@@ -188,6 +188,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -1533,17 +1535,19 @@ private fun TimedLyrics(
     val active = rememberSungLine(lines, following)
     val chords = rememberChords(state.chords, lines.map { it.text })
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
+    val look = WordsLook.on(state.phone)
     LaunchedEffect(active) {
         if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
     }
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 160.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(look.gap),
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxSize()
     ) {
         itemsIndexed(lines) { index, line ->
-            Box(Modifier.fadedAtEdges(list, index)) {
+            Box(Modifier.widthIn(max = look.width).fadedAtEdges(list, index)) {
                 LyricLineText(
                     line.text,
                     words = line.words,
@@ -1564,7 +1568,8 @@ private fun TimedLyrics(
                     onStudy = { onStudy(index) },
                     help = state.learning.helpFor(index),
                     textScale = state.learning.wordsScale,
-                    centered = state.wordsCentered
+                    centered = state.wordsCentered,
+                    look = look
                 )
             }
         }
@@ -1577,17 +1582,19 @@ private fun LyricLines(state: UiState, onStudy: (Int) -> Unit) {
     val lines = state.lyrics.lines()
     val chords = rememberChords(state.chords, lines)
     val list = rememberLazyListState()
+    val look = WordsLook.on(state.phone)
     LazyColumn(
         state = list,
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = BAR_ROOM),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(look.gap),
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxSize()
     ) {
         itemsIndexed(lines) { index, line ->
-            Box(Modifier.fadedAtEdges(list, index)) {
+            Box(Modifier.widthIn(max = look.width).fadedAtEdges(list, index)) {
                 LyricLineText(
                     line, place = null, chords = chords.getOrNull(index), onSeek = null, onStudy = { onStudy(index) }, help = state.learning.helpFor(index),
-                    textScale = state.learning.wordsScale, centered = state.wordsCentered
+                    textScale = state.learning.wordsScale, centered = state.wordsCentered, look = look
                 )
             }
         }
@@ -1704,7 +1711,8 @@ private fun LyricLineText(
     waiting: Boolean = false,
     seekLabel: Int = R.string.lyrics_jump,
     textScale: Float,
-    centered: Boolean
+    centered: Boolean,
+    look: WordsLook
 ) {
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
@@ -1715,9 +1723,12 @@ private fun LyricLineText(
         label = "line alpha"
     )
     val scale by animateFloatAsState(if (lit || place == null) 1f else 0.94f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow), label = "line scale")
+    // Words with no timings, a page to read rather than lines to follow, are a little smaller.
+    val size = look.size * (if (place == null) 22f / 26f else 1f) * textScale
     val style = MaterialTheme.typography.headlineSmall.copy(
-        fontSize = (if (place == null) 22.sp else 26.sp) * textScale,
-        lineHeight = (if (place == null) 30.sp else 34.sp) * textScale,
+        fontSize = size,
+        // Rows of a line close together and lines further apart, so a line that wraps still reads as one.
+        lineHeight = size * WORDS_ROWS,
         fontWeight = if (place == null) FontWeight.SemiBold else FontWeight.Bold,
         // Rows of about even length, broken between words, so no word or kana is left alone on the last.
         lineBreak = LineBreak.Heading,
@@ -1775,7 +1786,7 @@ private fun LyricLineText(
             Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         help?.translation?.let {
-            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale, lineHeight = TRANSLATION_LINE * help.translationScale, textAlign = style.textAlign)
+            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale * look.translation, lineHeight = TRANSLATION_LINE * help.translationScale * look.translation, textAlign = style.textAlign)
             Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
         }
     }
@@ -2041,6 +2052,20 @@ internal const val MAX_WORDS_SCALE = 3f
 internal const val MIN_WORDS_SCALE = 0.6f
 
 /** How big a line's translation starts under the words in the lyrics, and the room it takes. */
+/** How big the words are, how far apart their lines, how wide they run and how much bigger their translation. */
+internal data class WordsLook(val size: TextUnit, val gap: Dp, val width: Dp, val translation: Float = 1f) {
+    companion object {
+        // No wider than about as many letters to a row as on a phone held upright, on its side or on a tablet too.
+        private val PHONE = WordsLook(26.sp, 16.dp, 600.dp)
+        // Read from across a room, but still with the lines before and after the one being sung.
+        private val TV = WordsLook(34.sp, 20.dp, 700.dp, translation = 1.3f)
+
+        fun on(phone: Phone) = if (phone == Phone.TV) TV else PHONE
+    }
+}
+
+private const val WORDS_ROWS = 1.2f
+
 private val TRANSLATION_SIZE = 14.sp
 private val TRANSLATION_LINE = 20.sp
 
