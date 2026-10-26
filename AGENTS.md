@@ -1,6 +1,6 @@
 # Crosstune
 
-Crosstune is an Android app that opens a music link in the service you prefer, then helps you learn the song: lyrics, translations, practice cards. One Kotlin + Compose module, package `com.astrovm.crosstune`, flat in `app/src/main/java/com/astrovm/crosstune/`.
+Crosstune is an Android app that opens a music link in the service you prefer, then helps you learn the song: lyrics, translations, practice cards. One Kotlin + Compose module, package `com.astrovm.crosstune`, flat in `app/src/main/java/com/astrovm/crosstune/`. README's feature list is what the app does; building, releasing, the site and the screenshots are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Commands
 
@@ -11,6 +11,8 @@ git submodule update --init --recursive   # projectM is built from source for th
 ./gradlew :app:ci                         # all tests + 100% line coverage + lint + APKs
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
 python3 scripts/mutants.py                # mutation testing on the lines this branch changed; slow, so in the background
+python3 scripts/shots/shots.py            # store screenshots and site clips, through :app:shots; no phone needed
+node --test report/*.test.mjs             # the report Worker's tests
 ```
 
 Results land in `app/build/test-results/testDebugUnitTest/*.xml`, coverage in `app/build/reports/kover/reportDebug.xml`.
@@ -24,6 +26,8 @@ The most common defect here is a change that works where you tested it and is mi
 - **Strings.** Every user-visible string goes in all 16 locales: `values` plus `de es fr hi in it ja ko nl pl pt ru tr zh-rCN zh-rTW`. `TranslationsTest` fails otherwise. Spanish uses Argentine voseo. Escape apostrophes as `\'`.
 - **Shortcuts.** `app/src/debug/` keeps a copy of `res/xml/shortcuts.xml` pointing at its own package. Change both together.
 - **Docs.** README's feature list, `site/strings/` and the store text in `fastlane/` describe what the app does. Keep them matching, in every language.
+- **Privacy.** Anything that changes what leaves the phone, or where it goes, changes README's Privacy section and the privacy page (`privacy_body` in every `site/strings/` file) too.
+- **Version.** A bump goes in the PR being released, with its notes in `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`. CI fails without them (`scripts/release/check_changelog.py`).
 
 ## Design
 
@@ -35,13 +39,33 @@ The most common defect here is a change that works where you tested it and is mi
 - Fold a feature into the thing it belongs to. Naming a song is the mic in the link field, not a button. What's playing is a bar at the bottom, not a caption.
 - The main action is a filled button with an icon and one word (**Play**, **Open**). Lesser tools are flat, with no tile or box: an icon with at most a short label.
 - Icon-only is fine with a content description and a touch target of at least 48dp.
-- Check every state on a phone: loading, empty, error, missing access, no Shizuku, the largest font, and a long language like German.
+- Check every state on a phone: loading, empty, error, missing access, no Shizuku, offline, the largest font, a long language like German, and light, dark and pure black.
+- A TV is a real target: everything works with a remote. Check where focus starts on each screen and dialog, and where it lands when one closes or its content changes.
+
+## Principles
+
+- Private by default: no account, analytics or ads. Sound is heard on the phone and never sent; naming a song sends Shazam a fingerprint only. The only server is the report Worker in `report/`.
+- Data costs the user. Big downloads, like the 32 MB speech model, wait for an unmetered network unless the user asks for one.
+- Free software only, so F-Droid can build it: no Play Services or other non-free libraries. The release APK must stay reproducible (`scripts/release/check_native_paths.py` guards the native part).
+- Android 8 (minSdk 26) and up. An API added later needs a version check; easy to miss in plain Java calls like `readNBytes`.
+- Heavy work is for phones that can carry it: lining lyrics up to the singing needs 3 GB of memory, so a 2 GB TV doesn't get it.
 
 ## How it works
 
 `MainActivity` builds `MainViewModel` and hands its methods to the screens as `ScreenActions`. The view model owns one immutable `UiState` and replaces it with `copy(...)`. Screens never call services. `CrosstuneScreen.kt` picks the screen from `UiState` in a `when`, and the order matters (lyrics over player over the main card).
 
 Playback follows and controls other music apps through Android's media sessions (`Playback.kt`). Visuals run projectM through JNI on a GL thread.
+
+Where each feature starts:
+
+- Links: `MusicLinks.kt` reads them, `LinkResolver.kt` names the song, `Destinations.kt` and `Frontend.kt` pick where it opens.
+- Naming a song: `SongListener.kt`, `ShazamSignature.kt`, `SongRecognizers.kt`.
+- Lyrics: `LyricsFinder.kt` finds them, `LyricsScreen.kt` shows them, `TimingEvidence.kt` and `LyricsSync.kt` put them in time, `SungWords.kt` lines them up to the singing.
+- Chords: `ChordFinder.kt`, `Chords.kt`. Translations and readings: `Translator.kt`, `Readings.kt`. ChatGPT: `ChatGpt*.kt`.
+- Practice cards: `Practice*.kt`, `SavedLines.kt`.
+- Access and setup: `FixCenter.kt`, `OneTapSetup.kt` (Shizuku and root).
+- Reports: `Feedback.kt` and `AutoReports.kt` in the app, `report/` on Cloudflare.
+- TV: `UiState.phone` is `Phone.TV` (`FixCenter.kt`), and the screens check it. Tests in `TvTest` and `TvPlayTest`.
 
 ## Verifying
 
@@ -51,6 +75,10 @@ Playback follows and controls other music apps through Android's media sessions 
 - Changed logic gets mutation testing too: `python3 scripts/mutants.py`. Each change it lists that lived is a test missing, unless it can't change what the app does.
 - Test behavior through Compose in `MainActivityTest` and friends, with the fakes behind `MainActivity`'s `@VisibleForTesting` factories (`FakePlayback`, `FakeSpotify`, ...).
 - Tapping a disabled Compose node does nothing: wait for `isEnabled()` first.
+- The fakes answer at once, on `Dispatchers.Unconfined`, so loading states and late answers never show. To test one, hold the fake's answer (a `CountDownLatch` in its handler) until the test has looked.
+- When the focused node goes away, focus can land anywhere. Assert focus on something that stays.
+- Kover never sees an interface's default bodies run, as Kotlin calls them another way. Keep interface members abstract.
+- Checking that a test catches a bug by breaking the code? Commit first, so putting it back is a `git checkout`.
 
 ## Pull requests
 
