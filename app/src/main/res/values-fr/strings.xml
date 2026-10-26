@@ -285,8 +285,7 @@
     <string name="singing_model_failed">Le téléchargement de 32 Mo n\'a pas abouti.</string>
     <string name="singing_model_download">Télécharger</string>
     <string name="singing_model_close">Pas maintenant</string>
-    <string name="setting_auto_report">Signaler les problèmes de morceaux</string>
-    <string name="setting_auto_report_description">En privé, au développeur.</string>
+    <string name="setting_auto_report">Signaler automatiquement les problèmes de morceaux</string>
     <string name="lyrics_romanized">En lettres latines</string>
     <string name="lyrics_romaji_typed">Rōmaji tel qu’on le tape</string>
     <string name="lyrics_translation">Traduction</string>

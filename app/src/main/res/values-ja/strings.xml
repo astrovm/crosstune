@@ -286,8 +286,7 @@
     <string name="singing_model_failed">32 MBのダウンロードが完了しませんでした。</string>
     <string name="singing_model_download">ダウンロード</string>
     <string name="singing_model_close">今はしない</string>
-    <string name="setting_auto_report">曲の問題を報告</string>
-    <string name="setting_auto_report_description">開発者だけに非公開で。</string>
+    <string name="setting_auto_report">曲の問題を自動で報告</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>

@@ -285,8 +285,7 @@
     <string name="singing_model_failed">Загрузка 32 МБ не завершилась.</string>
     <string name="singing_model_download">Скачать</string>
     <string name="singing_model_close">Не сейчас</string>
-    <string name="setting_auto_report">Сообщать о проблемах с песнями</string>
-    <string name="setting_auto_report_description">Лично разработчику.</string>
+    <string name="setting_auto_report">Автоматически сообщать о проблемах с песнями</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_translation">Перевод</string>

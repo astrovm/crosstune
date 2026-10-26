@@ -285,8 +285,7 @@
     <string name="singing_model_failed">Unduhan 32 MB tidak selesai.</string>
     <string name="singing_model_download">Unduh</string>
     <string name="singing_model_close">Nanti saja</string>
-    <string name="setting_auto_report">Laporkan masalah lagu</string>
-    <string name="setting_auto_report_description">Secara pribadi, ke pengembang.</string>
+    <string name="setting_auto_report">Laporkan masalah lagu secara otomatis</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
     <string name="lyrics_romaji_typed">Romaji seperti diketik</string>
     <string name="lyrics_translation">Terjemahan</string>

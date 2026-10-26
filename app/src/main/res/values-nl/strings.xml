@@ -285,8 +285,7 @@
     <string name="singing_model_failed">De download van 32 MB is niet afgemaakt.</string>
     <string name="singing_model_download">Downloaden</string>
     <string name="singing_model_close">Niet nu</string>
-    <string name="setting_auto_report">Problemen met nummers melden</string>
-    <string name="setting_auto_report_description">Privé, naar de ontwikkelaar.</string>
+    <string name="setting_auto_report">Problemen met nummers automatisch melden</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_translation">Vertaling</string>

@@ -307,7 +307,7 @@ private fun SettingsList(
             if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false })
             SettingSwitch(
                 label = stringResource(R.string.setting_auto_report),
-                description = stringResource(R.string.setting_auto_report_description),
+                description = null,
                 checked = state.autoReports == true,
                 onCheckedChange = actions.onAllowAutoReports
             )

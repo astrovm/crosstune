@@ -285,8 +285,7 @@
     <string name="singing_model_failed">La descarga de 32 MB no terminó.</string>
     <string name="singing_model_download">Descargar</string>
     <string name="singing_model_close">Ahora no</string>
-    <string name="setting_auto_report">Reportar problemas de canciones</string>
-    <string name="setting_auto_report_description">En privado, al desarrollador.</string>
+    <string name="setting_auto_report">Reportar problemas de canciones automáticamente</string>
     <string name="lyrics_romanized">En letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se teclea</string>
     <string name="lyrics_translation">Traducción</string>
