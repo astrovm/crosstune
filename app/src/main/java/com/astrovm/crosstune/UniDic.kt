@@ -67,16 +67,14 @@ internal class UniDic(
             if (!client.fetchChecked(url, sha256, jar)) return false
             unpacking.mkdirs()
             ZipFile(jar).use { zip ->
-                for (entry in zip.entries()) {
-                    // Only the dictionary's own files, each by its name alone, so nothing lands elsewhere.
-                    val name = entry.name.removePrefix(FILES_IN_JAR)
-                    if (name != entry.name && name.endsWith(".bin") && '/' !in name) {
-                        zip.getInputStream(entry).use { input -> File(unpacking, name).outputStream().use { input.copyTo(it) } }
-                    }
+                // Only the dictionary's own files, by the names known here, so nothing in the jar picks where one lands.
+                for (name in NAMES) {
+                    // A jar without all of them is no use.
+                    val entry = zip.getEntry(FILES_IN_JAR + name) ?: return false
+                    zip.getInputStream(entry).use { input -> File(unpacking, name).outputStream().use { input.copyTo(it) } }
                 }
             }
-            // A jar without all of them is no use.
-            return NAMES.all { File(unpacking, it).isFile } && unpacking.renameTo(files)
+            return unpacking.renameTo(files)
         } catch (_: IOException) {
             return false
         } finally {
