@@ -366,9 +366,9 @@ class LyricsFinderTest {
         fun lrc(lines: List<String>) = lines.mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n")
         fun words(lines: List<String>) = Lyrics.Found(lines.joinToString("\n"), lines.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }, source = LyricsFinder.NETEASE)
         // Credits in English, in Chinese for a Japanese song, a rap's own lyricist, then the song's name and its artist's.
-        val opening = listOf("Producers: Someone", "Writers：A, B & C", "母帯工程師：Someone Else", "Rap作词 : 怜", "Vocal Directing Engineer: Them", "", "Hatsukoi", "", "Hiroko Mita")
+        val opening = listOf("Producers: Someone", "Writers：A, B & C", "母帯工程師：Someone Else", "Rap作词 : 怜", "", "Vocal Directing Engineer: Them", "", "Hatsukoi", "", "Hiroko Mita")
         japaneseSong(netEase = netEase, lyric = lrc(opening + sung))
-        assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(19_000L + index * 1_000, line) }), found(hatsukoi))
+        assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(20_000L + index * 1_000, line) }), found(hatsukoi))
         // Untimed, with the blank lines between them.
         japaneseSong(netEase = netEase, lyric = (opening + sung).joinToString("\n"))
         assertEquals(Lyrics.Found(sung.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
