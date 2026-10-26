@@ -1,0 +1,3 @@
+Lyrics and visuals run smoother on slower phones and TVs.
+Lyrics fit the screen: lines sit further apart, a TV shows them bigger, and a wide screen keeps them from running edge to edge.
+On a TV, YouTube's video no longer shows through the visuals.
