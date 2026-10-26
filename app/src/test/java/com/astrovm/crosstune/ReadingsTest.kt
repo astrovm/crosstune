@@ -290,6 +290,9 @@ class ReadingsTest {
         assertEquals("ぎ", fixed[1].parts.first { it.text == "着" }.reading)
         // ごし for 越 is only 越's ご, with the し written after it: nothing to put right.
         assertEquals(read[2], fixed[2])
+        // いま for 今 is all 今's, though ま comes after it too.
+        val now = listOf(LineReading(listOf(Ruby("今", "こん"), Ruby("まで")), "こんまで", "konmade"))
+        assertEquals(LineReading(listOf(Ruby("今", "いま"), Ruby("まで")), "いままで", "imamade"), Readings.corrected(now, listOf(ReadingFix(0, "今", "いま")))[0])
         // In katakana it's the same; a kanji the line hasn't, or a reading that isn't kana, is left out.
         assertEquals("きみ", Readings.corrected(read, listOf(ReadingFix(0, "君", "キミ")))[0].parts.first { it.text == "君" }.reading)
         assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "愛", "あい"), ReadingFix(1, "着", "gi"), ReadingFix(9, "君", "きみ"), ReadingFix(0, "君", ""))))

@@ -5,6 +5,7 @@ import android.icu.text.Transliterator
 import android.os.Build
 import androidx.annotation.RequiresApi
 import com.atilika.kuromoji.ipadic.Tokenizer
+import kotlin.math.abs
 
 /**
  * The writing systems that aren't Latin, so their words can be shown in Latin letters. Each has
@@ -292,8 +293,7 @@ internal object Readings {
 
     /**
      * [read] with [fixes] made: each kanji takes its new reading, on the line and in its kana and
-     * romaji. A fix that also gives the kana written after the kanji, ごし for 越 in 越し, has
-     * those left off; one that changes nothing, or names a kanji the line hasn't, is left out.
+     * romaji. One that changes nothing, or names a kanji the line hasn't, is left out.
      */
     fun corrected(read: List<LineReading>, fixes: List<ReadingFix>): List<LineReading> = read.mapIndexed { index, line ->
         fixes.filter { it.line == index }.fold(line) { fixed, fix ->
@@ -301,8 +301,11 @@ internal object Readings {
             if (at < 0) return@fold fixed
             val old = fixed.parts[at].reading!!
             val after = hiragana(fixed.parts.drop(at + 1).joinToString("") { it.text })
+            // A fix may give the kana written after the kanji too, ごし for 越 in 越し, or end in kana that
+            // only happen to come next, いま for 今 in 今まで: it's whichever is nearer the length the dictionary read.
             val wanted = hiragana(fix.reading).let { reading ->
-                (reading.length - 1 downTo 1).firstOrNull { cut -> after.startsWith(reading.substring(cut)) }?.let { reading.substring(0, it) } ?: reading
+                (listOf(reading) + (reading.length - 1 downTo 1).filter { after.startsWith(reading.substring(it)) }.map { reading.substring(0, it) })
+                    .minBy { abs(it.length - old.length) }
             }
             if (wanted.isEmpty() || wanted == old || wanted.any { it !in 'ぁ'..'ゟ' }) return@fold fixed
             // Only where those kanji are: another word read the same, e.g. a く of 君 in くん, stays.
