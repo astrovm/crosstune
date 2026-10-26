@@ -298,6 +298,8 @@ class TvTest {
         composeRule.waitUntil(5_000) { !shown("Machi No Dorufin (Live)") }
         composeRule.waitForIdle()
         assertTrue(fake.requestedUrls.any { it.contains("/track/1") })
+        // Back on the field, as after a link typed.
+        field().assertIsFocused()
     }
 
     @Test
