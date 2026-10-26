@@ -330,4 +330,62 @@ class ReadingsTest {
             assertTrue("$japans", japan.canEncode(japans) && Readings.isHan(japans))
         }
     }
+
+    private fun reading(line: String) = Readings.of(listOf(line), Script.JAPANESE).single()
+
+    @Test
+    fun withUniDicKanjiTheShippedDictionaryCantReadAreRead() {
+        // 溢 isn't in it: alone, it stays as written.
+        assertEquals("うつむいてきみが溢した", reading("うつむいて君が溢した").reading)
+        TestUniDic.reading {
+            val line = reading("うつむいて君が溢した")
+            assertEquals("うつむいてきみがこぼした", line.reading)
+            assertTrue(Ruby("溢", "こぼ") in line.parts)
+            assertEquals("utsumuite kimi ga koboshita", line.romanized)
+            // As are its words, with the form each is listed under.
+            assertEquals(Word("溢した", "こぼした", "koboshita", lookup = "溢す"), Readings.words("君が溢した", Script.JAPANESE).last())
+        }
+    }
+
+    @Test
+    fun withUniDicAWordTheShippedDictionaryBreaksUpReadsAsOne() {
+        assertEquals("びえみをくれたのはだれ？", reading("微笑みをくれたのは誰？").reading)
+        TestUniDic.reading {
+            assertEquals("ほほえみをくれたのはだれ？", reading("微笑みをくれたのは誰？").reading)
+            // Its long vowels as the word's spelled, and as it's said, or typed.
+            val line = reading("ザッツ！超常")
+            assertEquals("ザッツ！ちょうじょう", line.reading)
+            assertEquals("zattsu! choojoo", line.romanized)
+            assertEquals("zattsu! choujou", line.typed)
+        }
+    }
+
+    @Test
+    fun withUniDicAWordTakenForAPrefixOrASuffixToNothingIsAWord() {
+        assertEquals("くんにあいたい", reading(" 君に会いたい").reading.trim())
+        assertEquals("ああこんとなりで", reading("ああ今となりで").reading)
+        TestUniDic.reading {
+            assertEquals("きみにあいたい", reading(" 君に会いたい").reading.trim())
+            assertEquals("ああいまとなりで", reading("ああ今となりで").reading)
+            // A suffix to a word is one: 通り after 予想.
+            assertEquals("それはよそうどおり", reading("それは予想通り").reading)
+        }
+    }
+
+    @Test
+    fun withUniDicTheShippedDictionaryStillReadsLyricsWhereItKnowsThem() {
+        TestUniDic.reading {
+            // UniDic has 私 as わたくし, and splits 不器用.
+            assertEquals("わたしはぶきようだけど", reading("私は不器用だけど").reading)
+            // What neither knows stays as written.
+            assertEquals("龘", reading("龘").reading)
+        }
+    }
+
+    @Test
+    fun withUniDicAVerbFollowingAnotherIsOneWordWithIt() {
+        TestUniDic.reading {
+            assertEquals("sonomama mitsuzukeyoo", reading("そのまま見続けよう").romanized)
+        }
+    }
 }

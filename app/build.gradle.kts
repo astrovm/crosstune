@@ -85,6 +85,8 @@ android {
         resources {
             // Kuromoji's core and dictionary jars each carry the same notes; one copy is enough.
             pickFirsts += setOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md", "META-INF/NOTICE.md")
+            // UniDic's dictionary is fetched, see UniDic.kt, rather than making the app 46 MB bigger.
+            excludes += "com/atilika/kuromoji/unidic/*.bin"
         }
     }
 
@@ -171,6 +173,9 @@ dependencies {
 
     // Reads Japanese lyrics' kanji, for the kana over them; its dictionary is in the jar, so it works offline.
     implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
+    // UniDic, which knows far more kanji. Its dictionary, 150 MB, is left out of the app and fetched
+    // when it's first needed; tests read it from the jar.
+    implementation("com.atilika.kuromoji:kuromoji-unidic:0.9.0")
 
     // Sets everything up in one tap for people who run Shizuku, which can do what otherwise only the user can.
     implementation("dev.rikka.shizuku:api:13.1.5")

@@ -106,18 +106,93 @@ internal object Readings {
         )
     }
 
+    /** UniDic, once it's on the phone: Japanese is read with it too, where it knows better than IPADIC. */
+    @Volatile
+    var uniDic: com.atilika.kuromoji.unidic.Tokenizer? = null
+
     // Kanji in their old forms, as 燈 for 灯, read as the new ones the dictionary knows, and stay as written.
-    private fun pieces(line: String): List<Piece> = tokenizer.tokenize(line.map { NEW_FORMS[it] ?: it }.joinToString("")).map { token ->
+    private fun pieces(line: String): List<Piece> {
+        val text = line.map { NEW_FORMS[it] ?: it }.joinToString("")
+        val known = tokenizer.tokenize(text).map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
+            val reading = token.reading?.takeIf { it != "*" }
             Piece(
                 line.substring(token.position, token.position + token.surface.length),
-                token.reading?.takeIf { it != "*" }?.let(::hiragana) ?: token.surface,
+                reading?.let(::hiragana) ?: token.surface,
                 token.partOfSpeechLevel1,
                 token.partOfSpeechLevel2,
                 token.baseForm?.takeIf { it != "*" } ?: token.surface,
-                token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) }
+                token.pronunciation?.takeIf { it != "*" }?.let { drawnOutE(hiragana(it)) },
+                token.position + token.surface.length,
+                unread = reading == null
             )
         }
+        return uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known
+    }
+
+    /** [line] as UniDic splits it. */
+    private fun uniDicPieces(uniDic: com.atilika.kuromoji.unidic.Tokenizer, line: String, text: String) = uniDic.tokenize(text).map { token ->
+        val surface = line.substring(token.position, token.position + token.surface.length)
+        // UniDic reads Latin letters too, "eh" as え and エイチ, which stay as written.
+        val said = token.pronunciation.takeIf { it != "*" && surface.any { isHan(it) || isKana(it) } }
+        Piece(
+            surface,
+            if (said != null && surface.any(::isHan)) spelled(said, token.lemmaReadingForm) else hiragana(surface),
+            token.partOfSpeechLevel1,
+            // A verb that can follow another, 続ける in 見続ける, as IPADIC names it, so it's one word with it.
+            if (token.partOfSpeechLevel2 == "非自立可能" && token.partOfSpeechLevel1 == "動詞") "非自立" else token.partOfSpeechLevel2,
+            token.writtenBaseForm.takeIf { it != "*" } ?: surface,
+            said?.let(::hiragana),
+            token.position + token.surface.length,
+            unread = said == null
+        )
+    }
+
+    /**
+     * The kana a word UniDic gives as it's [said], ちょーじょー, is spelled with, ちょうじょう: each
+     * long vowel as the word's dictionary form, [listed], spells it there, or else as it most often
+     * is, こう more than こお; and づ and ぢ, said as ず and じ, where it spells them so.
+     */
+    private fun spelled(said: String, listed: String): String {
+        val spelling = hiragana(listed)
+        val out = StringBuilder()
+        hiragana(said).forEachIndexed { at, kana ->
+            val there = spelling.getOrElse(at) { ' ' }
+            out.append(
+                when {
+                    kana == 'ー' && out.isNotEmpty() -> LONG[romaji(out.last().toString()).lastOrNull()]?.let { if (there in it) there else it[0] } ?: kana
+                    (kana == 'ず' && there == 'づ') || (kana == 'じ' && there == 'ぢ') -> there
+                    else -> kana
+                }
+            )
+        }
+        return out.toString()
+    }
+
+    /** The kana a long vowel is spelled with after each vowel, the likelier first. */
+    private val LONG = mapOf('a' to "あ", 'i' to "い", 'u' to "う", 'e' to "いえ", 'o' to "うお")
+
+    /**
+     * The line as IPADIC splits it, with UniDic's words where it knows better: kanji IPADIC has no
+     * reading for, 溢 or 踠; a word IPADIC breaks up, 微笑み into 微 and 笑み; and a word IPADIC
+     * takes for a prefix or a suffix to nothing, 君 read くん after a space. Elsewhere IPADIC reads
+     * lyrics better: 私 わたし, where UniDic has わたくし, and 不器用 as a word of its own.
+     */
+    private fun mixed(ours: List<Piece>, theirs: List<Piece>): List<Piece> {
+        val out = mutableListOf<Piece>()
+        var i = 0
+        var j = 0
+        while (i < ours.size && j < theirs.size) {
+            val before = ours.getOrNull(i - 1)
+            // The pieces of each up to the next place both split the line.
+            val a = mutableListOf(ours[i++])
+            val b = mutableListOf(theirs[j++])
+            while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += ours[i++] else b += theirs[j++]
+            val better = a.any { it.unknown } || (b.size == 1 && a.size > 1 && b[0].surface.any(::isHan)) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
+            out += if (better && b.none { it.unknown }) b else a
+        }
+        return out
+    }
 
     /** Old forms of kanji, each before its new one, as lyrics keep them for their feel. */
     private val NEW_FORMS = ("燈灯戀恋櫻桜聲声體体國国學学氣気會会來来晝昼黑黒發発傳伝實実廣広獨独歸帰圓円驛駅舊旧" +
@@ -172,7 +247,24 @@ internal object Readings {
      * A word as the dictionary splits a line, with how it reads and what part of speech it is, and
      * how it's [spoken], when that's known: 先生, read せんせい, is said せんせー.
      */
-    private class Piece(val surface: String, val kana: String, val kind: String, val subkind: String, val base: String = surface, val spoken: String? = null) {
+    private class Piece(
+        val surface: String,
+        val kana: String,
+        val kind: String,
+        val subkind: String,
+        val base: String = surface,
+        val spoken: String? = null,
+        /** Where it ends in the line. */
+        val end: Int = 0,
+        /** Whether the dictionary has no reading for it. */
+        val unread: Boolean = false
+    ) {
+        /** Kanji the dictionary can't read. */
+        val unknown get() = unread && surface.any(::isHan)
+
+        /** A prefix or suffix of kanji with no word to be one of: a suffix fixes to a noun before it, [before]. */
+        fun strayAffix(before: Piece?) = surface.any(::isHan) && (kind == "接頭詞" || (subkind == "接尾" && before?.kind != "名詞"))
+
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
         val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
 

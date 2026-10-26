@@ -115,6 +115,7 @@ class MainActivity : ComponentActivity() {
                     oneTap = OneTapSetup(applicationContext, shellFactory()),
                     // Each song's sung readings are kept, so a song read again needs no lookup.
                     sungReadings = SungReadings(client, LookupCache(File(cacheDir, "sung_readings.json"), lookupDispatcher, maxEntries = 300)),
+                    uniDic = uniDicFactory(applicationContext, client),
                     updates = UpdateChecker(
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
@@ -338,6 +339,12 @@ class MainActivity : ComponentActivity() {
                 NativeWhisper::open,
                 fetch = model::fetchAnyway
             ).takeIf { memory.totalMem >= SINGING_MEMORY }
+        }
+
+        /** UniDic, fetched once on an unmetered network into files kept out of backups; a test may have none. */
+        @VisibleForTesting
+        internal var uniDicFactory: (Context, OkHttpClient) -> UniDic? = { context, client ->
+            UniDic(client, File(context.noBackupFilesDir, "unidic"), mayFetch = { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false })
         }
 
         /** What tells which language a song's words are in, when a test stands in for Android. */

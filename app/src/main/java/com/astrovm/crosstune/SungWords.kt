@@ -10,11 +10,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.Closeable
 import java.io.File
-import java.io.IOException
-import java.security.MessageDigest
 import java.text.Normalizer
 import kotlin.math.abs
 
@@ -141,40 +138,12 @@ internal class WhisperModel(
         fetching.withLock { file.takeIf { it.isFile } ?: if (anyway || mayFetch()) fetch() else null }
     }
 
-    private fun fetch(): File? {
-        dir.mkdirs()
-        val part = File(dir, "$NAME.part")
-        try {
-            client.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val digest = MessageDigest.getInstance("SHA-256")
-                part.outputStream().use { out ->
-                    response.body.byteStream().use { input ->
-                        val buffer = ByteArray(BUFFER)
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            digest.update(buffer, 0, read)
-                            out.write(buffer, 0, read)
-                        }
-                    }
-                }
-                // Only the very model it was tried with is kept: one cut short or changed is no use.
-                if (digest.digest().joinToString("") { "%02x".format(it) } != sha256 || !part.renameTo(file)) return null
-            }
-            return file
-        } catch (_: IOException) {
-            return null
-        } finally {
-            part.delete()
-        }
-    }
+    private fun fetch(): File? = file.takeIf { client.fetchChecked(url, sha256, it) }
 
     companion object {
         private const val NAME = "ggml-tiny-q5_1.bin"
         const val URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin"
         const val SHA256 = "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7"
-        private const val BUFFER = 64 * 1024
     }
 }
 

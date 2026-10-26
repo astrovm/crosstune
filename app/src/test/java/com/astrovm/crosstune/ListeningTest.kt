@@ -118,6 +118,9 @@ class ListeningTest {
     /** Put back after, so other tests still tell the phone as the app does. */
     private val realPhone = MainActivity.phoneFactory
 
+    /** Put back after, so other tests read Japanese as the app does. */
+    private val realUniDic = MainActivity.uniDicFactory
+
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
@@ -158,6 +161,9 @@ class ListeningTest {
         MainActivity.soundTapFactory = { OutputMixTap.open() }
         MainActivity.lyricsLanguageFactory = null
         MainActivity.phoneFactory = realPhone
+        MainActivity.uniDicFactory = realUniDic
+        Readings.uniDic = null
+        File(app.noBackupFilesDir, "unidic").deleteRecursively()
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
@@ -3154,6 +3160,35 @@ class ListeningTest {
         assertEquals("しんじつのしゅんかんはいつも", kept[0].reading)
         // One read already, as it's sung, stays so.
         assertEquals("まちのよる", kept[1].reading)
+    }
+
+    @Test
+    fun kanjiTheShippedDictionaryCantReadAreReadOnceUniDicIsFetched() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }, room = 0) }
+        val jar = TestUniDic.jar.readBytes()
+        wordsOf(null, "君が溢した涙", sites = { request -> if (request.url.toString() == UniDic.URL) FakeSpotify.image(request, jar) else null })
+        // Fetched while the words show, which are read again with it.
+        waitUntil(TIMEOUT_MS) { readingShown("こぼ") }
+        assertTrue(readingShown("きみ") && readingShown("なみだ"))
+        assertEquals(1, fake.requestedUrls.count { it == UniDic.URL })
+    }
+
+    @Test
+    fun uniDicOnThePhoneReadsTheWordsFromTheStartAndIsntFetchedAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
+        wordsOf(null, "君が溢した涙")
+        waitUntil(TIMEOUT_MS) { readingShown("こぼ") }
+        assertEquals(0, fake.requestedUrls.count { it == UniDic.URL })
+    }
+
+    @Test
+    fun uniDicIsntFetchedOnAMeteredNetwork() = kotlinx.coroutines.runBlocking {
+        // Robolectric's network is a phone's, which is metered.
+        assertNull(realUniDic(app, fake.client())!!.tokenizer(fetch = true))
+        assertEquals(emptyList<String>(), fake.requestedUrls)
     }
 
     @Test
