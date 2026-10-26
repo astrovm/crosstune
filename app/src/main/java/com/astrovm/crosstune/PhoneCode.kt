@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -37,11 +38,12 @@ internal val PhoneCodeLink = SemanticsPropertyKey<String>("PhoneCodeLink")
 
 /** Under a TV's link field: the code a phone's camera opens to type there, or why there's none. */
 @Composable
-internal fun PhoneCode(page: PhonePage, onClose: () -> Unit) {
+internal fun PhoneCode(page: PhonePage, onClose: () -> Unit, onLeft: () -> Unit) {
     BackHandler(onBack = onClose)
     val close = remember { FocusRequester() }
-    // The remote goes to it, so OK or Back puts it away.
+    // The remote goes to it, so OK or Back puts it away, and then back to the field, rather than wherever's next.
     LaunchedEffect(Unit) { runCatching { close.requestFocus() } }
+    DisposableEffect(Unit) { onDispose(onLeft) }
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,

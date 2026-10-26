@@ -296,6 +296,8 @@ class TvTest {
         assertEquals(song, fieldText())
         assertEquals(song, fake.requestedUrls.first())
         assertEquals(emptyList<String>(), code())
+        // The remote's back on the field, not wherever's next.
+        field().assertIsFocused()
 
         // The page keeps taking songs with the code put away; one more replaces it.
         phoneTyping.type("never gonna")
@@ -314,6 +316,7 @@ class TvTest {
         composeRule.waitForIdle()
         assertEquals(emptyList<String>(), code())
         assertTrue(!shown(string(R.string.phone_page_scan)))
+        field().assertIsFocused()
 
         // Back puts it away, rather than leave the app.
         phoneButton().performClick()

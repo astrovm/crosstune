@@ -643,12 +643,22 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         // The empty hint below says what the app does, so there's no tagline above it.
         Spacer(Modifier.height(8.dp))
         UpdateNotice(state, actions)
-        LinkField(state, actions)
+        // Where the remote goes back to once the code under it is put away, as soon as the field's
+        // there to take it: a song sent from the phone is looked up first.
+        val linkFocus = remember { FocusRequester() }
+        var refocus by remember { mutableStateOf(false) }
+        LinkField(state, actions, linkFocus)
+        LaunchedEffect(refocus, state.isLoading || state.isMatching) {
+            if (refocus && !state.isLoading && !state.isMatching) {
+                runCatching { linkFocus.requestFocus() }
+                refocus = false
+            }
+        }
         AnimatedVisibility(visible = state.phonePage != null, enter = Motion.appear, exit = Motion.disappear) {
             // Kept while it fades out.
             val shown = remember { mutableStateOf(state.phonePage) }
             state.phonePage?.let { shown.value = it }
-            shown.value?.let { PhoneCode(it, actions.onClosePhonePage) }
+            shown.value?.let { PhoneCode(it, actions.onClosePhonePage, onLeft = { refocus = true }) }
         }
         StatusSection(state, actions)
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
@@ -840,7 +850,7 @@ private fun NoticeStrip(text: String, action: String, onAction: () -> Unit, onDi
 
 /** One rounded field: paste when empty, clear once filled; the keyboard's Go button looks it up. */
 @Composable
-private fun LinkField(state: UiState, actions: ScreenActions) {
+private fun LinkField(state: UiState, actions: ScreenActions, fieldFocus: FocusRequester) {
     val busy = state.isLoading || state.isMatching
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
@@ -857,7 +867,6 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
     LaunchedEffect(typing) { if (tv && typing) keyboard?.show() }
     val field = remember { MutableInteractionSource() }
     // Its buttons are inside it, where looking right of it for the next thing never finds them, so the remote is sent there and back.
-    val fieldFocus = remember { FocusRequester() }
     val buttons = remember { FocusRequester() }
     // Keys reach it on their way to its buttons too, which it leaves to them.
     val onField = field.collectIsFocusedAsState().value
