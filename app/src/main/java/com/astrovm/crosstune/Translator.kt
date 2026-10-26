@@ -16,6 +16,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.text.Normalizer
 import java.util.Locale
 
 /**
@@ -86,19 +87,34 @@ internal class Translator(
      * page instead, leave the rest to MyMemory. [onFound] hears each line translated.
      */
     private suspend fun google(lines: List<String>, target: String, onFound: suspend (String, String) -> Unit): Boolean {
-        val url = GOOGLE_URL.toHttpUrl().newBuilder()
-            .addQueryParameter("client", "dict-chrome-ex")
-            .addQueryParameter("sl", "auto")
-            .addQueryParameter("tl", target)
-            .build()
         for (batch in lines.chunked(GOOGLE_LINES)) {
-            val form = FormBody.Builder().apply { batch.forEach { add("q", written(it)) } }.build()
-            // Each row is the line in [target], then the language it was in.
-            val rows = JSONArray(call(Request.Builder().url(url).post(form).build()))
-            if (rows.length() != batch.size) return false
-            batch.forEachIndexed { i, line -> onFound(line, rows.getJSONArray(i).getString(0).trim()) }
+            val rows = googleRows(batch, AUTO, target) ?: return false
+            // Pidgin and English around a Yoruba word are taken for English, and the Yoruba comes back
+            // as it was: "Soledad, ṣ'o mo?" stayed so. Asked as Yoruba, it's "Soledad, do you know?".
+            val yoruba = batch.indices.filter { rows[it].second != YORUBA && target != YORUBA && yorubaLetters.containsMatchIn(Normalizer.normalize(batch[it], Normalizer.Form.NFC)) }
+            val asYoruba = if (yoruba.isEmpty()) emptyList() else googleRows(yoruba.map { batch[it] }, YORUBA, target) ?: return false
+            val found = rows.map { it.first }.toMutableList()
+            yoruba.forEachIndexed { at, i -> found[i] = asYoruba[at].first }
+            batch.forEachIndexed { i, line -> onFound(line, found[i]) }
         }
         return true
+    }
+
+    /**
+     * Google's rows for [lines], from [source]: each line in [target], with the language it was
+     * read as. Asked from a language of its own, a row is the line alone. Null for other rows than
+     * the lines asked.
+     */
+    private suspend fun googleRows(lines: List<String>, source: String, target: String): List<Pair<String, String>>? {
+        val url = GOOGLE_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("client", "dict-chrome-ex")
+            .addQueryParameter("sl", source)
+            .addQueryParameter("tl", target)
+            .build()
+        val form = FormBody.Builder().apply { lines.forEach { add("q", written(it)) } }.build()
+        val rows = JSONArray(call(Request.Builder().url(url).post(form).build()))
+        if (rows.length() != lines.size) return null
+        return List(lines.size) { i -> rows.optJSONArray(i)?.let { it.getString(0).trim() to it.optString(1) } ?: (rows.getString(i).trim() to source) }
     }
 
     /**
@@ -180,6 +196,12 @@ internal class Translator(
         private const val USER_AGENT = "Crosstune (https://github.com/astrovm/crosstune)"
         /** Spoken forms, each a word of its own, and how they're written; the longer first, as one holds another. */
         private val SPOKEN_KOREAN = listOf("암만해도" to "아무래도", "암만" to "아무리", "글구" to "그리고", "멀" to "뭘")
+
+        /** Google working out what language each line is in. */
+        private const val AUTO = "auto"
+        private const val YORUBA = "yo"
+        /** Letters Yoruba writes and English doesn't, e.g. "ọmọ", "ṣé". */
+        private val yorubaLetters = Regex("[ẹọṣẸỌṢ]")
 
         /** Lines asked of Google at once: a whole song, most of the time. */
         const val GOOGLE_LINES = 100

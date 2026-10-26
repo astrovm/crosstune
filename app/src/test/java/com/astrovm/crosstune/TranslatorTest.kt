@@ -108,6 +108,45 @@ class TranslatorTest {
         assertEquals(listOf("[아무리 웃어도]", "[그리고 울어]"), translate(listOf("암만 웃어도", "글구 울어")))
     }
 
+    /** Google, reading each line asked as in [readAs], or as English, and translating it as asked from what it read: "<line>" from auto, "{line}" from Yoruba. */
+    private fun googleReads(readAs: (String) -> String = { "en" }) {
+        google = { request ->
+            val lines = asked(request)
+            val rows = if (request.url.queryParameter("sl") == "yo") JSONArray(lines.map { "{$it}" }) else JSONArray(lines.map { JSONArray().put("<$it>").put(readAs(it)) })
+            FakeSpotify.html(request, rows.toString())
+        }
+    }
+
+    private fun yorubaAsked() = googleAsked().filter { "sl=yo" in it }
+
+    @Test
+    fun aLineWithYorubaLettersGoogleTookForAnotherLanguageIsAskedAgainAsYoruba() {
+        googleReads { if (it.startsWith("Ọmọ ìyá")) "yo" else "en" }
+        val lines = listOf("I'm listening to Westlife, ṣ'o mo?", "Keep it moving, rọra baddie", "Ọmọ ìyá mi", "Buy you Dom Pérignon")
+        // Written with the dot apart, as some lyrics are, it's still Yoruba's letter.
+        assertEquals(listOf("{I'm listening to Westlife, ṣ'o mo?}", "{Keep it moving, rọra baddie}", "<Ọmọ ìyá mi>", "<Buy you Dom Pérignon>", "{E\u0323 jo\u0323\u0301o\u0323\u0301}"),
+            translate(lines + "E\u0323 jo\u0323\u0301o\u0323\u0301"))
+        // Only those, all at once; the line Google read as Yoruba, and the one with only an accent English writes too, aren't.
+        assertEquals(1, yorubaAsked().size)
+        assertEquals(2, googleAsked().size)
+    }
+
+    @Test
+    fun yorubaIsntAskedAgainForAReaderOfYoruba() {
+        googleReads()
+        assertEquals(listOf("<Keep it moving, rọra baddie>"), runBlocking { translator().translate(listOf("Keep it moving, rọra baddie"), "yo") })
+        assertTrue(yorubaAsked().isEmpty())
+    }
+
+    @Test
+    fun googleNotAnsweringAsYorubaLeavesItToMyMemory() {
+        googleReads()
+        val auto = google
+        google = { request -> if (request.url.queryParameter("sl") == "yo") FakeSpotify.html(request, "[]") else auto(request) }
+        myMemory()
+        assertEquals(listOf("[Keep it moving, rọra baddie]"), translate(listOf("Keep it moving, rọra baddie")))
+    }
+
     @Test
     fun whatGoogleCantTranslateMyMemoryDoes() {
         // A song longer than Google is asked at once, turned away after the first lines.
