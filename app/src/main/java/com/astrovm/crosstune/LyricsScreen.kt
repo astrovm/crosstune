@@ -1838,6 +1838,9 @@ private const val UNSUNG_ALPHA = 0.45f
 /** The chords shown over a line, by name, for tests to see what's drawn. */
 internal val ChordsShown = SemanticsPropertyKey<List<String>>("ChordsShown")
 
+/** Which of a line's chords is lit as it's played, by its place among them, -1 for none, for tests to see what's drawn. */
+internal val ChordLit = SemanticsPropertyKey<Int>("ChordLit")
+
 /**
  * A line with its chords: those played before it on a row of their own, then its words with each
  * chord over the letter it's played on. While it's sung, a line timed word by word lights its
@@ -1888,6 +1891,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
             .fillMaxWidth()
             .semantics {
                 this[ChordsShown] = chords.over.map { it.name }
+                this[ChordLit] = playing.intValue
                 if (ruby != null) this[ReadingsShown] = ruby.mapNotNull { it.reading }
             }
             // Laid out once for the words as laid out, not again each frame the line's sung.
