@@ -355,8 +355,8 @@ class ReadingsTest {
             // Its long vowels as the word's spelled, and as it's said, or typed.
             val line = reading("ザッツ！超常")
             assertEquals("ザッツ！ちょうじょう", line.reading)
-            assertEquals("zattsu! choojoo", line.romanized)
-            assertEquals("zattsu! choujou", line.typed)
+            assertEquals("zattsu！ choojoo", line.romanized)
+            assertEquals("zattsu！ choujou", line.typed)
         }
     }
 
