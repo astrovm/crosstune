@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import org.json.JSONArray
+import java.text.Normalizer
 
 /** A chord played from letter [at] of a line. */
 internal data class Chord(val at: Int, val name: String)
@@ -26,6 +27,12 @@ internal data class LineChords(val before: List<String> = emptyList(), val over:
 internal object ChordSheets {
     /** The sheet counts once this much of its words line up with the song's. */
     private const val GOOD_LETTERS = 0.6
+
+    /**
+     * And this much of it lines up a letter after the one before, as a line's words do: another
+     * song's letters can be found one by one in long enough words, rap's often, scattered.
+     */
+    private const val GOOD_RUNS = 0.4
 
     /** And a line of it once this much of it does. */
     private const val GOOD_LINE = 0.5
@@ -146,6 +153,7 @@ internal object ChordSheets {
         if (theirs.size < MIN_LETTERS || ours.size == 0) return null
         val matchedAt = BorrowedTimings.lineUp(ours.keys, theirs.keys) ?: return null
         if (matchedAt.count { it >= 0 } < theirs.size * GOOD_LETTERS) return null
+        if ((1 until matchedAt.size).count { matchedAt[it - 1] >= 0 && matchedAt[it] == matchedAt[it - 1] + 1 } < theirs.size * GOOD_RUNS) return null
 
         val before = Array(texts.size) { mutableListOf<String>() }
         val over = Array(texts.size) { mutableListOf<Chord>() }
@@ -263,7 +271,11 @@ internal object ChordSheets {
 
         fun lastOf(number: Int) = ends[number] - 1
 
-        private fun key(letter: Char): Char =
-            (if (letter in '！'..'～') letter - 0xFEE0 else letter).lowercaseChar()
+        private fun key(letter: Char): Char {
+            val plain = if (letter in '！'..'～') letter - 0xFEE0 else letter
+            // Without its accent, as a sheet may write it: "ǒ" of the pinyin the words are read in, "ó" of "canción".
+            val base = if (Character.UnicodeScript.of(plain.code) == Character.UnicodeScript.LATIN) Normalizer.normalize(plain.toString(), Normalizer.Form.NFD)[0] else plain
+            return base.lowercaseChar()
+        }
     }
 }
