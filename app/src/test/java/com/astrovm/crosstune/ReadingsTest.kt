@@ -322,6 +322,8 @@ class ReadingsTest {
         assertEquals("Plastic Love", Readings.asJapanWrites("Plastic Love"))
         // One for one, so a word's timings stay where they were.
         assertEquals("瞬間は，", Readings.inJapansKanji("瞬间は，"))
+        // Japan has 梦 too, as an old form, but Chinese sites write it for 夢.
+        assertEquals("鏡のような夢の中で、この頃", Readings.inJapansKanji("鏡のような梦の中で、この顷"))
     }
 
     @Test
@@ -329,12 +331,66 @@ class ReadingsTest {
         // Japan writes what Shift_JIS, its own way of storing text, has room for.
         val japan = java.nio.charset.Charset.forName("Shift_JIS").newEncoder()
         Readings.JAPANS_KANJI.forEach { (china, japans) ->
-            assertTrue("$china", china == '仆' || !japan.canEncode(china))
+            assertTrue("$china", china in "仆梦" || !japan.canEncode(china))
             assertTrue("$japans", japan.canEncode(japans) && Readings.isHan(japans))
         }
     }
 
     private fun reading(line: String) = Readings.of(listOf(line), Script.JAPANESE).single()
+
+    @Test
+    fun aDigitCountingSomethingIsReadAsItsKanjiAndStaysAsWritten() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> if (withUniDic) TestUniDic.reading { reading(line) } else reading(line) }
+            // 2人 is 二人, ふたり, not two and にん.
+            val line = read("雲がまだ2人の影を残すから")
+            assertEquals("$withUniDic", "くもがまだふたりのかげをのこすから", line.reading)
+            assertTrue("$withUniDic", Ruby("2人", "ふたり") in line.parts)
+            assertEquals("$withUniDic", "kumo ga mada futari no kage o nokosukara", line.romanized)
+            assertEquals("$withUniDic", "ひとつになる", read("1つになる").reading)
+            assertEquals("$withUniDic", "ふたりで", read("２人で").reading)
+            // Part of a bigger number, it's that number.
+            assertTrue("$withUniDic", read("12人で").reading.startsWith("12"))
+            assertTrue("$withUniDic", read("2024年").reading.startsWith("2024"))
+        }
+    }
+
+    @Test
+    fun oneRunsIntoTheCounterAfterIt() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> if (withUniDic) TestUniDic.reading { reading(line) } else reading(line) }
+            assertEquals("$withUniDic", "いっぽずつ", read("一歩ずつ").reading)
+            assertTrue("$withUniDic", read("一歩ずつ").romanized.startsWith("ippo"))
+            assertEquals("$withUniDic", "いっぽずつ", read("1歩ずつ").reading)
+            assertEquals("$withUniDic", "いっかいだけ", read("一回だけ").reading)
+            assertEquals("$withUniDic", "いっぱいの", read("一杯の").reading)
+            // Before other sounds it's as it was.
+            assertEquals("$withUniDic", "いちどだけ", read("一度だけ").reading)
+            assertEquals("$withUniDic", "いちばん", read("一番").reading)
+        }
+    }
+
+    @Test
+    fun lyricsReadSomeWordsTheirOwnWay() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> if (withUniDic) TestUniDic.reading { reading(line) } else reading(line) }
+            // 側 on its own is そば, a word of its own.
+            val near = read("あんなに側にいたのに")
+            assertEquals("$withUniDic", "あんなにそばにいたのに", near.reading)
+            assertTrue("$withUniDic", Ruby("側", "そば") in near.parts)
+            assertTrue("$withUniDic ${near.romanized}", " soba ni " in near.romanized)
+            assertEquals("$withUniDic", "きみのそばで", read("君の側で").reading)
+            assertEquals("$withUniDic", "ずっとそばにいたい", read("ずっと側に居たい").reading)
+            // A side of something is がわ.
+            assertEquals("$withUniDic", "こっちがわにきて", read("こっち側に来て").reading)
+            assertEquals("$withUniDic", "むこうがわ", read("向こう側").reading)
+            assertTrue("$withUniDic", read("反対側").reading.endsWith("がわ"))
+            // 違く is said for 違って.
+            assertEquals("$withUniDic", "うまれたほしのもとがちがくたって", read("生まれた星のもとが違くたって").reading)
+            assertEquals("$withUniDic", "ちがくて", read("違くて").reading)
+            assertTrue("$withUniDic", read("違かった").reading.startsWith("ちが"))
+        }
+    }
 
     @Test
     fun withUniDicKanjiTheShippedDictionaryCantReadAreRead() {

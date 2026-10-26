@@ -112,9 +112,10 @@ internal object Readings {
     @Volatile
     var uniDic: com.atilika.kuromoji.unidic.Tokenizer? = null
 
-    // Kanji in their old forms, as 燈 for 灯, read as the new ones the dictionary knows, and stay as written.
+    // Kanji in their old forms, as 燈 for 灯, read as the new ones the dictionary knows, and a digit
+    // counting something, as 2 in 2人, as its kanji, 二人 ふたり, not a number on its own: they stay as written.
     private fun pieces(line: String): List<Piece> {
-        val text = line.map { NEW_FORMS[it] ?: it }.joinToString("")
+        val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
         val known = tokenizer.tokenize(text).map { token ->
             // Words the dictionary doesn't know, e.g. English ones, have no reading: they read as written.
             val reading = token.reading?.takeIf { it != "*" }
@@ -269,6 +270,13 @@ internal object Readings {
         return out
     }
 
+    /** Whether the digit at [at] is one alone before a counter, a kanji or the つ of 1つ, rather than part of a number, 100人. */
+    private fun counts(line: String, at: Int) =
+        line.getOrNull(at - 1)?.isDigit() != true && line.getOrNull(at + 1)?.let { isHan(it) || it == 'つ' } == true
+
+    /** Digits, also as written full width, and the kanji counting with them. */
+    private val KANJI_DIGITS = ("1一2二3三4四5五6六7七8八9九" + "１一２二３三４四５五６六７七８八９九").chunked(2).associate { it[0] to it[1] }
+
     /** Old forms of kanji, each before its new one, as lyrics keep them for their feel. */
     private val NEW_FORMS = ("燈灯戀恋櫻桜聲声體体國国學学氣気會会來来晝昼黑黒發発傳伝實実廣広獨独歸帰圓円驛駅舊旧" +
         "樂楽萬万與与爭争戰戦繪絵戲戯聽聴譯訳變変邊辺鐵鉄靜静顏顔惠恵濱浜擧挙寫写對対數数斷断曉暁歡歓歲歳殘残滿満" +
@@ -287,7 +295,8 @@ internal object Readings {
 
     /**
      * Kanji as China writes them, each before Japan's own. Each of China's is one Japan doesn't
-     * write, but for 仆, which Japan only has for an old word, and Chinese sites write for 僕.
+     * write, but for 仆 and 梦, which Japan only has for an old word and an old form, and Chinese
+     * sites write for 僕 and 夢.
      */
     internal val JAPANS_KANJI = ("仆僕终終间間爱愛话話时時门門见見记記忆憶让譲这這远遠还還过過进進连連达達运運边辺对対发発东東车車" +
         "长長开開关関问問闻聞闪閃风風飞飛马馬鸟鳥鱼魚龙竜头頭颜顔题題认認讲講识識语語读読谁誰谢謝词詞试試诗詩请請调調" +
@@ -301,7 +310,7 @@ internal object Readings {
         "诚誠诞誕该該详詳误誤诸諸谊誼谜謎谦謙谱譜贝貝负負贡貢财財责責败敗货貨质質贫貧购購贯貫贵貴贸貿费費贺賀资資赏賞" +
         "赞賛赠贈跃躍轨軌轮輪软軟转転轻軽载載较較辈輩辉輝输輸迁遷违違迟遅适適选選遗遺邮郵邻隣释釈针針钟鐘钢鋼钱銭铁鉄" +
         "铃鈴银銀锁鎖错錯锦錦键鍵镜鏡闭閉队隊阳陽阴陰阵陣阶階际際陆陸险険隐隠难難雾霧韩韓项項顺順须須顽頑预預领領频頻" +
-        "额額饥飢饭飯饮飲饱飽馆館驱駆验験骑騎骚騒鲜鮮鸣鳴齐斉齿歯龄齢龟亀为為乐楽买買亚亜产産亲親亿億仓倉仪儀优優传伝" +
+        "梦夢顷頃额額饥飢饭飯饮飲饱飽馆館驱駆验験骑騎骚騒鲜鮮鸣鳴齐斉齿歯龄齢龟亀为為乐楽买買亚亜产産亲親亿億仓倉仪儀优優传伝" +
         "伤傷伦倫伪偽侦偵侧側俭倹债債倾傾偿償兰蘭兴興养養兽獣军軍农農冻凍净浄减減凤鳳剂剤剧劇劝勧务務协協厅庁厌厭叹嘆" +
         "员員圆円圣聖坟墳坠墜垒塁壳殻奖奨妇婦婴嬰宠寵审審宪憲尔爾尘塵层層岭嶺币幣师師帐帳库庫庙廟异異强強总総恳懇惩懲" +
         "愤憤扰擾抚撫拟擬挚摯斋斎标標栋棟栏欄毁毀沟溝滥濫滨浜灿燦烛燭牺犠狮獅狱獄盐塩监監矫矯矿鉱类類绳縄缔締缚縛聋聾" +
@@ -340,6 +349,9 @@ internal object Readings {
         /** A prefix or suffix of kanji with no word to be one of: a suffix fixes to a noun before it, [before]. */
         fun strayAffix(before: Piece?) = surface.any(::isHan) && (kind == "接頭詞" || (subkind == "接尾" && before?.kind != "名詞"))
 
+        /** It read [kana], as a word of [kind] and [subkind] when that changes too. */
+        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end)
+
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
         val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
 
@@ -350,18 +362,43 @@ internal object Readings {
     }
 
     /**
-     * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん.
-     * Kept to numbers of people, the ones lyrics are full of.
+     * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん, also
+     * written 2人. Kept to numbers of people, the ones lyrics are full of, and 一 before a counter,
+     * which it runs into: 一歩 いっぽ, 一回 いっかい. And words read as lyrics sing them: 側 on its own
+     * is そば, 君の側で, but after the side it is, こっち側, がわ; 違く, said for 違って, is ちがく.
      */
     private fun together(pieces: List<Piece>): List<Piece> {
         val out = mutableListOf<Piece>()
         for (piece in pieces) {
             val last = out.lastOrNull()
-            val word = last?.let { TOGETHER[it.surface + piece.surface] }
-            if (word != null) out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般") else out += piece
+            val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
+            when {
+                word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般")
+                last != null && counted(last, piece) -> out[out.lastIndex] = Piece(last.surface + piece.surface, "いっ" + plosive(piece.kana), "名詞", "一般")
+                piece.surface == "側" && (last == null || !sideOf(last)) -> out += piece.read("そば", "名詞", "一般")
+                last?.surface == "違" && piece.surface.first() in "くか" -> {
+                    out[out.lastIndex] = last.read("ちが")
+                    out += piece
+                }
+                else -> out += piece
+            }
         }
         return out
     }
+
+    /** Whether [piece] is a counter [one], いち, runs into: one kanji starting with k, s, t or h. */
+    private fun counted(one: Piece, piece: Piece) = one.kana == "いち" && one.subkind in NUMBERS && piece.surface.length == 1 &&
+        isHan(piece.surface[0]) && piece.kana.firstOrNull()?.let { it in RUN_INTO } == true
+
+    /** [kana] with an h as p, ほ as ぽ, as it is after a sound run into. */
+    private fun plosive(kana: String) = if (kana.first() in "はひふへほ") (kana.first() + 2) + kana.drop(1) else kana
+
+    /** Whether 側 after [piece] is a side of it: after kanji or katakana, 反対側, or a way, こっち側. */
+    private fun sideOf(piece: Piece) = piece.surface in SIDES || piece.surface.last().let { isHan(it) || it in 'ァ'..'ヺ' }
+
+    private val NUMBERS = setOf("数", "数詞")
+    private const val RUN_INTO = "かきくけこさしすせそたちつてとはひふへほ"
+    private val SIDES = setOf("こっち", "そっち", "あっち", "どっち", "こちら", "そちら", "あちら", "どちら", "向こう")
 
     private val TOGETHER = mapOf("一人" to "ひとり", "二人" to "ふたり")
 

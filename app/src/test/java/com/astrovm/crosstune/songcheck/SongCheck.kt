@@ -13,6 +13,7 @@ import com.astrovm.crosstune.Shazam
 import com.astrovm.crosstune.ShazamSignature
 import com.astrovm.crosstune.Translator
 import com.astrovm.crosstune.SungReadings
+import com.astrovm.crosstune.TestUniDic
 import com.astrovm.crosstune.httpClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -48,6 +49,8 @@ class SongCheck {
 
     @Test
     fun songs() = runBlocking {
+        // Japanese read as once UniDic is on the phone, as it is for most who read it.
+        Readings.uniDic = TestUniDic.tokenizer
         val reports = File(dir, "reports").apply { mkdirs() }
         val songs = JSONArray(File(dir, "songs.json").readText())
         for (i in 0 until songs.length()) {
