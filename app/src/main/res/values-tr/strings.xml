@@ -205,7 +205,7 @@
     <string name="visuals_drop">Bunu bir daha gösterme</string>
     <string name="settings_visuals_title">Görseller</string>
     <string name="setting_skip_heavy_visuals">Ağır görselleri atla</string>
-    <string name="setting_skip_heavy_visuals_description">Bu telefon için fazla yavaş olanlar, üstlerindeki sözleri takılttırır.</string>
+    <string name="setting_skip_heavy_visuals_description">Bu telefonda takılanlar.</string>
     <string name="setting_visuals_change">Değiştirme sıklığı</string>
     <string name="visuals_change_never">Asla</string>
     <string name="setting_visuals_list">Hangi görseller</string>
@@ -281,8 +281,8 @@
     <string name="auto_report_offer">Bunun gibi sorunlar otomatik bildirilsin mi?</string>
     <string name="auto_report_yes">Evet</string>
     <string name="auto_report_no">Hayır, teşekkürler</string>
-    <string name="setting_auto_report">Şarkı sorunlarını otomatik bildir</string>
-    <string name="setting_auto_report_description">Eksik sözler, zamanlama ya da akorlar ve düzelttiğiniz zamanlama, yalnızca Crosstune\'un geliştiricisine gider.</string>
+    <string name="setting_auto_report">Şarkı sorunlarını bildir</string>
+    <string name="setting_auto_report_description">Yalnızca geliştiriciye.</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_translation">Çeviri</string>

@@ -205,7 +205,7 @@
     <string name="visuals_drop">Nie pokazuj tego</string>
     <string name="settings_visuals_title">Wizualizacje</string>
     <string name="setting_skip_heavy_visuals">Pomijaj ciężkie wizualizacje</string>
-    <string name="setting_skip_heavy_visuals_description">Zbyt wolne na tym telefonie, przez które tekst nad nimi się zacina.</string>
+    <string name="setting_skip_heavy_visuals_description">Te, które zacinają się na tym telefonie.</string>
     <string name="setting_visuals_change">Zmieniaj co</string>
     <string name="visuals_change_never">Nigdy</string>
     <string name="setting_visuals_list">Które wizualizacje</string>
@@ -281,8 +281,8 @@
     <string name="auto_report_offer">Zgłaszać takie problemy automatycznie?</string>
     <string name="auto_report_yes">Tak</string>
     <string name="auto_report_no">Nie, dziękuję</string>
-    <string name="setting_auto_report">Automatycznie zgłaszaj problemy z utworami</string>
-    <string name="setting_auto_report_description">Brakujące teksty, tempo lub akordy oraz tempo, które poprawisz, trafiają prywatnie do dewelopera Crosstune.</string>
+    <string name="setting_auto_report">Zgłaszaj problemy z utworami</string>
+    <string name="setting_auto_report_description">Prywatnie, do dewelopera.</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
     <string name="lyrics_romaji_typed">Romaji tak, jak się pisze</string>
     <string name="lyrics_translation">Tłumaczenie</string>
