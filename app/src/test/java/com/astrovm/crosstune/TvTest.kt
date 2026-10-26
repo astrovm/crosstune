@@ -315,8 +315,12 @@ class TvTest {
 
         // Only the once: a song looked up later from elsewhere leaves the remote where it is.
         val down = AtomicBoolean(true)
+        // Looked up again, it takes a moment, as over a real network, so the screen sees it busy.
+        val again = CountDownLatch(1)
         val searched = fake.handler
-        fake.handler = { request -> if (down.get()) FakeSpotify.html(request, "", code = 503) else searched(request) }
+        fake.handler = { request ->
+            if (down.get()) FakeSpotify.html(request, "", code = 503) else searched(request.also { again.await(5, TimeUnit.SECONDS) })
+        }
         composeRule.onNode(hasContentDescription(string(R.string.clear_button))).performClick()
         field().requestFocus()
         press(Key.DirectionCenter)
@@ -328,6 +332,8 @@ class TvTest {
         // The remote on something that stays, rather than Try again, which goes, and with it the remote, anywhere.
         settings().requestFocus()
         retry.performClick()
+        composeRule.waitUntil(5_000) { shown(string(R.string.loading_text)) }
+        again.countDown()
         composeRule.waitUntil(5_000) { shown("Kingo Hamada") }
         composeRule.waitForIdle()
         settings().assertIsFocused()
