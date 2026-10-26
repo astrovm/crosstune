@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -77,6 +78,42 @@ class ChordsScreenTest {
 
     private fun string(id: Int, vararg args: Any) = context.getString(id, *args)
 
+    /** The line showing [text], the one with its chords over it when it has them. */
+    private fun lineOf(text: String) = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes()
+        .let { nodes -> nodes.firstOrNull { it.config.contains(ChordsShown) } ?: nodes.first() }
+
+    /** How many of [text]'s letters are lit as sung, before the dimmed ones; all of them when none are dimmed. */
+    private fun litLetters(text: String): Int {
+        val shown = lineOf(text).config[SemanticsProperties.Text].first()
+        return shown.spanStyles.filter { it.item.color.alpha < 1f }.minOfOrNull { it.start } ?: shown.length
+    }
+
+    private fun pausedAt(ms: Long) = Following(PlaybackClock(ms, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+
+    @Test
+    fun theChordPlayedAndTheWordsSungLightAsALineWithChordsIsSung() {
+        // Into "down", sung from 1.6 s, which the C is played on.
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(ChordsState(on = true, sheet = sheet), pausedAt(1_700)), ScreenActions()) } }
+        assertEquals(listOf("G", "C", "Em", "D", "D7"), chordsOver(lines[0].text))
+        assertEquals(1, lineOf(lines[0].text).config[ChordLit])
+        assertEquals("Walking down ".length, litLetters(lines[0].text))
+    }
+
+    @Test
+    fun withTheSongNotFollowedNoChordIsLitNorWordDimmed() {
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(ChordsState(on = true, sheet = sheet)), ScreenActions()) } }
+        assertEquals(listOf("G", "C", "Em", "D", "D7"), chordsOver(lines[0].text))
+        assertEquals(-1, lineOf(lines[0].text).config[ChordLit])
+        assertEquals(lines[0].text.length, litLetters(lines[0].text))
+    }
+
+    @Test
+    fun withChordsOffTheWordsSungStillLight() {
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(ChordsState(), pausedAt(2_100)), ScreenActions()) } }
+        composeRule.waitForIdle()
+        assertEquals("Walking down the ".length, litLetters(lines[0].text))
+    }
+
     @Test
     fun chordsShowOverTheWordsWithTheCapo() {
         // Paused partway into the first line, sung word by word: its chord being played lights.
@@ -146,6 +183,8 @@ class ChordsScreenTest {
         assertEquals(listOf("Am", "F"), chordsOver(text))
         val readings = composeRule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ReadingsShown) { null } }
         assertEquals(listOf("よぞら", "ほし"), readings)
+        // Into the first word: it's lit, with its readings' room kept, and the rest dimmed.
+        assertEquals("夜空の".length, litLetters(text))
     }
 
     private fun japanese(line: LyricLine, chords: ChordSheet, following: Following? = null): UiState {
