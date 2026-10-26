@@ -841,7 +841,7 @@ internal class LyricsFinder(
 
         /** On a page with Letras's own translation beside the song, the song's words, after its name. */
         val letrasOriginal = Regex("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
-        val letrasBox = Regex("""<div\b|</div>""")
+        private val letrasBox = Regex("""<div\b|</div>""")
         val letrasStanza = Regex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
         val letrasBreak = Regex("""<br\s*/?>""")
         val letrasTag = Regex("""<[^>]+>""")
