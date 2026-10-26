@@ -197,6 +197,7 @@ import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 
 internal const val LYRIC_LINE_TAG = "lyric-line"
 internal const val LYRICS_SONG_TAG = "lyrics-song"
@@ -698,6 +699,7 @@ private fun LyricsActions(
         StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
         VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
         if (state.reportOffer) ReportOffer(actions)
+        state.singingModel?.let { SingingModelOffer(it, actions) }
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
             shape = CircleShape,
@@ -747,6 +749,39 @@ private fun ReportOffer(actions: ScreenActions) {
                 Text(stringResource(R.string.auto_report_yes))
             }
             IconButton(onClick = { actions.onAllowAutoReports(false) }) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.auto_report_no)) }
+        }
+    }
+}
+
+/**
+ * Over the bar, while the words can't be lined up to the singing for want of the speech model,
+ * which isn't fetched on mobile data by itself: fetched by hand, on any network.
+ */
+@Composable
+private fun SingingModelOffer(offer: ModelOffer, actions: ScreenActions) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        shape = MaterialTheme.shapes.extraLarge,
+        shadowElevation = 6.dp,
+        modifier = Modifier.padding(bottom = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(
+                stringResource(if (offer == ModelOffer.FAILED) R.string.singing_model_failed else R.string.singing_model_offer),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(Modifier.width(12.dp))
+            if (offer == ModelOffer.FETCHING) {
+                CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.padding(12.dp).size(24.dp))
+            } else {
+                Button(onClick = actions.onFetchSingingModel) {
+                    AppIcon(R.drawable.ic_download, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(stringResource(R.string.singing_model_download))
+                }
+            }
+            IconButton(onClick = actions.onCloseSingingModel) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.singing_model_close)) }
         }
     }
 }

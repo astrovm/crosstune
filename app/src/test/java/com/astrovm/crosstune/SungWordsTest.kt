@@ -247,9 +247,40 @@ class SungWordsTest {
     fun withoutTheModelNothingsHeard() = runBlocking {
         val microphone = FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }
         val words = FakeWords(listOf(HeardWord("Oh", 320)))
-        assertNull(listener(microphone, model = null, hearing = words).hear(null))
+        val listener = listener(microphone, model = null, hearing = words)
+        assertNull(listener.hear(null))
         assertTrue(microphone.closed)
         assertNull(words.samples)
+        // It's the model that was missed, so it can be offered.
+        assertTrue(listener.missesModel)
+    }
+
+    @Test
+    fun theModelIsMissedOnlyWhenItWasWantedAndWasntThere() = runBlocking {
+        // A phone that won't share its sound never got as far as wanting it.
+        val silent = listener(FakeMicrophone(works = false), model = null)
+        silent.hear(null)
+        assertFalse(silent.missesModel)
+        // Missed once, then there: it's no longer missed.
+        var model: File? = null
+        val listener = SingingListener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()); play(SingingListener.SECONDS.toDouble()) }, { model }, { FakeWords(listOf(HeardWord("Oh", 320))) }, Dispatchers.Unconfined, Dispatchers.Unconfined, clock = { 1_234L })
+        listener.hear(null)
+        assertTrue(listener.missesModel)
+        model = File("model")
+        listener.hear(null)
+        assertFalse(listener.missesModel)
+    }
+
+    @Test
+    fun theModelIsFetchedByHandThroughTheListener() = runBlocking {
+        val fetched = SingingListener(FakeMicrophone(), { null }, { null }, Dispatchers.Unconfined, Dispatchers.Unconfined, fetch = { File("model") })
+        assertTrue(fetched.fetchModel())
+        val failed = SingingListener(FakeMicrophone(), { null }, { null }, Dispatchers.Unconfined, Dispatchers.Unconfined, fetch = { null })
+        assertFalse(failed.fetchModel())
+        // Without a way to fetch it, nothing is.
+        assertFalse(SingingListener(FakeMicrophone(), { null }, { null }).fetchModel())
+        assertFalse(SingingHearing { null }.fetchModel())
+        assertFalse(SingingHearing { null }.missesModel)
     }
 
     @Test
@@ -319,6 +350,23 @@ class SungWordsTest {
         val fake = serving()
         assertNull(whisper(fake, mayFetch = false).file())
         assertEquals(emptyList<String>(), fake.requestedUrls)
+    }
+
+    @Test
+    fun askedForByHandTheModelIsFetchedOnAnyNetworkAndKept() = runBlocking {
+        val fake = serving()
+        val file = whisper(fake, mayFetch = false).fetchAnyway()!!
+        assertEquals(String(modelBytes), file.readText())
+        // There now, it's used without fetching it again.
+        assertEquals(file, whisper(fake, mayFetch = false).fetchAnyway())
+        assertEquals(file, whisper(fake, mayFetch = false).file())
+        assertEquals(1, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun oneNotAsTriedIsntKeptWhenFetchedByHandEither() = runBlocking {
+        assertNull(whisper(serving(), mayFetch = false, sha256 = "0".repeat(64)).fetchAnyway())
+        assertEquals(emptyList<String>(), File(folder.root, "whisper").list()!!.toList())
     }
 
     @Test

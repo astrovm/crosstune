@@ -9,6 +9,9 @@ import android.os.SystemClock
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
@@ -180,6 +183,62 @@ class SingingTest {
         plays(positionMs = 200)
         composeRule.waitForIdle()
         assertEquals(1, singing.hears)
+    }
+
+    private fun shown(id: Int) = composeRule.onAllNodesWithText(app.getString(id)).fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    fun withoutTheSpeechModelItsOfferedByHandThenTheSingingIsHeard() {
+        singing.missing = true
+        singing.answer = { sung(SHIFT_MS) }
+        val gate = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        singing.fetched = { singing.missing = !gate.await(); !singing.missing }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { shown(R.string.singing_model_offer) }
+        assertFalse(model().uiState.lyricsSynced)
+        composeRule.onNodeWithText(app.getString(R.string.singing_model_download)).performClick()
+        // While it comes, it can't be asked for again.
+        waitUntil { !shown(R.string.singing_model_download) }
+        assertTrue(shown(R.string.singing_model_offer))
+        gate.complete(true)
+        // Here now, the singing is heard with it and the words move.
+        waitUntil { model().uiState.lyricsSynced }
+        assertEquals(SHIFT_MS, firstLineMs())
+        assertFalse(shown(R.string.singing_model_offer))
+        assertEquals(1, singing.fetches)
+    }
+
+    @Test
+    fun aFetchThatFailsSaysSoAndClosedTheModelIsntOfferedAgain() {
+        singing.missing = true
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { shown(R.string.singing_model_offer) }
+        composeRule.onNodeWithText(app.getString(R.string.singing_model_download)).performClick()
+        waitUntil { shown(R.string.singing_model_failed) }
+        // Tried again from there.
+        composeRule.onNodeWithText(app.getString(R.string.singing_model_download)).performClick()
+        waitUntil { singing.fetches == 2 && shown(R.string.singing_model_failed) }
+        composeRule.onNodeWithContentDescription(app.getString(R.string.singing_model_close)).performClick()
+        composeRule.waitForIdle()
+        assertFalse(shown(R.string.singing_model_failed))
+        // Missed again while Crosstune stays open, it isn't offered again.
+        val heard = singing.hears
+        plays(positionMs = 100)
+        waitUntil { singing.hears > heard }
+        composeRule.waitForIdle()
+        assertFalse(shown(R.string.singing_model_offer))
+    }
+
+    @Test
+    fun nothingHeardWithTheModelThereOffersNoModel() {
+        singing.answer = { null }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertFalse(shown(R.string.singing_model_offer))
     }
 
     @Test
@@ -424,8 +483,27 @@ class SingingTest {
         @Volatile
         var stopped = 0
 
+        /** Whether the speech model is missing, so nothing's heard and it's said to be missed. */
+        @Volatile
+        var missing = false
+
+        /** How a fetch by hand goes: whether the model's there after. */
+        @Volatile
+        var fetched: suspend () -> Boolean = { false }
+
+        @Volatile
+        var fetches = 0
+
+        override val missesModel get() = missing
+
+        override suspend fun fetchModel(): Boolean {
+            fetches++
+            return fetched()
+        }
+
         override suspend fun hear(language: String?): Sung? {
             languages += language
+            if (missing) return null
             return try {
                 answer()
             } catch (stop: kotlinx.coroutines.CancellationException) {

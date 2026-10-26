@@ -281,6 +281,10 @@
     <string name="auto_report_offer">Signaler automatiquement les problèmes comme celui-ci ?</string>
     <string name="auto_report_yes">Oui</string>
     <string name="auto_report_no">Non merci</string>
+    <string name="singing_model_offer">Caler les paroles sur le chant nécessite un téléchargement de 32 Mo.</string>
+    <string name="singing_model_failed">Le téléchargement de 32 Mo n\'a pas abouti.</string>
+    <string name="singing_model_download">Télécharger</string>
+    <string name="singing_model_close">Pas maintenant</string>
     <string name="setting_auto_report">Signaler les problèmes de morceaux</string>
     <string name="setting_auto_report_description">En privé, au développeur.</string>
     <string name="lyrics_romanized">En lettres latines</string>

@@ -281,6 +281,10 @@
     <string name="auto_report_offer">Problemen zoals dit automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>
     <string name="auto_report_no">Nee, bedankt</string>
+    <string name="singing_model_offer">Om de songtekst op de zang af te stemmen is een download van 32 MB nodig.</string>
+    <string name="singing_model_failed">De download van 32 MB is niet afgemaakt.</string>
+    <string name="singing_model_download">Downloaden</string>
+    <string name="singing_model_close">Niet nu</string>
     <string name="setting_auto_report">Problemen met nummers melden</string>
     <string name="setting_auto_report_description">Privé, naar de ontwikkelaar.</string>
     <string name="lyrics_romanized">In Latijnse letters</string>

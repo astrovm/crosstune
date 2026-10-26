@@ -281,6 +281,10 @@
     <string name="auto_report_offer">Relatar problemas como este automaticamente?</string>
     <string name="auto_report_yes">Sim</string>
     <string name="auto_report_no">Não, obrigado</string>
+    <string name="singing_model_offer">Para alinhar a letra com o canto, é preciso baixar 32 MB.</string>
+    <string name="singing_model_failed">O download de 32 MB não terminou.</string>
+    <string name="singing_model_download">Baixar</string>
+    <string name="singing_model_close">Agora não</string>
     <string name="setting_auto_report">Relatar problemas de músicas</string>
     <string name="setting_auto_report_description">Em particular, para o desenvolvedor.</string>
     <string name="lyrics_romanized">Em letras latinas</string>

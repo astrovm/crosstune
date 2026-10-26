@@ -302,6 +302,10 @@
     <string name="auto_report_offer">Report problems like this one automatically?</string>
     <string name="auto_report_yes">Yes</string>
     <string name="auto_report_no">No thanks</string>
+    <string name="singing_model_offer">Lining lyrics up to the singing needs a 32 MB download.</string>
+    <string name="singing_model_failed">The 32 MB download didn\'t finish.</string>
+    <string name="singing_model_download">Download</string>
+    <string name="singing_model_close">Not now</string>
     <string name="setting_auto_report">Report song problems</string>
     <string name="setting_auto_report_description">Privately, to the developer.</string>
     <string name="lyrics_romanized">In Latin letters</string>

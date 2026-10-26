@@ -1432,6 +1432,8 @@ internal class MainViewModel(
     /** Hearing the words sung, to line them up; [singingTries] this time the song's followed. */
     private var singingJob: Job? = null
     private var singingTries = 0
+    /** Whether the speech model, offered to be fetched by hand, was turned down; it isn't offered again till Crosstune opens again. */
+    private var modelClosed = false
 
     /** Set once the song shown was playing while its words were open, so the next song an app plays takes over. */
     private var shownPlayed = false
@@ -1858,7 +1860,12 @@ internal class MainViewModel(
             delay(untilSung(lines, uiState.following?.clock ?: return@launch) ?: return@launch)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return@launch
             singingTries++
-            val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-')) ?: return@launch
+            val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'))
+            if (sung == null) {
+                // Heard nothing for want of the speech model, which isn't fetched on mobile data by itself: it's offered by hand.
+                if (hearing.missesModel && !modelClosed) uiState = uiState.copy(singingModel = ModelOffer.MISSING)
+                return@launch
+            }
             // Moved, paused or gone on to another song meanwhile, what was heard can't be placed.
             val playing = uiState.following?.clock
             if (uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
@@ -2283,6 +2290,26 @@ internal class MainViewModel(
         timedByHand = false
         offeredFor = null
         uiState = uiState.copy(reportOffer = false)
+    }
+
+    /** Fetches the speech model offered, on any network, then hears the singing again with it. */
+    fun fetchSingingModel() {
+        val hearing = singing ?: return
+        uiState = uiState.copy(singingModel = ModelOffer.FETCHING)
+        viewModelScope.launch {
+            val fetched = hearing.fetchModel()
+            uiState = uiState.copy(singingModel = if (fetched) null else ModelOffer.FAILED)
+            if (fetched) {
+                singingTries = 0
+                hearSinging()
+            }
+        }
+    }
+
+    /** The speech model isn't wanted for now. */
+    fun closeSingingModel() {
+        modelClosed = true
+        uiState = uiState.copy(singingModel = null)
     }
 
     /** Problems found from now on are reported by itself, or never, and the one offered for goes too. */

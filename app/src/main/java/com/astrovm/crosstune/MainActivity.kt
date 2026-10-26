@@ -331,10 +331,12 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var singingFactory: (Context, OkHttpClient) -> SingingHearing? = { context, client ->
             val memory = ActivityManager.MemoryInfo().also { context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(it) }
+            val model = WhisperModel(client, File(context.noBackupFilesDir, "whisper"), mayFetch = { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false })
             SingingListener(
                 PlayedSound(soundTapFactory, context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)),
-                WhisperModel(client, File(context.noBackupFilesDir, "whisper"), mayFetch = { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false })::file,
-                NativeWhisper::open
+                model::file,
+                NativeWhisper::open,
+                fetch = model::fetchAnyway
             ).takeIf { memory.totalMem >= SINGING_MEMORY }
         }
 
@@ -472,6 +474,8 @@ class MainActivity : ComponentActivity() {
         onSendReport = viewModel::sendReport,
         onCloseReport = viewModel::closeReport,
         onAllowAutoReports = viewModel::allowAutoReports,
+        onFetchSingingModel = viewModel::fetchSingingModel,
+        onCloseSingingModel = viewModel::closeSingingModel,
         onReadingsChange = viewModel::setReadings,
         onRomanizedChange = viewModel::setRomanized,
         onRomajiTypedChange = viewModel::setRomajiTyped,

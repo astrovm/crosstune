@@ -6,6 +6,8 @@ import androidx.core.content.edit
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,6 +32,12 @@ internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>)
 /** Hears the words of the song the phone plays now; null when it can't, or heard none. */
 internal fun interface SingingHearing {
     suspend fun hear(language: String?): Sung?
+
+    /** Whether the last try heard nothing for want of the speech model, which wasn't fetched then, e.g. on mobile data. */
+    val missesModel: Boolean get() = false
+
+    /** Fetches the speech model now, on any network; whether it's here after. */
+    suspend fun fetchModel(): Boolean = false
 }
 
 /**
@@ -44,15 +52,25 @@ internal class SingingListener(
     private val recordDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Hearing the words takes a few seconds of CPU. */
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    private val clock: () -> Long = SystemClock::elapsedRealtime
+    private val clock: () -> Long = SystemClock::elapsedRealtime,
+    /** The speech model fetched now, whatever the network; null when it couldn't be. */
+    private val fetch: suspend () -> File? = { null }
 ) : SingingHearing {
+    @Volatile
+    override var missesModel = false
+        private set
+
+    override suspend fun fetchModel(): Boolean = fetch() != null
+
     override suspend fun hear(language: String?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
         val recording = withContext(recordDispatcher) { sound.open() } ?: return null
         var model: File? = null
         val heard = recording.use {
             // The model first, so what's heard is fresh when it's listened to.
-            model = this.model() ?: return null
+            model = this.model()
+            missesModel = model == null
+            if (model == null) return null
             withContext(recordDispatcher) { record(recording) }
         } ?: return null
         val words = withContext(computeDispatcher) {
@@ -110,9 +128,17 @@ internal class WhisperModel(
 ) {
     private val file get() = File(dir, NAME)
 
+    /** One fetch at a time, as both write the same part. */
+    private val fetching = Mutex()
+
     /** The model, fetched now if it may be; null while it isn't here and can't be. */
-    suspend fun file(): File? = withContext(ioDispatcher) {
-        file.takeIf { it.isFile } ?: if (mayFetch()) fetch() else null
+    suspend fun file(): File? = get(anyway = false)
+
+    /** The model, fetched now whatever the network, when asked for by hand; null when it couldn't be. */
+    suspend fun fetchAnyway(): File? = get(anyway = true)
+
+    private suspend fun get(anyway: Boolean): File? = withContext(ioDispatcher) {
+        fetching.withLock { file.takeIf { it.isFile } ?: if (anyway || mayFetch()) fetch() else null }
     }
 
     private fun fetch(): File? {
