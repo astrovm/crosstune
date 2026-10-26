@@ -281,6 +281,10 @@
     <string name="auto_report_offer">Probleme wie dieses automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>
     <string name="auto_report_no">Nein danke</string>
+    <string name="singing_model_offer">Damit sich der Liedtext nach dem Gesang richtet, ist ein Download von 32 MB nötig.</string>
+    <string name="singing_model_failed">Der Download von 32 MB wurde nicht fertig.</string>
+    <string name="singing_model_download">Herunterladen</string>
+    <string name="singing_model_close">Jetzt nicht</string>
     <string name="setting_auto_report">Song-Probleme melden</string>
     <string name="setting_auto_report_description">Privat, an den Entwickler.</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>

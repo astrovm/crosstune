@@ -282,6 +282,10 @@
     <string name="auto_report_offer">このような問題を自動で報告しますか？</string>
     <string name="auto_report_yes">はい</string>
     <string name="auto_report_no">いいえ</string>
+    <string name="singing_model_offer">歌詞を歌声に合わせるには、32 MBのダウンロードが必要です。</string>
+    <string name="singing_model_failed">32 MBのダウンロードが完了しませんでした。</string>
+    <string name="singing_model_download">ダウンロード</string>
+    <string name="singing_model_close">今はしない</string>
     <string name="setting_auto_report">曲の問題を報告</string>
     <string name="setting_auto_report_description">開発者だけに非公開で。</string>
     <string name="lyrics_romanized">ローマ字</string>

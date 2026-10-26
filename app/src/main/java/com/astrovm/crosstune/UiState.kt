@@ -68,6 +68,8 @@ internal data class UiState(
     val autoReports: Boolean? = null,
     /** Whether the words shown have a problem Crosstune offers to report by itself, from now on. */
     val reportOffer: Boolean = false,
+    /** The speech model that lines the words up to the singing, while it's missing and offered to be fetched by hand. */
+    val singingModel: ModelOffer? = null,
     /** Whether [lyricLines] are timed for a recording not as long as the one playing, so likely off, and not yet put right. */
     val lyricsOffTake: Boolean = false,
     /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */
@@ -502,3 +504,6 @@ internal enum class OneTapFix { LINKS, FOLLOW, FLOAT }
 
 /** A report on the words: on its way, there, or not sent. */
 internal enum class ReportStatus { SENDING, SENT, FAILED }
+
+/** The speech model, offered to be fetched by hand: [MISSING], [FETCHING] it, or the fetch [FAILED]. */
+internal enum class ModelOffer { MISSING, FETCHING, FAILED }

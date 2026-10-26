@@ -281,6 +281,10 @@
     <string name="auto_report_offer">Zgłaszać takie problemy automatycznie?</string>
     <string name="auto_report_yes">Tak</string>
     <string name="auto_report_no">Nie, dziękuję</string>
+    <string name="singing_model_offer">Dopasowanie tekstu do śpiewu wymaga pobrania 32 MB.</string>
+    <string name="singing_model_failed">Pobieranie 32 MB nie zostało ukończone.</string>
+    <string name="singing_model_download">Pobierz</string>
+    <string name="singing_model_close">Nie teraz</string>
     <string name="setting_auto_report">Zgłaszaj problemy z utworami</string>
     <string name="setting_auto_report_description">Prywatnie, do dewelopera.</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>

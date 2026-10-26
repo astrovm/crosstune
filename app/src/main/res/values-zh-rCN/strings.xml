@@ -281,6 +281,10 @@
     <string name="auto_report_offer">自动报告这类问题？</string>
     <string name="auto_report_yes">好</string>
     <string name="auto_report_no">不用了</string>
+    <string name="singing_model_offer">让歌词对上歌声，需要下载 32 MB。</string>
+    <string name="singing_model_failed">32 MB 的下载没有完成。</string>
+    <string name="singing_model_download">下载</string>
+    <string name="singing_model_close">暂不</string>
     <string name="setting_auto_report">报告歌曲问题</string>
     <string name="setting_auto_report_description">只私下发给开发者。</string>
     <string name="lyrics_romanized">拉丁字母</string>

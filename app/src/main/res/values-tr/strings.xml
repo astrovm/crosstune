@@ -281,6 +281,10 @@
     <string name="auto_report_offer">Bunun gibi sorunlar otomatik bildirilsin mi?</string>
     <string name="auto_report_yes">Evet</string>
     <string name="auto_report_no">Hayır, teşekkürler</string>
+    <string name="singing_model_offer">Sözleri şarkıya göre ayarlamak için 32 MB indirmek gerekiyor.</string>
+    <string name="singing_model_failed">32 MB\'lık indirme tamamlanmadı.</string>
+    <string name="singing_model_download">İndir</string>
+    <string name="singing_model_close">Şimdi değil</string>
     <string name="setting_auto_report">Şarkı sorunlarını bildir</string>
     <string name="setting_auto_report_description">Yalnızca geliştiriciye.</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
