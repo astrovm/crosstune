@@ -3167,7 +3167,18 @@ class ListeningTest {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
         MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }, room = 0) }
         val jar = TestUniDic.jar.readBytes()
-        wordsOf(null, "君が溢した涙", sites = { request -> if (request.url.toString() == UniDic.URL) FakeSpotify.image(request, jar) else null })
+        wordsOf(null, "君が溢した涙", sites = { request ->
+            when {
+                request.url.toString() == UniDic.URL -> FakeSpotify.image(request, jar)
+                // Looking for the sung readings takes until it's here, so the words are still being read.
+                request.url.host == "utaten.com" -> {
+                    val until = System.currentTimeMillis() + TIMEOUT_MS
+                    while (Readings.uniDic == null && System.currentTimeMillis() < until) Thread.sleep(20)
+                    FakeSpotify.html(request, "")
+                }
+                else -> null
+            }
+        })
         // Fetched while the words show, which are read again with it.
         waitUntil(TIMEOUT_MS) { readingShown("こぼ") }
         assertTrue(readingShown("きみ") && readingShown("なみだ"))
