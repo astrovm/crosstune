@@ -5,6 +5,8 @@ import com.astrovm.crosstune.ui.theme.wallpaperColors
 
 internal data class UiState(
     val linkText: String = "",
+    /** On a TV, the page a phone types the link on, while its code shows under the field. */
+    val phonePage: PhonePage? = null,
     val isLoading: Boolean = false,
     val isMatching: Boolean = false,
     /** While the result's app is asked to play it in the background. */
@@ -507,3 +509,9 @@ internal enum class ReportStatus { SENDING, SENT, FAILED }
 
 /** The speech model, offered to be fetched by hand: [MISSING], [FETCHING] it, or the fetch [FAILED]. */
 internal enum class ModelOffer { MISSING, FETCHING, FAILED }
+
+/** Typing on the phone for a TV: the page's address, which the code under the field opens, or no network to serve it on. */
+internal sealed interface PhonePage {
+    data class Open(val link: String) : PhonePage
+    data object NoNetwork : PhonePage
+}

@@ -125,7 +125,8 @@ class MainActivity : ComponentActivity() {
                     phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
                     keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
-                    lookAhead = lookAheadLyrics
+                    lookAhead = lookAheadLyrics,
+                    phoneTyping = phoneTypingFactory(applicationContext)
                 )
             }
         }
@@ -340,6 +341,12 @@ class MainActivity : ComponentActivity() {
             ).takeIf { memory.totalMem >= SINGING_MEMORY }
         }
 
+        /** Where a phone types for a TV: a page served on the Wi-Fi, in the app's language. */
+        @VisibleForTesting
+        internal var phoneTypingFactory: (Context) -> PhoneTyping = { context ->
+            WifiTyping({ PhonePageWords(context.getString(R.string.spotify_link_placeholder), context.getString(R.string.phone_page_send)) })
+        }
+
         /** What tells which language a song's words are in, when a test stands in for Android. */
         @VisibleForTesting
         internal var lyricsLanguageFactory: (() -> LyricsLanguage)? = null
@@ -444,6 +451,8 @@ class MainActivity : ComponentActivity() {
         onUrlChange = viewModel::onUrlChange,
         onResolve = viewModel::resolveTypedInput,
         onPaste = { viewModel.pasteLink(clipboardText()) },
+        onOpenPhonePage = viewModel::openPhonePage,
+        onClosePhonePage = viewModel::closePhonePage,
         recognizers = recognizers,
         recognizer = recognizers.firstOrNull(),
         onRecognize = { if (it.listensHere) listen() else tryStartActivity(it.intent) },

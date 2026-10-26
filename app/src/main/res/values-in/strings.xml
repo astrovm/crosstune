@@ -285,6 +285,10 @@
     <string name="singing_model_failed">Unduhan 32 MB tidak selesai.</string>
     <string name="singing_model_download">Unduh</string>
     <string name="singing_model_close">Nanti saja</string>
+    <string name="phone_page_button">Ketik di ponsel</string>
+    <string name="phone_page_scan">Pindai untuk mengetik di ponsel.</string>
+    <string name="phone_page_offline">TV tidak terhubung ke jaringan.</string>
+    <string name="phone_page_send">Kirim</string>
     <string name="setting_auto_report">Laporkan masalah lagu</string>
     <string name="setting_auto_report_description">Secara pribadi, ke pengembang.</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>

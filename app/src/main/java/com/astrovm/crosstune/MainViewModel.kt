@@ -116,7 +116,9 @@ internal class MainViewModel(
     /** Where the words of the songs shown lately are kept for after the app's closed; nullable so tests need none. */
     private val keptOnDisk: LookupCache? = null,
     /** Whether a song's lyrics are looked up as its card shows, see [lookAhead]. */
-    private val lookAhead: Boolean = true
+    private val lookAhead: Boolean = true,
+    /** On a TV, a page on the Wi-Fi a phone types the link on; nullable so tests need none. */
+    private val phoneTyping: PhoneTyping? = null
 ) : ViewModel() {
     /**
      * On a TV, an app opened on a song is covered rather than left, once Android lets Crosstune show
@@ -252,6 +254,7 @@ internal class MainViewModel(
     }.also(preferences::registerOnSharedPreferenceChangeListener)
 
     override fun onCleared() {
+        phoneTyping?.close()
         stopWatchingOneTap?.invoke()
         preferences.unregisterOnSharedPreferenceChangeListener(visualsChanged)
     }
@@ -539,6 +542,26 @@ internal class MainViewModel(
 
     fun onUrlChange(text: String) {
         uiState = uiState.copy(linkText = text, error = null)
+    }
+
+    /**
+     * Shows the code a phone opens to type the link on. The page keeps taking what's sent once the
+     * code's put away, so a phone can send song after song without the remote.
+     */
+    fun openPhonePage() {
+        val link = phoneTyping?.open { text ->
+            viewModelScope.launch {
+                // Off the field's way, for the song it finds.
+                uiState = uiState.copy(phonePage = null)
+                onUrlChange(text)
+                resolveTypedInput()
+            }
+        }
+        uiState = uiState.copy(phonePage = link?.let(PhonePage::Open) ?: PhonePage.NoNetwork)
+    }
+
+    fun closePhonePage() {
+        uiState = uiState.copy(phonePage = null)
     }
 
     /** Resolves what the user typed, leaving the text field as typed. */

@@ -285,6 +285,10 @@
     <string name="singing_model_failed">Der Download von 32 MB wurde nicht fertig.</string>
     <string name="singing_model_download">Herunterladen</string>
     <string name="singing_model_close">Jetzt nicht</string>
+    <string name="phone_page_button">Auf dem Handy tippen</string>
+    <string name="phone_page_scan">Scannen, um auf dem Handy zu tippen.</string>
+    <string name="phone_page_offline">Der Fernseher ist mit keinem Netzwerk verbunden.</string>
+    <string name="phone_page_send">Senden</string>
     <string name="setting_auto_report">Song-Probleme melden</string>
     <string name="setting_auto_report_description">Privat, an den Entwickler.</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>

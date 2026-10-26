@@ -285,6 +285,10 @@
     <string name="singing_model_failed">O download de 32 MB não terminou.</string>
     <string name="singing_model_download">Baixar</string>
     <string name="singing_model_close">Agora não</string>
+    <string name="phone_page_button">Digitar no celular</string>
+    <string name="phone_page_scan">Escaneie para digitar no celular.</string>
+    <string name="phone_page_offline">A TV não está conectada a nenhuma rede.</string>
+    <string name="phone_page_send">Enviar</string>
     <string name="setting_auto_report">Relatar problemas de músicas</string>
     <string name="setting_auto_report_description">Em particular, para o desenvolvedor.</string>
     <string name="lyrics_romanized">Em letras latinas</string>

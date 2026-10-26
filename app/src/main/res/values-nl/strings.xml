@@ -285,6 +285,10 @@
     <string name="singing_model_failed">De download van 32 MB is niet afgemaakt.</string>
     <string name="singing_model_download">Downloaden</string>
     <string name="singing_model_close">Niet nu</string>
+    <string name="phone_page_button">Typ op je telefoon</string>
+    <string name="phone_page_scan">Scan om op je telefoon te typen.</string>
+    <string name="phone_page_offline">De tv is niet met een netwerk verbonden.</string>
+    <string name="phone_page_send">Versturen</string>
     <string name="setting_auto_report">Problemen met nummers melden</string>
     <string name="setting_auto_report_description">Privé, naar de ontwikkelaar.</string>
     <string name="lyrics_romanized">In Latijnse letters</string>

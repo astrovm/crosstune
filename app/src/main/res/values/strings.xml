@@ -306,6 +306,10 @@
     <string name="singing_model_failed">The 32 MB download didn\'t finish.</string>
     <string name="singing_model_download">Download</string>
     <string name="singing_model_close">Not now</string>
+    <string name="phone_page_button">Type on your phone</string>
+    <string name="phone_page_scan">Scan to type on your phone.</string>
+    <string name="phone_page_offline">The TV isn\'t on a network.</string>
+    <string name="phone_page_send">Send</string>
     <string name="setting_auto_report">Report song problems</string>
     <string name="setting_auto_report_description">Privately, to the developer.</string>
     <string name="lyrics_romanized">In Latin letters</string>

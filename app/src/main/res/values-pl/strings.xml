@@ -285,6 +285,10 @@
     <string name="singing_model_failed">Pobieranie 32 MB nie zostało ukończone.</string>
     <string name="singing_model_download">Pobierz</string>
     <string name="singing_model_close">Nie teraz</string>
+    <string name="phone_page_button">Pisz na telefonie</string>
+    <string name="phone_page_scan">Zeskanuj, aby pisać na telefonie.</string>
+    <string name="phone_page_offline">Telewizor nie jest połączony z żadną siecią.</string>
+    <string name="phone_page_send">Wyślij</string>
     <string name="setting_auto_report">Zgłaszaj problemy z utworami</string>
     <string name="setting_auto_report_description">Prywatnie, do dewelopera.</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>

@@ -157,6 +157,9 @@ internal data class ScreenActions(
     val onUrlChange: (String) -> Unit = {},
     val onResolve: () -> Unit = {},
     val onPaste: () -> Unit = {},
+    /** On a TV, shows the code a phone opens to type the link on. */
+    val onOpenPhonePage: () -> Unit = {},
+    val onClosePhonePage: () -> Unit = {},
     /** What names a song playing nearby: Crosstune itself first, then Shazam and Google. */
     val recognizers: List<SongRecognizer> = emptyList(),
     /** The one the Recognize button opens: Crosstune, listening itself. */
@@ -641,6 +644,12 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         Spacer(Modifier.height(8.dp))
         UpdateNotice(state, actions)
         LinkField(state, actions)
+        AnimatedVisibility(visible = state.phonePage != null, enter = Motion.appear, exit = Motion.disappear) {
+            // Kept while it fades out.
+            val shown = remember { mutableStateOf(state.phonePage) }
+            state.phonePage?.let { shown.value = it }
+            shown.value?.let { PhoneCode(it, actions.onClosePhonePage) }
+        }
         StatusSection(state, actions)
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
         // Covers found for a playlist's songs fill in where they are rather than bring a new result.
@@ -874,6 +883,12 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
                         }
                         IconButton(onClick = actions.onPaste, enabled = !busy) {
                             AppIcon(R.drawable.ic_content_paste, contentDescription = stringResource(R.string.paste_button))
+                        }
+                        // A TV's remote is slow at typing, which a phone does instead.
+                        if (tv) {
+                            IconButton(onClick = actions.onOpenPhonePage, enabled = !busy) {
+                                AppIcon(R.drawable.ic_smartphone, contentDescription = stringResource(R.string.phone_page_button))
+                            }
                         }
                     }
                 } else {

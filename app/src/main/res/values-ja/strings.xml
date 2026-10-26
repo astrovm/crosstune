@@ -286,6 +286,10 @@
     <string name="singing_model_failed">32 MBのダウンロードが完了しませんでした。</string>
     <string name="singing_model_download">ダウンロード</string>
     <string name="singing_model_close">今はしない</string>
+    <string name="phone_page_button">スマホで入力</string>
+    <string name="phone_page_scan">スキャンしてスマホで入力</string>
+    <string name="phone_page_offline">テレビがネットワークに接続されていません。</string>
+    <string name="phone_page_send">送信</string>
     <string name="setting_auto_report">曲の問題を報告</string>
     <string name="setting_auto_report_description">開発者だけに非公開で。</string>
     <string name="lyrics_romanized">ローマ字</string>

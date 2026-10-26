@@ -285,6 +285,10 @@
     <string name="singing_model_failed">Le téléchargement de 32 Mo n\'a pas abouti.</string>
     <string name="singing_model_download">Télécharger</string>
     <string name="singing_model_close">Pas maintenant</string>
+    <string name="phone_page_button">Saisir sur votre téléphone</string>
+    <string name="phone_page_scan">Scannez pour saisir sur votre téléphone.</string>
+    <string name="phone_page_offline">Le téléviseur n\'est connecté à aucun réseau.</string>
+    <string name="phone_page_send">Envoyer</string>
     <string name="setting_auto_report">Signaler les problèmes de morceaux</string>
     <string name="setting_auto_report_description">En privé, au développeur.</string>
     <string name="lyrics_romanized">En lettres latines</string>

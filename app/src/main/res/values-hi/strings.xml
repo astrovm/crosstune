@@ -285,6 +285,10 @@
     <string name="singing_model_failed">32 MB का डाउनलोड पूरा नहीं हुआ।</string>
     <string name="singing_model_download">डाउनलोड करें</string>
     <string name="singing_model_close">अभी नहीं</string>
+    <string name="phone_page_button">अपने फ़ोन पर टाइप करें</string>
+    <string name="phone_page_scan">अपने फ़ोन पर टाइप करने के लिए स्कैन करें।</string>
+    <string name="phone_page_offline">टीवी किसी नेटवर्क से कनेक्ट नहीं है।</string>
+    <string name="phone_page_send">भेजें</string>
     <string name="setting_auto_report">गानों की समस्याओं की रिपोर्ट करें</string>
     <string name="setting_auto_report_description">निजी तौर पर, डेवलपर को।</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>

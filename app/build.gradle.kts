@@ -176,6 +176,9 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
 
+    // Draws the code a phone's camera opens to type for a TV.
+    implementation("com.google.zxing:core:3.5.4")
+
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.1")
     // Installs the baseline profile on first launch when the app store didn't, e.g. F-Droid or a GitHub APK.

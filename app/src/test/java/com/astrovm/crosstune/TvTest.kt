@@ -62,6 +62,8 @@ class TvTest {
 
     /** Put back after, so other tests still tell the phone as the app does. */
     private val realPhone = MainActivity.phoneFactory
+    private val realPhoneTyping = MainActivity.phoneTypingFactory
+    private val phoneTyping = FakePhoneTyping()
 
     @Before
     fun setUp() {
@@ -69,6 +71,7 @@ class TvTest {
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         MainActivity.phoneFactory = { phone }
+        MainActivity.phoneTypingFactory = { phoneTyping }
         MainActivity.checksForUpdates = { false }
         MainActivity.shellFactory = { emptyList() }
         prefs().edit().clear().commit()
@@ -84,6 +87,7 @@ class TvTest {
         MainActivity.checksForUpdates = ::looksForUpdates
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.playbackFactory = ::MediaSessionPlayback
+        MainActivity.phoneTypingFactory = realPhoneTyping
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -267,5 +271,78 @@ class TvTest {
         field().assertIsFocused()
         assertEquals("never gonna", fieldText())
         field().assert(hasText("never gonna"))
+    }
+
+    private fun phoneButton() = composeRule.onNode(hasContentDescription(string(R.string.phone_page_button)))
+
+    private fun code() = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(PhoneCodeLink)).fetchSemanticsNodes().map { it.config[PhoneCodeLink] }
+
+    @Test
+    fun onATvTheLinkIsTypedOnAPhoneThroughTheCodeUnderTheField() {
+        launch()
+        assertEquals(emptyList<String>(), code())
+        phoneButton().performClick()
+        composeRule.waitForIdle()
+        // The code opens the page, and says so.
+        assertEquals(listOf(phoneTyping.link), code())
+        assertTrue(shown(string(R.string.phone_page_scan)))
+        // The remote is on its close button, so OK puts it away.
+        composeRule.onNode(hasContentDescription(string(R.string.dismiss_button))).assertIsFocused()
+
+        // What the phone sends is looked up, and the code makes way for it.
+        val song = "https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl"
+        phoneTyping.type(song)
+        composeRule.waitForIdle()
+        assertEquals(song, fieldText())
+        assertEquals(song, fake.requestedUrls.first())
+        assertEquals(emptyList<String>(), code())
+
+        // The page keeps taking songs with the code put away; one more replaces it.
+        phoneTyping.type("never gonna")
+        composeRule.waitForIdle()
+        assertEquals("never gonna", fieldText())
+        assertEquals(1, phoneTyping.opened)
+        assertTrue(!phoneTyping.closed)
+    }
+
+    @Test
+    fun onATvTheCodeIsPutAwayWithItsButtonOrBack() {
+        launch()
+        phoneButton().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(string(R.string.dismiss_button))).performClick()
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), code())
+        assertTrue(!shown(string(R.string.phone_page_scan)))
+
+        // Back puts it away, rather than leave the app.
+        phoneButton().performClick()
+        composeRule.waitForIdle()
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), code())
+        assertTrue(!controller!!.get().isFinishing)
+
+        // The page goes when the app does.
+        controller!!.pause().stop().destroy()
+        controller = null
+        assertTrue(phoneTyping.closed)
+    }
+
+    @Test
+    fun onATvOnNoNetworkThereIsNoCodeAndItSaysWhy() {
+        phoneTyping.link = null
+        launch()
+        phoneButton().performClick()
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), code())
+        assertTrue(shown(string(R.string.phone_page_offline)))
+    }
+
+    @Test
+    fun aPhoneHasNoCodeToTypeOnAPhone() {
+        phone = Phone.OTHER
+        launch()
+        phoneButton().assertDoesNotExist()
     }
 }

@@ -285,6 +285,10 @@
     <string name="singing_model_failed">Загрузка 32 МБ не завершилась.</string>
     <string name="singing_model_download">Скачать</string>
     <string name="singing_model_close">Не сейчас</string>
+    <string name="phone_page_button">Ввести с телефона</string>
+    <string name="phone_page_scan">Отсканируйте, чтобы вводить с телефона.</string>
+    <string name="phone_page_offline">Телевизор не подключён к сети.</string>
+    <string name="phone_page_send">Отправить</string>
     <string name="setting_auto_report">Сообщать о проблемах с песнями</string>
     <string name="setting_auto_report_description">Лично разработчику.</string>
     <string name="lyrics_romanized">Латиницей</string>

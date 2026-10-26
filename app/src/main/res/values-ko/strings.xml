@@ -285,6 +285,10 @@
     <string name="singing_model_failed">32MB 다운로드가 끝나지 않았어요.</string>
     <string name="singing_model_download">다운로드</string>
     <string name="singing_model_close">나중에</string>
+    <string name="phone_page_button">휴대폰으로 입력</string>
+    <string name="phone_page_scan">스캔하면 휴대폰으로 입력할 수 있어요.</string>
+    <string name="phone_page_offline">TV가 네트워크에 연결되어 있지 않아요.</string>
+    <string name="phone_page_send">보내기</string>
     <string name="setting_auto_report">노래 문제 신고</string>
     <string name="setting_auto_report_description">개발자에게만 비공개로.</string>
     <string name="lyrics_romanized">라틴 문자로</string>
