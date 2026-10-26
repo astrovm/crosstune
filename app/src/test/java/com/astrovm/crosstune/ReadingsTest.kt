@@ -385,6 +385,9 @@ class ReadingsTest {
             assertEquals("$withUniDic", "こっちがわにきて", read("こっち側に来て").reading)
             assertEquals("$withUniDic", "むこうがわ", read("向こう側").reading)
             assertTrue("$withUniDic", read("反対側").reading.endsWith("がわ"))
+            // は and ね, not a verb, before a space.
+            assertEquals("$withUniDic", "bokura wa ne sonna", read("僕らはね そんな").romanized)
+            assertEquals("$withUniDic", "hane o hirogete", read("羽を広げて").romanized)
             // 違く is said for 違って.
             assertEquals("$withUniDic", "うまれたほしのもとがちがくたって", read("生まれた星のもとが違くたって").reading)
             assertEquals("$withUniDic", "ちがくて", read("違くて").reading)

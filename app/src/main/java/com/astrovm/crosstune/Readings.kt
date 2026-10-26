@@ -376,6 +376,11 @@ internal object Readings {
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般")
                 last != null && counted(last, piece) -> out[out.lastIndex] = Piece(last.surface + piece.surface, "いっ" + plosive(piece.kana), "名詞", "一般")
                 piece.surface == "側" && (last == null || !sideOf(last)) -> out += piece.read("そば", "名詞", "一般")
+                // Before a space, IPADIC takes はね after a noun for a verb, 跳ね: it's 僕らは and ね.
+                last?.kind == "名詞" && piece.kind == "動詞" && piece.surface.length == 2 && piece.surface[0] == 'は' && piece.surface[1] in ENDINGS -> {
+                    out += Piece("は", "は", "助詞", "係助詞")
+                    out += Piece(piece.surface.drop(1), piece.surface.drop(1), "助詞", "終助詞")
+                }
                 last?.surface == "違" && piece.surface.first() in "くか" -> {
                     out[out.lastIndex] = last.read("ちが")
                     out += piece
@@ -396,6 +401,8 @@ internal object Readings {
     /** Whether 側 after [piece] is a side of it: after kanji or katakana, 反対側, or a way, こっち側. */
     private fun sideOf(piece: Piece) = piece.surface in SIDES || piece.surface.last().let { isHan(it) || it in 'ァ'..'ヺ' }
 
+    /** Particles a line ends on, ね and よ. */
+    private const val ENDINGS = "ねさよな"
     private val NUMBERS = setOf("数", "数詞")
     private const val RUN_INTO = "かきくけこさしすせそたちつてとはひふへほ"
     private val SIDES = setOf("こっち", "そっち", "あっち", "どっち", "こちら", "そちら", "あちら", "どちら", "向こう")
