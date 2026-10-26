@@ -163,12 +163,15 @@ internal object SungAlignment {
         // Only the lines near what was heard, so a chorus sung again elsewhere isn't matched to it.
         val from = heard.first().second - MAX_SHIFT_MS
         val to = heard.last().second + MAX_SHIFT_MS
-        val timed = lines.filter { it.timeMs in from..to }.flatMap(::wordsOf)
-        val shifts = matched(heard.map { it.first }, timed.map { it.first }).mapNotNull { (h, t) -> timed[t].second?.let { heard[h].second - it } }
-        if (shifts.size < MIN_WORDS) return null
-        val agreed = shifts.map { shift -> shifts.filter { abs(it - shift) <= AGREE_MS } }.maxBy { it.size }
-        if (agreed.size < MIN_WORDS || agreed.size * 2 < shifts.size) return null
-        val shift = agreed.sorted()[agreed.size / 2] - HEARD_LATE_MS
+        val near = lines.filter { it.timeMs in from..to }
+        // Each word, with which line it's in.
+        val timed = near.indices.flatMap { line -> wordsOf(near[line]).map { (text, ms) -> Triple(text, ms, line) } }
+        val shifts = matched(heard.map { it.first }, timed.map { it.first }).mapNotNull { (h, t) -> timed[t].second?.let { (heard[h].second - it) to timed[t].third } }
+        if (shifts.size < MIN_LINES) return null
+        val agreed = shifts.map { (shift) -> shifts.filter { abs(it.first - shift) <= AGREE_MS } }.maxBy { it.size }
+        // Lines timed a line at a time have a time for their first words only, so a few lines are enough.
+        if ((agreed.size < MIN_WORDS && agreed.distinctBy { it.second }.size < MIN_LINES) || agreed.size * 2 < shifts.size) return null
+        val shift = agreed.map { it.first }.sorted()[agreed.size / 2] - HEARD_LATE_MS
         return shift.takeIf { abs(it) <= MAX_SHIFT_MS }
     }
 
@@ -204,8 +207,9 @@ internal object SungAlignment {
         return pairs
     }
 
-    /** Words heard that must match, and agree, to tell. */
+    /** Words heard that must match, and agree, to tell; or as few as the lines they're in, when in this many. */
     private const val MIN_WORDS = 5
+    private const val MIN_LINES = 3
 
     /** How far apart words may say the words are and still agree: about how far off one is heard. */
     private const val AGREE_MS = 400L

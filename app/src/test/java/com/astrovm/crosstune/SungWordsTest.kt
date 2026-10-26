@@ -102,9 +102,12 @@ class SungWordsTest {
 
     @Test
     fun tooFewWordsHeardToTell() {
-        // Five lines' first words tell; four don't.
-        assertEquals(500L, SungAlignment.shiftMs(heard(song.take(5), 500), fromTheStart, song))
-        assertNull(SungAlignment.shiftMs(heard(song.take(4), 500), fromTheStart, song))
+        // Three lines' first words tell, as lines timed a line at a time have few words with a time; two don't.
+        assertEquals(500L, SungAlignment.shiftMs(heard(song.take(3), 500), fromTheStart, song))
+        assertNull(SungAlignment.shiftMs(heard(song.take(2), 500), fromTheStart, song))
+        // Nor do four words of one line, timed word by word.
+        val oneLine = listOf(LyricLine(1_000, "Take me home now", listOf(TimedWord(1_000, "Take "), TimedWord(1_400, "me "), TimedWord(1_800, "home "), TimedWord(2_200, "now"))))
+        assertNull(SungAlignment.shiftMs(Sung(0, oneLine.single().words.map { HeardWord(it.text.trim(), it.timeMs + 300 + SungAlignment.HEARD_LATE_MS) }), fromTheStart, oneLine))
         // Heard words that aren't the song's, or nothing but sounds, tell nothing.
         assertNull(SungAlignment.shiftMs(Sung(0, listOf(HeardWord("♪", 600), HeardWord("...", 900))), fromTheStart, song))
         assertNull(SungAlignment.shiftMs(Sung(0, emptyList()), fromTheStart, song))
