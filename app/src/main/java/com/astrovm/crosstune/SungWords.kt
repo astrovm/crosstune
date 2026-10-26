@@ -30,14 +30,14 @@ internal fun interface WordHearing {
 internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>)
 
 /** Hears the words of the song the phone plays now; null when it can't, or heard none. */
-internal fun interface SingingHearing {
+internal interface SingingHearing {
     suspend fun hear(language: String?): Sung?
 
     /** Whether the last try heard nothing for want of the speech model, which wasn't fetched then, e.g. on mobile data. */
-    val missesModel: Boolean get() = false
+    val missesModel: Boolean
 
     /** Fetches the speech model now, on any network; whether it's here after. */
-    suspend fun fetchModel(): Boolean = false
+    suspend fun fetchModel(): Boolean
 }
 
 /**

@@ -256,13 +256,6 @@ class SungWordsTest {
     }
 
     @Test
-    fun aHearingWithoutAModelNeverMissesOneNorFetchesIt() = runBlocking {
-        val hearing = SingingHearing { null }
-        assertFalse(hearing.missesModel)
-        assertFalse(hearing.fetchModel())
-    }
-
-    @Test
     fun theModelIsMissedOnlyWhenItWasWantedAndWasntThere() = runBlocking {
         // A phone that won't share its sound never got as far as wanting it.
         val silent = listener(FakeMicrophone(works = false), model = null)
@@ -286,8 +279,6 @@ class SungWordsTest {
         assertFalse(failed.fetchModel())
         // Without a way to fetch it, nothing is.
         assertFalse(SingingListener(FakeMicrophone(), { null }, { null }).fetchModel())
-        assertFalse(SingingHearing { null }.fetchModel())
-        assertFalse(SingingHearing { null }.missesModel)
     }
 
     @Test
