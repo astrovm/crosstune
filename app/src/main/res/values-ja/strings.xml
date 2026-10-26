@@ -206,7 +206,7 @@
     <string name="visuals_drop">これを表示しない</string>
     <string name="settings_visuals_title">ビジュアル</string>
     <string name="setting_skip_heavy_visuals">重いビジュアルをスキップ</string>
-    <string name="setting_skip_heavy_visuals_description">この端末では遅すぎて、上の歌詞がカクつくもの。</string>
+    <string name="setting_skip_heavy_visuals_description">この端末でカクつくもの。</string>
     <string name="setting_visuals_change">切り替え間隔</string>
     <string name="visuals_change_never">しない</string>
     <string name="setting_visuals_list">表示するビジュアル</string>
@@ -282,8 +282,8 @@
     <string name="auto_report_offer">このような問題を自動で報告しますか？</string>
     <string name="auto_report_yes">はい</string>
     <string name="auto_report_no">いいえ</string>
-    <string name="setting_auto_report">曲の問題を自動で報告</string>
-    <string name="setting_auto_report_description">見つからない歌詞、タイミング、コード、そして手動で直したタイミングが、Crosstune の開発者だけに非公開で届きます。</string>
+    <string name="setting_auto_report">曲の問題を報告</string>
+    <string name="setting_auto_report_description">開発者だけに非公開で。</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_translation">翻訳</string>

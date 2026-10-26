@@ -205,7 +205,7 @@
     <string name="visuals_drop">No mostrar este</string>
     <string name="settings_visuals_title">Visuales</string>
     <string name="setting_skip_heavy_visuals">Saltar visuales pesados</string>
-    <string name="setting_skip_heavy_visuals_description">Los muy lentos para este teléfono, que hacen trabar la letra encima.</string>
+    <string name="setting_skip_heavy_visuals_description">Los que se traban en este teléfono.</string>
     <string name="setting_visuals_change">Cambiar cada</string>
     <string name="visuals_change_never">Nunca</string>
     <string name="setting_visuals_list">Qué visuales</string>
@@ -281,8 +281,8 @@
     <string name="auto_report_offer">¿Reportar problemas como este automáticamente?</string>
     <string name="auto_report_yes">Sí</string>
     <string name="auto_report_no">No, gracias</string>
-    <string name="setting_auto_report">Reportar problemas de canciones automáticamente</string>
-    <string name="setting_auto_report_description">Letras, tiempos o acordes que faltan, y los tiempos que corregís, le llegan en privado al desarrollador de Crosstune.</string>
+    <string name="setting_auto_report">Reportar problemas de canciones</string>
+    <string name="setting_auto_report_description">En privado, al desarrollador.</string>
     <string name="lyrics_romanized">En letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se teclea</string>
     <string name="lyrics_translation">Traducción</string>

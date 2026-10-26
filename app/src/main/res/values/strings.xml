@@ -151,7 +151,7 @@
     <string name="visuals_drop">Don\'t show this one</string>
     <string name="settings_visuals_title">Visuals</string>
     <string name="setting_skip_heavy_visuals">Skip heavy visuals</string>
-    <string name="setting_skip_heavy_visuals_description">Ones too slow for this phone, which make the words over them stutter.</string>
+    <string name="setting_skip_heavy_visuals_description">Ones that stutter on this phone.</string>
     <string name="setting_visuals_change">Change every</string>
     <string name="visuals_change_never">Never</string>
     <string name="setting_visuals_list">Which visuals</string>
@@ -302,8 +302,8 @@
     <string name="auto_report_offer">Report problems like this one automatically?</string>
     <string name="auto_report_yes">Yes</string>
     <string name="auto_report_no">No thanks</string>
-    <string name="setting_auto_report">Report song problems automatically</string>
-    <string name="setting_auto_report_description">Missing lyrics, timing or chords, and timing you fix, go privately to Crosstune\'s developer.</string>
+    <string name="setting_auto_report">Report song problems</string>
+    <string name="setting_auto_report_description">Privately, to the developer.</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_translation">Translation</string>

@@ -205,7 +205,7 @@
     <string name="visuals_drop">不再顯示這個</string>
     <string name="settings_visuals_title">視覺效果</string>
     <string name="setting_skip_heavy_visuals">略過繁重的視覺效果</string>
-    <string name="setting_skip_heavy_visuals_description">在這支手機上太慢、會讓上面的歌詞卡頓的。</string>
+    <string name="setting_skip_heavy_visuals_description">在這支手機上會卡頓的。</string>
     <string name="setting_visuals_change">切換間隔</string>
     <string name="visuals_change_never">永不</string>
     <string name="setting_visuals_list">顯示哪些視覺效果</string>
@@ -281,8 +281,8 @@
     <string name="auto_report_offer">自動回報這類問題？</string>
     <string name="auto_report_yes">好</string>
     <string name="auto_report_no">不用了</string>
-    <string name="setting_auto_report">自動回報歌曲問題</string>
-    <string name="setting_auto_report_description">缺少的歌詞、時間或和弦，以及你修正的時間，只會私下傳給 Crosstune 的開發者。</string>
+    <string name="setting_auto_report">回報歌曲問題</string>
+    <string name="setting_auto_report_description">只私下傳給開發者。</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
     <string name="lyrics_translation">翻譯</string>

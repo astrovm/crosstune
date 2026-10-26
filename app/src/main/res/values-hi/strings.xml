@@ -205,7 +205,7 @@
     <string name="visuals_drop">इसे फिर न दिखाएँ</string>
     <string name="settings_visuals_title">विज़ुअल</string>
     <string name="setting_skip_heavy_visuals">भारी विज़ुअल छोड़ें</string>
-    <string name="setting_skip_heavy_visuals_description">इस फ़ोन के लिए बहुत धीमे, जिनसे ऊपर के बोल अटकते हैं।</string>
+    <string name="setting_skip_heavy_visuals_description">जो इस फ़ोन पर अटकते हैं।</string>
     <string name="setting_visuals_change">हर इतने में बदलें</string>
     <string name="visuals_change_never">कभी नहीं</string>
     <string name="setting_visuals_list">कौन से विज़ुअल</string>
@@ -281,8 +281,8 @@
     <string name="auto_report_offer">ऐसी समस्याओं की रिपोर्ट अपने-आप करें?</string>
     <string name="auto_report_yes">हाँ</string>
     <string name="auto_report_no">नहीं, धन्यवाद</string>
-    <string name="setting_auto_report">गानों की समस्याओं की रिपोर्ट अपने-आप करें</string>
-    <string name="setting_auto_report_description">गायब बोल, टाइमिंग या कॉर्ड, और आपकी ठीक की गई टाइमिंग, निजी तौर पर Crosstune के डेवलपर तक जाती है।</string>
+    <string name="setting_auto_report">गानों की समस्याओं की रिपोर्ट करें</string>
+    <string name="setting_auto_report_description">निजी तौर पर, डेवलपर को।</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
     <string name="lyrics_translation">अनुवाद</string>

@@ -205,7 +205,7 @@
     <string name="visuals_drop">이것은 표시 안 함</string>
     <string name="settings_visuals_title">비주얼</string>
     <string name="setting_skip_heavy_visuals">무거운 비주얼 건너뛰기</string>
-    <string name="setting_skip_heavy_visuals_description">이 폰에서 너무 느려 위의 가사가 끊기는 것.</string>
+    <string name="setting_skip_heavy_visuals_description">이 폰에서 끊기는 것.</string>
     <string name="setting_visuals_change">바꾸는 간격</string>
     <string name="visuals_change_never">안 함</string>
     <string name="setting_visuals_list">표시할 비주얼</string>
@@ -281,8 +281,8 @@
     <string name="auto_report_offer">이런 문제를 자동으로 신고할까요?</string>
     <string name="auto_report_yes">예</string>
     <string name="auto_report_no">괜찮아요</string>
-    <string name="setting_auto_report">노래 문제 자동 신고</string>
-    <string name="setting_auto_report_description">없는 가사, 타이밍, 코드, 그리고 직접 고친 타이밍이 Crosstune 개발자에게만 비공개로 전해져요.</string>
+    <string name="setting_auto_report">노래 문제 신고</string>
+    <string name="setting_auto_report_description">개발자에게만 비공개로.</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_translation">번역</string>

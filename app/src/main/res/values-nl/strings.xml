@@ -205,7 +205,7 @@
     <string name="visuals_drop">Deze niet meer tonen</string>
     <string name="settings_visuals_title">Visuals</string>
     <string name="setting_skip_heavy_visuals">Zware visuals overslaan</string>
-    <string name="setting_skip_heavy_visuals_description">Te traag voor deze telefoon, waardoor de tekst erover hapert.</string>
+    <string name="setting_skip_heavy_visuals_description">Die op deze telefoon haperen.</string>
     <string name="setting_visuals_change">Wisselen elke</string>
     <string name="visuals_change_never">Nooit</string>
     <string name="setting_visuals_list">Welke visuals</string>
@@ -281,8 +281,8 @@
     <string name="auto_report_offer">Problemen zoals dit automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>
     <string name="auto_report_no">Nee, bedankt</string>
-    <string name="setting_auto_report">Problemen met nummers automatisch melden</string>
-    <string name="setting_auto_report_description">Ontbrekende teksten, timing of akkoorden, en timing die je verbetert, gaan privé naar de ontwikkelaar van Crosstune.</string>
+    <string name="setting_auto_report">Problemen met nummers melden</string>
+    <string name="setting_auto_report_description">Privé, naar de ontwikkelaar.</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_translation">Vertaling</string>
