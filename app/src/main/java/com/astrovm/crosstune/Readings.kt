@@ -352,6 +352,9 @@ internal object Readings {
         /** It read [kana], as a word of [kind] and [subkind] when that changes too. */
         fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end)
 
+        /** It read [kana], and said [said]. */
+        fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end)
+
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
         val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
 
@@ -414,44 +417,61 @@ internal object Readings {
      * romaji. One that changes nothing, or names a kanji the line hasn't, is left out.
      */
     fun corrected(read: List<LineReading>, fixes: List<ReadingFix>): List<LineReading> = read.mapIndexed { index, line ->
-        fixes.filter { it.line == index }.fold(line) { fixed, fix ->
-            val at = fixed.parts.indexOfFirst { it.text == fix.kanji && it.reading != null }
-            if (at < 0) return@fold fixed
-            val old = fixed.parts[at].reading!!
-            val after = hiragana(fixed.parts.drop(at + 1).joinToString("") { it.text })
-            // A fix may give the kana written after the kanji too, ごし for 越 in 越し, or end in kana that
-            // only happen to come next, いま for 今 in 今まで: it's whichever is nearer the length the dictionary read.
-            val wanted = hiragana(fix.reading).let { reading ->
-                (listOf(reading) + (reading.length - 1 downTo 1).filter { after.startsWith(reading.substring(it)) }.map { reading.substring(0, it) })
-                    .minBy { abs(it.length - old.length) }
-            }
-            if (wanted.isEmpty() || wanted == old || wanted.any { it !in 'ぁ'..'ゟ' }) return@fold fixed
-            // Only where those kanji are: another word read the same, e.g. a く of 君 in くん, stays.
-            val fixing = fixed.parts.indices.filter { fixed.parts[it].text == fix.kanji && fixed.parts[it].reading == old }
-            val starts = fixed.parts.runningFold(0) { at, part -> at + (part.reading ?: part.text).length }
-            val inReading = fixing.map { starts[it] }.filter { fixed.reading.startsWith(old, it) }
-            // Which times the old reading comes in the line, counted as romaji counts them, are these.
-            val times = Regex(Regex.escape(old)).findAll(fixed.reading).map { it.range.first }.toList()
-            val nth = inReading.map(times::indexOf).filter { it >= 0 }.toSet()
-            var seen = -1
-            var typedSeen = -1
-            LineReading(
-                fixed.parts.mapIndexed { at, part -> if (at in fixing) part.copy(reading = wanted) else part },
-                inReading.sortedDescending().fold(fixed.reading) { line, at -> line.replaceRange(at, at + old.length, wanted) },
-                // Romaji is as it's said, so the reading may be there drawn out, sensee for sensei.
-                fixed.romanized.replace(Regex("""\b(${Regex.escape(drawnOut(romaji(old)))}|${Regex.escape(romaji(old))})""")) {
-                    if (++seen !in nth) it.value else if (it.value == romaji(old)) romaji(wanted) else drawnOut(romaji(wanted))
-                },
-                // Typed, it's as the dictionary spells it.
-                fixed.typed.replace(Regex("""\b${Regex.escape(romaji(old, typed = true))}""")) {
-                    if (++typedSeen in nth) romaji(wanted, typed = true) else it.value
-                }
-            )
-        }
+        val parts = fixes.filter { it.line == index }.fold(line.parts, ::sungParts)
+        if (parts == line.parts) line else readAs(parts)
     }
 
-    /** Romaji with its long vowels as they're said: ei and ou drawn out, as ee and oo. */
-    private fun drawnOut(romaji: String) = romaji.replace("ei", "ee").replace("ou", "oo")
+    /** [parts] with [fix] made, where its kanji are read as the first of them is. */
+    private fun sungParts(parts: List<Ruby>, fix: ReadingFix): List<Ruby> {
+        val at = parts.indexOfFirst { it.text == fix.kanji && it.reading != null }
+        if (at < 0) return parts
+        val old = parts[at].reading!!
+        val after = hiragana(parts.drop(at + 1).joinToString("") { it.text })
+        // A fix may give the kana written after the kanji too, ごし for 越 in 越し, or end in kana that
+        // only happen to come next, いま for 今 in 今まで: it's whichever is nearer the length the dictionary read.
+        val wanted = hiragana(fix.reading).let { reading ->
+            (listOf(reading) + (reading.length - 1 downTo 1).filter { after.startsWith(reading.substring(it)) }.map { reading.substring(0, it) })
+                .minBy { abs(it.length - old.length) }
+        }
+        if (wanted.isEmpty() || wanted == old || wanted.any { it !in 'ぁ'..'ゟ' }) return parts
+        // Only where those kanji are: another word read the same, e.g. a く of 君 in くん, stays.
+        return parts.map { if (it.text == fix.kanji && it.reading == old) it.copy(reading = wanted) else it }
+    }
+
+    /**
+     * The line [parts] write, in kana and romaji, with each kanji read as they say: split into words
+     * as any line is, so the romaji is too, 頭ん中 as atama n naka, not the dictionary's reading
+     * with the new one pasted over it, where it can't be found in a word, atama nchuu.
+     */
+    private fun readAs(parts: List<Ruby>): LineReading {
+        val line = parts.joinToString("") { it.text }
+        // What each letter reads as: a kanji's reading on its first letter, nothing on the rest of it.
+        val reads = arrayOfNulls<String>(line.length)
+        var at = 0
+        for (part in parts) {
+            if (part.reading != null) part.text.indices.forEach { reads[at + it] = if (it == 0) part.reading else "" }
+            at += part.text.length
+        }
+        val given = givenReadings(line)
+        var from = 0
+        val pieces = readAsGiven(together(pieces(withoutGiven(line))), given).map { piece ->
+            val start = from.also { from += piece.surface.length }
+            // Where each letter is in the line, past the readings it gives in brackets.
+            val letters = piece.surface.indices.map { i -> (start + i).let { it + given.filter { reading -> reading.end <= it }.sumOf { reading -> reading.brackets.length } } }
+            val kana = letters.indices.joinToString("") { reads[letters[it]] ?: piece.surface[it].toString() }
+            val said = letters.indices.joinToString("") { reads[letters[it]]?.let(::longVowels) ?: piece.surface[it].toString() }
+            if (kana == piece.kana) piece else piece.reading(kana, said)
+        }
+        return LineReading(
+            parts,
+            pieces.joinToString("") { it.kana },
+            romajiWords(pieces) { it.said }.joinToString(" ") { romaji(it) },
+            romajiWords(pieces) { it.typed }.joinToString(" ") { romaji(it, typed = true) }
+        )
+    }
+
+    /** A kanji's [kana] as it's said, せんせい as せんせー and しょう as しょー: drawn out, as romaji shows it. */
+    private fun longVowels(kana: String) = drawnOutE(kana).replace(Regex("([おこごそぞとどのほぼぽもよろょ])う"), "$1ー")
 
     /**
      * The words of a line in kana, as romaji spaces them: a verb with its endings is one word, e.g.
