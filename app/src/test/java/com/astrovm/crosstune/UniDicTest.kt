@@ -15,6 +15,7 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import kotlin.random.Random
 
 class UniDicTest {
 
@@ -94,7 +95,10 @@ class UniDicTest {
         val own = com.atilika.kuromoji.unidic.Tokenizer()
         // Rare kanji, words, kana, Latin letters, digits, marks, an emoji, and a kanji neither knows.
         val lines = listOf("うつむいて君が溢した 儚くなまぬるい涙", "微笑みをくれたのは誰？", "Yeah-yeah, 2人で 400円 🎵 龘", "ザッツ！超常", "")
-        for (line in lines) {
+        // And made-up lines, kana and common kanji in no order, which find words all through the dictionary.
+        val random = Random(352)
+        val letters = ('ぁ'..'ゖ') + ('ァ'..'ヺ') + "日本人生心愛夢空海山川花雨風雪月星光道時間今何私君僕彼女子供手目口耳声歌音色白黒赤青春夏秋冬朝夜明暗".toList()
+        for (line in lines + List(300) { String(CharArray(40) { letters.random(random) }) }) {
             assertEquals(own.tokenize(line).map { "${it.position} ${it.surface} ${it.allFeatures}" }, TestUniDic.tokenizer.tokenize(line).map { "${it.position} ${it.surface} ${it.allFeatures}" })
         }
     }

@@ -347,6 +347,8 @@ class ReadingsTest {
             assertEquals("utsumuite kimi ga koboshita", line.romanized)
             // As are its words, with the form each is listed under.
             assertEquals(Word("溢した", "こぼした", "koboshita", lookup = "溢す"), Readings.words("君が溢した", Script.JAPANESE).last())
+            // Said ほー, it's spelled ほお as listed, not ほう as a long o most often is.
+            assertEquals("ほおをつたう", reading("頰を伝う").reading)
         }
     }
 
@@ -410,6 +412,12 @@ class ReadingsTest {
         assertEquals("かこえ", reading("歌（か）声").reading)
         // After kana the dictionary reads with them, the reading still goes over its kanji.
         assertEquals(listOf(Ruby("お"), Ruby("茶", "ちゃ"), Ruby("（ちゃ）")), reading("お茶（ちゃ）").parts)
+        // Further into the line, and with a reading for the kanji after too.
+        assertEquals(listOf(Ruby("君", "きみ"), Ruby("の"), Ruby("新", "あたら"), Ruby("（あたら）しい")), reading("君の新（あたら）しい").parts)
+        reading("あの頃の歌（うた）声（こえ）").let {
+            assertEquals("あのころのうたこえ", it.reading)
+            assertEquals(listOf(Ruby("歌", "うた"), Ruby("（うた）"), Ruby("声", "こえ"), Ruby("（こえ）")), it.parts.takeLast(4))
+        }
         // Looked up as the word it is.
         assertEquals("悲しい", Readings.words("悲（かな）しい", Script.JAPANESE).single().text)
         // Brackets of anything else are words.

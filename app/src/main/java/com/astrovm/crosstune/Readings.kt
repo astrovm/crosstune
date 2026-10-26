@@ -222,29 +222,30 @@ internal object Readings {
      */
     private fun readAsGiven(pieces: List<Piece>, given: List<Given>): List<Piece> {
         if (given.isEmpty()) return pieces
+        val left = ArrayDeque(pieces)
         val out = mutableListOf<Piece>()
         var at = 0
-        var i = 0
-        while (i < pieces.size) {
+        while (left.isNotEmpty()) {
             val reading = given.firstOrNull { it.start == at }
             if (reading == null) {
-                at += pieces[i].surface.length
-                out += pieces[i++]
+                out += left.removeFirst().also { at += it.surface.length }
                 continue
             }
-            val first = pieces[i]
+            val first = left.first()
             var surface = ""
             var kana = ""
-            while (at + surface.length < reading.end) pieces[i++].let { surface += it.surface; kana += it.kana }
+            while (at + surface.length < reading.end) left.removeFirst().let { surface += it.surface; kana += it.kana }
             val after = surface.drop(reading.end - at)
             if (after.any(::isHan)) {
-                // The rest as the dictionary read the word, ごえ of 歌声, when it read the kanji so too.
                 out += Piece(surface.take(reading.end - at), reading.kana, first.kind, first.subkind)
-                out += Piece(after, if (kana.startsWith(reading.kana)) kana.drop(reading.kana.length) else together(pieces(after)).joinToString("") { it.kana }, first.kind, first.subkind)
+                // The rest as the dictionary read the word, ごえ of 歌声, when it read the kanji so too; and
+                // as the lyrics read it, when they give a reading for it too, 声（こえ）.
+                left.addFirst(Piece(after, if (kana.startsWith(reading.kana)) kana.drop(reading.kana.length) else together(pieces(after)).joinToString("") { it.kana }, first.kind, first.subkind))
+                at = reading.end
             } else {
                 out += Piece(surface, reading.kana + hiragana(after), first.kind, first.subkind, first.base)
+                at += surface.length
             }
-            at += surface.length
         }
         return out
     }
