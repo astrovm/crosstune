@@ -1046,10 +1046,15 @@ private fun SongSearchSheet(
                             Text(stringResource(R.string.song_search_playlist), modifier = Modifier.padding(start = 8.dp))
                         }
                     }
+                    // With a remote, the first song rather than Dismiss, which was all there was to focus while they were looked up, so OK picks it.
+                    val first = remember { FocusRequester() }
+                    val firstSong = state.songSearch.firstOrNull()
+                    LaunchedEffect(firstSong) { if (firstSong != null) first.requestFocus() }
                     state.songSearch.forEachIndexed { index, song ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
                                 .clickable { onPick(song) }
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
