@@ -46,9 +46,7 @@ The most common defect here is a change that works where you tested it and is mi
 
 - Private by default: no account, analytics or ads. Sound is heard on the phone and never sent; naming a song sends Shazam a fingerprint only. The only server is the report Worker in `report/`.
 - Data costs the user. Big downloads, like the 32 MB speech model, wait for an unmetered network unless the user asks for one.
-- Free software only, so F-Droid can build it: no Play Services or other non-free libraries. The release APK must stay reproducible (`scripts/release/check_native_paths.py` guards the native part).
 - Android 8 (minSdk 26) and up. An API added later needs a version check; easy to miss in plain Java calls like `readNBytes`.
-- Heavy work is for phones that can carry it: lining lyrics up to the singing needs 3 GB of memory, so a 2 GB TV doesn't get it.
 
 ## How it works
 
@@ -78,7 +76,6 @@ Where each feature starts:
 - The fakes answer at once, on `Dispatchers.Unconfined`, so loading states and late answers never show. To test one, hold the fake's answer (a `CountDownLatch` in its handler) until the test has looked.
 - When the focused node goes away, focus can land anywhere. Assert focus on something that stays.
 - Kover never sees an interface's default bodies run, as Kotlin calls them another way. Keep interface members abstract.
-- Checking that a test catches a bug by breaking the code? Commit first, so putting it back is a `git checkout`.
 
 ## Pull requests
 
