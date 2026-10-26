@@ -142,6 +142,7 @@
     <string name="notice_apps_still_open">%1$s kendi bağlantılarını hâlâ açıyor</string>
     <string name="fix_button">Düzelt</string>
     <string name="notice_update">Crosstune %1$s çıktı</string>
+    <string name="notice_play">Crosstune hakkında ne düşündüğünü Google Play\'e söyle. Orada yer almasına yardım eder.</string>
     <string name="update_button">Güncelle</string>
     <string name="history_cleared">Geçmiş temizlendi</string>
     <string name="history_removed">Kaldırıldı</string>

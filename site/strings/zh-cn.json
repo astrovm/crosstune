@@ -61,9 +61,10 @@
   "play_steps": [
     "用你的 Google Play 账号加入 <a href=\"{group}\">Crosstune testers</a> 群组。",
     "打开<a href=\"{testing}\">测试页面</a>，点按 <b>Become a tester</b>。",
-    "从 <a href=\"{store}\">Google Play</a> 安装 Crosstune。"
+    "从 <a href=\"{store}\">Google Play</a> 安装 Crosstune。",
+    "用起来，并在 Google Play 的 Crosstune 页面上说说你的看法。"
   ],
-  "play_note": "Crosstune 正在 Google Play 上测试。可能需要几分钟才会显示。",
+  "play_note": "Crosstune 正在 Google Play 上测试，足够多的测试者使用后就会上架。可能需要几分钟才会显示。",
   "works_with": "支持的服务",
   "made_with": "由 {astro} 用 {heart} 制作",
   "privacy_link": "隐私政策",

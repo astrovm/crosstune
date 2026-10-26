@@ -304,7 +304,7 @@ private fun SettingsList(
                 Text(text = stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
             }
-            if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false })
+            if (reporting) ReportDialog(Report(appVersion()), onPlay = actions.onOpenPlayPage.takeIf { state.fromPlay }, onDismiss = { reporting = false })
             SettingSwitch(
                 label = stringResource(R.string.setting_auto_report),
                 description = null,

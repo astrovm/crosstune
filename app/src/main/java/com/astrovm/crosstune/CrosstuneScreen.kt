@@ -234,6 +234,7 @@ internal data class ScreenActions(
     /** Closes the notice about an update, by its version. */
     val onDismissNotices: (Set<String>) -> Unit = {},
     val onUpdate: () -> Unit = {},
+    val onOpenPlayPage: () -> Unit = {},
     /** Opens the player on the song a music app plays now. */
     val onOpenPlayingNow: () -> Unit = {},
     val onPeekPlayingNow: () -> Unit = {},
@@ -640,6 +641,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
         // The empty hint below says what the app does, so there's no tagline above it.
         Spacer(Modifier.height(8.dp))
         UpdateNotice(state, actions)
+        PlayNotice(state, actions)
         LinkField(state, actions)
         StatusSection(state, actions)
         // A new result grows in where the last one was; the space for it opens and closes smoothly.
@@ -796,6 +798,18 @@ private fun UpdateNotice(state: UiState, actions: ScreenActions) {
     val update = state.update?.takeIf { "update:${it.version}" !in state.dismissedNotices } ?: return
     val key = setOf("update:${update.version}")
     NoticeStrip(stringResource(R.string.notice_update, update.version), stringResource(R.string.update_button), actions.onUpdate) { actions.onDismissNotices(key) }
+}
+
+/**
+ * Asks someone who got Crosstune on Google Play, once they've opened a few songs, to say what they
+ * think there: what testers say there is what gets Crosstune listed. Asked once.
+ */
+@Composable
+private fun PlayNotice(state: UiState, actions: ScreenActions) {
+    if (!state.fromPlay || MainViewModel.NOTICE_PLAY in state.dismissedNotices || state.history.size < MainViewModel.SONGS_BEFORE_ASKING) return
+    NoticeStrip(stringResource(R.string.notice_play), stringResource(R.string.open_button), actions.onOpenPlayPage) {
+        actions.onDismissNotices(setOf(MainViewModel.NOTICE_PLAY))
+    }
 }
 
 @Composable

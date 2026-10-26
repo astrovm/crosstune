@@ -142,6 +142,7 @@
     <string name="notice_apps_still_open">%1$s 仍會開啟自己的連結</string>
     <string name="fix_button">修正</string>
     <string name="notice_update">Crosstune %1$s 已推出</string>
+    <string name="notice_play">在 Google Play 上說說你對 Crosstune 的看法，這能幫它在那裡上架。</string>
     <string name="update_button">更新</string>
     <string name="history_cleared">已清除歷史記錄</string>
     <string name="history_removed">已移除</string>

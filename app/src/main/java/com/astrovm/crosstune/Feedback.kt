@@ -5,6 +5,7 @@ import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -137,26 +138,40 @@ internal class ReportSender(
     }
 }
 
-/** What's wrong is said on GitHub, or by email, either filled in with [report]. */
+/**
+ * What's wrong is said on GitHub, or by email, either filled in with [report]. Installed from Google
+ * Play, [onPlay] says it there first, where testers' word is what gets Crosstune listed.
+ */
 @Composable
-internal fun ReportDialog(report: Report, onDismiss: () -> Unit) {
+internal fun ReportDialog(report: Report, onDismiss: () -> Unit, onPlay: (() -> Unit)? = null) {
     val open = rememberWebOpener()
+    val github: () -> Unit = {
+        onDismiss()
+        open(report.githubUrl())
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
         title = { Text(stringResource(R.string.report_problem)) },
         text = { Text(stringResource(R.string.report_problem_text)) },
         confirmButton = {
-            Button(onClick = {
-                onDismiss()
-                open(report.githubUrl())
-            }) { Text(stringResource(R.string.report_on_github)) }
+            if (onPlay == null) {
+                Button(onClick = github) { Text(stringResource(R.string.report_on_github)) }
+            } else {
+                Button(onClick = {
+                    onDismiss()
+                    onPlay()
+                }) { Text(stringResource(R.string.report_on_play)) }
+            }
         },
         dismissButton = {
-            TextButton(onClick = {
-                onDismiss()
-                open(report.emailUrl())
-            }) { Text(stringResource(R.string.report_by_email)) }
+            Row {
+                if (onPlay != null) TextButton(onClick = github) { Text(stringResource(R.string.report_on_github)) }
+                TextButton(onClick = {
+                    onDismiss()
+                    open(report.emailUrl())
+                }) { Text(stringResource(R.string.report_by_email)) }
+            }
         }
     )
 }

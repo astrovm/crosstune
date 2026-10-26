@@ -143,6 +143,7 @@ class MainActivityTest {
         MainActivity.lookAheadLyrics = true
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.checksForUpdates = ::looksForUpdates
+        MainActivity.fromPlay = ::installedFromPlay
     }
 
     // region helpers
@@ -2511,6 +2512,94 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(string(R.string.error_no_app_to_open), ShadowToast.getTextOfLatestToast())
     }
+
+    // region Google Play
+
+    /** Installed from Google Play, which can open Crosstune's page, with [songs] opened before. */
+    private fun fromPlayWith(songs: Int) {
+        MainActivity.fromPlay = { true }
+        prefs().edit().putBoolean("link_settings_helper_dismissed", true).commit()
+        installActivity(ComponentName(PLAY_STORE, "$PLAY_STORE.Store"), browserFilter())
+        repeat(songs) {
+            val url = "https://www.deezer.com/track/$it"
+            HistoryStore(prefs()).add(HistoryEntry(MusicLink(MusicService.DEEZER, ItemType.TRACK, "$it", url), MusicMetadata("Song $it", "Band")))
+        }
+    }
+
+    @Test
+    fun aPlayInstallIsAskedOnceWhatItThinksOnPlayAfterAFewSongs() {
+        fromPlayWith(songs = MainViewModel.SONGS_BEFORE_ASKING - 1)
+        launch()
+        composeRule.waitForIdle()
+        // Too soon to have anything to say.
+        assertTextAbsent(string(R.string.notice_play))
+        controller!!.pause().stop().destroy()
+
+        fromPlayWith(songs = MainViewModel.SONGS_BEFORE_ASKING)
+        launch()
+        waitForText(string(R.string.notice_play))
+        click(string(R.string.open_button))
+        // Play's own app opens on Crosstune's page, and Crosstune stays open.
+        val opened = nextStartedActivity()!!
+        assertEquals(PLAY_STORE, opened.`package`)
+        assertEquals(PLAY_PAGE, opened.dataString)
+        assertFalse(controller!!.get().isFinishing)
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_play))
+
+        controller!!.pause().stop().destroy()
+        launch()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_play))
+    }
+
+    @Test
+    fun aClosedPlayNoticeStaysClosed() {
+        fromPlayWith(songs = MainViewModel.SONGS_BEFORE_ASKING)
+        launch()
+        waitForText(string(R.string.notice_play))
+        composeRule.onNodeWithContentDescription(string(R.string.dismiss_button)).performClick()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_play))
+        assertNull(nextStartedActivity())
+
+        controller!!.pause().stop().destroy()
+        launch()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_play))
+    }
+
+    @Test
+    fun aCopyFromElsewhereIsNeverAskedAboutPlay() {
+        fromPlayWith(songs = MainViewModel.SONGS_BEFORE_ASKING)
+        MainActivity.fromPlay = { false }
+        launch()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.notice_play))
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.report_problem)).performScrollTo().performClick()
+        assertTextAbsent(string(R.string.report_on_play))
+    }
+
+    @Test
+    fun aPlayInstallSaysWhatsWrongOnPlayFirst() {
+        fromPlayWith(songs = 0)
+        launch()
+        click(string(R.string.settings_button))
+        val report = composeRule.onNodeWithText(string(R.string.report_problem)).performScrollTo()
+        report.performClick()
+        click(string(R.string.report_on_play))
+        val opened = nextStartedActivity()!!
+        assertEquals(PLAY_STORE, opened.`package`)
+        assertEquals(PLAY_PAGE, opened.dataString)
+        assertTextAbsent(string(R.string.report_problem_text))
+        // GitHub and email are still there.
+        report.performClick()
+        click(string(R.string.report_on_github))
+        assertEquals("https://github.com/astrovm/crosstune/issues/new", nextStartedActivity()!!.dataString!!.substringBefore("?"))
+    }
+
+    // endregion
 
     @Test
     fun madeByLinkOpensRepository() {

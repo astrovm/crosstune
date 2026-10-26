@@ -89,13 +89,25 @@ private const val RELEASE_PACKAGE = "com.astrovm.crosstune"
  * over USB, rather than by an app store, such as Google Play, F-Droid or Obtainium, which updates it itself.
  */
 internal fun installedFromAFile(context: Context): Boolean {
-    val installer = runCatching {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
-        } else {
-            @Suppress("DEPRECATION")
-            context.packageManager.getInstallerPackageName(context.packageName)
-        }
-    }.getOrElse { return false }
+    val installer = installerOf(context).getOrElse { return false }
     return installer == null || installer.endsWith(".packageinstaller")
 }
+
+/** Whether Google Play installed Crosstune, where what people say about it counts towards it being listed there. */
+internal fun installedFromPlay(context: Context): Boolean = installerOf(context).getOrNull() == PLAY_STORE
+
+/** The app that installed Crosstune: none over USB, and a failure when Android won't say. */
+private fun installerOf(context: Context): Result<String?> = runCatching {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+    } else {
+        @Suppress("DEPRECATION")
+        context.packageManager.getInstallerPackageName(context.packageName)
+    }
+}
+
+/** Google Play's own app. */
+internal const val PLAY_STORE = "com.android.vending"
+
+/** Crosstune on Google Play, where testers send what they think privately. */
+internal const val PLAY_PAGE = "https://play.google.com/store/apps/details?id=$RELEASE_PACKAGE"

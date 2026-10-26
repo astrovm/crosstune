@@ -61,9 +61,10 @@
   "play_steps": [
     "Gabung ke grup <a href=\"{group}\">Crosstune testers</a> dengan akun Google Play kamu.",
     "Buka <a href=\"{testing}\">halaman pengujian</a> lalu ketuk <b>Become a tester</b>.",
-    "Pasang Crosstune dari <a href=\"{store}\">Google Play</a>."
+    "Pasang Crosstune dari <a href=\"{store}\">Google Play</a>.",
+    "Pakai, lalu beri tahu Google Play pendapatmu di halaman Crosstune di sana."
   ],
-  "play_note": "Crosstune sedang diuji di Google Play. Mungkin perlu beberapa menit sampai muncul.",
+  "play_note": "Crosstune sedang diuji di Google Play, dan akan tampil di sana setelah cukup banyak penguji memakainya. Mungkin perlu beberapa menit sampai muncul.",
   "works_with": "Berfungsi dengan",
   "made_with": "Dibuat dengan {heart} oleh {astro}",
   "privacy_link": "Kebijakan privasi",

@@ -143,6 +143,7 @@
     <string name="notice_apps_still_open">%1$s aprono ancora i propri link</string>
     <string name="fix_button">Risolvi</string>
     <string name="notice_update">È uscito Crosstune %1$s</string>
+    <string name="notice_play">Di\' a Google Play cosa pensi di Crosstune. Lo aiuta a esserci.</string>
     <string name="update_button">Aggiorna</string>
     <string name="history_cleared">Cronologia cancellata</string>
     <string name="history_removed">Rimosso</string>

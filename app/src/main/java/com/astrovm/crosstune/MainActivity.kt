@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
                     updates = UpdateChecker(
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
                     ).takeIf { checksForUpdates(applicationContext) },
+                    fromPlay = fromPlay(applicationContext),
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     singing = singingFactory(applicationContext, client),
                     reports = ReportSender(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(), lookupDispatcher),
@@ -308,6 +309,10 @@ class MainActivity : ComponentActivity() {
         /** Whether this copy looks for a newer Crosstune, so a test can say. */
         @VisibleForTesting
         internal var checksForUpdates: (Context) -> Boolean = ::looksForUpdates
+
+        /** Whether Google Play installed this copy, so a test can say. */
+        @VisibleForTesting
+        internal var fromPlay: (Context) -> Boolean = ::installedFromPlay
 
         /** What hears songs nearby, when a test stands in for the microphone and Shazam both. */
         @VisibleForTesting
@@ -609,6 +614,7 @@ class MainActivity : ComponentActivity() {
         onOpenAppLinkSettings = { openLinkSettingsOf(it.packageName) },
         onDismissNotices = viewModel::dismissNotices,
         onUpdate = viewModel::openUpdate,
+        onOpenPlayPage = viewModel::openPlayPage,
         onOpenPlayingNow = viewModel::openPlayingNow,
         onPeekPlayingNow = viewModel::peekPlayingNow,
         onPlayingNowPlayPause = viewModel::playingNowPlayPause,

@@ -61,9 +61,10 @@
   "play_steps": [
     "Unisciti al gruppo <a href=\"{group}\">Crosstune testers</a> con il tuo account Google Play.",
     "Apri la <a href=\"{testing}\">pagina di test</a> e tocca <b>Become a tester</b>.",
-    "Installa Crosstune da <a href=\"{store}\">Google Play</a>."
+    "Installa Crosstune da <a href=\"{store}\">Google Play</a>.",
+    "Usalo, e di' a Google Play cosa ne pensi nella pagina di Crosstune."
   ],
-  "play_note": "Crosstune è in test su Google Play. Potrebbero volerci alcuni minuti prima che compaia.",
+  "play_note": "Crosstune è in test su Google Play, e ci sarà quando abbastanza tester lo useranno. Potrebbero volerci alcuni minuti prima che compaia.",
   "works_with": "Funziona con",
   "made_with": "Fatto con {heart} da {astro}",
   "privacy_link": "Informativa sulla privacy",

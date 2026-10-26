@@ -142,6 +142,7 @@
     <string name="notice_apps_still_open">%1$s 앱이 아직 자체 링크를 열어요</string>
     <string name="fix_button">해결</string>
     <string name="notice_update">Crosstune %1$s 출시</string>
+    <string name="notice_play">Google Play에 Crosstune에 대한 의견을 남겨 주세요. Google Play에 출시되는 데 도움이 돼요.</string>
     <string name="update_button">업데이트</string>
     <string name="history_cleared">기록을 지웠어요</string>
     <string name="history_removed">삭제했어요</string>

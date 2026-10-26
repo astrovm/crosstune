@@ -142,6 +142,7 @@
     <string name="notice_apps_still_open">%1$s masih membuka tautannya sendiri</string>
     <string name="fix_button">Perbaiki</string>
     <string name="notice_update">Crosstune %1$s sudah tersedia</string>
+    <string name="notice_play">Beri tahu Google Play pendapatmu tentang Crosstune. Itu membantunya tampil di sana.</string>
     <string name="update_button">Perbarui</string>
     <string name="history_cleared">Riwayat dihapus</string>
     <string name="history_removed">Dihapus</string>
