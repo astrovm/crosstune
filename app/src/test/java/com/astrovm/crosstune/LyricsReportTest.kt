@@ -112,6 +112,9 @@ class LyricsReportTest {
     private fun waitUntil(condition: () -> Boolean) =
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
 
+    /** Waits for the words' lookup to end: the problems with them are found in it, so one not sent by then never is. */
+    private fun settled() = waitUntil { !model().findingWords }
+
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().isNotEmpty()
 
     private fun click(label: String) {
@@ -236,13 +239,13 @@ class LyricsReportTest {
         prefs().edit().putBoolean("auto_reports", true).commit()
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","instrumental":true}]""")
         openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.waitForIdle()
+        settled()
         assertEquals(emptyList<String>(), problems())
         // Nor is it offered, while the user hasn't said.
         controller!!.pause().stop().destroy()
         prefs().edit().remove("auto_reports").commit()
         openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.waitForIdle()
+        settled()
         assertFalse(shown(offer))
     }
 
@@ -261,7 +264,7 @@ class LyricsReportTest {
         File(app.cacheDir, "kept_words.json").delete()
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
         openLyrics { shown("Plain one") }
-        composeRule.waitForIdle()
+        settled()
         assertFalse(shown(offer))
         assertEquals(emptyList<String>(), problems())
     }
@@ -279,7 +282,7 @@ class LyricsReportTest {
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         openLyrics { shown("Plain one") }
-        composeRule.waitForIdle()
+        settled()
         assertEquals(listOf("no_timing"), problems())
     }
 
@@ -311,7 +314,7 @@ class LyricsReportTest {
             File(app.cacheDir, "lyrics.json").delete()
             File(app.cacheDir, "kept_words.json").delete()
             openLyrics { shown("Plain one") }
-            composeRule.waitForIdle()
+            settled()
         }
         assertEquals(listOf("no_timing", "no_timing"), problems())
     }

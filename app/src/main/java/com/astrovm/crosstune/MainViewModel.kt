@@ -1384,6 +1384,10 @@ internal class MainViewModel(
     }
 
     private var lyricsJob: Job? = null
+
+    @VisibleForTesting
+    internal val findingWords get() = lyricsJob?.isActive == true
+
     private var followJob: Job? = null
 
     /** The last song Crosstune heard, so its words can follow on from where it was heard. */
