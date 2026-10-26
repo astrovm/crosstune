@@ -185,6 +185,25 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun aSheetOfAnotherSongWhoseLettersHideInLongWordsIsntPlaced() {
+        val words = listOf(
+            "Rolling through the city with the windows down", "Money on my mind and my team all around",
+            "Told my mama that I made it out the trenches", "Now we pulling up in foreign cars and benches",
+            "Every night we in the studio cooking", "Haters on the side but they only looking",
+            "I been grinding since the sun came up today", "Nothing gonna stop me get out of my way",
+            "Diamonds on my neck and my wrist so cold", "Started from the bottom now the story told",
+            "Pull up to the party with the gang in tow", "Everybody know that we running the show",
+            "Late night thinking bout the days gone by", "Keep it real with me and never tell a lie"
+        )
+        // Most of its letters can be found in these, one here, one there, but hardly two in a row.
+        val other = sheet(SheetLine("Carry me home by the river tonight", listOf(Chord(0, "G"))), SheetLine("Sing to me softly till the morning light", listOf(Chord(0, "C"))))
+        assertNull(ChordSheets.place(other, words))
+        // The song's own lines are placed, a word left out or put differently.
+        val own = sheet(SheetLine("Told my mama that I made it out the trench", listOf(Chord(0, "Am"))), SheetLine("Now we pull up in foreign cars and benches", listOf(Chord(0, "F"))))
+        assertEquals(listOf(Chord(0, "Am")), ChordSheets.place(own, words)!![2].over)
+    }
+
+    @Test
     fun aChordIsPlayedWhenItsLetterIsSung() {
         val byWord = LyricLine(10_000, "Two words", listOf(TimedWord(10_000, "Two "), TimedWord(11_000, "words")))
         assertEquals(10_000L, ChordSheets.timeOf(byWord, 0, 13_000))
