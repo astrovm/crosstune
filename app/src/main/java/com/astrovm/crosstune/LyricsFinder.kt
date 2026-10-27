@@ -95,6 +95,9 @@ private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> 
     return drop(start)
 }
 
+/** Whether any of it is written in Latin letters. */
+internal fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
+
 /** A name in brackets after a name, what it's called in Chinese: " （夫·埃里克森）". */
 private val netEaseGloss = Regex("""\s*[（(][^）)]*[）)]""")
 
@@ -419,7 +422,9 @@ internal class LyricsFinder(
                 (!otherTake || (it.lengthMs != null && fits(it, metadata)))
         }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
-        val own = recording?.let { withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
+        // A song given in its own script is often kept under the store's names in Latin letters, ILLIT's
+        // Magnetic for 아일릿's; one given in Latin letters, under the names its own country gives it.
+        val own = recording?.let { inLatin(metadata, it) ?: withTimeoutOrNull(timeoutMs) { ownNames(metadata, it.id) } }
         if (own != null && tried(fromLrclib(own, timeoutMs))) return answers.last()
         // The recording playing is the one to time them for; the store's may be another take.
         val lengthMs = metadata.lengthMs ?: recording?.lengthMs
@@ -521,12 +526,13 @@ internal class LyricsFinder(
      */
     private fun fits(found: Lyrics.Found, metadata: MusicMetadata) = found.timedFor(metadata.lengthMs)
 
-    /** A recording in the iTunes Store: its [id], and how long it lasts, when that's given. */
-    private data class Recording(val id: Long, val lengthMs: Long?)
+    /** A recording in the iTunes Store: its [id], how long it lasts, when that's given, and the [names] it's under there. */
+    private data class Recording(val id: Long, val lengthMs: Long?, val names: MusicMetadata)
 
     /**
      * The song in the US iTunes Store, which names it as music apps do, in Latin letters: by the
-     * artist given, or by one it only writes in another script. Null when it's not there.
+     * artist given, or by one it only writes in another script, or, for an artist given in another
+     * script, as Korea's store gives 아일릿 for ILLIT, by one as long. Null when it's not there.
      */
     private suspend fun inStore(metadata: MusicMetadata): Recording? = try {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
@@ -539,17 +545,22 @@ internal class LyricsFinder(
         found?.let { list ->
             (0 until list.length()).mapNotNull { list.optJSONObject(it) }.firstOrNull { song ->
                 val artist = song.optString("artistName")
+                val sameLength = metadata.lengthMs?.let { abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } == true
                 SongNames.same(song.optString("trackName"), metadata.title) &&
-                    (SongNames.sameArtist(artist, metadata.artist) || !artist.hasLatin())
+                    (SongNames.sameArtist(artist, metadata.artist) || !artist.hasLatin() || (sameLength && !metadata.artist.hasLatin()))
             }
         }?.let { song ->
-            Recording(song.optLong("trackId"), song.optLong("trackTimeMillis").takeIf { it > 0 }).takeIf { it.id > 0 }
+            val names = metadata.copy(title = song.optString("trackName"), artist = song.optString("artistName"))
+            Recording(song.optLong("trackId"), song.optLong("trackTimeMillis").takeIf { it > 0 }, names).takeIf { it.id > 0 }
         }
     } catch (_: IOException) {
         null
     } catch (_: JSONException) {
         null
     }
+
+    /** [recording]'s names in Latin letters, when [metadata]'s artist isn't written in them. */
+    private fun inLatin(metadata: MusicMetadata, recording: Recording) = recording.names.takeIf { !metadata.artist.hasLatin() && it.artist.hasLatin() }
 
     /**
      * The song's names as written where it comes from, say in Japanese, when they're not the ones
@@ -887,8 +898,6 @@ internal class LyricsFinder(
 
     }
 
-/** Whether any of it is written in Latin letters. */
-private fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
 }
 

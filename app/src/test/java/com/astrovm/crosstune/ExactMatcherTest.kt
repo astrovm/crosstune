@@ -593,6 +593,20 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anArtistGivenInItsOwnScriptIsFoundByItsNameInLatinLetters() {
+        // Korea's store credits Magnetic to 아일릿, the US store and YouTube Music to ILLIT.
+        val song = MusicMetadata("Magnetic", "아일릿", lengthMs = 160_688)
+        val songs = listOf(youTubeMusicRow("Magnetic", "ILLIT • SUPER REAL ME • 2:41", videoId = "magnetic000"))
+        val us = appleSong("Magnetic", "Someone Else", 200_000, id = 1) + "," + appleSong("Magnetic", "ILLIT", 163_688)
+        namesAndTabs(songs = songs, apple = mapOf("US" to us))
+        assertEquals("https://music.youtube.com/watch?v=magnetic000", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        // Only a song as long, give or take 3 seconds, is theirs; and an artist given in Latin letters is that one.
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 160_687)) })
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = null)) })
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(artist = "Some Band")) })
+    }
+
+    @Test
     fun appleIsAskedInTheUsStoreWhenTheLocalOneOnlyNamesItInAnotherScript() {
         val song = MusicMetadata("Yoru ni Kakeru", "YOASOBI")
         namesAndTabs(

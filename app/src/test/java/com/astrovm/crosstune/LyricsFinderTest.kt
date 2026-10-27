@@ -542,6 +542,39 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aSongGivenInItsOwnScriptIsFoundUnderItsNamesInLatinLetters() {
+        // Korea's store credits Magnetic to 아일릿, LRCLIB to ILLIT, as the US store does.
+        fun illit(us: String, lookup: String = """{"results":[]}""") {
+            fake.handler = { request ->
+                val url = request.url
+                when {
+                    url.host == "lrclib.net" -> FakeSpotify.html(
+                        request,
+                        if (url.queryParameter("artist_name") == "ILLIT") """[${answer("Magnetic", "ILLIT", "Baby, I'm just trying to play it cool")}]""" else "[]"
+                    )
+                    url.encodedPath == "/search" -> FakeSpotify.html(request, """{"results":[$us]}""")
+                    url.encodedPath == "/lookup" -> FakeSpotify.html(request, lookup)
+                    else -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                }
+            }
+        }
+        val words = Lyrics.Found("Baby, I'm just trying to play it cool", source = LyricsFinder.LRCLIB)
+        val magnetic = MusicMetadata("Magnetic", "아일릿", lengthMs = 160_688)
+        val otherAndIllit = """{"trackId":7,"trackName":"Magnetic","artistName":"Someone Else","trackTimeMillis":200000},""" +
+            """{"trackId":42,"trackName":"Magnetic","artistName":"ILLIT","trackTimeMillis":163688}"""
+        illit(otherAndIllit)
+        assertEquals(words, found(magnetic))
+        // The store's song by another name is only theirs when it's as long, give or take 3 seconds.
+        assertEquals(Lyrics.None, found(magnetic.copy(lengthMs = 160_687)))
+        assertEquals(Lyrics.None, found(magnetic.copy(lengthMs = null)))
+        // And an artist given in Latin letters is that one.
+        assertEquals(Lyrics.None, found(MusicMetadata("Magnetic", "Some Band", lengthMs = 160_688)))
+        // The store naming it as given, its own country's names are asked for, as for a song given in Latin letters.
+        illit("""{"trackId":42,"trackName":"Magnetic","artistName":"아일릿","trackTimeMillis":160688}""", lookup = """{"results":[{"trackName":"Magnetic","artistName":"ILLIT"}]}""")
+        assertEquals(words, found(magnetic))
+    }
+
+    @Test
     fun netEaseHavingNoSuchSongIsNoneEvenWithLrclibDown() {
         fake.handler = { request ->
             val url = request.url
