@@ -266,11 +266,11 @@ class ReadingsTest {
     fun koreanNumbersInDigitsAreSaidAsWhatTheyCountIs() {
         val said = mapOf(
             // Korean's own numbers count hours, years of age, people and things.
-            "12시" to "yeoldusi", "2시" to "dusi", "24시간" to "seumullesigan", "20살" to "seumusal", "16살" to "yeollyeoseotsal", "6살" to "yeoseotsal",
+            "12시" to "yeoldusi", "1시" to "hansi", "2시" to "dusi", "24시간" to "seumullesigan", "20살" to "seumusal", "16살" to "yeollyeoseotsal", "6살" to "yeoseotsal",
             "99살" to "aheunahopsal", "2개" to "dugae",
             // Those from Chinese count all else, and anything past 99.
             "1년" to "illyeon", "6년" to "yungnyeon", "7월의" to "chirworui", "11월" to "sibirwol", "6월" to "yuwol", "10월" to "siwol", "3개월" to "samgaewol",
-            "0부터" to "yeongbuteo", "100까지" to "baekkkaji", "176에" to "baekchilsimnyuge", "100살" to "baeksal", "1000번" to "cheonbeon",
+            "0부터" to "yeongbuteo", "0시" to "yeongsi", "100까지" to "baekkkaji", "176에" to "baekchilsimnyuge", "100살" to "baeksal", "1000번" to "cheonbeon",
             "2024년" to "icheonisipsanyeon", "10000원" to "manwon", "100000000원" to "ireogwon", "지난1년은" to "jinanillyeoneun",
             // Only digits a word in Hangul goes on from.
             "11:11 속에" to "11:11 soge", "MP3를" to "MP3reul", "3.5배" to "3.5bae", "1,000원" to "1,000won", "007가" to "007ga", "2 살" to "2 sal"
