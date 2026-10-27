@@ -1,5 +1,6 @@
 package com.astrovm.crosstune.shots
 
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
@@ -26,6 +27,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
@@ -302,7 +304,10 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             CrosstuneTheme(darkTheme = darkTheme, palette = Palette.VIOLET) {
-                CompositionLocalProvider(LocalVisuals provides { play, modifier -> VisualFrame(play.shade, modifier) }) {
+                CompositionLocalProvider(
+                    LocalVisuals provides { play, modifier -> VisualFrame(play.shade, modifier) },
+                    LocalResources provides released(activity.resources)
+                ) {
                     Box(Modifier.fillMaxSize()) {
                         // Always reading the bars' room keeps it: once nothing does, Compose forgets it,
                         // and asks Android for it again, which has none to give here.
@@ -325,6 +330,12 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
         val root = capture()
         width = root.width and 1.inv()
         height = root.height and 1.inv()
+    }
+
+    /** Resources that name the app as released: the shots are drawn with the dev build, named Crosstune Dev. */
+    @Suppress("DEPRECATION")
+    private fun released(resources: Resources): Resources = object : Resources(resources.assets, resources.displayMetrics, resources.configuration) {
+        override fun getString(id: Int): String = if (id == R.string.app_name) "Crosstune" else super.getString(id)
     }
 
     /** The bars' room, as the phone the screenshots used to come from has it, in its pixels. */
