@@ -10,6 +10,16 @@ buildscript {
             classpath("org.jdom:jdom2:2.0.6.1")
             classpath("org.apache.commons:commons-lang3:3.21.0")
             classpath("org.apache.httpcomponents:httpclient:4.5.14")
+            classpath("com.google.guava:guava:33.7.2-jre")
+        }
+    }
+}
+
+// Tests and lint pull a vulnerable Guava too, which never ships in the app; use the patched one there as well.
+subprojects {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "com.google.guava" && requested.name == "guava") useVersion("33.7.2-jre")
         }
     }
 }
