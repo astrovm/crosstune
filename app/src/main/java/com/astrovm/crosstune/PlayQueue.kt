@@ -6,6 +6,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -34,6 +35,12 @@ internal class PlayQueue(
     /** Where in the part the app is, once it plays one of its songs. */
     private var at = -1
 
+    /** What the app played as the part was asked of it, still from before the part until it plays something else. */
+    private var before: AppPlays? = null
+
+    /** The app's number for [before]: all it numbered no higher it queued before the part. */
+    private var floor: Long? = null
+
     /**
      * Plays on through [tracks] in [app], after the [part] of them it was just asked for, which ends
      * at [to]; any playlist played through before stops.
@@ -41,6 +48,8 @@ internal class PlayQueue(
     suspend fun play(tracks: List<MusicMetadata>, service: MusicService, app: String, to: Int, part: List<MusicMetadata>) {
         stop()
         if (to >= tracks.size) return
+        before = playback.plays(app).first()
+        floor = before?.queueId
         start(Playing(tracks, service, app, to, part))
     }
 
@@ -71,6 +80,9 @@ internal class PlayQueue(
 
     private suspend fun heard(now: AppPlays) {
         val queue = playing ?: return
+        if (now == before) return
+        before = null
+        if (floor.let { it != null && now.queueId != null && now.queueId <= it }) return
         val part = queue.part
         val named = part.indexOfFirst { SongNames.sameSong(it, now.song) }
         // Once one of the part's songs is seen with the app's number for it, the app's numbers say
@@ -79,6 +91,8 @@ internal class PlayQueue(
         val numbered = first != null && now.queueId != null
         val index = if (numbered) (now.queueId - first).toInt() else named
         when {
+            // The part's last song played to its end, and the app stopped there, as YouTube does.
+            index == part.lastIndex && now.ended -> playNext()
             index in part.indices -> {
                 at = index
                 if (next == null) lookAhead()

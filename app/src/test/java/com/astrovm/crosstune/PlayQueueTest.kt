@@ -47,12 +47,12 @@ class PlayQueueTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
     }
 
-    /** YouTube Music plays [number] of the songs, numbered [id] in its queue, or something else by its name. */
-    private fun plays(song: String, id: Long? = null) {
-        phone.inApp(music).value = AppPlays(MusicMetadata(song, "Band"), id)
+    /** YouTube Music plays [number] of the songs, numbered [id] in its queue, or something else by its name; or stopped at its end, once [ended]. */
+    private fun plays(song: String, id: Long? = null, ended: Boolean = false) {
+        phone.inApp(music).value = AppPlays(MusicMetadata(song, "Band"), id, ended)
     }
 
-    private fun plays(number: Int, id: Long? = null) = plays("Song $number", id)
+    private fun plays(number: Int, id: Long? = null, ended: Boolean = false) = plays("Song $number", id, ended)
 
     private fun PlayQueue.playing(to: Int = 50) = runBlocking { play(tracks, MusicService.YOUTUBE_MUSIC, music, to, tracks.subList(to - 50, to)) }
 
@@ -107,6 +107,42 @@ class PlayQueueTest {
         assertTrue(phone.listsAsked.isEmpty())
         plays("Radio")
         assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
+    fun stoppedAtTheEndOfThePartsLastSongTheNextPartPlays() {
+        // As YouTube, which plays nothing after a list's last song.
+        queue().playing()
+        plays(1)
+        // Stopped at another song's end, it only waits.
+        plays(10, ended = true)
+        assertTrue(phone.listsAsked.isEmpty())
+        assertTrue(file.exists())
+        plays(50)
+        plays(50, ended = true)
+        assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
+    fun whatPlayedAsThePartWasAskedForIsFromBefore() {
+        // One of its songs, played on its own just before, by the number YouTube Music gave it then.
+        plays(1, 5)
+        val queue = queue()
+        queue.playing()
+        plays(1, 100)
+        // All YouTube Music queued then is from before too.
+        plays(3, 4)
+        plays(50, 149)
+        plays("Radio", 150)
+        assertEquals(1, phone.listsAsked.size)
+        // Stopped at the end of the part's last song, played through before; the part plays first.
+        plays(50, ended = true)
+        queue.playing()
+        assertEquals(1, phone.listsAsked.size)
+        plays(1)
+        plays(50)
+        plays(50, ended = true)
+        assertEquals(2, phone.listsAsked.size)
     }
 
     @Test

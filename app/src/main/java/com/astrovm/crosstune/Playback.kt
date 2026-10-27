@@ -84,9 +84,10 @@ internal data class Following(
 /**
  * A song an app plays, and its place in the app's queue, by the number the app gave it there; null
  * for an app that shows no queue, as YouTube doesn't. YouTube Music numbers what it's asked to play
- * one after another, then what it plays on after those.
+ * one after another, then what it plays on after those. [ended] once the app stopped at the song's
+ * end, as YouTube does after a list's last song.
  */
-internal data class AppPlays(val song: MusicMetadata, val queueId: Long?)
+internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false)
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
@@ -305,8 +306,20 @@ internal class MediaSessionPlayback(
 
     override fun plays(app: String): Flow<AppPlays?> = changes {
         runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .firstOrNull { sameApp(app, it.packageName) && (it.playbackState?.state ?: PlaybackState.STATE_NONE) !in NOT_PLAYING }
-            ?.let { controller -> playing(controller)?.let { AppPlays(it.metadata, controller.playbackState?.activeQueueItemId?.takeIf { id -> id != MediaSession.QueueItem.UNKNOWN_ID.toLong() }) } }
+            .filter { sameApp(app, it.packageName) }
+            .firstNotNullOfOrNull { controller ->
+                val ended = controller.ended()
+                controller.takeIf { ended || (it.playbackState?.state ?: PlaybackState.STATE_NONE) !in NOT_PLAYING }?.let(::playing)?.let {
+                    AppPlays(it.metadata, controller.playbackState?.activeQueueItemId?.takeIf { id -> id != MediaSession.QueueItem.UNKNOWN_ID.toLong() }, ended)
+                }
+            }
+    }
+
+    /** Stopped or paused at its song's end, where it said it is. */
+    private fun MediaController.ended(): Boolean {
+        val state = playbackState ?: return false
+        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 } ?: return false
+        return state.state in STILL && state.position >= duration - ENDED_WITHIN_MS
     }
 
     override suspend fun playList(app: String, link: String): Boolean {
@@ -477,6 +490,12 @@ private const val COVER_QUALITY = 90
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)
+
+/** States an app rests in, once its song ends with nothing after it. */
+private val STILL = setOf(PlaybackState.STATE_PAUSED, PlaybackState.STATE_STOPPED)
+
+/** How short of its song's length an app may stop, and still have played it to its end. YouTube stops a little past it. */
+private const val ENDED_WITHIN_MS = 2_000L
 
 /**
  * Only here so Android shows Crosstune what music apps are playing, which it does for an app the
