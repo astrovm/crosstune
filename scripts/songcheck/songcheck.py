@@ -32,6 +32,13 @@ COUNTRIES = {
     "us": "North America", "br": "South America", "de": "Europe", "jp": "Asia", "ng": "Africa", "au": "Oceania",
     "mx": "North America", "ar": "South America", "fr": "Europe", "kr": "Asia", "za": "Africa", "nz": "Oceania",
 }
+# More to check with `songs --countries`, each with a script or a language the first ones lack.
+CONTINENTS = {
+    **COUNTRIES,
+    "in": "Asia", "id": "Asia", "th": "Asia", "vn": "Asia", "sa": "Asia", "il": "Asia",
+    "tr": "Europe", "es": "Europe", "it": "Europe", "ru": "Europe", "gr": "Europe",
+    "co": "South America", "cl": "South America", "eg": "Africa", "ke": "Africa",
+}
 TOP = 100
 # How far off a line may start and still be on time.
 ON_TIME_MS = 500
@@ -227,7 +234,7 @@ def summary(_):
         for graded in json.loads(path.read_text()):
             grades[graded["id"]] = graded
     lines = ["# Song check", ""]
-    for country, continent in COUNTRIES.items():
+    for country, continent in CONTINENTS.items():
         songs = [report for report in reports.values() if report["country"] == country]
         if not songs:
             continue
@@ -266,9 +273,12 @@ def main():
     parser.add_argument("--model", default="small", help="faster-whisper model, or a folder with one")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--out", type=Path, help="where it all goes, if not build/songcheck/")
+    parser.add_argument("--countries", help="the charts to take the songs from, as in,th,eg; the first twelve if not given")
     args = parser.parse_args()
-    global OUT
+    global OUT, COUNTRIES
     OUT = (args.out or OUT).resolve()
+    if args.countries:
+        COUNTRIES = {country: CONTINENTS[country] for country in args.countries.split(",")}
     globals()[args.step](args)
 
 
