@@ -661,6 +661,17 @@ internal class ExactMatcher(
                 looselyMatches(metadata, it.optString("trackName"), it.optString("artistName")) &&
                     !SongNames.saysAnotherVersion(it.optString("trackName"), metadata.title, metadata.artist)
             }
+            ?: results.firstOrNull { inLatinLetters(metadata, it) }
+    }
+
+    /**
+     * Whether [song] is [metadata]'s, named in Latin letters where it's given in another script, as
+     * Korea's store names ILLIT 아일릿: the same title, by an artist the store writes otherwise, and as long.
+     */
+    private fun inLatinLetters(metadata: MusicMetadata, song: JSONObject): Boolean {
+        val lengthMs = metadata.lengthMs ?: return false
+        return !metadata.artist.hasLatin() && SongNames.sameVersion(metadata.title, song.optString("trackName"), "") &&
+            kotlin.math.abs(song.optLong("trackTimeMillis") - lengthMs) <= SAME_RECORDING_LENGTH_MS
     }
 
     private suspend fun appleLookup(id: Long, store: String): JSONObject? {
