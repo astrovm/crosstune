@@ -102,6 +102,10 @@ private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> 
     return drop(afterCredits(start))
 }
 
+/** The lines without all NetEase's contributors add to a song's words: credits, a heading, notes and parts' names. */
+private fun <T> List<T>.withoutNetEaseExtras(song: MusicMetadata, text: (T) -> String): List<T> =
+    filterNot { netEaseCredit.containsMatchIn(text(it)) }.withoutOpeningCredits(song, text).withoutClosingCredits(text).withoutNotes(text)
+
 /** Whether any of it is written in Latin letters. */
 internal fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
@@ -198,7 +202,7 @@ internal class LyricsFinder(
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
-        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(words), final = !provisional) } }
+        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(cleaned(words, metadata)), final = !provisional) } }
         val (found, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Best(Lyrics.Unavailable)
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
         // they're the recording's own, which no copy found elsewhere times better.
@@ -727,7 +731,7 @@ internal class LyricsFinder(
 
     /** NetEase's words timed word by word, without credits; null when it hasn't them so. */
     private fun netEaseWordByWord(yrc: String, song: MusicMetadata): Lyrics.Found? {
-        val lines = SyncedLyrics.parseWordByWord(yrc).filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutOpeningCredits(song) { it.text }.withoutClosingCredits { it.text }.withoutNotes { it.text }
+        val lines = SyncedLyrics.parseWordByWord(yrc).withoutNetEaseExtras(song) { it.text }
         if (lines.isEmpty()) return null
         return Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = NETEASE)
     }
@@ -735,11 +739,11 @@ internal class LyricsFinder(
     /** NetEase's words, without the credits, such as "作词 : …", it puts first or last; null for none. */
     private fun netEaseWords(lrc: String, song: MusicMetadata): Lyrics.Found? {
         val stamped = SyncedLyrics.parse(lrc)
-        val timed = stamped.filterNot { netEaseCredit.containsMatchIn(it.text) }.withoutOpeningCredits(song) { it.text }.withoutClosingCredits { it.text }.withoutNotes { it.text }
+        val timed = stamped.withoutNetEaseExtras(song) { it.text }
         val lines = SyncedLyrics.withPauses(timed)
         // Words with timings are only those; plain words, only when there are no timings at all.
         val words = if (stamped.isNotEmpty()) timed.joinToString("\n") { it.text }.trim()
-        else lrc.lines().filterNot { netEaseCredit.containsMatchIn(it) }.withoutOpeningCredits(song) { it }.withoutClosingCredits { it }.withoutNotes { it }.joinToString("\n").trim()
+        else lrc.lines().withoutNetEaseExtras(song) { it }.joinToString("\n").trim()
         if (words.isEmpty()) return null
         return Lyrics.Found(words, lines, source = NETEASE)
     }
@@ -886,6 +890,16 @@ internal class LyricsFinder(
          * with China's kanji, and words in romaji found under a song's name in Latin letters.
          */
         const val CACHE_VERSION = 10
+
+        /**
+         * [found], words kept from before, without what's since learned to be left out of NetEase's,
+         * so each fix reaches words kept before it too, with no need to look them up again.
+         */
+        fun cleaned(found: Lyrics.Found, song: MusicMetadata): Lyrics.Found {
+            if (found.source?.startsWith(NETEASE) != true) return found
+            val words = found.words.lines().withoutNetEaseExtras(song) { it }.joinToString("\n").trim()
+            return found.copy(words = words, lines = SyncedLyrics.withPauses(found.lines.withoutNetEaseExtras(song) { it.text }))
+        }
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L

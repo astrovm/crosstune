@@ -1574,10 +1574,11 @@ internal class MainViewModel(
 
     /**
      * Shows [song]'s words as they were left, when they're kept and were worked out as they would
-     * be now, and says whether they were.
+     * be now, and says whether they were. Words with more in them than would be shown now, e.g. a
+     * credit since left out, are worked out again.
      */
     private fun showKept(song: MusicMetadata): Boolean {
-        val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith() } ?: return false
+        val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith() && it.found?.let { found -> LyricsFinder.cleaned(found, song) == found } != false } ?: return false
         found = kept.found
         foundLines = kept.foundLines
         japanese = kept.japanese
