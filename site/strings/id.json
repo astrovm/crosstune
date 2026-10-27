@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "Selama kamu masuk, Crosstune mengirim ke OpenAI apa yang dibutuhkan tiap fitur: judul, artis, dan lirik lagu untuk menerjemahkan atau menjelaskannya, membetulkan cara baca Jepang, menulis dalam bahasa Jepang lirik yang ditemukan dalam romaji, atau memilih kata yang layak dipelajari; sebuah kata dan barisnya untuk mencari artinya; pertanyaan yang kamu ajukan tentang sebuah baris atau lagu; dan deskripsi yang kamu ketik, atau sebuah lagu, untuk menemukan lagu yang cocok. OpenAI memprosesnya menurut kebijakan privasinya sendiri, dan semuanya dihitung dalam pemakaian paketmu."
+      "Selama kamu masuk, Crosstune mengirim ke OpenAI apa yang dibutuhkan tiap fitur: judul, artis, dan lirik lagu untuk menerjemahkan atau menjelaskannya, membetulkan cara baca Jepang, menulis dalam bahasa Jepang atau Korea lirik yang ditemukan dalam huruf Latin, atau memilih kata yang layak dipelajari; sebuah kata dan barisnya untuk mencari artinya; pertanyaan yang kamu ajukan tentang sebuah baris atau lagu; dan deskripsi yang kamu ketik, atau sebuah lagu, untuk menemukan lagu yang cocok. OpenAI memprosesnya menurut kebijakan privasinya sendiri, dan semuanya dihitung dalam pemakaian paketmu."
     ],
     [
       "h2",

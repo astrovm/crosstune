@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "While you're signed in, Crosstune sends OpenAI what each feature needs: a song's title, artist and lyrics to translate or explain them, correct Japanese readings, write lyrics found in romaji in Japanese, or pick words worth learning; a word and its line to look it up; the questions you ask about a line or a song; and a description you type, or a song, to find songs that match. OpenAI handles them under its own privacy policy, and they count toward your plan's usage."
+      "While you're signed in, Crosstune sends OpenAI what each feature needs: a song's title, artist and lyrics to translate or explain them, correct Japanese readings, write lyrics found in Latin letters in Japanese or Korean, or pick words worth learning; a word and its line to look it up; the questions you ask about a line or a song; and a description you type, or a song, to find songs that match. OpenAI handles them under its own privacy policy, and they count toward your plan's usage."
     ],
     [
       "h2",

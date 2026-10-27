@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "Giriş yaptığın sürece Crosstune her özelliğin ihtiyacını OpenAI'ye gönderir: bir şarkının adı, sanatçısı ve sözleri; bunları çevirmek ya da açıklamak, Japonca okunuşları düzeltmek, romaji olarak bulunan sözleri Japonca yazmak veya öğrenmeye değer kelimeleri seçmek için; bir kelime ve satırı, anlamına bakmak için; bir satır ya da şarkı hakkında sorduğun sorular; ve eşleşen şarkıları bulmak için yazdığın bir açıklama ya da bir şarkı. OpenAI bunları kendi gizlilik politikasına göre işler ve planının kullanımına sayılırlar."
+      "Giriş yaptığın sürece Crosstune her özelliğin ihtiyacını OpenAI'ye gönderir: bir şarkının adı, sanatçısı ve sözleri; bunları çevirmek ya da açıklamak, Japonca okunuşları düzeltmek, Latin harfleriyle bulunan sözleri Japonca veya Korece yazmak veya öğrenmeye değer kelimeleri seçmek için; bir kelime ve satırı, anlamına bakmak için; bir satır ya da şarkı hakkında sorduğun sorular; ve eşleşen şarkıları bulmak için yazdığın bir açıklama ya da bir şarkı. OpenAI bunları kendi gizlilik politikasına göre işler ve planının kullanımına sayılırlar."
     ],
     [
       "h2",

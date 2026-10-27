@@ -395,41 +395,42 @@ internal class LyricsFinder(
      * Under the title as given, then, for one that's two names joined by a dash, as YouTube Music
      * gives "ミステリー・ガール - Mystery Girl", under each of them, and last under its bare title: a
      * video named "Song (Loop y Extendido)" has the song's words, though no one keeps them under that.
-     * Words in romaji found under one give way to the song's own, in Japanese, under another, when
-     * they're timed as well.
+     * Words in Latin letters, Japanese in romaji or Korean, found under one give way to the song's
+     * own, in its script, under another, when they're timed as well.
      */
     private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
-        var romaji: Lyrics.Found? = null
+        var romanized: Lyrics.Found? = null
         val answers = (SongNames.titleNames(metadata.title) + SongNames.bareTitle(metadata.title)).distinct().map { title ->
             underName(metadata.copy(title = title), timeoutMs).also { answer ->
-                val kept = romaji
+                val kept = romanized
                 if (answer is Lyrics.Found) {
-                    if (kept == null && isRomaji(answer.words)) romaji = answer
-                    else if (kept == null || (!isRomaji(answer.words) && timing(answer) >= timing(kept))) return answer
+                    if (kept == null && romanizedScript(answer.words) != null) romanized = answer
+                    else if (kept == null || (romanizedScript(answer.words) == null && timing(answer) >= timing(kept))) return answer
                 }
             }
         }
-        return romaji ?: answers.reduce(::better)
+        return romanized ?: answers.reduce(::better)
     }
 
     /**
-     * LRCLIB's words first. Words only there in romaji, Japanese written in Latin letters, give way
-     * to the song's own, in Japanese, from wherever else has them; words with no timings give way to
-     * timed ones, which can follow the song.
+     * LRCLIB's words first. Words only there in Latin letters, Japanese in romaji or Korean, give
+     * way to the song's own, in its script, from wherever else has them; words with no timings give
+     * way to timed ones, which can follow the song.
      */
     private suspend fun underName(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         val first = fromLrclib(metadata, timeoutMs)
-        val romaji = first is Lyrics.Found && isRomaji(first.words)
+        val romanized = (first as? Lyrics.Found)?.let { romanizedScript(it.words) }
         // Words timed badly are no better than untimed ones: both give way to words timed well.
         val untimed = first is Lyrics.Found && timing(first) < WELL_TIMED
         // Words timed for a recording that isn't as long as the one playing are another take's, so
         // they give way to words from somewhere else that are timed for one that is.
         val otherTake = first is Lyrics.Found && !fits(first, metadata)
-        if (first is Lyrics.Found && !romaji && !untimed && !otherTake) return first
+        if (first is Lyrics.Found && romanized == null && !untimed && !otherTake) return first
         val answers = mutableListOf(first)
-        // Romaji is only bettered by words in Japanese, untimed words by timed ones, and another take's by this one's.
+        // Words in Latin letters are only bettered by words in the song's script, untimed words by timed
+        // ones, and another take's by this one's.
         suspend fun tried(answer: Lyrics) = answer.also { answers += it }.let {
-            it is Lyrics.Found && (!romaji || it.words.hasJapanese()) && (!untimed || timing(it) >= WELL_TIMED) &&
+            it is Lyrics.Found && (romanized == null || it.words.isIn(romanized)) && (!untimed || timing(it) >= WELL_TIMED) &&
                 (!otherTake || (it.lengthMs != null && fits(it, metadata)))
         }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
@@ -901,9 +902,10 @@ internal class LyricsFinder(
 
         /**
          * Bumped when words kept from before should be looked up again: 8 for Japanese songs NetEase writes
-         * with China's kanji, and words in romaji found under a song's name in Latin letters.
+         * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
+         * Korean songs found in Latin letters.
          */
-        const val CACHE_VERSION = 10
+        const val CACHE_VERSION = 11
 
         /**
          * [found], words kept from before, without what's since learned to be left out of NetEase's,
@@ -959,6 +961,12 @@ private fun timing(answer: LyricsFinder.Lyrics): Int {
 /** Whether any of it is written in Japanese: kana, or the kanji Japanese shares with Chinese. */
 private fun String.hasJapanese() = any { it in '\u3040'..'\u30FF' || it in '\u4E00'..'\u9FFF' }
 
+/** Whether any of it is written in Hangul. */
+private fun String.hasHangul() = any { it in '\uAC00'..'\uD7A3' }
+
+/** Whether any of it is written in [script], Japanese or Korean. */
+private fun String.isIn(script: Script) = if (script == Script.KOREAN) hasHangul() else hasJapanese()
+
 /** A word that could be Japanese in Latin letters: syllables like "ka", "shi", "tsu", "n", and doubled consonants. */
 private val romajiWord = Regex("""^(?:(?:ch|sh|ts|[kgsztdnhbpmyrwfj])?y?[aiueo]|n(?![aiueoy])|([kstpgdbc])(?=\1))+$""")
 
@@ -975,6 +983,36 @@ internal fun isRomaji(words: String): Boolean {
     if (all.isEmpty()) return false
     val japanese = all.count { romajiWord.matches(it) }
     return japanese * 20 >= all.size * 9 && all.count { it in romajiParticles } >= 3
+}
+
+/** A word that could be Korean in Latin letters: syllables like "geu", "saek", "ttae", "jeong". */
+private val romanizedKoreanWord =
+    Regex("""^(?:(?:kk|tt|pp|ss|jj|ch|[gkndtrlmbpsjh])?(?:yae|yeo|wae|ae|ya|eo|ye|wa|oe|yo|wo|we|wi|yu|eu|ui|[aeoui])(?:ng|[knltmpgbds])?)+$""")
+
+/** Little words Korean songs can't do without, which other languages rarely use. */
+private val koreanLittleWords = setOf(
+    "neon", "nan", "nal", "neol", "nae", "naega", "naege", "nega", "neoui", "neoreul", "nareul", "naneun", "neoneun",
+    "geu", "geudae", "uri", "wae", "mwo", "dasi", "jigeum", "ige", "jeongmal", "neomu", "hamkke",
+)
+
+/**
+ * Whether [words] are Korean written in Latin letters, as ILLIT's "Geu ttae aiseutineun nae mat":
+ * most words read as Korean syllables, and its little words show up again and again. Hindi and
+ * Indonesian read as such syllables too, but never use those words.
+ */
+internal fun isRomanizedKorean(words: String): Boolean {
+    if (words.hasHangul() || words.hasJapanese()) return false
+    val all = words.lowercase().split(Regex("[^a-z']+")).filter { it.isNotEmpty() }
+    if (all.isEmpty()) return false
+    val korean = all.count { romanizedKoreanWord.matches(it) }
+    return korean * 20 >= all.size * 9 && all.count { it in koreanLittleWords } >= 3
+}
+
+/** What [words] are written in, when it's Japanese or Korean in Latin letters. */
+internal fun romanizedScript(words: String): Script? = when {
+    isRomaji(words) -> Script.JAPANESE
+    isRomanizedKorean(words) -> Script.KOREAN
+    else -> null
 }
 
 /**

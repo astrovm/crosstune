@@ -444,7 +444,7 @@ internal data class Learning(
     val wordsAs: WordsAs = WordsAs.WRITTEN,
     /** Whether Japanese in Latin letters is spelled as typed, sensei, rather than as said, sensee. */
     val romajiTyped: Boolean = false,
-    /** Set when the words were found in romaji, and ChatGPT wrote them in Japanese. */
+    /** Set when the words were found in Latin letters, and ChatGPT wrote them in Japanese or Korean. */
     val fromRomaji: Boolean = false,
     /** The words most worth learning from the song, as ChatGPT finds them. */
     val wordsToKnow: Asking<List<KeyWord>>? = null,
