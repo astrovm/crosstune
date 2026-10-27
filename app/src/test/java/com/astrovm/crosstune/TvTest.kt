@@ -19,6 +19,7 @@ import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -279,6 +280,8 @@ class TvTest {
     fun onATvTheSongsANameTurnsUpOpenOnTheFirstSoOkPicksIt() {
         // They come in after the picker opens, as they do over a real network, with Dismiss all there is meanwhile.
         val found = CountDownLatch(1)
+        // The song picked is looked up after the picker's gone, and the field's busy till then.
+        val looked = CountDownLatch(1)
         fake.handler = { request ->
             when {
                 request.url.encodedPath.startsWith("/search") -> {
@@ -289,8 +292,10 @@ class TvTest {
                             """{"id":2,"title":"Machi No Dorufin (Live)","link":"https://www.deezer.com/track/2","artist":{"name":"Kingo Hamada"}}]}"""
                     )
                 }
-                request.url.encodedPath.startsWith("/track/") ->
+                request.url.encodedPath.startsWith("/track/") -> {
+                    looked.await(5, TimeUnit.SECONDS)
                     FakeSpotify.html(request, """{"id":1,"title":"Machi No Dorufin","link":"https://www.deezer.com/track/1","artist":{"name":"Kingo Hamada"}}""")
+                }
                 else -> FakeSpotify.html(request, """{"data":[],"contents":[]}""")
             }
         }
@@ -307,10 +312,11 @@ class TvTest {
         val first = composeRule.onNode(hasText("Machi No Dorufin") and hasClickAction() and hasAnyAncestor(isDialog()))
         first.assertIsFocused()
         first.performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitUntil(5_000) { !shown("Machi No Dorufin (Live)") }
+        composeRule.waitUntil(5_000) { !shown("Machi No Dorufin (Live)") && fake.requestedUrls.any { it.contains("/track/1") } }
+        looked.countDown()
+        // Back on the field once the song's looked up, as after a link typed.
+        composeRule.waitUntil(5_000) { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         composeRule.waitForIdle()
-        assertTrue(fake.requestedUrls.any { it.contains("/track/1") })
-        // Back on the field, as after a link typed.
         field().assertIsFocused()
 
         // Only the once: a song looked up later from elsewhere leaves the remote where it is.
