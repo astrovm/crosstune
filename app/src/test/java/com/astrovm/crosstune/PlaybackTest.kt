@@ -866,19 +866,23 @@ class PlaybackTest {
         assertNull(runBlocking { playback.plays("com.example.gone").first() })
         // Stopped or paused at its song's end, it played it through, as YouTube stops after a list's last song, a little past it.
         val youTube = MusicService.YOUTUBE.packageName
-        val atEnd = player(youTube, "YouTube", "Self Control", "Laura Branigan", PlaybackState.STATE_STOPPED, album = "Laura Branigan", position = 246_479, duration = 246_000)
+        // Named as YouTube names a song, with no album, as any video: not one that says it's music, but what it was asked to play.
+        val atEnd = player(youTube, "YouTube", "Self Control", "Laura Branigan", PlaybackState.STATE_STOPPED, position = 246_479, duration = 246_000)
         shadowOf(sessions).addController(atEnd)
         val ended = { state: Int, position: Long ->
             shadowOf(atEnd).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, PLAYED_AT).build())
             runBlocking { playback.plays(youTube).first() }?.ended
         }
-        assertEquals(true, runBlocking { playback.plays(youTube).first() }?.ended)
+        assertEquals(AppPlays(MusicMetadata("Self Control", "Laura Branigan"), null, ended = true), runBlocking { playback.plays(youTube).first() })
         assertEquals(true, ended(PlaybackState.STATE_PAUSED, 244_000))
         // Short of it, paused it's still playing it, and stopped it plays nothing.
         assertEquals(false, ended(PlaybackState.STATE_PAUSED, 243_999))
         assertNull(ended(PlaybackState.STATE_STOPPED, 243_999))
         assertEquals(false, ended(PlaybackState.STATE_PLAYING, 246_000))
         assertNull(ended(PlaybackState.STATE_ERROR, 246_000))
+        // Nothing named, nothing to follow.
+        shadowOf(atEnd).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, " ").putString(MediaMetadata.METADATA_KEY_ARTIST, "Laura Branigan").build())
+        assertNull(ended(PlaybackState.STATE_PLAYING, 0))
     }
 
     @Test

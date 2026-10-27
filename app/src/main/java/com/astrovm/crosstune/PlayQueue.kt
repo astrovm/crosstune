@@ -84,7 +84,7 @@ internal class PlayQueue(
         before = null
         if (floor.let { it != null && now.queueId != null && now.queueId <= it }) return
         val part = queue.part
-        val named = part.indexOfFirst { SongNames.sameSong(it, now.song) }
+        val named = part.indexOfFirst { sameEntry(it, now.song) }
         // Once one of the part's songs is seen with the app's number for it, the app's numbers say
         // where it is, whatever it calls the songs.
         val first = queue.first ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
@@ -101,10 +101,14 @@ internal class PlayQueue(
             at < 0 -> Unit
             // On from the part's last song to what the app plays after it.
             at == part.lastIndex && if (numbered) index == part.size else index < 0 -> playNext()
-            // Something else was picked to play.
-            else -> stop()
+            // Something else was picked to play; without numbers, it may only be the app's own name for one of the part's songs.
+            numbered -> stop()
         }
     }
+
+    /** The same song of the list, in whatever version the app found it: live, remastered, its video. */
+    private fun sameEntry(song: MusicMetadata, plays: MusicMetadata) = SongNames.sameArtist(song.artist, plays.artist) &&
+        SongNames.titleNames(song.title).any { name -> SongNames.titleNames(plays.title).any { SongNames.same(SongNames.bareTitle(name), SongNames.bareTitle(it)) } }
 
     /** The next part as one queue, looked up while this one plays, so it's there as this one ends. */
     private fun lookAhead(): Deferred<YouTubeQueue?> {

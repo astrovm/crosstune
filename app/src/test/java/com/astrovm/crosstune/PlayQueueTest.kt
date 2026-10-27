@@ -147,7 +147,8 @@ class PlayQueueTest {
 
     @Test
     fun somethingElsePickedToPlayStopsIt() {
-        queue().playing()
+        val queue = queue()
+        queue.playing()
         plays(3, 102)
         // Another list, numbered on after what YouTube Music had queued.
         plays("Other", 900)
@@ -155,18 +156,31 @@ class PlayQueueTest {
         plays(50, 149)
         plays("Radio", 150)
         assertTrue(phone.listsAsked.isEmpty())
-        // Without numbers, by its name.
-        queue().playing()
-        plays(3)
-        plays("Other")
-        assertFalse(file.exists())
         // Picked as the last song played, YouTube Music numbers it past what it played after.
-        queue().playing()
-        plays(1, 100)
-        plays(50, 149)
-        plays("Other", 180)
-        plays("Radio", 150)
+        queue.playing()
+        plays(1, 1000)
+        plays(50, 1049)
+        plays("Other", 1080)
+        plays("Radio", 1050)
         assertTrue(phone.listsAsked.isEmpty())
+    }
+
+    @Test
+    fun withoutNumbersTheAppsOwnNamesForTheSongsAreFollowed() {
+        // As YouTube names what it found: another version of the song, its video, or something else.
+        queue().playing()
+        plays(1)
+        plays("Something Else")
+        assertTrue(file.exists())
+        // Another's song by the same name isn't the list's.
+        phone.inApp(music).value = AppPlays(MusicMetadata("Song 50", "Someone Else"), null, ended = true)
+        assertTrue(phone.listsAsked.isEmpty())
+        plays("Song 50 (Live at Home) [2019 Remaster]")
+        plays("Radio")
+        assertEquals(1, phone.listsAsked.size)
+        plays("Band - Song 51 (Official Video)")
+        plays("Band - Song 100 (Official Video)", ended = true)
+        assertEquals(2, phone.listsAsked.size)
     }
 
     @Test

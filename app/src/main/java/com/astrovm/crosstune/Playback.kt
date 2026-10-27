@@ -309,11 +309,18 @@ internal class MediaSessionPlayback(
             .filter { sameApp(app, it.packageName) }
             .firstNotNullOfOrNull { controller ->
                 val ended = controller.ended()
-                controller.takeIf { ended || (it.playbackState?.state ?: PlaybackState.STATE_NONE) !in NOT_PLAYING }?.let(::playing)?.let {
-                    AppPlays(it.metadata, controller.playbackState?.activeQueueItemId?.takeIf { id -> id != MediaSession.QueueItem.UNKNOWN_ID.toLong() }, ended)
-                }
+                controller.takeIf { ended || (it.playbackState?.state ?: PlaybackState.STATE_NONE) !in NOT_PLAYING }
+                    // A video that doesn't say it's music is still what the app was asked to play: YouTube
+                    // names "Thriller" by "Michael Jackson" with no album, as it does any video.
+                    ?.let { playing(it)?.metadata ?: it.named() }
+                    ?.let { AppPlays(it, controller.playbackState?.activeQueueItemId?.takeIf { id -> id != MediaSession.QueueItem.UNKNOWN_ID.toLong() }, ended) }
             }
     }
+
+    /** What plays, as the app names it. */
+    private fun MediaController.named(): MusicMetadata? =
+        metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
+            ?.let { MusicMetadata(it, metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) }
 
     /** Stopped or paused at its song's end, where it said it is. */
     private fun MediaController.ended(): Boolean {

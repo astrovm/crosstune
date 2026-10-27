@@ -1643,7 +1643,8 @@ internal class MainViewModel(
     }
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
-        SongNames.sameSong(one, other) && (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
+        SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&
+            (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
 
     /** Where [song] is, as Crosstune last heard it, when that's the song it heard. */
     private fun heardFollowing(song: MusicMetadata): Following? =
