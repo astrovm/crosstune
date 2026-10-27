@@ -98,9 +98,6 @@
     <string name="play_all_progress">Nummers zoeken… %1$d van %2$d</string>
     <string name="play_all_in">Alles afspelen in %1$s</string>
     <string name="play_first_in">Eerste nummer afspelen in %1$s</string>
-    <string name="play_part">%1$d tot %2$d afspelen</string>
-    <string name="play_part_in">%1$d tot %2$d afspelen in %3$s</string>
-    <string name="part_range">%1$d tot %2$d</string>
     <string name="play_first_button">Eerste nummer afspelen</string>
     <string name="play_in_background">Afspelen in %1$s en hier blijven</string>
     <string name="songs_shown">Eerste %1$d van %2$d</string>

@@ -144,6 +144,10 @@ internal object SongNames {
     fun artistNames(credit: String): List<String> =
         credit.split(artistSeparator).map { it.trim() }.filter { it.isNotEmpty() }
 
+    /** The same song, by its names and its artist's, however each service writes them. */
+    fun sameSong(one: MusicMetadata, other: MusicMetadata): Boolean =
+        titleNames(one.title).any { title -> titleNames(other.title).any { same(title, it) } } && sameArtist(one.artist, other.artist)
+
     /** The same name, whatever punctuation, spacing, accents or case write it. */
     fun same(one: String, other: String): Boolean =
         normalize(withoutEditionTag(one)) == normalize(withoutEditionTag(other))

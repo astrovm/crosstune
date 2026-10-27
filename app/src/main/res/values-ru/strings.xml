@@ -98,9 +98,6 @@
     <string name="play_all_progress">Ищем треки… %1$d из %2$d</string>
     <string name="play_all_in">Слушать всё в %1$s</string>
     <string name="play_first_in">Включить первый трек в %1$s</string>
-    <string name="play_part">Слушать с %1$d по %2$d</string>
-    <string name="play_part_in">Слушать с %1$d по %2$d в %3$s</string>
-    <string name="part_range">С %1$d по %2$d</string>
     <string name="play_first_button">Включить первый трек</string>
     <string name="play_in_background">Включить в %1$s и остаться здесь</string>
     <string name="songs_shown">Первые %1$d из %2$d</string>

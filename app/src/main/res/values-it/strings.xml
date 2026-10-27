@@ -99,9 +99,6 @@
     <string name="play_all_progress">Ricerca dei brani… %1$d di %2$d</string>
     <string name="play_all_in">Riproduci tutto in %1$s</string>
     <string name="play_first_in">Riproduci il primo brano in %1$s</string>
-    <string name="play_part">Riproduci da %1$d a %2$d</string>
-    <string name="play_part_in">Riproduci da %1$d a %2$d in %3$s</string>
-    <string name="part_range">Da %1$d a %2$d</string>
     <string name="play_first_button">Riproduci il primo brano</string>
     <string name="play_in_background">Riproduci in %1$s e resta qui</string>
     <string name="songs_shown">Primi %1$d di %2$d</string>

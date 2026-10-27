@@ -47,7 +47,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -126,7 +128,8 @@ class MainActivity : ComponentActivity() {
                     phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
                     keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
-                    lookAhead = lookAheadLyrics
+                    lookAhead = lookAheadLyrics,
+                    playQueue = playQueue(applicationContext)
                 )
             }
         }
@@ -288,6 +291,29 @@ class MainActivity : ComponentActivity() {
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
+
+        /** Crosstune's own queue, and the app it's for. */
+        private var playQueue: Pair<Context, PlayQueue>? = null
+
+        /**
+         * Crosstune's own queue, playing a long playlist through: one for the whole app, as it outlives
+         * the screen, started again by [NowPlayingListener] after Android stops Crosstune.
+         */
+        internal fun playQueue(context: Context): PlayQueue {
+            val app = context.applicationContext
+            playQueue?.takeIf { it.first === app }?.let { return it.second }
+            // One made for another app, as each test makes, is done with.
+            playQueue?.second?.stop()
+            // Its own lookups, as it may play on with no screen to share them with.
+            val matcher = ExactMatcher(httpClientFactory(), cache = LookupCache(File(app.cacheDir, "queue_lookups.json"), lookupDispatcher), missingForMs = MISSING_FOR_MS)
+            return PlayQueue(
+                playbackFactory(app),
+                { service, tracks -> matcher.youtubeQueue(service, tracks) {} },
+                File(app.noBackupFilesDir, "play_queue.json"),
+                CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+                lookupDispatcher
+            ).also { playQueue = app to it }
+        }
 
         /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */
         @VisibleForTesting

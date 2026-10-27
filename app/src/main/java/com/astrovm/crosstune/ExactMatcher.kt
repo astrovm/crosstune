@@ -23,6 +23,9 @@ import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
+/** A queue in YouTube or YouTube Music: its [url], and the [songs] it plays, as asked for, those found there. */
+internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>)
+
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
  * Search API and Deezer's public API, plus the search behind Bandcamp's, YouTube Music's, TIDAL's,
@@ -188,26 +191,28 @@ internal class ExactMatcher(
      * video, then YouTube makes a temporary playlist of those videos, opened at the first. No
      * account needed. [onProgress] hears how many have been looked up. Null when none match.
      */
-    suspend fun youtubeQueue(target: MusicService, tracks: List<MusicMetadata>, onProgress: (Int) -> Unit): String? {
+    suspend fun youtubeQueue(target: MusicService, tracks: List<MusicMetadata>, onProgress: (Int) -> Unit): YouTubeQueue? {
         val looked = AtomicInteger()
         val lookups = Semaphore(QUEUE_LOOKUPS_AT_ONCE)
-        val ids = coroutineScope {
+        val found = coroutineScope {
             tracks.map { track ->
                 async {
                     lookups.withPermit { matchForQueue(target, track) }.also { onProgress(looked.incrementAndGet()) }
                 }
             }.awaitAll()
-        }.mapNotNull { it?.toHttpUrl()?.queryParameter("v") }.distinct()
+        }.zip(tracks).mapNotNull { (url, track) -> url?.toHttpUrl()?.queryParameter("v")?.let { it to track } }.distinctBy { it.first }
         cache?.save()
-        if (ids.isEmpty()) return null
+        if (found.isEmpty()) return null
+        val ids = found.map { it.first }
         val watch = if (target == MusicService.YOUTUBE_MUSIC) YOUTUBE_MUSIC_WATCH_URL else YOUTUBE_WATCH_URL
         val list = try {
             temporaryPlaylist(ids)
         } catch (_: IOException) {
             null
         }
-        // Without the playlist, the first song still plays.
-        return watch + ids.first() + (list?.let { "&list=$it" } ?: "")
+        // Without the playlist, the first song still plays, on its own.
+        val songs = if (list != null) found.map { it.second } else listOf(found.first().second)
+        return YouTubeQueue(watch + ids.first() + (list?.let { "&list=$it" } ?: ""), songs)
     }
 
     /** YouTube answers a list of videos with a redirect to a temporary playlist of them. */

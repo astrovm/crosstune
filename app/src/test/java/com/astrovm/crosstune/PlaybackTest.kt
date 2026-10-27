@@ -23,6 +23,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -835,6 +836,52 @@ class PlaybackTest {
         // YouTube Music is given the song's link there; another app, asked by name, has no use for one.
         assertTrue(playback.playSong(song, "com.google.android.apps.youtube.music", "https://music.youtube.com/watch?v=other000000"))
         assertTrue(playback.playSong(song, "com.spotify.music", "https://music.youtube.com/watch?v=other000000"))
+    }
+
+    @Test
+    fun whatAnAppPlaysIsFollowedWithItsPlaceInItsQueue() {
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val seen = mutableListOf<AppPlays?>()
+        collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.plays(music).collect { seen += it } }
+        shadowOf(Looper.getMainLooper()).idle()
+        // Without access, nothing.
+        assertEquals(listOf<AppPlays?>(null), seen)
+        allow()
+        val youTubeMusic = player(music, "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours")
+        val queued = { state: Int, id: Long -> PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).setActiveQueueItemId(id).build() }
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PLAYING, 107))
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band", album = "Album"))
+        shadowOf(sessions).addController(youTubeMusic)
+        assertEquals("Blinding Lights" to 107L, seen.last()?.let { it.song.title to it.queueId })
+        // Paused it still plays it; stopped, it plays nothing.
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PAUSED, 108))
+        assertEquals(108L, runBlocking { playback.plays(music).first() }?.queueId)
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_STOPPED, 108))
+        assertNull(runBlocking { playback.plays(music).first() })
+        // An app with no queue gives no place in it.
+        shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+        assertNull(runBlocking { playback.plays(music).first() }?.queueId)
+        // Each app's is its own.
+        assertEquals("Other", runBlocking { playback.plays("com.spotify.music").first() }?.song?.title)
+        assertNull(runBlocking { playback.plays("com.example.gone").first() })
+    }
+
+    @Test
+    fun aListIsAskedOfTheAppOrTheAppWokenForIt() = runBlocking {
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val list = "https://music.youtube.com/watch?v=first000000&list=TLGG"
+        // Nothing running, and nothing to wake.
+        assertFalse(playback.playList(music, list))
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageNames, woken.single())
+        // Woken, it's asked.
+        wakes = player(music, "YouTube Music", "Other", "Band")
+        assertTrue(playback.playList(music, list))
+        // Running, it's asked as it is.
+        woken.clear()
+        allow()
+        shadowOf(sessions).addController(player(music, "YouTube Music", "Other", "Band"))
+        assertTrue(playback.playList(music, list))
+        assertTrue(woken.isEmpty())
     }
 
     @Test

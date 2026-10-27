@@ -119,7 +119,9 @@ internal class MainViewModel(
     /** Where the words of the songs shown lately are kept for after the app's closed; nullable so tests need none. */
     private val keptOnDisk: LookupCache? = null,
     /** Whether a song's lyrics are looked up as its card shows, see [lookAhead]. */
-    private val lookAhead: Boolean = true
+    private val lookAhead: Boolean = true,
+    /** Plays a playlist longer than one queue through, see [playAll]. */
+    private val playQueue: PlayQueue? = null
 ) : ViewModel() {
     /**
      * On a TV, an app opened on a song is covered rather than left, once Android lets Crosstune show
@@ -1112,23 +1114,31 @@ internal class MainViewModel(
     private var trackJob: Job? = null
 
     /**
-     * Plays the result's songs as one queue in YouTube Music or YouTube, [MAX_QUEUE] at most, which
-     * is all YouTube takes: a longer list plays in parts, [from] the first song of one.
+     * Plays the result's songs in YouTube Music or YouTube, as one queue of the first [MAX_QUEUE],
+     * which is all YouTube takes; [playQueue] plays a longer list on from there.
      */
-    fun playAll(from: Int) {
+    fun playAll() {
         val destination = uiState.resultDestination
         val service = destination.matchService ?: return
-        val tracks = uiState.result?.tracks.orEmpty().drop(from).take(MAX_QUEUE)
+        val all = uiState.result?.tracks.orEmpty()
+        val tracks = all.take(MAX_QUEUE)
         cancelTrackWork()
         trackJob = viewModelScope.launch {
-            uiState = uiState.copy(queueProgress = 0 to tracks.size, queueFrom = from)
+            uiState = uiState.copy(queueProgress = 0 to tracks.size)
             try {
-                val url = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
-                if (url == null) showError(AppError.NOT_FOUND) else effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen = false))
+                val queue = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
+                if (queue == null) return@launch showError(AppError.NOT_FOUND)
+                effectChannel.send(Effect.Open(queue.url, destination.packageName, finishAfterOpen = false))
+                playOn(all, service, destination, queue)
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
             }
         }
+    }
+
+    /** Plays the rest of [tracks] on in the app [destination] is, after [queue], their first [MAX_QUEUE]. */
+    private suspend fun playOn(tracks: List<MusicMetadata>, service: MusicService, destination: Destination, queue: YouTubeQueue) {
+        playQueue?.play(tracks, service, destination.packageName ?: return, MAX_QUEUE, queue.songs)
     }
 
     /** Opens one of a playlist's songs where the result goes, matched like a song of its own. */
@@ -1633,8 +1643,7 @@ internal class MainViewModel(
     }
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
-        SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&
-            (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
+        SongNames.sameSong(one, other) && (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
 
     /** Where [song] is, as Crosstune last heard it, when that's the song it heard. */
     private fun heardFollowing(song: MusicMetadata): Following? =
@@ -3272,7 +3281,10 @@ internal class MainViewModel(
         // An album has its own page there, which the exact match below finds.
         if (entry.metadata.type == ItemType.PLAYLIST && entry.metadata.tracks.isNotEmpty() && (service == MusicService.YOUTUBE_MUSIC || service == MusicService.YOUTUBE)) {
             entry.link.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
-            matcher.youtubeQueue(service, entry.metadata.tracks.take(MAX_QUEUE)) {}?.let { return it }
+            matcher.youtubeQueue(service, entry.metadata.tracks.take(MAX_QUEUE)) {}?.let { queue ->
+                playOn(entry.metadata.tracks, service, destination, queue)
+                return queue.url
+            }
         }
         entry.destinationLinks[destination.key]?.takeIf { it.matchingEnabled == uiState.exactMatch }?.let { return it.url.forSharing() }
         val match = if (uiState.exactMatch && service != null) matcher.lookFor(service, entry.metadata) else null
