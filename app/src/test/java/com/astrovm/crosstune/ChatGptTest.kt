@@ -985,5 +985,8 @@ class ChatGptTest {
         runBlocking { tutor.fromRomaji(song, lines) }
         assertEquals(2, openAi.asked.size)
         assertTrue(openAi.asked.last().getString("instructions").contains("romaji to Japanese"))
+        // Japanese stays kept where it was before Korean, so what earlier versions kept still counts.
+        val keys = JSONArray(File(folder.root, "answers.json").readText()).let { kept -> (0 until kept.length()).map { kept.getJSONArray(it).getString(0) } }
+        assertEquals(listOf("hangul", "romaji"), keys.map { it.substringBefore('|') })
     }
 }

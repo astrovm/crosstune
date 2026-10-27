@@ -4500,6 +4500,9 @@ class ListeningTest {
         assertTrue(described(string(R.string.lyrics_from_romanized_korean)))
         // Korean has no kana to show it in.
         assertFalse(shown(string(R.string.lyrics_only_kana)))
+        // Once written, they're kept so.
+        composeRule.runOnIdle { controllerModel().keep() }
+        waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.exists() && "넌 내 맘을 몰라" in it.readText() } }
     }
 
     @Test
