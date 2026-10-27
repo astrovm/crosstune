@@ -147,12 +147,10 @@ internal data class UiState(
     val songsFromChatGpt: Int = 0,
     /** Set when a source was turned on before Android 12, which can't tell whether its links are allowed, until they're opened. */
     val showLinkSettingsHelper: Boolean = false,
-    /** The main screen's notices the user closed: updates by version, and asking what they think. */
+    /** The update notices the user closed, by version. */
     val dismissedNotices: Set<String> = emptySet(),
     /** A newer Crosstune to update to, for a copy installed from a file. */
     val update: Update? = null,
-    /** Whether Google Play installed Crosstune, so what people think can be said there. */
-    val fromPlay: Boolean = false,
     /** The song a music app on the phone plays, or has paused, while Crosstune is in sight: a bar to open its player from. */
     val playingNow: NowPlaying? = null,
     val history: List<HistoryEntry> = emptyList(),

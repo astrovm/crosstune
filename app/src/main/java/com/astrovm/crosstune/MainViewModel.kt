@@ -105,8 +105,6 @@ internal class MainViewModel(
     private val uniDic: UniDic? = null,
     /** Where a newer Crosstune is looked for; null for a copy an app store updates. */
     private val updates: UpdateChecker? = null,
-    /** Whether Google Play installed Crosstune. */
-    fromPlay: Boolean,
     /** Calibration may use the microphone only when its permission has already been granted. */
     private val mayCalibrate: () -> Boolean = { false },
     /** Hears the words sung in what the phone plays, to line the timed words up to them; nullable so tests need none. */
@@ -227,7 +225,6 @@ internal class MainViewModel(
             ),
             showLinkSettingsHelper = !preferences.getBoolean(KEY_LINK_SETTINGS_HELPER_DISMISSED, false),
             dismissedNotices = preferences.getStringSet(KEY_DISMISSED_NOTICES, null).orEmpty().toSet(),
-            fromPlay = fromPlay,
             history = historyStore.load(),
             savedLines = savedLinesStore.load(),
             systemStateKnown = false,
@@ -3516,12 +3513,6 @@ internal class MainViewModel(
         viewModelScope.launch { effectChannel.send(Effect.Open(update.apkUrl, packageName = null, finishAfterOpen = false)) }
     }
 
-    /** Opens Crosstune on Google Play, to say what the user thinks there; asked once, so it's not asked again. */
-    fun openPlayPage() {
-        dismissNotices(setOf(NOTICE_PLAY))
-        viewModelScope.launch { effectChannel.send(Effect.Open(PLAY_PAGE, PLAY_STORE, finishAfterOpen = false)) }
-    }
-
     /** Closes the main screen's notices about [keys]; one about anything else still shows. */
     fun dismissNotices(keys: Set<String>) {
         val dismissed = uiState.dismissedNotices + keys
@@ -3536,12 +3527,6 @@ internal class MainViewModel(
 
     companion object {
         const val PREFERENCES_NAME = "crosstune_preferences"
-
-        /** The notice asking what the user thinks, on Google Play. */
-        const val NOTICE_PLAY = "play"
-
-        /** Songs opened before that's asked, so there's something to say. */
-        const val SONGS_BEFORE_ASKING = 3
         /** A song without any picture can wait a little longer for its cover than a video with a frame. */
         private const val COVER_TIMEOUT_MS = 5_000L
         private const val VIDEO_COVER_TIMEOUT_MS = 2_000L

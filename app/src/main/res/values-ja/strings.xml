@@ -143,7 +143,6 @@
     <string name="notice_apps_still_open">%1$s がまだ自分のリンクを開いています</string>
     <string name="fix_button">修正</string>
     <string name="notice_update">Crosstune %1$s が出ました</string>
-    <string name="notice_play">Crosstune の感想を Google Play で伝えてください。Google Play に公開される助けになります。</string>
     <string name="update_button">アップデート</string>
     <string name="history_cleared">履歴を削除しました</string>
     <string name="history_removed">削除しました</string>

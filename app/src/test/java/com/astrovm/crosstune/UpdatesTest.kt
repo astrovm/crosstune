@@ -133,28 +133,8 @@ class UpdatesTest {
     fun beforeAndroid11TheInstallerIsAskedTheOldWay() {
         app.packageManager.setInstallerPackageName(app.packageName, "com.android.vending")
         assertFalse(installedFromAFile(app))
-        assertTrue(installedFromPlay(app))
         app.packageManager.setInstallerPackageName(app.packageName, "com.android.packageinstaller")
         assertTrue(installedFromAFile(app))
-        assertFalse(installedFromPlay(app))
-    }
-
-    @Test
-    fun onlyGooglePlayCountsAsPlay() {
-        val packages = shadowOf(app.packageManager)
-        fun installedBy(installer: String?) = packages.setInstallSourceInfo(app.packageName, null, null, null, installer, null, PackageInstaller.PACKAGE_SOURCE_UNSPECIFIED)
-        installedBy("com.android.vending")
-        assertTrue(installedFromPlay(app))
-        for (other in listOf(null, "com.google.android.packageinstaller", "org.fdroid.fdroid", "dev.imranr.obtainium")) {
-            installedBy(other)
-            assertFalse("$other", installedFromPlay(app))
-        }
-        // Android won't say for a package it doesn't know, which isn't Play either.
-        val unknown = object : android.content.ContextWrapper(app) {
-            override fun getPackageName() = "com.example.unknown"
-        }
-        assertFalse(installedFromPlay(unknown))
-        assertFalse(installedFromAFile(unknown))
     }
 
     @Test
