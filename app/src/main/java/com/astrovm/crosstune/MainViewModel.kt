@@ -1557,23 +1557,14 @@ internal class MainViewModel(
      */
     fun keep() {
         val busy = listOfNotNull(lyricsJob, readingsJob, restoreJob, translationJob, chordsJob).filter { it.isActive }
-        if (busy.isEmpty()) return keepShown()
-        keeping?.cancel()
-        keeping = viewModelScope.launch {
-            busy.joinAll()
-            keeping = null
-            keep()
-        }
+        if (busy.isEmpty()) keepShown() else viewModelScope.launch { busy.joinAll(); keep() }
     }
-
-    private var keeping: Job? = null
 
     /**
      * Keeps the words shown for when they're opened again, once all that's on for them is worked out;
      * left before that, they're looked up again.
      */
     private fun keepShown() {
-        keeping?.cancel()
         val song = uiState.lyricsFor ?: return
         val learning = uiState.learning
         val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || restoreJob?.isActive == true || learning.translating || uiState.chords.loading
