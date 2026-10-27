@@ -3719,10 +3719,20 @@ class ListeningTest {
                 else -> null
             }
         }
-        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSites)
-        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") }
-        // Android closes the app while the words are open.
-        composeRule.runOnIdle { controller!!.pause().stop().destroy() }
+        // LRCLIB's second answer, a copy to time the words by, is held until the app's been left.
+        val searches = java.util.concurrent.atomic.AtomicInteger()
+        val timing = java.util.concurrent.CountDownLatch(1)
+        val sites = { request: okhttp3.Request ->
+            if (request.url.host == "lrclib.net" && searches.incrementAndGet() == 2) timing.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            chordSites(request)
+        }
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = sites)
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") && shown("[Singing to the morning light]") && searches.get() == 2 }
+        // Left while they're still being timed, the words are kept once they are, and then Android closes the app.
+        composeRule.runOnIdle { controller!!.pause().stop() }
+        timing.countDown()
+        waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
+        composeRule.runOnIdle { controller!!.destroy() }
         val asked = fake.requestedUrls.size
 
         launch()

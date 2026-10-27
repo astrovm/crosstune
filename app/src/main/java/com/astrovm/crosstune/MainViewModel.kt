@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -1490,7 +1491,7 @@ internal class MainViewModel(
         // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
         shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
         leaveWords()
-        keep()
+        keepShown()
         lyricsJob?.cancel()
         stopLearning()
         stopFollowing()
@@ -1550,8 +1551,20 @@ internal class MainViewModel(
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
     }
 
-    /** Keeps the words shown for when they're opened again, once all that's on for them is worked out. */
+    /**
+     * Keeps the words shown as the app's left, for when they're opened again: once all that's on for
+     * them is worked out, as it still is while Android lets the app run, e.g. timing them better.
+     */
     fun keep() {
+        val busy = listOfNotNull(lyricsJob, readingsJob, restoreJob, translationJob, chordsJob).filter { it.isActive }
+        if (busy.isEmpty()) keepShown() else viewModelScope.launch { busy.joinAll(); keep() }
+    }
+
+    /**
+     * Keeps the words shown for when they're opened again, once all that's on for them is worked out;
+     * left before that, they're looked up again.
+     */
+    private fun keepShown() {
         val song = uiState.lyricsFor ?: return
         val learning = uiState.learning
         val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || restoreJob?.isActive == true || learning.translating || uiState.chords.loading
@@ -2435,7 +2448,7 @@ internal class MainViewModel(
     fun dismissLyrics() {
         heardSong = null
         leaveWords()
-        keep()
+        keepShown()
         lyricsJob?.cancel()
         lyricsJob = null
         nextJob?.cancel()
