@@ -11,7 +11,9 @@ flag the rest as missing.
 - **translation**: each line means what the original says, reads naturally, and none is left
   untranslated when it isn't in the target language already. Judge meaning, not style.
 - **readings**: each kana reading or romanization is how the line is sung. Flag wrong readings of
-  kanji (行く read こう), wrong romaji, and Chinese read as Japanese or the other way round.
+  kanji (行く read こう), wrong romaji, and Chinese read as Japanese or the other way round. Hindi,
+  Punjabi, Tamil, Thai, Arabic, Hebrew, Greek or Russian in Latin letters should read close to how
+  it's sung: flag letters that are dropped or mangled, not a spelling you'd have chosen.
 - **chords**: the sheet is of this song (its words match the lyrics), and the chords look like a
   real song's, not text read as chords. A site's own notes or other text that isn't the song in the
   sheet is not ok too: start `why` with "site text:" and quote it.

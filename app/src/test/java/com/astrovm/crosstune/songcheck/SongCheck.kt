@@ -151,7 +151,7 @@ class SongCheck {
 
     /** How the lines are read, for words not written in Latin letters, as the app shows them. */
     private suspend fun readingsJson(metadata: MusicMetadata, lines: List<String>): JSONObject? {
-        val script = Readings.scriptOf(lines) ?: return null
+        val script = Readings.displayScriptOf(lines) ?: return null
         var read = Readings.of(lines, script)
         var fixed = 0
         if (script == Script.JAPANESE) {
