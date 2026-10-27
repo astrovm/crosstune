@@ -304,6 +304,20 @@ internal object SongNames {
     fun withGuests(artist: String, title: String): String =
         (listOf(artist) + guestCredit.findAll(title).map { it.groupValues[1].trim() }).joinToString(" feat. ")
 
+    /**
+     * The iTunes Store of the country that writes names as [names] are, which names its songs as
+     * given there when another store translates them: Korea's for Hangul, Japan's for kana, Taiwan's
+     * for Chinese characters alone. Null for names in none of those.
+     */
+    fun homeStore(names: String): String? {
+        val scripts = names.map { Character.UnicodeScript.of(it.code) }.toSet()
+        return homeStores.entries.firstOrNull { it.key in scripts }?.value
+    }
+
+    private val homeStores = linkedMapOf(
+        Character.UnicodeScript.HANGUL to "KR", Character.UnicodeScript.HIRAGANA to "JP", Character.UnicodeScript.KATAKANA to "JP", Character.UnicodeScript.HAN to "TW"
+    )
+
     /** [name] is one of [credit]'s artists, or is written inside one of them. */
     fun artistInside(name: String, credit: String): Boolean {
         val theirs = artists(name)

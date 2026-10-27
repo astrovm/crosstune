@@ -662,6 +662,18 @@ internal class ExactMatcher(
                     !SongNames.saysAnotherVersion(it.optString("trackName"), metadata.title, metadata.artist)
             }
             ?: results.firstOrNull { inLatinLetters(metadata, it) }
+            ?: results.firstOrNull { song -> metadata.lengthMs?.let { kotlin.math.abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } != false }
+                ?.takeIf { namedAtHome(metadata, it) }
+    }
+
+    /**
+     * Whether [song], under other names, is [metadata]'s: what the store of the country that writes
+     * those names calls it, as Korea's calls ILLIT's You're Under Arrest 체포하겠어, by 아일릿.
+     */
+    private suspend fun namedAtHome(metadata: MusicMetadata, song: JSONObject): Boolean {
+        val store = SongNames.homeStore(metadata.title + metadata.artist) ?: return false
+        val home = appleLookup(song.optLong("trackId"), store) ?: return false
+        return SongNames.same(home.optString("trackName"), metadata.title) && SongNames.sameArtist(home.optString("artistName"), metadata.artist)
     }
 
     /**

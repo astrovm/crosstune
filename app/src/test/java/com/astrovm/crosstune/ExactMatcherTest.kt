@@ -607,6 +607,27 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aSongTheUsStoreTranslatesIsFoundWhenItsHomeStoreNamesItAsGiven() {
+        // Korea's store has 체포하겠어 by 아일릿; the US store and YouTube Music, You're Under Arrest by ILLIT.
+        val song = MusicMetadata("체포하겠어", "아일릿", lengthMs = 181_912)
+        val songs = listOf(youTubeMusicRow("You're Under Arrest", "ILLIT • You're Under Arrest • 3:02", videoId = "arrest00000"))
+        val us = appleSong("Rush", "ILLIT", 150_000, id = 1) + "," + appleSong("You're Under Arrest", "ILLIT", 181_912, id = 42)
+        namesAndTabs(songs = songs, apple = mapOf("US" to us), elsewhere = mapOf("KR" to appleSong("체포하겠어", "아일릿", 181_912, id = 42)))
+        assertEquals("https://music.youtube.com/watch?v=arrest00000", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertTrue(fake.requestedUrls.any { "/lookup" in it && "id=42" in it })
+        // Under other names at home, it's another song.
+        namesAndTabs(songs = songs, apple = mapOf("US" to us), elsewhere = mapOf("KR" to appleSong("Magnetic", "아일릿", 181_912, id = 42)))
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        // Nor is one that isn't as long.
+        namesAndTabs(songs = songs, apple = mapOf("US" to us), elsewhere = mapOf("KR" to appleSong("체포하겠어", "아일릿", 181_912, id = 42)))
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 170_000)) })
+        // A song given in Latin letters has no home store to ask.
+        fake.requestedUrls.clear()
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Arrest", "Some Band", lengthMs = 181_912)) })
+        assertTrue(fake.requestedUrls.none { "/lookup" in it })
+    }
+
+    @Test
     fun appleIsAskedInTheUsStoreWhenTheLocalOneOnlyNamesItInAnotherScript() {
         val song = MusicMetadata("Yoru ni Kakeru", "YOASOBI")
         namesAndTabs(

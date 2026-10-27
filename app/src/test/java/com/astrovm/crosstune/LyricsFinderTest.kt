@@ -610,6 +610,49 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aSongTheUsStoreTranslatesIsFoundWhenItsHomeStoreNamesItAsGiven() {
+        // Korea's store has 체포하겠어 by 아일릿; the US store and LRCLIB, You're Under Arrest by ILLIT.
+        fun illit(home: String) {
+            fake.handler = { request ->
+                val url = request.url
+                when {
+                    url.host == "lrclib.net" -> FakeSpotify.html(
+                        request,
+                        if (url.queryParameter("track_name") == "You're Under Arrest") """[${answer("You're Under Arrest", "ILLIT", "Hands up")}]""" else "[]"
+                    )
+                    url.encodedPath == "/search" -> FakeSpotify.html(
+                        request,
+                        """{"results":[{"trackId":7,"trackName":"Rush","artistName":"ILLIT","trackTimeMillis":150000},{"trackId":42,"trackName":"You're Under Arrest","artistName":"ILLIT","trackTimeMillis":181912}]}"""
+                    )
+                    url.encodedPath == "/lookup" && url.queryParameter("country") == "KR" && url.queryParameter("id") == "42" -> FakeSpotify.html(request, """{"results":[$home]}""")
+                    url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[]}""")
+                    else -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+                }
+            }
+        }
+        val words = Lyrics.Found("Hands up", source = LyricsFinder.LRCLIB)
+        val arrest = MusicMetadata("체포하겠어", "아일릿", lengthMs = 181_000)
+        illit("""{"trackName":"체포하겠어","artistName":"아일릿"}""")
+        assertEquals(words, found(arrest))
+        // Not knowing how long it is, the first the store found is the one checked.
+        assertEquals(Lyrics.None, found(arrest.copy(lengthMs = null)))
+        // Under other names at home, it's another song.
+        illit("""{"trackName":"Magnetic","artistName":"아일릿"}""")
+        assertEquals(Lyrics.None, found(arrest))
+        illit("""{"trackName":"체포하겠어","artistName":"키키"}""")
+        assertEquals(Lyrics.None, found(arrest))
+        // A song given in Latin letters has no home store to ask.
+        fake.requestedUrls.clear()
+        assertEquals(Lyrics.None, found(MusicMetadata("Arrest", "Some Band", lengthMs = 181_000)))
+        assertTrue(fake.requestedUrls.none { "/lookup" in it })
+    }
+
+    @Test
+    fun namesAreCheckedInTheStoreOfTheCountryThatWritesThemSo() {
+        assertEquals(listOf("KR", "KR", "JP", "JP", "TW", null), listOf("아일릿", "사랑 愛", "夜に駆ける", "ヨアソビ", "光年之外", "Magnetic").map(SongNames::homeStore))
+    }
+
+    @Test
     fun netEaseHavingNoSuchSongIsNoneEvenWithLrclibDown() {
         fake.handler = { request ->
             val url = request.url
