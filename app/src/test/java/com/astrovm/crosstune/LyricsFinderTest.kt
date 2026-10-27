@@ -372,6 +372,11 @@ class LyricsFinderTest {
         // Untimed, with the blank lines between them.
         japaneseSong(netEase = netEase, lyric = (opening + sung).joinToString("\n"))
         assertEquals(Lyrics.Found(sung.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
+        // Or both on one line, with what they're called in Chinese.
+        for (heading in listOf("Hatsukoi （初恋）-Hiroko Mita （三田寛子）", "Hiroko Mita - Hatsukoi")) {
+            japaneseSong(netEase = netEase, lyric = lrc(listOf("作词 : 怜", "", heading) + sung))
+            assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(13_000L + index * 1_000, line) }), found(hatsukoi))
+        }
         // A song that opens with its own name sings it.
         val named = listOf("Hatsukoi") + sung
         japaneseSong(netEase = netEase, lyric = lrc(named))

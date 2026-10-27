@@ -83,12 +83,20 @@ private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> 
         start++
     }
     // The name then the artist, as a heading, or the other way round: neither alone, as a song may open with its name.
+    val title = SongNames.normalize(song.title)
+    val artist = SongNames.normalize(song.artist)
     val names = lines.drop(start).filter { it.isNotEmpty() }.take(2).map(SongNames::normalize)
-    if (names.toSet() == setOf(SongNames.normalize(song.title), SongNames.normalize(song.artist))) {
+    if (names.toSet() == setOf(title, artist)) {
         repeat(2) { while (lines[start].isEmpty()) start++; start++ }
+    } else if (lines.getOrNull(start)?.replace(netEaseGloss, "")?.let(SongNames::normalize) in setOf(title + artist, artist + title)) {
+        // Or both on one line, each maybe with its name in Chinese: "Leif Erikson （夫·埃里克森）-Interpol （国际刑警乐队）".
+        start++
     }
     return drop(start)
 }
+
+/** A name in brackets after a name, what it's called in Chinese: " （夫·埃里克森）". */
+private val netEaseGloss = Regex("""\s*[（(][^）)]*[）)]""")
 
 /**
  * The lines up to the credits NetEase closes some songs with: at least two, with nothing sung after
