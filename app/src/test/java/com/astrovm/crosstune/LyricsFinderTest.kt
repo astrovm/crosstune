@@ -542,6 +542,12 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun onlyAToZAreLatinLetters() {
+        assertEquals(listOf(true, true, true, true), listOf("a", "z", "A", "Z").map { it.hasLatin() })
+        assertEquals(listOf(false, false, false, false, false), listOf("`", "{", "@", "[", "아일릿").map { it.hasLatin() })
+    }
+
+    @Test
     fun aSongGivenInItsOwnScriptIsFoundUnderItsNamesInLatinLetters() {
         // Korea's store credits Magnetic to 아일릿, LRCLIB to ILLIT, as the US store does.
         fun illit(us: String, lookup: String = """{"results":[]}""") {
