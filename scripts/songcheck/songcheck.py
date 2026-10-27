@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks Crosstune's lyrics, timing, chords, readings and translations on the songs people play most.
 
-  python3 scripts/songcheck/songcheck.py songs      # Apple Music's top 100 in a country per continent
+  python3 scripts/songcheck/songcheck.py songs      # Apple Music's top 100 in two countries per continent
   python3 scripts/songcheck/songcheck.py audio      # their 30-second previews, as 16 kHz mono
   python3 scripts/songcheck/songcheck.py run        # the app's own lookups on each, through Gradle
   python3 scripts/songcheck/songcheck.py hear       # what's sung in each preview, and when (faster-whisper)
@@ -27,8 +27,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "songcheck"
-# One big Apple Music country per continent.
-COUNTRIES = {"us": "North America", "br": "South America", "de": "Europe", "jp": "Asia", "ng": "Africa", "au": "Oceania"}
+# Two big Apple Music countries per continent, as one alone misses much of what a continent plays.
+COUNTRIES = {
+    "us": "North America", "br": "South America", "de": "Europe", "jp": "Asia", "ng": "Africa", "au": "Oceania",
+    "mx": "North America", "ar": "South America", "fr": "Europe", "kr": "Asia", "za": "Africa", "nz": "Oceania",
+}
 TOP = 100
 # How far off a line may start and still be on time.
 ON_TIME_MS = 500
