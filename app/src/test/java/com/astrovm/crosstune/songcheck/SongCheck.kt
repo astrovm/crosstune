@@ -1,6 +1,8 @@
 package com.astrovm.crosstune.songcheck
 
 import com.astrovm.crosstune.ChordFinder
+import com.astrovm.crosstune.ChordSheet
+import com.astrovm.crosstune.ChordSheets
 import com.astrovm.crosstune.ExactMatcher
 import com.astrovm.crosstune.Heard
 import com.astrovm.crosstune.LookupCache
@@ -130,8 +132,21 @@ class SongCheck {
             .put("site", answer.sheet.site.name)
             .put("url", answer.sheet.url)
             .put("capo", answer.sheet.capo)
-            .put("lines", JSONArray(answer.sheet.lines.take(SHOWN_LINES).map { line -> "${line.chords.joinToString(" ") { it.name }} | ${line.text}" }))
+            .put("lines", JSONArray(shownChords(answer.sheet, lines)))
         else -> JSONObject().put("kind", answer::class.simpleName!!.lowercase())
+    }
+
+    /**
+     * The chords as the app shows them over the words, not the sheet as the site has it: each in
+     * brackets where it's played, "[G]Walking [C]down", after those played before the line.
+     */
+    private fun shownChords(sheet: ChordSheet, lines: List<String>): List<String> {
+        val placed = ChordSheets.place(sheet, lines) ?: return emptyList()
+        return lines.zip(placed).filter { (text, chords) -> text.isNotBlank() || !chords.isEmpty }.take(SHOWN_LINES).map { (text, chords) ->
+            val over = StringBuilder(text)
+            chords.over.sortedByDescending { it.at }.forEach { over.insert(it.at, "[${it.name}]") }
+            (chords.before.joinToString("") { "[$it]" } + " " + over).trim()
+        }
     }
 
     /** Into English, or Spanish for a song already in English, as nothing comes back for it in English. */
@@ -151,7 +166,7 @@ class SongCheck {
 
     /** How the lines are read, for words not written in Latin letters, as the app shows them. */
     private suspend fun readingsJson(metadata: MusicMetadata, lines: List<String>): JSONObject? {
-        val script = Readings.scriptOf(lines) ?: return null
+        val script = Readings.displayScriptOf(lines) ?: return null
         var read = Readings.of(lines, script)
         var fixed = 0
         if (script == Script.JAPANESE) {
