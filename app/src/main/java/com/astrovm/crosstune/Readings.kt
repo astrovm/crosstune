@@ -722,8 +722,48 @@ internal object Readings {
     /**
      * Hangul in Latin letters, the Revised Romanization way: as it's sung, where the end of a syllable
      * changes with the start of the next in the same word. 있어 is "isseo", 좋아 "joa", 같이 "gachi", 몰라 "molla".
+     * A number in digits is said too, as the word it's part of: 1년 "illyeon".
      */
-    fun romaja(hangul: String): String = HANGUL_WORD.replace(hangul) { said(it.value) }
+    fun romaja(hangul: String): String {
+        val spelled = NUMBER_IN_A_WORD.replace(hangul) { number -> inHangul(number.value, hangul.substring(number.range.last + 1)) }
+        return HANGUL_WORD.replace(spelled) { said(it.value) }
+    }
+
+    /**
+     * [digits] as they're said before [counted]: in Korean's own numbers before what's counted with
+     * them, as 12시 is 열두 시 and 2살 두 살, and otherwise in the ones from Chinese, as 7월 is 칠월.
+     */
+    private fun inHangul(digits: String, counted: String): String =
+        // After another syllable, six's y sound takes an n: 십육 "simnyuk", 열여섯 "yeollyeoseot".
+        number(digits.toLong(), counted).replace(SIX_AFTER) { if (it.value == "육") "뉵" else "녀" }
+
+    private fun number(number: Long, counted: String): String {
+        if (number in 1..99 && COUNTED_IN_KOREAN.any(counted::startsWith) && !counted.startsWith("개월")) {
+            return if (number == 20L) "스무" else KOREAN_TENS[number.toInt() / 10] + KOREAN_ONES[number.toInt() % 10]
+        }
+        // June and October drop a sound: 유월, 시월.
+        if (counted.startsWith("월") && number == 6L) return "유"
+        if (counted.startsWith("월") && number == 10L) return "시"
+        if (number == 0L) return "영"
+        // In fours, as Korean counts: 만 is ten thousand, 억 a hundred million, 조 a trillion.
+        var left = number
+        var said = ""
+        for (big in listOf("", "만", "억", "조")) {
+            val four = (left % 10_000).toInt()
+            left /= 10_000
+            if (four > 0) said = (if (four == 1 && big == "만") "" else upTo9999(four)) + big + said
+        }
+        return said
+    }
+
+    /** A number up to 9999 in Korean's numbers from Chinese: 백칠십육 for 176, with no 일 before a ten, a hundred or a thousand. */
+    private fun upTo9999(number: Int): String = listOf(1000 to "천", 100 to "백", 10 to "십", 1 to "").joinToString("") { (place, unit) ->
+        when (val digit = number / place % 10) {
+            0 -> ""
+            1 -> if (unit.isEmpty()) "일" else unit
+            else -> SINO_DIGITS[digit] + unit
+        }
+    }
 
     private fun said(word: String): String {
         val starts = word.map { CONSONANTS[(it - '가') / (21 * 28)] }.toMutableList()
@@ -780,6 +820,16 @@ internal object Readings {
     }
 
     private val HANGUL_WORD = Regex("[가-힣]+")
+
+    /** Digits a word in Hangul goes on from, 1년, but not ones in English, MP3를, or the end of a time or a decimal, 11:11, 3.5배. */
+    private val NUMBER_IN_A_WORD = Regex("""(?<![A-Za-z0-9:.,])(?:0|[1-9][0-9]{0,15})(?=[가-힣])""")
+
+    /** What's counted in Korean's own numbers rather than those from Chinese: hours, years of age, people, things. */
+    private val COUNTED_IN_KOREAN = listOf("시", "살", "명", "개", "마리", "잔", "병", "사람", "가지", "곡", "송이", "걸음")
+    private val KOREAN_TENS = listOf("", "열", "스물", "서른", "마흔", "쉰", "예순", "일흔", "여든", "아흔")
+    private val KOREAN_ONES = listOf("", "한", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉")
+    private const val SINO_DIGITS = "영일이삼사오육칠팔구"
+    private val SIX_AFTER = Regex("(?<=.)(?:육|여(?=[섯덟]))")
     private const val CONSONANTS = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
     private val STARTS = CONSONANTS.toList().zip(listOf("g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h")).toMap()
     private val VOWELS = listOf("a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi", "yu", "eu", "ui", "i")
