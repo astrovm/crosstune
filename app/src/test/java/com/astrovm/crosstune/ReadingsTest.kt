@@ -236,11 +236,30 @@ class ReadingsTest {
     }
 
     @Test
-    fun koreanIsRomanizedSyllableBySyllable() {
+    fun koreanIsRomanizedAsItsSung() {
         val (line) = Readings.of(listOf("사랑해 한국"), Script.KOREAN)
         assertEquals(listOf(Ruby("사랑해 한국")), line.parts)
         assertEquals("saranghae hanguk", line.romanized)
-        assertEquals("kkotbat", Readings.romaja("꽃밭"))
+        val said = mapOf(
+            "꽃밭" to "kkotbat", "강아지" to "gangaji",
+            // A vowel takes the sound before it.
+            "있을까요" to "isseulkkayo", "찾아" to "chaja", "다섯이" to "daseosi", "없이" to "eopsi", "밟아" to "balba",
+            // ㄷ and ㅌ soften before i.
+            "굳이" to "guji", "같이" to "gachi", "붙여" to "buchyeo", "닫혀" to "dachyeo",
+            // ㅎ goes quiet, or makes the sound next to it harder.
+            "좋아" to "joa", "많이" to "mani", "싫어" to "sireo", "이렇게" to "ireoke", "좋다" to "jota", "좋지" to "jochi", "좋습니다" to "josseumnida",
+            "축하" to "chuka", "입학" to "ipak", "깨끗해" to "kkaekkeutae", "밝혀" to "balkyeo", "맞혀" to "machyeo", "전화" to "jeonhwa",
+            "놓는" to "nonneun", "않는" to "anneun", "싫니" to "silli", "좋며" to "jomyeo",
+            // Through the nose before n and m.
+            "국물" to "gungmul", "있는" to "inneun", "합니다" to "hamnida", "끝나" to "kkeunna", "읽는" to "ingneun", "없는" to "eomneun",
+            // ㄴ and ㄹ.
+            "신라" to "silla", "설날" to "seollal", "몰라" to "molla", "심리" to "simni", "종로" to "jongno", "독립" to "dongnip", "협력" to "hyeomnyeok",
+            // Two consonants closing a syllable sound as one.
+            "닭" to "dak", "맑게" to "malge", "삶" to "sam", "읊다" to "eupda", "여덟" to "yeodeol", "값" to "gap", "앉다" to "anda", "넋" to "neok", "많다" to "manta"
+        )
+        assertEquals(said, said.mapValues { Readings.romaja(it.key) })
+        // Only within a word.
+        assertEquals("ot an, 1nyeon", Readings.romaja("옷 안, 1년"))
     }
 
     @Test

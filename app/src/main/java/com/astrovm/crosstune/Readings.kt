@@ -719,14 +719,83 @@ internal object Readings {
         put("てぃ", "ti"); put("でぃ", "di"); put("うぃ", "wi"); put("うぇ", "we"); put("ゔぁ", "va")
     }
 
-    /** Hangul in Latin letters, the Revised Romanization way, syllable by syllable. */
-    fun romaja(hangul: String): String = hangul.map { c ->
-        if (c !in '가'..'힣') return@map c.toString()
-        val index = c - '가'
-        INITIALS[index / (21 * 28)] + MEDIALS[(index % (21 * 28)) / 28] + FINALS[index % 28]
-    }.joinToString("")
+    /**
+     * Hangul in Latin letters, the Revised Romanization way: as it's sung, where the end of a syllable
+     * changes with the start of the next in the same word. 있어 is "isseo", 좋아 "joa", 같이 "gachi", 몰라 "molla".
+     */
+    fun romaja(hangul: String): String = HANGUL_WORD.replace(hangul) { said(it.value) }
 
-    private val INITIALS = listOf("g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h")
-    private val MEDIALS = listOf("a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi", "yu", "eu", "ui", "i")
-    private val FINALS = listOf("", "k", "k", "k", "n", "n", "n", "t", "l", "k", "m", "l", "l", "l", "p", "l", "m", "p", "p", "t", "t", "ng", "t", "t", "k", "t", "p", "t")
+    private fun said(word: String): String {
+        val starts = word.map { CONSONANTS[(it - '가') / (21 * 28)] }.toMutableList()
+        val vowels = word.map { VOWELS[(it - '가') % (21 * 28) / 28] }
+        val ends = word.map { ENDS[(it - '가') % 28] }.toMutableList()
+        for (i in 1 until word.length) {
+            val (end, start) = joined(ends[i - 1], starts[i], vowels[i])
+            ends[i - 1] = end
+            starts[i] = start
+        }
+        return word.indices.joinToString("") { i ->
+            // ㄹ after ㄹ is an l too.
+            val start = if (starts[i] == 'ㄹ' && heard(ends.getOrElse(i - 1) { "" }) == 'ㄹ') "l" else STARTS.getValue(starts[i])
+            start + vowels[i] + (heard(ends[i])?.let(LAST_SOUNDS::getValue) ?: "")
+        }
+    }
+
+    /** The end of one syllable and the start of the next, as they're said together. */
+    private fun joined(end: String, start: Char, vowel: String): Pair<String, Char> {
+        // ㄷ and ㅌ before an i sound become ㅈ and ㅊ: 굳이 "guji", 같이 "gachi", 닫혀 "dachyeo".
+        fun softened(c: Char) = if (vowel == "i" || vowel == "yeo") SOFTER[c] ?: c else c
+        if (start == 'ㅇ') {
+            // A vowel takes the sound before it, and ㅎ goes quiet: 있어 "isseo", 없이 "eopsi", 좋아 "joa".
+            val left = end.removeSuffix("ㅎ")
+            if (left.isEmpty() || left == "ㅇ") return left to start
+            return left.dropLast(1) to softened(left.last())
+        }
+        // ㅎ and the sound next to it make one harder sound: 이렇게 "ireoke", 축하 "chuka".
+        if (end.endsWith('ㅎ')) HARDER_AFTER_H[start]?.let { return end.dropLast(1) to it }
+        if (start == 'ㅎ') end.lastOrNull()?.let(HARDER_BEFORE_H::get)?.let { return end.dropLast(1) to softened(it) }
+        // Otherwise ㅎ goes quiet, or is said ㄴ before ㄴ: 놓는 "nonneun", 않는 "anneun".
+        var heard = heard(if (end == "ㅎ" && start == 'ㄴ') "ㄴ" else end.removeSuffix("ㅎ"), start) ?: return "" to start
+        var next = start
+        when {
+            // ㄴ and ㄹ together are both l: 신라 "silla", 설날 "seollal".
+            next == 'ㄹ' && heard == 'ㄴ' -> heard = 'ㄹ'
+            next == 'ㄴ' && heard == 'ㄹ' -> next = 'ㄹ'
+            // ㄹ after any other sound is said n: 심리 "simni", 독립 "dongnip".
+            next == 'ㄹ' && heard != 'ㄹ' -> next = 'ㄴ'
+        }
+        // And k, t and p go through the nose before n and m: 국물 "gungmul", 있는 "inneun", 합니다 "hamnida".
+        if (next == 'ㄴ' || next == 'ㅁ') heard = NASAL[heard] ?: heard
+        return heard.toString() to next
+    }
+
+    /** The one sound [end] makes closing a syllable before [next]: ㄺ is a k, but an l before ㄱ, as in 맑게 "malge". */
+    private fun heard(end: String, next: Char? = null): Char? {
+        val sound = when {
+            end.isEmpty() -> return null
+            end.length == 2 && end[0] == 'ㄹ' && end[1] in "ㄱㅁㅍ" && !(end[1] == 'ㄱ' && next == 'ㄱ') -> end[1]
+            else -> end[0]
+        }
+        return CLOSED[sound] ?: sound
+    }
+
+    private val HANGUL_WORD = Regex("[가-힣]+")
+    private const val CONSONANTS = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
+    private val STARTS = CONSONANTS.toList().zip(listOf("g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h")).toMap()
+    private val VOWELS = listOf("a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi", "yu", "eu", "ui", "i")
+    private val ENDS = listOf(
+        "", "ㄱ", "ㄲ", "ㄱㅅ", "ㄴ", "ㄴㅈ", "ㄴㅎ", "ㄷ", "ㄹ", "ㄹㄱ", "ㄹㅁ", "ㄹㅂ", "ㄹㅅ", "ㄹㅌ",
+        "ㄹㅍ", "ㄹㅎ", "ㅁ", "ㅂ", "ㅂㅅ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"
+    )
+
+    /** What a consonant sounds like closing a syllable, where only seven are told apart. */
+    private val CLOSED = mapOf('ㄲ' to 'ㄱ', 'ㅋ' to 'ㄱ', 'ㅅ' to 'ㄷ', 'ㅆ' to 'ㄷ', 'ㅈ' to 'ㄷ', 'ㅊ' to 'ㄷ', 'ㅌ' to 'ㄷ', 'ㅎ' to 'ㄷ', 'ㅍ' to 'ㅂ')
+    private val LAST_SOUNDS = mapOf('ㄱ' to "k", 'ㄴ' to "n", 'ㄷ' to "t", 'ㄹ' to "l", 'ㅁ' to "m", 'ㅂ' to "p", 'ㅇ' to "ng")
+    private val SOFTER = mapOf('ㄷ' to 'ㅈ', 'ㅌ' to 'ㅊ')
+    private val HARDER_AFTER_H = mapOf('ㄱ' to 'ㅋ', 'ㄷ' to 'ㅌ', 'ㅈ' to 'ㅊ', 'ㅅ' to 'ㅆ')
+    private val HARDER_BEFORE_H = mapOf(
+        'ㄱ' to 'ㅋ', 'ㄲ' to 'ㅋ', 'ㅋ' to 'ㅋ', 'ㄷ' to 'ㅌ', 'ㅅ' to 'ㅌ', 'ㅆ' to 'ㅌ', 'ㅌ' to 'ㅌ',
+        'ㅈ' to 'ㅊ', 'ㅊ' to 'ㅊ', 'ㅂ' to 'ㅍ', 'ㅍ' to 'ㅍ'
+    )
+    private val NASAL = mapOf('ㄱ' to 'ㅇ', 'ㄷ' to 'ㄴ', 'ㅂ' to 'ㅁ')
 }
