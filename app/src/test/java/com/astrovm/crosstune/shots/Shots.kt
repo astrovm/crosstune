@@ -178,6 +178,9 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
         Video(File(out, "lyrics-$theme.mp4"), width, height).use { video ->
             record(video, 11_400) { at ->
                 if (at == 500L) save(File(out, "lyrics-$theme.png"))
+                // By then the bar has gone out of the words' way, as it does a few seconds into a
+                // playing song; a touch at the top, clear of the words, brings it back.
+                if (at == 4_000L) root().performTouchInput { click(Offset(centerX, 8f)) }
                 if (at == 4_600L) {
                     composeRule.onNodeWithContentDescription(string(R.string.visuals_show)).performTouchInput { click() }
                 }
