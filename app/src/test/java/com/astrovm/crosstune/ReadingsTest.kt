@@ -307,6 +307,10 @@ class ReadingsTest {
         assertEquals("あたまんなか うめつくす", inside.reading)
         assertTrue(inside.romanized, "naka" in inside.romanized && "chuu" !in inside.romanized)
         assertTrue(inside.typed, "naka" in inside.typed && "chuu" !in inside.typed)
+        // After a reading the lyrics give in brackets, it's still where it's written.
+        val after = Readings.corrected(Readings.of(listOf("歌（うた）って頭の中"), Script.JAPANESE), listOf(ReadingFix(0, "中", "うち")))[0]
+        assertEquals("うたってあたまのうち", after.reading)
+        assertTrue(after.romanized, after.romanized.endsWith("uchi"))
         // Typed, it's put right as the kana spell it, only where those kanji are.
         val typed = listOf(LineReading(listOf(Ruby("生", "せい"), Ruby("と"), Ruby("せい")), "せいとせい", "seeto see", "seito sei"))
         val fixedTyped = Readings.corrected(typed, listOf(ReadingFix(0, "生", "しょう")))[0]
@@ -400,6 +404,8 @@ class ReadingsTest {
             assertEquals("$withUniDic", "こっちがわにきて", read("こっち側に来て").reading)
             assertEquals("$withUniDic", "むこうがわ", read("向こう側").reading)
             assertTrue("$withUniDic", read("反対側").reading.endsWith("がわ"))
+            assertTrue("$withUniDic", read("ソファ側").reading.endsWith("がわ"))
+            assertTrue("$withUniDic", read("サーバー側").reading.endsWith("がわ"))
             // は and ね, not a verb, before a space.
             assertEquals("$withUniDic", "bokura wa ne sonna", read("僕らはね そんな").romanized)
             assertEquals("$withUniDic", "hane o hirogete", read("羽を広げて").romanized)

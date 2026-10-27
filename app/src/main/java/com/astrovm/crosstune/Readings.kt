@@ -401,8 +401,8 @@ internal object Readings {
     /** [kana] with an h as p, ほ as ぽ, as it is after a sound run into. */
     private fun plosive(kana: String) = if (kana.first() in "はひふへほ") (kana.first() + 2) + kana.drop(1) else kana
 
-    /** Whether 側 after [piece] is a side of it: after kanji or katakana, 反対側, or a way, こっち側. */
-    private fun sideOf(piece: Piece) = piece.surface in SIDES || piece.surface.last().let { isHan(it) || it in 'ァ'..'ヺ' }
+    /** Whether 側 after [piece] is a side of it: after kanji or katakana, 反対側 and サーバー側, or a way, こっち側. */
+    private fun sideOf(piece: Piece) = piece.surface in SIDES || piece.surface.last().let { isHan(it) || it in 'ァ'..'ヺ' || it == 'ー' }
 
     /** Particles a line ends on, ね and よ. */
     private const val ENDINGS = "ねさよな"
