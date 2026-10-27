@@ -864,14 +864,19 @@ Singing to the morning light</div>"""
                 request,
                 mapOf(
                     "https://www.ultimate-guitar.com/search.php" to ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/accents-1", "Canción del río", "Beyoncé", 3)),
-                    "https://tabs.ultimate-guitar.com/tab/accents-1" to ugTab("[ch]G[/ch]   [ch]C[/ch]\nCaminando junto al río\n[ch]D[/ch]\nCantando a la luz del día")
+                    "https://tabs.ultimate-guitar.com/tab/accents-1" to ugTab("[ch]G[/ch]   [ch]C[/ch]\nCaminando junto al río\n[ch]D[/ch]\nCantando a la luz del día\n[ch]Em[/ch]\nSo&shy;ñando c&oelig;ur wei&szlig; &bdquo;hoy&ldquo;")
                         .replace("del día", "del d&iacute;a &bogus;").replace("é", "&eacute;").replace("í", "&#237;").replace("ó", "&#xF3;")
                 )
             )
         }
-        val found = chords(MusicMetadata("Canción del río", "Beyoncé"), listOf("Caminando junto al río", "Cantando a la luz del día &bogus;")) as ChordFinder.Chords.Found
+        val words = listOf("Caminando junto al río", "Cantando a la luz del día &bogus;", "Soñando cœur weiß „hoy“")
+        val found = chords(MusicMetadata("Canción del río", "Beyoncé"), words) as ChordFinder.Chords.Found
         assertEquals(
-            listOf(SheetLine("Caminando junto al río", listOf(Chord(0, "G"), Chord(4, "C"))), SheetLine("Cantando a la luz del día &bogus;", listOf(Chord(0, "D")))),
+            listOf(
+                SheetLine("Caminando junto al río", listOf(Chord(0, "G"), Chord(4, "C"))),
+                SheetLine("Cantando a la luz del día &bogus;", listOf(Chord(0, "D"))),
+                SheetLine("Soñando cœur weiß „hoy“", listOf(Chord(0, "Em")))
+            ),
             found.sheet.lines
         )
     }

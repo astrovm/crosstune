@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.text.Html
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -450,10 +451,8 @@ internal class ChordFinder(
         private val titleWords = Regex("""[\p{L}\p{N}]+""")
 
         val entity = Regex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
-        val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ") + mapOf(
-            "ordm" to "º", "ordf" to "ª", "deg" to "°", "iexcl" to "¡", "iquest" to "¿", "laquo" to "«", "raquo" to "»",
-            "ndash" to "–", "mdash" to "—", "hellip" to "…", "lsquo" to "‘", "rsquo" to "’", "ldquo" to "“", "rdquo" to "”"
-        )
+        /** The entities pages use most, and one read otherwise than HTML says: a hidden hyphen is no letter of the word. */
+        val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ", "shy" to "")
 
         /** An HTML attribute's text as written, spaces and all, which [android.text.Html] would run together. */
         fun unescape(text: String): String = entity.replace(text) { match ->
@@ -461,21 +460,13 @@ internal class ChordFinder(
             when {
                 name.startsWith("#x") -> codePoint(name.substring(2).toIntOrNull(16), match.value)
                 name.startsWith("#") -> codePoint(name.substring(1).toIntOrNull(), match.value)
-                else -> named[name] ?: htmlLetters[name] ?: match.value
+                // Any other by name, as Ultimate Guitar writes "wei&szlig;", "c&oelig;ur" and "&bdquo;".
+                else -> named[name] ?: Html.fromHtml(match.value, Html.FROM_HTML_MODE_LEGACY).toString()
             }
         }
 
         /** The character of a numbered entity, or the entity as it is when the number is no character. */
         private fun codePoint(code: Int?, entity: String): String =
             if (code != null && Character.isValidCodePoint(code)) String(Character.toChars(code)) else entity
-
-        /** The accented letters Ultimate Guitar writes by name, as in "Beyonc&eacute;". */
-        val htmlLetters: Map<String, String> = buildMap {
-            val accents = mapOf("acute" to '́', "grave" to '̀', "circ" to '̂', "tilde" to '̃', "uml" to '̈', "ring" to '̊', "cedil" to '̧')
-            for (letter in "aeiouyncAEIOUYNC") for ((accent, mark) in accents) {
-                val composed = java.text.Normalizer.normalize("$letter$mark", java.text.Normalizer.Form.NFC)
-                if (composed.length == 1) put("$letter$accent", composed)
-            }
-        }
     }
 }
