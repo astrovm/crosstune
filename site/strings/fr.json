@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "Tant que vous êtes connecté, Crosstune envoie à OpenAI ce dont chaque fonction a besoin : le titre, l'artiste et les paroles d'une chanson pour les traduire ou les expliquer, corriger les lectures japonaises, écrire en japonais des paroles trouvées en romaji ou choisir les mots à apprendre ; un mot et sa ligne pour le chercher ; vos questions sur une ligne ou une chanson ; et une description que vous tapez, ou une chanson, pour trouver des chansons qui correspondent. OpenAI les traite selon sa propre politique de confidentialité, et elles comptent dans l'utilisation de votre abonnement."
+      "Tant que vous êtes connecté, Crosstune envoie à OpenAI ce dont chaque fonction a besoin : le titre, l'artiste et les paroles d'une chanson pour les traduire ou les expliquer, corriger les lectures japonaises, écrire en japonais ou en coréen des paroles trouvées en lettres latines ou choisir les mots à apprendre ; un mot et sa ligne pour le chercher ; vos questions sur une ligne ou une chanson ; et une description que vous tapez, ou une chanson, pour trouver des chansons qui correspondent. OpenAI les traite selon sa propre politique de confidentialité, et elles comptent dans l'utilisation de votre abonnement."
     ],
     [
       "h2",

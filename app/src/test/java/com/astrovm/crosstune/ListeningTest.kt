@@ -2969,6 +2969,7 @@ class ListeningTest {
             200 to when {
                 "a word in it" in instructions -> FakeOpenAi.stream("""{"meaning": "the heavens", "type": "noun"}""")
                 "restore song lyrics written in romaji" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMAJI_JAPANESE[lines.getString(it)] ?: lines.getString(it) }) }.toString())
+                "restore song lyrics written in Latin letters to Korean" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMANIZED_HANGUL[lines.getString(it)] ?: lines.getString(it) }) }.toString())
                 "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
                 "covers and samples" in instructions -> FakeOpenAi.stream("""{"original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
                 "get to know the artists" in instructions -> FakeOpenAi.stream("A band from Rome.\n---\nNight pop.\n---\nDemo (2020).")
@@ -4236,6 +4237,12 @@ class ListeningTest {
 
         /** What ChatGPT writes the romaji lines of the tests in. */
         val ROMAJI_JAPANESE = mapOf("yoru ni kimi wa" to "夜に君は", "hoshi ga hikaru" to "星が光る", "boku mo namida" to "僕も涙", "ashita no uta" to "明日の歌")
+
+        /** Timed words in Korean written in Latin letters, as LRCLIB has some Korean songs. */
+        const val ROMANIZED_KOREAN = "[00:00.00] neon nae mameul molla\\n[00:01.00] geu ttae uri dasi\\n[00:30.00] naega neol bureul ttae\\n[09:00.00] haneul arae"
+
+        /** What ChatGPT writes the Korean lines of the tests in. */
+        val ROMANIZED_HANGUL = mapOf("neon nae mameul molla" to "넌 내 맘을 몰라", "geu ttae uri dasi" to "그 때 우리 다시", "naega neol bureul ttae" to "내가 널 부를 때", "haneul arae" to "하늘 아래")
     }
 
     /** Waits for the words, shown whole when nothing helps read them. */
@@ -4481,6 +4488,21 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown("よるにきみは") }
         click(string(R.string.lyrics_as_written))
         waitUntil(TIMEOUT_MS) { shown("夜に君は") }
+    }
+
+    @Test
+    fun koreanFoundInLatinLettersIsWrittenInHangulSignedIn() {
+        val openAi = signedInWithChatGpt()
+        wordsOf(ROMANIZED_KOREAN, "neon nae mameul molla\\ngeu ttae uri dasi", openAi = openAi)
+        waitUntil(TIMEOUT_MS) { shown("넌 내 맘을 몰라") && shown("하늘 아래") }
+        assertFalse(shown("neon nae mameul molla"))
+        learnMenu()
+        assertTrue(described(string(R.string.lyrics_from_romanized_korean)))
+        // Korean has no kana to show it in.
+        assertFalse(shown(string(R.string.lyrics_only_kana)))
+        // Once written, they're kept so.
+        composeRule.runOnIdle { controllerModel().keep() }
+        waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.exists() && "넌 내 맘을 몰라" in it.readText() } }
     }
 
     @Test

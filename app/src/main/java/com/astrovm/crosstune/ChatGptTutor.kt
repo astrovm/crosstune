@@ -226,20 +226,28 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     }
 
     /**
-     * [song]'s [lines], Japanese written in romaji, written in Japanese as its lyrics are, line by
-     * line; null when it couldn't be done.
+     * [song]'s [lines], Japanese written in romaji or Korean in Latin letters, as [script] says,
+     * written in it as its lyrics are, line by line; null when it couldn't be done.
      */
-    suspend fun fromRomaji(song: MusicMetadata, lines: List<String>): List<String>? {
+    suspend fun fromRomaji(song: MusicMetadata, lines: List<String>, script: Script = Script.JAPANESE): List<String>? {
         val model = chatGpt.model() ?: return null
-        val key = "romaji|$model|${song.title}|${song.artist}|${lines.hashCode()}"
+        val korean = script == Script.KOREAN
+        val key = "${if (korean) "hangul" else "romaji"}|$model|${song.title}|${song.artist}|${lines.hashCode()}"
         val kept = cache.get(key) ?: run {
             // Tried on real songs with GPT-6-Luna: Owaranai Uta and Gurenge came back as they're
             // written, 終わらない歌を歌おう, 強くなれる理由を知った, a romaji typo put right and English
-            // kept, in about 2 s.
+            // kept, in about 2 s. ILLIT's You're Under Arrest came back as 새끼손가락 건 약속은 안
+            // 했지만, 체포하겠어 crime signs, English kept and gaps left as they were.
             val reply = chatGpt.ask(
-                "You restore song lyrics written in romaji to Japanese. The user sends a song, as title and artist, and its lines as a JSON array of strings, in order. " +
-                    "Write each line in Japanese as the song's lyrics are officially written, in kanji and kana; keep words sung in English as they are. " +
-                    "Reply with only a JSON array of strings, the same length and in the same order. A line that isn't Japanese stays as it is.",
+                if (korean) {
+                    "You restore song lyrics written in Latin letters to Korean. The user sends a song, as title and artist, and its lines as a JSON array of strings, in order. " +
+                        "Write each line in Korean as the song's lyrics are officially written, in Hangul; keep words sung in English as they are. " +
+                        "Reply with only a JSON array of strings, the same length and in the same order. A line that isn't Korean stays as it is."
+                } else {
+                    "You restore song lyrics written in romaji to Japanese. The user sends a song, as title and artist, and its lines as a JSON array of strings, in order. " +
+                        "Write each line in Japanese as the song's lyrics are officially written, in kanji and kana; keep words sung in English as they are. " +
+                        "Reply with only a JSON array of strings, the same length and in the same order. A line that isn't Japanese stays as it is."
+                },
                 JSONObject().put("song", "${song.title} by ${song.artist}").put("lines", JSONArray(lines)).toString(),
                 effort = "low"
             )

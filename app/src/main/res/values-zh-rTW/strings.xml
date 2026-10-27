@@ -373,6 +373,7 @@
     <string name="lyrics_only_kana">僅假名</string>
     <string name="lyrics_only_latin">僅拉丁字母</string>
     <string name="lyrics_from_romaji">由 ChatGPT 寫成日文</string>
+    <string name="lyrics_from_romanized_korean">由 ChatGPT 寫成韓文</string>
     <string name="lyrics_reading_options">讀音</string>
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">假名</string>

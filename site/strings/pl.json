@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "Gdy jesteś zalogowany, Crosstune wysyła do OpenAI to, czego potrzebuje każda funkcja: tytuł, wykonawcę i tekst utworu, by go przetłumaczyć lub wyjaśnić, poprawić japońskie odczyty, zapisać po japońsku teksty znalezione w romaji albo wybrać słowa warte nauki; słowo i jego wiersz, by je sprawdzić; pytania, które zadajesz o wiersz lub utwór; oraz wpisany opis albo utwór, by znaleźć pasujące utwory. OpenAI przetwarza je zgodnie z własną polityką prywatności, a liczą się one do wykorzystania Twojego planu."
+      "Gdy jesteś zalogowany, Crosstune wysyła do OpenAI to, czego potrzebuje każda funkcja: tytuł, wykonawcę i tekst utworu, by go przetłumaczyć lub wyjaśnić, poprawić japońskie odczyty, zapisać po japońsku lub koreańsku teksty znalezione w alfabecie łacińskim albo wybrać słowa warte nauki; słowo i jego wiersz, by je sprawdzić; pytania, które zadajesz o wiersz lub utwór; oraz wpisany opis albo utwór, by znaleźć pasujące utwory. OpenAI przetwarza je zgodnie z własną polityką prywatności, a liczą się one do wykorzystania Twojego planu."
     ],
     [
       "h2",

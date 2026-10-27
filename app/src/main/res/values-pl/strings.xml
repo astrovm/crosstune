@@ -373,6 +373,7 @@
     <string name="lyrics_only_kana">Tylko kana</string>
     <string name="lyrics_only_latin">Tylko litery łacińskie</string>
     <string name="lyrics_from_romaji">Zapisane po japońsku przez ChatGPT</string>
+    <string name="lyrics_from_romanized_korean">Zapisane po koreańsku przez ChatGPT</string>
     <string name="lyrics_reading_options">Odczyt</string>
     <string name="lyrics_display_original">Oryginał</string>
     <string name="lyrics_display_kana">Kana</string>

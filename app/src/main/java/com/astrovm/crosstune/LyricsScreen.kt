@@ -1197,9 +1197,10 @@ internal fun WordsAsPicker(script: Script?, selected: WordsAs, onChange: (WordsA
                         WordsAs.LATIN -> R.string.lyrics_display_latin
                     }), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                // Found in romaji, the words as written are ChatGPT's.
+                // Found in Latin letters, the words as written are ChatGPT's.
                 if (wordsAs == WordsAs.WRITTEN && fromRomaji) {
-                    AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(R.string.lyrics_from_romaji), modifier = Modifier.padding(start = 4.dp).size(14.dp))
+                    val from = if (script == Script.KOREAN) R.string.lyrics_from_romanized_korean else R.string.lyrics_from_romaji
+                    AppIcon(R.drawable.ic_translator_chatgpt, contentDescription = stringResource(from), modifier = Modifier.padding(start = 4.dp).size(14.dp))
                 }
             }
         }

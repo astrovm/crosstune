@@ -9,6 +9,7 @@ import okhttp3.Request
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -962,6 +963,42 @@ class LyricsFinderTest {
         assertEquals(true, isRomaji("ni wa ga sora kaze yume hana michi namida $english"))
         assertEquals(false, isRomaji("ni wa ga sora kaze yume hana michi cloud $english"))
         assertEquals(false, isRomaji("ni wa koe sora kaze yume hana michi namida $english"))
+    }
+
+    @Test
+    fun koreanInLatinLettersIsToldFromRomajiAndOtherLanguages() {
+        // Lines made up for the test.
+        val korean = "neon nae mameul molla\ngeu ttae uri dasi mannal su isseulkka\nnaega neol bureul ttae"
+        assertEquals(true, isRomanizedKorean(korean))
+        assertEquals(Script.KOREAN, romanizedScript(korean))
+        assertEquals(Script.JAPANESE, romanizedScript("ashita no sora wa aoi kara\nkimi to aruku michi de\nboku wa zutto matte iru yo"))
+        assertEquals(false, isRomanizedKorean("ashita no sora wa aoi kara\nkimi to aruku michi de\nboku wa zutto matte iru yo"))
+        assertNull(romanizedScript("I walked along the river tonight\nthinking about the things you said"))
+        // Hindi reads as Korean syllables too, without its little words.
+        assertEquals(false, isRomanizedKorean("main tera intezaar karta hoon\ndil ki baat kehni hai\nyeh raat bahut lambi hai"))
+        // In Hangul or kana already, it isn't.
+        assertEquals(false, isRomanizedKorean("넌 내 맘을 nae neon geu uri"))
+        assertEquals(false, isRomanizedKorean("君と nae neon geu uri"))
+        assertEquals(false, isRomanizedKorean(""))
+        // Just under half the words read as Korean is enough, with three of its little words.
+        val english = "street night black dream lights think world green stand river shout"
+        assertEquals(true, isRomanizedKorean("nae neon geu saram haneul baram kkum sarang nunmul $english"))
+        assertEquals(false, isRomanizedKorean("nae neon geu saram haneul baram kkum sarang cloud $english"))
+        assertEquals(false, isRomanizedKorean("nae neon gippeum saram haneul baram kkum sarang nunmul $english"))
+    }
+
+    @Test
+    fun koreanInLatinLettersGivesWayToTheWordsInHangul() {
+        val korean = "neon nae mameul molla\ngeu ttae uri dasi\nnaega neol bureul ttae"
+        betterElsewhere(answer("Song", "Band", korean, "[00:01.00] neon nae mameul molla"), "[00:01.00]넌 내 맘을 몰라")
+        assertEquals("넌 내 맘을 몰라", words(MusicMetadata("Song", "Band")))
+        // Japanese elsewhere isn't the song's own script: LRCLIB's stays.
+        betterElsewhere(answer("Song", "Band", korean, "[00:01.00] neon nae mameul molla"), "[00:01.00]君の声")
+        assertEquals(korean, words(MusicMetadata("Song", "Band")))
+        // Nor is Hangul for words in romaji.
+        val romaji = "kimi no koe ga kikoeru\nboku wa zutto matte iru yo\nyume wo miru"
+        betterElsewhere(answer("Song", "Band", romaji, "[00:01.00] kimi no koe ga kikoeru"), "[00:01.00]넌 내 맘을 몰라")
+        assertEquals(romaji, words(MusicMetadata("Song", "Band")))
     }
 
     /** A song LRCLIB has only [lrclib], and NetEase has with [netEase] words. */

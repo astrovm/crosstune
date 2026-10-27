@@ -969,4 +969,24 @@ class ChatGptTest {
         openAi.models = { 500 to "" }
         assertNull(runBlocking { tutor(chatGpt()).fromRomaji(song.copy(title = "Other"), lines) })
     }
+
+    @Test
+    fun koreanInLatinLettersIsWrittenInHangulLineByLine() {
+        val tutor = tutor()
+        val song = MusicMetadata("Song", "Band")
+        val lines = listOf("neon nae mameul molla", "", "geu ttae uri dasi")
+        answering("[\"넌 내 맘을 몰라\", \"\", \"그 때 우리 다시\"]")
+        assertEquals(listOf("넌 내 맘을 몰라", "", "그 때 우리 다시"), runBlocking { tutor.fromRomaji(song, lines, Script.KOREAN) })
+        val instructions = openAi.asked.single().getString("instructions")
+        assertTrue(instructions, instructions.contains("to Korean") && instructions.contains("in Hangul") && !instructions.contains("Japanese"))
+        // Kept apart from the same lines read as romaji.
+        runBlocking { tutor.fromRomaji(song, lines, Script.KOREAN) }
+        assertEquals(1, openAi.asked.size)
+        runBlocking { tutor.fromRomaji(song, lines) }
+        assertEquals(2, openAi.asked.size)
+        assertTrue(openAi.asked.last().getString("instructions").contains("romaji to Japanese"))
+        // Japanese stays kept where it was before Korean, so what earlier versions kept still counts.
+        val keys = JSONArray(File(folder.root, "answers.json").readText()).let { kept -> (0 until kept.length()).map { kept.getJSONArray(it).getString(0) } }
+        assertEquals(listOf("hangul", "romaji"), keys.map { it.substringBefore('|') })
+    }
 }

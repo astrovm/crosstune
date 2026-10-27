@@ -149,13 +149,13 @@ internal class MainViewModel(
     private var foundLines: List<LyricLine> = emptyList()
     private var found: LyricsFinder.Lyrics.Found? = null
 
-    /** The words found in romaji, written in Japanese by ChatGPT, line by line, once they are. */
-    private var japanese: List<String>? = null
+    /** The words found in Latin letters, written in Japanese or Korean by ChatGPT, line by line, once they are. */
+    private var restored: List<String>? = null
 
-    /** [lines] as they show: in Japanese when found in romaji and written so, timed as found. */
+    /** [lines] as they show: in the song's script when found in Latin letters and written so, timed as found. */
     private fun shown(lines: List<LyricLine>): List<LyricLine> =
         // Written otherwise, the line's words are no longer the ones timed.
-        japanese?.let { written -> lines.mapIndexed { index, line -> written.getOrNull(index)?.let { line.copy(text = it, words = emptyList()) } ?: line } } ?: lines
+        restored?.let { written -> lines.mapIndexed { index, line -> written.getOrNull(index)?.let { line.copy(text = it, words = emptyList()) } ?: line } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
 
     /** The words of the songs shown lately, by recording, the last one shown last. */
@@ -1496,7 +1496,7 @@ internal class MainViewModel(
         stopFollowing()
         foundLines = emptyList()
         found = null
-        japanese = null
+        restored = null
         syncPoints = emptyList()
         handGap = null
         if (showKept(song)) {
@@ -1526,8 +1526,9 @@ internal class MainViewModel(
                             timeSavedLines(song)
                             learn()
                             chords()
-                            // Japanese in romaji is written back in Japanese, so it reads like any Japanese song.
-                            if (usesChatGpt() && isRomaji(answer.words)) writeInJapanese(song)
+                            // Japanese in romaji or Korean in Latin letters is written back in its own script, so it
+                            // reads like any song in it.
+                            if (usesChatGpt()) romanizedScript(answer.words)?.let { writeInOwnScript(song, it) }
                         }
                         // No words were shown while looking, so there's none to clear.
                         LyricsFinder.Lyrics.None -> problemFound(SongProblem.NO_LYRICS)
@@ -1553,11 +1554,11 @@ internal class MainViewModel(
     fun keep() {
         val song = uiState.lyricsFor ?: return
         val learning = uiState.learning
-        val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || romajiJob?.isActive == true || learning.translating || uiState.chords.loading
+        val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || restoreJob?.isActive == true || learning.translating || uiState.chords.loading
         if (uiState.lyrics.isEmpty() || working) return
         val key = RecordingKey.of(song)
         val words = KeptWords(
-            uiState.lyrics, uiState.lyricLines, uiState.lyricsSynced, found, foundLines, japanese, syncPoints,
+            uiState.lyrics, uiState.lyricLines, uiState.lyricsSynced, found, foundLines, restored, syncPoints,
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
@@ -1581,7 +1582,7 @@ internal class MainViewModel(
         val kept = kept[RecordingKey.of(song)]?.takeIf { it.madeWith == madeWith() && it.found?.let { found -> LyricsFinder.cleaned(found, song) == found } != false } ?: return false
         found = kept.found
         foundLines = kept.foundLines
-        japanese = kept.japanese
+        restored = kept.japanese
         syncPoints = kept.syncPoints
         uiState = uiState.copy(
             lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, isLoadingLyrics = false,
@@ -2397,18 +2398,18 @@ internal class MainViewModel(
         timeSavedLines(song, again = true)
     }
 
-    private var romajiJob: Job? = null
+    private var restoreJob: Job? = null
 
     /**
-     * Has ChatGPT write [song]'s words, found in romaji, in Japanese, each line timed as found; then
-     * they're worked out again as Japanese, with readings, kana and romaji of their own.
+     * Has ChatGPT write [song]'s words, found in Latin letters, in [script], Japanese or Korean, each
+     * line timed as found; then they're worked out again in it, with readings of their own.
      */
-    private fun writeInJapanese(song: MusicMetadata) {
+    private fun writeInOwnScript(song: MusicMetadata, script: Script) {
         val lines = wordLines()
-        romajiJob = viewModelScope.launch {
-            val written = tutor?.fromRomaji(song, lines) ?: return@launch
+        restoreJob = viewModelScope.launch {
+            val written = tutor?.fromRomaji(song, lines, script) ?: return@launch
             if (uiState.lyricsFor != song || wordLines() != lines) return@launch
-            japanese = written
+            restored = written
             stopLearning()
             uiState = uiState.copy(
                 lyrics = written.joinToString("\n"),
@@ -2458,7 +2459,7 @@ internal class MainViewModel(
         chordsJob?.cancel()
         readingsJob?.cancel()
         translationJob?.cancel()
-        romajiJob?.cancel()
+        restoreJob?.cancel()
         wordJob?.cancel()
         explanationJob?.cancel()
         songExplanationJob?.cancel()
