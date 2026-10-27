@@ -164,25 +164,48 @@ internal object SungAlignment {
         val from = heard.first().second - MAX_SHIFT_MS
         val to = heard.last().second + MAX_SHIFT_MS
         val near = lines.filter { it.timeMs in from..to }
-        // Each word, with which line it's in.
-        val timed = near.indices.flatMap { line -> wordsOf(near[line]).map { (text, ms) -> Triple(text, ms, line) } }
-        val shifts = matched(heard.map { it.first }, timed.map { it.first }).mapNotNull { (h, t) -> timed[t].second?.let { (heard[h].second - it) to timed[t].third } }
-        if (shifts.size < MIN_LINES) return null
-        val agreed = shifts.map { (shift) -> shifts.filter { abs(it.first - shift) <= AGREE_MS } }.maxBy { it.size }
+        val timed = near.indices.flatMap { line -> wordsOf(near[line], near.getOrNull(line + 1)?.timeMs, line) }
+        val pairs = matched(heard.map { it.first }, timed.map { it.text })
         // Lines timed a line at a time have a time for their first words only, so a few lines are enough.
-        if ((agreed.size < MIN_WORDS && agreed.distinctBy { it.second }.size < MIN_LINES) || agreed.size * 2 < shifts.size) return null
-        val shift = agreed.map { it.first }.sorted()[agreed.size / 2] - HEARD_LATE_MS
+        val told = agreed(pairs.mapNotNull { (h, t) -> timed[t].ms?.let { (heard[h].second - it) to timed[t].line } }, AGREE_MS) {
+            it.size >= MIN_WORDS || it.distinctBy { (_, line) -> line }.size >= MIN_LINES
+        }
+            // Or else when the rest of a line's words are sung by where they are in it: a guess, so it takes more of them.
+            ?: agreed(pairs.map { (h, t) -> (heard[h].second - timed[t].guessMs) to timed[t].line }, GUESSED_AGREE_MS) {
+                it.size >= MIN_GUESSED && it.distinctBy { (_, line) -> line }.size >= MIN_LINES
+            }
+            ?: return null
+        val shift = told - HEARD_LATE_MS
         return shift.takeIf { abs(it) <= MAX_SHIFT_MS }
     }
+
+    /** Where most of [shifts], each with its line, agree within [within] ms; null when they're too few to tell, or split. */
+    private fun agreed(shifts: List<Pair<Long, Int>>, within: Long, enough: (List<Pair<Long, Int>>) -> Boolean): Long? {
+        if (shifts.isEmpty()) return null
+        val agreed = shifts.map { (shift) -> shifts.filter { abs(it.first - shift) <= within } }.maxBy { it.size }
+        if (!enough(agreed) || agreed.size * 2 < shifts.size) return null
+        return agreed.map { it.first }.sorted()[agreed.size / 2]
+    }
+
+    /** A word of the [line]th line, when it's sung if the lyrics say, and about when by where it is in the line. */
+    private class Word(val text: String, val ms: Long?, val guessMs: Long, val line: Int)
 
     /**
      * A line's words, each with when it's sung: every one timed word by word, or else its first, as
      * the line starts with it. Its first that's sung, so a line opening with "♪" or "-" keeps its time.
+     * The rest are guessed by their letters, the line sung over most of the time until [nextMs].
      */
-    private fun wordsOf(line: LyricLine): List<Pair<String, Long?>> =
-        line.words.ifEmpty { listOf(TimedWord(line.timeMs, line.text)) }.flatMap { word ->
-            word.text.split(' ').map(::plain).filter { it.isNotEmpty() }.mapIndexed { index, text -> text to word.timeMs.takeIf { index == 0 } }
+    private fun wordsOf(line: LyricLine, nextMs: Long?, index: Int): List<Word> {
+        val words = line.words.ifEmpty { listOf(TimedWord(line.timeMs, line.text)) }.flatMap { word ->
+            word.text.split(' ').map(::plain).filter { it.isNotEmpty() }.mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
         }
+        val letters = words.sumOf { it.first.length }
+        val sungFor = (nextMs ?: (line.timeMs + LAST_LINE_MS)) - line.timeMs
+        var before = 0
+        return words.map { (text, ms) ->
+            Word(text, ms, ms ?: (line.timeMs + sungFor * before * 4 / 5 / letters), index).also { before += text.length }
+        }
+    }
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
     private fun plain(word: String): String =
@@ -213,6 +236,13 @@ internal object SungAlignment {
 
     /** How far apart words may say the words are and still agree: about how far off one is heard. */
     private const val AGREE_MS = 400L
+
+    /** Guessed words that must agree to tell, and how far apart they may be: more, as a guess is further off. */
+    private const val MIN_GUESSED = 8
+    private const val GUESSED_AGREE_MS = 500L
+
+    /** About how long a last line is sung, with no next one to say. */
+    private const val LAST_LINE_MS = 3_000L
 
     /** The model hears a word about this long after it starts, tried on songs heard both ways. */
     const val HEARD_LATE_MS = 600L

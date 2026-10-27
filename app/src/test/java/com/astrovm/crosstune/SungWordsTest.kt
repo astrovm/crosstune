@@ -121,6 +121,25 @@ class SungWordsTest {
         assertNull(SungAlignment.shiftMs(Sung(0, listOf("la", "la", "la", "la", "la", "la").mapIndexed { index, word -> HeardWord(word, index * 500L) }), fromTheStart, song))
     }
 
+    /** The words of [lines] after their first, sung evenly over the first 2.4 s of the 3 s each line has. */
+    private fun heardMidLine(lines: List<LyricLine>, shiftMs: Long) = Sung(0, lines.flatMap { line ->
+        val words = line.text.split(' ')
+        val letters = words.sumOf { it.length }
+        words.indices.drop(1).map { at -> HeardWord(words[at], line.timeMs + shiftMs + SungAlignment.HEARD_LATE_MS + 2_400L * words.take(at).sumOf { it.length } / letters) }
+    })
+
+    @Test
+    fun wordsHeardOnlyMidLineTellByWhereTheyAreInIt() {
+        // Lines timed a line at a time say nothing of their other words, but when they're sung says about where.
+        assertEquals(1_500L, SungAlignment.shiftMs(heardMidLine(song.take(3), 1_500), fromTheStart, song))
+        // The last line has no next one to say how long it's sung: about 3 s.
+        assertEquals(-800L, SungAlignment.shiftMs(heardMidLine(song.takeLast(3), -800), fromTheStart, song))
+        // A guess takes eight words, from three lines.
+        assertNull(SungAlignment.shiftMs(heardMidLine(song.take(3), 1_500).let { it.copy(words = it.words.drop(2).dropLast(1)) }, fromTheStart, song))
+        val long = timed("We will sing and dance all night long", "We will run and hide under the moon", "Far away")
+        assertNull(SungAlignment.shiftMs(heardMidLine(long.take(2), 1_500), fromTheStart, long))
+    }
+
     @Test
     fun wordsThatDontAgreeTellNothing() {
         val lines = timed("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven")
