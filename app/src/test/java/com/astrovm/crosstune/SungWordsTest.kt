@@ -95,16 +95,26 @@ class SungWordsTest {
         val sung = Sung(0, listOf("Take" to 1_000L, "me" to 1_400L, "now" to 1_800L, "Never" to 3_000L, "let" to 3_300L, "me" to 3_600L, "go" to 3_900L).map { (word, at) ->
             HeardWord(word, at - 700 + SungAlignment.HEARD_LATE_MS)
         })
-        // "me" in "let me" has no time of its own, so six words tell.
+        // "me" in "let me" has no time of its own, so six words tell; five still do, four don't.
         assertEquals(-700L, SungAlignment.shiftMs(sung, fromTheStart, words))
+        assertEquals(-700L, SungAlignment.shiftMs(Sung(0, sung.words.take(5)), fromTheStart, words))
         assertNull(SungAlignment.shiftMs(Sung(0, sung.words.take(4)), fromTheStart, words))
     }
 
     @Test
+    fun linesTimedAsFarOffAsCanBeStillTell() {
+        // Sung 9.4 s after it's timed, heard 0.6 s late: the first line is 10 s before the first word heard.
+        assertEquals(9_400L, SungAlignment.shiftMs(heard(song.take(3), 9_400), fromTheStart, song))
+    }
+
+    @Test
     fun tooFewWordsHeardToTell() {
-        // Five lines' first words tell; four don't.
-        assertEquals(500L, SungAlignment.shiftMs(heard(song.take(5), 500), fromTheStart, song))
-        assertNull(SungAlignment.shiftMs(heard(song.take(4), 500), fromTheStart, song))
+        // Three lines' first words tell, as lines timed a line at a time have few words with a time; two don't.
+        assertEquals(500L, SungAlignment.shiftMs(heard(song.take(3), 500), fromTheStart, song))
+        assertNull(SungAlignment.shiftMs(heard(song.take(2), 500), fromTheStart, song))
+        // Nor do four words of one line, timed word by word.
+        val oneLine = listOf(LyricLine(1_000, "Take me home now", listOf(TimedWord(1_000, "Take "), TimedWord(1_400, "me "), TimedWord(1_800, "home "), TimedWord(2_200, "now"))))
+        assertNull(SungAlignment.shiftMs(Sung(0, oneLine.single().words.map { HeardWord(it.text.trim(), it.timeMs + 300 + SungAlignment.HEARD_LATE_MS) }), fromTheStart, oneLine))
         // Heard words that aren't the song's, or nothing but sounds, tell nothing.
         assertNull(SungAlignment.shiftMs(Sung(0, listOf(HeardWord("♪", 600), HeardWord("...", 900))), fromTheStart, song))
         assertNull(SungAlignment.shiftMs(Sung(0, emptyList()), fromTheStart, song))
@@ -133,8 +143,8 @@ class SungWordsTest {
         val offs = listOf(1_000L, 1_100, 1_200, 1_300, 1_400, 3_000)
         val sung = Sung(0, lines.zip(offs) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
         assertEquals(1_200L, SungAlignment.shiftMs(sung, fromTheStart, lines))
-        // 400 ms apart still agree.
-        val edge = Sung(0, lines.zip(listOf(0L, 400, 400, 400, 400, 5_000)) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
+        // 400 ms apart still agree: three lines, each 400 ms from the middle one.
+        val edge = Sung(0, lines.take(3).zip(listOf(0L, 400, 800)) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
         assertEquals(400L, SungAlignment.shiftMs(edge, fromTheStart, lines))
         // 401 ms apart, none agree with another.
         val apart = Sung(0, lines.zip(listOf(0L, 401, 802, 1_203, 1_604, 2_005)) { line, off -> HeardWord(line.text, line.timeMs + off + SungAlignment.HEARD_LATE_MS) })
