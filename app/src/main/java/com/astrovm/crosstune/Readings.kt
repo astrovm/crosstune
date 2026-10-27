@@ -103,8 +103,8 @@ internal object Readings {
         return LineReading(
             joined(withGiven(parts, given)),
             pieces.joinToString("") { it.kana },
-            romajiWords(pieces) { it.said }.joinToString(" ") { romaji(it) },
-            romajiWords(pieces) { it.typed }.joinToString(" ") { romaji(it, typed = true) }
+            romanizedLine(pieces, typed = false),
+            romanizedLine(pieces, typed = true)
         )
     }
 
@@ -465,8 +465,8 @@ internal object Readings {
         return LineReading(
             parts,
             pieces.joinToString("") { it.kana },
-            romajiWords(pieces) { it.said }.joinToString(" ") { romaji(it) },
-            romajiWords(pieces) { it.typed }.joinToString(" ") { romaji(it, typed = true) }
+            romanizedLine(pieces, typed = false),
+            romanizedLine(pieces, typed = true)
         )
     }
 
@@ -479,6 +479,10 @@ internal object Readings {
      * against what they're beside.
      */
     private fun romajiWords(pieces: List<Piece>, kana: (Piece) -> String): List<String> = grouped(pieces).map { word -> word.joinToString("", transform = kana) }
+
+    /** The line [pieces] make in romaji, as it's said or [typed], with a space at most between words. */
+    private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =
+        romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(Regex("""\s+"""), " ").trim()
 
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
@@ -494,9 +498,10 @@ internal object Readings {
             val ending = piece.kind == "助動詞" || (piece.kind == "助詞" && piece.subkind == "接続助詞") ||
                 (piece.kind == "動詞" && piece.subkind == "非自立") || piece.subkind == "接尾"
             // An ending after a particle starts a word of its own: だけだった is dake datta. English
-            // the dictionary splits, "Don't" into Don, ' and t, stays as written.
+            // the dictionary splits, "Don't" into Don, ' and t, stays as written. A mark goes with the word
+            // before it, also one the dictionary takes for a word, as "!" in "Shock!".
             val english = previous != null && isEnglish(previous.surface) && isEnglish(piece.surface)
-            val attaches = previous != null && (opened || english || (piece.kind == "記号" && !opening) || (ending && previous.kind != "助詞"))
+            val attaches = previous != null && (opened || english || ((piece.kind == "記号" || piece.surface.none(Char::isLetterOrDigit)) && !opening) || (ending && previous.kind != "助詞"))
             if (attaches) words.last() += piece else words += mutableListOf(piece)
             opened = opening
             previous = piece
@@ -550,6 +555,9 @@ internal object Readings {
     }
 
     private const val OPENING = "「『（(【〈《“"
+
+    /** What only spaces words in Japanese, a wide space and the ・ of アスファルト・レディ: a space in romaji. */
+    private val LATIN_MARKS = mapOf('　' to ' ', '・' to ' ')
 
     /** Kana over only the kanji of [surface]: the kana it starts or ends with read as written. */
     private fun furigana(surface: String, kana: String): List<Ruby> {
@@ -661,7 +669,7 @@ internal object Readings {
                 when (val c = hira[i]) {
                     'っ' -> double = true
                     'ー' -> out.lastOrNull { it in "aeiou" }?.let(out::append)
-                    else -> out.append(c)
+                    else -> out.append(LATIN_MARKS[c] ?: c)
                 }
                 afterN = false
                 i++

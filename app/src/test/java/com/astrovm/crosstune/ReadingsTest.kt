@@ -361,6 +361,16 @@ class ReadingsTest {
     }
 
     @Test
+    fun romajiSpacesWordsWithASpace() {
+        // A wide space and ・ only space words; "!", which the dictionary takes for a word, goes with the one before.
+        val line = reading("Shock!　君はアスファルト・レディ")
+        assertEquals("Shock! kun wa asufaruto redi", line.romanized)
+        assertEquals("Shock! kun wa asufaruto redi", line.typed)
+        assertEquals("Oh! Baby nee", reading("Oh! Baby　ねえ").romanized)
+        assertEquals("aishiteru zutto", reading("愛してる・・・ずっと").romanized)
+    }
+
+    @Test
     fun oneRunsIntoTheCounterAfterIt() {
         for (withUniDic in listOf(false, true)) {
             val read = { line: String -> if (withUniDic) TestUniDic.reading { reading(line) } else reading(line) }
