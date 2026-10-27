@@ -626,8 +626,9 @@ internal class LyricsFinder(
             val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
             val matching = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.filter { song ->
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
-                // An artist only written in another script there, say パイパー for Piper, counts when
-                // the recording lasts as long as the store's, or the music app's.
+                // An artist only written in another script there, say パイパー for Piper, or in Latin
+                // letters for one given in another, YANGHONGWON for 양홍원, counts when the recording
+                // lasts as long as the store's, or the music app's.
                 val length = lengthMs ?: metadata.lengthMs
                 val sameLength = length != null && abs(song.optLong("duration") - length) <= SAME_RECORDING_LENGTH_MS
                 val name = song.optString("name")
@@ -639,7 +640,7 @@ internal class LyricsFinder(
                     SongNames.sameVersion(SongNames.asChinaWrites(metadata.title), SongNames.asChinaWrites(name), SongNames.asChinaWrites(album)) ||
                     (sameLength && SongNames.sameButKanji(metadata.title, name))) &&
                     artists.any { name ->
-                        listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
+                        listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && (!name.hasLatin() || !metadata.artist.hasLatin()))
                     }
             }
             // Of the same song, the recording as long as the one playing is the one timed for it.

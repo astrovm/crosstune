@@ -761,6 +761,30 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(sunshine))
     }
 
+    @Test
+    fun anArtistGivenInHangulThatNetEaseWritesInLatinLettersCountsForARecordingAsLong() {
+        // 사계 by 양홍원, whom NetEase credits as YANGHONGWON and the US store as Young B.
+        fun fourSeasons(lengthMs: Long) {
+            fake.handler = { request ->
+                val url = request.url
+                when {
+                    url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                    url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                    url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":8,"name":"사계","artists":[{"name":"YANGHONGWON"}],"duration":$lengthMs}]}}""")
+                    else -> FakeSpotify.html(request, """{"lrc":{"lyric":"[00:02.706]샤워한 듯이 풀려 힘이"}}""")
+                }
+            }
+        }
+        val song = MusicMetadata("사계", "양홍원", lengthMs = 193_628)
+        fourSeasons(lengthMs = 193_628 + SAME_RECORDING_LENGTH_MS)
+        assertEquals("샤워한 듯이 풀려 힘이", words(song))
+        // A recording of another length is another song of that name.
+        fourSeasons(lengthMs = 193_628 + SAME_RECORDING_LENGTH_MS + 1)
+        assertEquals(Lyrics.None, found(song))
+        // And an artist given in Latin letters is that one.
+        fourSeasons(lengthMs = 193_628)
+        assertEquals(Lyrics.None, found(song.copy(artist = "Some Band")))
+    }
 
     @Test
     fun aJapaneseTitleNetEaseWritesWithChinasKanjiIsTheSameSong() {
