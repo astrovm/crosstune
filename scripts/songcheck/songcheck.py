@@ -306,11 +306,12 @@ def summary(_):
         lyrics = [song for song in songs if song["lyrics"]["kind"] == "found"]
         timed = [song for song in lyrics if song["lyrics"].get("lines")]
         judged = [timings[song["id"]] for song in timed if timings.get(song["id"], {}).get("verdict") in ("on time", "off")]
+        unsure = sum(timings.get(song["id"], {}).get("verdict") == "unsure" for song in timed)
         chords = [song for song in lyrics if song.get("chords", {}).get("kind") == "found"]
         lines += [
             f"## {continent} ({country})", "",
             f"- Lyrics: {len(lyrics)} of {len(songs)} found, {len(timed)} timed",
-            f"- Timing: {sum(t['verdict'] == 'on time' for t in judged)} of {len(judged)} checked on time",
+            f"- Timing: {sum(t['verdict'] == 'on time' for t in judged)} of {len(judged)} checked on time, {unsure} unsure",
             f"- Chords: {len(chords)} of {len(lyrics)} found",
             "",
         ]
