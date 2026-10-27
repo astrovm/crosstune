@@ -263,6 +263,8 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
     private fun base() = UiState(
         palette = Palette.VIOLET,
         destinations = MusicService.entries.map { com.astrovm.crosstune.Destination.Service(it) },
+        // Every service's app, so a song shows Play, as most use it, and the picker still lists them all.
+        installed = MusicService.entries.toSet(),
         intercepted = MusicService.entries.filter { it.opensTappedLinks }.toSet(),
         unapprovedHosts = emptyMap(),
         blockingApps = emptySet(),
