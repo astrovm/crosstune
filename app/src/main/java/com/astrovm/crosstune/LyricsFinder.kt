@@ -29,8 +29,8 @@ internal const val LYRICS_BUSY_PAUSE_MS = 1_000L
 /** How far apart two recordings' lengths can be and still be the same one. */
 internal const val SAME_RECORDING_LENGTH_MS = 3_000L
 
-/** A credit line: who wrote, composed, arranged or produced it, in Chinese, Japanese or English. */
-private val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer)\s*[:：]""", RegexOption.IGNORE_CASE)
+/** A credit line: who wrote, composed, arranged, produced or published it, in Chinese, Japanese or English: "SP：…". */
+private val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer|OP|SP)\s*[:：]""", RegexOption.IGNORE_CASE)
 
 /** A credit NetEase opens some songs with, a short label and who: "Producers: …", "Writers：…", "母帯工程師：…". */
 private val netEaseOpeningCredit = Regex("""^([^:：]{1,40}?)\s*[:：]\s*\S""")
@@ -47,10 +47,13 @@ private val sungPart = Regex("""^(?:male|female|both|all|verse|chorus|hook|bridg
 /** A line NetEase's contributors fill an intro or an outro with, not sung: the song's name, "♪Artist - Song", or a dash. */
 private val netEaseFiller = Regex("""♪.*\s[-–]\s.*|[-–—]+""")
 
+/** A part's name, which some of NetEase's contributors head each part with: "[Verse 1]", "[Chorus: Drake]". */
+private val netEasePart = Regex("""\[(?:intro|verse|pre-?chorus|chorus|post-?chorus|hook|bridge|interlude|refrain|outro)\b[^\]]*\]""", RegexOption.IGNORE_CASE)
+
 /**
  * The lines without what NetEase's contributors fill a song's quiet parts with: a note in 【】, which
- * may run over a few lines, as the artist's own words on the song in a solo, and [netEaseFiller]s. Who
- * sings a line, "【A】" before it, is no note, and one never closed is left be.
+ * may run over a few lines, as the artist's own words on the song in a solo, [netEaseFiller]s, and
+ * the parts' names. Who sings a line, "【A】" before it, is no note, and one never closed is left be.
  */
 private fun <T> List<T>.withoutNotes(text: (T) -> String): List<T> {
     val notes = mutableSetOf<Int>()
@@ -65,23 +68,27 @@ private fun <T> List<T>.withoutNotes(text: (T) -> String): List<T> {
             opened = start
         }
     }
-    return filterIndexed { index, item -> index !in notes && !netEaseFiller.matches(text(item).trim()) }
+    return filterIndexed { index, item -> index !in notes && text(item).trim().let { !netEaseFiller.matches(it) && !netEasePart.matches(it) } }
 }
 
 /**
  * The lines after what NetEase's contributors open some songs with, before anything sung: credits
- * in any language, and the song's name and its artist's, one on each line. A sung line that looks
- * like a credit, "Me : still here", only comes after something sung.
+ * in any language, and the song's name and its artist's, one on each line, with more credits after
+ * them. A sung line that looks like a credit, "Me : still here", only comes after something sung.
  */
 private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> String): List<T> {
     val lines = map { text(it).trim() }
-    var start = 0
-    while (start < size) {
-        val line = lines[start]
-        val label = netEaseOpeningCredit.find(line)?.groupValues?.get(1)?.trim()
-        if (line.isNotEmpty() && (label == null || label.none(Char::isLetter) || sungPart.matches(label) || label.split(' ').size > 3)) break
-        start++
+    fun afterCredits(from: Int): Int {
+        var start = from
+        while (start < size) {
+            val line = lines[start]
+            val label = netEaseOpeningCredit.find(line)?.groupValues?.get(1)?.trim()
+            if (line.isNotEmpty() && (label == null || label.none(Char::isLetter) || sungPart.matches(label) || label.split(' ').size > 3)) break
+            start++
+        }
+        return start
     }
+    var start = afterCredits(0)
     // The name then the artist, as a heading, or the other way round: neither alone, as a song may open with its name.
     val title = SongNames.normalize(song.title)
     val artist = SongNames.normalize(song.artist)
@@ -92,7 +99,7 @@ private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> 
         // Or both on one line, each maybe with its name in Chinese: "Leif Erikson （夫·埃里克森）-Interpol （国际刑警乐队）".
         start++
     }
-    return drop(start)
+    return drop(afterCredits(start))
 }
 
 /** Whether any of it is written in Latin letters. */

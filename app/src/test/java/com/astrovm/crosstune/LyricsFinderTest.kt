@@ -372,10 +372,10 @@ class LyricsFinderTest {
         // Untimed, with the blank lines between them.
         japaneseSong(netEase = netEase, lyric = (opening + sung).joinToString("\n"))
         assertEquals(Lyrics.Found(sung.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
-        // Or both on one line, with what they're called in Chinese.
+        // Or both on one line, with what they're called in Chinese, and more credits after them.
         for (heading in listOf("Hatsukoi （初恋）-Hiroko Mita （三田寛子）", "Hiroko Mita - Hatsukoi")) {
-            japaneseSong(netEase = netEase, lyric = lrc(listOf("作词 : 怜", "", heading) + sung))
-            assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(13_000L + index * 1_000, line) }), found(hatsukoi))
+            japaneseSong(netEase = netEase, lyric = lrc(listOf("作词 : 怜", "", heading, "Written by：A/B （C）") + sung))
+            assertEquals(words(sung).copy(lines = sung.mapIndexed { index, line -> LyricLine(14_000L + index * 1_000, line) }), found(hatsukoi))
         }
         // A song that opens with its own name sings it.
         val named = listOf("Hatsukoi") + sung
@@ -408,9 +408,13 @@ class LyricsFinderTest {
         val duet = sung + listOf("Male : Stay with me", "Female : Never leave", "Both 2 : Together")
         japaneseSong(netEase = netEase, lyric = (duet + credits).joinToString("\n"))
         assertEquals(Lyrics.Found(duet.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
-        // One alone could be sung.
+        // One alone could be sung, but not who published it.
         japaneseSong(netEase = netEase, lyric = (sung + "Mastering : Someone").joinToString("\n"))
         assertEquals(Lyrics.Found((sung + "Mastering : Someone").joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
+        for (publisher in listOf("SP：A Label", "OP : Another")) {
+            japaneseSong(netEase = netEase, lyric = (sung + publisher).joinToString("\n"))
+            assertEquals(Lyrics.Found(sung.joinToString("\n"), source = LyricsFinder.NETEASE), found(hatsukoi))
+        }
 
         val byWord = (sung + credits).filter { it.isNotEmpty() }.mapIndexed { index, line -> "[${index * 1_000},900](${index * 1_000},900,0)$line" }.joinToString("\n")
         fake.handler = { request ->
@@ -426,8 +430,8 @@ class LyricsFinderTest {
     @Test
     fun whatNetEaseFillsASongsQuietPartsWithIsLeftOut() {
         val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
-        // Its name in the intro, the artist's notes over two lines in a solo, and a dash at the end.
-        val filler = listOf("♪三田寛子 - 初恋", "五月雨は緑色", "【セルフライナーノーツ：上京後に", "書いた曲。】", "【A】悲しくさせたよ", "【Chorus】", "-")
+        // Its name in the intro, the parts' names, the artist's notes over two lines in a solo, and a dash at the end.
+        val filler = listOf("♪三田寛子 - 初恋", "[Verse 1]", "五月雨は緑色", "【セルフライナーノーツ：上京後に", "書いた曲。】", "[Chorus: Someone]", "【A】悲しくさせたよ", "【Chorus】", "-")
         val sung = listOf("五月雨は緑色", "【A】悲しくさせたよ")
         japaneseSong(netEase = netEase, lyric = filler.mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n"))
         assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
