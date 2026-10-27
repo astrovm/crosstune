@@ -24,7 +24,7 @@ httpcore2==2.16.0
     # via httpx2
 httpx2==2.16.0
     # via huggingface-hub
-huggingface-hub==2.2.0
+huggingface-hub==2.3.0
     # via
     #   faster-whisper
     #   tokenizers
