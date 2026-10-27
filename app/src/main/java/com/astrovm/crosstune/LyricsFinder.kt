@@ -543,7 +543,9 @@ internal class LyricsFinder(
     /**
      * The song in the US iTunes Store, which names it as music apps do, in Latin letters: by the
      * artist given, or by one it only writes in another script, or, for an artist given in another
-     * script, as Korea's store gives 아일릿 for ILLIT, by one as long. Null when it's not there.
+     * script, as Korea's store gives 아일릿 for ILLIT, by one as long. Under another title, as it
+     * translates 체포하겠어 as You're Under Arrest, it's the song when the store of the country that
+     * writes the names given has it under them. Null when it's not there.
      */
     private suspend fun inStore(metadata: MusicMetadata): Recording? = try {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
@@ -552,15 +554,15 @@ internal class LyricsFinder(
             .addQueryParameter("entity", "song")
             .addQueryParameter("limit", "10")
             .build()
-        val found = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")
-        found?.let { list ->
-            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.firstOrNull { song ->
-                val artist = song.optString("artistName")
-                val sameLength = metadata.lengthMs?.let { abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } == true
-                SongNames.same(song.optString("trackName"), metadata.title) &&
-                    (SongNames.sameArtist(artist, metadata.artist) || !artist.hasLatin() || (sameLength && !metadata.artist.hasLatin()))
-            }
-        }?.let { song ->
+        val songs = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
+        // Null when the song's length isn't known.
+        fun asLong(song: JSONObject) = metadata.lengthMs?.let { abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS }
+        val named = songs.firstOrNull { song ->
+            val artist = song.optString("artistName")
+            SongNames.same(song.optString("trackName"), metadata.title) &&
+                (SongNames.sameArtist(artist, metadata.artist) || !artist.hasLatin() || (asLong(song) == true && !metadata.artist.hasLatin()))
+        } ?: songs.firstOrNull { asLong(it) != false }?.takeIf { namedAtHome(metadata, it.optLong("trackId")) }
+        named?.let { song ->
             val names = metadata.copy(title = song.optString("trackName"), artist = song.optString("artistName"))
             Recording(song.optLong("trackId"), song.optLong("trackTimeMillis").takeIf { it > 0 }, names).takeIf { it.id > 0 }
         }
@@ -568,6 +570,17 @@ internal class LyricsFinder(
         null
     } catch (_: JSONException) {
         null
+    }
+
+    /** Whether the store of the country that writes [metadata]'s names so has recording [id] under them. */
+    private suspend fun namedAtHome(metadata: MusicMetadata, id: Long): Boolean {
+        val store = SongNames.homeStore(metadata.title + metadata.artist) ?: return false
+        val lookup = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("id", id.toString())
+            .addQueryParameter("country", store)
+            .build()
+        val song = (parse(lookup.toString()) as? JSONObject)?.optJSONArray("results")?.optJSONObject(0) ?: return false
+        return SongNames.same(song.optString("trackName"), metadata.title) && SongNames.sameArtist(song.optString("artistName"), metadata.artist)
     }
 
     /** [recording]'s names in Latin letters, when [metadata]'s artist isn't written in them. */
@@ -613,8 +626,9 @@ internal class LyricsFinder(
             val songs = result.optJSONArray("songs") ?: return@withTimeoutOrNull Lyrics.None
             val matching = (0 until songs.length()).mapNotNull { songs.optJSONObject(it) }.filter { song ->
                 val artists = song.optJSONArray("artists")?.let { list -> (0 until list.length()).map { list.optJSONObject(it)?.optString("name").orEmpty() } }.orEmpty()
-                // An artist only written in another script there, say パイパー for Piper, counts when
-                // the recording lasts as long as the store's, or the music app's.
+                // An artist only written in another script there, say パイパー for Piper, or in Latin
+                // letters for one given in another, YANGHONGWON for 양홍원, counts when the recording
+                // lasts as long as the store's, or the music app's.
                 val length = lengthMs ?: metadata.lengthMs
                 val sameLength = length != null && abs(song.optLong("duration") - length) <= SAME_RECORDING_LENGTH_MS
                 val name = song.optString("name")
@@ -626,7 +640,7 @@ internal class LyricsFinder(
                     SongNames.sameVersion(SongNames.asChinaWrites(metadata.title), SongNames.asChinaWrites(name), SongNames.asChinaWrites(album)) ||
                     (sameLength && SongNames.sameButKanji(metadata.title, name))) &&
                     artists.any { name ->
-                        listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && !name.hasLatin())
+                        listOf(SongNames.withGuests(metadata.artist, metadata.title), alsoBy).any { SongNames.sameArtist(name, it) || SongNames.artistInside(name, it) } || (sameLength && (!name.hasLatin() || !metadata.artist.hasLatin()))
                     }
             }
             // Of the same song, the recording as long as the one playing is the one timed for it.
