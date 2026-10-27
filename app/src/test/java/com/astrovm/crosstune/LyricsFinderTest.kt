@@ -287,6 +287,31 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun whatsLeftOutOfNetEasesWordsNowIsLeftOutOfOnesKeptBefore() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val kept = { song: MusicMetadata, source: String ->
+            val lines = org.json.JSONArray(listOf(listOf(0, "Song"), listOf(1_000, "Band"), listOf(2_000, "作词 : Someone"), listOf(4_000, "First"), listOf(9_000, ""), listOf(20_000, "Second"), listOf(25_000, "")))
+            val words = org.json.JSONObject().put("words", "Song\nBand\n作词 : Someone\nFirst\n\nSecond").put("source", source).put("lines", lines)
+            runBlocking { cache.put("${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(song)}", words.toString()) }
+        }
+        kept(MusicMetadata("Song", "Band"), LyricsFinder.NETEASE)
+        kept(MusicMetadata("Song", "Other band"), LyricsFinder.LRCLIB)
+        fake.handler = { throw IOException("offline") }
+        val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+
+        // The heading and the credit go, and only the pause sung around stays.
+        val netEase = runBlocking { finder.lyricsOf(MusicMetadata("Song", "Band")) } as Lyrics.Found
+        assertEquals("First\n\nSecond", netEase.words)
+        assertEquals(listOf(LyricLine(4_000, "First"), LyricLine(9_000, ""), LyricLine(20_000, "Second")), netEase.lines)
+        // Words from anywhere else are kept as they are.
+        val lrclib = runBlocking { finder.lyricsOf(MusicMetadata("Song", "Other band")) } as Lyrics.Found
+        assertEquals("Song\nBand\n作词 : Someone\nFirst\n\nSecond", lrclib.words)
+        assertEquals(7, lrclib.lines.size)
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+    }
+
+    @Test
     fun anEditionTagNamesNoOtherRecordingSoItsWordsAreTaken() {
         // The tag says which edition the words came from, not that they belong to another song.
         // One word on its own says too little to stand for a longer title, so a lone word is only

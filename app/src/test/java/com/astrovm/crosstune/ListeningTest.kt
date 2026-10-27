@@ -3742,6 +3742,32 @@ class ListeningTest {
     }
 
     @Test
+    fun wordsKeptBeforeTheirHeadingWasLeftOutShowWithoutIt() {
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light")
+        waitForText("Walking down the river road\nSinging to the morning light")
+        composeRule.runOnIdle { controller!!.pause().stop().destroy() }
+        // As an earlier version kept them from NetEase, opening with the song's name and its artist's.
+        for (name in listOf("lyrics.json", "kept_words.json")) {
+            val file = File(app.cacheDir, name)
+            val entries = org.json.JSONArray(file.readText())
+            for (index in 0 until entries.length()) {
+                val entry = entries.getJSONArray(index)
+                entry.put(1, entry.getString(1).replace("\"source\":\"lrclib\"", "\"source\":\"netease\"").replace("\"Walking", "\"Demo\\nBand\\nWalking"))
+            }
+            file.writeText(entries.toString())
+        }
+        val asked = fake.requestedUrls.size
+
+        launch()
+        recognize()
+        waitForText("Demo")
+        composeRule.runOnIdle { controllerModel().showLyrics() }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyrics == "Walking down the river road\nSinging to the morning light" }
+        // Left out of what was kept, with no need to look them up again.
+        assertTrue(fake.requestedUrls.drop(asked).none { "lrclib" in it })
+    }
+
+    @Test
     fun chordsSwitchedOffStopBeingLookedUp() {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light")
         waitForText("Walking down the river road\nSinging to the morning light")
