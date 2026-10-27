@@ -227,8 +227,8 @@ def summary(_):
         for graded in json.loads(path.read_text()):
             grades[graded["id"]] = graded
     lines = ["# Song check", ""]
-    for continent in COUNTRIES.values():
-        songs = [report for report in reports.values() if report["continent"] == continent]
+    for country, continent in COUNTRIES.items():
+        songs = [report for report in reports.values() if report["country"] == country]
         if not songs:
             continue
         lyrics = [song for song in songs if song["lyrics"]["kind"] == "found"]
@@ -236,7 +236,7 @@ def summary(_):
         judged = [timings[song["id"]] for song in timed if timings.get(song["id"], {}).get("verdict") in ("on time", "off")]
         chords = [song for song in lyrics if song.get("chords", {}).get("kind") == "found"]
         lines += [
-            f"## {continent} ({songs[0]['country']})", "",
+            f"## {continent} ({country})", "",
             f"- Lyrics: {len(lyrics)} of {len(songs)} found, {len(timed)} timed",
             f"- Timing: {sum(t['verdict'] == 'on time' for t in judged)} of {len(judged)} checked on time",
             f"- Chords: {len(chords)} of {len(lyrics)} found",
