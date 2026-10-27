@@ -88,9 +88,8 @@ private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> 
     val names = lines.drop(start).filter { it.isNotEmpty() }.take(2).map(SongNames::normalize)
     if (names.toSet() == setOf(title, artist)) {
         repeat(2) { while (lines[start].isEmpty()) start++; start++ }
-    } else if (names.isNotEmpty() && SongNames.normalize(lines.drop(start).first { it.isNotEmpty() }.replace(netEaseGloss, "")) in setOf(title + artist, artist + title)) {
+    } else if (lines.getOrNull(start)?.replace(netEaseGloss, "")?.let(SongNames::normalize) in setOf(title + artist, artist + title)) {
         // Or both on one line, each maybe with its name in Chinese: "Leif Erikson （夫·埃里克森）-Interpol （国际刑警乐队）".
-        while (lines[start].isEmpty()) start++
         start++
     }
     return drop(start)
