@@ -10,8 +10,8 @@
   python3 scripts/songcheck/songcheck.py summary    # what failed, per continent
 
 Everything goes in build/songcheck/; each step goes on where it stopped. `run --gradle "sh run.sh"`
-runs Gradle some other way, like in a container; `hear` wants faster-whisper, from
-scripts/lyrics/requirements.txt.
+runs Gradle some other way, like in a container; `hear` and `timing` want faster-whisper and
+anyascii, from scripts/lyrics/requirements.txt.
 """
 import argparse
 import difflib
@@ -20,8 +20,10 @@ import shlex
 import statistics
 import subprocess
 import sys
+import re
 import time
 import unicodedata
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -48,6 +50,8 @@ SEARCH_MS = 8000
 AGREE_MS = 500
 # Small enough for a small model to read a batch of Japanese songs, readings and all, at once.
 BATCH = 10
+# Fewer words than this heard in a preview with lyrics is worth hearing again with a bigger model.
+FEW_WORDS = 8
 
 
 def get(url, tries=8):
@@ -116,23 +120,43 @@ def run(args):
 def hear(args):
     from faster_whisper import WhisperModel
     import numpy as np
-    model = WhisperModel(args.model, device="cpu", compute_type="int8", cpu_threads=args.threads)
     folder = OUT / "heard"
     folder.mkdir(parents=True, exist_ok=True)
+    models = {}
+
+    def heard(pcm, name):
+        model = models.get(name) or models.setdefault(name, WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=args.threads))
+        samples = np.frombuffer(pcm.read_bytes(), dtype=np.int16).astype(np.float32) / 32768
+        segments, info = model.transcribe(samples, word_timestamps=True, vad_filter=False, condition_on_previous_text=False)
+        words = [{"ms": round(word.start * 1000), "word": word.word} for segment in segments for word in segment.words]
+        return {"language": info.language, "words": words, "model": name}
+
     for pcm in sorted((OUT / "audio").glob("*.pcm")):
         out = folder / f"{pcm.stem}.json"
         if out.exists():
             continue
-        samples = np.frombuffer(pcm.read_bytes(), dtype=np.int16).astype(np.float32) / 32768
-        segments, info = model.transcribe(samples, word_timestamps=True, vad_filter=False, condition_on_previous_text=False)
-        words = [{"ms": round(word.start * 1000), "word": word.word} for segment in segments for word in segment.words]
-        out.write_text(json.dumps({"language": info.language, "words": words}, ensure_ascii=False))
-        print(pcm.stem, info.language, len(words))
+        found = heard(pcm, args.model)
+        out.write_text(json.dumps(found, ensure_ascii=False))
+        print(pcm.stem, found["language"], len(found["words"]))
+    # A small model often hears little over loud music; a bigger one, once, where there are words to hear.
+    for out in sorted(folder.glob("*.json")):
+        found, report = json.loads(out.read_text()), OUT / "reports" / out.name
+        if len(found["words"]) >= FEW_WORDS or found.get("model") == args.retry_model or not report.exists():
+            continue
+        if not json.loads(report.read_text()).get("lyrics", {}).get("lines"):
+            continue
+        again = heard(OUT / "audio" / f"{out.stem}.pcm", args.retry_model)
+        out.write_text(json.dumps(again if len(again["words"]) > len(found["words"]) else {**found, "model": args.retry_model}, ensure_ascii=False))
+        print(out.stem, "again", len(found["words"]), "->", len(again["words"]))
 
 
 def plain(text):
-    """Letters and digits only, lowercase and composed, so a line and what was heard compare."""
-    return "".join(c for c in unicodedata.normalize("NFKC", text).lower() if c.isalnum())
+    """
+    Letters and digits only, in Latin letters and lowercase, so a line and what was heard compare:
+    Whisper often writes Hindi in Latin letters or Urdu's script, where the lyrics are in Devanagari.
+    """
+    from anyascii import anyascii
+    return "".join(c for c in anyascii(unicodedata.normalize("NFKC", text)).lower() if c.isalnum())
 
 
 def preview_start(preview):
@@ -176,6 +200,40 @@ def line_timing(report, heard):
     return {"previewStartMs": start, "lines": checked}
 
 
+def copy_times(synced):
+    """A timed copy's lines, as their first words to each time they start."""
+    times = {}
+    for line in synced.splitlines():
+        found = re.match(r"\[(\d+):(\d+(?:\.\d+)?)]\s*(.*)", line)
+        if found:
+            times.setdefault(plain(found[3])[:24], []).append(round((int(found[1]) * 60 + float(found[2])) * 1000))
+    return times
+
+
+def other_copies(report, lines):
+    """
+    How far LRCLIB's other timed copies of the song, as long as it, put its lines from where the
+    app does: one each, by the middle of the lines they share. A copy timed the same to the
+    millisecond is the app's own, and says nothing.
+    """
+    query = urllib.parse.urlencode({"track_name": report["title"], "artist_name": report["artist"]})
+    try:
+        copies = json.loads(get(f"https://lrclib.net/api/search?{query}", tries=3))
+    except (OSError, ValueError):
+        return []
+    found = []
+    for copy in copies:
+        length = copy.get("duration")
+        if not copy.get("syncedLyrics") or not length or not report.get("lengthMs") or abs(length * 1000 - report["lengthMs"]) > 2000:
+            continue
+        times = copy_times(copy["syncedLyrics"])
+        # A line sung again, as a chorus is, is the time of it nearest.
+        apart = [min((time - line["ms"] for time in times[key]), key=abs) for line in lines if len(key := plain(line["text"])[:24]) >= 8 and key in times]
+        if len(apart) >= 3 and any(apart):
+            found.append(round(statistics.median(apart)))
+    return found
+
+
 def timing(_):
     results = {}
     for path in sorted((OUT / "reports").glob("*.json")):
@@ -196,6 +254,13 @@ def timing(_):
             verdict = "on time" if abs(middle) <= ON_TIME_MS else "off" if spread <= AGREE_MS else "unsure"
             found["medianOffMs"] = round(middle)
             found["spreadMs"] = round(spread)
+            if verdict == "off":
+                # Shazam can place the preview by another master of the song, with a longer or
+                # shorter start, and Whisper's times wander: other copies side with the app then.
+                copies = other_copies(report, report["lyrics"]["lines"])
+                found["copiesApartMs"] = copies
+                if copies and abs(statistics.median(copies)) < abs(statistics.median(copies) - middle):
+                    verdict = "unsure"
         found["verdict"] = verdict
         results[path.stem] = found
     (OUT / "timing.json").write_text(json.dumps(results, ensure_ascii=False, indent=1))
@@ -271,6 +336,7 @@ def main():
     parser.add_argument("step", choices=["songs", "audio", "run", "hear", "timing", "grade", "summary"])
     parser.add_argument("--gradle", default="./gradlew", help="how to run Gradle")
     parser.add_argument("--model", default="small", help="faster-whisper model, or a folder with one")
+    parser.add_argument("--retry-model", default="medium", help="the bigger one for previews where little was heard")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--out", type=Path, help="where it all goes, if not build/songcheck/")
     parser.add_argument("--countries", help="the charts to take the songs from, as in,th,eg; the first twelve if not given")
