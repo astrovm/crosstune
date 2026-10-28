@@ -135,6 +135,8 @@ kover {
                 classes("com.astrovm.crosstune.RootShell*")
                 // Waking another music app binds to it, which needs a phone, where it's checked.
                 classes("com.astrovm.crosstune.MediaBrowserWaker*")
+                // A music app's shuffle is told through its own session, which needs a phone, where it's checked.
+                classes("com.astrovm.crosstune.SessionShuffle*")
                 // Hearing words runs whisper.cpp's native library, which unit tests don't load; it's
                 // checked on a phone. What it hears is parsed, and lined up, in tested code.
                 classes("com.astrovm.crosstune.NativeWhisper*")
@@ -180,6 +182,10 @@ dependencies {
     // Sets everything up in one tap for people who run Shizuku, which can do what otherwise only the user can.
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+
+    // A music app's shuffle, which Android's own media sessions have no word for; most apps' sessions
+    // are the support library's, which has.
+    implementation("androidx.media:media:1.8.0")
 
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.1")

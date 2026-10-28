@@ -1115,12 +1115,13 @@ internal class MainViewModel(
 
     /**
      * Plays the result's songs in YouTube Music or YouTube, as one queue of the first [MAX_QUEUE],
-     * which is all YouTube takes; [playQueue] plays a longer list on from there.
+     * which is all YouTube takes; [playQueue] plays a longer list on from there. [shuffled], the
+     * whole list is shuffled first, as the app would only shuffle the part it was given.
      */
-    fun playAll() {
+    fun playAll(shuffled: Boolean = false) {
         val destination = uiState.resultDestination
         val service = destination.matchService ?: return
-        val all = uiState.result?.tracks.orEmpty()
+        val all = uiState.result?.tracks.orEmpty().let { if (shuffled) it.shuffled() else it }
         val tracks = all.take(MAX_QUEUE)
         cancelTrackWork()
         trackJob = viewModelScope.launch {
@@ -1306,6 +1307,13 @@ internal class MainViewModel(
         if (!(if (next) following.canSkipNext else following.canSkipPrevious)) return
         uiState = uiState.copy(player = player.copy(played = true))
         playback?.skip(player.song, next)
+    }
+
+    /** Has the app shuffle, or play in order again. */
+    fun playerShuffle() {
+        val player = uiState.player ?: return
+        val shuffles = player.following?.shuffle ?: return
+        playback?.shuffle(player.song, !shuffles)
     }
 
     fun playerSeek(positionMs: Long) {

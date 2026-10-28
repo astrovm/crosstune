@@ -98,6 +98,8 @@
     <string name="play_all_button">Riproduci tutto</string>
     <string name="play_all_progress">Ricerca dei brani… %1$d di %2$d</string>
     <string name="play_all_in">Riproduci tutto in %1$s</string>
+    <string name="shuffle_button">Casuale</string>
+    <string name="shuffle_all_in">Riproduci tutto in ordine casuale in %1$s</string>
     <string name="play_first_in">Riproduci il primo brano in %1$s</string>
     <string name="play_first_button">Riproduci il primo brano</string>
     <string name="play_in_background">Riproduci in %1$s e resta qui</string>
@@ -186,6 +188,7 @@
     <string name="player_waiting">In attesa di %1$s</string>
     <string name="player_follow_allow">Consenti a Crosstune di vedere e controllare il brano in riproduzione nella tua app di musica.</string>
     <string name="player_position">%1$s di %2$s</string>
+    <string name="player_shuffle">Riproduzione casuale</string>
     <string name="lyrics_jump">Vai qui</string>
     <string name="lyrics_sync">Correggi il tempo</string>
     <string name="lyrics_sync_hint">Tocca la riga che senti ora</string>

@@ -97,6 +97,8 @@
     <string name="play_all_button">Tout lire</string>
     <string name="play_all_progress">Recherche des titres… %1$d sur %2$d</string>
     <string name="play_all_in">Tout lire dans %1$s</string>
+    <string name="shuffle_button">Aléatoire</string>
+    <string name="shuffle_all_in">Tout lire en aléatoire dans %1$s</string>
     <string name="play_first_in">Lire le premier titre dans %1$s</string>
     <string name="play_first_button">Lire le premier titre</string>
     <string name="play_in_background">Lire dans %1$s et rester ici</string>
@@ -185,6 +187,7 @@
     <string name="player_waiting">En attente de %1$s</string>
     <string name="player_follow_allow">Laissez Crosstune voir et contrôler le morceau en cours dans votre app de musique.</string>
     <string name="player_position">%1$s sur %2$s</string>
+    <string name="player_shuffle">Lecture aléatoire</string>
     <string name="lyrics_jump">Aller ici</string>
     <string name="lyrics_sync">Corriger le timing</string>
     <string name="lyrics_sync_hint">Touchez la ligne que vous entendez</string>

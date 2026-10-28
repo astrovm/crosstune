@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "Para abrir o próprio item, o app envia o título e o artista do item ao serviço de busca do destino: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack ou Qobuz. Com os links indo direto para um app e “Tocar na hora” desativado, uma busca abre lá no lugar e nada é enviado. Quando você abre um destino, o app ou site selecionado recebe o link de destino ou os termos de busca. Quando você usa “Tocar tudo” em uma playlist ou álbum, o app envia o título e o artista de cada música à busca do YouTube Music e depois envia a lista de vídeos encontrados ao YouTube, que retorna uma playlist temporária. Destinos personalizados recebem os termos de busca no modelo de URL que você configurar. Compartilhar um resultado o envia para o app ou destinatário que você selecionar."
+      "Para abrir o próprio item, o app envia o título e o artista do item ao serviço de busca do destino: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack ou Qobuz. Com os links indo direto para um app e “Tocar na hora” desativado, uma busca abre lá no lugar e nada é enviado. Quando você abre um destino, o app ou site selecionado recebe o link de destino ou os termos de busca. Quando você usa “Tocar tudo” ou “Aleatório” em uma playlist ou álbum, o app envia o título e o artista de cada música à busca do YouTube Music e depois envia a lista de vídeos encontrados ao YouTube, que retorna uma playlist temporária. Destinos personalizados recebem os termos de busca no modelo de URL que você configurar. Compartilhar um resultado o envia para o app ou destinatário que você selecionar."
     ],
     [
       "p",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Se você deixar a letra acompanhar a música tocando no seu app de música, o Android pede que você permita o acesso a notificações do Crosstune. O Crosstune o usa só para ver qual música seus apps de música dizem estar tocando e em que ponto ela está, para que a letra acompanhe e uma linha que você tocar possa levar a música até ali. Ele nunca lê suas notificações, e nada disso sai do seu celular. Você pode desativar isso nas configurações do Android a qualquer momento. Quando você pratica linhas salvas, o Crosstune também pede ao seu app de música que toque a música de cada linha, nessa linha. O player do Crosstune usa o mesmo acesso para mostrar a música e pausá-la, pulá-la ou movê-la no seu app de música."
+      "Se você deixar a letra acompanhar a música tocando no seu app de música, o Android pede que você permita o acesso a notificações do Crosstune. O Crosstune o usa só para ver qual música seus apps de música dizem estar tocando e em que ponto ela está, para que a letra acompanhe e uma linha que você tocar possa levar a música até ali. Ele nunca lê suas notificações, e nada disso sai do seu celular. Você pode desativar isso nas configurações do Android a qualquer momento. Quando você pratica linhas salvas, o Crosstune também pede ao seu app de música que toque a música de cada linha, nessa linha. O player do Crosstune usa o mesmo acesso para mostrar a música e pausá-la, pulá-la, movê-la ou ativar o modo aleatório no seu app de música."
     ],
     [
       "p",

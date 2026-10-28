@@ -17,6 +17,8 @@ internal class FakePlayback : PlaybackSource {
     val plays: MutableList<Boolean> = CopyOnWriteArrayList()
     /** Each ask to go on to the next song (true) or back to the one before (false). */
     val skips: MutableList<Boolean> = CopyOnWriteArrayList()
+    /** Each ask to shuffle (true) or play in order (false). */
+    val shuffled: MutableList<Boolean> = CopyOnWriteArrayList()
     /** Each song asked for by name, and the app asked. */
     val songsAsked: MutableList<Pair<MusicMetadata, String?>> = CopyOnWriteArrayList()
     /** Each song's link given with it, when there was one. */
@@ -77,6 +79,10 @@ internal class FakePlayback : PlaybackSource {
 
     override fun skip(song: MusicMetadata, next: Boolean) {
         skips += next
+    }
+
+    override fun shuffle(song: MusicMetadata, on: Boolean) {
+        shuffled += on
     }
 
     private val inApps = mutableMapOf<String, MutableStateFlow<AppPlays?>>()

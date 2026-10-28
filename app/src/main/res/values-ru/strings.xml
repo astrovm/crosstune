@@ -97,6 +97,8 @@
     <string name="play_all_button">Слушать всё</string>
     <string name="play_all_progress">Ищем треки… %1$d из %2$d</string>
     <string name="play_all_in">Слушать всё в %1$s</string>
+    <string name="shuffle_button">Перемешать</string>
+    <string name="shuffle_all_in">Слушать всё вперемешку в %1$s</string>
     <string name="play_first_in">Включить первый трек в %1$s</string>
     <string name="play_first_button">Включить первый трек</string>
     <string name="play_in_background">Включить в %1$s и остаться здесь</string>
@@ -185,6 +187,7 @@
     <string name="player_waiting">Ждём %1$s</string>
     <string name="player_follow_allow">Разрешите Crosstune видеть песню в музыкальном приложении и управлять ею.</string>
     <string name="player_position">%1$s из %2$s</string>
+    <string name="player_shuffle">Перемешать</string>
     <string name="lyrics_jump">Перейти сюда</string>
     <string name="lyrics_sync">Исправить тайминг</string>
     <string name="lyrics_sync_hint">Нажмите строку, которую слышите сейчас</string>

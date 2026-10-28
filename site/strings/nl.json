@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "Om het item zelf te openen, stuurt de app de titel en artiest van het item naar de zoekdienst van de bestemming: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack of Qobuz. Gaan links direct naar een app en staat ‘Meteen afspelen’ uit, dan opent daar in plaats daarvan een zoekopdracht en wordt er niets verstuurd. Als je een bestemming opent, ontvangt de gekozen app of website de bestemmingslink of de zoektermen. Als je ‘Alles afspelen’ gebruikt bij een afspeellijst of album, stuurt de app de titel en artiest van elk nummer naar de zoekdienst van YouTube Music en daarna de lijst met gevonden video's naar YouTube, dat een tijdelijke afspeellijst teruggeeft. Eigen bestemmingen ontvangen de zoektermen in de URL-sjabloon die je instelt. Als je een resultaat deelt, gaat het naar de app of ontvanger die je kiest."
+      "Om het item zelf te openen, stuurt de app de titel en artiest van het item naar de zoekdienst van de bestemming: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack of Qobuz. Gaan links direct naar een app en staat ‘Meteen afspelen’ uit, dan opent daar in plaats daarvan een zoekopdracht en wordt er niets verstuurd. Als je een bestemming opent, ontvangt de gekozen app of website de bestemmingslink of de zoektermen. Als je ‘Alles afspelen’ of ‘Shuffle’ gebruikt bij een afspeellijst of album, stuurt de app de titel en artiest van elk nummer naar de zoekdienst van YouTube Music en daarna de lijst met gevonden video's naar YouTube, dat een tijdelijke afspeellijst teruggeeft. Eigen bestemmingen ontvangen de zoektermen in de URL-sjabloon die je instelt. Als je een resultaat deelt, gaat het naar de app of ontvanger die je kiest."
     ],
     [
       "p",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Als je de songtekst het nummer laat volgen dat in je muziek-app speelt, vraagt Android je om Crosstune toegang tot meldingen te geven. Crosstune gebruikt die alleen om te zien welk nummer je muziek-apps zeggen af te spelen en hoe ver ze zijn, zodat de tekst meeloopt en een regel waarop je tikt het nummer daarheen kan laten springen. Het leest nooit je meldingen, en niets hiervan verlaat je telefoon. Je kunt dit altijd uitzetten in de instellingen van Android. Als je bewaarde regels oefent, vraagt Crosstune je muziek-app ook om het nummer van elke regel af te spelen, vanaf die regel. De speler van Crosstune gebruikt dezelfde toegang om het nummer te tonen en het in je muziek-app te pauzeren, over te slaan of te verplaatsen."
+      "Als je de songtekst het nummer laat volgen dat in je muziek-app speelt, vraagt Android je om Crosstune toegang tot meldingen te geven. Crosstune gebruikt die alleen om te zien welk nummer je muziek-apps zeggen af te spelen en hoe ver ze zijn, zodat de tekst meeloopt en een regel waarop je tikt het nummer daarheen kan laten springen. Het leest nooit je meldingen, en niets hiervan verlaat je telefoon. Je kunt dit altijd uitzetten in de instellingen van Android. Als je bewaarde regels oefent, vraagt Crosstune je muziek-app ook om het nummer van elke regel af te spelen, vanaf die regel. De speler van Crosstune gebruikt dezelfde toegang om het nummer te tonen en het in je muziek-app te pauzeren, over te slaan, te verplaatsen of shuffle aan of uit te zetten."
     ],
     [
       "p",

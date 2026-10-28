@@ -1064,6 +1064,59 @@ class MainActivityTest {
         assertEquals(listOf(music to "https://music.youtube.com/watch?v=00000000051&list=TLGGpart"), phone.listsAsked)
     }
 
+    @Test
+    fun aPlaylistPlaysShuffledAsAWhole() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        File(app.cacheDir, "queue_lookups.json").delete()
+        val songs = (1..60).joinToString(",") { """{"title":"Song $it","subtitle":"Band"}""" }
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[$songs]}}}}}}</script>"""
+        // Held while its songs are found, so it can be seen it can't be asked twice.
+        val found = CountDownLatch(1)
+        fake.handler = { request ->
+            val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
+                    .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGpart").build()
+                // Each song is found as itself, its video named after its number.
+                request.url.host == "music.youtube.com" -> {
+                    found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                        "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
+                        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                        "playlistItemData":{"videoId":"${number.padStart(11, '0')}"}}}]}""")
+                }
+                request.url.host == "open.spotify.com" -> FakeSpotify.html(request, FakeSpotify.trackPage("Long | Spotify", "Playlist"))
+                else -> FakeSpotify.html(request, "", code = 404)
+            }
+        }
+        launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("Song 1")
+        // A short label beside Copy and Share; screen readers hear where.
+        val shuffle = string(R.string.shuffle_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes))
+        composeRule.onNodeWithText(string(R.string.shuffle_button), useUnmergedTree = true).assertExists()
+        click(shuffle)
+        waitUntil { composeRule.onAllNodes(hasContentDescription(shuffle) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        found.countDown()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        nextStartedActivity()
+        // The first part YouTube Music is given is any 50 of the 60, in no set order.
+        val part = fake.requestedUrls.single { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")!!.split(",").map { it.trimStart('0').toInt() }
+        assertEquals(50, part.toSet().size)
+        assertTrue(part.all { it in 1..60 })
+        assertTrue(part != part.sorted())
+        // The rest play on after them, shuffled as they are.
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Song ${part.first()}", "Band"), 100) }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "/watch_videos" in it } == 2 }
+        val rest = fake.requestedUrls.last { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")!!.split(",").map { it.trimStart('0').toInt() }
+        assertEquals((1..60).toSet(), (part + rest).toSet())
+    }
+
     /** A playlist whose songs are YouTube videos, as a YouTube playlist's are. */
     private fun youtubeSongPlaylist() {
         val lockup = { id: String, title: String ->
@@ -1115,6 +1168,7 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
         waitForText("First Song")
         assertTextAbsent(string(R.string.play_all_button))
+        composeRule.onNodeWithText(string(R.string.shuffle_button), useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
@@ -3515,6 +3569,19 @@ class MainActivityTest {
         composeRule.onNode(hasContentDescription(string(R.string.lyrics_previous_song))).assertIsNotEnabled()
         click(string(R.string.lyrics_next_song))
         assertEquals(listOf(true), phone.skips)
+        // Shuffle shows once the app says whether it shuffles, as it says, and turns it the other way.
+        val shuffle = string(R.string.player_shuffle)
+        assertTrue(composeRule.onAllNodes(hasContentDescription(shuffle)).fetchSemanticsNodes().isEmpty())
+        phone.playing.value = phone.playing.value!!.copy(shuffle = false)
+        waitForDescription(shuffle)
+        composeRule.onNode(hasContentDescription(shuffle)).assertIsOff()
+        click(shuffle)
+        assertEquals(listOf(true), phone.shuffled)
+        phone.playing.value = phone.playing.value!!.copy(shuffle = true)
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription(shuffle)).assertIsOn()
+        click(shuffle)
+        assertEquals(listOf(true, false), phone.shuffled)
         composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performSemanticsAction(SemanticsActions.SetProgress) { it(100_000f) }
         composeRule.waitForIdle()
         assertEquals(listOf(100_000L), phone.seeks)

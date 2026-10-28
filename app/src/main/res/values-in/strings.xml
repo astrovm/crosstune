@@ -97,6 +97,8 @@
     <string name="play_all_button">Putar semua</string>
     <string name="play_all_progress">Mencari lagu… %1$d dari %2$d</string>
     <string name="play_all_in">Putar semua di %1$s</string>
+    <string name="shuffle_button">Acak</string>
+    <string name="shuffle_all_in">Putar acak semua di %1$s</string>
     <string name="play_first_in">Putar lagu pertama di %1$s</string>
     <string name="play_first_button">Putar lagu pertama</string>
     <string name="play_in_background">Putar di %1$s dan tetap di sini</string>
@@ -185,6 +187,7 @@
     <string name="player_waiting">Menunggu %1$s</string>
     <string name="player_follow_allow">Izinkan Crosstune melihat dan mengontrol lagu yang diputar di aplikasi musikmu.</string>
     <string name="player_position">%1$s dari %2$s</string>
+    <string name="player_shuffle">Acak</string>
     <string name="lyrics_jump">Lompat ke sini</string>
     <string name="lyrics_sync">Perbaiki waktu</string>
     <string name="lyrics_sync_hint">Ketuk baris yang kamu dengar sekarang</string>

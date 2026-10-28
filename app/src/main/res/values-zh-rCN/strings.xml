@@ -97,6 +97,8 @@
     <string name="play_all_button">全部播放</string>
     <string name="play_all_progress">正在查找歌曲… %1$d/%2$d</string>
     <string name="play_all_in">在 %1$s 中全部播放</string>
+    <string name="shuffle_button">随机播放</string>
+    <string name="shuffle_all_in">在 %1$s 中随机播放全部</string>
     <string name="play_first_in">在 %1$s 中播放第一首</string>
     <string name="play_first_button">播放第一首</string>
     <string name="play_in_background">在 %1$s 中播放并留在这里</string>
@@ -185,6 +187,7 @@
     <string name="player_waiting">正在等待 %1$s</string>
     <string name="player_follow_allow">允许 Crosstune 查看并控制音乐应用中正在播放的歌曲。</string>
     <string name="player_position">%1$s / %2$s</string>
+    <string name="player_shuffle">随机播放</string>
     <string name="lyrics_jump">跳到这里</string>
     <string name="lyrics_sync">校准时间</string>
     <string name="lyrics_sync_hint">点按你现在听到的那一行</string>

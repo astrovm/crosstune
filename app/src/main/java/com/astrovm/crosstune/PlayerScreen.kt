@@ -22,6 +22,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -121,7 +123,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 64.dp)) {
                             when {
                                 !state.canFollowApps -> PlayerFollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW)
-                                following != null -> PlayerProgress(following, actions.onPlayerSeek)
+                                following != null -> PlayerProgress(following, actions.onPlayerSeek, actions.onPlayerShuffle)
                                 // Until the app plays it, once; stopped there after, there's nothing to wait for.
                                 !player.played && app != null -> PlayerWaiting(app)
                             }
@@ -166,7 +168,7 @@ private fun PlayerMenu(ready: Boolean, actions: ScreenActions) {
 
 /** Where the song is, to drag elsewhere when the app lets it, with how long it is when the app says. */
 @Composable
-private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
+private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit, onShuffle: () -> Unit) {
     val position = rememberPosition(following) ?: 0L
     val duration = following.durationMs
     // Where it's dragged to, held there until the app says it moved, or a moment passes without it saying.
@@ -200,9 +202,26 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
                 modifier = Modifier.fillMaxWidth().slidesSideways().semantics { stateDescription = description }
             )
         }
-        Row(modifier = Modifier.fillMaxWidth()) {
+        // Whether the app shuffles sits between the times, boxed in when it does, as a color alone is too
+        // faint beside the times. As tall with or without it, the rest doesn't move once the app says.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(clockText(shown), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            if (duration != null) Text(clockText(duration), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            following.shuffle?.let { shuffles ->
+                IconToggleButton(
+                    checked = shuffles,
+                    onCheckedChange = { onShuffle() },
+                    colors = IconButtonDefaults.iconToggleButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                ) {
+                    AppIcon(if (shuffles) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle, contentDescription = stringResource(R.string.player_shuffle))
+                }
+            }
+            Text(
+                duration?.let(::clockText).orEmpty(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -278,6 +297,6 @@ internal fun clockText(ms: Long): String {
 private const val SEEK_HOLD_MS = 1_500L
 
 /** What's under the cover: its title and artist, progress and buttons. */
-private val PLAYER_CONTROLS_HEIGHT = 290.dp
+private val PLAYER_CONTROLS_HEIGHT = 320.dp
 private val PLAYER_COVER_MIN = 120.dp
 private val PLAYER_COVER_MAX = 340.dp

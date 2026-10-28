@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "Öğenin kendisini açmak için uygulama, öğenin başlığını ve sanatçısını hedefin arama servisine gönderir: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack veya Qobuz. Bağlantılar doğrudan bir uygulamaya gidiyorsa ve “Hemen oynat” kapalıysa, bunun yerine orada bir arama açılır ve hiçbir şey gönderilmez. Bir hedefi açtığınızda, seçilen uygulama veya web sitesi hedef bağlantıyı ya da arama terimlerini alır. Bir çalma listesinde veya albümde “Tümünü çal”ı kullandığınızda uygulama, her şarkının başlığını ve sanatçısını YouTube Music'in aramasına, ardından bulunan videoların listesini YouTube'a gönderir; YouTube da geçici bir çalma listesi döndürür. Eklediğiniz diğer uygulamalar ve siteler, arama terimlerini sizin ayarladığınız URL şablonunda alır. Bir sonucu paylaştığınızda, sonuç seçtiğiniz uygulamaya veya kişiye gönderilir."
+      "Öğenin kendisini açmak için uygulama, öğenin başlığını ve sanatçısını hedefin arama servisine gönderir: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack veya Qobuz. Bağlantılar doğrudan bir uygulamaya gidiyorsa ve “Hemen oynat” kapalıysa, bunun yerine orada bir arama açılır ve hiçbir şey gönderilmez. Bir hedefi açtığınızda, seçilen uygulama veya web sitesi hedef bağlantıyı ya da arama terimlerini alır. Bir çalma listesinde veya albümde “Tümünü çal” ya da “Karıştır” düğmesini kullandığınızda uygulama, her şarkının başlığını ve sanatçısını YouTube Music'in aramasına, ardından bulunan videoların listesini YouTube'a gönderir; YouTube da geçici bir çalma listesi döndürür. Eklediğiniz diğer uygulamalar ve siteler, arama terimlerini sizin ayarladığınız URL şablonunda alır. Bir sonucu paylaştığınızda, sonuç seçtiğiniz uygulamaya veya kişiye gönderilir."
     ],
     [
       "p",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Sözlerin müzik uygulamanda çalan şarkıyı takip etmesine izin verirsen, Android senden Crosstune'a bildirim erişimi vermeni ister. Crosstune bunu yalnızca müzik uygulamalarının hangi şarkıyı çaldığını ve şarkının neresinde olduğunu görmek için kullanır; böylece sözler takip eder ve dokunduğun bir satır şarkıyı oraya götürebilir. Bildirimlerini asla okumaz ve bunların hiçbiri telefonundan çıkmaz. Bunu istediğin zaman Android ayarlarından kapatabilirsin. Kaydedilen satırlarla pratik yaptığında Crosstune, müzik uygulamandan her satırın şarkısını o satırdan çalmasını da ister. Crosstune'un oynatıcısı aynı erişimi şarkıyı göstermek ve müzik uygulamanda duraklatmak, atlamak ya da ilerletmek için kullanır."
+      "Sözlerin müzik uygulamanda çalan şarkıyı takip etmesine izin verirsen, Android senden Crosstune'a bildirim erişimi vermeni ister. Crosstune bunu yalnızca müzik uygulamalarının hangi şarkıyı çaldığını ve şarkının neresinde olduğunu görmek için kullanır; böylece sözler takip eder ve dokunduğun bir satır şarkıyı oraya götürebilir. Bildirimlerini asla okumaz ve bunların hiçbiri telefonundan çıkmaz. Bunu istediğin zaman Android ayarlarından kapatabilirsin. Kaydedilen satırlarla pratik yaptığında Crosstune, müzik uygulamandan her satırın şarkısını o satırdan çalmasını da ister. Crosstune'un oynatıcısı aynı erişimi şarkıyı göstermek ve müzik uygulamanda duraklatmak, atlamak, ilerletmek ya da karıştırmak için kullanır."
     ],
     [
       "p",

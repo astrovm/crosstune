@@ -97,6 +97,8 @@
     <string name="play_all_button">Tocar tudo</string>
     <string name="play_all_progress">Procurando músicas… %1$d de %2$d</string>
     <string name="play_all_in">Tocar tudo em %1$s</string>
+    <string name="shuffle_button">Aleatório</string>
+    <string name="shuffle_all_in">Tocar tudo no aleatório em %1$s</string>
     <string name="play_first_in">Tocar a primeira em %1$s</string>
     <string name="play_first_button">Tocar a primeira</string>
     <string name="play_in_background">Tocar no %1$s e continuar aqui</string>
@@ -185,6 +187,7 @@
     <string name="player_waiting">Aguardando o %1$s</string>
     <string name="player_follow_allow">Deixe o Crosstune ver e controlar a música que toca no seu app de música.</string>
     <string name="player_position">%1$s de %2$s</string>
+    <string name="player_shuffle">Aleatório</string>
     <string name="lyrics_jump">Ir para aqui</string>
     <string name="lyrics_sync">Ajustar o tempo</string>
     <string name="lyrics_sync_hint">Toque na linha que você ouve agora</string>

@@ -78,7 +78,9 @@ internal data class Following(
     /** How long what it plays is, when it says; for a video, the video. */
     val durationMs: Long? = null,
     /** The player clock is in the lyrics' recording, rather than an uncalibrated video. */
-    val timingKnown: Boolean = true
+    val timingKnown: Boolean = true,
+    /** Whether it shuffles; null when it doesn't say, or can't be told to. */
+    val shuffle: Boolean? = null
 )
 
 /**
@@ -105,6 +107,9 @@ internal interface PlaybackSource {
 
     /** Has the app playing [song] go on to its [next] song, or back to the one before, and play it. */
     fun skip(song: MusicMetadata, next: Boolean)
+
+    /** Has the app playing [song] shuffle, or play in order. */
+    fun shuffle(song: MusicMetadata, on: Boolean)
 
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
@@ -154,7 +159,8 @@ internal interface PlaybackSource {
 internal class MediaSessionPlayback(
     private val context: Context,
     private val now: () -> Long = SystemClock::elapsedRealtime,
-    private val waker: AppWaker = MediaBrowserWaker(context)
+    private val waker: AppWaker = MediaBrowserWaker(context),
+    private val shuffles: AppShuffle = SessionShuffle(context)
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -169,6 +175,7 @@ internal class MediaSessionPlayback(
 
     override fun follow(song: MusicMetadata): Flow<Following?> = callbackFlow {
         var followed: MediaController? = null
+        var shuffleWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
         var pauses = SteadyPause()
         fun steadily(controller: MediaController) = following(controller)?.let { it.copy(clock = pauses.of(it.clock)) }
@@ -181,9 +188,12 @@ internal class MediaSessionPlayback(
             val playing = appFor(song, controllers)
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
+                shuffleWatched()
                 followed = playing
                 pauses = SteadyPause()
                 playing?.registerCallback(callback, handler)
+                // An app's shuffle isn't in what Android says of how it plays, so it's watched apart.
+                shuffleWatched = playing?.let { app -> shuffles.watch(app, handler) { trySend(steadily(app)) } } ?: {}
             }
             trySend(playing?.let(::steadily))
         }
@@ -208,6 +218,7 @@ internal class MediaSessionPlayback(
             sessions.removeOnActiveSessionsChangedListener(changed)
             watched.forEach { it.unregisterCallback(renamed) }
             followed?.unregisterCallback(callback)
+            shuffleWatched()
         }
     }.distinctUntilChanged()
 
@@ -240,6 +251,11 @@ internal class MediaSessionPlayback(
                 if (paused) play()
             }
         }
+    }
+
+    override fun shuffle(song: MusicMetadata, on: Boolean) {
+        // Taken back meanwhile, it plays on as it did.
+        runCatching { appFor(song)?.let { shuffles.shuffle(it, on) } }
     }
 
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
@@ -437,7 +453,8 @@ internal class MediaSessionPlayback(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
             canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
-            durationMs = controller.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 }
+            durationMs = controller.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 },
+            shuffle = shuffles.shuffles(controller)
         )
     }
 

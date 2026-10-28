@@ -54,7 +54,8 @@ class PlaybackTest {
     /** Each app woken to be asked for a song, as its packages, and the player it wakes as; none, when null. */
     private val woken = mutableListOf<List<String>>()
     private var wakes: MediaController? = null
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes })
+    private val shuffle = FakeShuffle()
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, shuffles = shuffle)
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
 
@@ -815,6 +816,58 @@ class PlaybackTest {
         playback.skip(song, next = true)
         // Nothing playing it, nothing to ask.
         playback.skip(MusicMetadata("Other", "Band"), next = true)
+    }
+
+    /** A music app's shuffle as the app has it, what it's told, and who's watching it. */
+    private class FakeShuffle : AppShuffle {
+        var on: Boolean? = null
+        val told = mutableListOf<Pair<String, Boolean>>()
+        val watching = mutableListOf<() -> Unit>()
+
+        override fun shuffles(app: MediaController) = on
+
+        override fun shuffle(app: MediaController, on: Boolean) {
+            told += app.packageName to on
+        }
+
+        override fun watch(app: MediaController, handler: android.os.Handler, changed: () -> Unit): () -> Unit {
+            watching += changed
+            return { watching -= changed }
+        }
+    }
+
+    @Test
+    fun theAppPlayingItSaysWhetherItShufflesAndIsToldTo() {
+        allow()
+        val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
+        shadowOf(sessions).addController(spotify)
+        // One that can't be told to shows nothing of it.
+        val seen = followed()
+        assertNull(seen.last()!!.shuffle)
+        shuffle.on = false
+        shuffle.watching.single()()
+        assertEquals(false, seen.last()!!.shuffle)
+        // Turned on in the app, it shows at once, though nothing else changed.
+        shuffle.on = true
+        shuffle.watching.single()()
+        assertEquals(true, seen.last()!!.shuffle)
+
+        playback.shuffle(song, on = false)
+        assertEquals(listOf("com.spotify.music" to false), shuffle.told)
+        // Nothing playing it, nothing to tell.
+        playback.shuffle(MusicMetadata("Other", "Band"), on = true)
+        assertEquals(1, shuffle.told.size)
+
+        // An app no longer followed, or no longer followed at all, is no longer watched.
+        shadowOf(sessions).clearControllers()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(shuffle.watching.isEmpty())
+        shadowOf(sessions).addController(spotify)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, shuffle.watching.size)
+        collecting.forEach(Job::cancel)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(shuffle.watching.isEmpty())
     }
 
     @Test

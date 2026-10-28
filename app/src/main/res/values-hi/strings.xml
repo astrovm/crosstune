@@ -97,6 +97,8 @@
     <string name="play_all_button">सभी चलाएं</string>
     <string name="play_all_progress">गाने ढूंढ रहे हैं… %2$d में से %1$d</string>
     <string name="play_all_in">%1$s में सभी चलाएं</string>
+    <string name="shuffle_button">शफ़ल</string>
+    <string name="shuffle_all_in">%1$s में सभी शफ़ल करके चलाएं</string>
     <string name="play_first_in">%1$s में पहला गाना चलाएं</string>
     <string name="play_first_button">पहला गाना चलाएं</string>
     <string name="play_in_background">%1$s में चलाएं और यहीं रहें</string>
@@ -185,6 +187,7 @@
     <string name="player_waiting">%1$s का इंतज़ार</string>
     <string name="player_follow_allow">Crosstune को अपने म्यूज़िक ऐप में चल रहा गाना देखने और कंट्रोल करने दें।</string>
     <string name="player_position">%2$s में से %1$s</string>
+    <string name="player_shuffle">शफ़ल</string>
     <string name="lyrics_jump">यहाँ जाएँ</string>
     <string name="lyrics_sync">समय ठीक करें</string>
     <string name="lyrics_sync_hint">जो पंक्ति अभी सुन रहे हैं, उस पर टैप करें</string>

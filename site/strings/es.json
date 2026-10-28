@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "Para abrir el elemento en sí, la app envía el título y el artista del elemento al servicio de búsqueda del destino: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack o Qobuz. Si los links van directo a una app y “Reproducir al instante” está desactivado, ahí se abre una búsqueda y no se envía nada. Cuando abrís un destino, la app o el sitio web elegido recibe el link de destino o los términos de búsqueda. Cuando usás “Reproducir todo” en una playlist o un álbum, la app envía el título y el artista de cada canción a la búsqueda de YouTube Music, y después envía la lista de videos encontrados a YouTube, que devuelve una playlist temporal. Los destinos personalizados reciben los términos de búsqueda en la plantilla de URL que configures. Compartir un resultado lo envía a la app o al destinatario que elijas."
+      "Para abrir el elemento en sí, la app envía el título y el artista del elemento al servicio de búsqueda del destino: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack o Qobuz. Si los links van directo a una app y “Reproducir al instante” está desactivado, ahí se abre una búsqueda y no se envía nada. Cuando abrís un destino, la app o el sitio web elegido recibe el link de destino o los términos de búsqueda. Cuando usás “Reproducir todo” o “Aleatorio” en una playlist o un álbum, la app envía el título y el artista de cada canción a la búsqueda de YouTube Music, y después envía la lista de videos encontrados a YouTube, que devuelve una playlist temporal. Los destinos personalizados reciben los términos de búsqueda en la plantilla de URL que configures. Compartir un resultado lo envía a la app o al destinatario que elijas."
     ],
     [
       "p",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Si hacés que la letra siga la canción que suena en tu app de música, Android te pide permitir el acceso a notificaciones de Crosstune. Crosstune lo usa solo para ver qué canción dicen tus apps de música que están reproduciendo y en qué parte van, así la letra la sigue y una línea que tocás puede llevar la canción ahí. Nunca lee tus notificaciones, y nada de esto sale de tu teléfono. Podés desactivarlo en los ajustes de Android cuando quieras. Cuando practicás líneas guardadas, Crosstune también le pide a tu app de música que reproduzca la canción de cada línea, en esa línea. El reproductor de Crosstune usa ese mismo acceso para mostrar la canción y pausarla, saltarla o moverla en tu app de música."
+      "Si hacés que la letra siga la canción que suena en tu app de música, Android te pide permitir el acceso a notificaciones de Crosstune. Crosstune lo usa solo para ver qué canción dicen tus apps de música que están reproduciendo y en qué parte van, así la letra la sigue y una línea que tocás puede llevar la canción ahí. Nunca lee tus notificaciones, y nada de esto sale de tu teléfono. Podés desactivarlo en los ajustes de Android cuando quieras. Cuando practicás líneas guardadas, Crosstune también le pide a tu app de música que reproduzca la canción de cada línea, en esa línea. El reproductor de Crosstune usa ese mismo acceso para mostrar la canción y pausarla, saltarla, moverla o activar el aleatorio en tu app de música."
     ],
     [
       "p",

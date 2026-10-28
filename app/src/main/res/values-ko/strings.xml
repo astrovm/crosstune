@@ -97,6 +97,8 @@
     <string name="play_all_button">모두 재생</string>
     <string name="play_all_progress">노래를 찾는 중… %1$d/%2$d</string>
     <string name="play_all_in">%1$s에서 모두 재생</string>
+    <string name="shuffle_button">셔플</string>
+    <string name="shuffle_all_in">%1$s에서 모두 셔플 재생</string>
     <string name="play_first_in">%1$s에서 첫 곡 재생</string>
     <string name="play_first_button">첫 곡 재생</string>
     <string name="play_in_background">%1$s에서 재생하고 여기 머무르기</string>
@@ -185,6 +187,7 @@
     <string name="player_waiting">%1$s 기다리는 중</string>
     <string name="player_follow_allow">Crosstune이 음악 앱에서 재생 중인 노래를 보고 제어하도록 허용하세요.</string>
     <string name="player_position">%1$s / %2$s</string>
+    <string name="player_shuffle">셔플</string>
     <string name="lyrics_jump">여기로 이동</string>
     <string name="lyrics_sync">타이밍 맞추기</string>
     <string name="lyrics_sync_hint">지금 들리는 줄을 탭하세요</string>

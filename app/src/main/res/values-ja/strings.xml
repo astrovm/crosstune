@@ -98,6 +98,8 @@
     <string name="play_all_button">すべて再生</string>
     <string name="play_all_progress">曲を探しています… %1$d/%2$d</string>
     <string name="play_all_in">%1$s ですべて再生</string>
+    <string name="shuffle_button">シャッフル</string>
+    <string name="shuffle_all_in">%1$s ですべてシャッフル再生</string>
     <string name="play_first_in">%1$s で最初の曲を再生</string>
     <string name="play_first_button">最初の曲を再生</string>
     <string name="play_in_background">%1$sで再生してこの画面のままにする</string>
@@ -186,6 +188,7 @@
     <string name="player_waiting">%1$s を待っています</string>
     <string name="player_follow_allow">音楽アプリで再生中の曲を Crosstune で表示・操作できるようにします。</string>
     <string name="player_position">%1$s / %2$s</string>
+    <string name="player_shuffle">シャッフル</string>
     <string name="lyrics_jump">ここへ移動</string>
     <string name="lyrics_sync">タイミングを直す</string>
     <string name="lyrics_sync_hint">今聞こえている行をタップ</string>

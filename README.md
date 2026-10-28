@@ -34,9 +34,9 @@ Once you've opened something, anything left or broken later shows as **Things to
 - **Tap and go.** A link from one service opens in another, at the exact song, album or artist when the app supports it: Spotify to YouTube Music, Apple Music to Deezer, TIDAL to Spotify.
 - **Choose where.** Pick your music app once. Links go straight to it, or show in Crosstune first, with the song playing in that app. Set one app per service, or add any app or site with a search URL like `https://example.com/search?q={query}`.
 - **Not in the app you picked?** Crosstune says so, then opens the song where it's from or searches anyway. Choose in **Settings** → **When a song isn't found**.
-- **Playlists and albums.** See their songs and open any one, or play the lot in YouTube Music or YouTube.
+- **Playlists and albums.** See their songs and open any one, or play the lot, in order or shuffled, in YouTube Music or YouTube.
 - **Recent.** Search your recent songs, and swipe one away to remove it. Its play button goes where links do.
-- **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip and seek. Whatever is playing waits in a bar on the home screen. Swipe up for the player, up again for the words, and down to go back.
+- **Play and stay.** **Play** a song in your music app while you stay in Crosstune, with its own player: cover, progress, pause, skip, shuffle and seek. Whatever is playing waits in a bar on the home screen. Swipe up for the player, up again for the words, and down to go back.
 - **Name that song.** Crosstune listens for up to 12 seconds and shows the song playing nearby, like a pasted link. Or type a song's name to find it. If Shazam can't be reached, it opens the Shazam app or Google's song search instead, when you have them.
 - **Lyrics in time.** The words follow your music app, or Crosstune listens along, song after song. Tap a line to jump there, make the words bigger or smaller or center them, and fix the timing by tapping the line you hear or nudging it half a second at a time. Lyrics timed for another take offer the fix themselves. Also works with YouTube and YouTube Music patched by ReVanced, RVX or Morphe.
 - **Chords.** Chord sheets over the words, with the capo, lined up letter by letter.
