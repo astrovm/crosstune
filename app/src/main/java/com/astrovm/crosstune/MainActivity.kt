@@ -78,7 +78,9 @@ class MainActivity : ComponentActivity() {
                 )
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
-                val playback = playbackFactory(applicationContext)
+                // Skipping on from the end of a part of a long playlist plays the next part.
+                val queue = playQueue(applicationContext)
+                val playback = queue.skipping(playbackFactory(applicationContext))
                 // What was found for songs is kept, so a playlist played again needs no lookups.
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
                 val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong, missingForMs = MISSING_FOR_MS)
@@ -129,7 +131,7 @@ class MainActivity : ComponentActivity() {
                     // The words of the songs shown lately, so they show at once after the app's closed too.
                     keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
                     lookAhead = lookAheadLyrics,
-                    playQueue = playQueue(applicationContext)
+                    playQueue = queue
                 )
             }
         }

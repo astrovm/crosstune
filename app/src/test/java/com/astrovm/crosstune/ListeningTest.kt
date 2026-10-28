@@ -438,6 +438,45 @@ class ListeningTest {
     }
 
     @Test
+    fun theBarSkipsOnFromTheEndOfAPartOfALongPlaylistToTheNext() {
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        File(app.cacheDir, "queue_lookups.json").delete()
+        fake.handler = { request ->
+            val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
+            when {
+                request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
+                    .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGnext").build()
+                // Each song is found as itself, its video named after its number.
+                request.url.host == "music.youtube.com" -> {
+                    val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                        "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
+                        {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                        "playlistItemData":{"videoId":"${number.padStart(11, '0')}"}}}]}""")
+                }
+                else -> FakeSpotify.html(request, "", code = 404)
+            }
+        }
+        // A list of 60 played through by Crosstune: YouTube Music played the first 50, and is on the last of those.
+        val tracks = (1..60).map { MusicMetadata("Song $it", "Band") }
+        runBlocking { MainActivity.playQueue(app).play(tracks, MusicService.YOUTUBE_MUSIC, music, 50, tracks.take(50)) }
+        for (number in 1..50) phone.inApp(music).value = AppPlays(MusicMetadata("Song $number", "Band"), 99L + number)
+        phone.onThePhone = Heard.Song(MusicMetadata("Song 50", "Band"), null, 60_000, SystemClock.elapsedRealtime())
+        // As YouTube at a list's last video, the app can't skip on by itself.
+        phone.playing.value = Following(
+            PlaybackClock(60_000, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = music, durationMs = 200_000
+        )
+        launch()
+        waitForText("Band \u00b7 YouTube Music")
+        click(string(R.string.lyrics_next_song))
+        waitUntil(TIMEOUT_MS) { phone.listsAsked.isNotEmpty() }
+        assertEquals(listOf(music to "https://music.youtube.com/watch?v=00000000051&list=TLGGnext"), phone.listsAsked)
+        assertTrue(phone.skips.isEmpty())
+    }
+
+    @Test
     fun theBarForTheSongPlayingPausesSkipsAndOpensItsPlayerAndStaysWhilePaused() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }
