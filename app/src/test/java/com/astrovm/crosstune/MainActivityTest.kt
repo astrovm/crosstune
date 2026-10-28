@@ -3755,7 +3755,7 @@ class MainActivityTest {
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         phone.playing.value = Following(
             PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic,
-            durationMs = 200_000, repeat = Repeat.OFF, like = AppAction("thumbs_up_action", "Like", 1),
+            durationMs = 200_000, repeat = Repeat.OFF, like = AppAction("thumbs_up_action", "Like", 1), canSkipNext = true,
             upNext = listOf(Queued("Next Song", "Band", 7), Queued("Third Song", "Band", 8), Queued("Later Song", "Band"))
         )
         // The line being sung shows under its buttons, looked up as its card looks its words up.
