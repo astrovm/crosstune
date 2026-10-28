@@ -24,6 +24,7 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.app.UiModeManager
 import android.content.Context
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import android.os.SystemClock
 import android.content.Intent
@@ -1214,6 +1215,7 @@ class MainActivityTest {
     }
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun aListsSongsStillToAskForMoveAndPlayOnFromThePlayer() {
         val tidal = MusicService.TIDAL.packageName
         val phone = FakePlayback().apply { access = true }
@@ -3731,6 +3733,7 @@ class MainActivityTest {
     }
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun thePlayersSongRepeatsIsLikedPlaysWhatsNextSleepsAndOpensItsCard() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }

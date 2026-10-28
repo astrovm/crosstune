@@ -14,7 +14,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.SeekableTransitionState
-import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -163,22 +163,15 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val openUpNext = { upTop: Boolean -> openedUpTop = upTop; upNext = true }
     val morphing = remember { SeekableTransitionState(open) }
     val morph = rememberTransition(morphing, label = "up next")
+    // Held, it's where the finger or the swipe back is; let go, or a tap, it carries on from there, or goes back, as screens do.
     LaunchedEffect(open, pull.fraction) {
         val far = pull.fraction
-        when {
-            far != null -> morphing.seekTo(far, targetState = false)
-            // Let go short of put away, it goes back the way it came.
-            morphing.currentState == open && morphing.targetState != open -> {
-                animate(morphing.fraction, 0f, animationSpec = tween((morphing.fraction * MORPH_MS).toInt())) { value, _ -> launch { morphing.seekTo(value) } }
-                morphing.snapTo(open)
-            }
-            else -> morphing.animateTo(open)
-        }
+        if (far != null) morphing.seekTo(far, targetState = false) else morphing.animateTo(open, Motion.rise)
     }
     LaunchedEffect(morph.currentState) {
         val upTop = openedUpTop ?: return@LaunchedEffect
         // Once it's settled, as till then the parts it's on are still on their way.
-        if (morph.currentState || listed == null) return@LaunchedEffect
+        if (morph.currentState || open || listed == null) return@LaunchedEffect
         (if (upTop && listed.from != null) fromTop else fromTools).requestFocus()
     }
     // The words, but a video's, as its clock may be the video's; blank ones, between verses, leave the last one up.
@@ -281,7 +274,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             UpNextList(
                 player, cover, listed, actions, pull, onClose = { upNext = false },
                 // All the way, so pulled down, it goes with the finger.
-                modifier = with(moving.content) { modifier.animateEnterExit(enter = slideInVertically { it }, exit = slideOutVertically { it }) }
+                modifier = with(moving.content) { modifier.animateEnterExit(enter = slideInVertically(tween(MORPH_MS, easing = LinearEasing)) { it }, exit = slideOutVertically(tween(MORPH_MS, easing = LinearEasing)) { it }) }
             )
         }
     }
@@ -299,7 +292,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             val beside = maxWidth > maxHeight
             SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
                 morph.AnimatedContent(
-                    transitionSpec = { fadeIn(tween(MORPH_MS, delayMillis = MORPH_MS / 3)) togetherWith fadeOut(tween(MORPH_MS / 3)) },
+                    // Evenly, as all of it moves, so a finger can hold it anywhere along the way.
+                    transitionSpec = { fadeIn(tween(MORPH_MS * 2 / 3, delayMillis = MORPH_MS / 3, easing = LinearEasing)) togetherWith fadeOut(tween(MORPH_MS, easing = LinearEasing)) },
                     contentAlignment = Alignment.TopCenter,
                     modifier = Modifier.fillMaxSize()
                 ) { opened ->
@@ -382,7 +376,7 @@ private class UpNextPull {
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun Modifier.moves(key: String, morph: Morph): Modifier = with(morph.layout) {
-    this@moves.sharedElement(rememberSharedContentState(key), morph.content)
+    this@moves.sharedElement(rememberSharedContentState(key), morph.content, boundsTransform = { _, _ -> tween(MORPH_MS, easing = LinearEasing) })
 }
 
 /** Copy, share or open the song's link elsewhere, from the song's card under the player. */
@@ -929,7 +923,7 @@ private val SLEEP_MINUTES = listOf(15, 30, 45, 60)
 
 private const val SLEEP_TICK_MS = 1_000L
 
-/** How long what plays next takes to open or close. */
+/** What plays next opening or closing, each part along evenly in step with the others; how quick it goes is [Motion.rise]. */
 private const val MORPH_MS = 400
 
 /** How quick a flick down puts what plays next away, wherever it's let go, as a swipe between screens. */

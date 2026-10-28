@@ -11,9 +11,11 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
@@ -348,6 +350,7 @@ class PlayerScreenTest {
     }
 
     @Test
+    @OptIn(ExperimentalTestApi::class)
     fun songsUpNextMoveByTheirHandleOrAScreenReaderAmongTheirOwnKind() {
         val moved = mutableListOf<Pair<Int, Int>>()
         player(ScreenActions(onPlayerMoveQueued = { from, to -> moved += from to to })) {
