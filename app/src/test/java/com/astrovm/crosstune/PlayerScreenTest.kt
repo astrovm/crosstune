@@ -233,6 +233,10 @@ class PlayerScreenTest {
         assertEquals(listOf(7L), played)
         compose.onNodeWithText("Next Song").assertExists()
         compose.onNode(asked).assertExists()
+        // Never played, it stops saying so after a while.
+        compose.mainClock.advanceTimeBy(15_000)
+        compose.waitForIdle()
+        none(asked)
         // One still to ask for plays the list on from there.
         compose.onNodeWithText("Later Song").performClick()
         assertEquals(listOf(1), later)
