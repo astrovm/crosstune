@@ -55,10 +55,10 @@ class PlaybackTest {
     /** Each app woken to be asked for a song, as its packages, and the player it wakes as; none, when null. */
     private val woken = mutableListOf<List<String>>()
     private var wakes: MediaController? = null
-    private val shuffle = FakeShuffle()
+    private val modes = FakeModes()
     /** Each app's queue, by its package, as Robolectric shows none. */
     private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, shuffles = shuffle, queueOf = { queues[it.packageName] })
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, modes = modes, queueOf = { queues[it.packageName] })
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
 
@@ -821,16 +821,24 @@ class PlaybackTest {
         playback.skip(MusicMetadata("Other", "Band"), next = true)
     }
 
-    /** A music app's shuffle as the app has it, what it's told, and who's watching it. */
-    private class FakeShuffle : AppShuffle {
+    /** A music app's shuffle and repeat as the app has them, what it's told, and who's watching them. */
+    private class FakeModes : AppModes {
         var on: Boolean? = null
         val told = mutableListOf<Pair<String, Boolean>>()
+        var repeats: Repeat? = null
+        val toldRepeat = mutableListOf<Pair<String, Repeat>>()
         val watching = mutableListOf<() -> Unit>()
 
         override fun shuffles(app: MediaController) = on
 
         override fun shuffle(app: MediaController, on: Boolean) {
             told += app.packageName to on
+        }
+
+        override fun repeats(app: MediaController) = repeats
+
+        override fun repeat(app: MediaController, how: Repeat) {
+            toldRepeat += app.packageName to how
         }
 
         override fun watch(app: MediaController, handler: android.os.Handler, changed: () -> Unit): () -> Unit {
@@ -847,30 +855,30 @@ class PlaybackTest {
         // One that can't be told to shows nothing of it.
         val seen = followed()
         assertNull(seen.last()!!.shuffle)
-        shuffle.on = false
-        shuffle.watching.single()()
+        modes.on = false
+        modes.watching.single()()
         assertEquals(false, seen.last()!!.shuffle)
         // Turned on in the app, it shows at once, though nothing else changed.
-        shuffle.on = true
-        shuffle.watching.single()()
+        modes.on = true
+        modes.watching.single()()
         assertEquals(true, seen.last()!!.shuffle)
 
         playback.shuffle(song, on = false)
-        assertEquals(listOf("com.spotify.music" to false), shuffle.told)
+        assertEquals(listOf("com.spotify.music" to false), modes.told)
         // Nothing playing it, nothing to tell.
         playback.shuffle(MusicMetadata("Other", "Band"), on = true)
-        assertEquals(1, shuffle.told.size)
+        assertEquals(1, modes.told.size)
 
         // An app no longer followed, or no longer followed at all, is no longer watched.
         shadowOf(sessions).clearControllers()
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(shuffle.watching.isEmpty())
+        assertTrue(modes.watching.isEmpty())
         shadowOf(sessions).addController(spotify)
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(1, shuffle.watching.size)
+        assertEquals(1, modes.watching.size)
         collecting.forEach(Job::cancel)
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(shuffle.watching.isEmpty())
+        assertTrue(modes.watching.isEmpty())
     }
 
     @Test

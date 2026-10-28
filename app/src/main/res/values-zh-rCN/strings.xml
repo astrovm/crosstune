@@ -188,6 +188,15 @@
     <string name="player_follow_allow">允许 Crosstune 查看并控制音乐应用中正在播放的歌曲。</string>
     <string name="player_position">%1$s / %2$s</string>
     <string name="player_shuffle">随机播放</string>
+    <string name="player_repeat">循环播放</string>
+    <string name="player_repeat_all">全部歌曲</string>
+    <string name="player_repeat_one">单曲</string>
+    <string name="player_up_next">接下来播放</string>
+    <string name="player_song_card">歌曲链接</string>
+    <string name="player_sleep_timer">睡眠定时</string>
+    <string name="player_sleep_minutes">%1$d 分钟</string>
+    <string name="player_sleep_song_end">歌曲结束时</string>
+    <string name="player_sleep_off">关闭</string>
     <string name="lyrics_jump">跳到这里</string>
     <string name="lyrics_sync">校准时间</string>
     <string name="lyrics_sync_hint">点按你现在听到的那一行</string>

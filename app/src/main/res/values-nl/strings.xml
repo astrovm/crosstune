@@ -188,6 +188,15 @@
     <string name="player_follow_allow">Laat Crosstune het nummer in je muziekapp zien en bedienen.</string>
     <string name="player_position">%1$s van %2$s</string>
     <string name="player_shuffle">Shuffle</string>
+    <string name="player_repeat">Herhalen</string>
+    <string name="player_repeat_all">Alle nummers</string>
+    <string name="player_repeat_one">Dit nummer</string>
+    <string name="player_up_next">Hierna</string>
+    <string name="player_song_card">Links van het nummer</string>
+    <string name="player_sleep_timer">Slaaptimer</string>
+    <string name="player_sleep_minutes">%1$d min</string>
+    <string name="player_sleep_song_end">Einde van het nummer</string>
+    <string name="player_sleep_off">Uitzetten</string>
     <string name="lyrics_jump">Hierheen springen</string>
     <string name="lyrics_sync">Timing corrigeren</string>
     <string name="lyrics_sync_hint">Tik op de regel die je nu hoort</string>

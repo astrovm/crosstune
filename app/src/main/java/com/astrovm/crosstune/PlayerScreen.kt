@@ -1,9 +1,33 @@
 package com.astrovm.crosstune
 
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.graphics.drawable.toBitmap
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -88,7 +112,11 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                     IconButton(onClick = actions.onClosePlayer) {
                         AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.dismiss_button))
                     }
-                    Spacer(Modifier.weight(1f))
+                    // The list it plays from, up top as music apps keep it, which opens what plays next.
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f)) {
+                        following?.takeIf { it.from != null || it.upNext.isNotEmpty() }?.let { PlayingFrom(it, actions) }
+                    }
+                    SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
                     // Where it plays, by its icon, which brings that app forward, up top as music apps keep where they play.
                     // The app it's followed in, as its name says, over the one it was asked of.
                     val service = MusicService.ofPackage(following?.appPackage ?: player.app)
@@ -109,24 +137,39 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.widthIn(max = PLAYER_COVER_MAX).fillMaxWidth()
                     ) {
-                        CoverArt(cover, actions.loadArtwork, size = coverSize)
-                        Text(
-                            song.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
-                        )
-                        Text(
-                            song.artist,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                        )
+                        SwipedCover(following, actions.onPlayerSkip) { CoverArt(cover, actions.loadArtwork, size = coverSize, modifier = it) }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                            // Kept as wide as the like on the other side, so the title stays in the middle.
+                            Spacer(Modifier.size(48.dp))
+                            // A tap on its name opens its card, with its links, as music apps open a song's page.
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard)
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                Text(
+                                    song.title,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    song.artist,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
+                                following?.like?.let { LikeButton(it, following.appPackage, actions.onPlayerLike) }
+                            }
+                        }
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 64.dp)) {
                             when {
                                 !state.canFollowApps -> PlayerFollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW)
@@ -135,7 +178,11 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                                 !player.played && app != null -> PlayerWaiting(app)
                             }
                         }
-                        PlayerButtons(following, actions, hasLyrics = song.artist.isNotBlank())
+                        PlayerButtons(following, actions)
+                        // One whose artist is unknown can't be looked up safely, so it has no words to show.
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)) {
+                            if (song.artist.isNotBlank()) LyricsPeek(player, actions.onPlayerLyrics)
+                        }
                     }
                 }
             }
@@ -222,9 +269,9 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
     }
 }
 
-/** Shuffle, previous, play or pause, and next, as the app lets them; play asks the app again when it isn't playing the song. */
+/** Shuffle, previous, play or pause, next, and repeat, as the app lets them; play asks the app again when it isn't playing the song. */
 @Composable
-private fun PlayerButtons(following: Following?, actions: ScreenActions, hasLyrics: Boolean) {
+private fun PlayerButtons(following: Following?, actions: ScreenActions) {
     val playing = following?.clock?.playing == true
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -257,11 +304,218 @@ private fun PlayerButtons(following: Following?, actions: ScreenActions, hasLyri
         IconButton(onClick = { actions.onPlayerSkip(true) }, enabled = following?.canSkipNext == true, modifier = Modifier.size(56.dp)) {
             AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song), modifier = Modifier.size(32.dp))
         }
-        // One whose artist is unknown can't be looked up safely, so its place is left empty.
+        // How the app repeats, right of next as music apps have it, boxed in as shuffle is when it does.
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
-            if (hasLyrics) IconButton(onClick = actions.onPlayerLyrics) {
-                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
+            following?.repeat?.let { repeats ->
+                val how = when (repeats) {
+                    Repeat.OFF -> null
+                    Repeat.ALL -> stringResource(R.string.player_repeat_all)
+                    Repeat.ONE -> stringResource(R.string.player_repeat_one)
+                }
+                IconToggleButton(
+                    checked = repeats != Repeat.OFF,
+                    onCheckedChange = { actions.onPlayerRepeat() },
+                    colors = IconButtonDefaults.iconToggleButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                    modifier = Modifier.then(if (how != null) Modifier.semantics { stateDescription = how } else Modifier)
+                ) {
+                    val icon = when (repeats) {
+                        Repeat.OFF -> R.drawable.ic_repeat
+                        Repeat.ALL -> R.drawable.ic_repeat_on
+                        Repeat.ONE -> R.drawable.ic_repeat_one_on
+                    }
+                    AppIcon(icon, contentDescription = stringResource(R.string.player_repeat))
+                }
             }
+        }
+    }
+}
+
+/**
+ * The cover, which a swipe sideways skips from, as music apps have it: left for the next song,
+ * right for the one before. It follows the finger, held back where the app can't go.
+ */
+@Composable
+private fun SwipedCover(following: Following?, onSkip: (next: Boolean) -> Unit, cover: @Composable (Modifier) -> Unit) {
+    val moved = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val canNext = following?.canSkipNext == true
+    val canPrevious = following?.canSkipPrevious == true
+    cover(
+        Modifier
+            .graphicsLayer {
+                translationX = moved.value
+                alpha = 1f - (abs(moved.value) / size.width).coerceAtMost(1f) / 2
+            }
+            .pointerInput(canNext, canPrevious) {
+                val skipAt = size.width * COVER_SKIP_AT
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        val next = moved.value < 0
+                        if (abs(moved.value) >= skipAt && (if (next) canNext else canPrevious)) onSkip(next)
+                        scope.launch { moved.animateTo(0f) }
+                    },
+                    onDragCancel = { scope.launch { moved.animateTo(0f) } }
+                ) { change, amount ->
+                    change.consume()
+                    val can = if (moved.value + amount < 0) canNext else canPrevious
+                    scope.launch { moved.snapTo(moved.value + if (can) amount else amount * COVER_HELD_BACK) }
+                }
+            }
+    )
+}
+
+/** The list the song plays from, by name when Crosstune played it, which opens what plays next. */
+@Composable
+private fun PlayingFrom(following: Following, actions: ScreenActions) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val upNext = stringResource(R.string.player_up_next)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClickLabel = upNext) { open = true }
+            .padding(horizontal = 12.dp)
+            .semantics(mergeDescendants = true) { contentDescription = following.from?.let { "$upNext, $it" } ?: upNext }
+    ) {
+        AppIcon(R.drawable.ic_queue_music, contentDescription = null, modifier = Modifier.size(20.dp))
+        following.from?.let {
+            Text(it, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+    if (open) UpNextSheet(following, actions, onDismiss = { open = false })
+}
+
+/** What the app plays next, then what Crosstune asks it for after; one the app has plays at a tap. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UpNextSheet(following: Following, actions: ScreenActions, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
+        Text(
+            following.from ?: stringResource(R.string.player_up_next),
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp)
+        )
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+            items(following.upNext) { next ->
+                val id = next.id
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Still to be asked for, it can't be played yet, but the remote still goes through it.
+                        .then(if (id != null) Modifier.clickable { onDismiss(); actions.onPlayerPlayQueued(id) } else Modifier.focusable())
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                ) {
+                    Text(next.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (next.artist.isNotBlank()) {
+                        Text(next.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The sleep timer, which pauses the music after a while, or once the song ends, when the app says
+ * how long it is. Set, it's filled in, with the minutes left beside it.
+ */
+@Composable
+private fun SleepButton(sleep: Sleep?, songEnds: Boolean, actions: ScreenActions) {
+    var open by remember { mutableStateOf(false) }
+    val left by produceState<Long?>(null, sleep) {
+        val at = sleep?.atMs ?: return@produceState run { value = null }
+        while (true) {
+            value = at - SystemClock.elapsedRealtime()
+            delay(SLEEP_TICK_MS)
+        }
+    }
+    val name = stringResource(R.string.player_sleep_timer)
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .widthIn(min = 48.dp)
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClickLabel = name) { open = true }
+                .padding(horizontal = 12.dp)
+                .semantics(mergeDescendants = true) { contentDescription = name }
+        ) {
+            AppIcon(if (sleep != null) R.drawable.ic_bedtime_on else R.drawable.ic_bedtime, contentDescription = null)
+            left?.let {
+                // Up to the minute it's in, as a clock counting down shows it.
+                Text(
+                    stringResource(R.string.player_sleep_minutes, ((it + SleepTimer.MINUTE_MS - 1) / SleepTimer.MINUTE_MS).coerceAtLeast(1)),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            SLEEP_MINUTES.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.player_sleep_minutes, minutes)) },
+                    onClick = { open = false; actions.onPlayerSleep(minutes) }
+                )
+            }
+            if (songEnds) DropdownMenuItem(
+                text = { Text(stringResource(R.string.player_sleep_song_end)) },
+                onClick = { open = false; actions.onPlayerSleep(null) }
+            )
+            if (sleep != null) DropdownMenuItem(
+                text = { Text(stringResource(R.string.player_sleep_off)) },
+                leadingIcon = { AppIcon(R.drawable.ic_close, contentDescription = null) },
+                onClick = { open = false; actions.onPlayerSleepOff() }
+            )
+        }
+    }
+}
+
+/**
+ * The app's own like, drawn as the app draws it, which shows whether the song's liked, and named as
+ * the app names it, in its language; drawn as a thumb up when the app's drawing can't be had.
+ */
+@Composable
+private fun LikeButton(like: AppAction, app: String?, onLike: () -> Unit) {
+    val context = LocalContext.current
+    val size = with(LocalDensity.current) { 24.dp.roundToPx() }
+    val drawn = remember(app, like.icon, size) {
+        app?.let { runCatching { context.packageManager.getResourcesForApplication(it).getDrawable(like.icon, null).toBitmap(size, size).asImageBitmap() }.getOrNull() }
+    }
+    IconButton(onClick = onLike) {
+        if (drawn != null) Icon(drawn, contentDescription = like.name)
+        else AppIcon(R.drawable.ic_thumb_up, contentDescription = like.name)
+    }
+}
+
+/**
+ * The line being sung, under the buttons, which opens all the words, as does a swipe up. Before the
+ * singing, the first; a video's clock may be the video's, so it shows none, nor do words not found.
+ */
+@Composable
+private fun LyricsPeek(player: PlayerState, onLyrics: () -> Unit) {
+    val lines = player.lines.takeIf { player.following?.video != true }.orEmpty()
+    val at = rememberWhilePlaying(player.following?.takeIf { lines.size > 1 }) { position -> lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0) } ?: 0
+    val line = lines.getOrNull(at)?.text?.takeIf { it.isNotBlank() }
+    val name = stringResource(R.string.lyrics_button)
+    if (line == null) {
+        IconButton(onClick = onLyrics) { AppIcon(R.drawable.ic_lyrics, contentDescription = name) }
+        return
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(onClickLabel = name, onClick = onLyrics)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        AppIcon(R.drawable.ic_lyrics, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Crossfade(line, label = "sung line", modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(it, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -298,7 +552,18 @@ internal fun clockText(ms: Long): String {
 
 private const val SEEK_HOLD_MS = 1_500L
 
-/** What's under the cover: its title and artist, progress and buttons. */
-private val PLAYER_CONTROLS_HEIGHT = 288.dp
+/** How far across a swipe takes the cover before it skips, of its width. */
+private const val COVER_SKIP_AT = 0.3f
+
+/** How much of a swipe the cover follows toward a song the app can't go to. */
+private const val COVER_HELD_BACK = 0.25f
+
+/** The sleep timer's choices, in minutes. */
+private val SLEEP_MINUTES = listOf(15, 30, 45, 60)
+
+private const val SLEEP_TICK_MS = 1_000L
+
+/** What's under the cover: its title and artist, progress, buttons and the line being sung. */
+private val PLAYER_CONTROLS_HEIGHT = 360.dp
 private val PLAYER_COVER_MIN = 120.dp
 private val PLAYER_COVER_MAX = 340.dp

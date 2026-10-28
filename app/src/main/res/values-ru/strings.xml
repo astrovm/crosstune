@@ -188,6 +188,15 @@
     <string name="player_follow_allow">Разрешите Crosstune видеть песню в музыкальном приложении и управлять ею.</string>
     <string name="player_position">%1$s из %2$s</string>
     <string name="player_shuffle">Перемешать</string>
+    <string name="player_repeat">Повтор</string>
+    <string name="player_repeat_all">Все песни</string>
+    <string name="player_repeat_one">Эта песня</string>
+    <string name="player_up_next">Далее</string>
+    <string name="player_song_card">Ссылки на песню</string>
+    <string name="player_sleep_timer">Таймер сна</string>
+    <string name="player_sleep_minutes">%1$d мин</string>
+    <string name="player_sleep_song_end">Конец песни</string>
+    <string name="player_sleep_off">Выключить</string>
     <string name="lyrics_jump">Перейти сюда</string>
     <string name="lyrics_sync">Исправить тайминг</string>
     <string name="lyrics_sync_hint">Нажмите строку, которую слышите сейчас</string>

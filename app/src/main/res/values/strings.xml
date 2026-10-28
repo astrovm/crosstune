@@ -134,6 +134,15 @@
     <string name="player_follow_allow">Let Crosstune see and control the song playing in your music app.</string>
     <string name="player_position">%1$s of %2$s</string>
     <string name="player_shuffle">Shuffle</string>
+    <string name="player_repeat">Repeat</string>
+    <string name="player_repeat_all">All songs</string>
+    <string name="player_repeat_one">This song</string>
+    <string name="player_up_next">Up next</string>
+    <string name="player_song_card">Song\'s links</string>
+    <string name="player_sleep_timer">Sleep timer</string>
+    <string name="player_sleep_minutes">%1$d min</string>
+    <string name="player_sleep_song_end">End of song</string>
+    <string name="player_sleep_off">Turn off</string>
     <string name="lyrics_jump">Jump here</string>
     <string name="lyrics_sync">Fix the timing</string>
     <string name="lyrics_sync_hint">Tap the line you hear now</string>

@@ -80,8 +80,22 @@ internal data class Following(
     /** The player clock is in the lyrics' recording, rather than an uncalibrated video. */
     val timingKnown: Boolean = true,
     /** Whether it shuffles; null when it doesn't say, or can't be told to. */
-    val shuffle: Boolean? = null
+    val shuffle: Boolean? = null,
+    /** How it repeats; null when it doesn't say, or can't be told to. */
+    val repeat: Repeat? = null,
+    /** The app's own button to like the song, or keep it in the user's collection there, as the app shows it now. */
+    val like: AppAction? = null,
+    /** What the app plays after it, as far as it says. */
+    val upNext: List<Queued> = emptyList(),
+    /** The list it plays from, when Crosstune is playing one through: see [PlayQueue]. */
+    val from: String? = null
 )
+
+/** One of a music app's own buttons, as its session shows it: what it does, and what it's called and drawn with, an [icon] of the app's, there. */
+internal data class AppAction(val action: String, val name: String, val icon: Int)
+
+/** A song waiting to play: [id] is the app's number for it in its queue, to play it now; none for one Crosstune asks for later. */
+internal data class Queued(val title: String, val artist: String, val id: Long? = null)
 
 /**
  * A song an app plays, and its place in the app's queue, by the number the app gave it there; null
@@ -111,6 +125,15 @@ internal interface PlaybackSource {
 
     /** Has the app playing [song] shuffle, or play in order. */
     fun shuffle(song: MusicMetadata, on: Boolean)
+
+    /** Has the app playing [song] repeat [how]. */
+    fun repeat(song: MusicMetadata, how: Repeat)
+
+    /** Presses the app's own like for [song], which likes it there, or no longer, as the app has it. */
+    fun like(song: MusicMetadata)
+
+    /** Has the app playing [song] play the one numbered [id] in its queue now. */
+    fun playQueued(song: MusicMetadata, id: Long)
 
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
@@ -161,7 +184,7 @@ internal class MediaSessionPlayback(
     private val context: Context,
     private val now: () -> Long = SystemClock::elapsedRealtime,
     private val waker: AppWaker = MediaBrowserWaker(context),
-    private val shuffles: AppShuffle = SessionShuffle(context),
+    private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue
 ) : PlaybackSource {
@@ -178,12 +201,18 @@ internal class MediaSessionPlayback(
 
     override fun follow(song: MusicMetadata): Flow<Following?> = callbackFlow {
         var followed: MediaController? = null
-        var shuffleWatched: () -> Unit = {}
+        var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
         var pauses = SteadyPause()
-        fun steadily(controller: MediaController) = following(controller)?.let { it.copy(clock = pauses.of(it.clock)) }
+        // What it plays next only for the one followed, as reading an app's queue takes a while.
+        fun steadily(controller: MediaController) = following(controller)?.let { it.copy(clock = pauses.of(it.clock), upNext = upNext(controller)) }
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
+                trySend(followed?.let(::steadily))
+            }
+
+            // What it plays next.
+            override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) {
                 trySend(followed?.let(::steadily))
             }
         }
@@ -191,12 +220,12 @@ internal class MediaSessionPlayback(
             val playing = appFor(song, controllers)
             if (playing?.sessionToken != followed?.sessionToken) {
                 followed?.unregisterCallback(callback)
-                shuffleWatched()
+                modesWatched()
                 followed = playing
                 pauses = SteadyPause()
                 playing?.registerCallback(callback, handler)
-                // An app's shuffle isn't in what Android says of how it plays, so it's watched apart.
-                shuffleWatched = playing?.let { app -> shuffles.watch(app, handler) { trySend(steadily(app)) } } ?: {}
+                // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
+                modesWatched = playing?.let { app -> modes.watch(app, handler) { trySend(steadily(app)) } } ?: {}
             }
             trySend(playing?.let(::steadily))
         }
@@ -221,7 +250,7 @@ internal class MediaSessionPlayback(
             sessions.removeOnActiveSessionsChangedListener(changed)
             watched.forEach { it.unregisterCallback(renamed) }
             followed?.unregisterCallback(callback)
-            shuffleWatched()
+            modesWatched()
         }
     }.distinctUntilChanged()
 
@@ -243,14 +272,19 @@ internal class MediaSessionPlayback(
         runCatching { appFor(song)?.transportControls?.run { if (play) play() else pause() } }
     }
 
-    override fun skip(song: MusicMetadata, next: Boolean) {
+    override fun skip(song: MusicMetadata, next: Boolean) = moveOn(song) { if (next) skipToNext() else skipToPrevious() }
+
+    override fun playQueued(song: MusicMetadata, id: Long) = moveOn(song) { skipToQueueItem(id) }
+
+    /** Has the app playing [song] go on to another, as [move] asks it, and play it. */
+    private fun moveOn(song: MusicMetadata, move: MediaController.TransportControls.() -> Unit) {
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching {
             val app = appFor(song) ?: return
             val paused = app.playbackState?.state != PlaybackState.STATE_PLAYING
             app.transportControls.run {
-                if (next) skipToNext() else skipToPrevious()
-                // Paused, the song skipped to would wait unheard, with the words still on the last one.
+                move()
+                // Paused, the song moved on to would wait unheard, with the words still on the last one.
                 if (paused) play()
             }
         }
@@ -258,7 +292,21 @@ internal class MediaSessionPlayback(
 
     override fun shuffle(song: MusicMetadata, on: Boolean) {
         // Taken back meanwhile, it plays on as it did.
-        runCatching { appFor(song)?.let { shuffles.shuffle(it, on) } }
+        runCatching { appFor(song)?.let { modes.shuffle(it, on) } }
+    }
+
+    override fun repeat(song: MusicMetadata, how: Repeat) {
+        // Taken back meanwhile, it plays on as it did.
+        runCatching { appFor(song)?.let { modes.repeat(it, how) } }
+    }
+
+    override fun like(song: MusicMetadata) {
+        // Taken back meanwhile, nothing's liked.
+        runCatching {
+            val app = appFor(song) ?: return
+            val like = app.playbackState?.customActions?.firstOrNull { it.action in LIKES } ?: return
+            app.transportControls.sendCustomAction(like, Bundle())
+        }
     }
 
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
@@ -463,8 +511,18 @@ internal class MediaSessionPlayback(
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
             canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
             durationMs = controller.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 },
-            shuffle = shuffles.shuffles(controller)
+            shuffle = modes.shuffles(controller),
+            repeat = modes.repeats(controller),
+            like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon) }
         )
+    }
+
+    /** The songs after the one [controller] plays, in its queue; none when it doesn't say where in it it is. */
+    private fun upNext(controller: MediaController): List<Queued> {
+        val queue = queueOf(controller).orEmpty()
+        val at = queue.indexOfFirst { it.queueId == controller.playbackState?.activeQueueItemId }
+        if (at < 0) return emptyList()
+        return queue.drop(at + 1).map { Queued(it.description.title?.toString().orEmpty(), it.description.subtitle?.toString().orEmpty(), it.queueId) }
     }
 
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
@@ -520,6 +578,16 @@ internal const val STALE_PAUSE_MS = 1_000L
 private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)
 
 private const val COVER_QUALITY = 90
+
+/**
+ * A music app's own button to like a song, or keep it, by what the app's session calls it, the same
+ * whether it's liked or not; what it's called and drawn with there says which.
+ */
+private val LIKES = setOf(
+    "thumbs_up_action", // YouTube Music
+    "com.aspiro.tidal.player.action.TOGGLE_FAVORITE", // TIDAL
+    "waze.thumbUp" // Amazon Music
+)
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)

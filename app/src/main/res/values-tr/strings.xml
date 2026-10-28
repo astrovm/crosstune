@@ -188,6 +188,15 @@
     <string name="player_follow_allow">Crosstune\'un müzik uygulamanda çalan şarkıyı görmesine ve kontrol etmesine izin ver.</string>
     <string name="player_position">%1$s / %2$s</string>
     <string name="player_shuffle">Karıştır</string>
+    <string name="player_repeat">Tekrarla</string>
+    <string name="player_repeat_all">Tüm şarkılar</string>
+    <string name="player_repeat_one">Bu şarkı</string>
+    <string name="player_up_next">Sıradakiler</string>
+    <string name="player_song_card">Şarkının bağlantıları</string>
+    <string name="player_sleep_timer">Uyku zamanlayıcısı</string>
+    <string name="player_sleep_minutes">%1$d dk</string>
+    <string name="player_sleep_song_end">Şarkı bitince</string>
+    <string name="player_sleep_off">Kapat</string>
     <string name="lyrics_jump">Buraya atla</string>
     <string name="lyrics_sync">Zamanlamayı düzelt</string>
     <string name="lyrics_sync_hint">Şu an duyduğun satıra dokun</string>

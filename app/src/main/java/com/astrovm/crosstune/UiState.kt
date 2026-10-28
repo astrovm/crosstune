@@ -112,6 +112,8 @@ internal data class UiState(
     val practice: Practice? = null,
     /** The song the player shows, playing in its music app; null while it's closed. */
     val player: PlayerState? = null,
+    /** When the sleep timer pauses the music, while it's set. */
+    val sleep: Sleep? = null,
     /** The kinds of practice card, each with what it shows on either side. */
     val cardTypes: List<CardType> = DEFAULT_CARD_TYPES,
     /** The ChatGPT account whose plan the AI features run on. */
@@ -338,19 +340,21 @@ internal data class ChatGptState(
  * means once [turned]. With none left, the session's done; with none at all, none was due: all are
  * caught up.
  */
-/**
- * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
- * Music; [following] it once the app plays it, and [played] since.
- */
 /** A song a music app plays on the phone, with where it is and what the app lets be done, when it says. */
 internal data class NowPlaying(val song: MusicMetadata, val following: Following? = null)
 
+/**
+ * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
+ * Music; [following] it once the app plays it, and [played] since. Its [lines], once found, show
+ * the one being sung.
+ */
 internal data class PlayerState(
     val song: MusicMetadata,
     val app: String?,
     val link: String? = null,
     val following: Following? = null,
-    val played: Boolean = false
+    val played: Boolean = false,
+    val lines: List<LyricLine> = emptyList()
 )
 
 internal data class Practice(

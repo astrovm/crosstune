@@ -19,6 +19,12 @@ internal class FakePlayback : PlaybackSource {
     val skips: MutableList<Boolean> = CopyOnWriteArrayList()
     /** Each ask to shuffle (true) or play in order (false). */
     val shuffled: MutableList<Boolean> = CopyOnWriteArrayList()
+    /** Each way it was asked to repeat. */
+    val repeated: MutableList<Repeat> = CopyOnWriteArrayList()
+    /** How many times its like was pressed. */
+    var liked = 0
+    /** Each song up next it was asked to play now, by its number. */
+    val queuedPlayed: MutableList<Long> = CopyOnWriteArrayList()
     /** Each song asked for by name, and the app asked. */
     val songsAsked: MutableList<Pair<MusicMetadata, String?>> = CopyOnWriteArrayList()
     /** Each song's link given with it, when there was one. */
@@ -83,6 +89,18 @@ internal class FakePlayback : PlaybackSource {
 
     override fun shuffle(song: MusicMetadata, on: Boolean) {
         shuffled += on
+    }
+
+    override fun repeat(song: MusicMetadata, how: Repeat) {
+        repeated += how
+    }
+
+    override fun like(song: MusicMetadata) {
+        liked++
+    }
+
+    override fun playQueued(song: MusicMetadata, id: Long) {
+        queuedPlayed += id
     }
 
     private val inApps = mutableMapOf<String, MutableStateFlow<AppPlays?>>()

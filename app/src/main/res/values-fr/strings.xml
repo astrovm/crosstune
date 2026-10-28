@@ -188,6 +188,15 @@
     <string name="player_follow_allow">Laissez Crosstune voir et contrôler le morceau en cours dans votre app de musique.</string>
     <string name="player_position">%1$s sur %2$s</string>
     <string name="player_shuffle">Lecture aléatoire</string>
+    <string name="player_repeat">Répéter</string>
+    <string name="player_repeat_all">Toutes les chansons</string>
+    <string name="player_repeat_one">Cette chanson</string>
+    <string name="player_up_next">À suivre</string>
+    <string name="player_song_card">Liens de la chanson</string>
+    <string name="player_sleep_timer">Minuteur de sommeil</string>
+    <string name="player_sleep_minutes">%1$d min</string>
+    <string name="player_sleep_song_end">Fin de la chanson</string>
+    <string name="player_sleep_off">Désactiver</string>
     <string name="lyrics_jump">Aller ici</string>
     <string name="lyrics_sync">Corriger le timing</string>
     <string name="lyrics_sync_hint">Touchez la ligne que vous entendez</string>
