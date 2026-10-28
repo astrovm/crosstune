@@ -524,7 +524,7 @@ class PlaybackTest {
     }
 
     @Test
-    fun theSongPlayingOnThePhoneIsNamedWithWhereItIs() {
+    fun theSongPlayingOnThePhoneIsNamedWithWhereItIsAndTheAppPlayingIt() {
         // Not allowed yet, Android shows nothing. Empty rather than unset, which would keep what another test allowed.
         Settings.Secure.putString(app.contentResolver, "enabled_notification_listeners", "")
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
@@ -533,7 +533,7 @@ class PlaybackTest {
         sounding()
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
-        assertEquals(Heard.Song(song, appleMusicId = null, offsetMs = 42_000, startedAtMs = PLAYED_AT), playback.nowPlaying())
+        assertEquals(Heard.Song(song, appleMusicId = null, offsetMs = 42_000, startedAtMs = PLAYED_AT, app = "com.spotify.music"), playback.nowPlaying())
     }
 
     @Test

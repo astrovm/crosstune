@@ -37,9 +37,10 @@ internal sealed interface Heard {
      * [appleMusicId] is the song on Apple Music, when Shazam knows it. [offsetMs] is how far into the
      * song the sound heard starts, and [startedAtMs] when that sound started, on the clock that counts
      * since the phone started, so the words can follow on from there. [matchId] is the recording Shazam
-     * matched it to, whose place [offsetMs] is: often another release than the one playing.
+     * matched it to, whose place [offsetMs] is: often another release than the one playing. [app] is
+     * the music app playing it on the phone, by package.
      */
-    data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null, val matchId: String? = null) : Heard {
+    data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null, val matchId: String? = null, val app: String? = null) : Heard {
         /** Where the song is, as heard, when both halves are known. */
         val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs) else null
     }

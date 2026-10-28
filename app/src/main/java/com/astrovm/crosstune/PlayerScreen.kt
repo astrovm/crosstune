@@ -90,7 +90,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                     }
                     Spacer(Modifier.weight(1f))
                     // Where it plays, by its icon, which brings that app forward, up top as music apps keep where they play.
-                    val service = MusicService.ofPackage(player.app)
+                    // The app it's followed in, as its name says, over the one it was asked of.
+                    val service = MusicService.ofPackage(following?.appPackage ?: player.app)
                     val playingIn = app?.let { stringResource(R.string.player_playing_in, it) }
                     if (service != null) IconButton(onClick = actions.onPlayerOpenApp, modifier = Modifier.then(if (playingIn != null) Modifier.semantics { contentDescription = playingIn } else Modifier)) {
                         DestinationIcon(Destination.Service(service), setOf(service), size = 28.dp)
