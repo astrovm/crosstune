@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android. Quand vous révisez des lignes enregistrées, Crosstune demande aussi à votre app de musique de lire la chanson de chaque ligne, à cette ligne. Le lecteur de Crosstune utilise ce même accès pour afficher la chanson, et la mettre en pause, la passer ou la déplacer dans votre app de musique."
+      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android. Quand vous révisez des lignes enregistrées, Crosstune demande aussi à votre app de musique de lire la chanson de chaque ligne, à cette ligne. Le lecteur de Crosstune utilise ce même accès pour afficher la chanson, et la mettre en pause, la passer, la déplacer ou activer la lecture aléatoire dans votre app de musique."
     ],
     [
       "p",
