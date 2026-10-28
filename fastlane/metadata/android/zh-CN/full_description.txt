@@ -5,7 +5,7 @@
 <b>功能</b>
 <ul>
 <li>可读取 Spotify、YouTube Music、YouTube、Apple Music、Deezer、TIDAL、SoundCloud、Bandcamp 和 Audiomack 的链接，并在其中任意一个或 Amazon Music 和 Qobuz 中打开。</li>
-<li>播放列表和专辑会显示其中的歌曲：可在你选的应用中打开任意一首，复制或分享列表，或在 YouTube Music 或 YouTube 中全部播放。</li>
+<li>播放列表和专辑会显示其中的歌曲：可在你选的应用中打开任意一首，复制或分享列表，或在 YouTube Music 或 YouTube 中按顺序或随机播放全部。</li>
 <li>为每个服务指定不同的去向，例如 YouTube 链接用 YouTube Music 打开，其余都用 Apple Music 打开。</li>
 <li>先在 Crosstune 中显示：你留在这里，歌曲在你选的应用中播放。</li>
 <li>Apple Music、Deezer、YouTube Music、TIDAL、SoundCloud 和 Audiomack 可直接打开歌曲、专辑或艺人本身，而不是搜索结果，Bandcamp 和 Qobuz 可直接打开歌曲或专辑，YouTube 可直接打开歌曲。</li>
@@ -22,4 +22,4 @@
 </ul>
 
 <b>隐私</b>
-没有账号、数据分析或广告。历史记录只保存在你的设备上。为了显示链接的标题、艺人和封面，Crosstune 只会向链接所属的服务发出请求。为了直接打开歌曲，标题和艺人还会发送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜索。“全部播放”会将歌曲的标题和艺人发送到 YouTube Music 的搜索，并将找到的视频发送到 YouTube。 识别歌曲时，Crosstune 只在聆听期间使用麦克风，并且只向 Shazam 发送声音的指纹，绝不发送音频。 输入歌曲名称会将其发送到 Deezer 和 Apple 的歌曲搜索；请求歌词或和弦时，歌曲的标题和艺人会发送到歌词和和弦网站（LRCLIB、YouTube Music、网易云音乐、Letras、Ultimate Guitar、Cifra Club、LaCuerda、U-FRET）。翻译会发送到 MyMemory。用 ChatGPT 登录后，AI 功能会把歌曲的标题、艺人、歌词以及你的提问发送给 OpenAI。 如果已允许使用麦克风，歌词可短暂聆听，以校正并记住该录音片头造成的时间偏移。歌词还会对齐演唱，演唱只在手机上识别，从不发送。
+没有账号、数据分析或广告。历史记录只保存在你的设备上。为了显示链接的标题、艺人和封面，Crosstune 只会向链接所属的服务发出请求。为了直接打开歌曲，标题和艺人还会发送到 Apple、Deezer、YouTube Music、YouTube 或 Bandcamp 的搜索。“全部播放”和“随机播放”会将歌曲的标题和艺人发送到 YouTube Music 的搜索，并将找到的视频发送到 YouTube。 识别歌曲时，Crosstune 只在聆听期间使用麦克风，并且只向 Shazam 发送声音的指纹，绝不发送音频。 输入歌曲名称会将其发送到 Deezer 和 Apple 的歌曲搜索；请求歌词或和弦时，歌曲的标题和艺人会发送到歌词和和弦网站（LRCLIB、YouTube Music、网易云音乐、Letras、Ultimate Guitar、Cifra Club、LaCuerda、U-FRET）。翻译会发送到 MyMemory。用 ChatGPT 登录后，AI 功能会把歌曲的标题、艺人、歌词以及你的提问发送给 OpenAI。 如果已允许使用麦克风，歌词可短暂聆听，以校正并记住该录音片头造成的时间偏移。歌词还会对齐演唱，演唱只在手机上识别，从不发送。

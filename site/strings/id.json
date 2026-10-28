@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "Untuk membuka item itu langsung, aplikasi mengirim judul dan artis item ke layanan pencarian tujuan: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack, atau Qobuz. Jika link langsung ke aplikasi dan “Langsung putar” mati, pencarianlah yang terbuka di sana, dan tidak ada yang dikirim. Saat kamu membuka tujuan, aplikasi atau situs yang dipilih menerima link tujuan atau kata kunci pencarian. Saat kamu memakai “Putar semua” di playlist atau album, aplikasi mengirim judul dan artis setiap lagu ke pencarian YouTube Music, lalu mengirim daftar video yang ditemukan ke YouTube, yang mengembalikan playlist sementara. Aplikasi dan situs lain yang kamu tambahkan menerima kata kunci pencarian dalam template URL yang kamu atur. Membagikan hasil akan mengirimnya ke aplikasi atau penerima yang kamu pilih."
+      "Untuk membuka item itu langsung, aplikasi mengirim judul dan artis item ke layanan pencarian tujuan: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack, atau Qobuz. Jika link langsung ke aplikasi dan “Langsung putar” mati, pencarianlah yang terbuka di sana, dan tidak ada yang dikirim. Saat kamu membuka tujuan, aplikasi atau situs yang dipilih menerima link tujuan atau kata kunci pencarian. Saat kamu memakai “Putar semua” atau “Acak” di playlist atau album, aplikasi mengirim judul dan artis setiap lagu ke pencarian YouTube Music, lalu mengirim daftar video yang ditemukan ke YouTube, yang mengembalikan playlist sementara. Aplikasi dan situs lain yang kamu tambahkan menerima kata kunci pencarian dalam template URL yang kamu atur. Membagikan hasil akan mengirimnya ke aplikasi atau penerima yang kamu pilih."
     ],
     [
       "p",
