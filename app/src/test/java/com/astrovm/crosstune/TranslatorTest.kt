@@ -120,7 +120,7 @@ class TranslatorTest {
     private fun yorubaAsked() = googleAsked().filter { "sl=yo" in it }
 
     @Test
-    fun aLineWithYorubaLettersGoogleTookForAnotherLanguageIsAskedAgainAsYoruba() {
+    fun aLineWithYorubaLettersGoogleTookForEnglishIsAskedAgainAsYoruba() {
         googleReads { if (it.startsWith("Ọmọ ìyá")) "yo" else "en" }
         val lines = listOf("I'm listening to Westlife, ṣ'o mo?", "Keep it moving, rọra baddie", "Ọmọ ìyá mi", "Buy you Dom Pérignon")
         // Written with the dot apart, as some lyrics are, it's still Yoruba's letter.
@@ -129,6 +129,14 @@ class TranslatorTest {
         // Only those, all at once; the line Google read as Yoruba, and the one with only an accent English writes too, aren't.
         assertEquals(1, yorubaAsked().size)
         assertEquals(2, googleAsked().size)
+    }
+
+    @Test
+    fun vietnameseIsntAskedAgainAsYoruba() {
+        // Vietnamese writes ẹ and ọ too, and Google reads it as Vietnamese.
+        googleReads { "vi" }
+        assertEquals(listOf("<Em đẹp lắm>", "<Anh vẫn đợi em trong mộng>"), translate(listOf("Em đẹp lắm", "Anh vẫn đợi em trong mộng")))
+        assertTrue(yorubaAsked().isEmpty())
     }
 
     @Test

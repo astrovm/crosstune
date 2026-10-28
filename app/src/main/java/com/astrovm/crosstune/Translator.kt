@@ -88,8 +88,9 @@ internal class Translator(
         for (batch in lines.chunked(GOOGLE_LINES)) {
             val rows = googleRows(batch, AUTO, target) ?: return false
             // Pidgin and English around a Yoruba word are taken for English, and the Yoruba comes back
-            // as it was: "Soledad, ṣ'o mo?" stayed so. Asked as Yoruba, it's "Soledad, do you know?".
-            val yoruba = batch.indices.filter { rows[it].second != YORUBA && target != YORUBA && yorubaLetters.containsMatchIn(Normalizer.normalize(batch[it], Normalizer.Form.NFC)) }
+            // as it was: "Keep it moving, rọra baddie" stays so. Only those: Vietnamese writes ẹ and ọ
+            // too, and asked as Yoruba, comes back garbled.
+            val yoruba = batch.indices.filter { rows[it].second == ENGLISH && target != YORUBA && yorubaLetters.containsMatchIn(Normalizer.normalize(batch[it], Normalizer.Form.NFC)) }
             val asYoruba = if (yoruba.isEmpty()) emptyList() else googleRows(yoruba.map { batch[it] }, YORUBA, target) ?: return false
             val found = rows.map { it.first }.toMutableList()
             yoruba.forEachIndexed { at, i -> found[i] = asYoruba[at].first }
@@ -198,6 +199,7 @@ internal class Translator(
         /** Google working out what language each line is in. */
         private const val AUTO = "auto"
         private const val YORUBA = "yo"
+        private const val ENGLISH = "en"
         /** Letters Yoruba writes and English doesn't, e.g. "ọmọ", "ṣé". */
         private val yorubaLetters = Regex("[ẹọṣẸỌṢ]")
 
