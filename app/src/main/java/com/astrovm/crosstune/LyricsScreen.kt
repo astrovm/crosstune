@@ -234,7 +234,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var choosing by rememberSaveable(song) { mutableStateOf<Boolean?>(null) }
     // Saved lines take the place of the words, so only the words hold the screen, and only while a song plays.
     KeepScreenOn(state.following?.clock?.playing == true)
-    BackHandler(onBack = actions.onDismissLyrics)
+    SwipedBack(onBack = actions.onDismissLyrics)
     // Where the timed words are scrolled to, kept out here so they're right where they were when they
     // come back, e.g. once the visuals come or go, with nothing to glide back to.
     val timedList = rememberSaveable(song, saver = LazyListState.Saver) { LazyListState() }

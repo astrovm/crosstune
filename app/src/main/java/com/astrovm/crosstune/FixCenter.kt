@@ -1,7 +1,6 @@
 package com.astrovm.crosstune
 
 import android.os.Build
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -217,7 +216,7 @@ internal fun FixBar(count: Int, onClick: () -> Unit, modifier: Modifier = Modifi
 /** Everything Android has to allow, each marked, with one way to do it all: in one tap with Shizuku or root, or one by one. */
 @Composable
 internal fun FixesPage(state: UiState, actions: ScreenActions) {
-    BackHandler(onBack = actions.onCloseFixes)
+    SwipedBack(onBack = actions.onCloseFixes)
     Page(
         title = stringResource(R.string.fix_title),
         navigationIcon = {
@@ -420,7 +419,7 @@ internal fun needTitle(need: Need): String = stringResource(need.title(), (need 
 internal fun FixStepPage(state: UiState, actions: ScreenActions) {
     val fixes = state.fixes ?: return
     val need = fixes.need ?: return
-    BackHandler(onBack = actions.onFixBack)
+    SwipedBack(onBack = actions.onFixBack)
     val done = state.done(need) == true
     LaunchedEffect(need, done) {
         if (!done) return@LaunchedEffect

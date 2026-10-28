@@ -2,7 +2,6 @@ package com.astrovm.crosstune
 
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -95,7 +94,7 @@ internal const val PRACTICE_CARD_TAG = "practice-card"
 @Composable
 internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     val practice = state.practice ?: return
-    BackHandler(onBack = actions.onStopPractice)
+    SwipedBack(onBack = actions.onStopPractice)
     var optionsOpen by rememberSaveable { mutableStateOf(false) }
     var preview by remember { mutableStateOf<CardPreview?>(null) }
     LaunchedEffect(optionsOpen) { if (!optionsOpen) preview = null }

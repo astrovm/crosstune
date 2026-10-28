@@ -1,17 +1,25 @@
 package com.astrovm.crosstune
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.core.ExperimentalTransitionApi
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -21,6 +29,7 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
 
 /**
  * A screen a swipe reaches: [go] gets there, and [back], for one that's opened as the finger starts,
@@ -29,14 +38,17 @@ import kotlin.math.abs
 internal class Layer(val to: Screen, val go: () -> Unit, val back: (() -> Unit)? = null, val settled: (() -> Unit)? = null)
 
 /**
- * A swipe up or down between layers (the bar, the player, the words) under way. The screens follow
- * the finger by [fraction], from the one shown to [to], then carry on or go back once it lifts.
+ * A swipe between screens under way: up or down between layers (the bar, the player, the words), or
+ * back from the side of the screen. The screens follow the finger by [fraction], from the one shown
+ * to [to], then carry on or go back once it lifts.
  */
 @Stable
 internal class LayerSwipe {
     /** Where a swipe up or down from the screen shown leads, if anywhere. */
     var up: Layer? = null
     var down: Layer? = null
+    /** Where Back from the screen shown goes, when that's known, for a swipe back to follow the finger there. */
+    var backTo: Screen? = null
     /** How far a full swipe is, and how quick a flick is to count for one, in pixels. */
     var distance = 1f
     var flick = 1f
@@ -46,6 +58,9 @@ internal class LayerSwipe {
         private set
     /** How far along that is, 0 to 1. */
     var fraction by mutableFloatStateOf(0f)
+        private set
+    /** Whether the swipe under way is one back, from the side of the screen. */
+    var backing by mutableStateOf(false)
         private set
     /** Once the finger lifts, whether it carries on to [to] or goes back. */
     var carryOn by mutableStateOf<Boolean?>(null)
@@ -97,12 +112,39 @@ internal class LayerSwipe {
         return velocity
     }
 
+    /**
+     * A swipe back, from the side of the screen, starts; whether the screens can follow it, as where
+     * Back goes is known and nothing else is moving them.
+     */
+    fun backStart(): Boolean {
+        val going = backTo
+        if (going == null || to != null) return false
+        // Back is only done once it's let go, so there's nothing to do on the way.
+        layer = Layer(going, go = {})
+        upward = false
+        backing = true
+        to = going
+        return true
+    }
+
+    /** The swipe back, [progress] of the way, 0 to 1. */
+    fun backBy(progress: Float) {
+        if (carryOn == null) fraction = progress
+    }
+
+    /** The swipe back let go, done, with [back] going back, or taken back. */
+    fun backDone(done: Boolean, back: () -> Unit) {
+        if (done) back()
+        carryOn = done
+    }
+
     /** The screens are where they're going, so the swipe is over. */
     fun finish() {
         layer = null
         to = null
         fraction = 0f
         carryOn = null
+        backing = false
     }
 
     private companion object {
@@ -112,6 +154,64 @@ internal class LayerSwipe {
 }
 
 internal val LocalLayerSwipe = compositionLocalOf { LayerSwipe() }
+
+/**
+ * Back, which a swipe from the side of the screen follows as it goes: the screen it goes back to
+ * comes as far as the swipe has, then [onBack] once it's let go, or it's taken back. A press of Back,
+ * or Back from a screen whose way back isn't known, only goes back.
+ */
+@Composable
+internal fun SwipedBack(enabled: Boolean = true, onBack: () -> Unit) {
+    val swipe = LocalLayerSwipe.current
+    val back by rememberUpdatedState(onBack)
+    PredictiveBackHandler(enabled) { progress ->
+        val following = swipe.backStart()
+        try {
+            progress.collect { if (following) swipe.backBy(it.progress) }
+            if (following) swipe.backDone(done = true, back) else back()
+        } catch (e: CancellationException) {
+            if (following) swipe.backDone(done = false, back)
+            throw e
+        }
+    }
+}
+
+/**
+ * Pages, [shown] the one in view: a new one slides in over the one it opens from, [forward] when it's
+ * deeper, and back out the other way. A swipe back drags it off towards [back] as far as it's gone,
+ * then [onBack] once it's let go; a press of Back only goes back.
+ */
+@OptIn(ExperimentalTransitionApi::class)
+@Composable
+internal fun <S> SwipedBackPages(
+    shown: S,
+    back: S,
+    label: String,
+    forward: (from: S, to: S) -> Boolean,
+    onBack: () -> Unit,
+    content: @Composable AnimatedContentScope.(S) -> Unit
+) {
+    val moving = remember { SeekableTransitionState(shown) }
+    var swiped by remember { mutableStateOf<Float?>(null) }
+    PredictiveBackHandler(enabled = shown != back) { swipe ->
+        try {
+            swipe.collect { swiped = it.progress }
+            swiped = null
+            onBack()
+        } catch (e: CancellationException) {
+            swiped = null
+            throw e
+        }
+    }
+    LaunchedEffect(shown, swiped) {
+        val far = swiped
+        if (far != null) moving.seekTo(far, back) else moving.animateTo(shown, Motion.rise)
+    }
+    rememberTransition(moving, label = label).AnimatedContent(
+        transitionSpec = { if (swiped != null) slideAway() else slideAlong(forward(initialState, targetState)) },
+        content = content
+    )
+}
 
 /** How far below the status bar a swipe down has to start to move a layer, about as far as a screen's header goes. */
 private val TOP_ZONE = 96.dp
