@@ -173,7 +173,7 @@ internal class PlayQueue(
                 json.getString("app"),
                 json.getInt("to"),
                 songs(json.getJSONArray("part")),
-                json.optLong("first", -1).takeIf { it >= 0 }
+                if (json.has("first")) json.getLong("first") else null
             )
 
             /** Each song as its name, its artist's, and its link, as Recent keeps a playlist's. */

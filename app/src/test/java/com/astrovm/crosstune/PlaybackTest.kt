@@ -880,9 +880,15 @@ class PlaybackTest {
         assertNull(ended(PlaybackState.STATE_STOPPED, 243_999))
         assertEquals(false, ended(PlaybackState.STATE_PLAYING, 246_000))
         assertNull(ended(PlaybackState.STATE_ERROR, 246_000))
-        // Nothing named, nothing to follow.
+        // A video that says it's music is named as its song.
+        shadowOf(atEnd).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Laura Branigan - Self Control (Official Video)").putString(MediaMetadata.METADATA_KEY_ARTIST, "LauraBraniganVEVO").build())
+        assertEquals(false, ended(PlaybackState.STATE_PLAYING, 0))
+        assertEquals("Self Control", runBlocking { playback.plays(youTube).first() }?.song?.title)
+        // Nothing named, or saying nothing of how it plays, nothing to follow.
         shadowOf(atEnd).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, " ").putString(MediaMetadata.METADATA_KEY_ARTIST, "Laura Branigan").build())
         assertNull(ended(PlaybackState.STATE_PLAYING, 0))
+        shadowOf(atEnd).setPlaybackState(null)
+        assertNull(runBlocking { playback.plays(youTube).first() })
     }
 
     @Test

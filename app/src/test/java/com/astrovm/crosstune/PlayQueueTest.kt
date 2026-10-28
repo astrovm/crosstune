@@ -24,7 +24,7 @@ class PlayQueueTest {
     private val phone = FakePlayback()
     private val file = File(app.noBackupFilesDir, "play_queue.json")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-    private val tracks = (1..120).map { MusicMetadata("Song $it", "Band") }
+    private val tracks = (1..120).map { MusicMetadata("Song $it", "Band", url = "https://open.spotify.com/track/$it".takeIf { _ -> it % 2 == 0 }) }
 
     /** Each part looked up, as the songs asked for. */
     private val looked = mutableListOf<List<MusicMetadata>>()
@@ -130,8 +130,9 @@ class PlayQueueTest {
         val queue = queue()
         queue.playing()
         plays(1, 100)
-        // All YouTube Music queued then is from before too.
+        // All YouTube Music queued then is from before too, that song's number included.
         plays(3, 4)
+        plays("Another Name", 5)
         plays(50, 149)
         plays("Radio", 150)
         assertEquals(1, phone.listsAsked.size)
@@ -149,7 +150,7 @@ class PlayQueueTest {
     fun somethingElsePickedToPlayStopsIt() {
         val queue = queue()
         queue.playing()
-        plays(3, 102)
+        plays(1, 100)
         // Another list, numbered on after what YouTube Music had queued.
         plays("Other", 900)
         assertFalse(file.exists())
@@ -192,9 +193,10 @@ class PlayQueueTest {
         stopped.cancel()
         val again = queue()
         again.resume()
-        // Already playing through, it carries on as it was.
+        // Already playing through, it carries on as it was: by YouTube Music's numbers, and the songs' links.
         again.resume()
-        plays(50, 149)
+        plays("Last One", 149)
+        assertEquals(tracks.subList(50, 100), looked.last())
         plays("Radio", 150)
         assertEquals(1, phone.listsAsked.size)
     }
