@@ -249,6 +249,18 @@ class LyricsFinderTest {
         // Answering once the others have said they have none, its words come.
         busy = 5
         assertEquals("Words", words(song))
+
+        // Saying it has none, it isn't asked again.
+        fake.handler = { request: Request ->
+            when {
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                request.url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        fake.requestedUrls.clear()
+        assertEquals(Lyrics.None, found(MusicMetadata("Other", "Band")))
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
     }
 
     @Test
