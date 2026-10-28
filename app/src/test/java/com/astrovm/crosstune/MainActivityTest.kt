@@ -3289,6 +3289,33 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongIsSearchedForAtOnceInAnAppThatPlaysNothingAskedOfIt() {
+        val spotify = MusicService.SPOTIFY.packageName
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        launch()
+        resolveTyped(link)
+        // Spotify ignores apps asking it to play, so there's no Play, only its search.
+        val search = string(R.string.search_in_destination, "Spotify")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(search) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.play_in_background, "Spotify"))).fetchSemanticsNodes().isEmpty())
+        click(search)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(spotify, nextStartedActivity()!!.`package`)
+        // A link that comes in to play right away shows here with the search, asking Spotify for nothing.
+        controller!!.pause().stop().destroy()
+        prefs().edit().putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(search) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        assertTrue(phone.songsAsked.isEmpty())
+    }
+
+    @Test
     fun aSongPlaysInItsAppWithoutLeavingCrosstuneOrOpensThereWhenItCant() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val link = "https://music.youtube.com/watch?v=sPmul8b17AU"

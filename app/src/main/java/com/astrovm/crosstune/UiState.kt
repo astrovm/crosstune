@@ -242,7 +242,7 @@ internal data class UiState(
 
     /** Whether the song's app, installed and with the song, or maybe with it, can be asked to play it while Crosstune stays open. */
     val canPlayResult: Boolean
-        get() = result?.type == ItemType.TRACK && resultDestination.let { it is Destination.Service && it.service in installed } && !resultMissing
+        get() = result?.type == ItemType.TRACK && resultDestination.let { it is Destination.Service && it.service in installed && it.service.playsAskedSongs } && !resultMissing
 
     /** Whether the words open are the result's, found and not followed in an app yet, so they can start it there. */
     val canPlayFromLyrics: Boolean
