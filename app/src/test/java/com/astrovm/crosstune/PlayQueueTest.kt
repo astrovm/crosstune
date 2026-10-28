@@ -423,6 +423,24 @@ class PlayQueueTest {
     }
 
     @Test
+    fun aSongTheListHoldsTwiceEndsOnlyThePartItEnds() {
+        // The song ending the first part comes again in the middle of the next.
+        val twice = tracks.take(100).mapIndexed { index, song -> if (index == 74) tracks[49] else song }
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        runBlocking { queue.play(twice, MusicService.YOUTUBE_MUSIC, music, 50, twice.take(50)) }
+        for (number in 1..50) plays(number, 99L + number)
+        assertEquals(true, playback.canSkipOn(50))
+        // YouTube Music plays it to its end, and the next part plays.
+        plays(50, 149, ended = true)
+        assertEquals(1, phone.listsAsked.size)
+        for (number in 51..74) plays(number, 149L + number)
+        plays(50, 224)
+        assertEquals(false, playback.canSkipOn(50))
+    }
+
+    @Test
     fun skippedOnWhileTheAppMovesOnTooTheNextPartPlaysOnce() {
         val lookup = CompletableDeferred<YouTubeQueue?>()
         val queue = PlayQueue(phone, { _, _ -> lookup.await() }, file, scope, Dispatchers.Unconfined)
