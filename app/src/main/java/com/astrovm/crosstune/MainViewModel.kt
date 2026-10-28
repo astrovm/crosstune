@@ -1284,7 +1284,8 @@ internal class MainViewModel(
                 val played = player.played || following?.clock?.playing == true
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
                 val next = playing?.takeIf { played && following == null && uiState.practice == null && !sameSong(it.metadata, song) }
-                if (next != null) return@collect openPlayer(next.metadata, player.following?.appPackage ?: player.app, played = true)
+                // In the app that plays it, which may not be the one the song before played in.
+                if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 uiState = uiState.copy(player = player.copy(following = following, played = played))
             }
         }

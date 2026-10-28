@@ -3656,6 +3656,15 @@ class MainActivityTest {
         waitForText("Other Song")
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_button))).fetchSemanticsNodes().isEmpty())
+        // One another app plays next is that app's, by its name and its icon.
+        phone.onThePhone = Heard.Song(MusicMetadata("Third Song", ""), null, app = MusicService.SPOTIFY.packageName)
+        waitForText("Third Song")
+        waitForDescription(string(R.string.player_playing_in, "Spotify"))
+        composeRule.onNodeWithTag("destination-icon:SPOTIFY", useUnmergedTree = true).assertExists()
+        // Followed in another app than the one it was asked of, the icon is that one's, as the name is.
+        phone.playing.value = Following(PlaybackClock(0, now, playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
+        composeRule.onNodeWithTag("destination-icon:YOUTUBE_MUSIC", useUnmergedTree = true).assertExists()
 
         // Closed, it's the song's card again.
         controller!!.get().onBackPressedDispatcher.onBackPressed()

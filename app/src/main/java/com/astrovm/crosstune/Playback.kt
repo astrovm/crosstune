@@ -422,7 +422,7 @@ internal class MediaSessionPlayback(
             artworkUrl = artwork,
             url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
-        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs)
+        ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName)
     }
 
     /**
