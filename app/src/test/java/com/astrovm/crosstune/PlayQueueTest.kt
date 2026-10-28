@@ -240,6 +240,20 @@ class PlayQueueTest {
     }
 
     @Test
+    fun aShuffledPartCarriesOnAfterCrosstuneIsStopped() {
+        val stopped = CoroutineScope(Dispatchers.Unconfined)
+        queue(scope = stopped).playing()
+        plays(1, 100)
+        plays(50, 149)
+        (2..49).forEach { plays(it, 99L + it) }
+        stopped.cancel()
+        // Started again, it still knows they all played, so it plays on.
+        queue().resume()
+        plays("Radio", 150)
+        assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
     fun theListenerAndroidConnectsCarriesItOn() {
         val stopped = CoroutineScope(Dispatchers.Unconfined)
         val sixty = tracks.take(60)
