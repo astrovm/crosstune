@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida. Gdy ćwiczysz zapisane wiersze, Crosstune prosi też Twoją aplikację muzyczną o odtworzenie utworu każdego wiersza od tego wiersza. Odtwarzacz Crosstune używa tego samego dostępu, by pokazać utwór oraz go zatrzymać, pominąć, przewinąć lub włączyć odtwarzanie losowe w Twojej aplikacji muzycznej."
+      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida. Gdy ćwiczysz zapisane wiersze, Crosstune prosi też Twoją aplikację muzyczną o odtworzenie utworu każdego wiersza od tego wiersza. Odtwarzacz Crosstune używa tego samego dostępu, by pokazać utwór i to, co gra następne, oraz go zatrzymać, pominąć, przewinąć, powtarzać, włączyć odtwarzanie losowe, nacisnąć polubienie samej aplikacji lub zatrzymać wyłącznikiem czasowym w Twojej aplikacji muzycznej."
     ],
     [
       "p",

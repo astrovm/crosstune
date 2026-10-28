@@ -13,7 +13,7 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <li>Paste with one tap, search and reopen recent links, or open a copied link from the home screen widget, the Quick Settings tile, or by long-pressing the app icon.</li>
 <li>Names a song playing nearby: Crosstune listens itself, or opens Shazam or Google's song search. Also opens Shazam links and songs shared from Pixel Now Playing.</li>
 <li>Can't read a link? Open it in the app it came from, copy the search text, or share a search link.</li>
-<li>Find a song by typing its name instead of a link. Play keeps you in Crosstune: a bar at the bottom shows what's playing, its player has a menu with Copy, Share and Open with, and you swipe between player and lyrics. Read the lyrics of any song you open.</li>
+<li>Find a song by typing its name instead of a link. Play keeps you in Crosstune: a bar at the bottom shows what's playing, its player has up next, repeat, like and a sleep timer, and you swipe between player and lyrics.</li>
 <li>Lyrics in time: they follow your music app or listen along, float over other apps, and play with MilkDrop visuals behind them. Wrong words or timing? Report them from the lyrics in one tap: the song and its timing go privately to the developer.</li>
 <li>Learn the words with kana, pinyin, romaji and any other script in Latin letters, and translations for the languages you don't already read. Choose what appears on each side of your practice cards. Make more than one kind of card from a line, each on its own schedule.</li>
 <li>Sign in with your paid ChatGPT plan to translate whole songs, explain lines, find words worth learning, and find songs by describing them.</li>
