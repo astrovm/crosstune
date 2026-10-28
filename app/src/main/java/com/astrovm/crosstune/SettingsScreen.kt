@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import android.os.Build
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
-import androidx.compose.material3.Slider
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.animation.AnimatedVisibility
@@ -572,7 +571,7 @@ internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier
             Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
-        Slider(
+        AppSlider(
             value = steps.indexOf(changeMs).coerceAtLeast(0).toFloat(),
             onValueChange = { at -> steps[at.roundToInt().coerceIn(steps.indices)].takeIf { it != changeMs }?.let(onChange) },
             valueRange = 0f..steps.lastIndex.toFloat(),

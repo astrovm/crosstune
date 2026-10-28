@@ -5,6 +5,16 @@ import kotlinx.coroutines.Dispatchers
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -277,6 +287,52 @@ internal fun OneTapButton(label: String, onClick: () -> Unit, fixing: Boolean) {
         }
         Text(label)
     }
+}
+
+/**
+ * The app's slider: a thin track with a round knob, which grows while it's held, as music apps have
+ * it; without the dot Material marks the track's end with, or one for each step.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AppSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    steps: Int = 0,
+    onValueChangeFinished: (() -> Unit)? = null
+) {
+    val held = remember { MutableInteractionSource() }
+    val pressed by held.collectIsPressedAsState()
+    val dragged by held.collectIsDraggedAsState()
+    val knob by animateDpAsState(if (pressed || dragged) 20.dp else 14.dp, label = "knob")
+    val colors = SliderDefaults.colors(inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f))
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        enabled = enabled,
+        onValueChangeFinished = onValueChangeFinished,
+        colors = colors,
+        interactionSource = held,
+        steps = steps,
+        valueRange = valueRange,
+        thumb = { Box(Modifier.size(knob).background(if (enabled) colors.thumbColor else colors.disabledThumbColor, CircleShape)) },
+        track = { slider ->
+            SliderDefaults.Track(
+                sliderState = slider,
+                modifier = Modifier.height(4.dp),
+                enabled = enabled,
+                colors = colors,
+                drawStopIndicator = null,
+                drawTick = { _, _ -> },
+                thumbTrackGapSize = 0.dp,
+                trackInsideCornerSize = 2.dp
+            )
+        }
+    )
 }
 
 /**

@@ -80,7 +80,9 @@ class MainActivity : ComponentActivity() {
                 val apis = ServiceApis(client, Locale.getDefault().country)
                 // Skipping on from the end of a part of a long playlist plays the next part.
                 val queue = playQueue(applicationContext)
-                val playback = queue.skipping(playbackFactory(applicationContext))
+                // The order songs up next were moved to, over the app's own.
+                val order = queueOrder(applicationContext)
+                val playback = order.ordering(queue.skipping(playbackFactory(applicationContext)))
                 // What was found for songs is kept, so a playlist played again needs no lookups.
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
                 val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong, missingForMs = MISSING_FOR_MS)
@@ -131,7 +133,9 @@ class MainActivity : ComponentActivity() {
                     // The words of the songs shown lately, so they show at once after the app's closed too.
                     keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
                     lookAhead = lookAheadLyrics,
-                    playQueue = queue
+                    playQueue = queue,
+                    queueOrder = order,
+                    sleepTimer = sleepTimer(applicationContext)
                 )
             }
         }
@@ -317,6 +321,28 @@ class MainActivity : ComponentActivity() {
             ).also { playQueue = app to it }
         }
 
+        private var queueOrder: Pair<Context, QueueOrder>? = null
+
+        /** The order songs up next were moved to, the app's rather than a screen's, so it keeps it with Crosstune closed too. */
+        internal fun queueOrder(context: Context): QueueOrder {
+            val app = context.applicationContext
+            queueOrder?.takeIf { it.first === app }?.let { return it.second }
+            // One made for another app, as each test makes, is done with.
+            queueOrder?.second?.off()
+            return QueueOrder(playbackFactory(app), CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)).also { queueOrder = app to it }
+        }
+
+        private var sleepTimer: Pair<Context, SleepTimer>? = null
+
+        /** The sleep timer, the app's rather than a screen's, so it pauses with Crosstune closed too. */
+        internal fun sleepTimer(context: Context): SleepTimer {
+            val app = context.applicationContext
+            sleepTimer?.takeIf { it.first === app }?.let { return it.second }
+            // One made for another app, as each test makes, is done with.
+            sleepTimer?.second?.off()
+            return SleepTimer(playbackFactory(app), CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)).also { sleepTimer = app to it }
+        }
+
         /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */
         @VisibleForTesting
         internal var lookAheadLyrics: Boolean = true
@@ -495,6 +521,14 @@ class MainActivity : ComponentActivity() {
         onPlayerPlayPause = viewModel::playerPlayPause,
         onPlayerSkip = viewModel::playerSkip,
         onPlayerShuffle = viewModel::playerShuffle,
+        onPlayerRepeat = viewModel::playerRepeat,
+        onPlayerLike = viewModel::playerLike,
+        onPlayerPlayQueued = viewModel::playerPlayQueued,
+        onPlayerPlayLater = viewModel::playerPlayLater,
+        onPlayerMoveQueued = viewModel::playerMoveQueued,
+        onPlayerCard = viewModel::playerCard,
+        onPlayerSleep = viewModel::playerSleep,
+        onPlayerSleepOff = viewModel::playerSleepOff,
         onPlayerSeek = viewModel::playerSeek,
         onPlayerLyrics = viewModel::playerLyrics,
         onOpenWith = { destination -> viewModel.openResult(destination, finishAfterOpen = true) },

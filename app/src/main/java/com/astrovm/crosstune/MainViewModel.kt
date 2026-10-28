@@ -121,7 +121,10 @@ internal class MainViewModel(
     /** Whether a song's lyrics are looked up as its card shows, see [lookAhead]. */
     private val lookAhead: Boolean = true,
     /** Plays a playlist longer than one queue through, see [playAll]. */
-    private val playQueue: PlayQueue? = null
+    private val playQueue: PlayQueue? = null,
+    private val queueOrder: QueueOrder? = null,
+    /** Pauses the music after a while, see [playerSleep]. */
+    private val sleepTimer: SleepTimer? = null
 ) : ViewModel() {
     /**
      * On a TV, an app opened on a song is covered rather than left, once Android lets Crosstune show
@@ -235,6 +238,11 @@ internal class MainViewModel(
             microphone = microphoneAccess()
         ).withOneTap().withDestinations()
     )
+
+    init {
+        // The timer is the app's, so one set from another screen, or before Crosstune was closed, shows too.
+        sleepTimer?.let { timer -> viewModelScope.launch { timer.set.collect { uiState = uiState.copy(sleep = it) } } }
+    }
 
     var uiState by screen
         private set
@@ -1123,7 +1131,8 @@ internal class MainViewModel(
         val destination = uiState.resultDestination
         val service = destination.matchService ?: return
         val all = uiState.result?.tracks.orEmpty().let { if (shuffled) it.shuffled() else it }
-        if (service.playsSongBySong) return playSongBySong(all, service, destination)
+        val name = uiState.result?.title
+        if (service.playsSongBySong) return playSongBySong(all, service, destination, name)
         val tracks = all.take(MAX_QUEUE)
         cancelTrackWork()
         trackJob = viewModelScope.launch {
@@ -1132,7 +1141,7 @@ internal class MainViewModel(
                 val queue = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
                 if (queue == null) return@launch showError(AppError.NOT_FOUND)
                 effectChannel.send(Effect.Open(queue.url, destination.packageName, finishAfterOpen = false))
-                playOn(all, service, destination, queue)
+                playOn(all, service, destination, queue, name)
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
             }
@@ -1144,14 +1153,14 @@ internal class MainViewModel(
      * asked for here, with the player on it, and [playQueue] asking for each next one as the one before
      * ends. With no app to ask, the first opens there, as it would on its own.
      */
-    private fun playSongBySong(tracks: List<MusicMetadata>, service: MusicService, destination: Destination) {
+    private fun playSongBySong(tracks: List<MusicMetadata>, service: MusicService, destination: Destination, name: String?) {
         val app = destination.packageName ?: return
         val first = tracks.first()
         cancelTrackWork()
         trackJob = viewModelScope.launch {
             openPlayer(first, app)
             if (playback?.playSong(first, app) == true) {
-                playQueue?.play(tracks, service, app, 1, listOf(first))
+                playQueue?.play(tracks, service, app, 1, listOf(first), name)
             } else {
                 closePlayer()
                 openTrack(first)
@@ -1159,9 +1168,9 @@ internal class MainViewModel(
         }
     }
 
-    /** Plays the rest of [tracks] on in the app [destination] is, after [queue], their first [MAX_QUEUE]. */
-    private suspend fun playOn(tracks: List<MusicMetadata>, service: MusicService, destination: Destination, queue: YouTubeQueue) {
-        playQueue?.play(tracks, service, destination.packageName ?: return, MAX_QUEUE, queue.songs)
+    /** Plays the rest of [tracks], the list called [name], on in the app [destination] is, after [queue], their first [MAX_QUEUE]. */
+    private suspend fun playOn(tracks: List<MusicMetadata>, service: MusicService, destination: Destination, queue: YouTubeQueue, name: String?) {
+        playQueue?.play(tracks, service, destination.packageName ?: return, MAX_QUEUE, queue.songs, name)
     }
 
     /** Opens one of a playlist's songs where the result goes, matched like a song of its own. */
@@ -1267,6 +1276,36 @@ internal class MainViewModel(
     private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false) {
         uiState = uiState.copy(player = PlayerState(song, app, link, played = played), canFollowApps = playback?.hasAccess() == true)
         followPlayer()
+        peekWords()
+    }
+
+    private var peekJob: Job? = null
+
+    /**
+     * The player's song's words, for the line being sung under its buttons: as they were shown, or
+     * looked up as the song's card looks them up ahead, which opening them then shares.
+     */
+    private fun peekWords() {
+        peekJob?.cancel()
+        val song = uiState.player?.song ?: return
+        val asked = asPlayed(song)
+        val key = RecordingKey.of(asked)
+        kept[key]?.let { return showPeek(song, it.lines, it.lyrics) }
+        val finder = lyricsFinder?.takeIf { lookAhead && asked.type == ItemType.TRACK && asked.artist.isNotBlank() } ?: return
+        val look = lookingAhead[key] ?: viewModelScope.async { finder.firstLook(asked) }.also {
+            lookingAhead[key] = it
+            it.invokeOnCompletion { lookingAhead.remove(key) }
+        }
+        peekJob = viewModelScope.launch {
+            (look.await().lyrics as? LyricsFinder.Lyrics.Found)?.let { showPeek(song, it.lines, it.words) }
+        }
+    }
+
+    /** [lines] under [song]'s player, while it shows it; words that aren't timed show their first line. */
+    private fun showPeek(song: MusicMetadata, lines: List<LyricLine>, words: String) {
+        val player = uiState.player?.takeIf { it.song == song } ?: return
+        val shown = lines.ifEmpty { words.lines().filter { it.isNotBlank() }.take(1).map { LyricLine(0, it) } }
+        uiState = uiState.copy(player = player.copy(lines = shown))
     }
 
     /**
@@ -1294,6 +1333,7 @@ internal class MainViewModel(
     fun closePlayer() {
         playerJob?.cancel()
         playerJob = null
+        peekJob?.cancel()
         uiState = uiState.copy(player = null)
     }
 
@@ -1337,6 +1377,69 @@ internal class MainViewModel(
         val player = uiState.player ?: return
         val shuffles = player.following?.shuffle ?: return
         playback?.shuffle(player.song, !shuffles)
+    }
+
+    /** Has the app repeat the next way, as music apps go round them: not at all, all of its list, then the song. */
+    fun playerRepeat() {
+        val player = uiState.player ?: return
+        val repeats = player.following?.repeat ?: return
+        playback?.repeat(player.song, Repeat.entries[(repeats.ordinal + 1) % Repeat.entries.size])
+    }
+
+    /** Presses the app's own like for the player's song. */
+    fun playerLike() {
+        val player = uiState.player ?: return
+        if (player.following?.like == null) return
+        playback?.like(player.song)
+    }
+
+    /** Has the app play one of the songs it has up next now, which the player then shows. */
+    fun playerPlayQueued(id: Long) {
+        val player = uiState.player ?: return
+        uiState = uiState.copy(player = player.copy(played = true))
+        playback?.playQueued(player.song, id)
+    }
+
+    /** Plays the list on from the song up next at [index], one it still has to ask the app for. */
+    fun playerPlayLater(index: Int) {
+        val player = uiState.player ?: return
+        val apps = player.following?.upNext.orEmpty().count { it.id != null }
+        uiState = uiState.copy(player = player.copy(played = true))
+        viewModelScope.launch { playQueue?.playFrom(index - apps) }
+    }
+
+    /**
+     * Moves the song up next at [from] to [to]: the app's songs among themselves, by the order
+     * Crosstune keeps over the app's, and a list's still to ask for among theirs.
+     */
+    fun playerMoveQueued(from: Int, to: Int) {
+        val following = uiState.player?.following ?: return
+        val upNext = following.upNext
+        val moved = upNext.getOrNull(from) ?: return
+        val onto = upNext.getOrNull(to) ?: return
+        val apps = upNext.count { it.id != null }
+        when {
+            moved.id != null && onto.id != null -> queueOrder?.move(following, from, to)
+            moved.id == null && onto.id == null -> viewModelScope.launch { playQueue?.move(from - apps, to - apps) }
+        }
+    }
+
+    /** The player's song's card, under it, with its links. */
+    fun playerCard() {
+        val song = uiState.player?.song ?: return
+        closePlayer()
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+    }
+
+    /** Pauses the music in [minutes], or once the player's song ends, without them. */
+    fun playerSleep(minutes: Int?) {
+        val timer = sleepTimer ?: return
+        if (minutes != null) return timer.after(minutes)
+        uiState.player?.song?.let(timer::afterSong)
+    }
+
+    fun playerSleepOff() {
+        sleepTimer?.off()
     }
 
     fun playerSeek(positionMs: Long) {
@@ -3314,7 +3417,7 @@ internal class MainViewModel(
         if (entry.metadata.type == ItemType.PLAYLIST && entry.metadata.tracks.isNotEmpty() && (service == MusicService.YOUTUBE_MUSIC || service == MusicService.YOUTUBE)) {
             entry.link.youtubePlaylistOn(service)?.let { return destination.adapt(it) }
             matcher.youtubeQueue(service, entry.metadata.tracks.take(MAX_QUEUE)) {}?.let { queue ->
-                playOn(entry.metadata.tracks, service, destination, queue)
+                playOn(entry.metadata.tracks, service, destination, queue, entry.metadata.title)
                 return queue.url
             }
         }

@@ -135,8 +135,8 @@ kover {
                 classes("com.astrovm.crosstune.RootShell*")
                 // Waking another music app binds to it, which needs a phone, where it's checked.
                 classes("com.astrovm.crosstune.MediaBrowserWaker*")
-                // A music app's shuffle is told through its own session, which needs a phone, where it's checked.
-                classes("com.astrovm.crosstune.SessionShuffle*")
+                // A music app's shuffle and repeat are told through its own session, which needs a phone, where it's checked.
+                classes("com.astrovm.crosstune.SessionModes*")
                 // Hearing words runs whisper.cpp's native library, which unit tests don't load; it's
                 // checked on a phone. What it hears is parsed, and lined up, in tested code.
                 classes("com.astrovm.crosstune.NativeWhisper*")
@@ -168,6 +168,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // Songs up next dragged into another order, scrolling the list on as they near its edge.
+    implementation("sh.calvin.reorderable:reorderable:3.1.0")
 
     // The home screen widget, in the app's own Material You style.
     implementation("androidx.glance:glance-appwidget:1.2.0")

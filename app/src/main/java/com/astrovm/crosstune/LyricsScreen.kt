@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.Slider
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -1003,7 +1002,7 @@ internal fun SizeSlider(@StringRes label: Int, scale: Float, range: ClosedFloati
             Text(NumberFormat.getPercentInstance().format(sizeShare(scale, range)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         }
         var latest by remember { mutableFloatStateOf(scale) }
-        Slider(
+        AppSlider(
             value = scale,
             onValueChange = {
                 latest = it
@@ -1418,7 +1417,7 @@ private fun VisualsMenu(open: Boolean, state: UiState, actions: ScreenActions, o
             }
             // Where it was let go is kept, even before the menu has caught up with it.
             var latest by remember { mutableFloatStateOf(state.visualsShade) }
-            Slider(
+            AppSlider(
                 value = MAX_VISUALS_SHADE - state.visualsShade,
                 onValueChange = {
                     latest = MAX_VISUALS_SHADE - it

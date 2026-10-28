@@ -22,7 +22,7 @@ import java.io.IOException
  * Music is asked for [MainViewModel.MAX_QUEUE] songs at a time, and for the next ones as the last of
  * those ends. An app that takes no list, [MusicService.playsSongBySong], is asked for one song at a
  * time instead. Kept on disk, so it carries on after Android stops Crosstune, which it starts again
- * to show it what plays.
+ * to show it what plays. A list as short as one part is followed too, for the player to show it.
  */
 internal class PlayQueue(
     private val playback: PlaybackSource,
@@ -33,6 +33,13 @@ internal class PlayQueue(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private var playing: Playing? = null
+        set(value) {
+            field = value
+            shown.value = value
+        }
+
+    /** [playing], for the player to show what plays from it. */
+    private val shown = MutableStateFlow<Playing?>(null)
     private var job: Job? = null
     private var next: Deferred<YouTubeQueue?>? = null
 
@@ -52,26 +59,29 @@ internal class PlayQueue(
     private var moving = false
 
     /**
-     * Plays on through [tracks] in [app], after the [part] of them it was just asked for, which ends
-     * at [to]; any playlist played through before stops.
+     * Plays on through [tracks], the list called [name], in [app], after the [part] of them it was
+     * just asked for, which ends at [to]; any playlist played through before stops.
      */
-    suspend fun play(tracks: List<MusicMetadata>, service: MusicService, app: String, to: Int, part: List<MusicMetadata>) {
+    suspend fun play(tracks: List<MusicMetadata>, service: MusicService, app: String, to: Int, part: List<MusicMetadata>, name: String? = null) {
         stop()
-        if (to >= tracks.size) return
         before = playback.plays(app).first()
         // An app numbering songs by what they are, as TIDAL does, numbers nothing in order.
         floor = before?.queueId?.takeUnless { service.playsSongBySong }
-        start(Playing(tracks, service, app, to, part))
+        start(Playing(tracks, service, app, minOf(to, tracks.size), part, name = name))
     }
 
     /**
      * [playback], where skipping on from the song that ends the part plays the next part at once,
      * even where the app can't skip on by itself, as YouTube can't from a list's last song. Back
-     * stays the app's, as it can't be asked to start a part at its last song.
+     * stays the app's, as it can't be asked to start a part at its last song. A song of the list
+     * shows it's from it, with the list's songs still to come up next.
      */
     fun skipping(playback: PlaybackSource): PlaybackSource = object : PlaybackSource by playback {
-        override fun follow(song: MusicMetadata): Flow<Following?> = combine(playback.follow(song), onLast) { following, last ->
-            if (following != null && last != null && sameEntry(last, song)) following.copy(canSkipNext = true) else following
+        override fun follow(song: MusicMetadata): Flow<Following?> = combine(playback.follow(song), onLast, shown) { following, last, list ->
+            if (following == null) return@combine null
+            val skips = if (last != null && sameEntry(last, song)) following.copy(canSkipNext = true) else following
+            // In the app it's played through, not another that happens to play one of its songs.
+            list?.takeIf { sameApp(it.app, following.appPackage) && it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
         }
 
         override fun skip(song: MusicMetadata, next: Boolean) {
@@ -86,11 +96,35 @@ internal class PlayQueue(
     fun stop() {
         onLast.value = null
         job?.cancel()
-        next?.cancel()
         job = null
-        next = null
+        forgetNext()
         playing = null
         file.delete()
+    }
+
+    /** Moves the list's song still to ask for at [from], among those, to [to], so it plays then. */
+    suspend fun move(from: Int, to: Int) {
+        val queue = playing ?: return
+        val later = queue.tracks.drop(queue.to).toMutableList()
+        if (from !in later.indices || to !in later.indices) return
+        later.add(to, later.removeAt(from))
+        // The next part was looked up in the order before.
+        forgetNext()
+        save(queue.copy(tracks = queue.tracks.take(queue.to) + later))
+    }
+
+    /** Plays the list on from its song still to ask for at [index], among those, past the ones before it. */
+    suspend fun playFrom(index: Int) {
+        val queue = playing ?: return
+        if (index !in 0 until queue.tracks.size - queue.to) return
+        forgetNext()
+        save(queue.copy(to = queue.to + index))
+        playNext()
+    }
+
+    private fun forgetNext() {
+        next?.cancel()
+        next = null
     }
 
     /** Carries on with the playlist being played through when Crosstune was stopped, if there was one. */
@@ -118,9 +152,15 @@ internal class PlayQueue(
         val named = part.indexOfFirst { sameEntry(it, now.song) }
         // Once one of the part's songs is seen with the app's number for it, the app's numbers say
         // where it is, whatever it calls the songs.
-        val first = queue.first ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
+        // The song it was on, by another number, was numbered anew, as YouTube Music may as it fills a
+        // list it had stopped on with another, first saying the song by its old one: they count from there.
+        val kept = queue.first?.takeUnless { now.queueId != null && !queue.bySong && named >= 0 && named == at && now.queueId - named != it }
+        val first = kept ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
         val numbered = first != null && now.queueId != null
         val index = if (numbered && !queue.bySong) (now.queueId - first).toInt() else named
+        // Named as another of the part's songs than its number says, the numbers are another queue's: the app
+        // started over, as YouTube Music numbers from 1 again once it was stopped, and plays something else.
+        if (numbered && !queue.bySong && named >= 0 && index in part.indices && !sameEntry(part[index], now.song)) return stop()
         when {
             // The part's last song played to its end, and the app stopped there, as YouTube does.
             index == part.lastIndex && now.ended -> playNext()
@@ -148,6 +188,16 @@ internal class PlayQueue(
             // Something else was picked to play; without numbers, it may only be the app's own name for one of the part's songs.
             numbered -> stop()
         }
+    }
+
+    /**
+     * [following], a song of [list], played from it: next, what the app has of the part, before
+     * anything it plays on with after it, e.g. its radio, then the list's songs still to ask for.
+     * An app that takes no list has only its radio after the song.
+     */
+    private fun Following.playedFrom(list: Playing): Following {
+        val queued = if (list.bySong) emptyList() else upNext.takeWhile { next -> list.part.any { sameEntry(it, MusicMetadata(next.title, next.artist)) } }
+        return copy(from = list.name, upNext = queued + list.tracks.drop(list.to).map { Queued(it.title, it.artist, art = it.artworkUrl) })
     }
 
     /** The same song of the list, in whatever version the app found it: live, remastered, its video. */
@@ -207,7 +257,7 @@ internal class PlayQueue(
      * The playlist's [tracks], played through in [app], of [service]: the part playing ends at [to],
      * holding the songs found of those, its [part]; [first] is the app's number for the first of
      * them in its queue, once seen, and [heard] where in the part each song it played is, as
-     * shuffled there, it plays them out of order.
+     * shuffled there, it plays them out of order. [name] is the list's, when it has one.
      */
     private data class Playing(
         val tracks: List<MusicMetadata>,
@@ -216,7 +266,8 @@ internal class PlayQueue(
         val to: Int,
         val part: List<MusicMetadata>,
         val first: Long? = null,
-        val heard: Set<Int> = emptySet()
+        val heard: Set<Int> = emptySet(),
+        val name: String? = null
     ) {
         val bySong: Boolean get() = service.playsSongBySong
 
@@ -228,6 +279,7 @@ internal class PlayQueue(
             .put("part", songs(part))
             .putOpt("first", first)
             .put("heard", JSONArray(heard.sorted()))
+            .putOpt("name", name)
             .toString()
 
         companion object {
@@ -238,15 +290,19 @@ internal class PlayQueue(
                 json.getInt("to"),
                 songs(json.getJSONArray("part")),
                 if (json.has("first")) json.getLong("first") else null,
-                json.optJSONArray("heard")?.let { heard -> (0 until heard.length()).mapTo(mutableSetOf(), heard::getInt) }.orEmpty()
+                json.optJSONArray("heard")?.let { heard -> (0 until heard.length()).mapTo(mutableSetOf(), heard::getInt) }.orEmpty(),
+                json.optString("name").ifEmpty { null }
             )
 
-            /** Each song as its name, its artist's, and its link, as Recent keeps a playlist's. */
-            private fun songs(songs: List<MusicMetadata>) = JSONArray().apply { songs.forEach { put(JSONArray().put(it.title).put(it.artist).put(it.url.orEmpty())) } }
+            /** Each song as its name, its artist's, its link, as Recent keeps a playlist's, and its cover's, to show up next. */
+            private fun songs(songs: List<MusicMetadata>) = JSONArray().apply {
+                songs.forEach { put(JSONArray().put(it.title).put(it.artist).put(it.url.orEmpty()).put(it.artworkUrl.orEmpty())) }
+            }
 
             private fun songs(json: JSONArray) = (0 until json.length()).map { index ->
                 val song = json.getJSONArray(index)
-                MusicMetadata(song.getString(0), song.getString(1), url = song.getString(2).ifEmpty { null })
+                // Kept before covers were, a song has none.
+                MusicMetadata(song.getString(0), song.getString(1), artworkUrl = song.optString(3).ifEmpty { null }, url = song.getString(2).ifEmpty { null })
             }
         }
     }
