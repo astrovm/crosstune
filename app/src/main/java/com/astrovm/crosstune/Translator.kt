@@ -56,7 +56,8 @@ internal class Translator(
         key: (String) -> String,
         service: suspend (List<String>, suspend (String, String) -> Unit) -> Boolean
     ): Boolean {
-        words.filter { it !in found }.forEach { line -> cache.get(key(line))?.let { found[line] = it } }
+        // One kept blank, as Google's answer to it once was, is asked again.
+        words.filter { it !in found }.forEach { line -> cache.get(key(line))?.takeIf(String::isNotBlank)?.let { found[line] = it } }
         val missing = words.filter { it !in found }
         return try {
             missing.isEmpty() || service(missing) { line, translation ->
@@ -94,7 +95,11 @@ internal class Translator(
             val asYoruba = if (yoruba.isEmpty()) emptyList() else googleRows(yoruba.map { batch[it] }, YORUBA, target) ?: return false
             val found = rows.map { it.first }.toMutableList()
             yoruba.forEachIndexed { at, i -> found[i] = asYoruba[at].first }
-            batch.forEachIndexed { i, line -> onFound(line, found[i]) }
+            // Google at times answers a line with nothing, and asked again, translates it. Still
+            // nothing, it's left for the next time it's asked.
+            val blank = found.indices.filter { found[it].isBlank() }
+            if (blank.isNotEmpty()) googleRows(blank.map { batch[it] }, AUTO, target)?.let { again -> blank.forEachIndexed { at, i -> found[i] = again[at].first } }
+            batch.forEachIndexed { i, line -> if (found[i].isNotBlank()) onFound(line, found[i]) }
         }
         return true
     }

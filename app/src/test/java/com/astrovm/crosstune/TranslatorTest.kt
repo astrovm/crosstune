@@ -132,6 +132,29 @@ class TranslatorTest {
     }
 
     @Test
+    fun aLineGoogleAnsweredWithNothingIsAskedAgain() {
+        var blanks = 1
+        googleTranslates { line -> if (line == "ਚੰਗੇਆ ਨਾ" && blanks-- > 0) "" else "<$line>" }
+        assertEquals(listOf("<ਚੰਗੇਆ ਨਾ>", "<ਸ਼ਾਮ>"), translate(listOf("ਚੰਗੇਆ ਨਾ", "ਸ਼ਾਮ")))
+        assertEquals(2, googleAsked().size)
+        // Nothing twice, it isn't kept as nothing, and is asked again the next time.
+        blanks = 2
+        cacheFile.delete()
+        assertEquals(listOf(null, "<ਸ਼ਾਮ>"), runBlocking { translator().translate(listOf("ਚੰਗੇਆ ਨਾ", "ਸ਼ਾਮ"), "es") })
+        assertEquals(listOf("<ਚੰਗੇਆ ਨਾ>", "<ਸ਼ਾਮ>"), translate(listOf("ਚੰਗੇਆ ਨਾ", "ਸ਼ਾਮ")))
+    }
+
+    @Test
+    fun aLineKeptBlankIsAskedAgain() {
+        // As Google's nothing once was kept.
+        translator()
+        cacheFile.writeText(JSONArray().put(JSONArray().put("google|es|ਚੰਗੇਆ ਨਾ").put("")).toString())
+        googleTranslates()
+        assertEquals(listOf("<ਚੰਗੇਆ ਨਾ>"), translate(listOf("ਚੰਗੇਆ ਨਾ")))
+        assertEquals(1, googleAsked().size)
+    }
+
+    @Test
     fun vietnameseIsntAskedAgainAsYoruba() {
         // Vietnamese writes ẹ and ọ too, and Google reads it as Vietnamese.
         googleReads { "vi" }
