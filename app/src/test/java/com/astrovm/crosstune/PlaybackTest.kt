@@ -887,6 +887,7 @@ class PlaybackTest {
         // Nothing named, or saying nothing of how it plays, nothing to follow.
         shadowOf(atEnd).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, " ").putString(MediaMetadata.METADATA_KEY_ARTIST, "Laura Branigan").build())
         assertNull(ended(PlaybackState.STATE_PLAYING, 0))
+        shadowOf(atEnd).setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Self Control").putString(MediaMetadata.METADATA_KEY_ARTIST, "Laura Branigan").putLong(MediaMetadata.METADATA_KEY_DURATION, 246_000).build())
         shadowOf(atEnd).setPlaybackState(null)
         assertNull(runBlocking { playback.plays(youTube).first() })
     }

@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -144,6 +146,19 @@ class PlayQueueTest {
         plays(50)
         plays(50, ended = true)
         assertEquals(2, phone.listsAsked.size)
+    }
+
+    @Test
+    fun stoppedItLetsGoOfTheAppAndOfALookupStillGoing() {
+        val lookup = CompletableDeferred<YouTubeQueue?>()
+        var cancelled = false
+        val queue = PlayQueue(phone, { _, _ -> try { lookup.await() } catch (stop: CancellationException) { cancelled = true; throw stop } }, file, scope, Dispatchers.Unconfined)
+        queue.playing()
+        plays(1, 100)
+        assertEquals(1, phone.inApp(music).subscriptionCount.value)
+        queue.stop()
+        assertEquals(0, phone.inApp(music).subscriptionCount.value)
+        assertTrue(cancelled)
     }
 
     @Test

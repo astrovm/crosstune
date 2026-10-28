@@ -59,6 +59,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -903,7 +904,13 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
         waitForText("First Song")
         assertTextShown(string(R.string.search_in_destination, string(MusicService.YOUTUBE_MUSIC.labelRes)))
+        // Held while its songs are found, so it can be seen it can't be asked twice.
+        val found = CountDownLatch(1)
+        val answer = fake.handler
+        fake.handler = { request -> if (request.url.host == "music.youtube.com") found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS); answer(request) }
         click(string(R.string.play_all_button))
+        waitUntil { composeRule.onAllNodes(hasText(string(R.string.play_all_button)) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        found.countDown()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
     }
@@ -1005,8 +1012,9 @@ class MainActivityTest {
         File(app.cacheDir, "queue_lookups.json").delete()
         val songs = (1..60).joinToString(",") { """{"title":"Song $it","subtitle":"Band"}""" }
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[$songs]}}}}}}</script>"""
-        // Holds the song lookups so the progress can be seen.
+        // Holds the song lookups so the progress can be seen, and the 50th longer, to see it count.
         val release = CountDownLatch(1)
+        val last = CountDownLatch(1)
         fake.handler = { request ->
             // Its own body: songs are looked up several at a time, so the last one sent may be another's.
             val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
@@ -1016,8 +1024,8 @@ class MainActivityTest {
                     .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGpart").build()
                 // Each song is found as itself, its video named after its number.
                 request.url.host == "music.youtube.com" -> {
-                    release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    (if (number == "50") last else release).await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                         "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
                         {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
@@ -1041,6 +1049,8 @@ class MainActivityTest {
         // It shows how far it got while it looks up as many as YouTube takes.
         waitForText(string(R.string.play_all_progress, 0, 50))
         release.countDown()
+        waitForText(string(R.string.play_all_progress, 49, 50))
+        last.countDown()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=00000000001&list=TLGGpart", nextStartedActivity()!!.dataString)
         assertEquals(50, fake.requestedUrls.count { "music.youtube.com" in it })
