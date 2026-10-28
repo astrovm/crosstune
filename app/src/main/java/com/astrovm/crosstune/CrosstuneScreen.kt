@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.alpha
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.ExperimentalTransitionApi
 import androidx.compose.animation.core.SeekableTransitionState
@@ -104,6 +103,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -1619,7 +1619,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
         keyboard?.hide()
         focus.clearFocus()
     }
-    BackHandler(enabled = searchExpanded) { closeSearch() }
+    val closing = swipedAway(enabled = searchExpanded, onBack = closeSearch)
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 32.dp, bottom = 4.dp).heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1646,7 +1646,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     ),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                    modifier = Modifier.fillMaxWidth().goingAway(closing, TransformOrigin(1f, 0.5f)).focusRequester(focusRequester)
                 )
                 LaunchedEffect(Unit) { focusRequester.requestFocus() }
             } else {

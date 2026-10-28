@@ -47,6 +47,8 @@ internal object Motion {
     val size: FiniteAnimationSpec<IntSize> = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntSize(1, 1))
     /** How a screen rises or sinks once the finger is off it, or it was a tap: it carries on from where it is. */
     val rise: FiniteAnimationSpec<Float> = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = 0.001f)
+    /** Something on a screen going once a swipe back's let go, or coming back: quicker than a screen, as it's smaller. */
+    val away: FiniteAnimationSpec<Float> = spring(stiffness = Spring.StiffnessMedium, visibilityThreshold = 0.001f)
     /** What comes in fades in a touch slower than what goes, so the two don't blur together. */
     val fadeIn: FiniteAnimationSpec<Float> = tween(durationMillis = 220, delayMillis = 60)
     val fadeOut: FiniteAnimationSpec<Float> = tween(durationMillis = 120)

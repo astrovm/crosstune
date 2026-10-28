@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.ExperimentalTransitionApi
 import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.rememberTransition
@@ -19,10 +20,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -30,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * A screen a swipe reaches: [go] gets there, and [back], for one that's opened as the finger starts,
@@ -212,6 +217,44 @@ internal fun <S> SwipedBackPages(
         content = content
     )
 }
+
+/**
+ * Back for something on a screen rather than the screen, e.g. a menu: a swipe back takes it away as
+ * far as it's gone, and once it's let go the rest of the way, then [onBack]; or it comes back. A press
+ * of Back takes it the whole way. Gives how far away it is, 0 to 1, for it to show.
+ */
+@Composable
+internal fun swipedAway(enabled: Boolean = true, shown: Any? = null, onBack: () -> Unit): () -> Float {
+    val away = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val back by rememberUpdatedState(onBack)
+    // Gone, it stays so while it goes, e.g. as its space closes; it's whole again once it's back, or
+    // something else is [shown] in its place.
+    LaunchedEffect(enabled, shown) { if (enabled) away.snapTo(0f) }
+    PredictiveBackHandler(enabled) { swipe ->
+        try {
+            swipe.collect { away.snapTo(it.progress) }
+            away.animateTo(1f, Motion.away)
+            back()
+        } catch (e: CancellationException) {
+            scope.launch { away.animateTo(0f, Motion.away) }
+            throw e
+        }
+    }
+    return { away.value }
+}
+
+/** Something [away] of the way gone, as [swipedAway] has it: smaller, toward [origin], and fainter. */
+internal fun Modifier.goingAway(away: () -> Float, origin: TransformOrigin): Modifier = graphicsLayer {
+    val gone = away()
+    alpha = 1f - gone
+    scaleX = 1f - gone * GONE_SMALLER
+    scaleY = scaleX
+    transformOrigin = origin
+}
+
+/** How much smaller something is once it's all the way gone. */
+private const val GONE_SMALLER = 0.1f
 
 /** How far below the status bar a swipe down has to start to move a layer, about as far as a screen's header goes. */
 private val TOP_ZONE = 96.dp

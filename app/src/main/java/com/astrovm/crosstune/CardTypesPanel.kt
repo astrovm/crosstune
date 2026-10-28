@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -56,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.semantics.toggleableState
@@ -94,8 +94,9 @@ internal fun CardType.title(): String = when {
 internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Boolean, actions: ScreenActions, onClose: () -> Unit, onPreview: (CardPreview?) -> Unit = {}) {
     var editing by remember { mutableStateOf<String?>(null) }
     var fixing by remember { mutableStateOf(false) }
-    BackHandler { if (fixing) fixing = false else if (editing != null) editing = null else onClose() }
     val type = types.firstOrNull { it.id == editing }
+    val inside = fixing || type != null
+    val goingBack = swipedAway(shown = inside) { if (fixing) fixing = false else if (editing != null) editing = null else onClose() }
     val change = { list: List<CardType>, save: Boolean -> actions.onCardTypesChange(list, save) }
     LaunchedEffect(type?.id) { if (type == null) onPreview(null) }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.42f
@@ -103,10 +104,10 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.large,
         shadowElevation = 6.dp,
-        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().testTag("practice-card-options")
+        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().then(if (inside) Modifier else Modifier.goingAway(goingBack, TransformOrigin(1f, 0f))).testTag("practice-card-options")
     ) {
         Column {
-        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()).then(if (inside) Modifier.goingAway(goingBack, TransformOrigin.Center) else Modifier).padding(16.dp)) {
             if (fixing) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { fixing = false }) { AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button)) }

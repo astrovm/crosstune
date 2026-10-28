@@ -95,7 +95,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
@@ -251,9 +250,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             syncingAsked = true
         }
     }
-    BackHandler(enabled = syncing) { syncingAsked = false }
+    val unsyncing = swipedAway(enabled = syncing) { syncingAsked = false }
     val onlyVisuals = visualsOnly && state.visuals
-    BackHandler(enabled = onlyVisuals) { visualsOnly = false }
+    val wordsBack = swipedAway(enabled = onlyVisuals) { visualsOnly = false }
     val tint by animateColorAsState(
         coverColor(cover, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
         tween(durationMillis = 700),
@@ -296,7 +295,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     val toolsAway by rememberUpdatedState(!toolsShown)
     // Again once the words arrive, which put their own tools first on it; not while the bar is away, where it would only pull the remote back.
     if (tv) LaunchedEffect(state.lyrics.isEmpty()) { if (toolsShown) focusBar = true }
-    WithVisuals(state, onlyVisuals, barMenu != null, onShowWords = { visualsOnly = false }) { ground ->
+    WithVisuals(state, onlyVisuals, wordsBack, barMenu != null, onShowWords = { visualsOnly = false }) { ground ->
     Surface(color = ground, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize()) {
     Box(
         modifier = Modifier
@@ -350,7 +349,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             ) {
                 FollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW, onDismiss = { followOffered = false })
             }
-            AnimatedVisibility(visible = syncing) {
+            AnimatedVisibility(visible = syncing, modifier = Modifier.goingAway(unsyncing, TransformOrigin(0.5f, 0f))) {
                 SyncStrip(state.lyricsSynced, actions, onDone = { syncingAsked = false })
             }
             Box(
@@ -470,17 +469,20 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
  * are either way, so the words coming and going don't start them over.
  */
 @Composable
-private fun WithVisuals(state: UiState, only: Boolean, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
+private fun WithVisuals(state: UiState, only: Boolean, wordsBack: () -> Float, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Keep a reading scrim even at the lightest setting. Menus soften the moving background further.
             val readingShade = if (menuOpen) 0.75f else 0.5f
             // Darkened as they're drawn, smaller than the screen, rather than under a shade over the whole of it.
-            val shade = if (only) 0f else readingShade + (1f - readingShade) * state.visualsShade
-            LocalVisuals.current(state.visualsPlay.copy(shade = shade, behind = true), Modifier.fillMaxSize())
+            val reading = readingShade + (1f - readingShade) * state.visualsShade
+            // Swiped back to, the words and their shade come as far as the swipe has.
+            val coming = if (only) wordsBack() else 1f
+            LocalVisuals.current(state.visualsPlay.copy(shade = reading * coming, behind = true), Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
+                if (coming > 0f) Box(Modifier.graphicsLayer { alpha = coming }) { content(Color.Transparent) }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -693,13 +695,16 @@ private fun LyricsActions(
     modifier: Modifier = Modifier
 ) {
     // The readings page handles back first, while it's open, and returns to its card.
-    BackHandler(enabled = menu != null) { onMenuChange(null) }
+    val closing = swipedAway(enabled = menu != null, shown = menu) { onMenuChange(null) }
     Box(modifier = modifier.widthIn(max = 392.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
         val close = { onMenuChange(null) }
-        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
-        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
-        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
+        // Swiped back, a menu sinks into the bar it came from.
+        Column(Modifier.goingAway(closing, TransformOrigin(0.5f, 1f))) {
+            LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
+            StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
+            VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
+        }
         if (state.reportOffer) ReportOffer(actions)
         state.singingModel?.let { SingingModelOffer(it, actions) }
         Surface(
