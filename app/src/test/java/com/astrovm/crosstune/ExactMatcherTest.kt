@@ -41,6 +41,23 @@ class ExactMatcherTest {
         assertTrue(fake.requestBodies.single().contains("\"videoId\":\"4NRXx6U8ABQ\""))
         respond(type("ATV"))
         assertEquals(true, runBlocking { matcher().isMusicVideo("4NRXx6U8ABQ") })
+        // Someone's own upload is music when they put it under Music, like a concert they filmed.
+        var category: String? = "Music"
+        fake.handler = { request ->
+            if (request.url.host == "www.youtube.com") {
+                FakeSpotify.html(request, category?.let { """{"microformat":{"playerMicroformatRenderer":{"category":"$it"}}}""" } ?: throw IOException("offline"))
+            } else {
+                FakeSpotify.html(request, type("UGC"))
+            }
+        }
+        assertEquals(true, runBlocking { matcher().isMusicVideo("b0T7GPQjJ7w") })
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.youtube.com/youtubei/v1/player"))
+        assertTrue(fake.requestBodies.last().contains("\"videoId\":\"b0T7GPQjJ7w\""))
+        // A tutorial, or a vlog, isn't.
+        category = "Howto & Style"
+        assertEquals(false, runBlocking { matcher().isMusicVideo("HXJx8j7JpKY") })
+        category = null
+        assertNull(runBlocking { matcher().isMusicVideo("HXJx8j7JpKY") })
         respond(type("UGC"))
         assertEquals(false, runBlocking { matcher().isMusicVideo("jNQXAC9IVRw") })
 
