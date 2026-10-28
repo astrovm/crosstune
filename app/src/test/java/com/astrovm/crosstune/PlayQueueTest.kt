@@ -162,6 +162,29 @@ class PlayQueueTest {
     }
 
     @Test
+    fun aPartShuffledInTheAppPlaysOnOnceItsSongsAllPlayed() {
+        val queue = queue()
+        queue.playing()
+        plays(1, 100)
+        // Shuffled, YouTube Music plays the part's songs out of order, each by its number.
+        plays(50, 149)
+        (2..49).forEach { plays(it, 99L + it) }
+        assertTrue(phone.listsAsked.isEmpty())
+        // Then on to what it plays after them all.
+        plays("Radio", 150)
+        assertEquals(listOf(music to "https://music.youtube.com/watch?v=Song 51&list=TL"), phone.listsAsked)
+
+        // Something picked before they all played is something else to play, as without shuffle.
+        queue.playing()
+        plays(1, 1000)
+        plays(50, 1049)
+        plays(2, 1001)
+        plays("Other", 1050)
+        assertFalse(file.exists())
+        assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
     fun somethingElsePickedToPlayStopsIt() {
         val queue = queue()
         queue.playing()
@@ -212,6 +235,20 @@ class PlayQueueTest {
         again.resume()
         plays("Last One", 149)
         assertEquals(tracks.subList(50, 100), looked.last())
+        plays("Radio", 150)
+        assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
+    fun aShuffledPartCarriesOnAfterCrosstuneIsStopped() {
+        val stopped = CoroutineScope(Dispatchers.Unconfined)
+        queue(scope = stopped).playing()
+        plays(1, 100)
+        plays(50, 149)
+        (2..49).forEach { plays(it, 99L + it) }
+        stopped.cancel()
+        // Started again, it still knows they all played, so it plays on.
+        queue().resume()
         plays("Radio", 150)
         assertEquals(1, phone.listsAsked.size)
     }
