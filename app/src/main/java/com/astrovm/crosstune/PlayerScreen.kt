@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.core.graphics.drawable.toBitmap
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -71,6 +72,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+
+internal const val PLAYER_COVER_TAG = "player-cover"
 
 /**
  * Crosstune's player: the song playing in its music app, behind, with its cover, where it is, and
@@ -342,6 +345,7 @@ private fun SwipedCover(following: Following?, onSkip: (next: Boolean) -> Unit, 
     val canPrevious = following?.canSkipPrevious == true
     cover(
         Modifier
+            .testTag(PLAYER_COVER_TAG)
             .graphicsLayer {
                 translationX = moved.value
                 alpha = 1f - (abs(moved.value) / size.width).coerceAtMost(1f) / 2

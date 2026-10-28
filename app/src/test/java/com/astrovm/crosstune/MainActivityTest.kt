@@ -3703,6 +3703,95 @@ class MainActivityTest {
     }
 
     @Test
+    fun thePlayersSongRepeatsIsLikedPlaysWhatsNextSleepsAndOpensItsCard() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        MainActivity.lookAheadLyrics = true
+        val words = """[{"trackName":"Dakare Ni Kita Onna","artistName":"Kingo Hamada","plainLyrics":"One\nTwo\nThree",""" +
+            """"syncedLyrics":"[00:01.00] One\n[00:20.00] Two\n[00:40.00] Three"}]"""
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, words)
+            else FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""")
+        }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
+        phone.playing.value = Following(
+            PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic,
+            durationMs = 200_000, repeat = Repeat.OFF, like = AppAction("thumbs_up_action", "Like", 1),
+            upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "Band"))
+        )
+        // The line being sung shows under its buttons, looked up as its card looks its words up.
+        waitForText("Two")
+
+        // Repeat goes round the app's ways, as music apps do.
+        val repeat = string(R.string.player_repeat)
+        click(repeat)
+        phone.playing.value = phone.playing.value!!.copy(repeat = Repeat.ALL)
+        composeRule.waitForIdle()
+        click(repeat)
+        phone.playing.value = phone.playing.value!!.copy(repeat = Repeat.ONE)
+        composeRule.waitForIdle()
+        click(repeat)
+        assertEquals(listOf(Repeat.ALL, Repeat.ONE, Repeat.OFF), phone.repeated)
+        // The app's own like is pressed there.
+        click("Like")
+        assertEquals(1, phone.liked)
+        // What the app has up next plays at a tap.
+        click(string(R.string.player_up_next))
+        composeRule.onNodeWithText("Next Song").performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(7L), phone.queuedPlayed)
+        // The sleep timer counts down the minutes, and is turned off.
+        val sleep = string(R.string.player_sleep_timer)
+        click(sleep)
+        composeRule.onNodeWithText(string(R.string.player_sleep_minutes, 15)).performClick()
+        waitUntil { composeRule.onAllNodes(hasContentDescription(sleep) and hasText(string(R.string.player_sleep_minutes, 15))).fetchSemanticsNodes().isNotEmpty() }
+        click(sleep)
+        composeRule.onNodeWithText(string(R.string.player_sleep_song_end)).performClick()
+        waitUntil { composeRule.onAllNodes(hasText(string(R.string.player_sleep_minutes, 15))).fetchSemanticsNodes().isEmpty() }
+        click(sleep)
+        composeRule.onNodeWithText(string(R.string.player_sleep_off)).performClick()
+        composeRule.waitForIdle()
+        click(sleep)
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_sleep_off))).fetchSemanticsNodes().isEmpty())
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+
+        // Its name opens its card, which is the song's already.
+        composeRule.onNodeWithText("Dakare Ni Kita Onna").performClick()
+        composeRule.waitForIdle()
+        waitForDescription(play)
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.player_playing_in, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
+        // Its words kept, as the app left with them open keeps them, the player shows them at once.
+        click(string(R.string.lyrics_button))
+        waitUntil { composeRule.onAllNodes(hasTestTag(LYRICS_SONG_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        waitForText("Three")
+        controller!!.pause().stop().restart().resume()
+        composeRule.waitForIdle()
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitForText("Two")
+
+        // Another song the app went on to opens a card of its own.
+        phone.playing.value = null
+        phone.onThePhone = Heard.Song(MusicMetadata("Other Song", "Band"), null)
+        waitForText("Other Song")
+        composeRule.onNodeWithText("Other Song").performClick()
+        composeRule.waitForIdle()
+        waitUntil { composeRule.onAllNodes(hasContentDescription(string(R.string.player_playing_in, "YouTube Music"))).fetchSemanticsNodes().isEmpty() }
+        waitForText("Other Song")
+    }
+
+    @Test
     fun withoutAccessThePlayerSaysHowToAllowItAndPlayAsksTheAppAgain() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback()
