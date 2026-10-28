@@ -12,11 +12,15 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -88,6 +92,16 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val following = player.following
     val app = following?.app ?: MusicService.ofPackage(player.app)?.let { stringResource(it.labelRes) }
     BackHandler(onBack = actions.onClosePlayer)
+    // The list it plays from, up top, which opens what plays next over the player.
+    val listed = following?.takeIf { it.from != null || it.upNext.isNotEmpty() }
+    var upNext by rememberSaveable { mutableStateOf(false) }
+    val opener = remember { FocusRequester() }
+    var opened by remember { mutableStateOf(false) }
+    LaunchedEffect(upNext) {
+        if (upNext) opened = true
+        // Put away, the remote is back where it opened it, rather than anywhere, as the song it was on went.
+        else if (opened && listed != null) opener.requestFocus()
+    }
     val ground = MaterialTheme.colorScheme.surface
     val tint by animateColorAsState(
         coverColor(cover, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
@@ -117,7 +131,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                     }
                     // The list it plays from, up top as music apps keep it, which opens what plays next.
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f)) {
-                        following?.takeIf { it.from != null || it.upNext.isNotEmpty() }?.let { PlayingFrom(it, actions) }
+                        listed?.let { PlayingFrom(it, Modifier.focusRequester(opener)) { upNext = true } }
                     }
                     SleepButton(state.sleep, songEnds = following?.durationMs != null, actions)
                     // Where it plays, by its icon, which brings that app forward, up top as music apps keep where they play.
@@ -190,6 +204,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 }
             }
         }
+        if (upNext && listed != null) UpNext(listed, actions, onDismiss = { upNext = false })
     }
 }
 
@@ -370,15 +385,14 @@ private fun SwipedCover(following: Following?, onSkip: (next: Boolean) -> Unit, 
 
 /** The list the song plays from, by name when Crosstune played it, which opens what plays next. */
 @Composable
-private fun PlayingFrom(following: Following, actions: ScreenActions) {
-    var open by rememberSaveable { mutableStateOf(false) }
+private fun PlayingFrom(following: Following, modifier: Modifier, onOpen: () -> Unit) {
     val upNext = stringResource(R.string.player_up_next)
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .heightIn(min = 48.dp)
             .clip(MaterialTheme.shapes.small)
-            .clickable(onClickLabel = upNext) { open = true }
+            .clickable(onClickLabel = upNext, onClick = onOpen)
             .padding(horizontal = 12.dp)
             .semantics(mergeDescendants = true) { contentDescription = following.from?.let { "$upNext, $it" } ?: upNext }
     ) {
@@ -387,34 +401,67 @@ private fun PlayingFrom(following: Following, actions: ScreenActions) {
             Text(it, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp))
         }
     }
-    if (open) UpNextSheet(following, actions, onDismiss = { open = false })
 }
 
-/** What the app plays next, then what Crosstune asks it for after; one the app has plays at a tap. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * What the app plays next, then what Crosstune asks it for after; one the app has plays at a tap. A
+ * sheet over the player rather than a window of its own: on a TV the player is itself over another
+ * app, where Crosstune can open no other window.
+ */
 @Composable
-private fun UpNextSheet(following: Following, actions: ScreenActions, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
-        Text(
-            following.from ?: stringResource(R.string.player_up_next),
-            style = MaterialTheme.typography.titleLarge,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp)
+private fun UpNext(following: Following, actions: ScreenActions, onDismiss: () -> Unit) {
+    BackHandler(onBack = onDismiss)
+    // With a remote, it starts on the next song, so OK plays it.
+    val first = remember { FocusRequester() }
+    if (following.upNext.isNotEmpty()) LaunchedEffect(Unit) {
+        // Once the list has laid it out.
+        withFrameNanos {}
+        first.requestFocus()
+    }
+    Box(contentAlignment = Alignment.BottomCenter, modifier = Modifier.fillMaxSize()) {
+        // A tap beside it puts it away, as a sheet's does; the remote has Back for that, so it takes no focus.
+        Spacer(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
+                .pointerInput(onDismiss) { detectTapGestures { onDismiss() } }
         )
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-            items(following.upNext) { next ->
-                val id = next.id
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // Still to be asked for, it can't be played yet, but the remote still goes through it.
-                        .then(if (id != null) Modifier.clickable { onDismiss(); actions.onPlayerPlayQueued(id) } else Modifier.semantics(mergeDescendants = true) {}.focusable())
-                        .padding(horizontal = 24.dp, vertical = 8.dp)
-                ) {
-                    Text(next.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (next.artist.isNotBlank()) {
-                        Text(next.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Surface(
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(top = 48.dp)
+                .widthIn(max = ContentMaxWidth)
+                .fillMaxWidth()
+                // The remote stays in it, as the player's under it, until Back.
+                .focusProperties { onExit = { cancelFocusChange() } }
+                .focusGroup()
+        ) {
+            Column(modifier = Modifier.navigationBarsPadding().padding(top = 24.dp)) {
+                Text(
+                    following.from ?: stringResource(R.string.player_up_next),
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp)
+                )
+                LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                    itemsIndexed(following.upNext) { index, next ->
+                        val id = next.id
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (index == 0) Modifier.focusRequester(first) else Modifier)
+                                // Still to be asked for, it can't be played yet, but the remote still goes through it.
+                                .then(if (id != null) Modifier.clickable { onDismiss(); actions.onPlayerPlayQueued(id) } else Modifier.semantics(mergeDescendants = true) {}.focusable())
+                                .padding(horizontal = 24.dp, vertical = 8.dp)
+                        ) {
+                            Text(next.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (next.artist.isNotBlank()) {
+                                Text(next.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
                     }
                 }
             }
@@ -517,7 +564,8 @@ private fun LyricsPeek(player: PlayerState, onLyrics: () -> Unit) {
             .clickable(onClickLabel = name, onClick = onLyrics)
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        AppIcon(R.drawable.ic_lyrics, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        // Named as the button it stands in for: the line changes as it's sung, which a screen reader would read out each time.
+        AppIcon(R.drawable.ic_lyrics, contentDescription = name, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         Crossfade(line, label = "sung line", modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Text(it, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }

@@ -7,7 +7,10 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.performKeyInput
@@ -16,6 +19,7 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -100,11 +104,16 @@ class PlayerScreenTest {
 
     private var shown by mutableStateOf(UiState())
 
+    private lateinit var inputModes: InputModeManager
+
     /** The player on "Song" by "Band", paused 25 seconds into its 200, followed as [following] has it on top of that. */
     private fun player(actions: ScreenActions = ScreenActions(), following: (Following) -> Following? = { it }) {
         val paused = Following(PlaybackClock(25_000, 0, playing = false), "YouTube Music", canSeek = true, durationMs = 200_000)
         shown = UiState(canFollowApps = true, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following(paused)))
-        compose.setContent { CrosstuneTheme { PlayerScreen(shown, actions) } }
+        compose.setContent {
+            inputModes = LocalInputModeManager.current
+            CrosstuneTheme { PlayerScreen(shown, actions) }
+        }
     }
 
     private fun showing(change: (UiState) -> UiState) {
@@ -194,6 +203,10 @@ class PlayerScreenTest {
         compose.onNodeWithContentDescription(upNext).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(upNext).assertExists()
+        // A tap beside it puts it away.
+        compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(centerX, 5f)) }
+        compose.waitForIdle()
+        none(hasText(upNext))
         // With nothing after it, there's nothing to open.
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = emptyList()))) }
         none(hasContentDescription(upNext))
@@ -212,26 +225,29 @@ class PlayerScreenTest {
         }
         fun focused(text: String) = compose.onAllNodes(hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isNotEmpty()
         val upNext = compose.onNodeWithContentDescription(context.getString(R.string.player_up_next))
+        // The remote's, as a TV is: Robolectric starts as a touch screen, where buttons take no focus.
+        compose.runOnIdle { inputModes.requestInputMode(InputMode.Keyboard) }
         upNext.requestFocus()
         press(upNext, Key.DirectionCenter)
-        // Down through the songs, the one still to be asked for too, and up to play one.
-        val later = compose.onNodeWithText("Later Song")
-        repeat(4) { if (!focused("Later Song")) press(later, Key.DirectionDown) }
+        // It starts on the next song; down through the rest, the one still to be asked for too, and no
+        // further, as the player's under it; then up to play one.
+        assertTrue(focused("Next Song"))
+        press(compose.onNodeWithText("Next Song"), Key.DirectionDown)
         assertTrue(focused("Later Song"))
-        press(later, Key.DirectionUp)
+        press(compose.onNodeWithText("Later Song"), Key.DirectionDown)
+        assertTrue(focused("Later Song"))
+        press(compose.onNodeWithText("Later Song"), Key.DirectionUp)
         assertTrue(focused("Next Song"))
         press(compose.onNodeWithText("Next Song"), Key.DirectionCenter)
         assertEquals(listOf(7L), played)
-        // Closed, the remote is back where it opened it.
+        // Put away, the remote is back where it opened it.
         upNext.assertIsFocused()
 
         val sleep = compose.onNodeWithContentDescription(context.getString(R.string.player_sleep_timer))
         sleep.requestFocus()
         press(sleep, Key.DirectionCenter)
-        val first = context.getString(R.string.player_sleep_minutes, 15)
-        repeat(2) { if (!focused(first)) press(compose.onNodeWithText(first), Key.DirectionDown) }
-        assertTrue(focused(first))
-        press(compose.onNodeWithText(first), Key.DirectionCenter)
+        compose.onNodeWithText(context.getString(R.string.player_sleep_minutes, 15)).performClick()
+        compose.waitForIdle()
         assertEquals(listOf<Int?>(15), asked)
         sleep.assertIsFocused()
     }

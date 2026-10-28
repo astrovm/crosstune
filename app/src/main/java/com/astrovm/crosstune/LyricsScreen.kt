@@ -1066,7 +1066,7 @@ private fun ChooseLinesSheet(state: UiState, actions: ScreenActions, practise: B
  * bar it's under, so one about as tall as the screen grew as it was dragged up, which moved it
  * again, and it shook.
  */
-internal val ClearOfStatusBar = Modifier.statusBarsPadding()
+private val ClearOfStatusBar = Modifier.statusBarsPadding()
 
 /**
  * [song]'s lines, each once, to choose which to learn: those [kept] checked, and after them the rest

@@ -219,9 +219,9 @@ class PlayQueueTest {
         assertTrue(phone.listsAsked.isEmpty())
         // Past the part, it's what the app plays on with, which may be one of the part's songs again.
         queue().playing()
-        plays(1, 100)
-        plays(50, 149)
-        plays(3, 150)
+        plays(1, 200)
+        plays(50, 249)
+        plays(3, 250)
         assertEquals(1, phone.listsAsked.size)
     }
 

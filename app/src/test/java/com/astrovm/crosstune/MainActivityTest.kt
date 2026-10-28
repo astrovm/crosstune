@@ -3781,7 +3781,9 @@ class MainActivityTest {
         click(play)
         waitForText("Two")
 
-        // Another song the app went on to opens a card of its own.
+        // Another song the app went on to, once this one played, opens a card of its own.
+        phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = true))
+        composeRule.waitForIdle()
         phone.playing.value = null
         phone.onThePhone = Heard.Song(MusicMetadata("Other Song", "Band"), null)
         waitForText("Other Song")

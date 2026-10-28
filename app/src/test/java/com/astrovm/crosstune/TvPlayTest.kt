@@ -16,6 +16,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -187,7 +188,7 @@ class TvPlayTest {
 
         // Back goes back in Crosstune, from the words to the player and on to the main screen, still over YouTube.
         pressBack(floating.get())
-        waitUntil { !shown("Demo one") }
+        waitUntil { composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(onPlayer())
         assertFalse(shadowOf(floating.get()).isStoppedBySelf)
         pressBack(floating.get())
