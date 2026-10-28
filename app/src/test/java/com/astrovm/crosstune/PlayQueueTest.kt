@@ -330,6 +330,77 @@ class PlayQueueTest {
         assertFalse(file.exists())
     }
 
+    private val tidal = MusicService.TIDAL.packageName
+
+    /** TIDAL plays [song], numbered by what it is, after the song numbered [after] in its queue; or stopped at its end, once [ended]. */
+    private fun tidalPlays(song: String, id: Long?, after: Long? = null, ended: Boolean = false) {
+        phone.inApp(tidal).value = AppPlays(MusicMetadata(song, "Band"), id, ended, after)
+    }
+
+    /** The first [songs] of the list played in TIDAL, which takes no list, from the first, just asked for. */
+    private fun PlayQueue.playingInTidal(songs: Int = 3) = runBlocking { play(tracks.take(songs), MusicService.TIDAL, tidal, 1, tracks.take(1)) }
+
+    @Test
+    fun anAppThatTakesNoListIsAskedForTheSongsOneByOne() {
+        // What TIDAL played before, numbered higher than the list's songs, as it numbers them by what they are.
+        tidalPlays("Before", 9_000)
+        queue().playingInTidal()
+        tidalPlays("Song 1", 155)
+        assertTrue(phone.songsAsked.isEmpty())
+        // On to its radio, a moment before TIDAL puts it in its queue, then right after the song
+        // there: the next is asked for by name, with nothing looked up.
+        tidalPlays("Radio", 143)
+        assertTrue(phone.songsAsked.isEmpty())
+        tidalPlays("Radio", 143, after = 155)
+        assertEquals(listOf("Song 2" to tidal), phone.songsAsked.map { it.first.title to it.second })
+        // Until it plays, the radio playing on is no part of it.
+        tidalPlays("More Radio", 144, after = 143)
+        tidalPlays("Song 2", 20)
+        // Played to its end with nothing after it, as with TIDAL's radio off, the next plays too.
+        tidalPlays("Song 2", 20, ended = true)
+        assertEquals(listOf("Song 2", "Song 3"), phone.songsAsked.map { it.first.title })
+        assertTrue(file.exists())
+        // The last has nothing after it: done, and nothing kept.
+        tidalPlays("Song 3", 7)
+        tidalPlays("Radio", 8, after = 7)
+        assertEquals(2, phone.songsAsked.size)
+        assertFalse(file.exists())
+        assertTrue(looked.isEmpty())
+    }
+
+    @Test
+    fun somethingElsePickedInAnAppThatTakesNoListStopsIt() {
+        queue().playingInTidal()
+        tidalPlays("Song 1", 155)
+        // Another album, which takes the place of TIDAL's queue: from its first song, it's only seen
+        // once the next plays after it.
+        tidalPlays("Other", 299)
+        assertTrue(file.exists())
+        tidalPlays("Other", 300, after = 299)
+        assertFalse(file.exists())
+        tidalPlays("Radio", 143, after = 155)
+        assertTrue(phone.songsAsked.isEmpty())
+        // With no app to ask for the next, it stops too.
+        queue().playingInTidal()
+        tidalPlays("Song 1", 156)
+        phone.canPlaySongs = false
+        tidalPlays("Radio", 143, after = 156)
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun skippingOnInAnAppThatTakesNoListAsksForTheNextSong() {
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "TIDAL", canSeek = true)
+        queue.playingInTidal()
+        tidalPlays("Song 1", 155)
+        assertEquals(true, playback.canSkipOn(1))
+        playback.skipFrom(1)
+        assertEquals(listOf("Song 2"), phone.songsAsked.map { it.first.title })
+        assertTrue(phone.skips.isEmpty())
+    }
+
     /** Whether the app playing [number] can skip on from it, as Crosstune shows. */
     private fun PlaybackSource.canSkipOn(number: Int) = runBlocking { follow(MusicMetadata("Song $number", "Band")).first() }?.canSkipNext
 

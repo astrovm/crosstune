@@ -79,6 +79,13 @@ internal enum class MusicService(
     val opensTappedLinks: Boolean get() = this in LinkInterception.HOSTS
 
     /**
+     * Whether its app takes no list of songs, but plays one asked for by name in the background, so
+     * a playlist plays there one song after another, see [PlayQueue]: TIDAL. Spotify plays none asked
+     * for (#507), and Amazon Music's free plan plays the artist's radio instead.
+     */
+    val playsSongBySong: Boolean get() = this == TIDAL
+
+    /**
      * The app's own package, then those of builds patched from it, e.g. ReVanced's, which open its
      * links and play as it does: YouTube and YouTube Music by ReVanced, ReVanced Extended, Morphe and
      * Vanced, under names of their own. Patched Spotify keeps Spotify's. YouTube's also has its TV app.

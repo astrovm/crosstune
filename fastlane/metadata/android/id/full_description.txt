@@ -5,7 +5,7 @@ Seseorang mengirim link dari satu layanan musik, tapi kamu dengar di layanan lai
 <b>Fitur</b>
 <ul>
 <li>Membaca link dari Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp, dan Audiomack, lalu membukanya di salah satu aplikasi itu atau di Amazon Music dan Qobuz.</li>
-<li>Playlist dan album menampilkan lagu-lagunya: buka lagu mana pun di aplikasi pilihanmu, salin atau bagikan daftarnya, atau putar semuanya, berurutan atau acak, di YouTube Music atau YouTube.</li>
+<li>Playlist dan album menampilkan lagu-lagunya: buka lagu mana pun di aplikasimu, salin atau bagikan daftarnya, atau putar semuanya, berurutan atau acak, di YouTube Music, YouTube, atau TIDAL.</li>
 <li>Arahkan tiap layanan ke tujuan berbeda, misalnya link YouTube ke YouTube Music dan sisanya ke Apple Music.</li>
 <li>Tampilkan di Crosstune dulu: lagu diputar di aplikasi pilihanmu selagi kamu tetap di sini.</li>
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud, dan Audiomack bisa langsung membuka lagu, album, atau artisnya, bukan hasil pencarian, Bandcamp dan Qobuz membuka lagu atau albumnya, dan YouTube membuka lagunya.</li>

@@ -221,12 +221,13 @@ internal data class UiState(
 
     /**
      * Whether a collection's songs can play as one queue where it goes: YouTube Music and YouTube
-     * make one for any list of videos. A YouTube playlist opens as itself there instead.
+     * make one for any list of videos. A YouTube playlist opens as itself there instead. A playlist
+     * also plays song by song in an app that takes no list, when it's on the phone to be asked.
      */
     val canPlayAll: Boolean
-        get() = result?.tracks.orEmpty().isNotEmpty() &&
-            resultDestination.matchService.let { it == MusicService.YOUTUBE_MUSIC || it == MusicService.YOUTUBE } &&
-            link?.youtubePlaylistOn(resultDestination.matchService) == null
+        get() = result?.tracks.orEmpty().isNotEmpty() && resultDestination.matchService.let {
+            it == MusicService.YOUTUBE_MUSIC || it == MusicService.YOUTUBE || (it != null && it.playsSongBySong && it in installed && isSongList)
+        } && link?.youtubePlaylistOn(resultDestination.matchService) == null
 
     /**
      * Whether songs are looked up in the app they open in, to open the song itself: unless links open

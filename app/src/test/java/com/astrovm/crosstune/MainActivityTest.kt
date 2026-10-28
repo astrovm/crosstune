@@ -1172,6 +1172,44 @@ class MainActivityTest {
     }
 
     @Test
+    fun aPlaylistPlaysSongBySongInAnAppThatTakesNoList() {
+        val tidal = MusicService.TIDAL.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "TIDAL").commit()
+        collectionWithSongs()
+        // Without TIDAL on the phone there's no one to ask, so only its first song plays.
+        launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+        assertTextAbsent(string(R.string.play_all_button))
+        controller!!.pause().stop().destroy()
+
+        shadowOf(app.packageManager).installPackage(installedApp(tidal, "TIDAL"))
+        launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+        click(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
+        waitUntil { phone.songsAsked.isNotEmpty() }
+        assertEquals(MusicMetadata("First Song", "Band") to tidal, phone.songsAsked.single())
+        // Crosstune stays, in its player, and asks for the next song as TIDAL's radio follows the first.
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isNotEmpty())
+        assertNull(nextStartedActivity())
+        composeRule.runOnIdle { phone.inApp(tidal).value = AppPlays(MusicMetadata("First Song", "Band"), 155) }
+        composeRule.runOnIdle { phone.inApp(tidal).value = AppPlays(MusicMetadata("Radio", "Band"), 143, previousId = 155) }
+        waitUntil { phone.songsAsked.size == 2 }
+        assertEquals("Second Song", phone.songsAsked.last().first.title)
+
+        // TIDAL not answering, the first song opens there, as it would on its own.
+        phone.canPlaySongs = false
+        click(string(R.string.dismiss_button))
+        click(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(tidal, nextStartedActivity()!!.`package`)
+        assertEquals(2, phone.songsAsked.size)
+    }
+
+    @Test
     fun aYouTubePlaylistOpensAsItselfInYouTubeMusic() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """<meta property="og:title" content="Road Trip">""") }

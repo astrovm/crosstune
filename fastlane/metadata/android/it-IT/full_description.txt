@@ -5,7 +5,7 @@ Ricevi un link da un servizio musicale e apri lo stesso brano nella tua app pref
 <b>Funzionalità</b>
 <ul>
 <li>Legge i link di Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack e li apre in uno qualsiasi di questi servizi o in Amazon Music e Qobuz.</li>
-<li>Playlist e album mostrano i loro brani: aprine uno qualsiasi nell'app che hai scelto, copia o condividi l'elenco, oppure riproduci tutto, in ordine o in modo casuale, in YouTube Music o YouTube.</li>
+<li>Playlist e album mostrano i loro brani: aprine uno qualsiasi nell'app che hai scelto, copia o condividi l'elenco, oppure riproduci tutto, in ordine o in modo casuale, in YouTube Music, YouTube o TIDAL.</li>
 <li>Indirizza ogni servizio dove vuoi, ad esempio i link di YouTube in YouTube Music e tutto il resto in Apple Music.</li>
 <li>Mostra prima in Crosstune: il brano parte nell'app che hai scelto mentre resti qui.</li>
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud e Audiomack possono aprire direttamente il brano, l'album o l'artista invece di una ricerca, Bandcamp e Qobuz il brano o l'album, e YouTube il brano.</li>

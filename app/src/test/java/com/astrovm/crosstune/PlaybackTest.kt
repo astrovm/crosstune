@@ -11,6 +11,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.AudioManager
 import android.media.AudioAttributes
+import android.media.MediaDescription
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -55,7 +56,9 @@ class PlaybackTest {
     private val woken = mutableListOf<List<String>>()
     private var wakes: MediaController? = null
     private val shuffle = FakeShuffle()
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, shuffles = shuffle)
+    /** Each app's queue, by its package, as Robolectric shows none. */
+    private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, shuffles = shuffle, queueOf = { queues[it.packageName] })
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
 
@@ -911,6 +914,17 @@ class PlaybackTest {
         assertEquals(108L, runBlocking { playback.plays(music).first() }?.queueId)
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_STOPPED, 108))
         assertNull(runBlocking { playback.plays(music).first() })
+        // What's before it in the queue, by its number; none for the first, or a song not in it.
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PLAYING, 108))
+        val item = { id: Long -> MediaSession.QueueItem(MediaDescription.Builder().setMediaId("TRACK::$id").build(), id) }
+        queues[music] = listOf(item(155), item(108), item(143))
+        // Seen again as the queue changes, as TIDAL puts a song there after it starts playing it.
+        shadowOf(youTubeMusic).getCallbacks().forEach { it.onQueueChanged(queues[music]) }
+        assertEquals(155L, seen.last()?.previousId)
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PLAYING, 155))
+        assertNull(runBlocking { playback.plays(music).first() }?.previousId)
+        shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PLAYING, 9))
+        assertNull(runBlocking { playback.plays(music).first() }?.previousId)
         // An app with no queue gives no place in it.
         shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
         assertNull(runBlocking { playback.plays(music).first() }?.queueId)

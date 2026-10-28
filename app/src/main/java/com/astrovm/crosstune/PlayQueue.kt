@@ -20,8 +20,9 @@ import java.io.IOException
 /**
  * A playlist longer than YouTube takes in one queue, played through by Crosstune: YouTube or YouTube
  * Music is asked for [MainViewModel.MAX_QUEUE] songs at a time, and for the next ones as the last of
- * those ends. Kept on disk, so it carries on after Android stops Crosstune, which it starts again to
- * show it what plays.
+ * those ends. An app that takes no list, [MusicService.playsSongBySong], is asked for one song at a
+ * time instead. Kept on disk, so it carries on after Android stops Crosstune, which it starts again
+ * to show it what plays.
  */
 internal class PlayQueue(
     private val playback: PlaybackSource,
@@ -58,7 +59,8 @@ internal class PlayQueue(
         stop()
         if (to >= tracks.size) return
         before = playback.plays(app).first()
-        floor = before?.queueId
+        // An app numbering songs by what they are, as TIDAL does, numbers nothing in order.
+        floor = before?.queueId?.takeUnless { service.playsSongBySong }
         start(Playing(tracks, service, app, to, part))
     }
 
@@ -118,7 +120,7 @@ internal class PlayQueue(
         // where it is, whatever it calls the songs.
         val first = queue.first ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
         val numbered = first != null && now.queueId != null
-        val index = if (numbered) (now.queueId - first).toInt() else named
+        val index = if (numbered && !queue.bySong) (now.queueId - first).toInt() else named
         when {
             // The part's last song played to its end, and the app stopped there, as YouTube does.
             index == part.lastIndex && now.ended -> playNext()
@@ -129,12 +131,20 @@ internal class PlayQueue(
                 // The last of the part played in order, or, shuffled, the last of its songs to play.
                 val ends = checkNotNull(playing).heard.size == part.size && (index == part.lastIndex || index !in was.heard)
                 if (ends && was.to < was.tracks.size) onLast.value = now.song
-                if (next == null) lookAhead()
+                if (next == null && !queue.bySong) lookAhead()
             }
             // Still what played before the part.
             at < 0 -> Unit
-            // On from the part's last song, or shuffled, from all of them, to what the app plays after it.
-            (at == part.lastIndex || queue.heard.size == part.size) && if (numbered) index == part.size else index < 0 -> playNext()
+            // On from the part's last song, or shuffled, from all of them, to what the app plays after it;
+            // one by one, what comes right after the song in the app's queue, as its radio does.
+            (at == part.lastIndex || queue.heard.size == part.size) && when {
+                numbered && queue.bySong -> now.previousId == first
+                numbered -> index == part.size
+                else -> index < 0
+            } -> playNext()
+            // Nothing before it in the app's queue yet: TIDAL goes on to its radio a moment before it
+            // puts it there, after the song.
+            numbered && queue.bySong && now.previousId == null -> Unit
             // Something else was picked to play; without numbers, it may only be the app's own name for one of the part's songs.
             numbered -> stop()
         }
@@ -156,6 +166,7 @@ internal class PlayQueue(
         moving = true
         try {
             val queue = checkNotNull(playing)
+            if (queue.bySong) return playSong(queue)
             val list = (next ?: lookAhead()).await() ?: return stop()
             next = null
             at = -1
@@ -164,6 +175,14 @@ internal class PlayQueue(
         } finally {
             moving = false
         }
+    }
+
+    /** The next of [queue]'s songs, asked of its app by name, as it takes no list. */
+    private suspend fun playSong(queue: Playing) {
+        val song = queue.tracks.getOrNull(queue.to) ?: return stop()
+        at = -1
+        save(queue.copy(to = queue.to + 1, part = listOf(song), first = null, heard = emptySet()))
+        if (!playback.playSong(song, queue.app)) stop()
     }
 
     private suspend fun save(queue: Playing) {
@@ -199,6 +218,8 @@ internal class PlayQueue(
         val first: Long? = null,
         val heard: Set<Int> = emptySet()
     ) {
+        val bySong: Boolean get() = service.playsSongBySong
+
         fun json(): String = JSONObject()
             .put("tracks", songs(tracks))
             .put("service", service.name)
