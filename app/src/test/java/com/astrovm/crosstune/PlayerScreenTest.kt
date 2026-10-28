@@ -38,6 +38,20 @@ class PlayerScreenTest {
     }
 
     @Test
+    fun shuffleSitsLeftOfPreviousAsMusicAppsHaveIt() {
+        compose.setContent {
+            val following = Following(PlaybackClock(30_000, 0, playing = false), "YouTube Music", canSeek = true, durationMs = 200_000, shuffle = false)
+            CrosstuneTheme { PlayerScreen(UiState(canFollowApps = true, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following)), ScreenActions()) }
+        }
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        fun bounds(name: Int) = compose.onNodeWithContentDescription(context.getString(name)).fetchSemanticsNode().boundsInRoot
+        val shuffle = bounds(R.string.player_shuffle)
+        val previous = bounds(R.string.lyrics_previous_song)
+        assertTrue("Shuffle isn't left of previous: $shuffle, $previous", shuffle.right <= previous.left)
+        assertEquals(previous.center.y, shuffle.center.y, 1f)
+    }
+
+    @Test
     fun shuffleOnIsBoxedIn() {
         var shuffles by mutableStateOf(false)
         compose.setContent {
