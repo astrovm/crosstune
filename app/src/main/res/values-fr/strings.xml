@@ -185,6 +185,7 @@
     <string name="player_waiting">En attente de %1$s</string>
     <string name="player_follow_allow">Laissez Crosstune voir et contrôler le morceau en cours dans votre app de musique.</string>
     <string name="player_position">%1$s sur %2$s</string>
+    <string name="player_shuffle">Lecture aléatoire</string>
     <string name="lyrics_jump">Aller ici</string>
     <string name="lyrics_sync">Corriger le timing</string>
     <string name="lyrics_sync_hint">Touchez la ligne que vous entendez</string>

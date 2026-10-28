@@ -185,6 +185,7 @@
     <string name="player_waiting">Wachten op %1$s</string>
     <string name="player_follow_allow">Laat Crosstune het nummer in je muziekapp zien en bedienen.</string>
     <string name="player_position">%1$s van %2$s</string>
+    <string name="player_shuffle">Shuffle</string>
     <string name="lyrics_jump">Hierheen springen</string>
     <string name="lyrics_sync">Timing corrigeren</string>
     <string name="lyrics_sync_hint">Tik op de regel die je nu hoort</string>

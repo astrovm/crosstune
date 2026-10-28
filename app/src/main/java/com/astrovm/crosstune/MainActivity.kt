@@ -492,6 +492,7 @@ class MainActivity : ComponentActivity() {
         onPlayerOpenWith = viewModel::playerOpenWith,
         onPlayerPlayPause = viewModel::playerPlayPause,
         onPlayerSkip = viewModel::playerSkip,
+        onPlayerShuffle = viewModel::playerShuffle,
         onPlayerSeek = viewModel::playerSeek,
         onPlayerLyrics = viewModel::playerLyrics,
         onOpenWith = { destination -> viewModel.openResult(destination, finishAfterOpen = true) },

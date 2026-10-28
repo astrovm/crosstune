@@ -185,6 +185,7 @@
     <string name="player_waiting">%1$s bekleniyor</string>
     <string name="player_follow_allow">Crosstune\'un müzik uygulamanda çalan şarkıyı görmesine ve kontrol etmesine izin ver.</string>
     <string name="player_position">%1$s / %2$s</string>
+    <string name="player_shuffle">Karıştır</string>
     <string name="lyrics_jump">Buraya atla</string>
     <string name="lyrics_sync">Zamanlamayı düzelt</string>
     <string name="lyrics_sync_hint">Şu an duyduğun satıra dokun</string>

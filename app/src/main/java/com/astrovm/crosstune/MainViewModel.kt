@@ -1308,6 +1308,13 @@ internal class MainViewModel(
         playback?.skip(player.song, next)
     }
 
+    /** Has the app shuffle, or play in order again. */
+    fun playerShuffle() {
+        val player = uiState.player ?: return
+        val shuffles = player.following?.shuffle ?: return
+        playback?.shuffle(player.song, !shuffles)
+    }
+
     fun playerSeek(positionMs: Long) {
         val player = uiState.player ?: return
         if (player.following?.canSeek != true) return

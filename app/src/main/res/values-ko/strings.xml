@@ -185,6 +185,7 @@
     <string name="player_waiting">%1$s 기다리는 중</string>
     <string name="player_follow_allow">Crosstune이 음악 앱에서 재생 중인 노래를 보고 제어하도록 허용하세요.</string>
     <string name="player_position">%1$s / %2$s</string>
+    <string name="player_shuffle">셔플</string>
     <string name="lyrics_jump">여기로 이동</string>
     <string name="lyrics_sync">타이밍 맞추기</string>
     <string name="lyrics_sync_hint">지금 들리는 줄을 탭하세요</string>
