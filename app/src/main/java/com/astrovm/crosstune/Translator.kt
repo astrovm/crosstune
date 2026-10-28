@@ -88,13 +88,23 @@ internal class Translator(
     private suspend fun google(lines: List<String>, target: String, onFound: suspend (String, String) -> Unit): Boolean {
         for (batch in lines.chunked(GOOGLE_LINES)) {
             val rows = googleRows(batch, AUTO, target) ?: return false
-            // Pidgin and English around a Yoruba word are taken for English, and the Yoruba comes back
-            // as it was: "Keep it moving, rọra baddie" stays so. Only those: Vietnamese writes ẹ and ọ
-            // too, and asked as Yoruba, comes back garbled.
-            val yoruba = batch.indices.filter { rows[it].second == ENGLISH && target != YORUBA && yorubaLetters.containsMatchIn(Normalizer.normalize(batch[it], Normalizer.Form.NFC)) }
-            val asYoruba = if (yoruba.isEmpty()) emptyList() else googleRows(yoruba.map { batch[it] }, YORUBA, target) ?: return false
+            val letters = batch.map { Normalizer.normalize(it, Normalizer.Form.NFC) }
+            // English around a few words in the song's own language is taken for English, and those
+            // words come back as they were: "Nơi ấy em chờ (I'm in love)", "맞잖아, crime signs". Asked
+            // from the song's language, they're translated too. Only lines with letters English doesn't
+            // write, so "Buy you Dom Pérignon" stays English.
+            val language = rows.groupingBy { it.second }.eachCount().maxByOrNull { it.value }?.key
+            val mixed = if (language == ENGLISH || language == target) emptyList()
+            else batch.indices.filter { i -> rows[i].second == ENGLISH && letters[i].any { it.code > LATIN_1 && it.isLetter() } }
+            // Pidgin and English around a Yoruba word in a song mostly in English are taken for English
+            // too: "Keep it moving, rọra baddie" stays so.
+            val yoruba = batch.indices.filter { it !in mixed && rows[it].second == ENGLISH && target != YORUBA && yorubaLetters.containsMatchIn(letters[it]) }
             val found = rows.map { it.first }.toMutableList()
-            yoruba.forEachIndexed { at, i -> found[i] = asYoruba[at].first }
+            for ((asked, from) in listOf(mixed to language, yoruba to YORUBA)) {
+                if (asked.isEmpty()) continue
+                val again = googleRows(asked.map { batch[it] }, checkNotNull(from), target) ?: return false
+                asked.forEachIndexed { at, i -> found[i] = again[at].first }
+            }
             // Google at times answers a line with nothing, and asked again, translates it. Still
             // nothing, it's left for the next time it's asked.
             val blank = found.indices.filter { found[it].isBlank() }
@@ -207,6 +217,9 @@ internal class Translator(
         private const val ENGLISH = "en"
         /** Letters Yoruba writes and English doesn't, e.g. "ọmọ", "ṣé". */
         private val yorubaLetters = Regex("[ẹọṣẸỌṢ]")
+
+        /** The last of the letters English borrows, as in café and Pérignon. */
+        private const val LATIN_1 = 0xFF
 
         /** Lines asked of Google at once: a whole song, most of the time. */
         const val GOOGLE_LINES = 100

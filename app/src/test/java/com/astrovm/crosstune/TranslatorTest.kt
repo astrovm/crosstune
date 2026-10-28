@@ -163,6 +163,21 @@ class TranslatorTest {
     }
 
     @Test
+    fun aLineMixingEnglishWithTheSongsLanguageIsAskedAgainFromIt() {
+        val song = listOf("Em đẹp lắm", "Anh vẫn đợi em", "Em vẫn chờ anh", "Anh yêu em", "Em nhớ anh", "Nơi ấy em chờ (I'm in love)", "Lọ mọ (in love)", "You′re so far away", "Buy you Dom Pérignon")
+        googleReads { if (it.startsWith("Em") || it.startsWith("Anh")) "vi" else "en" }
+        val auto = google
+        google = { request -> if (request.url.queryParameter("sl") == "vi") FakeSpotify.html(request, JSONArray(asked(request).map { "(vi) $it" }).toString()) else auto(request) }
+        // Only the lines with letters English doesn't write, all at once; ọ is Vietnamese's here, not Yoruba's.
+        assertEquals(song.take(5).map { "<$it>" } + listOf("(vi) Nơi ấy em chờ (I'm in love)", "(vi) Lọ mọ (in love)", "<You′re so far away>", "<Buy you Dom Pérignon>"), translate(song))
+        assertEquals(1, googleAsked().count { "sl=vi" in it })
+        assertTrue(yorubaAsked().isEmpty())
+        // Into Vietnamese, there's nothing to ask again.
+        runBlocking { translator().translate(song.map { "$it." }, "vi") }
+        assertEquals(1, googleAsked().count { "sl=vi" in it })
+    }
+
+    @Test
     fun yorubaIsntAskedAgainForAReaderOfYoruba() {
         googleReads()
         assertEquals(listOf("<Keep it moving, rọra baddie>"), runBlocking { translator().translate(listOf("Keep it moving, rọra baddie"), "yo") })
