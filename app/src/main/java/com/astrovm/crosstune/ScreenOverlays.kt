@@ -40,6 +40,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -91,6 +92,11 @@ private fun OverlayFrame(overlay: Overlay) {
         withFrameNanos {}
         if (!focused) overlay.focus.requestFocus()
     }
+    // Once it's gone, the remote goes back to what opened it.
+    DisposableEffect(overlay) {
+        // Gone with the screen it was over, when it's that that put it away.
+        onDispose { runCatching { overlay.opener.requestFocus() } }
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -98,30 +104,32 @@ private fun OverlayFrame(overlay: Overlay) {
             .semantics { dialog() }
             .onFocusChanged { focused = it.hasFocus }
             .focusRequester(overlay.focus)
-            // The remote stays in it, as what's under it is out of reach, until Back.
-            .focusProperties { onExit = { cancelFocusChange() } }
-            .focusGroup()
+            .keepsTheRemote()
     ) { overlay.content.value() }
 }
 
+/**
+ * The remote stays in what this is on, as what's under it is out of reach, until Back. Only moves it
+ * makes are stopped: a focus asked for, as of what's opened from it, or given back, goes through.
+ */
+internal fun Modifier.keepsTheRemote(): Modifier = focusProperties {
+    onExit = { if (requestedFocusDirection in MOVES) cancelFocusChange() }
+}.focusGroup()
+
+private val MOVES = setOf(FocusDirection.Up, FocusDirection.Down, FocusDirection.Left, FocusDirection.Right, FocusDirection.Next, FocusDirection.Previous)
+
 /** Shows [content] in [overlays] for as long as this is in the composition. */
 @Composable
-private fun InOverlay(overlays: Overlays, content: @Composable () -> Unit) {
+private fun InOverlay(overlays: Overlays, opener: FocusRequester?, content: @Composable () -> Unit) {
     val latest = rememberUpdatedState(content)
     DisposableEffect(overlays) {
-        val opener = overlays.shown.lastOrNull()?.focus ?: overlays.screen
-        opener.saveFocusedChild()
-        val overlay = Overlay(latest, opener)
+        val overlay = Overlay(latest, opener ?: overlays.shown.lastOrNull()?.focus ?: overlays.screen)
         overlays.shown.add(overlay)
-        onDispose {
-            overlays.shown.remove(overlay)
-            // Gone with the screen it was over, when it's that that put it away.
-            runCatching { overlay.opener.restoreFocusedChild() }
-        }
+        onDispose { overlays.shown.remove(overlay) }
     }
 }
 
-/** An [AlertDialog], or on a TV its place in the screen. */
+/** An [AlertDialog], or on a TV its place in the screen, which gives the remote back to [opener], what opened it, once it's put away. */
 @Composable
 internal fun ScreenAlert(
     onDismissRequest: () -> Unit,
@@ -129,20 +137,21 @@ internal fun ScreenAlert(
     dismissButton: (@Composable () -> Unit)? = null,
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
-    text: (@Composable () -> Unit)? = null
+    text: (@Composable () -> Unit)? = null,
+    opener: FocusRequester? = null
 ) {
     val overlays = LocalOverlays.current
     if (overlays == null) {
         AlertDialog(onDismissRequest = onDismissRequest, confirmButton = confirmButton, dismissButton = dismissButton, icon = icon, title = title, text = text)
     } else {
-        InOverlay(overlays) { InlineAlert(onDismissRequest, confirmButton, dismissButton, icon, title, text) }
+        InOverlay(overlays, opener) { InlineAlert(onDismissRequest, confirmButton, dismissButton, icon, title, text) }
     }
 }
 
-/** A [ModalBottomSheet], or on a TV its place in the screen. */
+/** A [ModalBottomSheet], or on a TV its place in the screen, which gives the remote back to [opener] once it's put away. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ScreenSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+internal fun ScreenSheet(onDismiss: () -> Unit, opener: FocusRequester? = null, content: @Composable ColumnScope.() -> Unit) {
     val overlays = LocalOverlays.current
     if (overlays == null) {
         // Open all the way, so one back closes it rather than lowering it halfway first. Kept clear of the
@@ -150,7 +159,7 @@ internal fun ScreenSheet(onDismiss: () -> Unit, content: @Composable ColumnScope
         // about as tall as the screen grew as it was dragged up, which moved it again, and it shook.
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = Modifier.statusBarsPadding(), content = content)
     } else {
-        InOverlay(overlays) { InlineSheet(onDismiss, content = content) }
+        InOverlay(overlays, opener) { InlineSheet(onDismiss, content = content) }
     }
 }
 
@@ -219,9 +228,7 @@ internal fun InlineSheet(onDismiss: () -> Unit, content: @Composable ColumnScope
                 .padding(top = 48.dp)
                 .widthIn(max = ContentMaxWidth)
                 .fillMaxWidth()
-                // The remote stays in it, as what's under it is out of reach, until Back.
-                .focusProperties { onExit = { cancelFocusChange() } }
-                .focusGroup()
+                .keepsTheRemote()
         ) {
             Column(modifier = Modifier.navigationBarsPadding().padding(top = 24.dp), content = content)
         }

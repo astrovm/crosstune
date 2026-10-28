@@ -138,10 +138,11 @@ internal class ReportSender(
 
 /** What's wrong is said on GitHub, or by email, either filled in with [report]. */
 @Composable
-internal fun ReportDialog(report: Report, onDismiss: () -> Unit) {
+internal fun ReportDialog(report: Report, onDismiss: () -> Unit, opener: FocusRequester? = null) {
     val open = rememberWebOpener()
     ScreenAlert(
         onDismissRequest = onDismiss,
+        opener = opener,
         icon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
         title = { Text(stringResource(R.string.report_problem)) },
         text = { Text(stringResource(R.string.report_problem_text)) },
@@ -165,14 +166,13 @@ internal fun ReportDialog(report: Report, onDismiss: () -> Unit) {
  * [status] is how it's going. Sent, it says so and closes.
  */
 @Composable
-internal fun SongReportDialog(status: ReportStatus?, onSend: (String) -> Unit, onDismiss: () -> Unit) {
+internal fun SongReportDialog(status: ReportStatus?, onSend: (String) -> Unit, onDismiss: () -> Unit, opener: FocusRequester? = null) {
     var comment by rememberSaveable { mutableStateOf("") }
     val sending = status == ReportStatus.SENDING
     val context = LocalContext.current
     val sent = stringResource(R.string.report_sent)
     // With a remote, Send rather than the comment, which would open the keyboard for what's optional.
     val send = remember { FocusRequester() }
-    LaunchedEffect(Unit) { send.requestFocus() }
     LaunchedEffect(status) {
         if (status == ReportStatus.SENT) {
             Toast.makeText(context, sent, Toast.LENGTH_SHORT).show()
@@ -181,6 +181,7 @@ internal fun SongReportDialog(status: ReportStatus?, onSend: (String) -> Unit, o
     }
     ScreenAlert(
         onDismissRequest = onDismiss,
+        opener = opener,
         icon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
         title = { Text(stringResource(R.string.report_problem)) },
         text = {
@@ -198,6 +199,8 @@ internal fun SongReportDialog(status: ReportStatus?, onSend: (String) -> Unit, o
             }
         },
         confirmButton = {
+            // Where Send is, as the dialog's content may be put in the screen a moment after this.
+            LaunchedEffect(Unit) { send.requestFocus() }
             Button(onClick = { onSend(comment) }, enabled = !sending, modifier = Modifier.focusRequester(send)) {
                 if (sending) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(ButtonDefaults.IconSize))
                 else AppIcon(R.drawable.ic_send, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))

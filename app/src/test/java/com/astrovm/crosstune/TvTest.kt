@@ -356,17 +356,21 @@ class TvTest {
         settings().performClick()
         composeRule.waitForIdle()
         val report = composeRule.onNode(hasText(string(R.string.report_problem)) and hasClickAction())
+        // The remote's, as a TV is: Robolectric starts as a touch screen, where rows take no focus.
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
         report.performScrollTo().requestFocus()
         report.performClick()
         composeRule.waitForIdle()
         // In the screen, not a window of its own, which a TV's cover over another app can't open.
-        val github = composeRule.onNode(hasText(string(R.string.report_on_github)) and hasAnyAncestor(isDialog()))
-        github.assertIsFocused()
+        val email = composeRule.onNode(hasText(string(R.string.report_by_email)) and hasAnyAncestor(isDialog()))
+        email.assertIsFocused()
         // The remote stays in it, as what's under it is out of reach.
-        github.performKeyInput { pressKey(Key.DirectionUp) }
+        email.performKeyInput { pressKey(Key.DirectionUp) }
         composeRule.waitForIdle()
-        github.assertIsFocused()
-        composeRule.onNode(hasText(string(R.string.report_by_email)) and hasAnyAncestor(isDialog())).assertExists()
+        email.assertIsFocused()
+        email.performKeyInput { pressKey(Key.DirectionRight) }
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(string(R.string.report_on_github)) and hasAnyAncestor(isDialog())).assertIsFocused()
 
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()

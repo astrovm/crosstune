@@ -274,6 +274,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     val bar = remember { FocusRequester() }
     var focusBar by remember { mutableStateOf(tv) }
     var infoFocused by remember { mutableStateOf(false) }
+    // What the song's info and its report open on a TV give the remote back to.
+    val info = remember { FocusRequester() }
+    val reportButton = remember { FocusRequester() }
     var barFocused by remember { mutableStateOf(false) }
     // They only go while timed words follow a song that's playing, where the words move on by themselves; paused, or read at
     // one's own pace, the tools stay. They also stay while there's something to do with them: a menu open, the words being put
@@ -335,7 +338,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // The song opens to what it's about, or, without ChatGPT, to the way to sign in for it.
             LyricsHeader(
                 song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, toolsShown,
-                onAbout = { openTab(SongTab.MEANING) }, onAboutFocus = { infoFocused = it }
+                onAbout = { openTab(SongTab.MEANING) }, onAboutFocus = { infoFocused = it }, info = info
             )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
@@ -444,9 +447,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     }
     }
-    songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onReport = { reporting = true }, onDismiss = { songTab = null }) }
+    songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onReport = { reporting = true }, onDismiss = { songTab = null }, opener = info, reportButton = reportButton) }
     if (reporting) {
-        SongReportDialog(state.report, onSend = actions.onSendReport, onDismiss = {
+        SongReportDialog(state.report, onSend = actions.onSendReport, opener = reportButton, onDismiss = {
             reporting = false
             actions.onCloseReport()
         })
@@ -557,7 +560,8 @@ private fun LyricsHeader(
     /** Whether the song's info button shows, rather than leaving the song's name and cover alone. */
     showAbout: Boolean,
     onAbout: () -> Unit,
-    onAboutFocus: (Boolean) -> Unit
+    onAboutFocus: (Boolean) -> Unit,
+    info: FocusRequester
 ) {
     // How far the song is swiped; the next one comes in from the side it went out to.
     val swiped = remember { Animatable(0f) }
@@ -602,6 +606,7 @@ private fun LyricsHeader(
                     )
                     if (skips.isNotEmpty()) customActions = skips
                 }
+                .focusRequester(info)
                 // The touch area stays put while the song moves, so a short swipe isn't a tap on its info.
                 .clickable(onClickLabel = about, onClick = onAbout)
                 .pointerInput(rtl) {
@@ -2317,8 +2322,8 @@ private fun Examples(asking: Asking<List<Example>>) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTab: (SongTab) -> Unit, onReport: () -> Unit, onDismiss: () -> Unit) {
-    ScreenSheet(onDismiss) {
+private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTab: (SongTab) -> Unit, onReport: () -> Unit, onDismiss: () -> Unit, opener: FocusRequester, reportButton: FocusRequester) {
+    ScreenSheet(onDismiss, opener) {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
@@ -2326,7 +2331,7 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SongNames(state, Modifier.weight(1f))
                 // Wrong words, or out of time, said where they can be put right.
-                IconButton(onClick = onReport) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
+                IconButton(onClick = onReport, modifier = Modifier.focusRequester(reportButton)) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
             }
             PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
                 SongTab.entries.forEach { shown ->

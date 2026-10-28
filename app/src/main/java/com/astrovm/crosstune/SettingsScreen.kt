@@ -12,6 +12,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -292,9 +294,11 @@ private fun SettingsList(
             }
             GroupDivider()
             var reporting by rememberSaveable { mutableStateOf(false) }
+            val reportRow = remember { FocusRequester() }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(reportRow)
                     .clickable { reporting = true }
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -302,7 +306,7 @@ private fun SettingsList(
                 Text(text = stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
             }
-            if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false })
+            if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false }, opener = reportRow)
             SettingSwitch(
                 label = stringResource(R.string.setting_auto_report),
                 description = null,
