@@ -175,10 +175,13 @@ def line_timing(report, heard):
     lines = report.get("lyrics", {}).get("lines") or []
     if start is None or not lines or not heard["words"]:
         return None
-    # What was heard as one run of letters, each with the time of the word it's in, in the song.
-    letters, times = "", []
+    # What was heard as one run of letters, each with the time of the word it's in, in the song,
+    # and where in it each word starts.
+    letters, times, starts = "", [], []
     for word in heard["words"]:
         text = plain(word["word"])
+        if text:
+            starts.append(len(letters))
         letters += text
         times += [start + word["ms"]] * len(text)
     length = report["preview"]["lengthMs"]
@@ -188,8 +191,15 @@ def line_timing(report, heard):
         # Short lines, "baby", "yeah", match anywhere.
         if len(text) < 8 or not start + 500 <= line["ms"] <= start + length - 2000:
             continue
+        # Sung again close by, as a chorus is, what's heard could be either time.
+        if any(other is not line and plain(other["text"])[:24] == text and abs(other["ms"] - line["ms"]) <= SEARCH_MS for other in lines):
+            continue
         best, at = 0.0, None
-        for i in range(len(letters) - len(text) + 1):
+        # A line starts where a word does. Started inside the word before, a run matches as well
+        # when the line's last letters are misheard, and takes that word's earlier time.
+        for i in starts:
+            if i > len(letters) - len(text):
+                break
             if abs(times[i] - line["ms"]) > SEARCH_MS:
                 continue
             ratio = difflib.SequenceMatcher(None, text, letters[i:i + len(text)], autojunk=False).ratio()
