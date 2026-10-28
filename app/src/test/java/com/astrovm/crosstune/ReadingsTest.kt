@@ -44,6 +44,20 @@ class ReadingsTest {
     }
 
     @Test
+    fun russianAndHindiReadAsTheyreSaid() {
+        fun romanized(line: String, script: Script) = Readings.of(listOf(line), script).single().romanized
+        assertEquals("Chto zhe ty, paren, ya zhdu tebya", romanized("Что же ты, парень, я жду тебя", Script.CYRILLIC))
+        assertEquals("Shchuka shyot, yozh khochet chayu", romanized("Щука шьёт, ёж хочет чаю", Script.CYRILLIC))
+        assertEquals("Yizhak i yenot", romanized("Їжак і єнот", Script.CYRILLIC))
+        assertEquals("mujhe tumase pyar hai, sham dhal chuki", romanized("मुझे तुमसे प्यार है, शाम ढल चुकी", Script.INDIC))
+        assertEquals("main hun, sambandh", romanized("मैं हूँ, संबंध", Script.INDIC))
+        // Telugu says the a its words end in.
+        assertEquals("prema", romanized("ప్రేమ", Script.INDIC))
+        // English in the line stays as it is.
+        assertEquals("sham attractive, chal", romanized("ਸ਼ਾਮ attractive, ਚੱਲ", Script.INDIC))
+    }
+
+    @Test
     fun aChineseTitleIsWrittenInSimplifiedCharacters() {
         assertEquals("小幸运", Readings.simplified("小幸運"))
         assertEquals("我的少女时代 Our Times - 小幸运", Readings.simplified("我的少女時代 Our Times - 小幸運"))

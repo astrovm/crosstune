@@ -624,7 +624,46 @@ internal object Readings {
     @SuppressLint("NewApi")
     private fun latin(text: String): String = synchronized(this) {
         val letters = latinizer ?: Transliterator.getInstance("Any-Latin; Latin-ASCII").also { latinizer = it }
-        letters.transliterate(text).trim()
+        letters.transliterate(lettersAsSaid(text)).trim()
+    }
+
+    /** Android's own letters-to-Latin alone, which writes an Indic word letter by letter, marks and all. */
+    private var indicLatinizer: Transliterator? = null
+
+    /**
+     * [text] with what Android writes in letters with marks that, once those are taken off, no one
+     * reads as said: Russian's я, ж and ч are "ya", "zh" and "ch", not "a", "z" and "c"; Hindi's श
+     * is "sh", and its words lose the a they aren't said with.
+     */
+    @SuppressLint("NewApi")
+    private fun lettersAsSaid(text: String): String {
+        val cyrillic = text.map { c -> CYRILLIC[c.lowercaseChar()]?.let { if (c.isUpperCase()) it.replaceFirstChar(Char::uppercaseChar) else it } ?: c.toString() }.joinToString("")
+        val out = StringBuilder()
+        var at = 0
+        while (at < cyrillic.length) {
+            val script = Character.UnicodeScript.of(cyrillic.codePointAt(at))
+            if (script !in INDIC_SCRIPTS) {
+                out.append(cyrillic[at++])
+                continue
+            }
+            // The word, with its vowel signs and joiners.
+            var end = at
+            while (end < cyrillic.length && Character.UnicodeScript.of(cyrillic.codePointAt(end)).let { it == script || it == Character.UnicodeScript.INHERITED }) end++
+            val word = cyrillic.substring(at, end)
+            val letters = (indicLatinizer ?: Transliterator.getInstance("Any-Latin").also { indicLatinizer = it }).transliterate(word)
+            out.append(indic(letters, dropsFinalA = script in FINAL_A_UNSAID))
+            at = end
+        }
+        return out.toString()
+    }
+
+    /** An Indic word's [letters], as Android writes them, the way they're said and typed. */
+    private fun indic(letters: String, dropsFinalA: Boolean): String {
+        // A word ending in a consonant's own a, after another vowel, isn't said with it: pyāra is pyār.
+        val word = if (dropsFinalA) FINAL_A.replace(letters, "") else letters
+        return word.replace(Regex("ch?")) { if (it.value == "ch") "chh" else "ch" }
+            .replace("ś", "sh").replace("ṣ", "sh")
+            .replace(Regex("ṁ(?=[pbm])"), "m").replace("ṁ", "n").replace("m\u0310", "n")
     }
 
     private fun latinized(line: String): LineReading = latin(line).let { LineReading(listOf(Ruby(line)), it, it) }
@@ -820,6 +859,25 @@ internal object Readings {
     }
 
     private val HANGUL_WORD = Regex("[가-힣]+")
+
+    /** Russian's letters, with Ukrainian's and Belarusian's own, as they're written in English. */
+    private val CYRILLIC = mapOf(
+        'а' to "a", 'б' to "b", 'в' to "v", 'г' to "g", 'д' to "d", 'е' to "e", 'ё' to "yo", 'ж' to "zh", 'з' to "z", 'и' to "i",
+        'й' to "y", 'к' to "k", 'л' to "l", 'м' to "m", 'н' to "n", 'о' to "o", 'п' to "p", 'р' to "r", 'с' to "s", 'т' to "t",
+        'у' to "u", 'ф' to "f", 'х' to "kh", 'ц' to "ts", 'ч' to "ch", 'ш' to "sh", 'щ' to "shch", 'ъ' to "", 'ы' to "y", 'ь' to "",
+        'э' to "e", 'ю' to "yu", 'я' to "ya", 'є' to "ye", 'і' to "i", 'ї' to "yi", 'ґ' to "g", 'ў' to "u"
+    )
+
+    private val INDIC_SCRIPTS = setOf(
+        Character.UnicodeScript.DEVANAGARI, Character.UnicodeScript.BENGALI, Character.UnicodeScript.GURMUKHI, Character.UnicodeScript.GUJARATI,
+        Character.UnicodeScript.TAMIL, Character.UnicodeScript.TELUGU, Character.UnicodeScript.KANNADA, Character.UnicodeScript.MALAYALAM
+    )
+
+    /** Hindi's, Punjabi's and Gujarati's, whose words don't say the a their last consonant is written with; Telugu's and Tamil's do. */
+    private val FINAL_A_UNSAID = setOf(Character.UnicodeScript.DEVANAGARI, Character.UnicodeScript.GURMUKHI, Character.UnicodeScript.GUJARATI)
+
+    /** A last consonant's own a, after another vowel, as Android writes them. */
+    private val FINAL_A = Regex("(?<=[aāiīuūeēoōṛ][^aāiīuūeēoōṛ]{1,6})a$")
 
     /** Digits a word in Hangul goes on from, 1년, but not ones in English, MP3를, or the end of a time or a decimal, 11:11, 3.5배. */
     private val NUMBER_IN_A_WORD = Regex("""(?<![A-Za-z0-9:.,])(?:0|[1-9][0-9]{0,15})(?=[가-힣])""")
