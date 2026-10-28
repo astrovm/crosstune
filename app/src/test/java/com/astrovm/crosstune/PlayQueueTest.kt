@@ -8,10 +8,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -326,6 +328,113 @@ class PlayQueueTest {
         plays(50, 349)
         plays("Radio", 350)
         assertFalse(file.exists())
+    }
+
+    /** Whether the app playing [number] can skip on from it, as Crosstune shows. */
+    private fun PlaybackSource.canSkipOn(number: Int) = runBlocking { follow(MusicMetadata("Song $number", "Band")).first() }?.canSkipNext
+
+    private fun PlaybackSource.skipFrom(number: Int, next: Boolean = true) = skip(MusicMetadata("Song $number", "Band"), next)
+
+    @Test
+    fun skippingOnFromAPartsLastSongPlaysTheNextPartAtOnce() {
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        // As YouTube at a list's last video, which it can't skip on from.
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        queue.playing()
+        for (number in 1..49) plays(number, 99L + number)
+        assertEquals(false, playback.canSkipOn(49))
+        playback.skipFrom(49)
+        assertEquals(listOf(true), phone.skips)
+        plays(50, 149)
+        assertEquals(true, playback.canSkipOn(50))
+        // Another song isn't the one ending the part.
+        assertEquals(false, playback.canSkipOn(12))
+        // Back stays the app's.
+        playback.skipFrom(50, next = false)
+        assertEquals(listOf(true, false), phone.skips)
+        playback.skipFrom(50)
+        assertEquals(listOf(music to "https://music.youtube.com/watch?v=Song 51&list=TL"), phone.listsAsked)
+        assertEquals(listOf(true, false), phone.skips)
+        // Asked again before the next part plays, the app skips on as it would.
+        playback.skipFrom(50)
+        assertEquals(listOf(true, false, true), phone.skips)
+        assertEquals(1, phone.listsAsked.size)
+        // With nothing playing, there's nothing to show.
+        phone.playing.value = null
+        assertNull(playback.canSkipOn(50))
+    }
+
+    @Test
+    fun aPartPlayedBackAndOnAgainEndsOnItsLastSong() {
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        queue.playing()
+        for (number in 1..50) plays(number, 99L + number)
+        plays(49, 148)
+        assertEquals(false, playback.canSkipOn(49))
+        plays(50, 149)
+        assertEquals(true, playback.canSkipOn(50))
+    }
+
+    @Test
+    fun shuffledThePartEndsOnTheLastOfItsSongsToPlay() {
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        queue.playing()
+        // YouTube Music keeps its numbers for the songs, and plays them out of order.
+        plays(50, 149)
+        assertEquals(false, playback.canSkipOn(50))
+        for (number in 1..48) plays(number, 99L + number)
+        plays(49, 148)
+        assertEquals(true, playback.canSkipOn(49))
+        playback.skipFrom(49)
+        assertEquals(1, phone.listsAsked.size)
+        assertTrue(phone.skips.isEmpty())
+    }
+
+    @Test
+    fun theLastPartOrOneJumpedToTheEndOfSkipsOnAsTheAppWould() {
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        // Jumped to its last song, the rest of the part wasn't played, and may still be.
+        queue.playing()
+        plays(1, 100)
+        plays(50, 149)
+        assertEquals(false, playback.canSkipOn(50))
+        playback.skipFrom(50)
+        assertEquals(listOf(true), phone.skips)
+        // The list's last part has nothing after it.
+        val sixty = tracks.take(60)
+        runBlocking { queue.play(sixty, MusicService.YOUTUBE_MUSIC, music, 50, sixty.take(50)) }
+        for (number in 1..50) plays(number, 199L + number)
+        plays("Radio", 250)
+        assertEquals(1, phone.listsAsked.size)
+        for (number in 51..60) plays(number, 249L + number)
+        assertEquals(false, playback.canSkipOn(60))
+        playback.skipFrom(60)
+        assertEquals(listOf(true, true), phone.skips)
+        // Stopped, it's the app's alone.
+        queue.stop()
+        assertEquals(false, playback.canSkipOn(60))
+    }
+
+    @Test
+    fun skippedOnWhileTheAppMovesOnTooTheNextPartPlaysOnce() {
+        val lookup = CompletableDeferred<YouTubeQueue?>()
+        val queue = PlayQueue(phone, { _, _ -> lookup.await() }, file, scope, Dispatchers.Unconfined)
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        queue.playing()
+        for (number in 1..50) plays(number, 99L + number)
+        playback.skipFrom(50)
+        // The next part, still being looked up, as YouTube Music plays on from the last song.
+        plays("Radio", 150)
+        lookup.complete(YouTubeQueue("https://music.youtube.com/watch?v=next&list=TL", tracks.subList(50, 100)))
+        assertEquals(listOf(music to "https://music.youtube.com/watch?v=next&list=TL"), phone.listsAsked)
     }
 
     @Test

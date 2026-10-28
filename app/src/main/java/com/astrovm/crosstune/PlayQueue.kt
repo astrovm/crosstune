@@ -6,6 +6,9 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,6 +44,12 @@ internal class PlayQueue(
     /** The app's number for [before]: all it numbered no higher it queued before the part. */
     private var floor: Long? = null
 
+    /** The song that ends the part, as the app names it, while it plays and more of the list comes after it. */
+    private val onLast = MutableStateFlow<MusicMetadata?>(null)
+
+    /** Going on to the next part, which skipping and the app moving on may both ask for at once. */
+    private var moving = false
+
     /**
      * Plays on through [tracks] in [app], after the [part] of them it was just asked for, which ends
      * at [to]; any playlist played through before stops.
@@ -53,8 +62,27 @@ internal class PlayQueue(
         start(Playing(tracks, service, app, to, part))
     }
 
+    /**
+     * [playback], where skipping on from the song that ends the part plays the next part at once,
+     * even where the app can't skip on by itself, as YouTube can't from a list's last song. Back
+     * stays the app's, as it can't be asked to start a part at its last song.
+     */
+    fun skipping(playback: PlaybackSource): PlaybackSource = object : PlaybackSource by playback {
+        override fun follow(song: MusicMetadata): Flow<Following?> = combine(playback.follow(song), onLast) { following, last ->
+            if (following != null && last != null && sameEntry(last, song)) following.copy(canSkipNext = true) else following
+        }
+
+        override fun skip(song: MusicMetadata, next: Boolean) {
+            val last = onLast.value
+            if (!next || last == null || !sameEntry(last, song)) return playback.skip(song, next)
+            onLast.value = null
+            scope.launch { playNext() }
+        }
+    }
+
     /** Stops playing through the playlist; the app plays on as it would. */
     fun stop() {
+        onLast.value = null
         job?.cancel()
         next?.cancel()
         job = null
@@ -80,6 +108,7 @@ internal class PlayQueue(
 
     private suspend fun heard(now: AppPlays) {
         val queue = playing ?: return
+        onLast.value = null
         if (now == before) return
         before = null
         if (floor.let { it != null && now.queueId != null && now.queueId <= it }) return
@@ -95,7 +124,11 @@ internal class PlayQueue(
             index == part.lastIndex && now.ended -> playNext()
             index in part.indices -> {
                 at = index
-                checkNotNull(playing).let { if (index !in it.heard) save(it.copy(heard = it.heard + index)) }
+                val was = checkNotNull(playing)
+                if (index !in was.heard) save(was.copy(heard = was.heard + index))
+                // The last of the part played in order, or, shuffled, the last of its songs to play.
+                val ends = checkNotNull(playing).heard.size == part.size && (index == part.lastIndex || index !in was.heard)
+                if (ends && was.to < was.tracks.size) onLast.value = now.song
                 if (next == null) lookAhead()
             }
             // Still what played before the part.
@@ -119,12 +152,18 @@ internal class PlayQueue(
     }
 
     private suspend fun playNext() {
-        val queue = checkNotNull(playing)
-        val list = (next ?: lookAhead()).await() ?: return stop()
-        next = null
-        at = -1
-        save(queue.copy(to = minOf(queue.to + MainViewModel.MAX_QUEUE, queue.tracks.size), part = list.songs, first = null, heard = emptySet()))
-        if (!playback.playList(queue.app, list.url)) stop()
+        if (moving) return
+        moving = true
+        try {
+            val queue = checkNotNull(playing)
+            val list = (next ?: lookAhead()).await() ?: return stop()
+            next = null
+            at = -1
+            save(queue.copy(to = minOf(queue.to + MainViewModel.MAX_QUEUE, queue.tracks.size), part = list.songs, first = null, heard = emptySet()))
+            if (!playback.playList(queue.app, list.url)) stop()
+        } finally {
+            moving = false
+        }
     }
 
     private suspend fun save(queue: Playing) {
