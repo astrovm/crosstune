@@ -3756,7 +3756,10 @@ class ListeningTest {
     fun wordsKeptBeforeTheirHeadingWasLeftOutShowWithoutIt() {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light")
         waitForText("Walking down the river road\nSinging to the morning light")
-        composeRule.runOnIdle { controller!!.pause().stop().destroy() }
+        // Kept once they're timed, by a second copy from LRCLIB, which may still be on its way when the app's left.
+        composeRule.runOnIdle { controller!!.pause().stop() }
+        waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
+        composeRule.runOnIdle { controller!!.destroy() }
         // As an earlier version kept them from NetEase, opening with the song's name and its artist's.
         for (name in listOf("lyrics.json", "kept_words.json")) {
             val file = File(app.cacheDir, name)
