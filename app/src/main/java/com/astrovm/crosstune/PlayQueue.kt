@@ -35,6 +35,9 @@ internal class PlayQueue(
     /** Where in the part the app is, once it plays one of its songs. */
     private var at = -1
 
+    /** Where in the part each song the app played is: shuffled there, it plays them out of order. */
+    private val heard = mutableSetOf<Int>()
+
     /** What the app played as the part was asked of it, still from before the part until it plays something else. */
     private var before: AppPlays? = null
 
@@ -74,6 +77,7 @@ internal class PlayQueue(
 
     private suspend fun start(queue: Playing) {
         at = -1
+        heard.clear()
         save(queue)
         job = scope.launch { playback.plays(queue.app).collect { now -> now?.let { heard(it) } } }
     }
@@ -95,12 +99,13 @@ internal class PlayQueue(
             index == part.lastIndex && now.ended -> playNext()
             index in part.indices -> {
                 at = index
+                heard += index
                 if (next == null) lookAhead()
             }
             // Still what played before the part.
             at < 0 -> Unit
-            // On from the part's last song to what the app plays after it.
-            at == part.lastIndex && if (numbered) index == part.size else index < 0 -> playNext()
+            // On from the part's last song, or shuffled, from all of them, to what the app plays after it.
+            (at == part.lastIndex || heard.size == part.size) && if (numbered) index == part.size else index < 0 -> playNext()
             // Something else was picked to play; without numbers, it may only be the app's own name for one of the part's songs.
             numbered -> stop()
         }
@@ -122,6 +127,7 @@ internal class PlayQueue(
         val list = (next ?: lookAhead()).await() ?: return stop()
         next = null
         at = -1
+        heard.clear()
         save(queue.copy(to = minOf(queue.to + MainViewModel.MAX_QUEUE, queue.tracks.size), part = list.songs, first = null))
         if (!playback.playList(queue.app, list.url)) stop()
     }
