@@ -168,10 +168,12 @@ internal class PracticeCards(
             val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
             var opened = false
             val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null else {
-                val link = youTubeMusicLink(song, app)
-                // Kept from no app in particular, a song YouTube Music has is asked of YouTube Music,
-                // not of whatever played last, e.g. a video, which wouldn't play it.
-                val asking = app ?: MusicService.YOUTUBE_MUSIC.packageName.takeIf { link != null }
+                // Kept from no app in particular, or one that plays nothing asked of it, a song YouTube
+                // Music has is asked of YouTube Music, not of whatever played last, e.g. a video, which
+                // wouldn't play it.
+                val from = app?.takeIf { MusicService.ofPackage(it)?.playsAskedSongs != false }
+                val link = youTubeMusicLink(song, from)
+                val asking = from ?: MusicService.YOUTUBE_MUSIC.packageName.takeIf { link != null }
                 // An app that can't be woken in the background is opened on the song, as it is with no
                 // app to ask at all, and left again once it has it.
                 val asked = source.playSong(song, asking, link)

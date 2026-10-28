@@ -1,0 +1,7 @@
+Play all plays playlists of any length, in TIDAL too, with shuffle in the player.
+Korean, Russian and Hindi read as they're sung.
+Lyrics for songs named in Korean, Japanese or Chinese script.
+Better translations of Vietnamese and of lines mixing in English.
+Fewer credits, headings and ads in lyrics.
+Spotify and Amazon Music open their search at once, as they can't be asked to play.
+The player shows the app actually playing.
