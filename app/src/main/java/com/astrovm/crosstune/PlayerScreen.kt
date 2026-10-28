@@ -409,7 +409,7 @@ private fun UpNextSheet(following: Following, actions: ScreenActions, onDismiss:
                     modifier = Modifier
                         .fillMaxWidth()
                         // Still to be asked for, it can't be played yet, but the remote still goes through it.
-                        .then(if (id != null) Modifier.clickable { onDismiss(); actions.onPlayerPlayQueued(id) } else Modifier.focusable())
+                        .then(if (id != null) Modifier.clickable { onDismiss(); actions.onPlayerPlayQueued(id) } else Modifier.semantics(mergeDescendants = true) {}.focusable())
                         .padding(horizontal = 24.dp, vertical = 8.dp)
                 ) {
                     Text(next.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)

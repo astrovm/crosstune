@@ -7,7 +7,12 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.captureToImage
@@ -192,6 +197,43 @@ class PlayerScreenTest {
         // With nothing after it, there's nothing to open.
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = emptyList()))) }
         none(hasContentDescription(upNext))
+    }
+
+    @Test
+    fun theRemoteGoesThroughWhatsNextAndTheSleepTimerAndBack() {
+        val played = mutableListOf<Long>()
+        val asked = mutableListOf<Int?>()
+        player(ScreenActions(onPlayerPlayQueued = { played += it }, onPlayerSleep = { asked += it })) {
+            it.copy(upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")))
+        }
+        fun press(node: androidx.compose.ui.test.SemanticsNodeInteraction, key: Key) {
+            node.performKeyInput { pressKey(key) }
+            compose.waitForIdle()
+        }
+        fun focused(text: String) = compose.onAllNodes(hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isNotEmpty()
+        val upNext = compose.onNodeWithContentDescription(context.getString(R.string.player_up_next))
+        upNext.requestFocus()
+        press(upNext, Key.DirectionCenter)
+        // Down through the songs, the one still to be asked for too, and up to play one.
+        val later = compose.onNodeWithText("Later Song")
+        repeat(4) { if (!focused("Later Song")) press(later, Key.DirectionDown) }
+        assertTrue(focused("Later Song"))
+        press(later, Key.DirectionUp)
+        assertTrue(focused("Next Song"))
+        press(compose.onNodeWithText("Next Song"), Key.DirectionCenter)
+        assertEquals(listOf(7L), played)
+        // Closed, the remote is back where it opened it.
+        upNext.assertIsFocused()
+
+        val sleep = compose.onNodeWithContentDescription(context.getString(R.string.player_sleep_timer))
+        sleep.requestFocus()
+        press(sleep, Key.DirectionCenter)
+        val first = context.getString(R.string.player_sleep_minutes, 15)
+        repeat(2) { if (!focused(first)) press(compose.onNodeWithText(first), Key.DirectionDown) }
+        assertTrue(focused(first))
+        press(compose.onNodeWithText(first), Key.DirectionCenter)
+        assertEquals(listOf<Int?>(15), asked)
+        sleep.assertIsFocused()
     }
 
     @Test
