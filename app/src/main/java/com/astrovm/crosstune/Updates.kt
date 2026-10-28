@@ -6,10 +6,8 @@ import android.content.pm.ApplicationInfo
 import android.os.Build
 import androidx.core.content.edit
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -35,12 +33,12 @@ internal class UpdateChecker(
     /** The latest release, with its APK; null offline, or with none. */
     private suspend fun latest(): Update? = try {
         val request = Request.Builder().url(LATEST_URL).header("Accept", "application/vnd.github+json").build()
-        client.newCall(request).executeAsync().use { response ->
-            if (!response.isSuccessful) return@use null
-            val release = JSONObject(withContext(Dispatchers.IO) { response.body.stringAtMost() })
-            val version = release.optString("tag_name").removePrefix("v").ifEmpty { return@use null }
-            val apk = release.optJSONArray("assets").objects().firstOrNull { it.optString("name").endsWith(".apk") } ?: return@use null
-            Update(version, apk.optString("browser_download_url").ifEmpty { return@use null })
+        client.newCall(request).answer(Dispatchers.IO) { response ->
+            if (!response.isSuccessful) return@answer null
+            val release = JSONObject(response.body.stringAtMost())
+            val version = release.optString("tag_name").removePrefix("v").ifEmpty { return@answer null }
+            val apk = release.optJSONArray("assets").objects().firstOrNull { it.optString("name").endsWith(".apk") } ?: return@answer null
+            Update(version, apk.optString("browser_download_url").ifEmpty { return@answer null })
         }
     } catch (_: IOException) {
         null

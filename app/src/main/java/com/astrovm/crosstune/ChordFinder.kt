@@ -8,7 +8,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -383,7 +382,7 @@ internal class ChordFinder(
             if (asPhone) asPhoneBrowser() else header("User-Agent", BROWSER)
             referer?.let { header("Referer", it) }
         }.get().build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             val body = response.body.stringAtMost()
             if (!response.isSuccessful && !found(response.code, body)) throw IOException("Chord site returned ${response.code}")
             body

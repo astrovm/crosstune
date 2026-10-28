@@ -4,12 +4,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
 import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -119,10 +117,9 @@ internal class SongSearcher(
     /** The object at [url], or an empty one when what came back isn't an object, e.g. an error page. */
     private suspend fun fetchJson(url: String): JSONObject {
         val request = Request.Builder().url(url).get().build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Song service returned ${response.code}")
-            val body = withContext(ioDispatcher) { response.body.stringAtMost() }
-            JSONTokener(body).nextValue() as? JSONObject ?: JSONObject()
+            JSONTokener(response.body.stringAtMost()).nextValue() as? JSONObject ?: JSONObject()
         }
     }
 

@@ -16,7 +16,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -480,9 +479,9 @@ internal class LyricsFinder(
 
     private suspend fun post(url: String, body: JSONObject): String {
         val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("YouTube Music returned ${response.code}")
-            withContext(ioDispatcher) { response.body.stringAtMost() }
+            response.body.stringAtMost()
         }
     }
 
@@ -722,9 +721,9 @@ internal class LyricsFinder(
 
     private suspend fun letrasPage(url: String): String {
         val request = Request.Builder().url(url).asPhoneBrowser().get().build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Lyrics service returned ${response.code}")
-            withContext(ioDispatcher) { response.body.stringAtMost() }
+            response.body.stringAtMost()
         }
     }
 
@@ -813,10 +812,9 @@ internal class LyricsFinder(
             .header("User-Agent", "Crosstune/$versionName (https://github.com/astrovm/crosstune)")
             .get()
             .build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Lyrics service returned ${response.code}")
-            val body = withContext(ioDispatcher) { response.body.stringAtMost() }
-            JSONTokener(body).nextValue()
+            JSONTokener(response.body.stringAtMost()).nextValue()
         }
     }
 

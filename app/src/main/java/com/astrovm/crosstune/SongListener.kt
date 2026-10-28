@@ -22,7 +22,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -70,10 +69,9 @@ internal class Shazam(
             .post(body(uri).toString().toRequestBody(JSON))
             .build()
         return try {
-            client.newCall(request).executeAsync().use { response ->
+            client.newCall(request).answer(ioDispatcher) { response ->
                 // Too many requests, or the server failing: another app may still name it.
-                if (!response.isSuccessful) return Heard.Failed(AppError.RECOGNITION_UNAVAILABLE)
-                parse(withContext(ioDispatcher) { response.body.stringAtMost() })
+                if (!response.isSuccessful) Heard.Failed(AppError.RECOGNITION_UNAVAILABLE) else parse(response.body.stringAtMost())
             }
         } catch (_: IOException) {
             Heard.Failed(AppError.NETWORK)
