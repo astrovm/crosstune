@@ -1200,13 +1200,15 @@ class MainActivityTest {
         waitUntil { phone.songsAsked.size == 2 }
         assertEquals("Second Song", phone.songsAsked.last().first.title)
 
-        // TIDAL not answering, the first song opens there, as it would on its own.
+        // TIDAL not answering, the first song opens there, as it would on its own, with no player for it.
         phone.canPlaySongs = false
         click(string(R.string.dismiss_button))
         click(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals(tidal, nextStartedActivity()!!.`package`)
         assertEquals(2, phone.songsAsked.size)
+        waitForDescription(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
+        assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
