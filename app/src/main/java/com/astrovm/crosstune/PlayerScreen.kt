@@ -325,22 +325,18 @@ private fun PlayerButtons(following: Following?, actions: ScreenActions) {
         // How the app repeats, right of next as music apps have it, boxed in as shuffle is when it does.
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
             following?.repeat?.let { repeats ->
-                val how = when (repeats) {
-                    Repeat.OFF -> null
-                    Repeat.ALL -> stringResource(R.string.player_repeat_all)
-                    Repeat.ONE -> stringResource(R.string.player_repeat_one)
+                val (icon, way) = when (repeats) {
+                    Repeat.OFF -> R.drawable.ic_repeat to null
+                    Repeat.ALL -> R.drawable.ic_repeat_on to R.string.player_repeat_all
+                    Repeat.ONE -> R.drawable.ic_repeat_one_on to R.string.player_repeat_one
                 }
+                val how = way?.let { stringResource(it) }
                 IconToggleButton(
                     checked = repeats != Repeat.OFF,
                     onCheckedChange = { actions.onPlayerRepeat() },
                     colors = IconButtonDefaults.iconToggleButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                     modifier = Modifier.then(if (how != null) Modifier.semantics { stateDescription = how } else Modifier)
                 ) {
-                    val icon = when (repeats) {
-                        Repeat.OFF -> R.drawable.ic_repeat
-                        Repeat.ALL -> R.drawable.ic_repeat_on
-                        Repeat.ONE -> R.drawable.ic_repeat_one_on
-                    }
                     AppIcon(icon, contentDescription = stringResource(R.string.player_repeat))
                 }
             }
@@ -367,13 +363,15 @@ private fun SwipedCover(following: Following?, onSkip: (next: Boolean) -> Unit, 
             }
             .pointerInput(canNext, canPrevious) {
                 val skipAt = size.width * COVER_SKIP_AT
+                // Back in place once let go, or once another gesture takes the finger.
+                val settle: () -> Unit = { scope.launch { moved.animateTo(0f) } }
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         val next = moved.value < 0
                         if (abs(moved.value) >= skipAt && (if (next) canNext else canPrevious)) onSkip(next)
-                        scope.launch { moved.animateTo(0f) }
+                        settle()
                     },
-                    onDragCancel = { scope.launch { moved.animateTo(0f) } }
+                    onDragCancel = settle
                 ) { change, amount ->
                     change.consume()
                     val can = if (moved.value + amount < 0) canNext else canPrevious

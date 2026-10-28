@@ -207,8 +207,15 @@ class PlayerScreenTest {
         compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(centerX, 5f)) }
         compose.waitForIdle()
         none(hasText(upNext))
+        // Played from a list, with nothing after it, it's only the list's name.
+        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = "Road trip", upNext = emptyList()))) }
+        compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
+        compose.waitForIdle()
+        assertEquals(2, compose.onAllNodes(hasText("Road trip"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(centerX, 5f)) }
+        compose.waitForIdle()
         // With nothing after it, there's nothing to open.
-        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = emptyList()))) }
+        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = null))) }
         none(hasContentDescription(upNext))
     }
 
