@@ -10,6 +10,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -412,6 +413,40 @@ class LyricsFinderTest {
             japaneseSong(netEase = netEase, lyric = lrc(listOf(first) + sung))
             assertEquals(words(listOf(first) + sung), found(hatsukoi))
         }
+    }
+
+    @Test
+    fun aNetEaseHeadingWithMoreAroundTheNamesIsLeftOut() {
+        val sung = listOf("五月雨は緑色", "悲しくさせたよ")
+        fun cleaned(title: String, vararg heading: String) =
+            LyricsFinder.cleaned(Lyrics.Found((heading.toList() + sung).joinToString("\n"), source = LyricsFinder.NETEASE), MusicMetadata(title, "Hiroko Mita")).words
+        val words = sung.joinToString("\n")
+        // The name without what the store adds to it.
+        assertEquals(words, cleaned("Hatsukoi (Remastered)", "Hatsukoi", "Hiroko Mita"))
+        // The site's word for words, and a guest under it.
+        assertEquals(words, cleaned("Hatsukoi", "Hiroko Mita - Hatsukoi lyrics", "（feat. Someone）"))
+        // Names in Chinese whose brackets never close, with the guest and "Explicit", unspaced.
+        assertEquals(words, cleaned("Hatsukoi (feat. Someone)", "Hatsukoi（feat.Someone（初恋（Explicit-HirokoMita（三田寛子"))
+        // A sung line with both names in it is sung, and a guest without a heading isn't one.
+        assertEquals((listOf("Hiroko Mita sings Hatsukoi") + sung).joinToString("\n"), cleaned("Hatsukoi", "Hiroko Mita sings Hatsukoi"))
+        assertEquals((listOf("ft. Someone") + sung).joinToString("\n"), cleaned("Hatsukoi", "ft. Someone"))
+    }
+
+    @Test
+    fun aLyricsSitesAdIsLeftOut() {
+        val ad = "{more Hiroko Mita lyrics at lyricsify.com/u/Someone}"
+        // Found now.
+        japaneseSong(lrclib = { title -> if (title == "初恋") """[${answer("初恋", "三田 寛子", "五月雨は緑色\n$ad")}]""" else "[]" })
+        assertEquals(Lyrics.Found("五月雨は緑色", source = LyricsFinder.LRCLIB), found(hatsukoi))
+        // Or kept from before, timed.
+        val kept = Lyrics.Found("五月雨は緑色\n$ad", listOf(LyricLine(1_000, "五月雨は緑色"), LyricLine(2_000, ad)), source = LyricsFinder.LRCLIB)
+        assertEquals(
+            Lyrics.Found("五月雨は緑色", SyncedLyrics.withPauses(listOf(LyricLine(1_000, "五月雨は緑色"))), source = LyricsFinder.LRCLIB),
+            LyricsFinder.cleaned(kept, hatsukoi)
+        )
+        // Words without one are kept as they are.
+        val sung = Lyrics.Found("Meet me at the www\nsite.com is down", source = LyricsFinder.LRCLIB)
+        assertSame(sung, LyricsFinder.cleaned(sung, hatsukoi))
     }
 
     @Test
