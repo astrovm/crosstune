@@ -278,6 +278,27 @@ class PlayerScreenTest {
     }
 
     @Test
+    fun whatPlaysNextStaysOpenFromOneSongToTheNext() {
+        player { it.copy(upNext = listOf(Queued("Next Song", "Band", 7))) }
+        val upNext = context.getString(R.string.player_up_next)
+        compose.onNodeWithContentDescription(upNext).performClick()
+        compose.waitForIdle()
+        val following = shown.player!!.following!!
+        // Between them, the app says nothing for a moment.
+        showing { it.copy(player = it.player!!.copy(song = MusicMetadata("Next Song", "Band"), following = null)) }
+        compose.onNodeWithText(upNext).assertExists()
+        showing { it.copy(player = it.player!!.copy(following = following.copy(upNext = listOf(Queued("After", "Band", 8))))) }
+        compose.onNodeWithText("After").assertExists()
+        // Saying nothing on, there's nothing up next.
+        showing { it.copy(player = it.player!!.copy(following = null)) }
+        compose.mainClock.advanceTimeBy(1_900)
+        compose.onNodeWithText("After").assertExists()
+        compose.mainClock.advanceTimeBy(200)
+        compose.waitForIdle()
+        none(hasText("After"))
+    }
+
+    @Test
     fun pulledDownWhatPlaysNextFollowsTheFingerThenGoesAwayOrBack() {
         player { it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", ""))) }
         val upNext = context.getString(R.string.player_up_next)
@@ -370,24 +391,23 @@ class PlayerScreenTest {
         compose.waitForIdle()
         assertEquals(listOf(0 to 1), moved)
         assertEquals(listOf("Third Song", "Next Song", "Later Song"), order())
-        // By its handle, a song follows the finger to where it's let go.
-        val rowHeight = compose.onNodeWithText("Next Song").fetchSemanticsNode().boundsInRoot.height + 30f
-        val handles = compose.onAllNodesWithContentDescription(context.getString(R.string.player_move))
-        handles[0].performTouchInput {
-            down(center)
-            repeat(10) { moveBy(Offset(0f, rowHeight / 6)); advanceEventTime(50) }
-            up()
+        // By its handle, a song follows the finger to where it's let go, a frame at a time as a finger goes.
+        val row = compose.onNodeWithText("Next Song").fetchSemanticsNode().boundsInRoot.top - compose.onNodeWithText("Third Song").fetchSemanticsNode().boundsInRoot.top
+        fun drag(handle: Int, by: Float) {
+            val at = compose.onAllNodesWithContentDescription(context.getString(R.string.player_move), useUnmergedTree = true)[handle].fetchSemanticsNode().boundsInRoot.center
+            compose.onRoot().performTouchInput { down(at) }
+            repeat(10) {
+                compose.onRoot().performTouchInput { moveBy(Offset(0f, by / 10)) }
+                compose.waitForIdle()
+            }
+            compose.onRoot().performTouchInput { up() }
+            compose.waitForIdle()
         }
-        compose.waitForIdle()
+        drag(0, row * 1.5f)
         assertEquals(listOf(0 to 1, 0 to 1), moved)
         assertEquals(listOf("Next Song", "Third Song", "Later Song"), order())
         // Not into one still to ask for.
-        handles[1].performTouchInput {
-            down(center)
-            repeat(10) { moveBy(Offset(0f, rowHeight / 6)); advanceEventTime(50) }
-            up()
-        }
-        compose.waitForIdle()
+        drag(1, row * 1.5f)
         assertEquals(listOf(0 to 1, 0 to 1), moved)
         assertEquals(listOf("Next Song", "Third Song", "Later Song"), order())
     }

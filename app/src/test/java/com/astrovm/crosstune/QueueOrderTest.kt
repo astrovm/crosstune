@@ -151,6 +151,7 @@ class QueueOrderTest {
         passes(200_000)
         assertTrue(phone.queuedPlayed.isEmpty())
         // Moved again, the last move is the one kept.
+        plays(10, listOf(a, b, later))
         order.move(following(), 1, 0)
         order.move(following(), 0, 1)
         assertEquals(listOf(a, b, later), shown())

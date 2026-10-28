@@ -137,7 +137,18 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val app = following?.app ?: MusicService.ofPackage(player.app)?.let { stringResource(it.labelRes) }
     BackHandler(onBack = actions.onClosePlayer)
     // What plays next, opened from the list it plays from up top or its button under the buttons.
-    val listed = following?.takeIf { it.from != null || it.upNext.isNotEmpty() }
+    // Between one song and the next the app says nothing for a moment, so it stays as it was till it
+    // does, or a while passes without it.
+    var between by remember { mutableStateOf<Following?>(null) }
+    LaunchedEffect(following) {
+        if (following != null) {
+            between = following
+        } else {
+            delay(BETWEEN_SONGS_MS)
+            between = null
+        }
+    }
+    val listed = (following ?: between)?.takeIf { it.from != null || it.upNext.isNotEmpty() }
     var upNext by rememberSaveable { mutableStateOf(false) }
     // Gone with the list, it stays gone, rather than open again over the next one.
     LaunchedEffect(listed == null) { if (listed == null) upNext = false }
@@ -210,7 +221,8 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             if (size >= PLAYER_COVER_MIN) SwipedCover(following, actions.onPlayerSkip) { CoverArt(cover, actions.loadArtwork, size = size, modifier = it.moves("cover", moving)) }
         }
     }
-    val titleRow: @Composable (Morph, (@Composable () -> Unit)?) -> Unit = { moving, lead ->
+    // On a phone, the names fade out and back in where they go, as moving they'd cross the cover as it grows.
+    val titleRow: @Composable (Morph, Boolean, (@Composable () -> Unit)?) -> Unit = { moving, crossing, lead ->
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
             lead?.invoke()
             // A tap on its name opens its card, with its links, as music apps open a song's page. One line
@@ -218,7 +230,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .moves("names", moving)
+                    .then(if (crossing) Modifier.fades(moving) else Modifier.moves("names", moving))
                     .clip(MaterialTheme.shapes.small)
                     .clickable(onClickLabel = stringResource(R.string.player_song_card), onClick = actions.onPlayerCard)
                     .padding(vertical = 8.dp)
@@ -292,8 +304,9 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             val beside = maxWidth > maxHeight
             SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
                 morph.AnimatedContent(
-                    // Evenly, as all of it moves, so a finger can hold it anywhere along the way.
-                    transitionSpec = { fadeIn(tween(MORPH_MS * 2 / 3, delayMillis = MORPH_MS / 3, easing = LinearEasing)) togetherWith fadeOut(tween(MORPH_MS, easing = LinearEasing)) },
+                    // Evenly, as all of it moves, so a finger can hold it anywhere along the way; what comes
+                    // only once what goes, e.g. the list going down, is most of the way out from over it.
+                    transitionSpec = { fadeIn(LATE_FADE) togetherWith fadeOut(tween(MORPH_MS, easing = LinearEasing)) },
                     contentAlignment = Alignment.TopCenter,
                     modifier = Modifier.fillMaxSize()
                 ) { opened ->
@@ -307,14 +320,14 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                             beside -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(horizontal = 24.dp)) {
                                 coverArt(Modifier.weight(1f).fillMaxHeight(), moving)
                                 Column(modifier = Modifier.weight(1f).padding(start = 24.dp).then(if (opened) Modifier.fillMaxHeight() else Modifier)) {
-                                    titleRow(moving, null)
+                                    titleRow(moving, false, null)
                                     transport(moving)
                                     if (opened) queue(Modifier.weight(1f), moving) else tools()
                                 }
                             }
                             // The cover beside the song's name, small, with what plays next under the buttons; a tap on it puts that away.
                             opened -> Column(modifier = Modifier.weight(1f).padding(horizontal = 24.dp).widthIn(max = PLAYER_COVER_MAX)) {
-                                titleRow(moving) {
+                                titleRow(moving, true) {
                                     CoverArt(
                                         cover, actions.loadArtwork, size = PLAYER_COVER_SMALL,
                                         modifier = Modifier
@@ -331,7 +344,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                                 coverArt(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp), moving)
                                 // As wide as the cover can be, so its edges, the progress bar's and the times' line up.
                                 Column(modifier = Modifier.padding(horizontal = 24.dp).widthIn(max = PLAYER_COVER_MAX)) {
-                                    titleRow(moving, null)
+                                    titleRow(moving, true, null)
                                     transport(moving)
                                     tools()
                                     Spacer(Modifier.size(16.dp))
@@ -348,6 +361,15 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
 /** The scopes the player's parts move in, from where they were to where they go, as what plays next opens or closes. */
 @OptIn(ExperimentalSharedTransitionApi::class)
 private class Morph(val layout: SharedTransitionScope, val content: AnimatedVisibilityScope)
+
+/** Gone at once as what plays next opens or closes, and back once the rest is most of the way. */
+@Composable
+private fun Modifier.fades(morph: Morph): Modifier = with(morph.content) {
+    this@fades.animateEnterExit(enter = fadeIn(LATE_FADE), exit = fadeOut(tween(MORPH_MS / 5, easing = LinearEasing)))
+}
+
+/** The last quarter of what plays next opening or closing. */
+private val LATE_FADE = tween<Float>(MORPH_MS / 4, delayMillis = MORPH_MS * 3 / 4, easing = LinearEasing)
 
 /** What plays next pulled toward put away, by a finger or a swipe back: how far, 0 to 1, while one has it. */
 @Stable
@@ -931,6 +953,9 @@ private val PULL_FLICK = 500.dp
 
 /** Let go this far along, what plays next carries on to put away, as a swipe between screens does. */
 private const val PULL_COMMIT = 0.3f
+
+/** How long the app can say nothing between songs before what plays next is taken to be gone. */
+private const val BETWEEN_SONGS_MS = 2_000L
 
 /** How long a song tapped up next shows it's on its way, at most, as the app may never play it. */
 private const val ASKED_FOR_MS = 15_000L
