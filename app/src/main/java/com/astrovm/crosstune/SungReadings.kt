@@ -2,12 +2,10 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import java.io.IOException
@@ -84,9 +82,9 @@ internal class SungReadings(
 
     private suspend fun get(url: String): String {
         val request = Request.Builder().url(url).header("User-Agent", BROWSER).get().build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("UtaTen returned ${response.code}")
-            withContext(ioDispatcher) { response.body.stringAtMost() }
+            response.body.stringAtMost()
         }
     }
 

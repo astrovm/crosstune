@@ -1,15 +1,21 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
+import okhttp3.ResponseBody.Companion.asResponseBody
+import okio.ForwardingSource
+import okio.buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.io.IOException
 
@@ -1100,6 +1106,40 @@ class ExactMatcherTest {
         val album = MusicMetadata("After Hours", "The Weeknd", ItemType.ALBUM)
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE, album) })
         assertTrue(fake.requestedUrls.isEmpty())
+    }
+
+    @Test
+    fun aQueuesAnswersAreClosedAwayFromWhereItWasAskedFor() {
+        // Asked for from the main thread, where Android stops the app for any use of the network: closing
+        // YouTube's redirect, which isn't read, tells it so.
+        val closedOn = CopyOnWriteArrayList<Thread>()
+        fake.handler = { request ->
+            val answer = if (request.url.encodedPath == "/watch_videos") {
+                FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=first000000&list=TLGGqueue").build()
+            } else {
+                FakeSpotify.html(request, youTubeMusicPage(
+                    youTubeMusicRow("First", "Band • Album • 3:00", videoId = "first000000"),
+                    youTubeMusicRow("Second", "Band • Album • 3:00", videoId = "second00000")
+                ))
+            }
+            val closing = object : ForwardingSource(answer.body.source()) {
+                override fun close() {
+                    closedOn += Thread.currentThread()
+                    super.close()
+                }
+            }
+            answer.newBuilder().body(closing.buffer().asResponseBody(answer.body.contentType())).build()
+        }
+        var ioThread: Thread? = null
+        val io = Executors.newSingleThreadExecutor { Thread(it).also { thread -> ioThread = thread } }
+        val queue = try {
+            runBlocking { ExactMatcher(fake.client(), "AR", io.asCoroutineDispatcher()).youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("First", "Band"), MusicMetadata("Second", "Band"))) {} }
+        } finally {
+            io.shutdown()
+        }
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", queue?.url)
+        assertTrue(closedOn.isNotEmpty())
+        assertEquals(setOf(ioThread), closedOn.toSet())
     }
 
     @Test

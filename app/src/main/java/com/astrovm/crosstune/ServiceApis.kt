@@ -5,12 +5,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -36,9 +34,9 @@ internal class ServiceApis(
 ) {
     private suspend fun get(url: HttpUrl, headers: Map<String, String> = emptyMap()): Any {
         val request = Request.Builder().url(url).apply { headers.forEach { (name, value) -> header(name, value) } }.get().build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw ServiceException(response.code)
-            JSONTokener(withContext(ioDispatcher) { response.body.stringAtMost() }).nextValue()
+            JSONTokener(response.body.stringAtMost()).nextValue()
         }
     }
 
@@ -89,12 +87,12 @@ internal class ServiceApis(
      */
     private suspend fun soundCloudId(fresh: Boolean): String = soundCloudKey.withLock {
         if (!fresh) clientId?.let { return it }
-        val page = client.newCall(Request.Builder().url(SOUNDCLOUD_URL).header("User-Agent", BROWSER).get().build()).executeAsync()
-            .use { withContext(ioDispatcher) { it.body.stringAtMost() } }
+        val page = client.newCall(Request.Builder().url(SOUNDCLOUD_URL).header("User-Agent", BROWSER).get().build())
+            .answer(ioDispatcher) { it.body.stringAtMost() }
         // The key sits in one of the last scripts the page loads.
         for (script in soundCloudScriptRegex.findAll(page).map { it.groupValues[1] }.toList().asReversed()) {
-            val code = client.newCall(Request.Builder().url(script).get().build()).executeAsync()
-                .use { withContext(ioDispatcher) { it.body.stringAtMost(MAX_SCRIPT_BYTES) } }
+            val code = client.newCall(Request.Builder().url(script).get().build())
+                .answer(ioDispatcher) { it.body.stringAtMost(MAX_SCRIPT_BYTES) }
             soundCloudIdRegex.find(code)?.let { found -> return found.groupValues[1].also { clientId = it } }
         }
         throw IOException("SoundCloud's key wasn't found")

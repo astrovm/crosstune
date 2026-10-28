@@ -3,7 +3,6 @@ package com.astrovm.crosstune
 import androidx.core.text.HtmlCompat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -11,7 +10,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -181,9 +179,9 @@ internal class Translator(
         }
     }
 
-    private suspend fun call(request: Request): String = client.newCall(request).executeAsync().use { response ->
+    private suspend fun call(request: Request): String = client.newCall(request).answer(ioDispatcher) { response ->
         if (!response.isSuccessful) throw IOException("Translation service returned ${response.code}")
-        withContext(ioDispatcher) { response.body.stringAtMost() }
+        response.body.stringAtMost()
     }
 
     companion object {

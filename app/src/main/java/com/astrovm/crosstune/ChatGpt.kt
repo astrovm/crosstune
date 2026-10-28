@@ -16,7 +16,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -147,19 +146,16 @@ internal class ChatGpt(
                 .apply { effort?.let { put("reasoning", JSONObject().put("effort", it)) } }
             val request = Request.Builder().url(RESPONSES_URL).header("Authorization", "Bearer $token")
                 .post(body.toString().toRequestBody(JSON)).build()
-            // All of it away from the main thread, closing too: an answer read only up to "completed"
-            // leaves the rest of the stream, which closing reads off the network.
-            withContext(ioDispatcher) {
-                answers.newCall(request).executeAsync().use { response ->
-                    when {
-                        // Ended early, e.g. signed out elsewhere, the token's renewed, once.
-                        response.code == 401 && !renewed -> ChatGptReply.Failed.also { turnedDown = true }
-                        response.code == 429 -> ChatGptReply.LimitReached
-                        // A tool the account may not use is refused, with a 400, before anything's written.
-                        response.code == 400 && webSearch -> null
-                        !response.isSuccessful -> ChatGptReply.Failed
-                        else -> read(response.body.source(), onText)
-                    }
+            // An answer read only up to "completed" leaves the rest of the stream, which closing reads off the network.
+            answers.newCall(request).answer(ioDispatcher) { response ->
+                when {
+                    // Ended early, e.g. signed out elsewhere, the token's renewed, once.
+                    response.code == 401 && !renewed -> ChatGptReply.Failed.also { turnedDown = true }
+                    response.code == 429 -> ChatGptReply.LimitReached
+                    // A tool the account may not use is refused, with a 400, before anything's written.
+                    response.code == 400 && webSearch -> null
+                    !response.isSuccessful -> ChatGptReply.Failed
+                    else -> read(response.body.source(), onText)
                 }
             }
         } catch (_: IOException) {
@@ -196,10 +192,8 @@ internal class ChatGpt(
     /** The models the account lists to pick from; it also has some it keeps out of sight. */
     private suspend fun fetchModels(token: String): List<ChatGptModel>? {
         val request = Request.Builder().url(MODELS_URL).header("Authorization", "Bearer $token").build()
-        val models = withContext(ioDispatcher) {
-            client.newCall(request).executeAsync().use { response ->
-                if (response.isSuccessful) JSONObject(response.body.stringAtMost()).getJSONArray("models") else null
-            }
+        val models = client.newCall(request).answer(ioDispatcher) { response ->
+            if (response.isSuccessful) JSONObject(response.body.stringAtMost()).getJSONArray("models") else null
         } ?: return null
         return (0 until models.length()).map(models::getJSONObject).filter { it.optString("visibility") == "list" }.map { model ->
             val slug = model.getString("slug")
@@ -302,21 +296,19 @@ internal class ChatGpt(
             .build()
         try {
             val request = Request.Builder().url(TOKEN_URL).post(form).build()
-            client.newCall(request).executeAsync().use { response ->
-                val body = withContext(ioDispatcher) { response.body.stringAtMost() }
-                if (response.isSuccessful) {
-                    keep(account, JSONObject(body))
-                    write(account)
-                    return account.getString(ACCESS_TOKEN)
-                }
-                // Not to be used again, so signing in again is the only way back; anything else may pass.
-                val error = runCatching { JSONObject(body).optString("error") }.getOrDefault("")
-                if (error in UNUSABLE) {
-                    forget(account)
-                    write(account)
-                }
-                null
+            val (renewed, body) = client.newCall(request).answer(ioDispatcher) { response -> response.isSuccessful to response.body.stringAtMost() }
+            if (renewed) {
+                keep(account, JSONObject(body))
+                write(account)
+                return account.getString(ACCESS_TOKEN)
             }
+            // Not to be used again, so signing in again is the only way back; anything else may pass.
+            val error = runCatching { JSONObject(body).optString("error") }.getOrDefault("")
+            if (error in UNUSABLE) {
+                forget(account)
+                write(account)
+            }
+            null
         } catch (_: IOException) {
             null
         } catch (_: JSONException) {
@@ -341,7 +333,7 @@ internal class ChatGpt(
                 .build()
             // Signed out here either way: the user can still disconnect Crosstune in ChatGPT.
             try {
-                client.newCall(Request.Builder().url(REVOKE_URL).post(form).build()).executeAsync().close()
+                client.newCall(Request.Builder().url(REVOKE_URL).post(form).build()).answer(ioDispatcher) {}
             } catch (_: IOException) {
             }
         }
@@ -364,9 +356,7 @@ internal class ChatGpt(
     /** The token endpoint's answer to [form], or null when it refused. */
     private suspend fun post(form: FormBody): String? {
         val request = Request.Builder().url(TOKEN_URL).post(form).build()
-        return client.newCall(request).executeAsync().use { response ->
-            if (response.isSuccessful) withContext(ioDispatcher) { response.body.stringAtMost() } else null
-        }
+        return client.newCall(request).answer(ioDispatcher) { response -> if (response.isSuccessful) response.body.stringAtMost() else null }
     }
 
     /**
@@ -378,10 +368,9 @@ internal class ChatGpt(
         if (parts.size != 3) return null
         val header = JSONObject(String(base64UrlDecode(parts[0])))
         if (header.optString("alg") != "RS256") return null
-        val keys = client.newCall(Request.Builder().url(JWKS_URL).build()).executeAsync().use { response ->
-            if (!response.isSuccessful) return null
-            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() }).getJSONArray("keys")
-        }
+        val keys = client.newCall(Request.Builder().url(JWKS_URL).build()).answer(ioDispatcher) { response ->
+            if (response.isSuccessful) JSONObject(response.body.stringAtMost()).getJSONArray("keys") else null
+        } ?: return null
         val key = (0 until keys.length()).map(keys::getJSONObject).firstOrNull { it.optString("kid") == header.optString("kid") } ?: return null
         // Whatever keeps it from being checked, a key or signature that isn't one, it isn't OpenAI's.
         val valid = runCatching {

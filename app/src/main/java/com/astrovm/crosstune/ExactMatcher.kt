@@ -7,7 +7,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -15,7 +14,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.coroutines.executeAsync
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -219,7 +217,7 @@ internal class ExactMatcher(
     private suspend fun temporaryPlaylist(ids: List<String>): String? {
         val url = YOUTUBE_WATCH_VIDEOS_URL.toHttpUrl().newBuilder().addQueryParameter("video_ids", ids.joinToString(",")).build()
         val noRedirects = client.newBuilder().followRedirects(false).build()
-        return noRedirects.newCall(Request.Builder().url(url).get().build()).executeAsync().use { response ->
+        return noRedirects.newCall(Request.Builder().url(url).get().build()).answer(ioDispatcher) { response ->
             response.header("Location")?.toHttpUrlOrNull()?.queryParameter("list")
         }
     }
@@ -429,9 +427,9 @@ internal class ExactMatcher(
     private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
         if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
         val url = "https://www.qobuz.com/us-en/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
-        val page = client.newCall(Request.Builder().url(url).get().build()).executeAsync().use { response ->
+        val page = client.newCall(Request.Builder().url(url).get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
-            withContext(ioDispatcher) { response.body.stringAtMost() }
+            response.body.stringAtMost()
         }
         val songs = qobuzItemRegex.findAll(page).mapNotNull { item ->
             val html = item.value
@@ -789,10 +787,10 @@ internal class ExactMatcher(
         val request = Request.Builder().url(url)
             .apply { if (body == null) get() else post(body.toString().toRequestBody("application/json".toMediaType())) }
             .build()
-        return client.newCall(request).executeAsync().use { response ->
+        return client.newCall(request).answer(ioDispatcher) { response ->
             // Busy, or down, it's no answer, and says nothing about whether it has the song.
             if (!response.isSuccessful) throw IOException("${request.url.host} answered ${response.code}")
-            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
+            JSONObject(response.body.stringAtMost())
         }
     }
 

@@ -12,7 +12,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
 import java.io.File
 import java.io.IOException
 import java.net.URI
@@ -67,12 +66,10 @@ internal class ArtworkLoader(
         val httpUrl = url.toHttpUrlOrNull() ?: return null
         val request = Request.Builder().url(httpUrl).get().build()
         return try {
-            client.newCall(request).executeAsync().use { response ->
-                if (!response.isSuccessful) return null
-                withContext(ioDispatcher) {
-                    val bytes = response.body.bytesAtMost()
-                    decode(bytes)?.also { if (file != null) save(file, bytes) }
-                }
+            client.newCall(request).answer(ioDispatcher) { response ->
+                if (!response.isSuccessful) return@answer null
+                val bytes = response.body.bytesAtMost()
+                decode(bytes)?.also { if (file != null) save(file, bytes) }
             }
         } catch (_: IOException) {
             null

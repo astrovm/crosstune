@@ -3,14 +3,12 @@ package com.astrovm.crosstune
 import androidx.annotation.StringRes
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.coroutines.executeAsync
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -230,9 +228,9 @@ internal class LinkResolver(
             .put("context", JSONObject().put("client", JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")))
             .put(key, id)
         val request = Request.Builder().url(url).post(body.toString().toRequestBody("application/json".toMediaType())).build()
-        client.newCall(request).executeAsync().use { response ->
-            if (!response.isSuccessful) return@use null
-            JSONObject(withContext(ioDispatcher) { response.body.stringAtMost() })
+        client.newCall(request).answer(ioDispatcher) { response ->
+            if (!response.isSuccessful) return@answer null
+            JSONObject(response.body.stringAtMost())
         }
     } catch (_: IOException) {
         null
@@ -242,9 +240,7 @@ internal class LinkResolver(
 
     private suspend fun fetch(url: String): Pair<Response, String> {
         val request = Request.Builder().url(url).get().build()
-        return client.newCall(request).executeAsync().use { response ->
-            response to withContext(ioDispatcher) { response.body.stringAtMost() }
-        }
+        return client.newCall(request).answer(ioDispatcher) { response -> response to response.body.stringAtMost() }
     }
 
     /** Whether [metadataUrl] asks an oEmbed endpoint, which turns away what's private. */
