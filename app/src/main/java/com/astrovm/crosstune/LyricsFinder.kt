@@ -115,7 +115,7 @@ private fun isHeading(line: String, song: MusicMetadata): Boolean {
     var rest = SongNames.normalize(line)
     if (title.isEmpty() || title !in rest || artists.none { it in rest }) return false
     // Longest first, so a name doesn't break up a longer one holding it.
-    val said = (listOf(title) + artists + song.title.split(' ').map(SongNames::normalize) + headingWords).filter { it.isNotEmpty() }
+    val said = (listOf(title) + artists + song.title.split(' ').map(SongNames::normalize) + headingWords)
     said.sortedByDescending { it.length }.forEach { rest = rest.replace(it, "") }
     return rest.all { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
 }
