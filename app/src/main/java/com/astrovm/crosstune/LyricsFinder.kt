@@ -89,17 +89,45 @@ private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> 
     }
     var start = afterCredits(0)
     // The name then the artist, as a heading, or the other way round: neither alone, as a song may open with its name.
-    val title = SongNames.normalize(song.title)
+    // The name may be without what the store adds to it: "Let Down" for "Let Down (Remastered)".
+    val titles = setOf(song.title, SongNames.bareTitle(song.title)).map(SongNames::normalize)
     val artist = SongNames.normalize(song.artist)
     val names = lines.drop(start).filter { it.isNotEmpty() }.take(2).map(SongNames::normalize)
-    if (names.toSet() == setOf(title, artist)) {
+    if (titles.any { names.toSet() == setOf(it, artist) }) {
         repeat(2) { while (lines[start].isEmpty()) start++; start++ }
-    } else if (lines.getOrNull(start)?.replace(netEaseGloss, "")?.let(SongNames::normalize) in setOf(title + artist, artist + title)) {
-        // Or both on one line, each maybe with its name in Chinese: "Leif Erikson （夫·埃里克森）-Interpol （国际刑警乐队）".
+    } else if (lines.getOrNull(start)?.let { isHeading(it, song) } == true) {
         start++
+        // A guest, under it: "（feat. Dwele）".
+        while (lines.getOrNull(start)?.let(guestCredit::matches) == true) start++
     }
     return drop(afterCredits(start))
 }
+
+/**
+ * Whether [line] is only the song's name and its artist's, as a heading, with what NetEase's
+ * contributors write around them: their names in Chinese, guests, "lyrics" and "Explicit", spaced
+ * or not, brackets closed or not. "Leif Erikson （夫·埃里克森）-Interpol （国际刑警乐队）", "Kanye West -
+ * Flashing Lights lyrics", "MeAcostumbre（feat.BadBunny（我习惯了（Explicit-Arcangel/BadBunny（坏痞兔".
+ */
+private fun isHeading(line: String, song: MusicMetadata): Boolean {
+    val title = SongNames.normalize(SongNames.bareTitle(song.title))
+    val artists = SongNames.artists(song.artist)
+    var rest = SongNames.normalize(line)
+    if (title.isEmpty() || title !in rest || artists.none { it in rest }) return false
+    // Longest first, so a name doesn't break up a longer one holding it.
+    val said = (listOf(title) + artists + song.title.split(' ').map(SongNames::normalize) + headingWords)
+    said.sortedByDescending { it.length }.forEach { rest = rest.replace(it, "") }
+    return rest.all { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
+}
+
+/** What a heading may say besides the names. */
+private val headingWords = listOf("lyrics", "explicit", "featuring", "feat", "ft")
+
+/** A line that's only a guest's credit: "（feat. Dwele）", "ft. Someone". */
+private val guestCredit = Regex("""(?i)\s*[(（\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^)）\]]+[)）\]]?\s*""")
+
+/** A web address, as a lyrics site's ad for itself: "{more ILLIT lyrics at lyricsify.com/u/KPopLRCFiles}". */
+private val webAddress = Regex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/""")
 
 /** The lines without all NetEase's contributors add to a song's words: credits, a heading, notes and parts' names. */
 private fun <T> List<T>.withoutNetEaseExtras(song: MusicMetadata, text: (T) -> String): List<T> =
@@ -202,7 +230,8 @@ internal class LyricsFinder(
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(cleaned(words, metadata)), final = !provisional) } }
-        val (found, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Best(Lyrics.Unavailable)
+        val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Best(Lyrics.Unavailable)
+        val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata) } ?: best
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
         // they're the recording's own, which no copy found elsewhere times better.
         cache?.let { cache ->
@@ -906,13 +935,17 @@ internal class LyricsFinder(
         const val CACHE_VERSION = 11
 
         /**
-         * [found], words kept from before, without what's since learned to be left out of NetEase's,
-         * so each fix reaches words kept before it too, with no need to look them up again.
+         * [found] without what's since learned to be left out: a site's ad, from any site, and what
+         * NetEase's contributors add. Words kept from before get each fix too, with no need to look
+         * them up again.
          */
         fun cleaned(found: Lyrics.Found, song: MusicMetadata): Lyrics.Found {
-            if (found.source?.startsWith(NETEASE) != true) return found
-            val words = found.words.lines().withoutNetEaseExtras(song) { it }.joinToString("\n").trim()
-            return found.copy(words = words, lines = SyncedLyrics.withPauses(found.lines.withoutNetEaseExtras(song) { it.text }))
+            val netEase = found.source?.startsWith(NETEASE) == true
+            val ads = found.words.lines().any(webAddress::containsMatchIn) || found.lines.any { webAddress.containsMatchIn(it.text) }
+            if (!netEase && !ads) return found
+            fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
+            val words = found.words.lines().clean { it }.joinToString("\n").trim()
+            return found.copy(words = words, lines = SyncedLyrics.withPauses(found.lines.clean { it.text }))
         }
 
         /** How long looking for a well-timed copy of badly timed words can take. */
