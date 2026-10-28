@@ -347,7 +347,10 @@ class PlayQueueTest {
         queue().playingInTidal()
         tidalPlays("Song 1", 155)
         assertTrue(phone.songsAsked.isEmpty())
-        // On to its radio, right after the song: the next is asked for by name, with nothing looked up.
+        // On to its radio, a moment before TIDAL puts it in its queue, then right after the song
+        // there: the next is asked for by name, with nothing looked up.
+        tidalPlays("Radio", 143)
+        assertTrue(phone.songsAsked.isEmpty())
         tidalPlays("Radio", 143, after = 155)
         assertEquals(listOf("Song 2" to tidal), phone.songsAsked.map { it.first.title to it.second })
         // Until it plays, the radio playing on is no part of it.
@@ -369,7 +372,10 @@ class PlayQueueTest {
     fun somethingElsePickedInAnAppThatTakesNoListStopsIt() {
         queue().playingInTidal()
         tidalPlays("Song 1", 155)
-        // Another album, which takes the place of TIDAL's queue.
+        // Another album, which takes the place of TIDAL's queue: from its first song, it's only seen
+        // once the next plays after it.
+        tidalPlays("Other", 299)
+        assertTrue(file.exists())
         tidalPlays("Other", 300, after = 299)
         assertFalse(file.exists())
         tidalPlays("Radio", 143, after = 155)

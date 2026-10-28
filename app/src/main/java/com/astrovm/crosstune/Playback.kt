@@ -360,7 +360,7 @@ internal class MediaSessionPlayback(
         return runCatching { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }.isSuccess
     }
 
-    /** What [read] says, again whenever an app starts, pauses, stops or changes songs. */
+    /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
     private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<MediaController> = emptyList()
         fun update() { trySend(read()) }
@@ -368,6 +368,7 @@ internal class MediaSessionPlayback(
             override fun onMetadataChanged(metadata: MediaMetadata?) = update()
             override fun onPlaybackStateChanged(state: PlaybackState?) = update()
             override fun onSessionDestroyed() = update()
+            override fun onQueueChanged(queue: MutableList<MediaSession.QueueItem>?) = update()
         }
         fun watch(controllers: List<MediaController>) {
             watched.forEach { it.unregisterCallback(callback) }

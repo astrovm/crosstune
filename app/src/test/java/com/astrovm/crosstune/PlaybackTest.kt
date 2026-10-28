@@ -918,7 +918,9 @@ class PlaybackTest {
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PLAYING, 108))
         val item = { id: Long -> MediaSession.QueueItem(MediaDescription.Builder().setMediaId("TRACK::$id").build(), id) }
         queues[music] = listOf(item(155), item(108), item(143))
-        assertEquals(155L, runBlocking { playback.plays(music).first() }?.previousId)
+        // Seen again as the queue changes, as TIDAL puts a song there after it starts playing it.
+        shadowOf(youTubeMusic).getCallbacks().forEach { it.onQueueChanged(queues[music]) }
+        assertEquals(155L, seen.last()?.previousId)
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PLAYING, 155))
         assertNull(runBlocking { playback.plays(music).first() }?.previousId)
         shadowOf(youTubeMusic).setPlaybackState(queued(PlaybackState.STATE_PLAYING, 9))

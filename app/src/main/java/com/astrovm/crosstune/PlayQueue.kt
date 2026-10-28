@@ -142,6 +142,9 @@ internal class PlayQueue(
                 numbered -> index == part.size
                 else -> index < 0
             } -> playNext()
+            // Nothing before it in the app's queue yet: TIDAL goes on to its radio a moment before it
+            // puts it there, after the song.
+            numbered && queue.bySong && now.previousId == null -> Unit
             // Something else was picked to play; without numbers, it may only be the app's own name for one of the part's songs.
             numbered -> stop()
         }
