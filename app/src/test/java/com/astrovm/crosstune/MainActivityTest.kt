@@ -59,6 +59,7 @@ import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -903,7 +904,13 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/album/4yP0hdKOZPNshxUOjY0cZj")
         waitForText("First Song")
         assertTextShown(string(R.string.search_in_destination, string(MusicService.YOUTUBE_MUSIC.labelRes)))
+        // Held while its songs are found, so it can be seen it can't be asked twice.
+        val found = CountDownLatch(1)
+        val answer = fake.handler
+        fake.handler = { request -> if (request.url.host == "music.youtube.com") found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS); answer(request) }
         click(string(R.string.play_all_button))
+        waitUntil { composeRule.onAllNodes(hasText(string(R.string.play_all_button)) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        found.countDown()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", nextStartedActivity()!!.dataString)
     }
@@ -998,12 +1005,16 @@ class MainActivityTest {
     }
 
     @Test
-    fun aLongPlaylistPlaysInPartsOfWhatYouTubeTakes() {
+    fun aLongPlaylistPlaysThroughInQueuesOfWhatYouTubeTakes() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        File(app.cacheDir, "queue_lookups.json").delete()
         val songs = (1..60).joinToString(",") { """{"title":"Song $it","subtitle":"Band"}""" }
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[$songs]}}}}}}</script>"""
-        // Holds the song lookups so the progress can be seen.
+        // Holds the song lookups so the progress can be seen, and the 50th longer, to see it count.
         val release = CountDownLatch(1)
+        val last = CountDownLatch(1)
         fake.handler = { request ->
             // Its own body: songs are looked up several at a time, so the last one sent may be another's.
             val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
@@ -1013,8 +1024,8 @@ class MainActivityTest {
                     .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGpart").build()
                 // Each song is found as itself, its video named after its number.
                 request.url.host == "music.youtube.com" -> {
-                    release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
+                    (if (number == "50") last else release).await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                         "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
                         {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
@@ -1028,28 +1039,29 @@ class MainActivityTest {
         launch()
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         waitForText("Song 1")
-        // The main button says which part it plays; screen readers hear where.
-        val youTubeMusic = string(MusicService.YOUTUBE_MUSIC.labelRes)
-        val firstPart = string(R.string.play_part_in, 1, 50, youTubeMusic)
-        composeRule.onNodeWithContentDescription(firstPart).assertExists()
-        assertTextShown(string(R.string.part_range, 1, 50))
-        val secondPart = composeRule.onNodeWithText(string(R.string.part_range, 51, 60)).performScrollTo()
-        // With the card scrolled away, a floating button stands in for its main one. The second part
-        // only just showed at the bottom, so it still plays the first.
-        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(firstPart, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
-        // Scrolled into the second part, it plays that one.
+        // However long, it plays all of it; screen readers hear where.
+        val playAll = string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes))
+        composeRule.onNodeWithContentDescription(playAll).assertExists()
+        // With the card scrolled away, a floating button stands in for it.
         composeRule.onNodeWithText("Song 60").performScrollTo()
-        val secondPartIn = string(R.string.play_part_in, 51, 60, youTubeMusic)
-        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(secondPartIn, useUnmergedTree = true).fetchSemanticsNodes().size == 1 }
-        // Each part's header plays it. The floating button may cover it at the bottom edge, so it's tapped by its action.
-        secondPart.performSemanticsAction(SemanticsActions.OnClick)
-        // It shows how far it got while it looks the songs up.
-        waitForText(string(R.string.play_all_progress, 0, 10))
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(playAll, useUnmergedTree = true).fetchSemanticsNodes().size == 2 }
+        composeRule.onAllNodes(hasContentDescription(playAll) and hasClickAction()).onLast().performSemanticsAction(SemanticsActions.OnClick)
+        // It shows how far it got while it looks up as many as YouTube takes.
+        waitForText(string(R.string.play_all_progress, 0, 50))
         release.countDown()
+        waitForText(string(R.string.play_all_progress, 49, 50))
+        last.countDown()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=00000000051&list=TLGGpart", nextStartedActivity()!!.dataString)
-        // Only those ten were looked up.
-        assertEquals(10, fake.requestedUrls.count { "music.youtube.com" in it })
+        assertEquals("https://music.youtube.com/watch?v=00000000001&list=TLGGpart", nextStartedActivity()!!.dataString)
+        assertEquals(50, fake.requestedUrls.count { "music.youtube.com" in it })
+        // Once YouTube Music plays them, the rest are looked up, and played as the last of those ends.
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Song 1", "Band"), 100) }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "music.youtube.com" in it } == 60 }
+        composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Song 50", "Band"), 149) }
+        composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Something Else", "Band"), 150) }
+        waitUntil(TIMEOUT_MS) { phone.listsAsked.isNotEmpty() }
+        assertEquals(listOf(music to "https://music.youtube.com/watch?v=00000000051&list=TLGGpart"), phone.listsAsked)
     }
 
     /** A playlist whose songs are YouTube videos, as a YouTube playlist's are. */

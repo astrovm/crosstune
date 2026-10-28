@@ -41,8 +41,6 @@ internal data class UiState(
     val shareSheetApps: Boolean = true,
     /** While Play all matches a collection's songs: how many have been looked up, out of how many. */
     val queueProgress: Pair<Int, Int>? = null,
-    /** Where in the list the songs Play all is matching start, so a later part shows its progress by itself. */
-    val queueFrom: Int = 0,
     /** What happens once a shared link is looked up, when a share sheet action asked for something other than opening. */
     val afterLookup: AfterLookup = AfterLookup.OPEN,
     /** YouTube, Invidious and Piped links reach the user's app only when they're music; other videos open as usual. */

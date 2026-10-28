@@ -9,6 +9,7 @@ import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
 import android.media.session.MediaController
+import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
@@ -80,6 +81,14 @@ internal data class Following(
     val timingKnown: Boolean = true
 )
 
+/**
+ * A song an app plays, and its place in the app's queue, by the number the app gave it there; null
+ * for an app that shows no queue, as YouTube doesn't. YouTube Music numbers what it's asked to play
+ * one after another, then what it plays on after those. [ended] once the app stopped at the song's
+ * end, as YouTube does after a list's last song.
+ */
+internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false)
+
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
     /** Whether Android lets Crosstune see what plays, which the user allows in its settings. */
@@ -122,6 +131,13 @@ internal interface PlaybackSource {
     /** The song playing now, updated when music apps start, pause, stop, or change songs. */
     @MainThread
     fun nowPlayingUpdates(): Flow<Heard.Song?>
+
+    /** What [app] plays, playing or paused, and where in its queue, as that changes; null while it plays nothing. */
+    @MainThread
+    fun plays(app: String): Flow<AppPlays?>
+
+    /** Has [app] play the list of songs at [link], from its first, in the background where it can; false with no app to ask. */
+    suspend fun playList(app: String, link: String): Boolean
 
     /**
      * Whether Android holds this access back until "Allow restricted settings" is turned on for
@@ -286,9 +302,44 @@ internal class MediaSessionPlayback(
             .firstNotNullOfOrNull { playing(it)?.metadata?.copy(title = song.title, artist = song.artist) }
     }
 
-    override fun nowPlayingUpdates(): Flow<Heard.Song?> = callbackFlow {
+    override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes(::nowPlaying)
+
+    override fun plays(app: String): Flow<AppPlays?> = changes {
+        runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
+            .filter { sameApp(app, it.packageName) }
+            .firstNotNullOfOrNull { controller ->
+                val ended = controller.ended()
+                controller.takeIf { ended || (it.playbackState?.state ?: PlaybackState.STATE_NONE) !in NOT_PLAYING }
+                    // A video that doesn't say it's music is still what the app was asked to play: YouTube
+                    // names "Thriller" by "Michael Jackson" with no album, as it does any video.
+                    ?.let { playing(it)?.metadata ?: it.named() }
+                    ?.let { AppPlays(it, controller.playbackState?.activeQueueItemId?.takeIf { id -> id != MediaSession.QueueItem.UNKNOWN_ID.toLong() }, ended) }
+            }
+    }
+
+    /** What plays, as the app names it. */
+    private fun MediaController.named(): MusicMetadata? =
+        metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
+            ?.let { MusicMetadata(it, metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) }
+
+    /** Stopped or paused at its song's end, where it said it is. */
+    private fun MediaController.ended(): Boolean {
+        val state = playbackState ?: return false
+        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 } ?: return false
+        return state.state in STILL && state.position >= duration - ENDED_WITHIN_MS
+    }
+
+    override suspend fun playList(app: String, link: String): Boolean {
+        val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName) }
+            ?: waker.wake(MusicService.ofPackage(app)?.packageNames ?: listOf(app))
+            ?: return false
+        return runCatching { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }.isSuccess
+    }
+
+    /** What [read] says, again whenever an app starts, pauses, stops or changes songs. */
+    private fun <T> changes(read: () -> T): Flow<T> = callbackFlow {
         var watched: List<MediaController> = emptyList()
-        fun update() { trySend(nowPlaying()) }
+        fun update() { trySend(read()) }
         val callback = object : MediaController.Callback() {
             override fun onMetadataChanged(metadata: MediaMetadata?) = update()
             override fun onPlaybackStateChanged(state: PlaybackState?) = update()
@@ -310,7 +361,7 @@ internal class MediaSessionPlayback(
             audio.registerAudioPlaybackCallback(sounding, handler)
             watch(sessions.getActiveSessions(listener))
         }.isSuccess
-        if (!watching) trySend(null)
+        if (!watching) update()
         awaitClose {
             sessions.removeOnActiveSessionsChangedListener(changed)
             audio.unregisterAudioPlaybackCallback(sounding)
@@ -447,8 +498,17 @@ private const val COVER_QUALITY = 90
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)
 
+/** States an app rests in, once its song ends with nothing after it. */
+private val STILL = setOf(PlaybackState.STATE_PAUSED, PlaybackState.STATE_STOPPED)
+
+/** How short of its song's length an app may stop, and still have played it to its end. YouTube stops a little past it. */
+private const val ENDED_WITHIN_MS = 2_000L
+
 /**
  * Only here so Android shows Crosstune what music apps are playing, which it does for an app the
  * user lets read notifications. The notifications themselves are never looked at.
  */
-class NowPlayingListener : NotificationListenerService()
+class NowPlayingListener : NotificationListenerService() {
+    // Android starts Crosstune again for this after stopping it, so a playlist it played through carries on.
+    override fun onListenerConnected() = MainActivity.playQueue(applicationContext).resume()
+}

@@ -79,9 +79,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -223,8 +221,8 @@ internal data class ScreenActions(
     val onRemoveHistory: (HistoryEntry) -> Unit = {},
     val onOpenTrack: (MusicMetadata) -> Unit = {},
     val onCopySongs: () -> Unit = {},
-    /** Plays the songs as one queue, from the given one, as many as YouTube takes. */
-    val onPlayAll: (Int) -> Unit = {},
+    /** Plays the songs through, as one queue at a time of as many as YouTube takes. */
+    val onPlayAll: () -> Unit = {},
     val onShareSongs: () -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onUndoClearHistory: () -> Unit = {},
@@ -592,11 +590,6 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     // A long list's main button scrolls away with the card, so a floating one stands in for it.
     var mainButtonShown by remember { mutableStateOf(true) }
     val songList = state.result?.takeIf { state.isSongList && it.tracks.isNotEmpty() }
-    // Where each part of a long list starts on screen, so the floating button plays the one in view.
-    val partTops = remember(state.link) { mutableStateMapOf<Int, Float>() }
-    // A part counts as in view once its header is in the top two thirds, so a short last part counts too.
-    val line = LocalWindowInfo.current.containerSize.height * 2 / 3f
-    val partInView = partTops.filterValues { it < line }.keys.maxOrNull() ?: 0
 
     // At the bottom, unless it's the song shown or it's turned off; not while a link is typed in.
     val playing = state.playingNow?.takeIf { now ->
@@ -635,7 +628,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = { songList?.let { PlayButton(it, state, actions, part = partInView, visible = !mainButtonShown) } }
+        floatingActionButton = { songList?.let { PlayButton(it, state, actions, visible = !mainButtonShown) } }
     ) {
         // The empty hint below says what the app does, so there's no tagline above it.
         Spacer(Modifier.height(8.dp))
@@ -648,7 +641,7 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
             result?.let {
                 Column {
                     ResultCard(it, state, actions, onMainButtonShown = { shown -> mainButtonShown = shown })
-                    if (it.tracks.isNotEmpty()) PlaylistSongs(it, state, actions, onPartTop = { part, top -> partTops[part] = top })
+                    if (it.tracks.isNotEmpty()) PlaylistSongs(it, state, actions)
                     // Room to scroll the last song out from under the floating button.
                     if (state.isSongList) Spacer(Modifier.height(72.dp))
                 }
@@ -1375,8 +1368,7 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 openButton(Modifier.weight(1f).fillMaxHeight())
             }
         }
-        // A later part shows its own, down by its button.
-        QueueProgress(state.queueProgress?.takeIf { state.queueFrom == 0 })
+        QueueProgress(state.queueProgress)
         if (destination != state.defaultDestination) {
             TextButton(onClick = actions.onMakeDefault, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                 Text(stringResource(R.string.make_default_named, destination.label()))
@@ -1432,13 +1424,7 @@ private fun mainAction(result: MusicMetadata, state: UiState, actions: ScreenAct
                 actions.onOpenTrack(result.tracks.first())
             }
         }
-        // Past what one queue takes, it says which part plays.
-        val max = MainViewModel.MAX_QUEUE
-        return if (result.tracks.size > max) {
-            MainAction(stringResource(R.string.play_part, 1, max), stringResource(R.string.play_part_in, 1, max, app), enabled, drawable = R.drawable.ic_play) { actions.onPlayAll(0) }
-        } else {
-            MainAction(stringResource(R.string.play_all_button), stringResource(R.string.play_all_in, app), enabled, drawable = R.drawable.ic_play) { actions.onPlayAll(0) }
-        }
+        return MainAction(stringResource(R.string.play_all_button), stringResource(R.string.play_all_in, app), enabled, drawable = R.drawable.ic_play, onClick = actions.onPlayAll)
     }
     // Not there, the song plays where it is instead, unless searching anyway was picked.
     state.link?.service?.takeIf { state.resultMissing && state.notFoundAction != NotFoundAction.SEARCH }?.let { original ->
@@ -1452,20 +1438,10 @@ private fun mainAction(result: MusicMetadata, state: UiState, actions: ScreenAct
     }
 }
 
-/**
- * The main button, floating at the bottom once the card it's on has scrolled away. In a long list,
- * it plays the [part] in view, which starts at that song.
- */
+/** The main button, floating at the bottom once the card it's on has scrolled away. */
 @Composable
-private fun PlayButton(result: MusicMetadata, state: UiState, actions: ScreenActions, part: Int, visible: Boolean) {
-    val first = mainAction(result, state, actions)
-    val to = minOf(part + MainViewModel.MAX_QUEUE, result.tracks.size)
-    val app = state.resultDestination.label()
-    val main = if (part == 0) first else MainAction(
-        stringResource(R.string.play_part, part + 1, to),
-        stringResource(R.string.play_part_in, part + 1, to, app),
-        first.enabled
-    ) { actions.onPlayAll(part) }
+private fun PlayButton(result: MusicMetadata, state: UiState, actions: ScreenActions, visible: Boolean) {
+    val main = mainAction(result, state, actions)
     val progress = state.queueProgress
     AnimatedVisibility(visible = visible, enter = Motion.appear, exit = Motion.disappear) {
         ExtendedFloatingActionButton(
@@ -1739,11 +1715,10 @@ internal fun RemoveBackground(direction: SwipeToDismissBoxValue) {
 
 /**
  * A collection's songs, each opening on its own where the result goes. A playlist's show their
- * covers; an album's, which share one, their number. Past what YouTube takes in one queue, each
- * part of a long list can be played on its own.
+ * covers; an album's, which share one, their number.
  */
 @Composable
-private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: ScreenActions, onPartTop: (Int, Float) -> Unit = { _, _ -> }) {
+private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: ScreenActions) {
     val tracks = result.tracks
     val busy = state.queueProgress != null
     SectionHeader(
@@ -1753,7 +1728,7 @@ private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: Screen
             // A playlist plays from the button above; an album opens as itself there.
             state.canPlayAll && !state.isSongList -> {
                 {
-                    TextButton(onClick = { actions.onPlayAll(0) }, enabled = !busy) {
+                    TextButton(onClick = actions.onPlayAll, enabled = !busy) {
                         AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(18.dp))
                         Text(stringResource(R.string.play_all_button), modifier = Modifier.padding(start = 6.dp))
                     }
@@ -1773,25 +1748,9 @@ private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: Screen
         }
     )
     val covers = result.type == ItemType.PLAYLIST
-    // Past what YouTube takes in one queue, the list comes in parts, each with a header that plays it.
-    val parts = state.canPlayAll && tracks.size > MainViewModel.MAX_QUEUE
     Group {
         tracks.forEachIndexed { index, track ->
             if (index > 0) GroupDivider()
-            if (parts && index % MainViewModel.MAX_QUEUE == 0) {
-                PartHeader(
-                    index,
-                    minOf(index + MainViewModel.MAX_QUEUE, tracks.size),
-                    enabled = !busy,
-                    modifier = Modifier.onGloballyPositioned { onPartTop(index, it.positionInWindow().y) }
-                ) { actions.onPlayAll(index) }
-                // The first part's shows by the button above, which plays it too.
-                QueueProgress(
-                    state.queueProgress?.takeIf { index > 0 && state.queueFrom == index },
-                    Modifier.padding(start = 20.dp, end = 20.dp, bottom = 16.dp)
-                )
-                GroupDivider()
-            }
             val openLabel = stringResource(R.string.history_open, track.title)
             Row(
                 modifier = Modifier
@@ -1825,28 +1784,6 @@ private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: Screen
                 AppIcon(R.drawable.ic_play, contentDescription = null, modifier = Modifier.size(24.dp))
             }
         }
-    }
-}
-
-/** "51 to 100 ▶": where a part of a list longer than one queue starts. Tapping it plays that part. */
-@Composable
-private fun PartHeader(from: Int, to: Int, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(enabled = enabled, onClickLabel = stringResource(R.string.play_part, from + 1, to), onClick = onClick)
-            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            stringResource(R.string.part_range, from + 1, to),
-            style = MaterialTheme.typography.titleSmall,
-            color = color,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(painterResource(R.drawable.ic_play), contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
     }
 }
 

@@ -99,9 +99,6 @@
     <string name="play_all_progress">曲を探しています… %1$d/%2$d</string>
     <string name="play_all_in">%1$s ですべて再生</string>
     <string name="play_first_in">%1$s で最初の曲を再生</string>
-    <string name="play_part">%1$d〜%2$d 曲目を再生</string>
-    <string name="play_part_in">%3$s で %1$d〜%2$d 曲目を再生</string>
-    <string name="part_range">%1$d〜%2$d 曲目</string>
     <string name="play_first_button">最初の曲を再生</string>
     <string name="play_in_background">%1$sで再生してこの画面のままにする</string>
     <string name="songs_shown">%2$d 曲中 最初の %1$d 曲</string>

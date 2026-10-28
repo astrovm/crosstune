@@ -78,4 +78,20 @@ internal class FakePlayback : PlaybackSource {
     override fun skip(song: MusicMetadata, next: Boolean) {
         skips += next
     }
+
+    private val inApps = mutableMapOf<String, MutableStateFlow<AppPlays?>>()
+
+    /** What [app] plays, as a test has it. */
+    fun inApp(app: String): MutableStateFlow<AppPlays?> = inApps.getOrPut(app) { MutableStateFlow(null) }
+
+    override fun plays(app: String): Flow<AppPlays?> = inApp(app)
+
+    /** Each list an app was asked to play, and its link. */
+    val listsAsked: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
+
+    override suspend fun playList(app: String, link: String): Boolean {
+        if (!canPlaySongs) return false
+        listsAsked += app to link
+        return true
+    }
 }

@@ -924,9 +924,11 @@ class ExactMatcherTest {
             }
         }
         val tracks = listOf(MusicMetadata("One", "Band"), MusicMetadata("Two", "Band"), MusicMetadata("One", "Band"))
-        val url = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) {} }
+        val queue = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) {} }
         assertEquals("same0000000", asked)
-        assertEquals("https://music.youtube.com/watch?v=same0000000&list=TLGGq", url)
+        assertEquals("https://music.youtube.com/watch?v=same0000000&list=TLGGq", queue?.url)
+        // The songs it plays, as asked for: the one video, once.
+        assertEquals(listOf(MusicMetadata("One", "Band")), queue?.songs)
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, emptyList()) {} })
     }
 
@@ -942,7 +944,10 @@ class ExactMatcherTest {
                 if (request.url.encodedPath == "/watch_videos") answer(request)
                 else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow("First", "Band • Album • 3:00", videoId = "first000000")))
             }
-            assertEquals("https://music.youtube.com/watch?v=first000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("First", "Band"))) {} })
+            val queue = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("First", "Band"), MusicMetadata("Second", "Band"))) {} }
+            assertEquals("https://music.youtube.com/watch?v=first000000", queue?.url)
+            // Only the first plays, on its own.
+            assertEquals(listOf(MusicMetadata("First", "Band")), queue?.songs)
         }
     }
 
@@ -961,8 +966,9 @@ class ExactMatcherTest {
             MusicMetadata("Nested", "", ItemType.PLAYLIST)
         )
         val looked = mutableListOf<Int>()
-        val url = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) { looked += it } }
-        assertEquals("https://music.youtube.com/watch?v=fine0000000&list=TLGGq", url)
+        val queue = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) { looked += it } }
+        assertEquals("https://music.youtube.com/watch?v=fine0000000&list=TLGGq", queue?.url)
+        assertEquals(listOf(MusicMetadata("Fine", "Band")), queue?.songs)
         assertEquals(listOf(1, 2, 3, 4), looked.sorted())
     }
 
@@ -992,7 +998,7 @@ class ExactMatcherTest {
             if (request.url.encodedPath == "/watch_videos") FakeSpotify.html(request, "").newBuilder().code(303).header("Location", "https://www.youtube.com/watch?v=x").build()
             else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow(rowTitle, "$rowArtist • Album • 3:00", videoId = "video000000")))
         }
-        return runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata(title, artist)), {}) }
+        return runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata(title, artist)), {}) }?.url
     }
 
     @Test
@@ -1048,11 +1054,11 @@ class ExactMatcherTest {
             ))
         }
         val tracks = listOf(MusicMetadata("Glass No Palm Tree", "Band"))
-        assertEquals("https://music.youtube.com/watch?v=exact000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) {} })
+        assertEquals("https://music.youtube.com/watch?v=exact000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) {} }?.url)
         // A song's close match is kept apart from its exact one, so opening it alone still wants the same title.
         respond(youTubeMusicPage(youTubeMusicRow("GLASS NO PALM TREE", "Band • Album • 3:00", videoId = "other000000")))
         val romaji = MusicMetadata("ガラスのPALM TREE", "Band")
-        assertEquals("https://music.youtube.com/watch?v=other000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(romaji)) {} })
+        assertEquals("https://music.youtube.com/watch?v=other000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(romaji)) {} }?.url)
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, romaji) })
     }
 
@@ -1065,7 +1071,7 @@ class ExactMatcherTest {
             else if (asked.incrementAndGet() == 1) throw IOException("slow moment")
             else FakeSpotify.html(request, youTubeMusicPage(youTubeMusicRow("Song", "Band • Album • 3:00", videoId = "video000000")))
         }
-        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Song", "Band"))) {} })
+        assertEquals("https://music.youtube.com/watch?v=video000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Song", "Band"))) {} }?.url)
         assertEquals(2, asked.get())
 
         // Nothing found is an answer, so it is not asked twice: once among the songs, once among the
@@ -1113,14 +1119,16 @@ class ExactMatcherTest {
         }
         val tracks = listOf(MusicMetadata("First", "Band"), MusicMetadata("Missing", "Nobody"), MusicMetadata("Second", "Band"))
         val looked = mutableListOf<Int>()
-        val url = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) { looked += it } }
-        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", url)
+        val queue = runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, tracks) { looked += it } }
+        assertEquals("https://music.youtube.com/watch?v=first000000&list=TLGGqueue", queue?.url)
+        // The songs it plays are those found, as asked for.
+        assertEquals(listOf(tracks[0], tracks[2]), queue?.songs)
         assertEquals(listOf(1, 2, 3), looked.sorted())
         assertTrue(fake.requestedUrls.any { java.net.URLDecoder.decode(it, "UTF-8").endsWith("watch_videos?video_ids=first000000,second00000") })
 
         // Without the temporary playlist, the first song still plays, in YouTube here.
         playlistAnswer = { throw IOException("offline") }
-        assertEquals("https://www.youtube.com/watch?v=first000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE, tracks) {} })
+        assertEquals("https://www.youtube.com/watch?v=first000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE, tracks) {} }?.url)
 
         // Nothing matched, nothing to play.
         assertNull(runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(MusicMetadata("Missing", "Nobody"))) {} })
