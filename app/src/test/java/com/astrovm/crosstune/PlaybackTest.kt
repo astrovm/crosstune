@@ -959,6 +959,11 @@ class PlaybackTest {
         shadowOf(music).getCallbacks().forEach { it.onQueueChanged(null) }
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(listOf(Queued("Save Your Tears", "The Weeknd", 3), Queued("Untitled", "", 4)), seen.last()!!.upNext)
+        // First in its queue, all the rest is next.
+        shadowOf(music).executeOnPlaybackStateChanged(at(1, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(3L, 4L), seen.last()!!.upNext.drop(1).map { it.id })
+        assertEquals("Blinding Lights", seen.last()!!.upNext.first().title)
         // Not saying where in it it is, there's no telling what's next.
         shadowOf(music).executeOnPlaybackStateChanged(at(9, PlaybackState.STATE_PLAYING))
         shadowOf(Looper.getMainLooper()).idle()

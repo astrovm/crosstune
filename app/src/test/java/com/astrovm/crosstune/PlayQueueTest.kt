@@ -217,6 +217,17 @@ class PlayQueueTest {
         assertFalse(file.exists())
         plays("Radio", 150)
         assertTrue(phone.listsAsked.isEmpty())
+        // Its first song, or by the first's number, as well.
+        queue().playing()
+        plays(1, 160)
+        plays(2, 161)
+        plays(1, 162)
+        assertFalse(file.exists())
+        queue().playing()
+        plays(1, 170)
+        plays(3, 170)
+        assertFalse(file.exists())
+        assertTrue(phone.listsAsked.isEmpty())
         // Past the part, it's what the app plays on with, which may be one of the part's songs again.
         queue().playing()
         plays(1, 200)

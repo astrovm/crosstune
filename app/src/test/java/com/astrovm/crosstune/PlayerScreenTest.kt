@@ -22,6 +22,8 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -217,6 +219,13 @@ class PlayerScreenTest {
         // With nothing after it, there's nothing to open.
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = null))) }
         none(hasContentDescription(upNext))
+        // Gone with the list while open, it stays gone once there's another.
+        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = listOf(Queued("Next Song", "Band", 7))))) }
+        compose.onNodeWithContentDescription(upNext).performClick()
+        compose.waitForIdle()
+        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = emptyList()))) }
+        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = listOf(Queued("Next Song", "Band", 7))))) }
+        none(hasText("Next Song"))
     }
 
     @Test
@@ -257,6 +266,15 @@ class PlayerScreenTest {
         compose.waitForIdle()
         assertEquals(listOf<Int?>(15), asked)
         sleep.assertIsFocused()
+
+        // Opened from the list's name up top, it's back there.
+        showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = "Road trip"))) }
+        val list = compose.onNodeWithContentDescription("${context.getString(R.string.player_up_next)}, Road trip")
+        list.requestFocus()
+        press(list, Key.DirectionCenter)
+        press(compose.onNodeWithText("Next Song"), Key.DirectionCenter)
+        assertEquals(listOf(7L, 7L), played)
+        list.assertIsFocused()
     }
 
     @Test
@@ -316,6 +334,26 @@ class PlayerScreenTest {
         compose.onNodeWithText("Untimed").assertExists()
         showing { it.copy(player = it.player!!.copy(lines = listOf(LyricLine(0, " ")))) }
         compose.onNodeWithContentDescription(lyrics).assertExists()
+        // Between verses, the last one sung stays up.
+        showing { it.copy(player = it.player!!.copy(lines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, ""), LyricLine(40_000, "Three")))) }
+        compose.onNodeWithText("One").assertExists()
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp")
+    fun widerThanTallTheCoverSitsBesideTheRest() {
+        player()
+        val cover = compose.onNodeWithTag(PLAYER_COVER_TAG).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("Song").fetchSemanticsNode().boundsInRoot
+        assertTrue("The cover isn't beside the title: $cover, $title", cover.right <= title.left)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h420dp")
+    fun withTooLittleRoomTheCoverGivesWayToTheButtons() {
+        player()
+        none(hasTestTag(PLAYER_COVER_TAG))
+        compose.onNodeWithContentDescription(context.getString(R.string.lyrics_play)).assertIsDisplayed()
     }
 
     @Test
