@@ -233,6 +233,37 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aSongLrclibWasBusyForIsntSaidToHaveNoWords() {
+        val song = MusicMetadata("Song", "Band")
+        var busy = Int.MAX_VALUE
+        // LRCLIB busy, and the other places without the song.
+        fake.handler = { request: Request ->
+            when {
+                request.url.host == "lrclib.net" && busy-- > 0 -> FakeSpotify.html(request, """{"message":"The server is busy","statusCode":503}""")
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, """[${answer("Song", "Band", "Words")}]""")
+                request.url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        assertEquals(Lyrics.Unavailable, found(song))
+        // Answering once the others have said they have none, its words come.
+        busy = 5
+        assertEquals("Words", words(song))
+
+        // Saying it has none, it isn't asked again.
+        fake.handler = { request: Request ->
+            when {
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                request.url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        fake.requestedUrls.clear()
+        assertEquals(Lyrics.None, found(MusicMetadata("Other", "Band")))
+        assertEquals(1, fake.requestedUrls.count { it.startsWith("https://lrclib.net/") })
+    }
+
+    @Test
     fun aBusyOrMissingServiceSaysSoRatherThanClaimingThereAreNoWords() {
         // LRCLIB is often busy, and a lookup that failed is not a song without words.
         fake.handler = { throw IOException("offline") }
@@ -689,7 +720,7 @@ class LyricsFinderTest {
     }
 
     @Test
-    fun netEaseHavingNoSuchSongIsNoneEvenWithLrclibDown() {
+    fun netEaseHavingNoSuchSongWithLrclibDownIsntNone() {
         fake.handler = { request ->
             val url = request.url
             when {
@@ -698,7 +729,8 @@ class LyricsFinderTest {
                 else -> FakeSpotify.html(request, """{"result":{"songs":[{"id":9,"name":"Another Song","artists":[{"name":"Band"}]}]}}""")
             }
         }
-        assertEquals(Lyrics.None, found(MusicMetadata("Song", "Band")))
+        // LRCLIB has most songs' words, so it isn't known the song has none.
+        assertEquals(Lyrics.Unavailable, found(MusicMetadata("Song", "Band")))
     }
 
     @Test

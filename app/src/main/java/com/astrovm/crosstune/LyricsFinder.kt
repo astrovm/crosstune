@@ -476,7 +476,11 @@ internal class LyricsFinder(
         if (!untimed && tried(fromLetras(metadata, timeoutMs))) return answers.last()
         // None better: the best timed of what was found, the first among equals, e.g. words timed
         // badly over untimed ones, as they still mostly follow the song and can be put in time by hand.
-        return answers.reduce(::better)
+        val best = answers.reduce(::better)
+        // LRCLIB, which has most songs' words, busy all along while the others had none: asked once
+        // more, as they took a while. Still busy, it isn't known that the song has none.
+        if (first !is Lyrics.Unavailable || best !is Lyrics.None) return best
+        return fromLrclib(metadata, timeoutMs)
     }
 
     /**
