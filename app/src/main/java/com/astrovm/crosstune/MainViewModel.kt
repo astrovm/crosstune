@@ -122,6 +122,7 @@ internal class MainViewModel(
     private val lookAhead: Boolean = true,
     /** Plays a playlist longer than one queue through, see [playAll]. */
     private val playQueue: PlayQueue? = null,
+    private val queueOrder: QueueOrder? = null,
     /** Pauses the music after a while, see [playerSleep]. */
     private val sleepTimer: SleepTimer? = null
 ) : ViewModel() {
@@ -1397,6 +1398,30 @@ internal class MainViewModel(
         val player = uiState.player ?: return
         uiState = uiState.copy(player = player.copy(played = true))
         playback?.playQueued(player.song, id)
+    }
+
+    /** Plays the list on from the song up next at [index], one it still has to ask the app for. */
+    fun playerPlayLater(index: Int) {
+        val player = uiState.player ?: return
+        val apps = player.following?.upNext.orEmpty().count { it.id != null }
+        uiState = uiState.copy(player = player.copy(played = true))
+        viewModelScope.launch { playQueue?.playFrom(index - apps) }
+    }
+
+    /**
+     * Moves the song up next at [from] to [to]: the app's songs among themselves, by the order
+     * Crosstune keeps over the app's, and a list's still to ask for among theirs.
+     */
+    fun playerMoveQueued(from: Int, to: Int) {
+        val following = uiState.player?.following ?: return
+        val upNext = following.upNext
+        val moved = upNext.getOrNull(from) ?: return
+        val onto = upNext.getOrNull(to) ?: return
+        val apps = upNext.count { it.id != null }
+        when {
+            moved.id != null && onto.id != null -> queueOrder?.move(following, from, to)
+            moved.id == null && onto.id == null -> viewModelScope.launch { playQueue?.move(from - apps, to - apps) }
+        }
     }
 
     /** The player's song's card, under it, with its links. */

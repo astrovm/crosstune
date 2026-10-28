@@ -5,13 +5,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import android.os.SystemClock
+import androidx.activity.BackEventCompat
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInputModeManager
-import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -77,29 +84,32 @@ class PlayerScreenTest {
     }
 
     @Test
-    fun shuffleOnIsBoxedIn() {
+    fun shuffleOnHasADotUnderItAndNoBox() {
         var shuffles by mutableStateOf(false)
         compose.setContent {
             val following = Following(PlaybackClock(30_000, 0, playing = false), "YouTube Music", canSeek = true, durationMs = 200_000, shuffle = shuffles)
             CrosstuneTheme { PlayerScreen(UiState(canFollowApps = true, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following)), ScreenActions()) }
         }
         val name = ApplicationProvider.getApplicationContext<android.content.Context>().getString(R.string.player_shuffle)
-        // How much of the button is drawn on: its pixels far from its edge on the same row, which is
-        // the ground behind it, as that fades from top to bottom, dithered.
-        fun inked(): Int {
+        val dp = compose.density.density
+        // How much of a band of the button, [from] to [to] dp down it, is drawn on: its pixels far from
+        // its edge on the same row, which is the ground behind it, as that fades from top to bottom.
+        fun inked(from: Int, to: Int): Int {
             val bounds = compose.onNodeWithContentDescription(name).fetchSemanticsNode().boundsInRoot
             val image = compose.onRoot().captureToImage().asAndroidBitmap()
             val xs = bounds.left.toInt() until bounds.right.toInt()
-            val ys = bounds.top.toInt() until bounds.bottom.toInt()
+            val ys = (bounds.top + from * dp).toInt() until (bounds.top + to * dp).toInt()
             fun light(pixel: Int) = android.graphics.Color.red(pixel) + android.graphics.Color.green(pixel) + android.graphics.Color.blue(pixel)
             return ys.sumOf { y -> xs.count { x -> kotlin.math.abs(light(image.getPixel(x, y)) - light(image.getPixel(xs.first, y))) > 150 } }
         }
-        val off = inked()
+        // Over the icon, and under it, where the dot goes.
+        val above = 0 to 10
+        val under = 37 to 46
+        assertEquals(0, inked(under.first, under.second))
         shuffles = true
         compose.waitForIdle()
-        // A color alone is too faint beside the times; on, it's a box, far more of it drawn.
-        val on = inked()
-        assertTrue("Shuffle on isn't boxed in: $on pixels drawn, against $off off", on > off * 2)
+        assertTrue("Shuffle on has no dot under it", inked(under.first, under.second) > 0)
+        assertEquals("Shuffle on is boxed in", 0, inked(above.first, above.second))
     }
 
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -108,12 +118,15 @@ class PlayerScreenTest {
 
     private lateinit var inputModes: InputModeManager
 
+    private lateinit var back: OnBackPressedDispatcher
+
     /** The player on "Song" by "Band", paused 25 seconds into its 200, followed as [following] has it on top of that. */
     private fun player(actions: ScreenActions = ScreenActions(), following: (Following) -> Following? = { it }) {
         val paused = Following(PlaybackClock(25_000, 0, playing = false), "YouTube Music", canSeek = true, durationMs = 200_000)
         shown = UiState(canFollowApps = true, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following(paused)))
         compose.setContent {
             inputModes = LocalInputModeManager.current
+            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
             CrosstuneTheme { PlayerScreen(shown, actions) }
         }
     }
@@ -124,6 +137,17 @@ class PlayerScreenTest {
     }
 
     private fun none(matcher: SemanticsMatcher) = assertTrue(compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
+
+    /** A song tapped up next, on its way. */
+    private val asked = SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, androidx.compose.ui.semantics.ProgressBarRangeInfo.Indeterminate)
+
+    private val putsAway = SemanticsMatcher("puts what plays next away") { it.config.getOrNull(SemanticsActions.OnClick)?.label == context.getString(R.string.dismiss_button) }
+
+    /** What plays next's handle, which puts it away, rather than the player's own button that does. */
+    private val handle = putsAway and hasContentDescription(context.getString(R.string.dismiss_button))
+
+    /** The cover, small beside the song's name while what plays next is open. */
+    private val smallCover = putsAway and SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription)
 
     @Test
     fun repeatSitsRightOfNextAndSaysHowItRepeats() {
@@ -189,32 +213,55 @@ class PlayerScreenTest {
     @Test
     fun theListItPlaysFromOpensWhatPlaysNext() {
         val played = mutableListOf<Long>()
-        player(ScreenActions(onPlayerPlayQueued = { played += it })) { it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", ""))) }
+        val later = mutableListOf<Int>()
+        player(ScreenActions(onPlayerPlayQueued = { played += it }, onPlayerPlayLater = { later += it })) {
+            it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "")))
+        }
         val upNext = context.getString(R.string.player_up_next)
         compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
         compose.waitForIdle()
-        // Named as the list, with the songs the app has playing at a tap, and those Crosstune asks for later not yet.
-        assertEquals(2, compose.onAllNodes(hasText("Road trip"), useUnmergedTree = true).fetchSemanticsNodes().size)
-        compose.onNodeWithText("Later Song").assertHasNoClickAction()
+        // Named over its songs, rather than up top, with the song playing first.
+        compose.onNodeWithText(context.getString(R.string.player_playing_from)).assertExists()
+        assertEquals(1, compose.onAllNodes(hasText("Road trip"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(2, compose.onAllNodes(hasText("Song"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        // A song the app has plays at a tap, the list staying open, with it on its way till it plays.
+        none(asked)
         compose.onNodeWithText("Next Song").performClick()
         compose.waitForIdle()
         assertEquals(listOf(7L), played)
-        none(hasText("Next Song"))
+        compose.onNodeWithText("Next Song").assertExists()
+        compose.onNode(asked).assertExists()
+        // One still to ask for plays the list on from there.
+        compose.onNodeWithText("Later Song").performClick()
+        assertEquals(listOf(1), later)
+        // Its handle puts it away, as does the small cover, and Back.
+        compose.onNode(handle).performClick()
+        compose.waitForIdle()
+        none(hasText("Later Song"))
+        compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
+        compose.waitForIdle()
+        compose.onNode(smallCover).performClick()
+        compose.waitForIdle()
+        none(hasText("Later Song"))
+        compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
+        compose.waitForIdle()
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
+        none(hasText("Later Song"))
         // Not played from a list, it's only what's next.
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = null))) }
         compose.onNodeWithContentDescription(upNext).performClick()
         compose.waitForIdle()
         compose.onNodeWithText(upNext).assertExists()
-        // A tap beside it puts it away.
-        compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(centerX, 5f)) }
+        none(hasText(context.getString(R.string.player_playing_from)))
+        compose.onNode(handle).performClick()
         compose.waitForIdle()
-        none(hasText(upNext))
-        // Played from a list, with nothing after it, it's only the list's name.
+        // Played from a list, with nothing after it, it's only the list's name and the song playing.
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = "Road trip", upNext = emptyList()))) }
         compose.onNodeWithContentDescription("$upNext, Road trip").performClick()
         compose.waitForIdle()
-        assertEquals(2, compose.onAllNodes(hasText("Road trip"), useUnmergedTree = true).fetchSemanticsNodes().size)
-        compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(centerX, 5f)) }
+        compose.onNodeWithText(context.getString(R.string.player_playing_from)).assertExists()
+        compose.onNode(handle).performClick()
         compose.waitForIdle()
         // With nothing after it, there's nothing to open.
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(from = null))) }
@@ -226,6 +273,120 @@ class PlayerScreenTest {
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = emptyList()))) }
         showing { it.copy(player = it.player!!.copy(following = it.player.following!!.copy(upNext = listOf(Queued("Next Song", "Band", 7))))) }
         none(hasText("Next Song"))
+    }
+
+    @Test
+    fun pulledDownWhatPlaysNextFollowsTheFingerThenGoesAwayOrBack() {
+        player { it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", ""))) }
+        val upNext = context.getString(R.string.player_up_next)
+        val open = { compose.onNodeWithContentDescription("$upNext, Road trip").performClick(); compose.waitForIdle() }
+        val name = compose.onNodeWithText(context.getString(R.string.player_playing_from))
+        fun top() = compose.onNodeWithText("Next Song").fetchSemanticsNode().boundsInRoot.top
+        // The list's name up top only shows as it goes, so it's on its way while there's two.
+        fun going() = compose.onAllNodes(hasText("Road trip"), useUnmergedTree = true).fetchSemanticsNodes().size == 2
+        open()
+        val opened = top()
+        // Held down by its name, it goes down with the finger, and the player with it.
+        name.performTouchInput { down(center); moveBy(Offset(0f, 300f)) }
+        compose.waitForIdle()
+        assertTrue("It didn't follow the finger: ${top()}, against $opened", top() > opened + 50f)
+        assertTrue(going())
+        // Back up, it comes back up, and let go there, it stays.
+        name.performTouchInput { moveBy(Offset(0f, -300f)); up() }
+        compose.waitForIdle()
+        assertEquals(opened, top(), 1f)
+        assertTrue(!going())
+        // Let go a little way down, slowly, it goes back.
+        name.performTouchInput { swipeDown(startY = centerY, endY = centerY + 100f, durationMillis = 2_000) }
+        compose.waitForIdle()
+        assertEquals(opened, top(), 1f)
+        // Far enough down, it carries on, however slow.
+        name.performTouchInput { swipeDown(startY = centerY, endY = centerY + 900f, durationMillis = 6_000) }
+        compose.waitForIdle()
+        none(hasText("Next Song"))
+        // Flicked down, it goes however little it moved.
+        open()
+        name.performTouchInput { swipeDown(startY = centerY, endY = centerY + 100f, durationMillis = 50) }
+        compose.waitForIdle()
+        none(hasText("Next Song"))
+        // Down past the top of its songs, it's pulled too.
+        open()
+        compose.onNodeWithText("Next Song").performTouchInput { down(center); moveBy(Offset(0f, 300f)) }
+        compose.waitForIdle()
+        assertTrue(going())
+        compose.onNodeWithText("Next Song").performTouchInput { moveBy(Offset(0f, 600f)); up() }
+        compose.waitForIdle()
+        none(hasText("Next Song"))
+        // And pushed back up there, the songs have the finger again.
+        open()
+        compose.onNodeWithText("Next Song").performTouchInput { down(center); moveBy(Offset(0f, 200f)); moveBy(Offset(0f, -400f)); up() }
+        compose.waitForIdle()
+        assertEquals(opened, top(), 1f)
+    }
+
+    @Test
+    fun aSwipeBackPutsWhatPlaysNextAwayAsItGoes() {
+        player { it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7))) }
+        compose.onNodeWithContentDescription("${context.getString(R.string.player_up_next)}, Road trip").performClick()
+        compose.waitForIdle()
+        fun top() = compose.onNodeWithText("Next Song").fetchSemanticsNode().boundsInRoot.top
+        val opened = top()
+        fun swipe(progress: Float) = compose.runOnIdle { back.dispatchOnBackProgressed(BackEventCompat(10f, 500f, progress, BackEventCompat.EDGE_LEFT)) }
+        compose.runOnIdle { back.dispatchOnBackStarted(BackEventCompat(0f, 500f, 0f, BackEventCompat.EDGE_LEFT)) }
+        swipe(0.5f)
+        compose.waitForIdle()
+        assertTrue("It didn't follow the swipe: ${top()}, against $opened", top() > opened + 50f)
+        // Taken back, it's back where it was, open.
+        compose.runOnIdle { back.dispatchOnBackCancelled() }
+        compose.waitForIdle()
+        assertEquals(opened, top(), 1f)
+        compose.runOnIdle { back.dispatchOnBackStarted(BackEventCompat(0f, 500f, 0f, BackEventCompat.EDGE_LEFT)) }
+        swipe(0.4f)
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
+        none(hasText("Next Song"))
+    }
+
+    @Test
+    fun songsUpNextMoveByTheirHandleOrAScreenReaderAmongTheirOwnKind() {
+        val moved = mutableListOf<Pair<Int, Int>>()
+        player(ScreenActions(onPlayerMoveQueued = { from, to -> moved += from to to })) {
+            it.copy(upNext = listOf(Queued("Next Song", "Band", 7), Queued("Third Song", "Band", 8), Queued("Later Song", "")))
+        }
+        compose.onNodeWithContentDescription(context.getString(R.string.player_up_next)).performClick()
+        compose.waitForIdle()
+        val down = context.getString(R.string.player_move_down)
+        val up = context.getString(R.string.player_move_up)
+        fun moves(text: String) = compose.onNode(hasText(text)).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label }
+        fun order() = listOf("Next Song", "Third Song", "Later Song").sortedBy { compose.onNodeWithText(it).fetchSemanticsNode().boundsInRoot.top }
+        // The first goes down only; one still to ask for can't go among the app's.
+        assertEquals(listOf(down), moves("Next Song"))
+        assertEquals(listOf(up), moves("Third Song"))
+        assertEquals(emptyList<String>(), moves("Later Song"))
+        compose.onNodeWithText("Next Song").performCustomAccessibilityActionWithLabel(down)
+        compose.waitForIdle()
+        assertEquals(listOf(0 to 1), moved)
+        assertEquals(listOf("Third Song", "Next Song", "Later Song"), order())
+        // By its handle, a song follows the finger to where it's let go.
+        val rowHeight = compose.onNodeWithText("Next Song").fetchSemanticsNode().boundsInRoot.height + 30f
+        val handles = compose.onAllNodesWithContentDescription(context.getString(R.string.player_move))
+        handles[0].performTouchInput {
+            down(center)
+            repeat(10) { moveBy(Offset(0f, rowHeight / 6)); advanceEventTime(50) }
+            up()
+        }
+        compose.waitForIdle()
+        assertEquals(listOf(0 to 1, 0 to 1), moved)
+        assertEquals(listOf("Next Song", "Third Song", "Later Song"), order())
+        // Not into one still to ask for.
+        handles[1].performTouchInput {
+            down(center)
+            repeat(10) { moveBy(Offset(0f, rowHeight / 6)); advanceEventTime(50) }
+            up()
+        }
+        compose.waitForIdle()
+        assertEquals(listOf(0 to 1, 0 to 1), moved)
+        assertEquals(listOf("Next Song", "Third Song", "Later Song"), order())
     }
 
     @Test
@@ -246,7 +407,7 @@ class PlayerScreenTest {
         upNext.requestFocus()
         press(upNext, Key.DirectionCenter)
         // It starts on the next song; down through the rest, the one still to be asked for too, and no
-        // further, as the player's under it; then up to play one.
+        // further, as it ends there; then up to play one, the list staying open.
         assertTrue(focused("Next Song"))
         press(compose.onNodeWithText("Next Song"), Key.DirectionDown)
         assertTrue(focused("Later Song"))
@@ -256,7 +417,10 @@ class PlayerScreenTest {
         assertTrue(focused("Next Song"))
         press(compose.onNodeWithText("Next Song"), Key.DirectionCenter)
         assertEquals(listOf(7L), played)
+        assertTrue(focused("Next Song"))
         // Put away, the remote is back where it opened it.
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
         upNext.assertIsFocused()
 
         val sleep = compose.onNodeWithContentDescription(context.getString(R.string.player_sleep_timer))
@@ -272,8 +436,9 @@ class PlayerScreenTest {
         val list = compose.onNodeWithContentDescription("${context.getString(R.string.player_up_next)}, Road trip")
         list.requestFocus()
         press(list, Key.DirectionCenter)
-        press(compose.onNodeWithText("Next Song"), Key.DirectionCenter)
-        assertEquals(listOf(7L, 7L), played)
+        assertTrue(focused("Next Song"))
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
         list.assertIsFocused()
     }
 

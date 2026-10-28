@@ -193,6 +193,10 @@
     <string name="player_repeat_all">すべての曲</string>
     <string name="player_repeat_one">この曲</string>
     <string name="player_up_next">次に再生</string>
+    <string name="player_playing_from">再生元</string>
+    <string name="player_move">移動</string>
+    <string name="player_move_up">上へ移動</string>
+    <string name="player_move_down">下へ移動</string>
     <string name="player_song_card">曲のリンク</string>
     <string name="player_sleep_timer">スリープタイマー</string>
     <string name="player_sleep_minutes">%1$d分</string>

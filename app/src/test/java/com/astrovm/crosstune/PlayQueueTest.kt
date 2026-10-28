@@ -379,6 +379,63 @@ class PlayQueueTest {
     }
 
     @Test
+    fun aSongStillToAskForMovesAmongThoseAndPlaysTheListOnFromWhereItsTapped() {
+        val queue = queue()
+        val songs = tracks.take(4).mapIndexed { index, song -> song.copy(artworkUrl = "https://covers.example/${index + 1}.jpg".takeIf { index != 2 }) }
+        runBlocking { queue.play(songs, MusicService.TIDAL, tidal, 1, songs.take(1), "Road Trip") }
+        phone.playing.value = Following(PlaybackClock(0, 0), "TIDAL", canSeek = true, appPackage = tidal)
+        fun next(playing: Int = 1, queue: PlayQueue = this.queue()) = runBlocking { queue.skipping(phone).follow(MusicMetadata("Song $playing", "Band")).first() }!!.upNext
+        // Each with its cover, when it has one.
+        assertEquals(listOf(Queued("Song 2", "Band", art = "https://covers.example/2.jpg"), Queued("Song 3", "Band"), Queued("Song 4", "Band", art = "https://covers.example/4.jpg")), next(queue = queue))
+        runBlocking { queue.move(2, 0) }
+        assertEquals(listOf("Song 4", "Song 2", "Song 3"), next(queue = queue).map { it.title })
+        // Nowhere in what's still to ask for, nothing moves.
+        runBlocking { queue.move(3, 0); queue.move(0, 3); queue.move(-1, 0); queue.move(0, -1) }
+        assertEquals(listOf("Song 4", "Song 2", "Song 3"), next(queue = queue).map { it.title })
+        // Kept so, covers too, it's so after Crosstune is stopped.
+        val again = queue().also { it.resume() }
+        assertEquals(listOf(Queued("Song 4", "Band", art = "https://covers.example/4.jpg"), Queued("Song 2", "Band", art = "https://covers.example/2.jpg"), Queued("Song 3", "Band")), next(queue = again))
+        // Tapped, the list plays on from there, past the ones before it.
+        runBlocking { queue.playFrom(4); queue.playFrom(-1) }
+        assertTrue(phone.songsAsked.isEmpty())
+        runBlocking { queue.playFrom(1) }
+        assertEquals(listOf("Song 2"), phone.songsAsked.map { it.first.title })
+        assertEquals(listOf("Song 3"), next(playing = 2, queue = queue).map { it.title })
+        // Stopped, there's nothing to move or play on.
+        queue.stop()
+        runBlocking { queue.move(0, 0); queue.playFrom(0) }
+        assertEquals(1, phone.songsAsked.size)
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun aListsSongsMovedOrPlayedFromAreLookedUpSoAnew() {
+        val queue = queue()
+        queue.playing()
+        plays(1, 100)
+        assertEquals(tracks.subList(50, 100), looked.single())
+        // The next part was looked up in the order before.
+        runBlocking { queue.move(0, 1) }
+        plays(50, 149)
+        plays("Radio", 150)
+        assertEquals(listOf(tracks[51], tracks[50]) + tracks.subList(52, 100), looked.last())
+        assertEquals("https://music.youtube.com/watch?v=Song 52&list=TL", phone.listsAsked.last().second)
+        // Played on from a song further on, it's from there.
+        plays(52, 300)
+        runBlocking { queue.playFrom(10) }
+        assertEquals(tracks.subList(110, 120), looked.last())
+        assertEquals("https://music.youtube.com/watch?v=Song 111&list=TL", phone.listsAsked.last().second)
+    }
+
+    @Test
+    fun aSongKeptBeforeCoversWereHasNone() {
+        file.writeText("""{"tracks":[["Song 1","Band",""],["Song 2","Band",""]],"service":"TIDAL","app":"$tidal","to":1,"part":[["Song 1","Band",""]],"heard":[]}""")
+        val queue = queue().also { it.resume() }
+        phone.playing.value = Following(PlaybackClock(0, 0), "TIDAL", canSeek = true, appPackage = tidal)
+        assertEquals(listOf(Queued("Song 2", "Band")), runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }!!.upNext)
+    }
+
+    @Test
     fun theListsNameCarriesOnAfterCrosstuneIsStopped() {
         val stopped = CoroutineScope(Dispatchers.Unconfined)
         runBlocking { queue(scope = stopped).play(tracks, MusicService.YOUTUBE_MUSIC, music, 50, tracks.take(50), "Road Trip") }

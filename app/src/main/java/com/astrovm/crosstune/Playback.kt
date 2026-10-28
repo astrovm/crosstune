@@ -94,8 +94,11 @@ internal data class Following(
 /** One of a music app's own buttons, as its session shows it: what it does, and what it's called and drawn with, an [icon] of the app's, there. */
 internal data class AppAction(val action: String, val name: String, val icon: Int)
 
-/** A song waiting to play: [id] is the app's number for it in its queue, to play it now; none for one Crosstune asks for later. */
-internal data class Queued(val title: String, val artist: String, val id: Long? = null)
+/**
+ * A song waiting to play: [id] is the app's number for it in its queue, to play it now; none for one
+ * Crosstune asks for later. [art] is a link to its cover, when known.
+ */
+internal data class Queued(val title: String, val artist: String, val id: Long? = null, val art: String? = null)
 
 /**
  * A song an app plays, and its place in the app's queue, by the number the app gave it there; null
@@ -528,7 +531,10 @@ internal class MediaSessionPlayback(
         val queue = queueOf(controller).orEmpty()
         val at = queue.indexOfFirst { it.queueId == controller.playbackState?.activeQueueItemId }
         if (at < 0) return emptyList()
-        return queue.drop(at + 1).map { Queued(it.description.title?.toString().orEmpty(), it.description.subtitle?.toString().orEmpty(), it.queueId) }
+        return queue.drop(at + 1).map {
+            val art = it.description.iconUri?.toString()?.replace(SIZED_COVER, "=w$QUEUED_COVER_PX-h$QUEUED_COVER_PX")
+            Queued(it.description.title?.toString().orEmpty(), it.description.subtitle?.toString().orEmpty(), it.queueId, art)
+        }
     }
 
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
@@ -576,6 +582,13 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
 internal const val LEFT_BEHIND_MS = 10 * 60_000L
+
+/**
+ * The size in a cover's link, as YouTube Music's say how big to draw it: the 60 pixels it gives other
+ * apps blur at a row's size, so a bigger one of the same cover is asked for.
+ */
+private val SIZED_COVER = Regex("=w\\d+-h\\d+")
+private const val QUEUED_COVER_PX = 180
 
 /** How far behind where it was playing an app may say it paused, and still be believed to have stopped there instead. */
 internal const val STALE_PAUSE_MS = 1_000L

@@ -192,6 +192,10 @@
     <string name="player_repeat_all">Wszystkie utwory</string>
     <string name="player_repeat_one">Ten utwór</string>
     <string name="player_up_next">Następne</string>
+    <string name="player_playing_from">Odtwarzane z</string>
+    <string name="player_move">Przenieś</string>
+    <string name="player_move_up">Przenieś w górę</string>
+    <string name="player_move_down">Przenieś w dół</string>
     <string name="player_song_card">Linki do utworu</string>
     <string name="player_sleep_timer">Wyłącznik czasowy</string>
     <string name="player_sleep_minutes">%1$d min</string>

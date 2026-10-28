@@ -192,6 +192,10 @@
     <string name="player_repeat_all">Todas as músicas</string>
     <string name="player_repeat_one">Esta música</string>
     <string name="player_up_next">A seguir</string>
+    <string name="player_playing_from">Tocando de</string>
+    <string name="player_move">Mover</string>
+    <string name="player_move_up">Mover para cima</string>
+    <string name="player_move_down">Mover para baixo</string>
     <string name="player_song_card">Links da música</string>
     <string name="player_sleep_timer">Timer para dormir</string>
     <string name="player_sleep_minutes">%1$d min</string>

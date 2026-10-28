@@ -192,6 +192,10 @@
     <string name="player_repeat_all">Все песни</string>
     <string name="player_repeat_one">Эта песня</string>
     <string name="player_up_next">Далее</string>
+    <string name="player_playing_from">Играет из</string>
+    <string name="player_move">Переместить</string>
+    <string name="player_move_up">Выше</string>
+    <string name="player_move_down">Ниже</string>
     <string name="player_song_card">Ссылки на песню</string>
     <string name="player_sleep_timer">Таймер сна</string>
     <string name="player_sleep_minutes">%1$d мин</string>

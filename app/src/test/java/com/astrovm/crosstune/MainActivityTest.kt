@@ -67,6 +67,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performScrollTo
@@ -843,9 +844,10 @@ class MainActivityTest {
         assertMarked(string(R.string.settings_where_you_listen))
     }
 
-    private fun collectionWithSongs(title: String = "Road Trip", type: String = "playlist") {
+    private fun collectionWithSongs(title: String = "Road Trip", type: String = "playlist", more: List<String> = emptyList()) {
+        val after = more.joinToString("") { """,{"title":"$it","subtitle":"Band"}""" }
         val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
-            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
+            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}$after]}}}}}}</script>"""
         fake.handler = { request ->
             when {
                 request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
@@ -1209,6 +1211,32 @@ class MainActivityTest {
         assertEquals(2, phone.songsAsked.size)
         waitForDescription(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
         assertTrue(composeRule.onAllNodes(hasContentDescription(string(R.string.dismiss_button))).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aListsSongsStillToAskForMoveAndPlayOnFromThePlayer() {
+        val tidal = MusicService.TIDAL.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "TIDAL").commit()
+        collectionWithSongs(more = listOf("Third Song", "Fourth Song"))
+        shadowOf(app.packageManager).installPackage(installedApp(tidal, "TIDAL"))
+        launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+        click(string(R.string.play_all_in, string(MusicService.TIDAL.labelRes)))
+        waitUntil { phone.songsAsked.isNotEmpty() }
+        phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "TIDAL", canSeek = true, appPackage = tidal, durationMs = 200_000)
+        waitForDescription(string(R.string.player_up_next))
+        click(string(R.string.player_up_next))
+        // Moved up, it's asked for sooner.
+        composeRule.onNodeWithText("Fourth Song").performCustomAccessibilityActionWithLabel(string(R.string.player_move_up))
+        val top = { text: String -> composeRule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top }
+        waitUntil { top("Fourth Song") < top("Third Song") }
+        // Tapped, the list plays on from there.
+        composeRule.onNodeWithText("Fourth Song").performClick()
+        waitUntil { phone.songsAsked.size == 2 }
+        assertEquals("Fourth Song" to tidal, phone.songsAsked.last().let { (song, app) -> song.title to app })
     }
 
     @Test
@@ -3725,7 +3753,7 @@ class MainActivityTest {
         phone.playing.value = Following(
             PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic,
             durationMs = 200_000, repeat = Repeat.OFF, like = AppAction("thumbs_up_action", "Like", 1),
-            upNext = listOf(Queued("Next Song", "Band", 7), Queued("Later Song", "Band"))
+            upNext = listOf(Queued("Next Song", "Band", 7), Queued("Third Song", "Band", 8), Queued("Later Song", "Band"))
         )
         // The line being sung shows under its buttons, looked up as its card looks its words up.
         waitForText("Two")
@@ -3743,11 +3771,22 @@ class MainActivityTest {
         // The app's own like is pressed there.
         click("Like")
         assertEquals(1, phone.liked)
-        // What the app has up next plays at a tap.
+        // What the app has up next plays at a tap, the list staying open.
         click(string(R.string.player_up_next))
         composeRule.onNodeWithText("Next Song").performClick()
         composeRule.waitForIdle()
         assertEquals(listOf(7L), phone.queuedPlayed)
+        // Moved up, a song shows there, and is the one the next button goes on to.
+        composeRule.onNodeWithText("Third Song").performCustomAccessibilityActionWithLabel(string(R.string.player_move_up))
+        composeRule.waitForIdle()
+        val top = { text: String -> composeRule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top }
+        assertTrue(top("Third Song") < top("Next Song"))
+        click(string(R.string.lyrics_next_song))
+        assertEquals(listOf(7L, 8L), phone.queuedPlayed)
+        // Back puts the list away, before the player.
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Third Song")).fetchSemanticsNodes().isEmpty())
         // The sleep timer counts down the minutes, and is turned off.
         val sleep = string(R.string.player_sleep_timer)
         click(sleep)

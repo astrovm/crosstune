@@ -168,6 +168,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    // Songs up next dragged into another order, scrolling the list on as they near its edge.
+    implementation("sh.calvin.reorderable:reorderable:3.1.0")
 
     // The home screen widget, in the app's own Material You style.
     implementation("androidx.glance:glance-appwidget:1.2.0")

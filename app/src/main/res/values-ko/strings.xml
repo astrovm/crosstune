@@ -192,6 +192,10 @@
     <string name="player_repeat_all">모든 노래</string>
     <string name="player_repeat_one">이 노래</string>
     <string name="player_up_next">다음 노래 목록</string>
+    <string name="player_playing_from">재생 중인 목록</string>
+    <string name="player_move">이동</string>
+    <string name="player_move_up">위로 이동</string>
+    <string name="player_move_down">아래로 이동</string>
     <string name="player_song_card">노래 링크</string>
     <string name="player_sleep_timer">수면 타이머</string>
     <string name="player_sleep_minutes">%1$d분</string>

@@ -192,6 +192,10 @@
     <string name="player_repeat_all">Alle nummers</string>
     <string name="player_repeat_one">Dit nummer</string>
     <string name="player_up_next">Hierna</string>
+    <string name="player_playing_from">Speelt af uit</string>
+    <string name="player_move">Verplaatsen</string>
+    <string name="player_move_up">Omhoog</string>
+    <string name="player_move_down">Omlaag</string>
     <string name="player_song_card">Links van het nummer</string>
     <string name="player_sleep_timer">Slaaptimer</string>
     <string name="player_sleep_minutes">%1$d min</string>

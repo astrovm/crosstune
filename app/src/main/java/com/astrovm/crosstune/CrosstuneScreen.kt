@@ -179,6 +179,10 @@ internal data class ScreenActions(
     val onPlayerLike: () -> Unit = {},
     /** Plays one of the songs up next now, by the app's number for it. */
     val onPlayerPlayQueued: (Long) -> Unit = {},
+    /** Plays the list on from the song up next at this place, one Crosstune still has to ask for. */
+    val onPlayerPlayLater: (Int) -> Unit = {},
+    /** Moves the song up next at one place to another. */
+    val onPlayerMoveQueued: (from: Int, to: Int) -> Unit = { _, _ -> },
     val onPlayerCard: () -> Unit = {},
     /** Pauses the music in so many minutes, or once the song ends, without them. */
     val onPlayerSleep: (minutes: Int?) -> Unit = {},

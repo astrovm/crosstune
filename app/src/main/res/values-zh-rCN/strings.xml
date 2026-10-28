@@ -192,6 +192,10 @@
     <string name="player_repeat_all">全部歌曲</string>
     <string name="player_repeat_one">单曲</string>
     <string name="player_up_next">接下来播放</string>
+    <string name="player_playing_from">播放来源</string>
+    <string name="player_move">移动</string>
+    <string name="player_move_up">上移</string>
+    <string name="player_move_down">下移</string>
     <string name="player_song_card">歌曲链接</string>
     <string name="player_sleep_timer">睡眠定时</string>
     <string name="player_sleep_minutes">%1$d 分钟</string>

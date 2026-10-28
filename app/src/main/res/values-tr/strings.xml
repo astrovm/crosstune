@@ -192,6 +192,10 @@
     <string name="player_repeat_all">Tüm şarkılar</string>
     <string name="player_repeat_one">Bu şarkı</string>
     <string name="player_up_next">Sıradakiler</string>
+    <string name="player_playing_from">Çalınan liste</string>
+    <string name="player_move">Taşı</string>
+    <string name="player_move_up">Yukarı taşı</string>
+    <string name="player_move_down">Aşağı taşı</string>
     <string name="player_song_card">Şarkının bağlantıları</string>
     <string name="player_sleep_timer">Uyku zamanlayıcısı</string>
     <string name="player_sleep_minutes">%1$d dk</string>

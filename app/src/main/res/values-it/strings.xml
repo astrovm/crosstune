@@ -193,6 +193,10 @@
     <string name="player_repeat_all">Tutte le canzoni</string>
     <string name="player_repeat_one">Questa canzone</string>
     <string name="player_up_next">A seguire</string>
+    <string name="player_playing_from">In riproduzione da</string>
+    <string name="player_move">Sposta</string>
+    <string name="player_move_up">Sposta su</string>
+    <string name="player_move_down">Sposta giù</string>
     <string name="player_song_card">Link della canzone</string>
     <string name="player_sleep_timer">Timer di spegnimento</string>
     <string name="player_sleep_minutes">%1$d min</string>

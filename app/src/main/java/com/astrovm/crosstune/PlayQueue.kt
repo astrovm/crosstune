@@ -96,11 +96,35 @@ internal class PlayQueue(
     fun stop() {
         onLast.value = null
         job?.cancel()
-        next?.cancel()
         job = null
-        next = null
+        forgetNext()
         playing = null
         file.delete()
+    }
+
+    /** Moves the list's song still to ask for at [from], among those, to [to], so it plays then. */
+    suspend fun move(from: Int, to: Int) {
+        val queue = playing ?: return
+        val later = queue.tracks.drop(queue.to).toMutableList()
+        if (from !in later.indices || to !in later.indices) return
+        later.add(to, later.removeAt(from))
+        // The next part was looked up in the order before.
+        forgetNext()
+        save(queue.copy(tracks = queue.tracks.take(queue.to) + later))
+    }
+
+    /** Plays the list on from its song still to ask for at [index], among those, past the ones before it. */
+    suspend fun playFrom(index: Int) {
+        val queue = playing ?: return
+        if (index !in 0 until queue.tracks.size - queue.to) return
+        forgetNext()
+        save(queue.copy(to = queue.to + index))
+        playNext()
+    }
+
+    private fun forgetNext() {
+        next?.cancel()
+        next = null
     }
 
     /** Carries on with the playlist being played through when Crosstune was stopped, if there was one. */
@@ -173,7 +197,7 @@ internal class PlayQueue(
      */
     private fun Following.playedFrom(list: Playing): Following {
         val queued = if (list.bySong) emptyList() else upNext.takeWhile { next -> list.part.any { sameEntry(it, MusicMetadata(next.title, next.artist)) } }
-        return copy(from = list.name, upNext = queued + list.tracks.drop(list.to).map { Queued(it.title, it.artist) })
+        return copy(from = list.name, upNext = queued + list.tracks.drop(list.to).map { Queued(it.title, it.artist, art = it.artworkUrl) })
     }
 
     /** The same song of the list, in whatever version the app found it: live, remastered, its video. */
@@ -270,12 +294,15 @@ internal class PlayQueue(
                 json.optString("name").ifEmpty { null }
             )
 
-            /** Each song as its name, its artist's, and its link, as Recent keeps a playlist's. */
-            private fun songs(songs: List<MusicMetadata>) = JSONArray().apply { songs.forEach { put(JSONArray().put(it.title).put(it.artist).put(it.url.orEmpty())) } }
+            /** Each song as its name, its artist's, its link, as Recent keeps a playlist's, and its cover's, to show up next. */
+            private fun songs(songs: List<MusicMetadata>) = JSONArray().apply {
+                songs.forEach { put(JSONArray().put(it.title).put(it.artist).put(it.url.orEmpty()).put(it.artworkUrl.orEmpty())) }
+            }
 
             private fun songs(json: JSONArray) = (0 until json.length()).map { index ->
                 val song = json.getJSONArray(index)
-                MusicMetadata(song.getString(0), song.getString(1), url = song.getString(2).ifEmpty { null })
+                // Kept before covers were, a song has none.
+                MusicMetadata(song.getString(0), song.getString(1), artworkUrl = song.optString(3).ifEmpty { null }, url = song.getString(2).ifEmpty { null })
             }
         }
     }

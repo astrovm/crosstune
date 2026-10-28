@@ -192,6 +192,10 @@
     <string name="player_repeat_all">Toutes les chansons</string>
     <string name="player_repeat_one">Cette chanson</string>
     <string name="player_up_next">À suivre</string>
+    <string name="player_playing_from">Lecture depuis</string>
+    <string name="player_move">Déplacer</string>
+    <string name="player_move_up">Monter</string>
+    <string name="player_move_down">Descendre</string>
     <string name="player_song_card">Liens de la chanson</string>
     <string name="player_sleep_timer">Minuteur de sommeil</string>
     <string name="player_sleep_minutes">%1$d min</string>

@@ -138,6 +138,10 @@
     <string name="player_repeat_all">All songs</string>
     <string name="player_repeat_one">This song</string>
     <string name="player_up_next">Up next</string>
+    <string name="player_playing_from">Playing from</string>
+    <string name="player_move">Move</string>
+    <string name="player_move_up">Move up</string>
+    <string name="player_move_down">Move down</string>
     <string name="player_song_card">Song\'s links</string>
     <string name="player_sleep_timer">Sleep timer</string>
     <string name="player_sleep_minutes">%1$d min</string>

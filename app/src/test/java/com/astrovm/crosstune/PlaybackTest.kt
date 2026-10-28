@@ -951,14 +951,25 @@ class PlaybackTest {
         val seen = followed()
         // No queue, nothing next.
         assertEquals(emptyList<Queued>(), seen.last()!!.upNext)
-        val item = { id: Long, title: String, artist: String? ->
-            MediaSession.QueueItem(MediaDescription.Builder().setMediaId("$id").setTitle(title).apply { if (artist != null) setSubtitle(artist) }.build(), id)
+        val item = { id: Long, title: String, artist: String?, icon: String? ->
+            MediaSession.QueueItem(
+                MediaDescription.Builder().setMediaId("$id").setTitle(title).apply { if (artist != null) setSubtitle(artist) }.setIconUri(icon?.let(android.net.Uri::parse)).build(),
+                id
+            )
         }
-        queues[music.packageName] = listOf(item(1, "Before", "Band"), item(2, "Blinding Lights", "The Weeknd"), item(3, "Save Your Tears", "The Weeknd"), item(4, "Untitled", null))
-        // Seen as the app's queue changes.
+        queues[music.packageName] = listOf(
+            item(1, "Before", "Band", null),
+            item(2, "Blinding Lights", "The Weeknd", null),
+            item(3, "Save Your Tears", "The Weeknd", "https://yt3.googleusercontent.com/cover=w60-h60-l90-rj"),
+            item(4, "Untitled", null, "content://covers/4")
+        )
+        // Seen as the app's queue changes, each with its cover, as big as it's shown when the app sizes it.
         shadowOf(music).getCallbacks().forEach { it.onQueueChanged(null) }
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf(Queued("Save Your Tears", "The Weeknd", 3), Queued("Untitled", "", 4)), seen.last()!!.upNext)
+        assertEquals(
+            listOf(Queued("Save Your Tears", "The Weeknd", 3, "https://yt3.googleusercontent.com/cover=w180-h180-l90-rj"), Queued("Untitled", "", 4, "content://covers/4")),
+            seen.last()!!.upNext
+        )
         // First in its queue, all the rest is next.
         shadowOf(music).executeOnPlaybackStateChanged(at(1, PlaybackState.STATE_PLAYING))
         shadowOf(Looper.getMainLooper()).idle()

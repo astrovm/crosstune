@@ -192,6 +192,10 @@
     <string name="player_repeat_all">Semua lagu</string>
     <string name="player_repeat_one">Lagu ini</string>
     <string name="player_up_next">Berikutnya</string>
+    <string name="player_playing_from">Diputar dari</string>
+    <string name="player_move">Pindahkan</string>
+    <string name="player_move_up">Naikkan</string>
+    <string name="player_move_down">Turunkan</string>
     <string name="player_song_card">Tautan lagu</string>
     <string name="player_sleep_timer">Timer tidur</string>
     <string name="player_sleep_minutes">%1$d mnt</string>
