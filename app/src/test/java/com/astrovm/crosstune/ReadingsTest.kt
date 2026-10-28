@@ -49,8 +49,13 @@ class ReadingsTest {
         assertEquals("Chto zhe ty, paren, ya zhdu tebya", romanized("Что же ты, парень, я жду тебя", Script.CYRILLIC))
         assertEquals("Shchuka shyot, yozh khochet chayu", romanized("Щука шьёт, ёж хочет чаю", Script.CYRILLIC))
         assertEquals("Yizhak i yenot", romanized("Їжак і єнот", Script.CYRILLIC))
-        assertEquals("mujhe tumase pyar hai, sham dhal chuki", romanized("मुझे तुमसे प्यार है, शाम ढल चुकी", Script.INDIC))
+        assertEquals("mujhe tumse pyar hai, sham dhal chuki", romanized("मुझे तुमसे प्यार है, शाम ढल चुकी", Script.INDIC))
         assertEquals("main hun, sambandh", romanized("मैं हूँ, संबंध", Script.INDIC))
+        // An a no one says between two consonants goes too, taken from the end of the word.
+        assertEquals("tu chup hai to ye dar lagta hai, apna mujhko", romanized("तू चुप है तो ये डर लगता है, अपना मुझको", Script.INDIC))
+        assertEquals("samajhna bachpan sundarta", romanized("समझना बचपन सुंदरता", Script.INDIC))
+        // ड़ and ੜ are typed d, and ऋ ri.
+        assertEquals("phir se ud chala, kudi, kripa krishna", romanized("फिर से उड़ चला, ਕੁੜੀ, कृपा कृष्ण", Script.INDIC))
         // Telugu says the a its words end in.
         assertEquals("prema", romanized("ప్రేమ", Script.INDIC))
         // English in the line stays as it is.
