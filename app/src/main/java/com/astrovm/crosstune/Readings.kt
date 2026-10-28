@@ -651,16 +651,24 @@ internal object Readings {
             while (end < cyrillic.length && Character.UnicodeScript.of(cyrillic.codePointAt(end)).let { it == script || it == Character.UnicodeScript.INHERITED }) end++
             val word = cyrillic.substring(at, end)
             val letters = (indicLatinizer ?: Transliterator.getInstance("Any-Latin").also { indicLatinizer = it }).transliterate(word)
-            out.append(indic(letters, dropsFinalA = script in FINAL_A_UNSAID))
+            out.append(indic(letters, hindiLike = script in HINDI_LIKE))
             at = end
         }
         return out.toString()
     }
 
     /** An Indic word's [letters], as Android writes them, the way they're said and typed. */
-    private fun indic(letters: String, dropsFinalA: Boolean): String {
-        // A word ending in a consonant's own a, after another vowel, isn't said with it: pyāra is pyār.
-        val word = if (dropsFinalA) FINAL_A.replace(letters, "") else letters
+    private fun indic(letters: String, hindiLike: Boolean): String {
+        var word = letters
+        if (hindiLike) {
+            // A word ending in a consonant's own a, after another vowel, isn't said with it: pyāra is pyār.
+            word = FINAL_A.replace(word, "")
+            // Nor is one between a vowel's consonant and the next's, taken from the end, as each one
+            // taken changes the next: samajhanā is samajhnā, not samjhnā.
+            while (true) word = MEDIAL_A.findAll(word).lastOrNull()?.let { word.removeRange(it.range) } ?: break
+            // ड़ is typed d, as in "Ud Chala"; ऋ is ri, as in "kripa".
+            word = word.replace("ṛ", "d").replace("r\u0325", "ri")
+        }
         return word.replace(Regex("ch?")) { if (it.value == "ch") "chh" else "ch" }
             .replace("ś", "sh").replace("ṣ", "sh")
             .replace(Regex("ṁ(?=[pbm])"), "m").replace("ṁ", "n").replace("m\u0310", "n")
@@ -873,11 +881,18 @@ internal object Readings {
         Character.UnicodeScript.TAMIL, Character.UnicodeScript.TELUGU, Character.UnicodeScript.KANNADA, Character.UnicodeScript.MALAYALAM
     )
 
-    /** Hindi's, Punjabi's and Gujarati's, whose words don't say the a their last consonant is written with; Telugu's and Tamil's do. */
-    private val FINAL_A_UNSAID = setOf(Character.UnicodeScript.DEVANAGARI, Character.UnicodeScript.GURMUKHI, Character.UnicodeScript.GUJARATI)
+    /** Hindi's, Punjabi's and Gujarati's, whose words don't say all the a's their consonants are written with; Telugu's and Tamil's do. */
+    private val HINDI_LIKE = setOf(Character.UnicodeScript.DEVANAGARI, Character.UnicodeScript.GURMUKHI, Character.UnicodeScript.GUJARATI)
 
-    /** A last consonant's own a, after another vowel, as Android writes them. */
-    private val FINAL_A = Regex("(?<=[aāiīuūeēoōṛ][^aāiīuūeēoōṛ]{1,6})a$")
+    /** A vowel and a consonant, with its h if it's said with a breath, as Android writes them. */
+    private const val VOWEL = "[aāiīuūeēoō]"
+    private const val CONSONANT = "(?:[kgcjṭḍtdpbṛ]h|[kgġṅcjñṭḍṇtdnpbmyrlvśṣshṛqzf])"
+
+    /** A last consonant's own a, after another vowel. */
+    private val FINAL_A = Regex("(?<=$VOWEL[^aāiīuūeēoō]{1,6})a$")
+
+    /** A consonant's own a between a vowel's consonant and a consonant with a vowel of its own. */
+    private val MEDIAL_A = Regex("(?<=${VOWEL}ṁ?$CONSONANT)a(?=$CONSONANT$VOWEL)")
 
     /** Digits a word in Hangul goes on from, 1년, but not ones in English, MP3를, or the end of a time or a decimal, 11:11, 3.5배. */
     private val NUMBER_IN_A_WORD = Regex("""(?<![A-Za-z0-9:.,])(?:0|[1-9][0-9]{0,15})(?=[가-힣])""")
