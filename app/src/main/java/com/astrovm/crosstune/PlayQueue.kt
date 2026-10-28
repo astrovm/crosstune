@@ -80,7 +80,8 @@ internal class PlayQueue(
         override fun follow(song: MusicMetadata): Flow<Following?> = combine(playback.follow(song), onLast, shown) { following, last, list ->
             if (following == null) return@combine null
             val skips = if (last != null && sameEntry(last, song)) following.copy(canSkipNext = true) else following
-            list?.takeIf { it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
+            // In the app it's played through, not another that happens to play one of its songs.
+            list?.takeIf { sameApp(it.app, following.appPackage) && it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
         }
 
         override fun skip(song: MusicMetadata, next: Boolean) {
@@ -130,6 +131,9 @@ internal class PlayQueue(
         val first = queue.first ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
         val numbered = first != null && now.queueId != null
         val index = if (numbered && !queue.bySong) (now.queueId - first).toInt() else named
+        // Named as another of the part's songs than its number says, the numbers are another queue's: the app
+        // started over, as YouTube Music numbers from 1 again once it was stopped, and plays something else.
+        if (numbered && !queue.bySong && named >= 0 && index in part.indices && !sameEntry(part[index], now.song)) return stop()
         when {
             // The part's last song played to its end, and the app stopped there, as YouTube does.
             index == part.lastIndex && now.ended -> playNext()

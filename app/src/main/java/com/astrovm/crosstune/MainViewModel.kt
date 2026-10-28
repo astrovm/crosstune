@@ -173,7 +173,6 @@ internal class MainViewModel(
         migrateExistingInstall()
         migrateLinkMode()
         migrateExactMatch()
-        sleepTimer?.let { timer -> viewModelScope.launch { timer.set.collect { uiState = uiState.copy(sleep = it) } } }
     }
 
     /** The last look at what Android says about apps and links, null until the first one finishes. */
@@ -238,6 +237,11 @@ internal class MainViewModel(
             microphone = microphoneAccess()
         ).withOneTap().withDestinations()
     )
+
+    init {
+        // The timer is the app's, so one set from another screen, or before Crosstune was closed, shows too.
+        sleepTimer?.let { timer -> viewModelScope.launch { timer.set.collect { uiState = uiState.copy(sleep = it) } } }
+    }
 
     var uiState by screen
         private set

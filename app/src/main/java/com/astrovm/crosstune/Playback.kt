@@ -126,7 +126,7 @@ internal interface PlaybackSource {
     /** Has the app playing [song] shuffle, or play in order. */
     fun shuffle(song: MusicMetadata, on: Boolean)
 
-    /** Has the app playing [song] repeat [how]. */
+    /** Has the app playing [song] repeat [how], or, one with a repeat button of its own, the next way it goes on to there. */
     fun repeat(song: MusicMetadata, how: Repeat)
 
     /** Presses the app's own like for [song], which likes it there, or no longer, as the app has it. */
@@ -297,7 +297,13 @@ internal class MediaSessionPlayback(
 
     override fun repeat(song: MusicMetadata, how: Repeat) {
         // Taken back meanwhile, it plays on as it did.
-        runCatching { appFor(song)?.let { modes.repeat(it, how) } }
+        runCatching {
+            val app = appFor(song) ?: return
+            // One with a button of its own for it goes on to its next way as when it's tapped there: YouTube Music
+            // only repeats a mix's song, never the endless mix, and won't be told to.
+            val own = app.playbackState?.customActions?.firstOrNull { it.action in REPEATS }
+            if (own != null) app.transportControls.sendCustomAction(own, Bundle()) else modes.repeat(app, how)
+        }
     }
 
     override fun like(song: MusicMetadata) {
@@ -588,6 +594,9 @@ private val LIKES = setOf(
     "com.aspiro.tidal.player.action.TOGGLE_FAVORITE", // TIDAL
     "waze.thumbUp" // Amazon Music
 )
+
+/** A music app's own button to repeat, which goes round its ways as it does there, by what the app's session calls it. */
+private val REPEATS = setOf("loop_mode_action") // YouTube Music
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)

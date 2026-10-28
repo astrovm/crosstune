@@ -882,6 +882,97 @@ class PlaybackTest {
     }
 
     @Test
+    fun theAppPlayingItSaysHowItRepeatsAndIsToldTo() {
+        allow()
+        val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
+        shadowOf(sessions).addController(spotify)
+        val seen = followed()
+        assertNull(seen.last()!!.repeat)
+        // Changed in the app, it shows at once, though nothing else changed.
+        modes.repeats = Repeat.ONE
+        modes.watching.single()()
+        assertEquals(Repeat.ONE, seen.last()!!.repeat)
+
+        playback.repeat(song, Repeat.ALL)
+        assertEquals(listOf("com.spotify.music" to Repeat.ALL), modes.toldRepeat)
+        // Nothing playing it, nothing to tell.
+        playback.repeat(MusicMetadata("Other", "Band"), Repeat.OFF)
+        assertEquals(1, modes.toldRepeat.size)
+        // With a repeat button of its own, it's that button that's pressed, as YouTube Music won't be told.
+        shadowOf(spotify).setPlaybackState(
+            PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT)
+                .addCustomAction(PlaybackState.CustomAction.Builder("loop_mode_action", "Repeat off", 1).build()).build()
+        )
+        playback.repeat(song, Repeat.ALL)
+        assertEquals(1, modes.toldRepeat.size)
+    }
+
+    @Test
+    fun theAppsOwnLikeIsFollowedAsItShowsIt() {
+        allow()
+        val like = { name: String, icon: Int -> PlaybackState.CustomAction.Builder("thumbs_up_action", name, icon).build() }
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours")
+        val state = { vararg actions: PlaybackState.CustomAction ->
+            PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).apply { actions.forEach(::addCustomAction) }.build()
+        }
+        shadowOf(music).setPlaybackState(state(PlaybackState.CustomAction.Builder("shuffle_action", "Shuffle off", 3).build()))
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        // An app's other buttons aren't its like.
+        assertNull(seen.last()!!.like)
+        // As the app names and draws it, which changes once it's liked.
+        shadowOf(music).executeOnPlaybackStateChanged(state(like("Like", 1)))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(AppAction("thumbs_up_action", "Like", 1), seen.last()!!.like)
+        shadowOf(music).executeOnPlaybackStateChanged(state(like("Remove like", 2)))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(AppAction("thumbs_up_action", "Remove like", 2), seen.last()!!.like)
+        // TIDAL's and Amazon Music's are theirs.
+        shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("com.aspiro.tidal.player.action.TOGGLE_FAVORITE", "Add to My Collection", 4).build()))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Add to My Collection", seen.last()!!.like?.name)
+        shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("waze.thumbUp", "Thumbs up on", 5).build()))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("Thumbs up on", seen.last()!!.like?.name)
+
+        // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe; the phone shows the rest.
+        playback.like(song)
+        shadowOf(music).setPlaybackState(state())
+        playback.like(song)
+        playback.like(MusicMetadata("Other", "Band"))
+    }
+
+    @Test
+    fun whatTheAppPlaysNextIsFollowedAndPlayedAtOnce() {
+        allow()
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours")
+        val at = { id: Long, state: Int -> PlaybackState.Builder().setState(state, 1_000, 1f, PLAYED_AT).setActiveQueueItemId(id).build() }
+        shadowOf(music).setPlaybackState(at(2, PlaybackState.STATE_PLAYING))
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        // No queue, nothing next.
+        assertEquals(emptyList<Queued>(), seen.last()!!.upNext)
+        val item = { id: Long, title: String, artist: String? ->
+            MediaSession.QueueItem(MediaDescription.Builder().setMediaId("$id").setTitle(title).apply { if (artist != null) setSubtitle(artist) }.build(), id)
+        }
+        queues[music.packageName] = listOf(item(1, "Before", "Band"), item(2, "Blinding Lights", "The Weeknd"), item(3, "Save Your Tears", "The Weeknd"), item(4, "Untitled", null))
+        // Seen as the app's queue changes.
+        shadowOf(music).getCallbacks().forEach { it.onQueueChanged(null) }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(Queued("Save Your Tears", "The Weeknd", 3), Queued("Untitled", "", 4)), seen.last()!!.upNext)
+        // Not saying where in it it is, there's no telling what's next.
+        shadowOf(music).executeOnPlaybackStateChanged(at(9, PlaybackState.STATE_PLAYING))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Queued>(), seen.last()!!.upNext)
+
+        // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe, playing or paused; the phone shows the rest.
+        playback.playQueued(song, 3)
+        shadowOf(music).setPlaybackState(at(2, PlaybackState.STATE_PAUSED))
+        playback.playQueued(song, 3)
+        playback.playQueued(MusicMetadata("Other", "Band"), 3)
+    }
+
+    @Test
     fun aSongIsAskedForByNameFromTheAppItWasIn() = runBlocking {
         // Without access, or with no music app to ask, there's no one to ask.
         assertFalse(playback.playSong(song, "com.spotify.music"))

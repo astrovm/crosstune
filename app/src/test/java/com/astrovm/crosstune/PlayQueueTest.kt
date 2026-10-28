@@ -207,6 +207,25 @@ class PlayQueueTest {
     }
 
     @Test
+    fun numbersFromANewQueueOfTheAppStopIt() {
+        // YouTube Music numbers from 1 again once it was stopped, so a new queue's songs get the part's numbers.
+        queue().playing()
+        plays(1, 100)
+        plays(2, 101)
+        // One of the list's songs, by a number that's another's.
+        plays(5, 102)
+        assertFalse(file.exists())
+        plays("Radio", 150)
+        assertTrue(phone.listsAsked.isEmpty())
+        // Past the part, it's what the app plays on with, which may be one of the part's songs again.
+        queue().playing()
+        plays(1, 100)
+        plays(50, 149)
+        plays(3, 150)
+        assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
     fun withoutNumbersTheAppsOwnNamesForTheSongsAreFollowed() {
         // As YouTube names what it found: another version of the song, its video, or something else.
         queue().playing()
@@ -288,12 +307,61 @@ class PlayQueueTest {
     }
 
     @Test
-    fun aListNoLongerThanThePartPlaysNothingOn() {
+    fun aListNoLongerThanThePartPlaysNothingOnButShowsUntilItEnds() {
         val queue = queue()
-        runBlocking { queue.play(tracks.take(50), MusicService.YOUTUBE_MUSIC, music, 50, tracks.take(50)) }
-        assertFalse(file.exists())
+        val thirty = tracks.take(30)
+        // Asked for from past its end, as a list shorter than a part is, nothing's left to ask for.
+        runBlocking { queue.play(thirty, MusicService.YOUTUBE_MUSIC, music, 50, thirty, "Short") }
+        assertTrue(file.exists())
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
+        assertEquals("Short", runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }?.from)
         plays(1, 100)
+        plays(30, 129)
+        // On from its last song, it's done, with nothing asked for.
+        plays("Radio", 130)
+        assertFalse(file.exists())
         assertTrue(looked.isEmpty())
+        assertTrue(phone.listsAsked.isEmpty())
+    }
+
+    @Test
+    fun aSongOfTheListShowsItsFromItWithTheSongsStillToComeNext() {
+        val queue = queue()
+        runBlocking { queue.play(tracks, MusicService.YOUTUBE_MUSIC, music, 50, tracks.take(50), "Road Trip") }
+        val followed = queue.skipping(phone)
+        // What the app has next: the part's next song, then its radio after it.
+        phone.playing.value = Following(
+            PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music,
+            upNext = listOf(Queued("Song 2", "Band", 2), Queued("Radio", "Someone", 99), Queued("Song 3", "Band", 3))
+        )
+        val seen = runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }!!
+        assertEquals("Road Trip", seen.from)
+        assertEquals(listOf(Queued("Song 2", "Band", 2)) + tracks.drop(50).map { Queued(it.title, it.artist) }, seen.upNext)
+        // A song not of the list is as the app has it.
+        val other = runBlocking { followed.follow(MusicMetadata("Other", "Someone")).first() }!!
+        assertNull(other.from)
+        assertEquals(3, other.upNext.size)
+        // Nor is one of its songs in another app.
+        phone.playing.value = phone.playing.value!!.copy(appPackage = MusicService.TIDAL.packageName)
+        assertNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }!!.from)
+        // Nothing playing, nothing shown.
+        phone.playing.value = null
+        assertNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() })
+        // Stopped, it's from nothing.
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
+        queue.stop()
+        assertNull(runBlocking { followed.follow(MusicMetadata("Song 1", "Band")).first() }!!.from)
+    }
+
+    @Test
+    fun theListsNameCarriesOnAfterCrosstuneIsStopped() {
+        val stopped = CoroutineScope(Dispatchers.Unconfined)
+        runBlocking { queue(scope = stopped).play(tracks, MusicService.YOUTUBE_MUSIC, music, 50, tracks.take(50), "Road Trip") }
+        stopped.cancel()
+        val again = queue()
+        again.resume()
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
+        assertEquals("Road Trip", runBlocking { again.skipping(phone).follow(MusicMetadata("Song 2", "Band")).first() }?.from)
     }
 
     @Test
@@ -369,6 +437,15 @@ class PlayQueueTest {
     }
 
     @Test
+    fun inAnAppThatTakesNoListTheListsSongsAreNextRatherThanItsRadio() {
+        val queue = queue()
+        runBlocking { queue.play(tracks.take(3), MusicService.TIDAL, tidal, 1, tracks.take(1), "Road Trip") }
+        phone.playing.value = Following(PlaybackClock(0, 0), "TIDAL", canSeek = true, appPackage = tidal, upNext = listOf(Queued("Radio", "Someone", 99)))
+        val seen = runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }!!
+        assertEquals(listOf(Queued("Song 2", "Band"), Queued("Song 3", "Band")), seen.upNext)
+    }
+
+    @Test
     fun somethingElsePickedInAnAppThatTakesNoListStopsIt() {
         queue().playingInTidal()
         tidalPlays("Song 1", 155)
@@ -411,7 +488,7 @@ class PlayQueueTest {
         val queue = queue()
         val playback = queue.skipping(phone)
         // As YouTube at a list's last video, which it can't skip on from.
-        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         queue.playing()
         for (number in 1..49) plays(number, 99L + number)
         assertEquals(false, playback.canSkipOn(49))
@@ -440,7 +517,7 @@ class PlayQueueTest {
     fun aPartPlayedBackAndOnAgainEndsOnItsLastSong() {
         val queue = queue()
         val playback = queue.skipping(phone)
-        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         queue.playing()
         for (number in 1..50) plays(number, 99L + number)
         plays(49, 148)
@@ -453,7 +530,7 @@ class PlayQueueTest {
     fun shuffledThePartEndsOnTheLastOfItsSongsToPlay() {
         val queue = queue()
         val playback = queue.skipping(phone)
-        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         queue.playing()
         // YouTube Music keeps its numbers for the songs, and plays them out of order.
         plays(50, 149)
@@ -470,7 +547,7 @@ class PlayQueueTest {
     fun theLastPartOrOneJumpedToTheEndOfSkipsOnAsTheAppWould() {
         val queue = queue()
         val playback = queue.skipping(phone)
-        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         // Jumped to its last song, the rest of the part wasn't played, and may still be.
         queue.playing()
         plays(1, 100)
@@ -499,7 +576,7 @@ class PlayQueueTest {
         val twice = tracks.take(100).mapIndexed { index, song -> if (index == 74) tracks[49] else song }
         val queue = queue()
         val playback = queue.skipping(phone)
-        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         runBlocking { queue.play(twice, MusicService.YOUTUBE_MUSIC, music, 50, twice.take(50)) }
         for (number in 1..50) plays(number, 99L + number)
         assertEquals(true, playback.canSkipOn(50))
@@ -516,7 +593,7 @@ class PlayQueueTest {
         val lookup = CompletableDeferred<YouTubeQueue?>()
         val queue = PlayQueue(phone, { _, _ -> lookup.await() }, file, scope, Dispatchers.Unconfined)
         val playback = queue.skipping(phone)
-        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         queue.playing()
         for (number in 1..50) plays(number, 99L + number)
         playback.skipFrom(50)
