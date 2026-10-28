@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -141,7 +140,7 @@ internal class ReportSender(
 @Composable
 internal fun ReportDialog(report: Report, onDismiss: () -> Unit) {
     val open = rememberWebOpener()
-    AlertDialog(
+    ScreenAlert(
         onDismissRequest = onDismiss,
         icon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
         title = { Text(stringResource(R.string.report_problem)) },
@@ -180,7 +179,7 @@ internal fun SongReportDialog(status: ReportStatus?, onSend: (String) -> Unit, o
             onDismiss()
         }
     }
-    AlertDialog(
+    ScreenAlert(
         onDismissRequest = onDismiss,
         icon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
         title = { Text(stringResource(R.string.report_problem)) },

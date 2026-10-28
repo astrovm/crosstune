@@ -58,7 +58,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -506,7 +505,7 @@ private fun ManageUsageRow(onClick: () -> Unit) {
 /** Said once, after the first sign-in: the AI features use the user's ChatGPT plan from now on. */
 @Composable
 private fun ChatGptWelcome(onDismiss: () -> Unit) {
-    AlertDialog(
+    ScreenAlert(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.chatgpt_welcome_title)) },
         text = { Text(stringResource(R.string.chatgpt_welcome_message)) },

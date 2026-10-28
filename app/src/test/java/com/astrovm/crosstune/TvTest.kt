@@ -27,6 +27,11 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -343,6 +348,53 @@ class TvTest {
         composeRule.waitUntil(5_000) { shown("Kingo Hamada") }
         composeRule.waitForIdle()
         settings().assertIsFocused()
+    }
+
+    @Test
+    fun onATvADialogOpensInTheScreenWithTheRemoteInItAndBackPutsItAwayWhereItWas() {
+        launch()
+        settings().performClick()
+        composeRule.waitForIdle()
+        val report = composeRule.onNode(hasText(string(R.string.report_problem)) and hasClickAction())
+        report.performScrollTo().requestFocus()
+        report.performClick()
+        composeRule.waitForIdle()
+        // In the screen, not a window of its own, which a TV's cover over another app can't open.
+        val github = composeRule.onNode(hasText(string(R.string.report_on_github)) and hasAnyAncestor(isDialog()))
+        github.assertIsFocused()
+        // The remote stays in it, as what's under it is out of reach.
+        github.performKeyInput { pressKey(Key.DirectionUp) }
+        composeRule.waitForIdle()
+        github.assertIsFocused()
+        composeRule.onNode(hasText(string(R.string.report_by_email)) and hasAnyAncestor(isDialog())).assertExists()
+
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(!shown(string(R.string.report_on_github)))
+        // Still in settings, and the remote where it was.
+        assertTrue(shown(string(R.string.setting_show_in_crosstune_first)))
+        report.assertIsFocused()
+
+        // A tap beside it puts it away too.
+        report.performClick()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.report_on_github)))
+        composeRule.onRoot().performTouchInput { click(Offset(2f, 2f)) }
+        composeRule.waitForIdle()
+        assertTrue(!shown(string(R.string.report_on_github)))
+    }
+
+    @Test
+    fun onAPhoneADialogIsStillAWindowOfItsOwn() {
+        phone = Phone.PIXEL
+        prefs().edit().putBoolean("setup_complete", true).commit()
+        launch()
+        settings().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasText(string(R.string.report_problem)) and hasClickAction()).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        // Its own window has its own tree, over the screen's.
+        assertEquals(2, composeRule.onAllNodes(isRoot()).fetchSemanticsNodes().size)
     }
 
     @Test
