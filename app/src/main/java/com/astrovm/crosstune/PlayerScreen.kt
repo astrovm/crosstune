@@ -89,6 +89,12 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                         AppIcon(R.drawable.ic_expand_more, contentDescription = stringResource(R.string.dismiss_button))
                     }
                     Spacer(Modifier.weight(1f))
+                    // Where it plays, by its icon, which brings that app forward, up top as music apps keep where they play.
+                    val service = MusicService.ofPackage(player.app)
+                    val playingIn = app?.let { stringResource(R.string.player_playing_in, it) }
+                    if (service != null) IconButton(onClick = actions.onPlayerOpenApp, modifier = Modifier.then(if (playingIn != null) Modifier.semantics { contentDescription = playingIn } else Modifier)) {
+                        DestinationIcon(Destination.Service(service), setOf(service), size = 28.dp)
+                    }
                     // Its card is under the player, so what it has is a menu away, not another screen.
                     val card = state.result?.let { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) } == true
                     if (card) PlayerMenu(ready = !state.isLoading && !state.isMatching, actions)
@@ -123,12 +129,12 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 64.dp)) {
                             when {
                                 !state.canFollowApps -> PlayerFollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW)
-                                following != null -> PlayerProgress(following, actions.onPlayerSeek, actions.onPlayerShuffle)
+                                following != null -> PlayerProgress(following, actions.onPlayerSeek)
                                 // Until the app plays it, once; stopped there after, there's nothing to wait for.
                                 !player.played && app != null -> PlayerWaiting(app)
                             }
                         }
-                        PlayerButtons(following, actions, hasLyrics = song.artist.isNotBlank(), service = MusicService.ofPackage(player.app), appName = app)
+                        PlayerButtons(following, actions, hasLyrics = song.artist.isNotBlank())
                     }
                 }
             }
@@ -168,7 +174,7 @@ private fun PlayerMenu(ready: Boolean, actions: ScreenActions) {
 
 /** Where the song is, to drag elsewhere when the app lets it, with how long it is when the app says. */
 @Composable
-private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit, onShuffle: () -> Unit) {
+private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
     val position = rememberPosition(following) ?: 0L
     val duration = following.durationMs
     // Where it's dragged to, held there until the app says it moved, or a moment passes without it saying.
@@ -202,19 +208,8 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit, onShuff
                 modifier = Modifier.fillMaxWidth().slidesSideways().semantics { stateDescription = description }
             )
         }
-        // Whether the app shuffles sits between the times, boxed in when it does, as a color alone is too
-        // faint beside the times. As tall with or without it, the rest doesn't move once the app says.
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
             Text(clockText(shown), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            following.shuffle?.let { shuffles ->
-                IconToggleButton(
-                    checked = shuffles,
-                    onCheckedChange = { onShuffle() },
-                    colors = IconButtonDefaults.iconToggleButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                ) {
-                    AppIcon(if (shuffles) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle, contentDescription = stringResource(R.string.player_shuffle))
-                }
-            }
             Text(
                 duration?.let(::clockText).orEmpty(),
                 style = MaterialTheme.typography.labelMedium,
@@ -226,19 +221,26 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit, onShuff
     }
 }
 
-/** Previous, play or pause, and next, as the app lets them; play asks the app again when it isn't playing the song. */
+/** Shuffle, previous, play or pause, and next, as the app lets them; play asks the app again when it isn't playing the song. */
 @Composable
-private fun PlayerButtons(following: Following?, actions: ScreenActions, hasLyrics: Boolean, service: MusicService?, appName: String?) {
+private fun PlayerButtons(following: Following?, actions: ScreenActions, hasLyrics: Boolean) {
     val playing = following?.clock?.playing == true
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(vertical = 8.dp)
     ) {
-        // One whose artist is unknown can't be looked up safely, so its place is left empty.
+        // Whether the app shuffles, left of previous as music apps have it, boxed in when it does, as a
+        // color alone is too faint. Its place is kept without it, so the rest doesn't move once the app says.
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
-            if (hasLyrics) IconButton(onClick = actions.onPlayerLyrics) {
-                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
+            following?.shuffle?.let { shuffles ->
+                IconToggleButton(
+                    checked = shuffles,
+                    onCheckedChange = { actions.onPlayerShuffle() },
+                    colors = IconButtonDefaults.iconToggleButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                ) {
+                    AppIcon(if (shuffles) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle, contentDescription = stringResource(R.string.player_shuffle))
+                }
             }
         }
         IconButton(onClick = { actions.onPlayerSkip(false) }, enabled = following?.canSkipPrevious == true, modifier = Modifier.size(56.dp)) {
@@ -254,11 +256,10 @@ private fun PlayerButtons(following: Following?, actions: ScreenActions, hasLyri
         IconButton(onClick = { actions.onPlayerSkip(true) }, enabled = following?.canSkipNext == true, modifier = Modifier.size(56.dp)) {
             AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song), modifier = Modifier.size(32.dp))
         }
-        // Where it plays, by its icon, which brings that app forward.
-        val playingIn = appName?.let { stringResource(R.string.player_playing_in, it) }
+        // One whose artist is unknown can't be looked up safely, so its place is left empty.
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp)) {
-            if (service != null) IconButton(onClick = actions.onPlayerOpenApp, modifier = Modifier.then(if (playingIn != null) Modifier.semantics { contentDescription = playingIn } else Modifier)) {
-                DestinationIcon(Destination.Service(service), setOf(service), size = 28.dp)
+            if (hasLyrics) IconButton(onClick = actions.onPlayerLyrics) {
+                AppIcon(R.drawable.ic_lyrics, contentDescription = stringResource(R.string.lyrics_button))
             }
         }
     }
@@ -297,6 +298,6 @@ internal fun clockText(ms: Long): String {
 private const val SEEK_HOLD_MS = 1_500L
 
 /** What's under the cover: its title and artist, progress and buttons. */
-private val PLAYER_CONTROLS_HEIGHT = 320.dp
+private val PLAYER_CONTROLS_HEIGHT = 288.dp
 private val PLAYER_COVER_MIN = 120.dp
 private val PLAYER_COVER_MAX = 340.dp
