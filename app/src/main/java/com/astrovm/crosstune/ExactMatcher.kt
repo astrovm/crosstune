@@ -69,19 +69,28 @@ internal class ExactMatcher(
     private val pageSuffixes = listOf("", "music", "band", "official", "officialmusic")
 
     /**
-     * Whether YouTube Music counts a YouTube video as music: a song or an official music video,
-     * not someone's own upload such as a tutorial. Null when it can't be told, e.g. offline.
+     * Whether a YouTube video is music: a song or an official music video, as YouTube Music counts
+     * them, or someone's own upload they put under Music, like a concert they filmed; not a tutorial
+     * or a vlog. Null when it can't be told, e.g. offline.
      */
     suspend fun isMusicVideo(videoId: String): Boolean? = withTimeoutOrNull(TIMEOUT_MS) {
         try {
             val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION)
             val body = JSONObject().put("context", JSONObject().put("client", client)).put("videoId", videoId)
-            musicVideoTypeIn(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES }
+            musicVideoTypeIn(fetchJson(YOUTUBE_MUSIC_NEXT_URL, body))?.let { it in MUSIC_VIDEO_TYPES || uploadedAsMusic(videoId) }
         } catch (_: IOException) {
             null
         } catch (_: JSONException) {
             null
         }
+    }
+
+    /** Whether whoever put the video up filed it under Music, as YouTube tells whoever plays it. */
+    private suspend fun uploadedAsMusic(videoId: String): Boolean {
+        val client = JSONObject().put("clientName", "WEB").put("clientVersion", YOUTUBE_CLIENT_VERSION)
+        val body = JSONObject().put("context", JSONObject().put("client", client)).put("videoId", videoId)
+        val video = fetchJson(YOUTUBE_PLAYER_URL, body).optJSONObject("microformat")?.optJSONObject("playerMicroformatRenderer")
+        return video?.optString("category") == "Music"
     }
 
     suspend fun find(target: MusicService, metadata: MusicMetadata): String? = (lookFor(target, metadata) as? Match.Found)?.url
@@ -837,6 +846,8 @@ internal class ExactMatcher(
         /** How many search results the song is picked from. */
         const val PICK_FROM = 6
         const val YOUTUBE_MUSIC_CLIENT_VERSION = "1.20240101.01.00"
+        const val YOUTUBE_PLAYER_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+        const val YOUTUBE_CLIENT_VERSION = "2.20240101.00.00"
 
         // Search filters as YouTube Music itself encodes them: the song, album and artist tabs.
         const val YOUTUBE_MUSIC_SONGS = "EgWKAQIIAWoKEAoQAxAEEAkQBQ=="
