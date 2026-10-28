@@ -97,6 +97,8 @@
     <string name="play_all_button">Odtwórz wszystko</string>
     <string name="play_all_progress">Szukanie utworów… %1$d z %2$d</string>
     <string name="play_all_in">Odtwórz wszystko w %1$s</string>
+    <string name="shuffle_button">Losowo</string>
+    <string name="shuffle_all_in">Odtwórz wszystko losowo w %1$s</string>
     <string name="play_first_in">Odtwórz pierwszy utwór w %1$s</string>
     <string name="play_first_button">Odtwórz pierwszy utwór</string>
     <string name="play_in_background">Odtwórz w %1$s i zostań tutaj</string>

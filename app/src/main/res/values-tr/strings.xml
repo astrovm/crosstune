@@ -97,6 +97,8 @@
     <string name="play_all_button">Tümünü çal</string>
     <string name="play_all_progress">Şarkılar aranıyor… %2$d şarkıdan %1$d</string>
     <string name="play_all_in">Tümünü %1$s ile çal</string>
+    <string name="shuffle_button">Karıştır</string>
+    <string name="shuffle_all_in">Tümünü %1$s ile karışık çal</string>
     <string name="play_first_in">İlk şarkıyı %1$s ile çal</string>
     <string name="play_first_button">İlk şarkıyı çal</string>
     <string name="play_in_background">%1$s uygulamasında çal ve burada kal</string>

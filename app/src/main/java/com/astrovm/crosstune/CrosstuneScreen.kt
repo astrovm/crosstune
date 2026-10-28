@@ -224,6 +224,7 @@ internal data class ScreenActions(
     val onCopySongs: () -> Unit = {},
     /** Plays the songs through, as one queue at a time of as many as YouTube takes. */
     val onPlayAll: () -> Unit = {},
+    val onShuffleAll: () -> Unit = {},
     val onShareSongs: () -> Unit = {},
     val onClearHistory: () -> Unit = {},
     val onUndoClearHistory: () -> Unit = {},
@@ -1384,6 +1385,15 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             // Only a song has words, and one whose artist is unknown can't be looked up safely.
             if (result.type == ItemType.TRACK && result.artist.isNotBlank()) {
                 ToolAction(R.drawable.ic_lyrics, stringResource(R.string.lyrics_button), actions.onShowLyrics)
+            }
+            if (state.canPlayAll) {
+                ToolAction(
+                    R.drawable.ic_shuffle,
+                    stringResource(R.string.shuffle_button),
+                    actions.onShuffleAll,
+                    enabled = !state.isMatching && state.queueProgress == null,
+                    description = stringResource(R.string.shuffle_all_in, destination.label())
+                )
             }
             ToolAction(
                 R.drawable.ic_content_copy,

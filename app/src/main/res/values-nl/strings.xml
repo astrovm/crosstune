@@ -97,6 +97,8 @@
     <string name="play_all_button">Alles afspelen</string>
     <string name="play_all_progress">Nummers zoeken… %1$d van %2$d</string>
     <string name="play_all_in">Alles afspelen in %1$s</string>
+    <string name="shuffle_button">Shuffle</string>
+    <string name="shuffle_all_in">Alles shuffelen in %1$s</string>
     <string name="play_first_in">Eerste nummer afspelen in %1$s</string>
     <string name="play_first_button">Eerste nummer afspelen</string>
     <string name="play_in_background">Afspelen in %1$s en hier blijven</string>

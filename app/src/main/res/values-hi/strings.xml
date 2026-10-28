@@ -97,6 +97,8 @@
     <string name="play_all_button">सभी चलाएं</string>
     <string name="play_all_progress">गाने ढूंढ रहे हैं… %2$d में से %1$d</string>
     <string name="play_all_in">%1$s में सभी चलाएं</string>
+    <string name="shuffle_button">शफ़ल</string>
+    <string name="shuffle_all_in">%1$s में सभी शफ़ल करके चलाएं</string>
     <string name="play_first_in">%1$s में पहला गाना चलाएं</string>
     <string name="play_first_button">पहला गाना चलाएं</string>
     <string name="play_in_background">%1$s में चलाएं और यहीं रहें</string>

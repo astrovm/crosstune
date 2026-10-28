@@ -98,6 +98,8 @@
     <string name="play_all_button">すべて再生</string>
     <string name="play_all_progress">曲を探しています… %1$d/%2$d</string>
     <string name="play_all_in">%1$s ですべて再生</string>
+    <string name="shuffle_button">シャッフル</string>
+    <string name="shuffle_all_in">%1$s ですべてシャッフル再生</string>
     <string name="play_first_in">%1$s で最初の曲を再生</string>
     <string name="play_first_button">最初の曲を再生</string>
     <string name="play_in_background">%1$sで再生してこの画面のままにする</string>
