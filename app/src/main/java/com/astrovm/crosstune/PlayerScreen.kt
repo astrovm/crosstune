@@ -202,8 +202,8 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit, onShuff
                 modifier = Modifier.fillMaxWidth().slidesSideways().semantics { stateDescription = description }
             )
         }
-        // Whether the app shuffles sits between the times, in its color when it does. As tall with or
-        // without it, the rest doesn't move once the app says.
+        // Whether the app shuffles sits between the times, boxed in when it does, as a color alone is too
+        // faint beside the times. As tall with or without it, the rest doesn't move once the app says.
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(clockText(shown), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             following.shuffle?.let { shuffles ->
@@ -212,7 +212,7 @@ private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit, onShuff
                     onCheckedChange = { onShuffle() },
                     colors = IconButtonDefaults.iconToggleButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 ) {
-                    AppIcon(R.drawable.ic_shuffle, contentDescription = stringResource(R.string.player_shuffle))
+                    AppIcon(if (shuffles) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle, contentDescription = stringResource(R.string.player_shuffle))
                 }
             }
             Text(
