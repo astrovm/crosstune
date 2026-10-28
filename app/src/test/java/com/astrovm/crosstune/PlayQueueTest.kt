@@ -237,6 +237,20 @@ class PlayQueueTest {
     }
 
     @Test
+    fun theSongItWasOnNumberedAnewIsCountedFrom() {
+        // Asked for the list while stopped on another, YouTube Music first says the song by its old number.
+        queue().playing()
+        plays(1, 180)
+        plays(1, 230)
+        plays(2, 231)
+        assertTrue(file.exists())
+        // Then on from the part's last song, by the new numbers.
+        plays(50, 279)
+        plays(51, 280)
+        assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
     fun withoutNumbersTheAppsOwnNamesForTheSongsAreFollowed() {
         // As YouTube names what it found: another version of the song, its video, or something else.
         queue().playing()

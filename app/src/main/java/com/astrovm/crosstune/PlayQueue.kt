@@ -128,7 +128,10 @@ internal class PlayQueue(
         val named = part.indexOfFirst { sameEntry(it, now.song) }
         // Once one of the part's songs is seen with the app's number for it, the app's numbers say
         // where it is, whatever it calls the songs.
-        val first = queue.first ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
+        // The song it was on, by another number, was numbered anew, as YouTube Music may as it fills a
+        // list it had stopped on with another, first saying the song by its old one: they count from there.
+        val kept = queue.first?.takeUnless { now.queueId != null && !queue.bySong && named >= 0 && named == at && now.queueId - named != it }
+        val first = kept ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
         val numbered = first != null && now.queueId != null
         val index = if (numbered && !queue.bySong) (now.queueId - first).toInt() else named
         // Named as another of the part's songs than its number says, the numbers are another queue's: the app
