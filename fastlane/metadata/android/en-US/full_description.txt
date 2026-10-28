@@ -5,7 +5,7 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <b>Features</b>
 <ul>
 <li>Reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp and Audiomack, and opens them in any of those or in Amazon Music and Qobuz.</li>
-<li>Playlists and albums show their songs: open any one in the music app you picked, copy or share the list, or play it all, in order or shuffled, in YouTube Music or YouTube.</li>
+<li>Playlists and albums show their songs: open any one in the music app you picked, copy or share the list, or play it all, in order or shuffled, in YouTube Music, YouTube or TIDAL.</li>
 <li>Send each service somewhere different, like YouTube links to YouTube Music and everything else to Apple Music.</li>
 <li>Show in Crosstune first: the song plays in the music app you picked while you stay.</li>
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud and Audiomack can open the song, album or artist itself instead of a search, Bandcamp and Qobuz the song or album, and YouTube the song.</li>

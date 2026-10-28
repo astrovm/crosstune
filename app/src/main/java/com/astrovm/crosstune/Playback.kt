@@ -86,10 +86,11 @@ internal data class Following(
 /**
  * A song an app plays, and its place in the app's queue, by the number the app gave it there; null
  * for an app that shows no queue, as YouTube doesn't. YouTube Music numbers what it's asked to play
- * one after another, then what it plays on after those. [ended] once the app stopped at the song's
- * end, as YouTube does after a list's last song.
+ * one after another, then what it plays on after those; TIDAL numbers each song by what it is.
+ * [ended] once the app stopped at the song's end, as YouTube does after a list's last song.
+ * [previousId] is the number of the song before it in the queue.
  */
-internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false)
+internal data class AppPlays(val song: MusicMetadata, val queueId: Long?, val ended: Boolean = false, val previousId: Long? = null)
 
 /** What's playing on the phone, as far as Android lets Crosstune see. */
 internal interface PlaybackSource {
@@ -160,7 +161,9 @@ internal class MediaSessionPlayback(
     private val context: Context,
     private val now: () -> Long = SystemClock::elapsedRealtime,
     private val waker: AppWaker = MediaBrowserWaker(context),
-    private val shuffles: AppShuffle = SessionShuffle(context)
+    private val shuffles: AppShuffle = SessionShuffle(context),
+    /** An app's queue; Robolectric shows a test none. */
+    private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -329,7 +332,12 @@ internal class MediaSessionPlayback(
                     // A video that doesn't say it's music is still what the app was asked to play: YouTube
                     // names "Thriller" by "Michael Jackson" with no album, as it does any video.
                     ?.let { playing(it)?.metadata ?: it.named() }
-                    ?.let { AppPlays(it, controller.playbackState?.activeQueueItemId?.takeIf { id -> id != MediaSession.QueueItem.UNKNOWN_ID.toLong() }, ended) }
+                    ?.let { song ->
+                        val id = controller.playbackState?.activeQueueItemId?.takeIf { it != MediaSession.QueueItem.UNKNOWN_ID.toLong() }
+                        val queue = queueOf(controller).orEmpty()
+                        val previous = queue.getOrNull(queue.indexOfFirst { it.queueId == id } - 1)?.queueId
+                        AppPlays(song, id, ended, previous)
+                    }
             }
     }
 

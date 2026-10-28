@@ -5,7 +5,7 @@ Krijg je een link van een muziekdienst, dan opent hetzelfde nummer in je favorie
 <b>Functies</b>
 <ul>
 <li>Leest links van Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp en Audiomack en opent ze in een van die apps of in Amazon Music en Qobuz.</li>
-<li>Afspeellijsten en albums tonen hun nummers: open er een in de app die je koos, kopieer of deel de lijst, of speel alles af, op volgorde of geshuffeld, in YouTube Music of YouTube.</li>
+<li>Afspeellijsten en albums tonen hun nummers: open er een in de app die je koos, kopieer of deel de lijst, of speel alles af, op volgorde of geshuffeld, in YouTube Music, YouTube of TIDAL.</li>
 <li>Stuur elke service ergens anders heen, bijvoorbeeld YouTube-links naar YouTube Music en al het andere naar Apple Music.</li>
 <li>Eerst in Crosstune tonen: het nummer speelt af in de app die je koos terwijl je blijft.</li>
 <li>Waar de app het kan, opent het nummer, album of de artiest zelf in plaats van een zoekopdracht.</li>

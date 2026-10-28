@@ -1115,13 +1115,15 @@ internal class MainViewModel(
 
     /**
      * Plays the result's songs in YouTube Music or YouTube, as one queue of the first [MAX_QUEUE],
-     * which is all YouTube takes; [playQueue] plays a longer list on from there. [shuffled], the
-     * whole list is shuffled first, as the app would only shuffle the part it was given.
+     * which is all YouTube takes; [playQueue] plays a longer list on from there. In an app that takes
+     * no list, they play song by song. [shuffled], the whole list is shuffled first, as the app would
+     * only shuffle the part it was given.
      */
     fun playAll(shuffled: Boolean = false) {
         val destination = uiState.resultDestination
         val service = destination.matchService ?: return
         val all = uiState.result?.tracks.orEmpty().let { if (shuffled) it.shuffled() else it }
+        if (service.playsSongBySong) return playSongBySong(all, service, destination)
         val tracks = all.take(MAX_QUEUE)
         cancelTrackWork()
         trackJob = viewModelScope.launch {
@@ -1133,6 +1135,26 @@ internal class MainViewModel(
                 playOn(all, service, destination, queue)
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
+            }
+        }
+    }
+
+    /**
+     * Plays [tracks] in the app [destination] is, which takes no list, one after another: the first
+     * asked for here, with the player on it, and [playQueue] asking for each next one as the one before
+     * ends. With no app to ask, the first opens there, as it would on its own.
+     */
+    private fun playSongBySong(tracks: List<MusicMetadata>, service: MusicService, destination: Destination) {
+        val app = destination.packageName ?: return
+        val first = tracks.first()
+        cancelTrackWork()
+        trackJob = viewModelScope.launch {
+            openPlayer(first, app)
+            if (playback?.playSong(first, app) == true) {
+                playQueue?.play(tracks, service, app, 1, listOf(first))
+            } else {
+                closePlayer()
+                openTrack(first)
             }
         }
     }
