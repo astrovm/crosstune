@@ -912,9 +912,8 @@ class PlaybackTest {
         allow()
         val like = { name: String, icon: Int -> PlaybackState.CustomAction.Builder("thumbs_up_action", name, icon).build() }
         val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours")
-        val state = { vararg actions: PlaybackState.CustomAction ->
+        fun state(vararg actions: PlaybackState.CustomAction) =
             PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT).apply { actions.forEach(::addCustomAction) }.build()
-        }
         shadowOf(music).setPlaybackState(state(PlaybackState.CustomAction.Builder("shuffle_action", "Shuffle off", 3).build()))
         shadowOf(sessions).addController(music)
         val seen = followed()
