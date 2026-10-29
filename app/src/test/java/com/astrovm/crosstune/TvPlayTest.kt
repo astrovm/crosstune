@@ -486,11 +486,11 @@ class TvPlayTest {
         val windows = { Shadow.extract<ShadowWindowManagerImpl>(floating.get().getSystemService(WindowManager::class.java)).views.size }
         val before = windows()
 
-        val song = composeRule.onNode(hasTestTag(LYRICS_SONG_TAG))
+        val info = composeRule.onNode(hasContentDescription(string(R.string.lyrics_about_song)))
         // The remote's, as a TV is: Robolectric starts as a touch screen, where rows take no focus.
         composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
-        song.requestFocus()
-        song.performSemanticsAction(SemanticsActions.OnClick)
+        info.requestFocus()
+        info.performSemanticsAction(SemanticsActions.OnClick)
         val report = hasContentDescription(string(R.string.report_problem)) and hasAnyAncestor(isDialog())
         waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(before, windows())
@@ -514,7 +514,7 @@ class TvPlayTest {
         pressBack(floating.get())
         waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isEmpty() }
         assertTrue(shown("Demo one"))
-        song.assertIsFocused()
+        info.assertIsFocused()
         assertFalse(shadowOf(floating.get()).isStoppedBySelf)
     }
 

@@ -41,6 +41,7 @@ import androidx.lifecycle.ViewModelProvider
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertNotNull
 import android.os.Looper
 import android.Manifest
@@ -71,6 +72,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import java.text.NumberFormat
 import androidx.compose.ui.test.onNodeWithTag
@@ -1111,6 +1113,31 @@ class ListeningTest {
         assertTrue(phone.skips.isEmpty())
         assertFalse(SemanticsActions.CustomActions in song.fetchSemanticsNode().config)
         assertTrue(shown("Demo one"))
+    }
+
+    @Test
+    fun aTapOnTheSongGoesDownToItsPlayerOverItsCard() {
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // The words go on to the next song heard, while the card is still the first one's.
+        hearing.song("Other", 3.0)
+        waitUntil(TIMEOUT_MS) { lit("Other one") }
+        // Opened on their own, a tap on their song opens a player on it, over that song's card.
+        composeRule.onNodeWithTag(LYRICS_SONG_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        assertNull(controllerModel().uiState.lyricsFor)
+        assertEquals("Other", controllerModel().uiState.player?.song?.title)
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Other" }
+        // Opened from that player, a tap goes back down to it, as it was.
+        val player = controllerModel().uiState.player
+        val lyrics = string(R.string.lyrics_button)
+        composeRule.onAllNodes(hasContentDescription(lyrics) or SemanticsMatcher("opens the words") {
+            SemanticsActions.OnClick in it.config && it.config[SemanticsActions.OnClick].label == lyrics
+        }).onLast().performClick()
+        waitForText("Other one")
+        composeRule.onNodeWithTag(LYRICS_SONG_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor == null }
+        assertSame(player, controllerModel().uiState.player)
     }
 
     @Test
@@ -3995,6 +4022,32 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyrics == "Walking down the river road\nSinging to the morning light" }
         // Left out of what was kept, with no need to look them up again.
         assertTrue(fake.requestedUrls.drop(asked).none { "lrclib" in it })
+    }
+
+    @Test
+    fun wordsKeptBeforeTheLookupWasFixedAreLookedUpAgain() {
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light")
+        waitForText("Walking down the river road\nSinging to the morning light")
+        composeRule.runOnIdle { controller!!.pause().stop() }
+        waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
+        composeRule.runOnIdle { controller!!.destroy() }
+        // As the lookup before its last fix kept them, with nothing saying where they came from.
+        val file = File(app.cacheDir, "kept_words.json")
+        val entries = org.json.JSONArray(file.readText())
+        for (index in 0 until entries.length()) {
+            val entry = entries.getJSONArray(index)
+            entry.put(1, entry.getString(1).replace(",\"source\":\"lrclib\"", "").replace("[${LyricsFinder.CACHE_VERSION}, ", "[${LyricsFinder.CACHE_VERSION - 1}, "))
+        }
+        file.writeText(entries.toString())
+
+        launch()
+        recognize()
+        waitForText("Demo")
+        composeRule.runOnIdle { controllerModel().showLyrics() }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyrics == "Walking down the river road\nSinging to the morning light" && !controllerModel().uiState.isLoadingLyrics }
+        // Worked out again, they say where they're from, kept as the app's left.
+        composeRule.runOnIdle { controller!!.pause().stop() }
+        waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").readText().contains("\\\"source\\\":\\\"lrclib\\\"") }
     }
 
     @Test

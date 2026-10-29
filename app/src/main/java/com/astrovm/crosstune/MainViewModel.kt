@@ -1768,12 +1768,13 @@ internal class MainViewModel(
     }
 
     /**
-     * What a song's words are worked out with: the language they're translated into, those left
-     * untranslated, and, signed in, ChatGPT and its model, which translate them, put their readings
-     * right and write romaji in Japanese.
+     * What a song's words are worked out with: how they're looked up, as words looked up before a
+     * fix are looked up again, the language they're translated into, those left untranslated, and,
+     * signed in, ChatGPT and its model, which translate them, put their readings right and write
+     * romaji in Japanese.
      */
     private fun madeWith() =
-        listOf(translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, uiState.chatGpt.model).toString()
+        listOf(LyricsFinder.CACHE_VERSION, translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, uiState.chatGpt.model).toString()
 
     /**
      * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy
@@ -2601,6 +2602,19 @@ internal class MainViewModel(
      * Closes the words. The next song starts without them, rather than showing the last one's, and
      * what was heard is forgotten, so words opened later don't listen along to what plays by then.
      */
+    /**
+     * From the words down to their song's player: the one under them, or one opened on their song when
+     * they were opened on their own, over that song's card, as the words may have gone on to another.
+     */
+    fun lyricsToPlayer() {
+        val song = uiState.lyricsFor ?: return
+        if (uiState.player == null) {
+            openPlayer(song, uiState.following?.appPackage, played = shownPlayed)
+            if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+        }
+        dismissLyrics()
+    }
+
     fun dismissLyrics() {
         heardSong = null
         leaveWords()

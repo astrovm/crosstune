@@ -341,7 +341,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // The song opens to what it's about, or, without ChatGPT, to the way to sign in for it.
             LyricsHeader(
                 song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, toolsShown,
-                onAbout = { openTab(SongTab.MEANING) }, onAboutFocus = { infoFocused = it }, info = info
+                onAbout = { openTab(SongTab.MEANING) }, onPlayer = actions.onLyricsToPlayer, onAboutFocus = { infoFocused = it }, info = info
             )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
@@ -567,6 +567,8 @@ private fun LyricsHeader(
     /** Whether the song's info button shows, rather than leaving the song's name and cover alone. */
     showAbout: Boolean,
     onAbout: () -> Unit,
+    /** A tap on the song, which goes down to its player, as a swipe down does. */
+    onPlayer: () -> Unit,
     onAboutFocus: (Boolean) -> Unit,
     info: FocusRequester
 ) {
@@ -613,9 +615,8 @@ private fun LyricsHeader(
                     )
                     if (skips.isNotEmpty()) customActions = skips
                 }
-                .focusRequester(info)
-                // The touch area stays put while the song moves, so a short swipe isn't a tap on its info.
-                .clickable(onClickLabel = about, onClick = onAbout)
+                // The touch area stays put while the song moves, so a short swipe isn't a tap on it.
+                .clickable(onClickLabel = stringResource(R.string.lyrics_to_player), onClick = onPlayer)
                 .pointerInput(rtl) {
                     // Toward the start of the line, as reading goes, is on to the next song.
                     fun next(offset: Float) = (offset < 0f) != rtl
@@ -666,14 +667,14 @@ private fun LyricsHeader(
                 }
             }
         }
-        AboutButton(showAbout, about, onAbout, onAboutFocus)
+        AboutButton(showAbout, about, onAbout, onAboutFocus, info)
     }
 }
 
 /** The song's info button. It fades out of its place rather than leave it, so the song doesn't move. */
 @Composable
-private fun AboutButton(shown: Boolean, label: String, onClick: () -> Unit, onFocus: (Boolean) -> Unit) {
-    Box(modifier = Modifier.size(48.dp).onFocusChanged { onFocus(it.hasFocus) }) {
+private fun AboutButton(shown: Boolean, label: String, onClick: () -> Unit, onFocus: (Boolean) -> Unit, requester: FocusRequester) {
+    Box(modifier = Modifier.size(48.dp).focusRequester(requester).onFocusChanged { onFocus(it.hasFocus) }) {
         AnimatedVisibility(visible = shown, enter = fadeIn(tween(TOOLS_FADE_MS)), exit = fadeOut(tween(TOOLS_FADE_MS))) {
             IconButton(onClick = onClick) { AppIcon(R.drawable.ic_info, contentDescription = label) }
         }

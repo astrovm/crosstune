@@ -1,0 +1,3 @@
+Tap the song over its words to go to its player.
+A shorter hint in the link field.
+Words saved on your phone are looked up again after a fix to how they're found.

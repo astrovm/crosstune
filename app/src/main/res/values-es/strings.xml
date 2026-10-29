@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_placeholder">Pegá un link de música o el nombre de una canción</string>
+    <string name="spotify_link_placeholder">Link o canción</string>
     <string name="resolve_button">Convertir link</string>
     <string name="open_button">Abrir</string>
     <string name="search_button">Buscar</string>
@@ -366,6 +366,7 @@
     <string name="song_search_playlist">Armar una playlist</string>
     <string name="error_no_songs_like">No se encontraron canciones parecidas.</string>
     <string name="lyrics_about_song">Sobre la canción</string>
+    <string name="lyrics_to_player">Abrir el reproductor</string>
     <string name="lyrics_study">Estudiar</string>
     <string name="practice_due">%1$d para hoy</string>
     <string name="choose_lines">Elegir líneas</string>

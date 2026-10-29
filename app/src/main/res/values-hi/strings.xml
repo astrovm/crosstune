@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_placeholder">म्यूज़िक लिंक या गाने का नाम पेस्ट करें</string>
+    <string name="spotify_link_placeholder">लिंक या गाना</string>
     <string name="resolve_button">लिंक बदलें</string>
     <string name="open_button">खोलें</string>
     <string name="search_button">खोजें</string>
@@ -366,6 +366,7 @@
     <string name="song_search_playlist">प्लेलिस्ट बनाएं</string>
     <string name="error_no_songs_like">ऐसे गाने नहीं मिले।</string>
     <string name="lyrics_about_song">गाने के बारे में</string>
+    <string name="lyrics_to_player">प्लेयर खोलें</string>
     <string name="lyrics_study">पढ़ाई</string>
     <string name="practice_due">%1$d बाकी</string>
     <string name="choose_lines">लाइनें चुनें</string>

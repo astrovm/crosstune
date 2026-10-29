@@ -4,7 +4,7 @@
     <string name="publisher_id" translatable="false">astrovm</string>
     <string name="publisher_name" translatable="false">astrovm</string>
 
-    <string name="spotify_link_placeholder">Paste a music link or a song name</string>
+    <string name="spotify_link_placeholder">Link or song</string>
     <string name="resolve_button">Convert link</string>
     <string name="open_button">Open</string>
     <string name="search_button">Search</string>
@@ -387,6 +387,7 @@
     <string name="song_search_playlist">Make a playlist</string>
     <string name="error_no_songs_like">Couldn\'t find songs like this one.</string>
     <string name="lyrics_about_song">About the song</string>
+    <string name="lyrics_to_player">Open the player</string>
     <string name="lyrics_study">Study</string>
     <string name="practice_due">%1$d due</string>
     <string name="choose_lines">Choose lines</string>
