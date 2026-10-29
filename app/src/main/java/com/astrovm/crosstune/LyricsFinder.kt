@@ -360,7 +360,11 @@ internal class LyricsFinder(
             elsewhere.cancel()
             return@withContext Best(own, own = true)
         }
-        val found = own?.let { better(it, elsewhere.await()) } ?: elsewhere.await()
+        val rest = elsewhere.await()
+        // YouTube Music's words for another edit of the song, found by its name, give way to words
+        // timed as well for this one.
+        val otherTake = own != null && !fits(own, metadata) && rest is Lyrics.Found && rest.lengthMs != null && fits(rest, metadata) && timing(rest) >= timing(own)
+        val found = if (own == null || otherTake) rest else better(own, rest)
         val word = byWord.await() ?: return@withContext Best(found)
         // Another take's words, timed word by word, don't beat this one's, timed a line at a time.
         if (found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) return@withContext Best(found)
@@ -498,7 +502,9 @@ internal class LyricsFinder(
                 // A song without words has no page for them.
                 val page = lyricsPage.find(watching)?.groupValues?.get(1) ?: return@withTimeoutOrNull null
                 // Only YouTube Music's app is given them timed.
-                youTubeMusicWords(JSONObject(post(YOUTUBE_MUSIC_BROWSE_URL, innertube(APP_CLIENT, APP_CLIENT_VERSION).put("browseId", page))))
+                val words = youTubeMusicWords(JSONObject(post(YOUTUBE_MUSIC_BROWSE_URL, innertube(APP_CLIENT, APP_CLIENT_VERSION).put("browseId", page))))
+                // Timed for that very release, which, found by its name, may be another edit of the song.
+                words?.copy(lengthMs = MetadataParsers.youtubeMusicVideo(JSONObject(watching), videoId)?.lengthMs)
             } catch (_: IOException) {
                 null
             } catch (_: JSONException) {

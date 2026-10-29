@@ -48,6 +48,9 @@ class SongListenerTest {
         fake.handler = { request -> FakeSpotify.html(request, steps[next++]()) }
     }
 
+    /** How many times Shazam was asked, besides the iTunes Store asked how long what it named is. */
+    private fun askedShazam() = fake.requestedUrls.count { it.startsWith("https://amp.shazam.com/") }
+
     private fun heard(samples: ShortArray = ShortArray(16_000) { (it % 50).toShort() }) = runBlocking { shazam.recognize(samples, samples.size) }
 
     @After
@@ -98,6 +101,34 @@ class SongListenerTest {
         assertEquals(Heard.Song(MusicMetadata("Demo", ""), null, matchId = "1"), heard())
         answer("""{"matches":[{"id":"1"}],"track":{"title":"Demo"}}""")
         assertEquals(Heard.Song(MusicMetadata("Demo", ""), null, matchId = "1"), heard())
+    }
+
+    @Test
+    fun theSongNamedIsAsLongAsTheRecordingShazamMatched() {
+        var store: () -> String = { """{"resultCount":1,"results":[{"trackId":1109658204,"trackTimeMillis":289453}]}""" }
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "itunes.apple.com") store() else MATCH) }
+        val iris = Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls", artworkUrl = "https://example.com/iris.jpg", lengthMs = 289_453), "1109658204", matchId = "238534")
+        assertEquals(iris, heard())
+        assertEquals("https://itunes.apple.com/lookup?id=1109658204", fake.requestedUrls.last())
+        // Asked once for each recording, as listening along names it again and again.
+        fake.requestedUrls.clear()
+        assertEquals(iris, heard())
+        assertEquals(1, fake.requestedUrls.size)
+        // Not known, it's still the song, and asked about again next time.
+        val unknown = iris.copy(metadata = iris.metadata.copy(lengthMs = null))
+        val other = Shazam(fake.client(), computeDispatcher = Dispatchers.Unconfined)
+        listOf({ """{"resultCount":0,"results":[]}""" }, { """{"results":[{"trackTimeMillis":0}]}""" }, { "{}" }, { "not json" }, { throw IOException("offline") }).forEach {
+            store = it
+            assertEquals(unknown, runBlocking { other.recognize(ShortArray(16_000), 16_000) })
+        }
+        fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, "busy", code = 503) else FakeSpotify.html(request, MATCH) }
+        assertEquals(unknown, runBlocking { other.recognize(ShortArray(16_000), 16_000) })
+        assertEquals(6, fake.requestedUrls.count { it.startsWith("https://itunes.apple.com/") })
+        // Without Apple Music, there's nothing to ask.
+        fake.requestedUrls.clear()
+        answer("""{"matches":[{"id":"1"}],"track":{"title":"Demo"}}""")
+        heard()
+        assertEquals(1, fake.requestedUrls.size)
     }
 
     @Test
@@ -161,7 +192,7 @@ class SongListenerTest {
         answers({ microphone.play(3.0); NO_MATCH }, { microphone.play(3.0); MATCH })
         val heard = runBlocking { listener.listen() }
         assertEquals("Iris", (heard as Heard.Song).metadata.title)
-        assertEquals(2, fake.requestedUrls.size)
+        assertEquals(2, askedShazam())
         // It stopped listening, even though there's more to hear.
         assertTrue(microphone.closed)
     }
@@ -196,7 +227,7 @@ class SongListenerTest {
         assertTrue(runBlocking { listener.listen() } is Heard.Song)
         microphone.play(3.0)
         assertTrue(runBlocking { listener.listen() } is Heard.Song)
-        assertEquals(2, fake.requestedUrls.size)
+        assertEquals(2, askedShazam())
     }
 
     @Test
@@ -211,9 +242,9 @@ class SongListenerTest {
     @Test
     fun theNetworkFailingForAMomentIsAskedAgainWithMore() {
         microphone.play(3.0)
-        answers({ microphone.play(3.0); throw java.io.IOException("timed out") }, { MATCH })
+        answers({ microphone.play(3.0); throw java.io.IOException("timed out") }, { MATCH }, { NO_MATCH })
         assertTrue(runBlocking { listener.listen() } is Heard.Song)
-        assertEquals(2, fake.requestedUrls.size)
+        assertEquals(2, askedShazam())
         // Failing twice in a row, it says so, without listening on.
         microphone.play(3.0)
         fake.handler = { microphone.play(3.0); throw java.io.IOException("offline") }

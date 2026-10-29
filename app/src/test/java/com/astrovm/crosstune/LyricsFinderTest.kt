@@ -1191,6 +1191,42 @@ class LyricsFinderTest {
         assertEquals(true, browse.contains(""""browseId":"MPLYt_words"""") && browse.contains("ANDROID_MUSIC"))
     }
 
+    /** YouTube Music's page for video vid1, a song [length] long, or a video, with a page for its words. */
+    private fun watching(length: String, type: String = "ATV") =
+        """{"tabs":[{"browseEndpoint":{"browseId":"MPLYt_words"}}],"panel":{"playlistPanelVideoRenderer":{"videoId":"vid1","title":{"runs":[{"text":"Song"}]},""" +
+            """"longBylineText":{"runs":[{"text":"Band"}]},"lengthText":{"runs":[{"text":"$length"}]},"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}"""
+
+    @Test
+    fun youTubeMusicsWordsForAnotherEditGiveWayToWordsForThisOne() {
+        val edit = youTubeMusicPage("Erste" to 10_200, "Zweite" to 13_100)
+        // LRCLIB's, timed for a recording as long as the one playing, 4:22.
+        val asLong = timedOnLrclib.dropLast(1) + ""","duration":262}"""
+        val lrclibWords = Lyrics.Found("First\nSecond", listOf(LyricLine(1_000, "First"), LyricLine(10_000, "Second")), 262_000, LyricsFinder.LRCLIB)
+        val playing = song.copy(lengthMs = 262_000)
+        everywhere("[$asLong]", edit, next = watching("2:54"))
+        assertEquals(lrclibWords, runBlocking { withYouTubeMusic().lyricsOf(playing) })
+        // Up to 3 seconds apart is the same recording, so YouTube Music's, as it's first.
+        everywhere("[$asLong]", edit, next = watching("4:24"))
+        assertEquals(264_000L, (runBlocking { withYouTubeMusic().lyricsOf(playing) } as Lyrics.Found).lengthMs)
+        everywhere("[$asLong]", edit, next = watching("4:25"))
+        assertEquals(LyricsFinder.YOUTUBE_MUSIC, (runBlocking { withYouTubeMusic().lyricsOf(playing) } as Lyrics.Found).source)
+        // With nothing timed as well for this one, they stay, saying what they're timed for, so they can be put in time by hand.
+        val untimed = answer("Song", "Band", "First\nSecond").dropLast(1) + ""","duration":262}"""
+        val other = timedOnLrclib.dropLast(1) + ""","duration":174}"""
+        listOf("[$untimed]", "[$other]", "[$timedOnLrclib]", "[]").forEach { lrclib ->
+            everywhere(lrclib, edit, next = watching("2:54"))
+            val found = runBlocking { withYouTubeMusic().lyricsOf(playing) } as Lyrics.Found
+            assertEquals(lrclib, LyricsFinder.YOUTUBE_MUSIC to 174_000L, found.source to found.lengthMs)
+            assertEquals(false, found.timedFor(playing.lengthMs))
+        }
+        // With no telling which edit plays, they're as good as any.
+        everywhere("[$asLong]", edit, next = watching("2:54"))
+        assertEquals(LyricsFinder.YOUTUBE_MUSIC, (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).source)
+        // A video's length isn't its song's, which it may open with more than.
+        everywhere("[$asLong]", edit, next = watching("2:54", type = "OMV"))
+        assertEquals(LyricsFinder.YOUTUBE_MUSIC to null, (runBlocking { withYouTubeMusic().lyricsOf(playing) } as Lyrics.Found).let { it.source to it.lengthMs })
+    }
+
     @Test
     fun youTubeMusicsUntimedWordsGiveWayToTimedOnes() {
         everywhere("[$timedOnLrclib]", youTubeMusicPage("Erste" to null, "Zweite" to null))

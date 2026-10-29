@@ -18,6 +18,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,6 +29,7 @@ import org.json.JSONObject
 import java.io.Closeable
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -73,12 +75,38 @@ internal class Shazam(
             client.newCall(request).answer(ioDispatcher) { response ->
                 // Too many requests, or the server failing: another app may still name it.
                 if (!response.isSuccessful) Heard.Failed(AppError.RECOGNITION_UNAVAILABLE) else parse(response.body.stringAtMost())
-            }
+            }.let { heard -> if (heard is Heard.Song) withLength(heard) else heard }
         } catch (_: IOException) {
             Heard.Failed(AppError.NETWORK)
         } catch (_: JSONException) {
             Heard.Failed(AppError.RECOGNITION_UNAVAILABLE)
         }
+    }
+
+    /** How long the recordings Shazam named are, by their Apple Music ids, so each is asked about once. */
+    private val lengths = ConcurrentHashMap<String, Long>()
+
+    /**
+     * [heard] with how long the recording Shazam matched lasts, as the iTunes Store has it, so its
+     * words are timed for that one, where Shazam's place in it is, and not another edit of the song.
+     */
+    private suspend fun withLength(heard: Heard.Song): Heard.Song {
+        val id = heard.appleMusicId ?: return heard
+        val length = lengths[id] ?: lengthOf(id)?.also { lengths[id] = it } ?: return heard
+        return heard.copy(metadata = heard.metadata.copy(lengthMs = length))
+    }
+
+    /** Not known, e.g. offline, the song is still named, as only its words need it. */
+    private suspend fun lengthOf(id: String): Long? = try {
+        val url = ITUNES_LOOKUP_URL.toHttpUrl().newBuilder().addQueryParameter("id", id).build()
+        client.newCall(Request.Builder().url(url).build()).answer(ioDispatcher) { response ->
+            if (!response.isSuccessful) return@answer null
+            JSONObject(response.body.stringAtMost()).optJSONArray("results")?.optJSONObject(0)?.optLong("trackTimeMillis")?.takeIf { it > 0 }
+        }
+    } catch (_: IOException) {
+        null
+    } catch (_: JSONException) {
+        null
     }
 
     private fun body(uri: String): JSONObject {
@@ -116,6 +144,7 @@ internal class Shazam(
 
     companion object {
         private val JSON = "application/json".toMediaType()
+        private const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
         private const val USER_AGENT = "Dalvik/2.1.0 (Linux; U; Android 14; Pixel 8 Build/AP2A.240805.005)"
     }
 }

@@ -197,6 +197,59 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun anEditNamedJustLikeTheSongOpensOnlyWhenNoneIsAsLong() {
+        // An edit of 2:54 first, then the song itself, 4:22, as each app has them, by name alone.
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                when (request.url.host) {
+                    "itunes.apple.com" -> """{"results":[
+                        {"trackName":"Love Triangle","artistName":"Band","trackViewUrl":"https://music.apple.com/edit","trackTimeMillis":174000},
+                        {"trackName":"Love Triangle","artistName":"Band","trackViewUrl":"https://music.apple.com/album"},
+                        {"trackName":"Love Triangle","artistName":"Band","trackViewUrl":"https://music.apple.com/song","trackTimeMillis":261987}]}"""
+                    "api.deezer.com" -> """{"data":[
+                        {"title":"Love Triangle","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1","duration":174},
+                        {"title":"Love Triangle","artist":{"name":"Band"},"link":"https://www.deezer.com/track/2","duration":263}]}"""
+                    "api.tidal.com" -> """{"items":[{"id":1,"title":"Love Triangle","artists":[{"name":"Band"}],"duration":174},{"id":2,"title":"Love Triangle","artists":[{"name":"Band"}],"duration":270}]}"""
+                    else -> youTubeMusicPage(
+                        youTubeMusicRow("Love Triangle", "Band • Singles • 2:54", videoId = "edit0000000"),
+                        youTubeMusicRow("Love Triangle", "Band • Album • 4:22", videoId = "song0000000")
+                    )
+                }
+            )
+        }
+        val song = MusicMetadata("Love Triangle", "Band", lengthMs = 262_000)
+        assertEquals("https://music.apple.com/song", find(MusicService.APPLE_MUSIC, song))
+        assertEquals("https://www.deezer.com/track/2", find(MusicService.DEEZER, song))
+        // Up to 8 seconds apart is the same, e.g. remastered.
+        assertEquals("https://tidal.com/browse/track/2", find(MusicService.TIDAL, song))
+        assertEquals("https://music.youtube.com/watch?v=song0000000", find(MusicService.YOUTUBE_MUSIC, song))
+        // In a queue too, which takes a song by a looser name.
+        assertEquals("https://music.youtube.com/watch?v=song0000000", runBlocking { matcher().youtubeQueue(MusicService.YOUTUBE_MUSIC, listOf(song.copy(title = "Love Triangle (Remastered)"))) {} }?.url)
+        // Its length not known, or none as long, the first is as good as any.
+        listOf(song.copy(lengthMs = null), song.copy(lengthMs = 360_000), song.copy(lengthMs = 250_000)).forEach { other ->
+            assertEquals("https://music.apple.com/edit", find(MusicService.APPLE_MUSIC, other))
+            assertEquals("https://www.deezer.com/track/1", find(MusicService.DEEZER, other))
+            assertEquals("https://tidal.com/browse/track/1", find(MusicService.TIDAL, other))
+            assertEquals("https://music.youtube.com/watch?v=edit0000000", find(MusicService.YOUTUBE_MUSIC, other))
+        }
+        assertEquals("https://music.youtube.com/watch?v=edit0000000", find(MusicService.YOUTUBE_MUSIC, song.copy(lengthMs = 174_000)))
+    }
+
+    @Test
+    fun whatWasFoundForOneEditIsntRememberedForAnother() = runBlocking {
+        val file = kotlin.io.path.createTempDirectory("lookups").toFile().resolve("lookups.json")
+        val matcher = ExactMatcher(fake.client(), "AR", kotlinx.coroutines.Dispatchers.Unconfined, LookupCache(file, kotlinx.coroutines.Dispatchers.Unconfined))
+        respond("""{"data":[{"title":"Song","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1","duration":174},{"title":"Song","artist":{"name":"Band"},"link":"https://www.deezer.com/track/2","duration":263}]}""")
+        assertEquals("https://www.deezer.com/track/1", matcher.find(MusicService.DEEZER, MusicMetadata("Song", "Band", lengthMs = 174_000)))
+        assertEquals("https://www.deezer.com/track/2", matcher.find(MusicService.DEEZER, MusicMetadata("Song", "Band", lengthMs = 263_000)))
+        // Each is remembered as it was found.
+        fake.handler = { throw IOException("offline") }
+        assertEquals("https://www.deezer.com/track/1", matcher.find(MusicService.DEEZER, MusicMetadata("Song", "Band", lengthMs = 174_000)))
+        assertEquals("https://www.deezer.com/track/2", matcher.find(MusicService.DEEZER, MusicMetadata("Song", "Band", lengthMs = 263_000)))
+    }
+
+    @Test
     fun uncertainOrMissingMatchesFallBackToSearch() {
         respond("""{"results":[{"trackName":"Beyoncé Song","artistName":"Someone Else","trackViewUrl":"https://x"}]}""")
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })

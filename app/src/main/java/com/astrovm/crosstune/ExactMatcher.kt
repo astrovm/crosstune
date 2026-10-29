@@ -173,8 +173,9 @@ internal class ExactMatcher(
         return url.url?.let(Match::Found) ?: Match.Missing
     }
 
+    /** By the song's length too, when it's known, as an edit of a song is often named just like it. */
     private fun cacheKey(kind: String, target: String, metadata: MusicMetadata) =
-        listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()).joinToString("|")
+        (listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) + listOfNotNull(metadata.lengthMs)).joinToString("|")
 
     /**
      * What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found
@@ -244,19 +245,32 @@ internal class ExactMatcher(
             .apply { if (country.length == 2) addQueryParameter("country", country) }
             .build()
         val results = fetchJson(url.toString()).optJSONArray("results") ?: return null
-        return results.objects().firstOrNull { result ->
+        val named = results.objects().filter { result ->
             // Apple marks some albums in their name, e.g. "Name - Single", which the source doesn't.
             val name = result.optString(nameKey).removeSuffix(" - Single").removeSuffix(" - EP")
             matches(metadata, name, result.optString("artistName"))
-        }?.optString(urlKey)?.linkTo(MusicService.APPLE_MUSIC)
+        }
+        return asLongAs(metadata, named) { it.optLong("trackTimeMillis") }?.optString(urlKey)?.linkTo(MusicService.APPLE_MUSIC)
     }
 
-    private suspend fun findOnDeezer(metadata: MusicMetadata): String? =
-        searchDeezer(metadata).firstOrNull { result ->
+    private suspend fun findOnDeezer(metadata: MusicMetadata): String? {
+        val named = searchDeezer(metadata).filter { result ->
             val name = result.optString("title").ifEmpty { result.optString("name") }
             val artist = result.optJSONObject("artist")?.optString("name") ?: name
             matches(metadata, name, artist)
-        }?.optString("link")?.linkTo(MusicService.DEEZER)
+        }
+        return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.optString("link")?.linkTo(MusicService.DEEZER)
+    }
+
+    /**
+     * The first of [named], what a search found under the song's name, that's as long as the song,
+     * when its length is known, as the same name is often on an edit or another mix of it; or else
+     * the first.
+     */
+    private fun <T> asLongAs(metadata: MusicMetadata, named: List<T>, lengthMs: (T) -> Long?): T? {
+        val wanted = metadata.lengthMs ?: return named.firstOrNull()
+        return named.firstOrNull { found -> lengthMs(found)?.let { kotlin.math.abs(it - wanted) <= SAME_LENGTH_MS } == true } ?: named.firstOrNull()
+    }
 
     private suspend fun searchDeezer(metadata: MusicMetadata): List<JSONObject> {
         val path = when (metadata.type) {
@@ -376,13 +390,14 @@ internal class ExactMatcher(
             ItemType.ALBUM -> "albums" to "album"
             else -> "artists" to "artist"
         }
-        return apis.tidalSearch(kind, searchQuery(metadata)).firstOrNull { result ->
+        val named = apis.tidalSearch(kind, searchQuery(metadata)).filter { result ->
             when (metadata.type) {
                 ItemType.TRACK -> ServiceApis.tidalTrack(result)?.let { matches(metadata, it.title, it.artist) } == true
                 ItemType.ALBUM -> matches(metadata, result.optString("title"), result.optJSONArray("artists").objects().joinToString(", ") { it.optString("name") })
                 else -> matches(metadata, result.optString("name"), "")
             }
-        }?.let { "https://tidal.com/browse/$path/${it.optLong("id")}" }
+        }
+        return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.let { "https://tidal.com/browse/$path/${it.optLong("id")}" }
     }
 
     /**
@@ -550,8 +565,9 @@ internal class ExactMatcher(
             }
         }
         // An exact match anywhere in the results beats a close one at the top.
-        items.firstNotNullOfOrNull { found(it, loose = false) }?.let { return Answer(it) }
-        if (loosely) items.firstNotNullOfOrNull { found(it, loose = true) }?.let { return Answer(it) }
+        fun firstFound(loose: Boolean) = asLongAs(metadata, items.mapNotNull { item -> found(item, loose)?.let { it to row(item).lengthMs } }) { it.second }?.first
+        firstFound(loose = false)?.let { return Answer(it) }
+        if (loosely) firstFound(loose = true)?.let { return Answer(it) }
         if (!isSong) return Answer(null)
         // Not there by its name, it may be by another, e.g. in Japanese, or only as a video, e.g. one
         // never released, or only put up by others, as The Blue Hearts' are.
