@@ -1145,7 +1145,7 @@ internal class MainViewModel(
                 if (queue == null) return@launch showError(AppError.NOT_FOUND)
                 // In Crosstune's player, as one song plays, from the list's first song found.
                 val app = destination.packageName
-                val first = queue.songs.firstOrNull() ?: tracks.first()
+                val first = queue.songs.first()
                 openPlayer(first, app, queue.url)
                 // Before the app's asked, so what it played until then isn't taken for the list's start.
                 playOn(all, service, destination, queue, name)

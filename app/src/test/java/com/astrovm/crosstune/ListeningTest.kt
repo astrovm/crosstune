@@ -1141,6 +1141,21 @@ class ListeningTest {
     }
 
     @Test
+    fun aTapOnWordsAskedForFromTheSearchBarOpensAPlayerInTheAppPlayingThem() {
+        timedWordsOfAnySong()
+        val phone = appPlaying("Demo")
+        phone.playing.value = phone.playing.value!!.copy(appPackage = "com.example.music")
+        allowMicrophone()
+        launch()
+        click(string(R.string.tile_lyrics_label))
+        waitForText("Demo one")
+        composeRule.onNodeWithTag(LYRICS_SONG_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor == null }
+        assertEquals("com.example.music", controllerModel().uiState.player?.app)
+        assertEquals("Demo", controllerModel().uiState.result?.title)
+    }
+
+    @Test
     fun wordsHeardWithTheMicrophoneCantBeSwipedToAnotherSong() {
         val hearing = FakeHearing()
         val phone = FakePlayback().apply { access = true }
