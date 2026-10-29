@@ -3230,7 +3230,7 @@ class ListeningTest {
                 "restore song lyrics written in Latin letters to Korean" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMANIZED_HANGUL[lines.getString(it)] ?: lines.getString(it) }) }.toString())
                 "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
                 "covers and samples" in instructions -> FakeOpenAi.stream("""{"original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
-                "get to know the artists" in instructions -> FakeOpenAi.stream("Origin: Rome\n---\nNight pop.\n---\nDemo · 2020")
+                "get to know the artists" in instructions -> FakeOpenAi.stream("Origin: Rome\n---\nNight pop.\n---\nSunrise · 2020")
                 "example sentences" in instructions -> FakeOpenAi.stream("""[{"sentence": "The sky is blue.", "meaning": "El cielo es azul."}]""")
                 "You recommend songs" in instructions -> FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Made Up", "artist": "Nobody"}]""")
                 "about this song, in at most 80 words" in instructions -> FakeOpenAi.stream("It's ", "about stars.")
@@ -3353,6 +3353,9 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
         // What's known about it as a table, its story, mood as chips and its key line with what it means.
         assertTrue(shown("Year") && shown("1985") && shown("Calm") && shown("warm") && shown("“Stars”") && shown("They shine."))
+        // The key line sits right of its bar: 3dp bar and 12dp gap, past the story's edge.
+        val edge = { text: String -> composeRule.onNode(hasText(text)).fetchSemanticsNode().boundsInRoot.left }
+        assertEquals(15 * app.resources.displayMetrics.density, edge("“Stars”") - edge("A night under the stars."), 0.5f)
         val asked = openAi.asked.count { "explain the song in four parts" in it.getString("instructions") }
         // Closed and opened again, it's there, not asked again.
         composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
@@ -4625,7 +4628,7 @@ class ListeningTest {
         openAi.reply = answers
         click(string(R.string.retry_button))
         waitForText("Night pop.")
-        assertTrue(shown("Origin") && shown("Rome") && shown("Demo") && shown("2020"))
+        assertTrue(shown("Origin") && shown("Rome") && shown("Sunrise") && shown("2020"))
         // Asked about again, it's there already.
         val asked = openAi.asked.size
         composeRule.onNode(hasText("Night pop.")).performTouchInput { swipeDown() }

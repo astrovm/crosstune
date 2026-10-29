@@ -105,4 +105,32 @@ class SheetTest {
         val sheet = sheet("Origen: Roma\nEstilo breve y claro, sin más.\n«Plastic Love» · 1984\n“Variety” · 1984–85\n**Moonlight** · 1990 ([site](https://x.org))")
         assertEquals(listOf("Plastic Love" to "1984", "Variety" to "1984–85", "Moonlight" to "1990"), sheet.known)
     }
+
+    @Test
+    fun aLabelHasUpToFourWords() {
+        // Four words before the colon is a label, five is part of the story.
+        assertEquals(listOf("Uno dos tres cuatro" to "valor"), sheet("Uno dos tres cuatro: valor").facts)
+        assertEquals(listOf("" to "Uno dos tres cuatro cinco: valor"), sheet("Uno dos tres cuatro cinco: valor").facts)
+    }
+
+    @Test
+    fun aMoodHasUpToFourParts() {
+        assertEquals(listOf("Uno", "dos", "tres", "cuatro"), sheet("Uno · dos · tres · cuatro").mood)
+        assertEquals(emptyList<String>(), sheet("Uno · dos · tres · cuatro · cinco").mood)
+    }
+
+    @Test
+    fun aMoodPartHasUpToThreeWords() {
+        assertEquals(listOf("Uno dos tres", "otro"), sheet("Uno dos tres · otro").mood)
+        assertEquals(emptyList<String>(), sheet("Uno dos tres cuatro · otro").mood)
+    }
+
+    @Test
+    fun aLineWithNoLabelIsAFactUpToEightyCharacters() {
+        val eighty = "a".repeat(80)
+        assertEquals(listOf("" to eighty), sheet(eighty).facts)
+        val long = "a".repeat(81)
+        assertEquals(emptyList<Pair<String, String>>(), sheet(long).facts)
+        assertEquals(long, sheet(long).text)
+    }
 }
