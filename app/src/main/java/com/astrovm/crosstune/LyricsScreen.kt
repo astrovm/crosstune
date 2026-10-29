@@ -66,8 +66,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
 import androidx.compose.ui.text.input.ImeAction
@@ -276,6 +274,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     val bar = remember { FocusRequester() }
     var focusBar by remember { mutableStateOf(tv) }
     var infoFocused by remember { mutableStateOf(false) }
+    // What the song's info and its report open on a TV give the remote back to.
+    val info = remember { FocusRequester() }
+    val reportButton = remember { FocusRequester() }
     var barFocused by remember { mutableStateOf(false) }
     // They only go while timed words follow a song that's playing, where the words move on by themselves; paused, or read at
     // one's own pace, the tools stay. They also stay while there's something to do with them: a menu open, the words being put
@@ -337,7 +338,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // The song opens to what it's about, or, without ChatGPT, to the way to sign in for it.
             LyricsHeader(
                 song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, toolsShown,
-                onAbout = { openTab(SongTab.MEANING) }, onAboutFocus = { infoFocused = it }
+                onAbout = { openTab(SongTab.MEANING) }, onAboutFocus = { infoFocused = it }, info = info
             )
             TranslationStatus(state.learning, actions)
             CapoStatus(state.chords)
@@ -446,9 +447,9 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     }
     }
-    songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onReport = { reporting = true }, onDismiss = { songTab = null }) }
+    songTab?.let { tab -> SongSheet(state, actions, tab, onTab = openTab, onReport = { reporting = true }, onDismiss = { songTab = null }, opener = info, reportButton = reportButton) }
     if (reporting) {
-        SongReportDialog(state.report, onSend = actions.onSendReport, onDismiss = {
+        SongReportDialog(state.report, onSend = actions.onSendReport, opener = reportButton, onDismiss = {
             reporting = false
             actions.onCloseReport()
         })
@@ -559,7 +560,8 @@ private fun LyricsHeader(
     /** Whether the song's info button shows, rather than leaving the song's name and cover alone. */
     showAbout: Boolean,
     onAbout: () -> Unit,
-    onAboutFocus: (Boolean) -> Unit
+    onAboutFocus: (Boolean) -> Unit,
+    info: FocusRequester
 ) {
     // How far the song is swiped; the next one comes in from the side it went out to.
     val swiped = remember { Animatable(0f) }
@@ -604,6 +606,7 @@ private fun LyricsHeader(
                     )
                     if (skips.isNotEmpty()) customActions = skips
                 }
+                .focusRequester(info)
                 // The touch area stays put while the song moves, so a short swipe isn't a tap on its info.
                 .clickable(onClickLabel = about, onClick = onAbout)
                 .pointerInput(rtl) {
@@ -1061,13 +1064,6 @@ private fun ChooseLinesSheet(state: UiState, actions: ScreenActions, practise: B
 }
 
 /**
- * A sheet kept clear of the status bar. Material's own pads its top by however much of the status
- * bar it's under, so one about as tall as the screen grew as it was dragged up, which moved it
- * again, and it shook.
- */
-private val ClearOfStatusBar = Modifier.statusBarsPadding()
-
-/**
  * [song]'s lines, each once, to choose which to learn: those [kept] checked, and after them the rest
  * kept that aren't among them, words or lines sung otherwise now, to let go. With none kept yet,
  * those worth it are checked to start with. Each says how many times it's sung, and whether it has
@@ -1092,7 +1088,7 @@ internal fun ChooseLinesSheet(
     val others = kept.filter { saved -> saved.line != null || lines.none { it.text == saved.text.trim() } }
     val picked = remember(lines) { mutableStateListOf<Int>().apply { if (kept.isEmpty()) addAll(lines.filter { !it.filler }.map { it.index }) } }
     val dropped = remember(song) { mutableStateListOf<SavedLine>() }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
+    ScreenSheet(onDismiss) {
         Column(modifier = Modifier.padding(bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
                 CoverArt(song.artworkUrl, loadArtwork, size = 40.dp)
@@ -2133,7 +2129,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     val words by produceState(emptyList<Word>(), text, learning.script) { value = withContext(Dispatchers.Default) { Readings.words(text, learning.script) } }
     val saved = state.savedLines.any { it.text == text && it.title == state.lyricsFor?.title && it.artist == state.lyricsFor?.artist }
     // Open all the way, so one back closes it rather than lowering it halfway first.
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
+    ScreenSheet(onDismiss) {
         // Scrolled, so a long explanation is read to its end.
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -2326,8 +2322,8 @@ private fun Examples(asking: Asking<List<Example>>) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTab: (SongTab) -> Unit, onReport: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), modifier = ClearOfStatusBar) {
+private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTab: (SongTab) -> Unit, onReport: () -> Unit, onDismiss: () -> Unit, opener: FocusRequester, reportButton: FocusRequester) {
+    ScreenSheet(onDismiss, opener) {
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
@@ -2335,7 +2331,7 @@ private fun SongSheet(state: UiState, actions: ScreenActions, tab: SongTab, onTa
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SongNames(state, Modifier.weight(1f))
                 // Wrong words, or out of time, said where they can be put right.
-                IconButton(onClick = onReport) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
+                IconButton(onClick = onReport, modifier = Modifier.focusRequester(reportButton)) { AppIcon(R.drawable.ic_feedback, contentDescription = stringResource(R.string.report_problem)) }
             }
             PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = Color.Transparent) {
                 SongTab.entries.forEach { shown ->

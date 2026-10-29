@@ -12,6 +12,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -58,7 +60,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -293,9 +294,11 @@ private fun SettingsList(
             }
             GroupDivider()
             var reporting by rememberSaveable { mutableStateOf(false) }
+            val reportRow = remember { FocusRequester() }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusRequester(reportRow)
                     .clickable { reporting = true }
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -303,7 +306,7 @@ private fun SettingsList(
                 Text(text = stringResource(R.string.report_problem), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 AppIcon(R.drawable.ic_feedback, contentDescription = null, modifier = Modifier.size(20.dp))
             }
-            if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false })
+            if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false }, opener = reportRow)
             SettingSwitch(
                 label = stringResource(R.string.setting_auto_report),
                 description = null,
@@ -506,7 +509,7 @@ private fun ManageUsageRow(onClick: () -> Unit) {
 /** Said once, after the first sign-in: the AI features use the user's ChatGPT plan from now on. */
 @Composable
 private fun ChatGptWelcome(onDismiss: () -> Unit) {
-    AlertDialog(
+    ScreenAlert(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.chatgpt_welcome_title)) },
         text = { Text(stringResource(R.string.chatgpt_welcome_message)) },

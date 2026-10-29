@@ -62,7 +62,6 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -458,7 +457,9 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // way back, a screen starts afresh, as it always has.
     val kept = rememberSaveableStateHolder()
     LaunchedEffect(screen) { if (screen != Screen.FIX_STEP) Screen.entries.filter { it != screen }.forEach { kept.removeState(it.name) } }
-    CompositionLocalProvider(LocalLayerSwipe provides layers, LocalCovers provides actions.covers) {
+    CompositionLocalProvider(LocalCovers provides actions.covers) {
+    WithOverlays(inside = state.phone == Phone.TV) {
+    CompositionLocalProvider(LocalLayerSwipe provides layers) {
     rememberTransition(moving, label = "screen").AnimatedContent(
         transitionSpec = {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
@@ -494,6 +495,8 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     }
     }
     state.notFoundOffer?.let { NotFoundDialog(it, state, actions) }
+    }
+    }
 }
 
 /** What fills the window, each with how deep it is, so moving deeper and coming back slide opposite ways. */
@@ -1037,7 +1040,7 @@ private fun SongSearchSheet(
     onDismiss: () -> Unit,
     onPlaylist: () -> Unit = {}
 ) {
-    AlertDialog(
+    ScreenAlert(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.song_search_title)) },
         text = {
@@ -1871,7 +1874,7 @@ internal fun DestinationIcon(destination: Destination, installed: Set<MusicServi
 
 @Composable
 private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> ImageBitmap?, onPick: (Destination) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+    ScreenAlert(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.picker_title)) },
         text = {
@@ -1957,7 +1960,7 @@ internal fun CrosstuneScreenPreview() {
 @Composable
 private fun NotFoundDialog(offer: NotFoundOffer, state: UiState, actions: ScreenActions) {
     val app = offer.destination.label()
-    AlertDialog(
+    ScreenAlert(
         onDismissRequest = actions.onDismissNotFoundOffer,
         icon = { DestinationIcon(offer.destination, state.installed) },
         title = { Text(offer.song.title) },

@@ -15,13 +15,17 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -467,6 +471,51 @@ class TvPlayTest {
         val playButton = composeRule.onNode(hasContentDescription(play)).fetchSemanticsNode().boundsInRoot
         val microphone = composeRule.onNode(hasContentDescription(string(R.string.lyrics_listen_along))).fetchSemanticsNode().boundsInRoot
         assertTrue(playButton.left > microphone.right)
+    }
+
+    /** Whether the remote is on something in a dialog or a sheet. */
+    private fun inDialog() = composeRule.onAllNodes(hasAnyAncestor(isDialog())).fetchSemanticsNodes().any { it.config.getOrElseNullable(SemanticsProperties.Focused) { null } == true }
+
+    @Test
+    fun onATvASheetOverTheCoverIsDrawnInItRatherThanInAWindowItCantOpen() {
+        launch()
+        val floating = playCovered()
+        playing()
+        waitUntil { shown("Demo one") }
+        // The cover is a window of a service's, which no other window opens from: nothing opens beside it.
+        val windows = { Shadow.extract<ShadowWindowManagerImpl>(floating.get().getSystemService(WindowManager::class.java)).views.size }
+        val before = windows()
+
+        val song = composeRule.onNode(hasTestTag(LYRICS_SONG_TAG))
+        // The remote's, as a TV is: Robolectric starts as a touch screen, where rows take no focus.
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        song.requestFocus()
+        song.performSemanticsAction(SemanticsActions.OnClick)
+        val report = hasContentDescription(string(R.string.report_problem)) and hasAnyAncestor(isDialog())
+        waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(before, windows())
+        // The remote starts in it, and can't leave it for the words under it.
+        waitUntil { inDialog() }
+        composeRule.onNode(hasText("Demo two")).assertIsNotFocused()
+
+        // One over another: the report, over the sheet.
+        composeRule.onNode(report).requestFocus()
+        composeRule.onNode(report).performSemanticsAction(SemanticsActions.OnClick)
+        waitUntil { shown(string(R.string.report_send)) }
+        assertEquals(before, windows())
+        // Where the remote starts is Send, rather than the comment, which opens the keyboard.
+        waitUntil { composeRule.onNode(hasText(string(R.string.report_send)) and hasAnyAncestor(isDialog())).fetchSemanticsNode().config.getOrElseNullable(SemanticsProperties.Focused) { null } == true }
+
+        // Back puts away the one on top, and the remote goes back to what opened it, one then the other.
+        pressBack(floating.get())
+        waitUntil { !shown(string(R.string.report_send)) }
+        assertTrue(shown(string(R.string.lyrics_songs_like)) || composeRule.onAllNodes(report).fetchSemanticsNodes().isNotEmpty())
+        composeRule.onNode(report).assertIsFocused()
+        pressBack(floating.get())
+        waitUntil { composeRule.onAllNodes(report).fetchSemanticsNodes().isEmpty() }
+        assertTrue(shown("Demo one"))
+        song.assertIsFocused()
+        assertFalse(shadowOf(floating.get()).isStoppedBySelf)
     }
 
     private companion object {
