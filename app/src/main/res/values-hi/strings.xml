@@ -338,10 +338,6 @@
     <string name="lyrics_song_meaning_failed">गाना समझाया नहीं जा सका।</string>
     <string name="explanation_in_song">गाने में</string>
     <string name="explanation_language">भाषा</string>
-    <string name="song_about">गाने के बारे में</string>
-    <string name="song_story">कहानी</string>
-    <string name="song_mood">मूड</string>
-    <string name="song_key_lines">खास पंक्तियां</string>
     <string name="chatgpt_limit_reached">आपका ChatGPT प्लान अभी के लिए खत्म हो गया है।</string>
     <string name="lyrics_repeat_line">यह लाइन दोहराएं</string>
     <string name="lyrics_stop_repeating">दोहराना बंद करें</string>
@@ -359,9 +355,6 @@
     <string name="lyrics_ask_song">गाने के बारे में पूछें</string>
     <string name="song_original">इसका कवर</string>
     <string name="song_samples">सैंपल</string>
-    <string name="artist_who">कौन</string>
-    <string name="artist_style">शैली</string>
-    <string name="artist_known_for">किस लिए मशहूर</string>
     <string name="songs_like_label">ऐसे गाने</string>
     <string name="song_search_playlist">प्लेलिस्ट बनाएं</string>
     <string name="error_no_songs_like">ऐसे गाने नहीं मिले।</string>

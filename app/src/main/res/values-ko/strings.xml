@@ -338,10 +338,6 @@
     <string name="lyrics_song_meaning_failed">이 노래를 설명할 수 없어요.</string>
     <string name="explanation_in_song">노래 속에서</string>
     <string name="explanation_language">언어</string>
-    <string name="song_about">노래 정보</string>
-    <string name="song_story">이야기</string>
-    <string name="song_mood">분위기</string>
-    <string name="song_key_lines">핵심 가사</string>
     <string name="chatgpt_limit_reached">ChatGPT 요금제 사용량을 지금은 모두 썼어요.</string>
     <string name="lyrics_repeat_line">이 줄 반복</string>
     <string name="lyrics_stop_repeating">반복 중지</string>
@@ -359,9 +355,6 @@
     <string name="lyrics_ask_song">이 노래에 대해 질문</string>
     <string name="song_original">원곡</string>
     <string name="song_samples">샘플링</string>
-    <string name="artist_who">누구</string>
-    <string name="artist_style">스타일</string>
-    <string name="artist_known_for">대표작</string>
     <string name="songs_like_label">비슷한 노래:</string>
     <string name="song_search_playlist">플레이리스트 만들기</string>
     <string name="error_no_songs_like">비슷한 노래를 찾지 못했어요.</string>

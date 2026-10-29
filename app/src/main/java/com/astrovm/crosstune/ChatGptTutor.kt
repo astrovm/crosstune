@@ -62,8 +62,8 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     }
 
     /**
-     * What [song], whose words are [lines], is about, in [language]: its story, who's speaking, its
-     * mood, images and references. [onText] gets it as it's written.
+     * What [song], whose words are [lines], is about, in [language]: what's known of it, its story,
+     * its mood and a key line. [onText] gets it as it's written.
      */
     suspend fun explainSong(song: MusicMetadata, lines: List<String>, language: String, onText: (String) -> Unit): ChatGptReply {
         val model = chatGpt.model() ?: return ChatGptReply.Failed
@@ -79,10 +79,12 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 "Only state a fact when a page you found gives it for this song by name: pages listing many of the artist's songs mix them up. " +
                 "Leave out who wrote it unless a page names them for this song. " +
                 "Then, in ${nameOf(language)}, explain the song in four parts, separated by a line with only $PART_BREAK: " +
-                "first what you found about it, with no links or sources; then its story, who's speaking, to whom and what happens; " +
-                "then its mood; then one or two of its key lines, quoted as written, each with what it means and why it matters. " +
-                "One or two short sentences each, about 120 words in all. Never say what you didn't find, or that something is missing or absent. " +
-                "Plain text, without headings, labels, links or Markdown.",
+                "first what you found about it, as two to four lines of the form \"Label: value\", with short labels like the year, the album or the song it covers; " +
+                "then its story, who's speaking, to whom and what happens, in one or two short sentences; " +
+                "then its mood, as two or three words separated by \" · \"; " +
+                "then one of its key lines, quoted as written on a line of its own, and under it, in one short sentence, what it means. " +
+                "About 60 words in all. Never say what you didn't find, or that something is missing or absent. " +
+                "Plain text, without headings, links or Markdown.",
             "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
             webSearch = true,
             onText = onText
@@ -326,20 +328,22 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
     }
 
     /**
-     * Who [song]'s artist is, from the web, in [language]: where they're from, their era and style,
-     * then their best known work. [onText] gets it as it's written.
+     * Who [song]'s artist is, from the web, in [language]: facts about them, their style and
+     * influence, then their best known work. [onText] gets it as it's written.
      */
     suspend fun aboutArtist(song: MusicMetadata, language: String, onText: (String) -> Unit): ChatGptReply {
         val model = chatGpt.model() ?: return ChatGptReply.Failed
-        val key = "artist|$model|$language|${song.artist}"
+        val key = "artist2|$model|$language|${song.artist}"
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
         // Tried on real artists with GPT-6-Luna, searching the web: Mariya Takeuchi came as a singer
         // from Shimane who debuted in 1978, city pop, and Variety (1984) with Plastic Love, in about 6 s.
         val reply = chatGpt.ask(
             "You help someone get to know the artists they listen to. First search the web for this artist. Only state a fact a page you found gives for this artist by name. " +
-                "Then, in ${nameOf(language)}, write about them in three parts, separated by a line with only $PART_BREAK: who they are and where they're from; their era, style and influence; " +
-                "then two to four of their best known albums or songs, with the year. " +
-                "One or two short sentences each, about 90 words in all. Never say what you didn't find. Plain text, without headings, labels, links or Markdown.",
+                "Then, in ${nameOf(language)}, write about them in three parts, separated by a line with only $PART_BREAK: " +
+                "first two to four lines of the form \"Label: value\", with short labels like where they're from, their years or their genre; " +
+                "then their style and influence, in one or two short sentences; " +
+                "then two to four of their best known albums or songs, each on a line of its own as its name, then \" · \" and the year. " +
+                "About 50 words in all. Never say what you didn't find. Plain text, without headings, links or Markdown.",
             "Artist: ${song.artist}\nA song of theirs: ${song.title}",
             webSearch = true,
             effort = "low",
@@ -436,7 +440,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return if (title.isEmpty() || artist.isEmpty()) null else title to artist
     }
 
-    private fun songKey(model: String, language: String, song: MusicMetadata) = "song5|$model|$language|${song.title}|${song.artist}"
+    private fun songKey(model: String, language: String, song: MusicMetadata) = "song6|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */
     private suspend fun keep(key: String, reply: ChatGptReply) {
@@ -529,6 +533,59 @@ internal fun explanationParts(text: String): List<String> {
     val parts = plainText(text).split(Regex("""\n[ \t]*(?:-{3,}|[—–―]+)[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
     if (parts.size > 1) return parts
     return parts.single().split(Regex("""\n[ \t]*\n\s*""")).map { it.trim() }
+}
+
+/**
+ * What a song's or an artist's explanation says, sorted by what each line is rather than by where
+ * the `---` breaks fall, as ChatGPT leaves them out now and then: [facts] as label and value (the
+ * label empty when the line has none), the [text] that tells the story or style, the [mood]'s
+ * words, the [quote] of a key line with what it [means], and the [known] work as name and year.
+ * Whatever fits none of those goes into [text], so nothing said is lost.
+ */
+internal data class Sheet(
+    val facts: List<Pair<String, String>>,
+    val text: String,
+    val mood: List<String>,
+    val quote: String?,
+    val means: String?,
+    val known: List<Pair<String, String>>
+)
+
+private val FACT = Regex("""^([^:.,()·]{1,30}): (.+)$""")
+private val KNOWN = Regex("""^(.+) · (\d{4}\S*)$""")
+private const val QUOTE_MARKS = "\"“«„「『‘'"
+
+/** [text] sorted into a [Sheet]; while it's still being written, what's come so far. */
+internal fun sheet(text: String): Sheet {
+    val facts = mutableListOf<Pair<String, String>>()
+    val said = mutableListOf<String>()
+    val known = mutableListOf<Pair<String, String>>()
+    var mood = emptyList<String>()
+    var quote: String? = null
+    var means: String? = null
+    val lines = plainText(text).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.matches(Regex("""-{3,}|[—–―]+""")) }
+    var at = 0
+    while (at < lines.size) {
+        val line = lines[at++]
+        val parts = line.split(" · ")
+        val label = FACT.matchEntire(line)?.takeIf { it.groupValues[1].split(' ').size <= 4 }
+        val work = KNOWN.matchEntire(line)
+        when {
+            // Work comes before a quote: its names are often quoted too.
+            work != null -> known += work.groupValues[1].trim('«', '»', '“', '”', '"', ' ') to work.groupValues[2]
+            quote == null && line[0] in QUOTE_MARKS -> {
+                quote = line
+                // The sentence under it says what it means.
+                means = lines.getOrNull(at++)
+            }
+            mood.isEmpty() && parts.size in 2..4 && parts.all { it.split(' ').size <= 3 && it.none { c -> c.isDigit() || c in ".!?" } } -> mood = parts
+            // Facts come first: once the story or the key line has started, a line with a colon is just part of it.
+            said.isEmpty() && quote == null && label != null -> facts += label.groupValues[1] to label.groupValues[2]
+            said.isEmpty() && quote == null && line.length <= 80 && line.last() !in ".!?。" -> facts += "" to line
+            else -> said += line
+        }
+    }
+    return Sheet(facts, said.joinToString(" "), mood, quote, means, known)
 }
 
 /**

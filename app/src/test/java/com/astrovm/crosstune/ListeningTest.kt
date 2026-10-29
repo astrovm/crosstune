@@ -3230,14 +3230,14 @@ class ListeningTest {
                 "restore song lyrics written in Latin letters to Korean" in instructions -> FakeOpenAi.stream(org.json.JSONObject(input).getJSONArray("lines").let { lines -> org.json.JSONArray((0 until lines.length()).map { ROMANIZED_HANGUL[lines.getString(it)] ?: lines.getString(it) }) }.toString())
                 "6 to 10 words" in instructions -> FakeOpenAi.stream("""[{"word": "sky", "reading": "", "meaning": "cielo"}, {"word": "Stars", "reading": "", "meaning": "estrellas"}]""")
                 "covers and samples" in instructions -> FakeOpenAi.stream("""{"original": {"title": "First Demo", "artist": "Old Band"}, "samples": [{"title": "Beat", "artist": "Drummer"}]}""")
-                "get to know the artists" in instructions -> FakeOpenAi.stream("A band from Rome.\n---\nNight pop.\n---\nDemo (2020).")
+                "get to know the artists" in instructions -> FakeOpenAi.stream("Origin: Rome\n---\nNight pop.\n---\nDemo · 2020")
                 "example sentences" in instructions -> FakeOpenAi.stream("""[{"sentence": "The sky is blue.", "meaning": "El cielo es azul."}]""")
                 "You recommend songs" in instructions -> FakeOpenAi.stream("""[{"title": "Moon", "artist": "Luna"}, {"title": "Made Up", "artist": "Nobody"}]""")
                 "about this song, in at most 80 words" in instructions -> FakeOpenAi.stream("It's ", "about stars.")
                 "you can only help with the song" in instructions -> FakeOpenAi.stream("Because ", "it rhymes.")
                 "You check the readings" in instructions -> FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]")
                 "explain that line" in instructions -> FakeOpenAi.stream("Looking up ", "at night.\n--", "-\nA noun and its adjective.")
-                "explain the song in four parts" in instructions -> FakeOpenAi.stream("From 1985.\n---\nA night ", "under the stars.\n---\nCalm.\n---\n")
+                "explain the song in four parts" in instructions -> FakeOpenAi.stream("Year: 1985\n---\nA night ", "under the stars.\n---\nCalm · warm\n---\n“Stars”\nThey shine.")
                 else -> FakeOpenAi.stream(org.json.JSONArray(input).let { lines -> org.json.JSONArray((0 until lines.length()).map { "«${lines.getString(it)}»" }) }.toString())
             }
         }
@@ -3326,6 +3326,18 @@ class ListeningTest {
     }
 
     @Test
+    fun anAnswerOfPlainWordsIsShownAsItIs() {
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("explain the song in four parts" in body.getString("instructions")) 200 to FakeOpenAi.stream("A song about the night sky.") else answers(body) }
+        wordsOf(null, "Night sky\\nStars", openAi = openAi)
+        waitUntil(TIMEOUT_MS) { shown("«Stars»") }
+        aboutSong()
+        waitForText("A song about the night sky.")
+    }
+
+    @Test
     fun whatTheSongMeansIsInTheTranslateMenuSignedIn() {
         prefs().edit().putBoolean("lyrics_translation", true).commit()
         val openAi = signedInWithChatGpt()
@@ -3339,9 +3351,8 @@ class ListeningTest {
         openAi.reply = explained
         click(string(R.string.retry_button))
         waitUntil(TIMEOUT_MS) { shown("A night under the stars.") }
-        // What's known about it, its story and mood; no key lines, so their label isn't shown.
-        assertTrue(shown("From 1985.") && shown("Calm.") && shown(string(R.string.song_about)) && shown(string(R.string.song_story)) && shown(string(R.string.song_mood)))
-        assertFalse(shown(string(R.string.song_key_lines)))
+        // What's known about it as a table, its story, mood as chips and its key line with what it means.
+        assertTrue(shown("Year") && shown("1985") && shown("Calm") && shown("warm") && shown("“Stars”") && shown("They shine."))
         val asked = openAi.asked.count { "explain the song in four parts" in it.getString("instructions") }
         // Closed and opened again, it's there, not asked again.
         composeRule.onNode(hasText("A night under the stars.")).performTouchInput { swipeDown() }
@@ -4613,14 +4624,14 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_about_artist_failed)) }
         openAi.reply = answers
         click(string(R.string.retry_button))
-        waitForText("A band from Rome.")
-        assertTrue(shown("Night pop.") && shown("Demo (2020).") && shown(string(R.string.artist_who)) && shown(string(R.string.artist_style)) && shown(string(R.string.artist_known_for)))
+        waitForText("Night pop.")
+        assertTrue(shown("Origin") && shown("Rome") && shown("Demo") && shown("2020"))
         // Asked about again, it's there already.
         val asked = openAi.asked.size
-        composeRule.onNode(hasText("A band from Rome.")).performTouchInput { swipeDown() }
-        waitUntil(TIMEOUT_MS) { !shown("A band from Rome.") }
+        composeRule.onNode(hasText("Night pop.")).performTouchInput { swipeDown() }
+        waitUntil(TIMEOUT_MS) { !shown("Night pop.") }
         aboutSong(R.string.song_tab_artist)
-        waitForText("A band from Rome.")
+        waitForText("Night pop.")
         assertEquals(asked, openAi.asked.size)
     }
 
@@ -4639,7 +4650,7 @@ class ListeningTest {
         click(string(R.string.lyrics_ask_send))
         waitForText("It's about stars.")
         val asked = openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content")
-        assertTrue(asked, asked.contains("What you said about it:\nFrom 1985.") && asked.endsWith("Question: Why stars?"))
+        assertTrue(asked, asked.contains("What you said about it:\nYear: 1985") && asked.endsWith("Question: Why stars?"))
         // The next goes with it; failing says so.
         openAi.reply = { 500 to "" }
         composeRule.onNode(hasText(string(R.string.lyrics_ask_song))).performScrollTo().performTextInput("And night?")

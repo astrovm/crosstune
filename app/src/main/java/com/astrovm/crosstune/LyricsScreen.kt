@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -2398,7 +2399,7 @@ private fun SongMeaning(state: UiState, actions: ScreenActions) {
     val explanation = state.learning.songExplanation
     val facts = state.learning.songFacts
     if (explanation == null || explanation.writing || explanation.done || explanation.limitReached) {
-        ExplanationCard(explanation ?: LineExplanation(MainViewModel.SONG), SONG_PARTS)
+        ExplanationCard(explanation ?: LineExplanation(MainViewModel.SONG)) { SheetView(sheet(it)) }
     }
     if (explanation?.failed == true) {
         Text(stringResource(R.string.lyrics_song_meaning_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -2456,7 +2457,7 @@ private fun AboutArtist(state: UiState, actions: ScreenActions) {
     val about = state.learning.artist
     Text(state.lyricsFor?.artist.orEmpty(), style = MaterialTheme.typography.titleMedium)
     if (about == null || about.writing || about.done || about.limitReached) {
-        ExplanationCard(about ?: LineExplanation(MainViewModel.SONG), ARTIST_PARTS)
+        ExplanationCard(about ?: LineExplanation(MainViewModel.SONG)) { SheetView(sheet(it)) }
     }
     if (about?.failed == true) {
         Text(stringResource(R.string.lyrics_about_artist_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -2528,9 +2529,9 @@ private fun Questions(questions: List<LineQuestion>, @StringRes hint: Int, key: 
     )
 }
 
-/** What ChatGPT says a line means, as it writes it, or that the plan's used up for now. */
+/** What ChatGPT says a line means, as it writes it, or that the plan's used up for now. [content] shows what it's written so far. */
 @Composable
-private fun ExplanationCard(explanation: LineExplanation, labels: List<Int> = LINE_PARTS) {
+private fun ExplanationCard(explanation: LineExplanation, content: @Composable (String) -> Unit = { ExplanationParts(it, LINE_PARTS) }) {
     val openWebPage = rememberWebOpener()
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2542,7 +2543,7 @@ private fun ExplanationCard(explanation: LineExplanation, labels: List<Int> = LI
                     }
                 }
                 explanation.text.isEmpty() -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-                else -> ExplanationParts(explanation.text, labels)
+                else -> content(explanation.text)
             }
         }
     }
@@ -2565,9 +2566,52 @@ private fun ExplanationParts(text: String, labels: List<Int>) {
 /** What a line's explanation says, in order: what it means in the song, then about its language. */
 private val LINE_PARTS = listOf(R.string.explanation_in_song, R.string.explanation_language)
 
-/** What's said about an artist, in order. */
-private val ARTIST_PARTS = listOf(R.string.artist_who, R.string.artist_style, R.string.artist_known_for)
-
-/** What a song's explanation says, in order. */
-private val SONG_PARTS = listOf(R.string.song_about, R.string.song_story, R.string.song_mood, R.string.song_key_lines)
-
+/**
+ * A song's or an artist's [sheet] in one go: the facts as a table, what's said, the mood as chips,
+ * the key line under a bar, then the best known work with its year. Each only when there is some.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SheetView(sheet: Sheet) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (sheet.facts.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                sheet.facts.forEach { (label, value) ->
+                    Row {
+                        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(110.dp))
+                        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        if (sheet.text.isNotEmpty()) Text(sheet.text, style = MaterialTheme.typography.bodyMedium)
+        if (sheet.mood.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sheet.mood.forEach {
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                        Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                }
+            }
+        }
+        sheet.quote?.let { quote ->
+            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
+                Column(modifier = Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(quote, style = MaterialTheme.typography.bodyLarge, fontStyle = FontStyle.Italic)
+                    sheet.means?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
+        }
+        if (sheet.known.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                sheet.known.forEach { (name, year) ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(year, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}

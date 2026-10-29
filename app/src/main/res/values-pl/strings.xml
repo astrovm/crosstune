@@ -338,10 +338,6 @@
     <string name="lyrics_song_meaning_failed">Nie udało się wyjaśnić piosenki.</string>
     <string name="explanation_in_song">W piosence</string>
     <string name="explanation_language">Język</string>
-    <string name="song_about">O piosence</string>
-    <string name="song_story">Historia</string>
-    <string name="song_mood">Nastrój</string>
-    <string name="song_key_lines">Kluczowe wersy</string>
     <string name="chatgpt_limit_reached">Twój plan ChatGPT na razie się wyczerpał.</string>
     <string name="lyrics_repeat_line">Powtarzaj ten wiersz</string>
     <string name="lyrics_stop_repeating">Przestań powtarzać</string>
@@ -359,9 +355,6 @@
     <string name="lyrics_ask_song">Zapytaj o utwór</string>
     <string name="song_original">Cover utworu</string>
     <string name="song_samples">Sample</string>
-    <string name="artist_who">Kto</string>
-    <string name="artist_style">Styl</string>
-    <string name="artist_known_for">Znany z</string>
     <string name="songs_like_label">Utwory jak</string>
     <string name="song_search_playlist">Utwórz playlistę</string>
     <string name="error_no_songs_like">Nie znaleziono podobnych utworów.</string>
