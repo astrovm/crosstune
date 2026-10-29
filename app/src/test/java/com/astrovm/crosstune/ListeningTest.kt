@@ -326,6 +326,37 @@ class ListeningTest {
     }
 
     @Test
+    fun thePlayersMenuOnTheSongItsAppWentOnToHasThatSongsLinks() {
+        val first = MusicMetadata("Iris", "The Goo Goo Dolls")
+        val next = MusicMetadata("Slide", "The Goo Goo Dolls")
+        val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(first, null, 42_000, SystemClock.elapsedRealtime()) }
+        MainActivity.playbackFactory = { phone }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Iris" }
+        // The app goes on to the next song, which the player takes up.
+        phone.onThePhone = Heard.Song(next, null, 0, SystemClock.elapsedRealtime())
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.player?.song == next }
+        // Its menu is still there, the next song not looked up till it's opened, so Recent only gets songs that are.
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata == next })
+        click(string(R.string.more_button))
+        // Looking it up leaves the player open, its menu over it.
+        assertEquals(next, controllerModel().uiState.player?.song)
+        val copy = hasText(string(R.string.copy_link_button)) and isEnabled()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(copy).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("Slide", controllerModel().uiState.result?.title)
+        composeRule.onNodeWithContentDescription(string(R.string.dismiss_button)).assertExists()
+        composeRule.onNode(copy).performClick()
+        composeRule.waitForIdle()
+        // The link copied is the next song's, not the one the card was of before.
+        val copied = app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+        assertTrue(copied, copied.contains("Slide") && !copied.contains("Iris"))
+        // Still in the player, which is on the song the card now is.
+        assertEquals(next, controllerModel().uiState.player?.song)
+    }
+
+    @Test
     fun aShortSwipeUpFromTheBarGoesBackAndLeavesTheBarBe() {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
         MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }

@@ -1,0 +1,5 @@
+The player: reorder what's up next, with covers, and repeat, like and a sleep timer.
+Swipe the cover to skip. The line being sung shows under it.
+Swiping back follows your finger on every screen.
+Dialogs and menus work over other apps on a TV.
+Sliders without dots.

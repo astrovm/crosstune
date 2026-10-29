@@ -206,9 +206,9 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f)) {
                 if (!opened) listed?.from?.let { PlayingFrom(it, Modifier.focusRequester(fromTop)) { openUpNext(true) } }
             }
-            // Its place is kept without it, so the list's name stays in the middle.
+            // Its place keeps the list's name in the middle.
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(48.dp).moves("menu", moving)) {
-                if (card) PlayerMenu(ready = !state.isLoading && !state.isMatching, actions)
+                PlayerMenu(ready = card && !state.isLoading && !state.isMatching, actions)
             }
         }
     }
@@ -400,12 +400,18 @@ private fun Modifier.moves(key: String, morph: Morph): Modifier = with(morph.lay
     this@moves.sharedElement(rememberSharedContentState(key), morph.content, boundsTransform = { _, _ -> tween(MORPH_MS, easing = LinearEasing) })
 }
 
-/** Copy, share or open the song's link elsewhere, from the song's card under the player. */
+/**
+ * Copy, share or open the song's link elsewhere, from the song's card under the player, [ready] once
+ * it's of the song playing. Opened on another, e.g. the next its app went on to, that one's is looked up.
+ */
 @Composable
 private fun PlayerMenu(ready: Boolean, actions: ScreenActions) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }) {
+        IconButton(onClick = {
+            expanded = true
+            actions.onPlayerMenu()
+        }) {
             AppIcon(R.drawable.ic_more_vert, contentDescription = stringResource(R.string.more_button))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -424,6 +430,7 @@ private fun PlayerMenu(ready: Boolean, actions: ScreenActions) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.picker_title)) },
                 leadingIcon = { AppIcon(R.drawable.ic_open_in_new, contentDescription = null) },
+                enabled = ready,
                 onClick = { expanded = false; actions.onPlayerOpenWith() }
             )
         }
