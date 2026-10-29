@@ -213,6 +213,7 @@ tasks.register("ci") {
     description = "Unit tests with the 100% line coverage gate, lint, and the debug and minified release APKs."
     dependsOn(
         "testDebugUnitTest",
+        ":pitest-changed-lines:test",
         "koverLogDebug",
         "koverXmlReportDebug",
         "koverVerifyDebug",
