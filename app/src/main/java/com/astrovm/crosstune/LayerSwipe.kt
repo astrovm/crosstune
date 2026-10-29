@@ -4,12 +4,15 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.ExperimentalTransitionApi
 import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
@@ -34,6 +37,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -224,8 +228,7 @@ internal fun <S> SwipedBackPages(
  * of Back takes it the whole way. Gives how far away it is, 0 to 1, for it to show.
  */
 @Composable
-internal fun swipedAway(enabled: Boolean = true, shown: Any? = null, onBack: () -> Unit): () -> Float {
-    val away = remember { Animatable(0f) }
+internal fun swipedAway(enabled: Boolean = true, shown: Any? = null, away: Animatable<Float, AnimationVector1D> = remember { Animatable(0f) }, onBack: () -> Unit): () -> Float {
     val scope = rememberCoroutineScope()
     val back by rememberUpdatedState(onBack)
     // Gone, it stays so while it goes, e.g. as its space closes; it's whole again once it's back, or
@@ -255,6 +258,50 @@ internal fun Modifier.goingAway(away: () -> Float, origin: TransformOrigin): Mod
 
 /** How much smaller something is once it's all the way gone. */
 private const val GONE_SMALLER = 0.1f
+
+/**
+ * Back as a swipe in from either side, on a screen with Android's bars hidden, which hands that swipe
+ * to the app rather than taking it as Back. [away] follows it as [swipedAway] follows Back, 0 to 1,
+ * then [onBack] once it's let go far enough in; or it comes back. A tap is left to what's under it.
+ */
+@Composable
+internal fun Modifier.swipedInFromSides(away: Animatable<Float, AnimationVector1D>, onBack: () -> Unit): Modifier {
+    val back by rememberUpdatedState(onBack)
+    return pointerInput(away) {
+        val side = SIDE.toPx()
+        coroutineScope {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val inward = when {
+                    down.position.x <= side -> 1f
+                    down.position.x >= size.width - side -> -1f
+                    else -> return@awaitEachGesture
+                }
+                val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
+                var gone = 0f
+                horizontalDrag(start.id) { change ->
+                    change.consume()
+                    gone = ((change.position.x - down.position.x) * inward / size.width).coerceIn(0f, 1f)
+                    launch { away.snapTo(gone) }
+                }
+                launch {
+                    if (gone < SIDE_SWIPE_DONE) {
+                        away.animateTo(0f, Motion.away)
+                    } else {
+                        away.animateTo(1f, Motion.away)
+                        back()
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** How far in from a side a swipe has to start to be Back, about as far as Android's own. */
+private val SIDE = 32.dp
+
+/** How far across the screen a swipe in from a side has to go to be Back once it's let go. */
+private const val SIDE_SWIPE_DONE = 0.2f
 
 /** How far below the status bar a swipe down has to start to move a layer, about as far as a screen's header goes. */
 private val TOP_ZONE = 96.dp
