@@ -160,6 +160,44 @@ internal object SungAlignment {
     fun shiftMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>): Long? {
         val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) } }
         if (heard.isEmpty()) return null
+        return near(heard, lines)?.first ?: far(heard, lines)
+    }
+
+    /**
+     * Where each of [lines] heard sung starts, by index, once they're [shiftMs] off as a whole. A line
+     * timed word by word is placed by most of its words heard. One timed a line at a time is placed by
+     * its first two words heard one after the other, or by the words heard just before a pair, as many
+     * as come before it in the line, a few at most, and matching none: the model often mishears a
+     * line's first word. One heard only a little off, as near as a word is heard, or heard but not
+     * told where it starts, stays [shiftMs] off.
+     */
+    fun linesMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>, shiftMs: Long): Map<Int, Long> {
+        val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
+        if (heard.isEmpty()) return emptyMap()
+        val from = heard.first().second - LINE_OFF_MS
+        val to = heard.last().second + LINE_OFF_MS
+        val near = lines.indices.filter { lines[it].timeMs + shiftMs in from..to }
+        val timed = near.flatMapIndexed { at, line -> wordsOf(lines[line], near.getOrNull(at + 1)?.let { lines[it].timeMs }, line) }
+        val pairs = matched(heard.map { it.first }, timed.map { it.text })
+        val matchedHeard = pairs.map { it.first }.toSet()
+        return pairs.groupBy { (_, t) -> timed[t].line }.mapNotNull { (line, its) ->
+            val startMs = if (lines[line].words.isNotEmpty()) {
+                val offs = its.mapNotNull { (h, t) -> timed[t].ms?.let { heard[h].second - it } }
+                offs.takeIf { it.size >= 2 }?.sorted()?.let { it[it.size / 2] + lines[line].timeMs }
+            } else {
+                val (h, t) = its.first()
+                val before = t - timed.indexOfFirst { it.line == line }
+                // A pair: the next word of the line heard right after.
+                val pair = its.getOrNull(1) == (h + 1 to t + 1) && heard[h + 1].second - heard[h].second < PAIR_MS
+                heard.getOrNull(h - before)?.second?.takeIf { pair && before <= MAX_MISHEARD && (h - before until h).none { it in matchedHeard } }
+            } ?: return@mapNotNull (line to lines[line].timeMs + shiftMs).takeIf { its.size >= 2 }
+            val off = startMs - lines[line].timeMs - shiftMs
+            if (abs(off) > LINE_OFF_MS) null else line to lines[line].timeMs + shiftMs + if (abs(off) >= OWN_LINE_MS) off else 0L
+        }.toMap()
+    }
+
+    /** How far off the lines timed near what was [heard] are, and how many words heard match them; null when too few. */
+    private fun near(heard: List<Pair<String, Long>>, lines: List<LyricLine>): Pair<Long, Int>? {
         // Only the lines near what was heard, so a chorus sung again elsewhere isn't matched to it.
         val from = heard.first().second - MAX_SHIFT_MS
         val to = heard.last().second + MAX_SHIFT_MS
@@ -176,7 +214,25 @@ internal object SungAlignment {
             }
             ?: return null
         val shift = told - HEARD_LATE_MS
-        return shift.takeIf { abs(it) <= MAX_SHIFT_MS }
+        return (shift to pairs.size).takeIf { abs(shift) <= MAX_SHIFT_MS }
+    }
+
+    /**
+     * Lines timed much further off than [near] looks, e.g. for a release with a longer intro, as
+     * YouTube Music's own words for one of its releases can be: each place in the song the words
+     * heard could be is tried, and the one where by far the most of them agree, over several lines,
+     * is where they are. A chorus heard that's sung as much elsewhere tells nothing.
+     */
+    private fun far(heard: List<Pair<String, Long>>, lines: List<LyricLine>): Long? {
+        val timed = lines.indices.flatMap { line -> wordsOf(lines[line], lines.getOrNull(line + 1)?.timeMs, line) }
+        val tries = heard.flatMap { (text, at) -> timed.filter { it.text == text }.map { at - it.guessMs } }.map { it / FAR_STEP_MS * FAR_STEP_MS }.distinct()
+        val found = tries.mapNotNull { offset ->
+            near(heard, lines.map { it.copy(timeMs = it.timeMs + offset, words = it.words.map { word -> word.copy(timeMs = word.timeMs + offset) }, endMs = it.endMs?.plus(offset)) })
+                ?.let { (shift, matching) -> offset + shift to matching }
+        }.sortedByDescending { it.second }
+        val best = found.firstOrNull()?.takeIf { it.second >= MIN_FAR_WORDS } ?: return null
+        val other = found.firstOrNull { abs(it.first - best.first) > AGREE_MS }
+        return best.first.takeIf { other == null || other.second * FAR_CLEARLY < best.second }
     }
 
     /** Where most of [shifts], each with its line, agree within [within] ms; null when they're too few to tell, or split. */
@@ -244,11 +300,31 @@ internal object SungAlignment {
     /** About how long a last line is sung, with no next one to say. */
     private const val LAST_LINE_MS = 3_000L
 
-    /** The model hears a word about this long after it starts, tried on songs heard both ways. */
-    const val HEARD_LATE_MS = 600L
+    /**
+     * The model hears a word about this long after it starts: measured against where each word of a
+     * song is really sung, both on a phone and from the recording itself.
+     */
+    const val HEARD_LATE_MS = 400L
 
-    /** Words timed further off than this are for another song, or another part of it. */
+    /** Words timed further off than this are only found where by far the most words heard agree. */
     const val MAX_SHIFT_MS = 10_000L
+
+    /** Words heard that must match to place lines timed further off, and by how many times more than anywhere else. */
+    private const val MIN_FAR_WORDS = 8
+    private const val FAR_CLEARLY = 2
+
+    /** A line heard further than this from where the rest are is another line; one heard less than [OWN_LINE_MS] off isn't off by itself. */
+    private const val LINE_OFF_MS = 1_000L
+    private const val OWN_LINE_MS = 150L
+
+    /** How many of a line's first words may be misheard, and it still be told where it starts by the words heard in their place. */
+    private const val MAX_MISHEARD = 2
+
+    /** Two words heard further apart than this aren't sung one after the other. */
+    private const val PAIR_MS = 1_000L
+
+    /** How close together the places tried for far-off lines are: as close as words heard can tell apart. */
+    private const val FAR_STEP_MS = 1_000L
 }
 
 /** The songs whose words were heard sung and lined up, per recording and words, so each is heard once. */

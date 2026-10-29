@@ -1604,9 +1604,23 @@ internal class MainViewModel(
 
     private var nextJob: Job? = null
 
-    /** Hearing the words sung, to line them up; [singingTries] this time the song's followed. */
+    /** Hearing the words sung, to line them up; [singingTries] since the app's clock last started or jumped. */
     private var singingJob: Job? = null
     private var singingTries = 0
+
+    /**
+     * Whether the app's clock is known to be where the song is: Crosstune saw it say so as the song
+     * started. Picked up partway, or after a pause or a move, it may be most of a second behind, as
+     * YouTube Music's often is, so the singing heard then puts this time right, and only this time.
+     */
+    private var clockSure = false
+    /** The app's clock as last said, to tell when it jumps rather than plays on. */
+    private var lastAppClock: PlaybackClock? = null
+    /** How much later the words were heard sung than the app's clock, unsure, puts them, this time; and whether they were. */
+    private var heardShiftMs = 0L
+    private var heardThisTime = false
+    /** Whether the words are being lined up to the singing, through the song, with the app's clock sure; lines heard so far stay till it's done. */
+    private var liningUp = false
     /** Whether the speech model, offered to be fetched by hand, was turned down; it isn't offered again till Crosstune opens again. */
     private var modelClosed = false
 
@@ -2033,10 +2047,10 @@ internal class MainViewModel(
     }
 
     /**
-     * Lines the timed words up to the singing, once for the song and its words: a while of what the
-     * phone plays is heard, and the words move to where they're sung, as a nudge by hand would move
-     * them, which Reset undoes. Only while a music app on the phone plays it, lined up otherwise, with
-     * nothing put in time by hand, and Crosstune in sight with the words.
+     * Lines the timed words up to the singing, once for the song and its words: what the phone plays
+     * is heard a while at a time, through the song, and each line heard moves to where it's sung, as
+     * putting it in time by hand would, which Reset undoes. Only while a music app on the phone plays
+     * it, lined up otherwise, with nothing put in time by hand, and Crosstune in sight with the words.
      */
     private fun hearSinging() {
         val hearing = singing ?: return
@@ -2044,25 +2058,87 @@ internal class MainViewModel(
         val lines = foundLines
         // Not while Shazam hears the phone's sound to line it up, which it hears first.
         if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || (lining && alongJob?.isActive == true) || nextPaused) return
-        if (lines.isEmpty() || uiState.lyricsSynced || handGap != null || !playingLinedUp() || !mayCalibrate() || sungStore.heard(song, lines)) return
+        if (lines.isEmpty() || !playingLinedUp() || !mayCalibrate()) return
+        // With the app's clock sure, the words are heard once for the song; unsure, once each time it's picked up.
+        if (if (clockSure) (uiState.lyricsSynced && !liningUp) || timedByHand || handGap != null || sungStore.heard(song, lines) else heardThisTime) return
         singingJob = viewModelScope.launch {
-            // Heard where lines are sung, so there are words to hear.
-            delay(untilSung(lines, uiState.following?.clock ?: return@launch) ?: return@launch)
-            val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return@launch
-            singingTries++
-            val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'))
-            if (sung == null) {
-                // Heard nothing for want of the speech model, which isn't fetched on mobile data by itself: it's offered by hand.
-                if (hearing.missesModel && !modelClosed) uiState = uiState.copy(singingModel = ModelOffer.MISSING)
-                return@launch
+            // Where in the song the singing was heard up to, so the next while heard is further on.
+            var heardTo: Long? = null
+            while (true) {
+                // Heard against the lines as they're shown, so already where they're sung, a little off at most.
+                val shown = LyricsSync.adjust(lines, syncPoints)
+                // Heard where lines are sung, so there are words to hear.
+                delay(untilSung(shown, uiState.following?.clock ?: return@launch, heardTo) ?: return@launch)
+                val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return@launch
+                singingTries++
+                val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'))
+                if (sung == null) {
+                    // Heard nothing for want of the speech model, which isn't fetched on mobile data by itself: it's offered by hand.
+                    if (hearing.missesModel && !modelClosed) uiState = uiState.copy(singingModel = ModelOffer.MISSING)
+                    return@launch
+                }
+                // Moved, paused or gone on to another song meanwhile, what was heard can't be placed.
+                val playing = uiState.following?.clock
+                if (uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
+                val shift = SungAlignment.shiftMs(sung, clock::positionAt, shown) ?: return@launch
+                if (!clockSure) {
+                    // Off by the app's clock as much as by the words, it's put right for this time only.
+                    heardThisTime = true
+                    heardShiftMs += shift
+                    uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
+                    return@launch
+                }
+                singingTries = 0
+                if (heardTo == null && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
+                val wholeMs = shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L
+                placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, wholeMs), wholeMs)
+                heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
+                // Heard to the end, or as near as there's enough singing left to hear, it's done.
+                if (untilSung(LyricsSync.adjust(lines, syncPoints), clock, heardTo) == null) {
+                    liningUp = false
+                    sungStore.save(song, lines)
+                    return@launch
+                }
+                liningUp = true
             }
-            // Moved, paused or gone on to another song meanwhile, what was heard can't be placed.
-            val playing = uiState.following?.clock
-            if (uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
-            val shift = SungAlignment.shiftMs(sung, clock::positionAt, lines) ?: return@launch
-            sungStore.save(song, lines)
-            if (abs(shift) >= SINGING_NUDGE_MS && !uiState.lyricsSynced && handGap == null) nudge(shift)
-            if (abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
+        }
+    }
+
+    /**
+     * Each line of the words [placed] where it was heard sung, by its index, as putting it in time by
+     * hand would: the lines between stretch to fit. The lines either side of them keep to the [shiftMs]
+     * the words heard are off as a whole, unless heard before, so one line's own slip doesn't carry on.
+     */
+    private fun placeSung(song: MusicMetadata, placed: Map<Int, Long>, shiftMs: Long) {
+        val shown = LyricsSync.adjust(foundLines, syncPoints)
+        if (placed.none { (line, ms) -> ms != shown[line].timeMs }) return
+        val around = listOf(placed.keys.min() - 1, placed.keys.max() + 1).filter { it in foundLines.indices && syncPoints.none { point -> point.lineMs == foundLines[it].timeMs } }
+        val points = placed + around.associateWith { shown[it].timeMs + shiftMs }
+        setSync(song, points.entries.fold(syncPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms)) })
+    }
+
+    /**
+     * Whether the app's [clock] plays on from where it was, or jumped: picked up, moved, or played
+     * again after a pause from somewhere else. Said fresh as the song starts, it's sure; jumped
+     * otherwise, it may be behind, so the singing is heard again.
+     */
+    private fun noteClock(clock: PlaybackClock) {
+        val at = now()
+        val last = lastAppClock
+        lastAppClock = clock
+        val starts = clock.playing && clock.positionMs <= SURE_START_MS && at - clock.atMs <= SURE_START_MS
+        if (starts) {
+            // Each time it's played again, the singing may be heard a few more times.
+            if (!clockSure || heardShiftMs != 0L) {
+                heardThisTime = false
+                singingTries = 0
+            }
+            clockSure = true
+            heardShiftMs = 0L
+        } else if (last == null || abs(clock.positionAt(at) - last.positionAt(at)) > SAME_CLOCK_MS) {
+            clockSure = false
+            heardThisTime = false
+            singingTries = 0
         }
     }
 
@@ -2071,14 +2147,15 @@ internal class MainViewModel(
 
     /**
      * How long until what's heard from then on has lines sung in it, by [clock]; null when no stretch
-     * of the song left has enough.
+     * of the song left has enough. Only from [after] on, when the song was heard up to there.
      */
-    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock): Long? {
-        val at = clock.positionAt(now())
+    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?): Long? {
+        val here = clock.positionAt(now())
+        val at = maxOf(here, after ?: here)
         val heardMs = SingingListener.SECONDS * 1000L
         return (listOf(at) + lines.map { it.timeMs }.filter { it > at }).firstOrNull { from ->
             lines.count { it.text.isNotBlank() && it.timeMs in from until from + heardMs - SINGING_TAIL_MS } >= SINGING_LINES
-        }?.let { ((it - at) / clock.speed).toLong() }
+        }?.let { ((it - here) / clock.speed).toLong() }
     }
 
     /**
@@ -2111,7 +2188,8 @@ internal class MainViewModel(
      * words. A video not yet heard, so not lined up, gives way to where the song was heard, if it was;
      * while it's being lined up, it goes by the last hearing.
      */
-    private fun inSong(app: Following?): Following? {
+    private fun inSong(said: Following?): Following? {
+        val app = said?.takeIf { heardShiftMs != 0L }?.let { it.copy(clock = it.clock.copy(positionMs = it.clock.positionMs - heardShiftMs)) } ?: said
         if (app == null || (!app.video && appLeadMs == null)) return app
         val lead = leadNow ?: return if (calibrationAttempted || syncPoints.isNotEmpty()) app.copy(timingKnown = syncPoints.isNotEmpty())
             else uiState.lyricsFor?.let(::heardFollowing) ?: app.copy(timingKnown = false)
@@ -2119,7 +2197,7 @@ internal class MainViewModel(
     }
 
     /** [positionMs] in the song, where the app playing it has it: later, in a video ahead of it. */
-    private fun inApp(positionMs: Long) = positionMs + (leadNow?.takeIf { appFollowing != null } ?: 0L)
+    private fun inApp(positionMs: Long) = positionMs + (leadNow?.takeIf { appFollowing != null } ?: 0L) + heardShiftMs
 
     /** How far the video is ahead: as lined up, or else as last heard. */
     private val leadNow get() = appLeadMs ?: guessedLeadMs
@@ -2165,6 +2243,7 @@ internal class MainViewModel(
                 val left = inSong(appFollowing)?.clock?.takeIf { playing == null }?.let { PlaybackClock(it.positionAt(now()), now(), playing = false) }
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) hear(left)
                 appFollowing = playing
+                playing?.clock?.let(::noteClock)
                 // Listening by itself only lines up what the app plays: once it plays this no more, there's
                 // nothing for it, and the microphone would hear the room, as between two songs.
                 if (playing == null && autoCalibrating) stopListeningAlong()
@@ -2243,6 +2322,11 @@ internal class MainViewModel(
         singingJob?.cancel()
         singingJob = null
         singingTries = 0
+        clockSure = false
+        lastAppClock = null
+        heardShiftMs = 0L
+        heardThisTime = false
+        liningUp = false
         appFollowing = null
         appLeadMs = null
         guessedLeadMs = null
@@ -2410,6 +2494,9 @@ internal class MainViewModel(
     /** The words being put in time by hand: offered to be reported by itself now, while they're seen, but sent once they're left. */
     private fun handTimed() {
         timedByHand = true
+        // Put in time by hand, the singing isn't heard to put them in time too.
+        liningUp = false
+        singingJob?.cancel()
         if (autoReports.allowed == null) problemFound(SongProblem.TIMED_BY_HAND)
     }
 
@@ -2529,6 +2616,12 @@ internal class MainViewModel(
     fun resetSync() {
         val song = uiState.lyricsFor ?: return
         timedByHand = false
+        // Undone while the singing was being heard through the song, it isn't heard on.
+        if (liningUp) {
+            liningUp = false
+            singingJob?.cancel()
+            sungStore.save(song, foundLines)
+        }
         handGap?.let { hand ->
             handGap = null
             wordsMs?.let { words -> hand.gapMs?.let { gapStore.save(song, words, hand.match, it) } ?: gapStore.forget(words, hand.match) }
@@ -3802,7 +3895,11 @@ internal class MainViewModel(
         /** The last moment of what's heard, where a line starting hasn't been sung yet. */
         const val SINGING_TAIL_MS = 3_000L
         /** Words heard sung less off than this stay as they are: hearing them is about as exact. */
-        const val SINGING_NUDGE_MS = 250L
+        const val SINGING_NUDGE_MS = 150L
+        /** An app saying it plays from no further than this into the song, as it says it, starts it: where it says is sure. */
+        const val SURE_START_MS = 1_500L
+        /** An app's clock as far as this from where it was playing on to has jumped. */
+        const val SAME_CLOCK_MS = 250L
 
         /** How far off the singing heard has to be from the words for them to be reported as off. */
         const val SUNG_OFF_MS = 1_000L
