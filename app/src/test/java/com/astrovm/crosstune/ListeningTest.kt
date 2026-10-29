@@ -2239,9 +2239,46 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
         onlyVisuals()
         controller!!.get().onBackPressedDispatcher.onBackPressed()
-        // The words, not the screen before them.
+        // The words, not the screen before them, with their tools working again.
         waitUntil(TIMEOUT_MS) { shown("Demo one") }
-        assertTrue(described(string(R.string.visuals_options)))
+        click(string(R.string.visuals_options))
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.visuals_only)) }
+    }
+
+    @Test
+    fun aSwipeCountsFromRightAtTheSidesEdgeAndBringsTheWordsBackFromAFifthOfTheWay() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        val side = with(composeRule.density) { 32.dp.toPx() }
+        // Starting right at the edge of either side's strip, the words follow.
+        for (fromLeft in listOf(true, false)) {
+            val visualsOnly = onlyVisuals()
+            visualsOnly.performTouchInput {
+                val from = if (fromLeft) side else width - side
+                val way = if (fromLeft) 1f else -1f
+                down(Offset(from, centerY))
+                moveTo(Offset(from + way * width * 0.05f, centerY))
+                moveTo(Offset(from + way * width * 0.1f, centerY))
+            }
+            waitUntil(TIMEOUT_MS) { shown("Demo one") }
+            visualsOnly.performTouchInput { up() }
+            waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+            visualsOnly.performClick()
+            waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        }
+        // Let go exactly a fifth of the way across, they're back.
+        val visualsOnly = onlyVisuals()
+        visualsOnly.performTouchInput {
+            val fifth = width * 0.2f
+            down(Offset(0f, centerY))
+            moveTo(Offset(fifth / 2, centerY))
+            moveTo(Offset(fifth, centerY))
+            up()
+        }
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        click(string(R.string.visuals_options))
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.visuals_only)) }
     }
 
     /** Only the visuals shown, from the words with them; gives what a tap or a swipe on them lands on. */
