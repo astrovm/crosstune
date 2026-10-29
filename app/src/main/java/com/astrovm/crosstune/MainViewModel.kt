@@ -907,11 +907,14 @@ internal class MainViewModel(
         playback?.skip(now.song, true)
     }
 
-    /** Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's known. */
-    private fun showSong(song: MusicMetadata, appleMusicId: String? = null, underPlayer: Boolean = false) {
+    /**
+     * Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's
+     * known. The player's own song's card goes under it; any other song takes the player's place.
+     */
+    private fun showSong(song: MusicMetadata, appleMusicId: String? = null) {
         val input = appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") } ?: MusicLinks.recognizedSong(song)
         uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
-        resolve(input, openWhenReady = false, underPlayer = underPlayer)
+        resolve(input, openWhenReady = false, underPlayer = uiState.player?.let { sameSong(it.song, song) } == true)
     }
 
     private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
@@ -1350,8 +1353,7 @@ internal class MainViewModel(
      */
     fun playerMenu() {
         val song = uiState.player?.song ?: return
-        // Under the player, so its menu stays open over it while the song's links are found.
-        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song, underPlayer = true)
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
     }
 
     /** Closes the player on the song's card, with the apps to open it in over it. */

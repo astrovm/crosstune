@@ -46,7 +46,10 @@ internal class FakePlayback : PlaybackSource {
 
     override fun restricted() = restricted
 
-    override fun follow(song: MusicMetadata): Flow<Following?> = playing
+    /** Each song followed, once per time it's asked. */
+    val followed: MutableList<MusicMetadata> = CopyOnWriteArrayList()
+
+    override fun follow(song: MusicMetadata): Flow<Following?> = playing.also { followed += song }
 
     override fun nowPlaying() = onThePhone
 

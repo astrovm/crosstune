@@ -357,6 +357,21 @@ class ListeningTest {
     }
 
     @Test
+    fun theSongsCardFoundUnderThePlayerLeavesThePlayerAsItWas() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) }
+        MainActivity.playbackFactory = { phone }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Iris" }
+        composeRule.waitForIdle()
+        // Followed once by the bar and once by the player, which its card didn't close and open again.
+        assertEquals(listOf(playing, playing), phone.followed)
+        assertEquals(playing, controllerModel().uiState.player?.song)
+    }
+
+    @Test
     fun aShortSwipeUpFromTheBarGoesBackAndLeavesTheBarBe() {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
         MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
