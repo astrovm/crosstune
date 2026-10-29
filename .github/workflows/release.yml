@@ -130,7 +130,7 @@ jobs:
           keystore="$RUNNER_TEMP/release.keystore"
           trap 'rm -f "$keystore"' EXIT
           echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
-          apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
+          apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)"
           out="Crosstune-$TAG.apk"
           # Keeps Gradle's zip layout, so F-Droid can copy this signature onto its own build of the
           # tag and ship this APK. Without it apksigner re-pads entries and the builds don't match.
@@ -212,7 +212,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q apksigcopier
           # apksigcopier calls apksigner to check the copied signature.
-          PATH="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1):$PATH"
+          PATH="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1):$PATH"
           if ! apksigcopier compare "Crosstune-$TAG.apk" --unsigned app/build/outputs/apk/release/app-release-unsigned.apk; then
             echo "::error::The signed APK doesn't match a fresh build, so F-Droid can't ship it"
             exit 1
