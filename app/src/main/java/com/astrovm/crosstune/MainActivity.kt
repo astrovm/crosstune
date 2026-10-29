@@ -629,6 +629,7 @@ class MainActivity : ComponentActivity() {
         onVisualsChangeEveryChange = viewModel::setVisualsChangeEvery,
         onVisualsChange = { on -> if (on) withMicrophone(MicrophoneFor.VISUALS) else viewModel.setVisuals(false) },
         onDismissLyrics = viewModel::dismissLyrics,
+        onLyricsToPlayer = viewModel::lyricsToPlayer,
         onPickSong = viewModel::chooseSong,
         onDismissSongSearch = viewModel::dismissSongSearch,
         onTargetChange = viewModel::selectDefault,

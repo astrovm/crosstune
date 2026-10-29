@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_placeholder">음악 링크 또는 노래 제목을 붙여넣으세요</string>
+    <string name="spotify_link_placeholder">링크 또는 노래</string>
     <string name="resolve_button">링크 변환</string>
     <string name="open_button">열기</string>
     <string name="search_button">검색</string>
@@ -366,6 +366,7 @@
     <string name="song_search_playlist">플레이리스트 만들기</string>
     <string name="error_no_songs_like">비슷한 노래를 찾지 못했어요.</string>
     <string name="lyrics_about_song">이 노래에 대해</string>
+    <string name="lyrics_to_player">플레이어 열기</string>
     <string name="lyrics_study">공부</string>
     <string name="practice_due">복습 %1$d개</string>
     <string name="choose_lines">줄 고르기</string>

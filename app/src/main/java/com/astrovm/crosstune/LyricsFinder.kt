@@ -932,7 +932,7 @@ internal class LyricsFinder(
         const val APP_CLIENT_VERSION = "7.21.50"
 
         /**
-         * Bumped when words kept from before should be looked up again: 8 for Japanese songs NetEase writes
+         * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
          * Korean songs found in Latin letters.
          */

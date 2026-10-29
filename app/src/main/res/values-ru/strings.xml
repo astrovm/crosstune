@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_placeholder">Вставьте музыкальную ссылку или название трека</string>
+    <string name="spotify_link_placeholder">Ссылка или песня</string>
     <string name="resolve_button">Преобразовать ссылку</string>
     <string name="open_button">Открыть</string>
     <string name="search_button">Найти</string>
@@ -366,6 +366,7 @@
     <string name="song_search_playlist">Создать плейлист</string>
     <string name="error_no_songs_like">Похожие песни не найдены.</string>
     <string name="lyrics_about_song">О песне</string>
+    <string name="lyrics_to_player">Открыть плеер</string>
     <string name="lyrics_study">Учить</string>
     <string name="practice_due">%1$d к повторению</string>
     <string name="choose_lines">Выбрать строки</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_placeholder">粘贴音乐链接或歌曲名</string>
+    <string name="spotify_link_placeholder">链接或歌名</string>
     <string name="resolve_button">转换链接</string>
     <string name="open_button">打开</string>
     <string name="search_button">搜索</string>
@@ -366,6 +366,7 @@
     <string name="song_search_playlist">生成歌单</string>
     <string name="error_no_songs_like">找不到相似的歌曲。</string>
     <string name="lyrics_about_song">关于这首歌</string>
+    <string name="lyrics_to_player">打开播放器</string>
     <string name="lyrics_study">学习</string>
     <string name="practice_due">%1$d 条待复习</string>
     <string name="choose_lines">选择行</string>

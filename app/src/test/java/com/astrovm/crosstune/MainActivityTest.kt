@@ -901,6 +901,48 @@ class MainActivityTest {
     }
 
     @Test
+    fun playAllPlaysInCrosstunesPlayerAsPlayDoes() {
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val queue = "https://music.youtube.com/watch?v=first000000&list=TLGGqueue"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        File(app.cacheDir, "queue_lookups.json").delete()
+        collectionWithSongs()
+        val activity = launch()
+        resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
+        waitForText("First Song")
+        val playAll = string(R.string.play_all_in, string(MusicService.YOUTUBE_MUSIC.labelRes))
+        // YouTube Music plays the list in the background, and says so, under the player on its first song.
+        phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = music)
+        click(playAll)
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(listOf(music to queue), phone.listsAsked)
+        assertTrue(phone.opened.isEmpty())
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        assertTrue(composeRule.onAllNodes(hasText("First Song")).fetchSemanticsNodes().isNotEmpty())
+        // Asked to and not seen to play it, YouTube Music is opened on the list, and left again once it plays it.
+        composeRule.runOnIdle { phone.playing.value = null }
+        composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        phone.canPlaySongs = false
+        click(playAll)
+        waitUntil(TIMEOUT_MS) { phone.opened.isNotEmpty() }
+        assertEquals(listOf(music to queue), phone.opened)
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = music) }
+        waitUntil(TIMEOUT_MS) { phone.cameBack == 1 }
+        assertTrue(composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isNotEmpty())
+        // With no app to ask or open, it opens the list there, as it did, with no player.
+        composeRule.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasContentDescription(playAll) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        phone.access = false
+        click(playAll)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(queue, nextStartedActivity()!!.dataString)
+        assertTrue(composeRule.onAllNodes(hasTestTag(PLAYER_COVER_TAG)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun anAlbumOpensAsItselfAndItsSongsCanStillPlayAllAtOnce() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         collectionWithSongs(title = "Album", type = "album")
@@ -1055,17 +1097,22 @@ class MainActivityTest {
         release.countDown()
         waitForText(string(R.string.play_all_progress, 49, 50))
         last.countDown()
-        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        assertEquals("https://music.youtube.com/watch?v=00000000001&list=TLGGpart", nextStartedActivity()!!.dataString)
+        // YouTube Music is asked to play them from here, as Play does.
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val first = music to "https://music.youtube.com/watch?v=00000000001&list=TLGGpart"
+        waitUntil(TIMEOUT_MS) { phone.listsAsked.isNotEmpty() }
+        assertEquals(listOf(first), phone.listsAsked)
         assertEquals(50, fake.requestedUrls.count { "music.youtube.com" in it })
         // Once YouTube Music plays them, the rest are looked up, and played as the last of those ends.
-        val music = MusicService.YOUTUBE_MUSIC.packageName
-        composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Song 1", "Band"), 100) }
+        composeRule.runOnIdle {
+            phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = music)
+            phone.inApp(music).value = AppPlays(MusicMetadata("Song 1", "Band"), 100)
+        }
         waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "music.youtube.com" in it } == 60 }
         composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Song 50", "Band"), 149) }
         composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Something Else", "Band"), 150) }
-        waitUntil(TIMEOUT_MS) { phone.listsAsked.isNotEmpty() }
-        assertEquals(listOf(music to "https://music.youtube.com/watch?v=00000000051&list=TLGGpart"), phone.listsAsked)
+        waitUntil(TIMEOUT_MS) { phone.listsAsked.size == 2 }
+        assertEquals(listOf(first, music to "https://music.youtube.com/watch?v=00000000051&list=TLGGpart"), phone.listsAsked)
     }
 
     @Test
@@ -1106,8 +1153,7 @@ class MainActivityTest {
         click(shuffle)
         waitUntil { composeRule.onAllNodes(hasContentDescription(shuffle) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
         found.countDown()
-        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        nextStartedActivity()
+        waitUntil(TIMEOUT_MS) { phone.listsAsked.isNotEmpty() }
         // The first part YouTube Music is given is any 50 of the 60, in no set order.
         val part = fake.requestedUrls.single { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")!!.split(",").map { it.trimStart('0').toInt() }
         assertEquals(50, part.toSet().size)
@@ -1115,7 +1161,10 @@ class MainActivityTest {
         assertTrue(part != part.sorted())
         // The rest play on after them, shuffled as they are.
         val music = MusicService.YOUTUBE_MUSIC.packageName
-        composeRule.runOnIdle { phone.inApp(music).value = AppPlays(MusicMetadata("Song ${part.first()}", "Band"), 100) }
+        composeRule.runOnIdle {
+            phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = music)
+            phone.inApp(music).value = AppPlays(MusicMetadata("Song ${part.first()}", "Band"), 100)
+        }
         waitUntil(TIMEOUT_MS) { fake.requestedUrls.count { "/watch_videos" in it } == 2 }
         val rest = fake.requestedUrls.last { "/watch_videos" in it }.toHttpUrl().queryParameter("video_ids")!!.split(",").map { it.trimStart('0').toInt() }
         assertEquals((1..60).toSet(), (part + rest).toSet())

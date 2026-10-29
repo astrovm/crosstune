@@ -256,6 +256,7 @@ internal data class ScreenActions(
     val onShowLyrics: () -> Unit = {},
     /** Closes the words. */
     val onDismissLyrics: () -> Unit = {},
+    val onLyricsToPlayer: () -> Unit = {},
     /** Keeps the microphone listening along with the words shown, to stay in time with them. */
     val onListenAlong: () -> Unit = {},
     val onStopListeningAlong: () -> Unit = {},

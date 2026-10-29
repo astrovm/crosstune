@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="spotify_link_placeholder">Tempel tautan musik atau nama lagu</string>
+    <string name="spotify_link_placeholder">Tautan atau lagu</string>
     <string name="resolve_button">Konversi link</string>
     <string name="open_button">Buka</string>
     <string name="search_button">Cari</string>
@@ -366,6 +366,7 @@
     <string name="song_search_playlist">Buat playlist</string>
     <string name="error_no_songs_like">Tidak menemukan lagu serupa.</string>
     <string name="lyrics_about_song">Tentang lagu</string>
+    <string name="lyrics_to_player">Buka pemutar</string>
     <string name="lyrics_study">Belajar</string>
     <string name="practice_due">%1$d jatuh tempo</string>
     <string name="choose_lines">Pilih baris</string>

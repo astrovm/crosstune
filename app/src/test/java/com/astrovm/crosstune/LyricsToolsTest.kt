@@ -472,6 +472,8 @@ class LyricsToolsTest {
         passes(SHOWN_MS + FADE_MS)
         assertFalse(described(about))
         assertFalse(described(learn))
+        // Handed down to the words, rather than left on the info that's gone.
+        assertTrue(composeRule.onAllNodes(isFocused() and hasText("Demo ", substring = true)).fetchSemanticsNodes().isNotEmpty())
         composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionDown) }
         passes(1)
         assertTrue(described(about))

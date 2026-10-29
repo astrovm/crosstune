@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="spotify_link_placeholder">音楽リンクまたは曲名を貼り付け</string>
+    <string name="spotify_link_placeholder">リンクか曲名</string>
     <string name="resolve_button">変換</string>
     <string name="open_button">開く</string>
     <string name="search_button">検索</string>
@@ -367,6 +367,7 @@
     <string name="song_search_playlist">プレイリストを作る</string>
     <string name="error_no_songs_like">似た曲が見つかりませんでした。</string>
     <string name="lyrics_about_song">この曲について</string>
+    <string name="lyrics_to_player">プレーヤーを開く</string>
     <string name="lyrics_study">学習</string>
     <string name="practice_due">%1$d件の復習</string>
     <string name="choose_lines">行を選ぶ</string>
