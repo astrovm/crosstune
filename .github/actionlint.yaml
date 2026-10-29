@@ -1,0 +1,5 @@
+# actionlint doesn't know GitHub's Ubuntu 26.04 runners yet (rhysd/actionlint#682), and isn't
+# being updated for now, so they're named here.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
