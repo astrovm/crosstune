@@ -80,9 +80,9 @@ Where each feature starts:
 ## Pull requests
 
 - UI changes need before/after screenshots in the PR description. Never commit them.
-- One problem per PR.
+- One problem per PR. A bug found along the way gets its own PR, not a skip.
 
 ## Taste
 
 - Copy and comments are plain, conversational English. Comments say why, in the app's own terms.
-- Simplest thing that works. Don't add machinery for cases that don't exist.
+- Simplest design that works. That means the simplest design, not the smallest patch. Don't add machinery for cases that don't exist.
