@@ -357,6 +357,21 @@ class ListeningTest {
     }
 
     @Test
+    fun theSongsCardFoundUnderThePlayerLeavesThePlayerAsItWas() {
+        val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
+        val phone = FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) }
+        MainActivity.playbackFactory = { phone }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performTouchInput { swipe(center, center - Offset(0f, 1500f)) }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.result?.title == "Iris" }
+        composeRule.waitForIdle()
+        // Followed once by the bar and once by the player, which its card didn't close and open again.
+        assertEquals(listOf(playing, playing), phone.followed)
+        assertEquals(playing, controllerModel().uiState.player?.song)
+    }
+
+    @Test
     fun aShortSwipeUpFromTheBarGoesBackAndLeavesTheBarBe() {
         val playing = MusicMetadata("Iris", "The Goo Goo Dolls")
         MainActivity.playbackFactory = { FakePlayback().apply { access = true; onThePhone = Heard.Song(playing, null, 42_000, SystemClock.elapsedRealtime()) } }
@@ -2177,6 +2192,34 @@ class ListeningTest {
             androidx.compose.ui.semantics.SemanticsActions.OnClick in it.config && it.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label == showWords
         }).performClick()
         waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        assertTrue(visualsShown().isNotEmpty())
+    }
+
+    @Test
+    fun aSwipeInFromASideBringsTheWordsBackAsFarAsItGoes() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        click(string(R.string.visuals_options))
+        click(string(R.string.visuals_only))
+        waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+        val showWords = string(R.string.visuals_show_words)
+        val visualsOnly = composeRule.onNode(SemanticsMatcher("shows the words") {
+            androidx.compose.ui.semantics.SemanticsActions.OnClick in it.config && it.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label == showWords
+        })
+        // Partway in from the left, the words come as far as the finger has, and go again as it's let go short.
+        visualsOnly.performTouchInput {
+            down(Offset(2f, centerY))
+            moveTo(Offset(width * 0.05f, centerY))
+            moveTo(Offset(width * 0.1f, centerY))
+        }
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        visualsOnly.performTouchInput { up() }
+        waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+        // Further, from the right, they're back for good.
+        visualsOnly.performTouchInput { swipe(Offset(width - 2f, centerY), Offset(width * 0.4f, centerY)) }
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        assertTrue(described(string(R.string.visuals_options)))
         assertTrue(visualsShown().isNotEmpty())
     }
 

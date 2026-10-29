@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.rememberCoroutineScope
@@ -237,7 +238,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     // Where the timed words are scrolled to, kept out here so they're right where they were when they
     // come back, e.g. once the visuals come or go, with nothing to glide back to.
     val timedList = rememberSaveable(song, saver = LazyListState.Saver) { LazyListState() }
-    // Only the visuals, full screen, until a tap or Back brings the words back.
+    // Only the visuals, full screen, until a tap, Back or a swipe in from a side brings the words back.
     var visualsOnly by rememberSaveable { mutableStateOf(false) }
     // Putting the words in time: a line tapped is the one being sung. Only while something says where the song is.
     var syncingAsked by rememberSaveable(song) { mutableStateOf(false) }
@@ -252,7 +253,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     }
     val unsyncing = swipedAway(enabled = syncing) { syncingAsked = false }
     val onlyVisuals = visualsOnly && state.visuals
-    val wordsBack = swipedAway(enabled = onlyVisuals) { visualsOnly = false }
+    // How far the words have come back, by Back, or by a swipe in from a side, which with Android's
+    // bars hidden comes to the screen rather than as Back.
+    val wordsBack = remember { Animatable(0f) }
+    swipedAway(enabled = onlyVisuals, away = wordsBack) { visualsOnly = false }
     val tint by animateColorAsState(
         coverColor(cover, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary,
         tween(durationMillis = 700),
@@ -469,7 +473,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
  * are either way, so the words coming and going don't start them over.
  */
 @Composable
-private fun WithVisuals(state: UiState, only: Boolean, wordsBack: () -> Float, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
+private fun WithVisuals(state: UiState, only: Boolean, wordsBack: Animatable<Float, AnimationVector1D>, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
     if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -478,7 +482,7 @@ private fun WithVisuals(state: UiState, only: Boolean, wordsBack: () -> Float, m
             // Darkened as they're drawn, smaller than the screen, rather than under a shade over the whole of it.
             val reading = readingShade + (1f - readingShade) * state.visualsShade
             // Swiped back to, the words and their shade come as far as the swipe has.
-            val coming = if (only) wordsBack() else 1f
+            val coming = if (only) wordsBack.value else 1f
             LocalVisuals.current(state.visualsPlay.copy(shade = reading * coming, behind = true), Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
@@ -486,6 +490,7 @@ private fun WithVisuals(state: UiState, only: Boolean, wordsBack: () -> Float, m
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .swipedInFromSides(wordsBack, onShowWords)
                         .clickable(interactionSource = null, indication = null, onClickLabel = stringResource(R.string.visuals_show_words), onClick = onShowWords)
                 )
             } else {

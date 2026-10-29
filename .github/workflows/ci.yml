@@ -107,7 +107,7 @@ jobs:
       # The build cache is enabled here rather than in gradle.properties: CodeQL's autobuild restores
       # Gradle's caches too, and a compile served from the cache leaves it no code to analyze.
       - name: Test
-        run: ./gradlew :app:testDebugUnitTest :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
+        run: ./gradlew :app:testDebugUnitTest :pitest-changed-lines:test :app:koverLogDebug :app:koverXmlReportDebug :app:koverVerifyDebug --build-cache --configuration-cache
 
       - name: Upload test and coverage reports
         if: always()

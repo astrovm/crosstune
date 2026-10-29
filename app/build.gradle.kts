@@ -22,8 +22,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2160000
-        versionName = "2.16.0"
+        versionCode = 2160100
+        versionName = "2.16.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -213,6 +213,7 @@ tasks.register("ci") {
     description = "Unit tests with the 100% line coverage gate, lint, and the debug and minified release APKs."
     dependsOn(
         "testDebugUnitTest",
+        ":pitest-changed-lines:test",
         "koverLogDebug",
         "koverXmlReportDebug",
         "koverVerifyDebug",

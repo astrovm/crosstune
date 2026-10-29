@@ -1,0 +1,2 @@
+Swiping up to the player no longer makes it start over as the song's card loads under it.
+With only the visuals showing, a swipe in from a side brings the words back as far as you swipe.

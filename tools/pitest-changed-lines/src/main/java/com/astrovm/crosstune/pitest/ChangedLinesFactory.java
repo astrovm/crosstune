@@ -5,9 +5,13 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.objectweb.asm.tree.MethodNode;
 import org.pitest.bytecode.analysis.ClassTree;
 import org.pitest.mutationtest.build.InterceptorParameters;
 import org.pitest.mutationtest.build.InterceptorType;
@@ -53,6 +57,8 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
 
     private static final class ChangedLines implements MutationInterceptor {
         private final Set<String> lines;
+        private final Map<MethodNode, Optional<ComposeBookkeeping>> composables = new HashMap<>();
+        private ClassTree clazz;
 
         ChangedLines(Set<String> lines) {
             this.lines = lines;
@@ -65,6 +71,8 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
 
         @Override
         public void begin(ClassTree clazz) {
+            this.clazz = clazz;
+            composables.clear();
         }
 
         @Override
@@ -74,6 +82,8 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
 
         @Override
         public void end() {
+            clazz = null;
+            composables.clear();
         }
 
         private boolean changed(MutationDetails mutation) {
@@ -84,13 +94,22 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
 
         /**
          * Kotlin's own null checks, which no test of the app's behavior can tell are gone, and what
-         * Compose adds to a composable to skip it and trace it, which only makes it slower.
+         * Compose adds to a composable to skip it and trace it, which only makes it slower: its calls,
+         * named in their mutants' descriptions, and its masks and checks, which aren't.
          */
-        private static boolean isJunk(MutationDetails mutation) {
+        private boolean isJunk(MutationDetails mutation) {
             String description = mutation.getDescription();
             return description.contains("kotlin/jvm/internal/Intrinsics")
                 || description.contains("androidx/compose/runtime/Composer")
-                || description.contains("androidx/compose/runtime/ComposerKt");
+                || description.contains("androidx/compose/runtime/ComposerKt")
+                || isComposeBookkeeping(mutation);
+        }
+
+        private boolean isComposeBookkeeping(MutationDetails mutation) {
+            return clazz.method(mutation.getId().getLocation())
+                .flatMap(method -> composables.computeIfAbsent(method.rawNode(), node -> Optional.ofNullable(ComposeBookkeeping.of(clazz.name().asInternalName(), node))))
+                .map(bookkeeping -> bookkeeping.at(mutation.getInstructionIndex()))
+                .orElse(false);
         }
     }
 }
