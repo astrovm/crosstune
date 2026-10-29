@@ -266,7 +266,7 @@ class LayerSwipeTest {
         swipeBack(0.5f)
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(0.5f, away(), 0.001f) }
-        val box = compose.onNodeWithTag("mode").getUnclippedBoundsInRoot()
+        val box = compose.onNodeWithTag("mode").getBoundsInRoot()
         assertEquals(190.dp, box.right - box.left)
         compose.runOnIdle { back.dispatchOnBackCancelled() }
         compose.waitForIdle()
