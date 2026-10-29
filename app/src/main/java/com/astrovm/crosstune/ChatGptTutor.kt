@@ -333,17 +333,20 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
      */
     suspend fun aboutArtist(song: MusicMetadata, language: String, onText: (String) -> Unit): ChatGptReply {
         val model = chatGpt.model() ?: return ChatGptReply.Failed
-        val key = "artist2|$model|$language|${song.artist}"
+        val key = "artist3|$model|$language|${song.artist}"
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
         // Tried on real artists with GPT-6-Luna, searching the web: Mariya Takeuchi came as a singer
         // from Shimane who debuted in 1978, city pop, and Variety (1984) with Plastic Love, in about 6 s.
+        // A duet, Say Say Say, came as sentences about the song till each row was asked to cover each artist:
+        // "From: Liverpool, England; Gary, Indiana", 3 of 3 times.
         val reply = chatGpt.ask(
             "You help someone get to know the artists they listen to. First search the web for this artist. Only state a fact a page you found gives for this artist by name. " +
                 "Then, in ${nameOf(language)}, write about them in three parts, separated by a line with only $PART_BREAK: " +
                 "first two to four lines of the form \"Label: value\", with short labels like where they're from, their years or their genre; " +
-                "then their style and influence, in one or two short sentences; " +
+                "then, with no label, their style and influence, in one or two short sentences; " +
                 "then two to four of their best known albums or songs, each on a line of its own as its name, then \" · \" and the year. " +
-                "About 50 words in all. Never say what you didn't find. Plain text, without headings, links or Markdown.",
+                "Each value is a few words, never a sentence. It's about the artists, not this song: when it's by more than one, " +
+                "each row covers each of them, as \"From: Liverpool, England; Gary, Indiana\". About 50 words in all. Never say what you didn't find. Plain text, without headings, links or Markdown.",
             "Artist: ${song.artist}\nA song of theirs: ${song.title}",
             webSearch = true,
             effort = "low",
