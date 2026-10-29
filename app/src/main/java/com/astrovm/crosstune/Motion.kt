@@ -47,6 +47,8 @@ internal object Motion {
     val size: FiniteAnimationSpec<IntSize> = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntSize(1, 1))
     /** How a screen rises or sinks once the finger is off it, or it was a tap: it carries on from where it is. */
     val rise: FiniteAnimationSpec<Float> = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = 0.001f)
+    /** Something on a screen going once a swipe back's let go, or coming back: quicker than a screen, as it's smaller. */
+    val away: FiniteAnimationSpec<Float> = spring(stiffness = Spring.StiffnessMedium, visibilityThreshold = 0.001f)
     /** What comes in fades in a touch slower than what goes, so the two don't blur together. */
     val fadeIn: FiniteAnimationSpec<Float> = tween(durationMillis = 220, delayMillis = 60)
     val fadeOut: FiniteAnimationSpec<Float> = tween(durationMillis = 120)
@@ -79,6 +81,26 @@ internal fun <S> AnimatedContentTransitionScope<S>.rise(up: Boolean): ContentTra
     }
 
 private val RISE = tween<IntOffset>(durationMillis = 300, easing = LinearEasing)
+
+/**
+ * A screen going deeper, [forward], or back, as [slide], moving evenly so a swipe back can hold it
+ * where the finger is; the rest is [Motion.rise]. What goes fades as it starts, what comes as it ends.
+ */
+internal fun <S> AnimatedContentTransitionScope<S>.slideAlong(forward: Boolean): ContentTransform {
+    val direction = if (forward) 1 else -1
+    return (slideInHorizontally(RISE) { width -> direction * width / 5 } + fadeIn(ALONG_IN)) togetherWith
+        (slideOutHorizontally(RISE) { width -> -direction * width / 5 } + fadeOut(ALONG_OUT))
+}
+
+/**
+ * A screen going back as a swipe back has it: off to the side with the finger, over the one it goes
+ * back to, which comes a little way out from under it.
+ */
+internal fun <S> AnimatedContentTransitionScope<S>.slideAway(): ContentTransform =
+    (slideInHorizontally(RISE) { width -> -width / 5 } togetherWith slideOutHorizontally(RISE) { width -> width }).apply { targetContentZIndex = -1f }
+
+private val ALONG_IN = tween<Float>(durationMillis = 200, delayMillis = 100, easing = LinearEasing)
+private val ALONG_OUT = tween<Float>(durationMillis = 200, easing = LinearEasing)
 
 /** One thing swapping for another in place, e.g. a new result for the last one, or nothing for something. */
 internal fun <S> AnimatedContentTransitionScope<S>.swap(): ContentTransform =

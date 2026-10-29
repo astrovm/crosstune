@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.alpha
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.ExperimentalTransitionApi
 import androidx.compose.animation.core.SeekableTransitionState
@@ -104,6 +103,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -389,7 +389,6 @@ internal data class ScreenActions(
 @OptIn(ExperimentalTransitionApi::class)
 internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = showSettings) { showSettings = false }
     var showPracticeList by rememberSaveable { mutableStateOf(false) }
     // A link from another app is about to open or show its result, so don't leave the user in settings.
     // The request is consumed once handled, so a rotation keeps settings open, while a restored process
@@ -404,23 +403,32 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     var openSource by rememberSaveable { mutableStateOf<String?>(null) }
     // A link from another app on its way out shows just that, the fixes waiting till after.
     val fixes = state.fixes?.takeIf { !state.handingOff }
-    val screen = when {
+    // What's shown, and so what Back goes back to, without what it closes.
+    fun screenOf(
+        listening: Boolean = state.listening,
+        step: Boolean = fixes?.need != null,
+        fixList: Boolean = fixes?.list == true,
+        settings: Boolean = showSettings,
+        practice: Boolean = state.practice != null,
+        practiceList: Boolean = showPracticeList
+    ) = when {
         // Listening, e.g. from a tile or a widget, it's in sight with a way to stop, whatever comes
         // after; so are the words it was for.
-        state.listening -> Screen.LISTENING
+        listening -> Screen.LISTENING
         // Opened from anywhere, the steps show over it.
-        fixes?.need != null -> Screen.FIX_STEP
-        fixes?.list == true -> Screen.FIXES
-        showSettings -> Screen.SETTINGS
+        step -> Screen.FIX_STEP
+        fixList -> Screen.FIXES
+        settings -> Screen.SETTINGS
         state.handingOff -> Screen.HANDOFF
         // Over the words, practice shows in their place, so they're as they were after.
-        state.practice != null && state.lyricsFor == null -> Screen.PRACTICE
+        practice && state.lyricsFor == null -> Screen.PRACTICE
         state.lyricsFor != null -> Screen.LYRICS
         // Under the words it opens, as the song they're of.
         state.player != null -> Screen.PLAYER
-        showPracticeList -> Screen.PRACTICE_LIST
+        practiceList -> Screen.PRACTICE_LIST
         else -> Screen.MAIN
     }
+    val screen = screenOf()
     val layers = remember { LayerSwipe() }
     layers.up = when {
         // The song's card is only made under its player once the swipe gets there, so one let go early leaves the card shown.
@@ -433,6 +441,19 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
         Screen.PLAYER -> Layer(Screen.MAIN, actions.onClosePlayer)
         else -> null
     }
+    layers.backTo = when (screen) {
+        Screen.LISTENING -> screenOf(listening = false)
+        // Back to the list, when the step was opened from it.
+        Screen.FIX_STEP -> screenOf(step = false)
+        Screen.FIXES -> screenOf(fixList = false)
+        Screen.SETTINGS -> screenOf(settings = false)
+        Screen.PRACTICE -> screenOf(practice = false)
+        Screen.PRACTICE_LIST -> screenOf(practiceList = false)
+        Screen.LYRICS, Screen.PLAYER -> layers.down?.to
+        else -> null
+    }
+    // Back from settings' own list; its pages go back to it first.
+    CompositionLocalProvider(LocalLayerSwipe provides layers) { SwipedBack(enabled = showSettings) { showSettings = false } }
     val density = LocalDensity.current
     layers.distance = LocalWindowInfo.current.containerSize.height.toFloat().coerceAtLeast(1f)
     layers.flick = with(density) { 500.dp.toPx() }
@@ -440,7 +461,7 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
     // A change that isn't a swipe plays through; the finger holds the screens while it's on them.
     LaunchedEffect(screen, layers.to) {
         if (layers.to != null) return@LaunchedEffect
-        moving.animateTo(screen, Motion.rise.takeIf { screen in RISING || moving.currentState in RISING })
+        moving.animateTo(screen, Motion.rise)
     }
     LaunchedEffect(layers) {
         snapshotFlow { Triple(layers.to, layers.fraction, layers.carryOn) }.collectLatest { (to, fraction, carryOn) ->
@@ -465,7 +486,10 @@ internal fun CrosstuneScreen(state: UiState, actions: ScreenActions) {
             // Setup and a link on its way out aren't places in the app, so they fade rather than slide.
             // The words rise over the song they're of, and sink back into it.
             if (initialState in RISING || targetState in RISING) rise(up = targetState.depth > initialState.depth)
-            else if (initialState.depth < 0 || targetState.depth < 0) swap() else slide(forward = targetState.depth > initialState.depth)
+            else if (initialState.depth < 0 || targetState.depth < 0) swap()
+            // Swiped back, the screen goes with the finger.
+            else if (layers.backing) slideAway()
+            else slideAlong(forward = targetState.depth > initialState.depth)
         }
     ) { shown ->
         kept.SaveableStateProvider(shown.name) {
@@ -1595,7 +1619,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
         keyboard?.hide()
         focus.clearFocus()
     }
-    BackHandler(enabled = searchExpanded) { closeSearch() }
+    val closing = swipedAway(enabled = searchExpanded, onBack = closeSearch)
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 32.dp, bottom = 4.dp).heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1622,7 +1646,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
                         focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     ),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                    modifier = Modifier.fillMaxWidth().goingAway(closing, TransformOrigin(1f, 0.5f)).focusRequester(focusRequester)
                 )
                 LaunchedEffect(Unit) { focusRequester.requestFocus() }
             } else {

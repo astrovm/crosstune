@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
@@ -30,7 +29,7 @@ import androidx.compose.ui.unit.dp
 /** While the microphone listens for a song: waves going out from it, and a way to stop. */
 @Composable
 internal fun ListeningScreen(actions: ScreenActions) {
-    BackHandler(onBack = actions.onStopListening)
+    SwipedBack(onBack = actions.onStopListening)
     Page(title = null) {
         Column(
             modifier = Modifier

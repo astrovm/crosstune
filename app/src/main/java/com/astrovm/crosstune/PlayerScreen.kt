@@ -1,7 +1,6 @@
 package com.astrovm.crosstune
 
 import android.os.SystemClock
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
@@ -135,7 +134,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
     val cover = song.artworkUrl ?: state.result?.takeIf { SongNames.same(it.title, song.title) && SongNames.sameArtist(it.artist, song.artist) }?.artworkUrl
     val following = player.following
     val app = following?.app ?: MusicService.ofPackage(player.app)?.let { stringResource(it.labelRes) }
-    BackHandler(onBack = actions.onClosePlayer)
+    SwipedBack(onBack = actions.onClosePlayer)
     // What plays next, opened from the list it plays from up top or its button under the buttons.
     // Between one song and the next the app says nothing for a moment, so it stays as it was till it
     // does, or a while passes without it.

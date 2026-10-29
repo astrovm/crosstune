@@ -1,6 +1,5 @@
 package com.astrovm.crosstune
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -46,7 +45,7 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+    SwipedBack(onBack = onBack)
     val now = System.currentTimeMillis()
     val songs = state.savedLines.groupBy { it.title to it.artist }
         .map { (song, lines) -> PracticeSong(MusicMetadata(song.first, song.second, artworkUrl = lines.firstNotNullOfOrNull { it.artworkUrl }), lines, lines.cardsDueCount(now, state.cardTypes)) }

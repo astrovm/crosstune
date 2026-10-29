@@ -40,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import com.astrovm.crosstune.ui.theme.Palette
 import com.astrovm.crosstune.ui.theme.wallpaperColors
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -111,12 +110,10 @@ internal fun SettingsScreen(
     // Kept out here, so a list is where it was on coming back from a page.
     val listScroll = rememberScrollState()
     val sourcesScroll = rememberScrollState()
-    // A page slides in over the one it opens from, and back out the other way.
-    AnimatedContent(
-        targetState = openSource?.takeIf { key -> key == VISUALS_PAGE || key == ADVANCED_PAGE || key == SOURCES_PAGE || sources.any { it.key == key } },
-        transitionSpec = { slide(forward = depth(targetState) > depth(initialState)) },
-        label = "source"
-    ) { key ->
+    val page = openSource?.takeIf { key -> key == VISUALS_PAGE || key == ADVANCED_PAGE || key == SOURCES_PAGE || sources.any { it.key == key } }
+    // Back from a page: the list, or the sources' from a source's own.
+    val up = SOURCES_PAGE.takeIf { depth(page) == 2 }
+    SwipedBackPages(page, back = up, label = "source", forward = { from, to -> depth(to) > depth(from) }, onBack = { onOpenSource(up) }) { key ->
         val item = sources.firstOrNull { it.key == key }
         if (key == VISUALS_PAGE) {
             VisualsPage(state.visualsSettings, actions, onBack = { onOpenSource(null) })
@@ -632,7 +629,6 @@ private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
  */
 @Composable
 private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<SourceSettings>, scroll: ScrollState, onOpen: (String) -> Unit, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
     Page(
         title = stringResource(R.string.settings_links_title),
         navigationIcon = {
@@ -660,7 +656,6 @@ private const val ADVANCED_PAGE = "advanced"
  */
 @Composable
 private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
     Page(
         title = stringResource(R.string.settings_advanced_title),
         navigationIcon = {
@@ -749,7 +744,6 @@ private fun CustomDestinations(destinations: List<Destination>, installed: Set<M
  */
 @Composable
 private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
     val assets = LocalContext.current.assets
     val kinds = remember(assets) { milkdropKinds(assets) }
     val names = kinds.flatMap { it.second }
@@ -758,11 +752,23 @@ private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBac
     // Kept out here, so the list is where it was on coming back from one.
     val scroll = rememberScrollState()
     val canTurnOff = { name: String -> !(settings.shows(name) && on == 1) }
-    val playing = seeing
-    if (playing != null) {
-        VisualsPager(kinds, playing, settings, canTurnOff, actions, onBack = { seeing = null })
-        return
+    SwipedBackPages(seeing, back = null, label = "visual", forward = { _, to -> to != null }, onBack = { seeing = null }) { playing ->
+        if (playing != null) VisualsPager(kinds, playing, settings, canTurnOff, actions, onBack = { seeing = null }) else VisualsList(settings, actions, kinds, scroll, canTurnOff, onBack, onSee = { seeing = it })
     }
+}
+
+/** Each visual by kind, with whether heavy ones are skipped over them. */
+@Composable
+private fun VisualsList(
+    settings: VisualsSettings,
+    actions: ScreenActions,
+    kinds: List<Pair<String, List<String>>>,
+    scroll: ScrollState,
+    canTurnOff: (String) -> Boolean,
+    onBack: () -> Unit,
+    onSee: (Int) -> Unit
+) {
+    val names = kinds.flatMap { it.second }
     Page(
         title = stringResource(R.string.setting_visuals_list),
         navigationIcon = {
@@ -788,7 +794,7 @@ private fun VisualsPage(settings: VisualsSettings, actions: ScreenActions, onBac
             Group {
                 inKind.forEachIndexed { index, name ->
                     if (index > 0) GroupDivider()
-                    VisualRow(name, settings, canTurnOff(name), actions, onSee = { seeing = names.indexOf(name) })
+                    VisualRow(name, settings, canTurnOff(name), actions, onSee = { onSee(names.indexOf(name)) })
                 }
             }
         }
@@ -846,7 +852,6 @@ internal fun VisualsPager(
     actions: ScreenActions,
     onBack: () -> Unit
 ) {
-    BackHandler(onBack = onBack)
     val names = remember(kinds) { kinds.flatMap { it.second } }
     val pager = rememberPagerState(initialPage = start) { names.size }
     val name = names[pager.currentPage]
@@ -1397,7 +1402,6 @@ private fun SourcePage(
     fixingLinks: Boolean,
     onBack: () -> Unit
 ) {
-    BackHandler(onBack = onBack)
     Page(
         title = item.label,
         navigationIcon = {

@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipDescription
+import androidx.activity.BackEventCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -5679,6 +5680,43 @@ class MainActivityTest {
         activity.onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
 
+        assertTextAbsent(string(R.string.settings_links_title))
+        assertFalse(activity.isFinishing)
+    }
+
+    @Test
+    fun aSwipeBackFromSettingsOrOneOfItsPagesShowsWhereItGoesAsItGoes() {
+        val activity = launch()
+        val back = activity.onBackPressedDispatcher
+        fun swipeBack() = composeRule.runOnIdle {
+            back.dispatchOnBackStarted(BackEventCompat(0f, 500f, 0f, BackEventCompat.EDGE_LEFT))
+            back.dispatchOnBackProgressed(BackEventCompat(200f, 500f, 0.5f, BackEventCompat.EDGE_LEFT))
+        }
+        fun mainShown() = composeRule.onAllNodes(hasContentDescription(string(R.string.settings_button))).fetchSemanticsNodes().isNotEmpty()
+        click(string(R.string.settings_button))
+        swipeBack()
+        composeRule.waitForIdle()
+        // Half way, Settings and what it goes back to are both there.
+        assertTrue(mainShown())
+        assertTextShown(string(R.string.settings_links_title))
+        composeRule.runOnIdle { back.dispatchOnBackCancelled() }
+        composeRule.waitForIdle()
+        assertFalse(mainShown())
+        // A page goes back to the list the same way.
+        openAdvanced()
+        assertTextAbsent(string(R.string.settings_links_title))
+        swipeBack()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(string(R.string.add_custom_destination_button)).assertExists()
+        composeRule.onNodeWithText(string(R.string.settings_links_title)).assertExists()
+        composeRule.runOnIdle { back.onBackPressed() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(string(R.string.add_custom_destination_button)).assertDoesNotExist()
+        assertFalse(mainShown())
+        swipeBack()
+        composeRule.runOnIdle { back.onBackPressed() }
+        composeRule.waitForIdle()
+        assertTrue(mainShown())
         assertTextAbsent(string(R.string.settings_links_title))
         assertFalse(activity.isFinishing)
     }
