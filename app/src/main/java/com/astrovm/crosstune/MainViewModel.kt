@@ -1143,8 +1143,14 @@ internal class MainViewModel(
             try {
                 val queue = matcher.youtubeQueue(service, tracks) { looked -> uiState = uiState.copy(queueProgress = looked to tracks.size) }
                 if (queue == null) return@launch showError(AppError.NOT_FOUND)
-                effectChannel.send(Effect.Open(queue.url, destination.packageName, finishAfterOpen = false))
+                // In Crosstune's player, as one song plays, from the list's first song found.
+                val app = destination.packageName
+                val first = queue.songs.firstOrNull() ?: tracks.first()
+                openPlayer(first, app, queue.url)
+                // Before the app's asked, so what it played until then isn't taken for the list's start.
                 playOn(all, service, destination, queue, name)
+                val asked = app != null && playback?.playList(app, queue.url) == true
+                if (!playThere(first, app, queue.url, asked, exact = true)) effectChannel.send(Effect.Open(queue.url, app, finishAfterOpen = false))
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
             }
@@ -1255,22 +1261,28 @@ internal class MainViewModel(
                 }
                 // Asked by name, other apps find it; YouTube Music only plays its own link.
                 val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link) == true
-                // Seen to play it, or with no way to see, that's that; an app may say yes and not play it.
-                val sees = source?.hasAccess() == true
-                // Played in that app, not another that has it too.
-                if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null && sameApp(app, it.appPackage) } } != null)) return@launch
-                // An app that can't be asked in the background is opened on the song, and, when
-                // Crosstune can see it play there, left again once it does, as practice does.
-                val back = source?.takeIf { exact && sees && it.openSong(app, link) } ?: return@launch run {
-                    closePlayer()
-                    open(destination, finishAfterOpen = false, tapped = true)
-                }
-                withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && sameApp(app, it.appPackage) } }
-                back.comesBack()
+                if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true)
             } finally {
                 uiState = uiState.copy(playingResult = false)
             }
         }
+    }
+
+    /**
+     * [song] playing in [app], with the player on it, once [app] was [asked] to play it in the background: seen to play it
+     * there, or with no way to see, that's that, as an app may say yes and not play it. An app that couldn't be asked is
+     * opened on its [exact] [link], and, when Crosstune can see it play there, left again once it does, as practice does.
+     * False, with the player closed, when it could be neither.
+     */
+    private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean): Boolean {
+        val source = playback
+        val sees = source?.hasAccess() == true
+        // Played in that app, not another that has it too.
+        if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null && sameApp(app, it.appPackage) } } != null)) return true
+        val back = source?.takeIf { exact && sees && app != null && it.openSong(app, link) } ?: return false.also { closePlayer() }
+        withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && sameApp(app, it.appPackage) } }
+        back.comesBack()
+        return true
     }
 
     private var playerJob: Job? = null

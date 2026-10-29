@@ -1,4 +1,5 @@
 Tap the song over its words to go to its player.
+Play all plays in Crosstune's player, as Play does.
 A shorter hint in the link field.
 ChatGPT's translation of each line stays under that line, even when a sentence runs over several.
 Words saved on your phone are looked up again after a fix to how they're found.
