@@ -624,6 +624,20 @@ class ChatGptTest {
     }
 
     @Test
+    fun eachLineKeepsItsOwnPartAndLinesTranslatedBeforeThatAreAskedAgain() {
+        answering("[\"que nunca viste\"]")
+        assertEquals(listOf("que nunca viste"), runBlocking { tutor().translate(listOf("見た事もないような"), "es") })
+        // Told that a sentence over two lines keeps each line's part under it, rather than its words in the order the language would put them.
+        assertTrue(openAi.asked.single().getString("instructions").contains("Each translation says only what its own line says"))
+        // Kept as it was translated before that, it's asked again.
+        val file = File(folder.root, "answers.json")
+        file.writeText(file.readText().replace("translation$TRANSLATION_VERSION|", "translation|"))
+        answering("[\"que nunca se vio\"]")
+        assertEquals(listOf("que nunca se vio"), runBlocking { tutor().translate(listOf("見た事もないような"), "es") })
+        assertEquals(2, openAi.asked.size)
+    }
+
+    @Test
     fun aLineIsTranslatedForTheSongItsIn() {
         val tutor = tutor()
         val one = MusicMetadata("November Blue", "S.Kiyotaka & Omega Tribe")

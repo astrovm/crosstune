@@ -4025,18 +4025,26 @@ class ListeningTest {
     }
 
     @Test
-    fun wordsKeptBeforeTheLookupWasFixedAreLookedUpAgain() {
+    fun wordsKeptBeforeTheLookupWasFixedAreLookedUpAgain() = keptBeforeAFix("[${LyricsFinder.CACHE_VERSION}, ", "[${LyricsFinder.CACHE_VERSION - 1}, ")
+
+    @Test
+    fun wordsKeptBeforeChatGptWasAskedToTranslateAnotherWayAreWorkedOutAgain() =
+        keptBeforeAFix(", $TRANSLATION_VERSION, null]", ", ${TRANSLATION_VERSION - 1}, null]")
+
+    /** Words kept, then changed as they would have been before a fix, by [before] in what they were worked out with read as [after]: they're worked out again. */
+    private fun keptBeforeAFix(before: String, after: String) {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light")
         waitForText("Walking down the river road\nSinging to the morning light")
         composeRule.runOnIdle { controller!!.pause().stop() }
         waitUntil(TIMEOUT_MS) { File(app.cacheDir, "kept_words.json").let { it.isFile && "river road" in it.readText() } }
         composeRule.runOnIdle { controller!!.destroy() }
-        // As the lookup before its last fix kept them, with nothing saying where they came from.
+        // As kept before the fix, with nothing saying where they came from, which only words worked out again have.
         val file = File(app.cacheDir, "kept_words.json")
         val entries = org.json.JSONArray(file.readText())
         for (index in 0 until entries.length()) {
             val entry = entries.getJSONArray(index)
-            entry.put(1, entry.getString(1).replace(",\"source\":\"lrclib\"", "").replace("[${LyricsFinder.CACHE_VERSION}, ", "[${LyricsFinder.CACHE_VERSION - 1}, "))
+            assertTrue(entry.getString(1), before in entry.getString(1))
+            entry.put(1, entry.getString(1).replace(",\"source\":\"lrclib\"", "").replace(before, after))
         }
         file.writeText(entries.toString())
 

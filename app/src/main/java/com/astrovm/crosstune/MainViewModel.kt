@@ -1770,11 +1770,11 @@ internal class MainViewModel(
     /**
      * What a song's words are worked out with: how they're looked up, as words looked up before a
      * fix are looked up again, the language they're translated into, those left untranslated, and,
-     * signed in, ChatGPT and its model, which translate them, put their readings right and write
-     * romaji in Japanese.
+     * signed in, ChatGPT, how it's asked to translate and its model, which translate them, put their
+     * readings right and write romaji in Japanese.
      */
     private fun madeWith() =
-        listOf(LyricsFinder.CACHE_VERSION, translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, uiState.chatGpt.model).toString()
+        listOf(LyricsFinder.CACHE_VERSION, translateInto(), uiState.learning.untranslated.sorted(), usesChatGpt(), uiState.learning.chatGptTranslation, TRANSLATION_VERSION, uiState.chatGpt.model).toString()
 
     /**
      * [found], [song]'s words as shown, timed better once that's worked out, e.g. from another copy

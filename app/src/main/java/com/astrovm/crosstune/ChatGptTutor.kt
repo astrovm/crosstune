@@ -22,7 +22,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         // Each model's own, so picking another translates anew.
         val model = chatGpt.model() ?: return null
         // Kept for [song]: the same line in another song may mean something else there.
-        val key = { line: String -> "translation|$model|$language|${song?.title}|${song?.artist}|$line" }
+        val key = { line: String -> "translation$TRANSLATION_VERSION|$model|$language|${song?.title}|${song?.artist}|$line" }
         val known = words.associateWith { this.lines.get(key(it)) }
         val missing = words.filter { known[it] == null }
         val kept = known.filterValues { it != null }.mapValues { it.value!! }
@@ -39,6 +39,11 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 "You translate song lyrics into $name. The user sends the song's lines as a JSON array of strings, in order. " +
                     "A line already in ${sameAs(language)}, from anywhere and however it's spelled, isn't translated: its string is empty. " +
                     "Translate only the others, as one song, so each reads naturally in $name and keeps the meaning, tone, slang and wordplay the song gives it. " +
+                    // Tried on a Japanese song with GPT-6-Luna: as one song, a sentence over two lines came back in Spanish's order
+                    // in 4 of 5 tries, the guitar under the line before "ギター"; held to each line's own part, with an example, in none.
+                    "Each translation says only what its own line says, as it's sung under it. Where a sentence runs over several lines, as in Japanese or Korean, " +
+                    "each line keeps its own part, even in another order than the sentence would have in one line: " +
+                    "[\"誰も知らない\", \"秘密の場所で\"] is [\"that no one knows\", \"in a secret place\"], never [\"in a secret place\", \"that no one knows\"]. " +
                     "Reply with only a JSON array of strings, the same length and in the same order.",
                 JSONArray(missing).toString(),
                 effort = "low"
@@ -510,6 +515,9 @@ private const val EARLIER_QUESTIONS = 6
 
 /** What ChatGPT puts between the parts of an explanation. */
 internal const val PART_BREAK = "---"
+
+/** Bumped when ChatGPT is asked to translate another way, so lines translated before are asked again: 2 kept each line's part on it. */
+internal const val TRANSLATION_VERSION = 2
 
 /**
  * The parts of an explanation, in order, empty where it left one out; while it's still being
