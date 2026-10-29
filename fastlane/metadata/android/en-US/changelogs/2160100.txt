@@ -1,0 +1,1 @@
+Swiping up to the player no longer makes it start over as the song's card loads under it.
