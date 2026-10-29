@@ -239,8 +239,8 @@ class SingingTest {
         openLyrics()
         plays()
         waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
-        // The lines heard are where they're sung, and those after keep to the last of them.
-        assertEquals(listOf(3_000L, 6_000L, 9_300L, 31_300L, 34_300L, 37_300L), model().uiState.lyricLines.map { it.timeMs })
+        // The lines heard are where they're sung, and those after keep to how far off they were as a whole.
+        assertEquals(listOf(3_000L, 6_000L, 9_300L, 31_000L, 34_000L, 37_000L), model().uiState.lyricLines.map { it.timeMs })
         assertFalse(prefs().contains("sung_heard"))
         // Where the next lines are sung, they're heard too, and that's the song.
         passes(32_000)

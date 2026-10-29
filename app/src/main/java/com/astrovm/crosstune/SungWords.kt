@@ -164,9 +164,12 @@ internal object SungAlignment {
     }
 
     /**
-     * Where each of [lines] heard sung starts, by index, once they're [shiftMs] off as a whole: a
-     * line timed word by word by most of its words heard, one timed a line at a time by its first.
-     * One heard only a little off stays [shiftMs] off, as a word is heard about that exactly.
+     * Where each of [lines] heard sung starts, by index, once they're [shiftMs] off as a whole. A line
+     * timed word by word is placed by most of its words heard. One timed a line at a time is placed by
+     * its first two words heard one after the other, or by the words heard just before a pair, as many
+     * as come before it in the line, a few at most, and matching none: the model often mishears a
+     * line's first word. One heard only a little off, as near as a word is heard, or heard but not
+     * told where it starts, stays [shiftMs] off.
      */
     fun linesMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>, shiftMs: Long): Map<Int, Long> {
         val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
@@ -176,12 +179,19 @@ internal object SungAlignment {
         val near = lines.indices.filter { lines[it].timeMs + shiftMs in from..to }
         val timed = near.flatMapIndexed { at, line -> wordsOf(lines[line], near.getOrNull(at + 1)?.let { lines[it].timeMs }, line) }
         val pairs = matched(heard.map { it.first }, timed.map { it.text })
+        val matchedHeard = pairs.map { it.first }.toSet()
         return pairs.groupBy { (_, t) -> timed[t].line }.mapNotNull { (line, its) ->
-            val first = timed.indexOfFirst { it.line == line }
-            val offs = its.filter { (_, t) -> lines[line].words.isNotEmpty() || t == first }.mapNotNull { (h, t) -> timed[t].ms?.let { heard[h].second - it - shiftMs } }
-            // A word alone could be the same word in another line.
-            if (offs.isEmpty() || its.size < 2 || (lines[line].words.isNotEmpty() && offs.size < 2)) return@mapNotNull null
-            val off = offs.sorted()[offs.size / 2]
+            val startMs = if (lines[line].words.isNotEmpty()) {
+                val offs = its.mapNotNull { (h, t) -> timed[t].ms?.let { heard[h].second - it } }
+                offs.takeIf { it.size >= 2 }?.sorted()?.let { it[it.size / 2] + lines[line].timeMs }
+            } else {
+                val (h, t) = its.first()
+                val before = t - timed.indexOfFirst { it.line == line }
+                // A pair: the next word of the line heard right after.
+                val pair = its.getOrNull(1) == (h + 1 to t + 1) && heard[h + 1].second - heard[h].second < PAIR_MS
+                heard.getOrNull(h - before)?.second?.takeIf { pair && before <= MAX_MISHEARD && (h - before until h).none { it in matchedHeard } }
+            } ?: return@mapNotNull (line to lines[line].timeMs + shiftMs).takeIf { its.size >= 2 }
+            val off = startMs - lines[line].timeMs - shiftMs
             if (abs(off) > LINE_OFF_MS) null else line to lines[line].timeMs + shiftMs + if (abs(off) >= OWN_LINE_MS) off else 0L
         }.toMap()
     }
@@ -305,7 +315,13 @@ internal object SungAlignment {
 
     /** A line heard further than this from where the rest are is another line; one heard less than [OWN_LINE_MS] off isn't off by itself. */
     private const val LINE_OFF_MS = 1_000L
-    private const val OWN_LINE_MS = 250L
+    private const val OWN_LINE_MS = 150L
+
+    /** How many of a line's first words may be misheard, and it still be told where it starts by the words heard in their place. */
+    private const val MAX_MISHEARD = 2
+
+    /** Two words heard further apart than this aren't sung one after the other. */
+    private const val PAIR_MS = 1_000L
 
     /** How close together the places tried for far-off lines are: as close as words heard can tell apart. */
     private const val FAR_STEP_MS = 1_000L

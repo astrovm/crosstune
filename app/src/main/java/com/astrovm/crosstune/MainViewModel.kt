@@ -2090,7 +2090,8 @@ internal class MainViewModel(
                 }
                 singingTries = 0
                 if (heardTo == null && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
-                placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L))
+                val wholeMs = shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L
+                placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, wholeMs), wholeMs)
                 heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
                 // Heard to the end, or as near as there's enough singing left to hear, it's done.
                 if (untilSung(LyricsSync.adjust(lines, syncPoints), clock, heardTo) == null) {
@@ -2105,13 +2106,15 @@ internal class MainViewModel(
 
     /**
      * Each line of the words [placed] where it was heard sung, by its index, as putting it in time by
-     * hand would: the lines between stretch to fit, and those beyond keep to the nearest.
+     * hand would: the lines between stretch to fit. The lines either side of them keep to the [shiftMs]
+     * the words heard are off as a whole, unless heard before, so one line's own slip doesn't carry on.
      */
-    private fun placeSung(song: MusicMetadata, placed: Map<Int, Long>) {
+    private fun placeSung(song: MusicMetadata, placed: Map<Int, Long>, shiftMs: Long) {
         val shown = LyricsSync.adjust(foundLines, syncPoints)
-        val moved = placed.filter { (line, ms) -> ms != shown[line].timeMs }
-        if (moved.isEmpty()) return
-        setSync(song, placed.entries.fold(syncPoints) { points, (line, ms) -> LyricsSync.with(points, SyncPoint(foundLines[line].timeMs, ms)) })
+        if (placed.none { (line, ms) -> ms != shown[line].timeMs }) return
+        val around = listOf(placed.keys.min() - 1, placed.keys.max() + 1).filter { it in foundLines.indices && syncPoints.none { point -> point.lineMs == foundLines[it].timeMs } }
+        val points = placed + around.associateWith { shown[it].timeMs + shiftMs }
+        setSync(song, points.entries.fold(syncPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms)) })
     }
 
     /**

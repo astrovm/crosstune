@@ -118,6 +118,21 @@ class SungWordsTest {
         // Nor is one with a word heard alone, which could be the same word in another line.
         val alone = Sung(0, song.flatMapIndexed { index, line -> heard(listOf(line), 2_000).words.take(if (index == 2) 1 else 9) })
         assertEquals(setOf(0, 1, 3, 4, 5), SungAlignment.linesMs(alone, fromTheStart, song, 2_000).keys)
+        // A first word misheard, the word heard just before the rest of the line is where it starts.
+        val misheard = Sung(0, sung(listOf(0, 0, 0, 400, 0, 0)).words.map { if (it.text == "Hold") it.copy(text = "Old") else it })
+        assertEquals(11_400L, SungAlignment.linesMs(misheard, fromTheStart, song, 2_000)[3])
+        // Nor when more of its first words are misheard than a few, as the model may hear fewer words than are sung.
+        val tooMany = timed("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "You say the words that I can't say", "Dancing on the water", "Never let it go")
+        val heardAs = Sung(0, tooMany.flatMapIndexed { index, line -> heard(listOf(line), 2_000L + if (index == 3) 400 else 0).words.mapIndexed { word, it -> if (index == 3 && word < 4) it.copy(text = "who") else it } })
+        assertEquals(11_000L, SungAlignment.linesMs(heardAs, fromTheStart, tooMany, 2_000)[3])
+        // Not heard at all, the word before is the line before's, so it keeps to the rest.
+        val missed = Sung(0, sung(listOf(0, 0, 0, 400, 0, 0)).words.filterNot { it.text == "Hold" })
+        assertEquals(11_000L, SungAlignment.linesMs(missed, fromTheStart, song, 2_000)[3])
+        // So does one whose words are heard too far apart to be sung one after the other.
+        val apart = Sung(0, song.flatMapIndexed { index, line ->
+            heard(listOf(line), 2_000).words.mapIndexed { word, it -> if (index == 3 && word > 0) it.copy(atMs = it.atMs + 1_000) else it }
+        })
+        assertEquals(11_000L, SungAlignment.linesMs(apart, fromTheStart, song, 2_000)[3])
         // Heard elsewhere in the song, none are.
         assertEquals(emptyMap<Int, Long>(), SungAlignment.linesMs(Sung(0, heard(song, 2_000).words.map { it.copy(atMs = it.atMs + 60_000) }), fromTheStart, song, 2_000))
         assertEquals(emptyMap<Int, Long>(), SungAlignment.linesMs(Sung(0, listOf(HeardWord("♪", 0))), fromTheStart, song, 0))
@@ -133,8 +148,8 @@ class SungWordsTest {
         // The second line sung 400 ms later than the first, by its words "let" and "go", whatever "Never" says.
         val heard = sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_300L, "let" to 3_000L, "me" to 3_300L, "go" to 3_600L)
         assertEquals(mapOf(0 to 300L, 1 to 2_700L), SungAlignment.linesMs(heard, fromTheStart, words, -700))
-        // Heard by one of its timed words only, it isn't placed.
-        assertEquals(setOf(0), SungAlignment.linesMs(sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_700L, "me" to 3_300L), fromTheStart, words, -700).keys)
+        // Heard by one of its timed words only, it keeps to the rest.
+        assertEquals(mapOf(0 to 300L, 1 to 2_300L), SungAlignment.linesMs(sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_700L, "me" to 3_300L), fromTheStart, words, -700))
     }
 
     /** A verse of eight lines, then a chorus of three sung twice, three seconds a line. */
