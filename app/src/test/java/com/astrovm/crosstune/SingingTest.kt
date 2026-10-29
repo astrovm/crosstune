@@ -190,6 +190,109 @@ class SingingTest {
 
     private fun shown(id: Int) = composeRule.onAllNodesWithText(app.getString(id)).fetchSemanticsNodes().isNotEmpty()
 
+    /** Where the words follow the song to be now. */
+    private fun followedAt() = model().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime())
+
+    @Test
+    fun pickedUpPartwayTheSingingPutsItRightThisTimeOnly() {
+        // The app was already playing, so where it says it is may be behind, as YouTube Music's often is.
+        singing.answer = { sung(SHIFT_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && followedAt() == 3_000 - SHIFT_MS + SystemClock.elapsedRealtime() - startedAt }
+        // The words stay as they're timed, and nothing's kept for next time.
+        assertEquals(0L, firstLineMs())
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("sung_heard"))
+        // A line tapped moves the app to where it's sung by its clock.
+        composeRule.runOnIdle { model().seekLyrics(6_000) }
+        assertEquals(6_000 + SHIFT_MS, playback.seeks.last())
+        // Played on from where it was, it isn't heard again.
+        plays(positionMs = 3_000 + SystemClock.elapsedRealtime() - startedAt)
+        composeRule.waitForIdle()
+        assertEquals(1, singing.hears)
+        // Moved elsewhere in the app, it's heard again.
+        plays(positionMs = 4_000)
+        waitUntil { singing.hears == 2 }
+        // Started again, where the app says is sure: the words are lined up for good.
+        plays(positionMs = 100)
+        waitUntil { model().uiState.lyricsSynced }
+        assertEquals(SHIFT_MS, firstLineMs())
+        assertEquals(100L, followedAt() - (SystemClock.elapsedRealtime() - startedAt))
+        assertEquals(3, singing.hears)
+    }
+
+    /** Lines at [times] seconds, each heard sung [offMs] later, from where the song is as it's heard, for as long as it is. */
+    private fun sungAt(times: List<Int>, offMs: List<Long>) = SystemClock.elapsedRealtime().let { now ->
+        val at = now - startedAt + startedFromMs
+        Sung(now, lines.indices.filter { times[it] * 1_000L + offMs[it] in at until at + SingingListener.SECONDS * 1_000L }.flatMap { index ->
+            lines[index].split(' ').mapIndexed { word, text -> HeardWord(text, times[index] * 1_000L + offMs[index] + SungAlignment.HEARD_LATE_MS + word * 300L - at) }
+        })
+    }
+
+    @Test
+    fun aSongLongerThanWhatsHeardAtOnceIsHeardThroughEachLineWhereItsSung() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        // A second later as a whole, and some lines more or less, as the words' own timing is off by a little here and there.
+        singing.answer = { sungAt(times, listOf(1_000, 1_000, 1_300, 1_300, 900, 1_300)) }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
+        // The lines heard are where they're sung, and those after keep to the last of them.
+        assertEquals(listOf(3_000L, 6_000L, 9_300L, 31_300L, 34_300L, 37_300L), model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(prefs().contains("sung_heard"))
+        // Where the next lines are sung, they're heard too, and that's the song.
+        passes(32_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[4].timeMs == 33_900L }
+        assertEquals(listOf(3_000L, 6_000L, 9_300L, 31_300L, 33_900L, 37_300L), model().uiState.lyricLines.map { it.timeMs })
+        assertTrue(prefs().contains("sung_heard"))
+        passes(30_000)
+        assertEquals(2, singing.hears)
+    }
+
+    @Test
+    fun resetPartwayThroughTheSongTheSingingIsntHeardOn() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 1_000L }) }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
+        composeRule.runOnIdle { model().resetSync() }
+        passes(40_000)
+        assertEquals(1, singing.hears)
+        assertEquals(2_000L, firstLineMs())
+        assertTrue(prefs().contains("sung_heard"))
+    }
+
+    @Test
+    fun putInTimeByHandPartwayTheSingingIsntHeardOn() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 1_000L }) }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
+        composeRule.runOnIdle { model().nudgeSync(200) }
+        passes(40_000)
+        assertEquals(1, singing.hears)
+        assertEquals(3_200L, firstLineMs())
+    }
+
+    @Test
+    fun aStartSaidLateIsntSure() {
+        // The app says it started from the start, but said so a while ago: Crosstune didn't see it start.
+        singing.answer = { sung(SHIFT_MS) }
+        openLyrics()
+        startedAt = SystemClock.elapsedRealtime() - 2_000
+        startedFromMs = 0
+        playback.playing.value = Following(PlaybackClock(0, startedAt), "YouTube Music", canSeek = true)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.lyricsSynced)
+    }
+
     @Test
     fun withoutTheSpeechModelItsOfferedByHandThenTheSingingIsHeard() {
         singing.missing = true
@@ -432,6 +535,11 @@ class SingingTest {
         composeRule.waitForIdle()
         assertEquals(3, singing.hears)
         assertFalse(model().uiState.lyricsSynced)
+        // Moved elsewhere, it's tried three more times from there.
+        repeat(5) { plays(positionMs = 5_000L + it) }
+        waitUntil { singing.hears == 6 }
+        composeRule.waitForIdle()
+        assertEquals(6, singing.hears)
     }
 
     @Test

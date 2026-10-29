@@ -39,11 +39,12 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
 }
 
 /**
- * An app's clock can be a moment behind the song, as YouTube Music's often is, by up to half a
- * second or so. The song plays on from where it really is, so the words would come in late.
+ * An app's clock can be a moment behind the song, as YouTube Music's often is, by over a second
+ * after a pause. The song plays on from where it really is, so the words would come in late.
  *
- * Where it says it paused can be behind where the song really stopped: where it was playing on to is
- * believed instead, until the app says it's somewhere else, e.g. moved to another place.
+ * Where it says it paused can be behind where the song really stopped, and so can where it says it
+ * plays again from: where it was playing on to is believed instead, until the app says it's somewhere
+ * else, e.g. moved to another place.
  *
  * While it keeps playing, saying it's a moment back is stale too: as each song starts, YouTube
  * Music says it's at the start, then says so again most of a second later. Where it was playing on to
@@ -60,6 +61,8 @@ internal class SteadyClock {
         val behind = was?.takeIf { it.playing }?.let { it.positionAt(clock.atMs) - clock.positionMs }
         val stale = behind != null && behind in 1..STALE_CLOCK_MS
         if (was != null && stale && clock.playing && clock.speed == was.speed) return was
+        // Played again from a moment behind where it stopped, as YouTube Music says it is, it plays on from where it stopped.
+        if (was != null && !was.playing && clock.playing && was.positionMs - clock.positionMs in 1..STALE_CLOCK_MS) return clock.copy(positionMs = was.positionMs).also { last = it }
         if (behind != null && !clock.playing) {
             said = clock.positionMs.takeIf { stale }
             stopped = clock.positionMs + behind
@@ -197,7 +200,8 @@ internal class MediaSessionPlayback(
     private val waker: AppWaker = MediaBrowserWaker(context),
     private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
-    private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue
+    private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
+    private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -414,6 +418,11 @@ internal class MediaSessionPlayback(
             }
     }
 
+    /** How long the app says what it plays is, as it said before for the song; see [SteadyLengths]. */
+    private fun lengthOf(metadata: MediaMetadata): Long? = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }?.let {
+        lengths.of(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), it)
+    }
+
     /** What plays, as the app names it. */
     private fun MediaController.named(): MusicMetadata? =
         metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
@@ -422,7 +431,7 @@ internal class MediaSessionPlayback(
     /** Stopped or paused at its song's end, where it said it is. */
     private fun MediaController.ended(): Boolean {
         val state = playbackState ?: return false
-        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 } ?: return false
+        val duration = metadata?.let(::lengthOf) ?: return false
         return state.state in STILL && state.position >= duration - ENDED_WITHIN_MS
     }
 
@@ -480,7 +489,7 @@ internal class MediaSessionPlayback(
         // A music app's "Song - Remastered" stays whole.
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
         val named = when {
-            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 })
+            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = lengthOf(metadata))
             MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist) ?: return null
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
@@ -490,7 +499,7 @@ internal class MediaSessionPlayback(
         val clock = following(controller)?.takeIf { !it.video }?.clock
         val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
         val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
-        val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }
+        val duration = lengthOf(metadata)
         return Heard.Song(named.copy(
             artworkUrl = artwork,
             url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
@@ -535,7 +544,7 @@ internal class MediaSessionPlayback(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
             canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
-            durationMs = controller.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 },
+            durationMs = controller.metadata?.let(::lengthOf),
             shuffle = modes.shuffles(controller),
             repeat = modes.repeats(controller),
             like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon) }
@@ -579,7 +588,7 @@ internal class MediaSessionPlayback(
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
-        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), playing.getLong(MediaMetadata.METADATA_KEY_DURATION))
+        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), lengthOf(playing))
         if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
@@ -607,7 +616,7 @@ private val SIZED_COVER = Regex("=w\\d+-h\\d+")
 private const val QUEUED_COVER_PX = 180
 
 /** How far behind where it was playing on to an app may say it is, and still be believed to be there instead. */
-internal const val STALE_CLOCK_MS = 1_000L
+internal const val STALE_CLOCK_MS = 2_000L
 
 /** Where an app puts the cover it shows, the song's own before its album's. */
 private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)

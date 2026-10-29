@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
@@ -111,6 +112,44 @@ class PlaybackTest {
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
+    }
+
+    @Test
+    fun aSongSaidASecondLongerIsStillTheSameRecording() {
+        allow()
+        // YouTube Music says the same song is 220 seconds long, then 221.
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours", duration = 220_000)
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        assertEquals(220_000L, seen.last()!!.durationMs)
+        val longer = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 221_000).build()
+        shadowOf(music).setMetadata(longer)
+        shadowOf(music).executeOnMetadataChanged(longer)
+        shadowOf(Looper.getMainLooper()).idle()
+        // Still followed, as long as it was, and keyed the same; any app saying so the next day too.
+        assertEquals(220_000L, seen.last()!!.durationMs)
+        val played = MusicMetadata("Blinding Lights", "The Weeknd")
+        assertEquals("com.google.android.apps.youtube.music:duration:220000", playback.recording(played)?.recordingId)
+        assertEquals(220_000L, playback.recording(played)?.lengthMs)
+        assertEquals(220_000L, SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).of("Blinding Lights", "The Weeknd", 218_500))
+        // Further apart, it's another recording, e.g. a longer edit.
+        val edit = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 221_501).build()
+        shadowOf(music).setMetadata(edit)
+        assertEquals(221_501L, playback.recording(played)?.lengthMs)
+    }
+
+    @Test
+    fun songLengthsKeptAreTheLatestFiveHundred() {
+        val prefs = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        val lengths = SteadyLengths(prefs)
+        repeat(501) { lengths.of("Song $it", "Band", 200_000) }
+        val again = SteadyLengths(prefs)
+        // The first is gone, so it's taken as said; the last is kept.
+        assertEquals(201_000L, again.of("Song 0", "Band", 201_000))
+        assertEquals(200_000L, again.of("Song 500", "Band", 201_000))
+        // Kept the wrong way, it starts over.
+        prefs.edit().putString("song_lengths", "not json").commit()
+        assertEquals(201_000L, SteadyLengths(prefs).of("Song 500", "Band", 201_000))
     }
 
     @Test
@@ -346,6 +385,22 @@ class PlaybackTest {
         // Moved while paused, it's where it was moved to.
         says(PlaybackState.STATE_PAUSED, 30_000, PLAYED_AT + 70_000)
         assertEquals(30_000L, seen.last()!!.clock.positionMs)
+        // Played again from a moment behind where it stopped, up to two seconds, it plays on from where it stopped.
+        says(PlaybackState.STATE_PLAYING, 30_000 - STALE_CLOCK_MS, PLAYED_AT + 75_000)
+        assertEquals(PlaybackClock(30_000, PLAYED_AT + 75_000, 1f, true), seen.last()!!.clock)
+        says(PlaybackState.STATE_PAUSED, 40_000, PLAYED_AT + 85_000)
+        says(PlaybackState.STATE_PLAYING, 39_999, PLAYED_AT + 90_000)
+        assertEquals(40_000L, seen.last()!!.clock.positionMs)
+        // Further behind, or right there, or ahead, it's where the app says.
+        says(PlaybackState.STATE_PAUSED, 50_000, PLAYED_AT + 95_000)
+        says(PlaybackState.STATE_PLAYING, 50_000 - STALE_CLOCK_MS - 1, PLAYED_AT + 100_000)
+        assertEquals(50_000 - STALE_CLOCK_MS - 1, seen.last()!!.clock.positionMs)
+        says(PlaybackState.STATE_PAUSED, 60_000, PLAYED_AT + 105_000)
+        says(PlaybackState.STATE_PLAYING, 60_000, PLAYED_AT + 110_000)
+        assertEquals(60_000L, seen.last()!!.clock.positionMs)
+        says(PlaybackState.STATE_PAUSED, 70_000, PLAYED_AT + 115_000)
+        says(PlaybackState.STATE_PLAYING, 70_500, PLAYED_AT + 120_000)
+        assertEquals(70_500L, seen.last()!!.clock.positionMs)
     }
 
     @Test

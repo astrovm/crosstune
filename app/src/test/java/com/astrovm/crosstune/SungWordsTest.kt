@@ -103,8 +103,59 @@ class SungWordsTest {
 
     @Test
     fun linesTimedAsFarOffAsCanBeStillTell() {
-        // Sung 9.4 s after it's timed, heard 0.6 s late: the first line is 10 s before the first word heard.
-        assertEquals(9_400L, SungAlignment.shiftMs(heard(song.take(3), 9_400), fromTheStart, song))
+        // Sung 9.6 s after it's timed, heard 0.4 s late: the first line is 10 s before the first word heard.
+        assertEquals(9_600L, SungAlignment.shiftMs(heard(song.take(3), 9_600), fromTheStart, song))
+    }
+
+    @Test
+    fun eachLineHeardIsPlacedWhereItsSung() {
+        // Two seconds later as a whole, and some lines further off by themselves: the third 600 ms later, the fifth 300 ms earlier.
+        // The second, 100 ms later, is as near as a word is heard, so it's taken as the rest.
+        fun sung(off: List<Long>) = Sung(0, song.flatMapIndexed { index, line -> heard(listOf(line), 2_000 + off[index]).words })
+        assertEquals(mapOf(0 to 2_000L, 1 to 5_000L, 2 to 8_600L, 3 to 11_000L, 4 to 13_700L, 5 to 17_000L), SungAlignment.linesMs(sung(listOf(0, 100, 600, 0, -300, 0)), fromTheStart, song, 2_000))
+        // One heard much further off than the rest is another line, sung where this one isn't.
+        assertFalse(2 in SungAlignment.linesMs(sung(listOf(0, 0, 1_500, 0, 0, 0)), fromTheStart, song, 2_000))
+        // Nor is one with a word heard alone, which could be the same word in another line.
+        val alone = Sung(0, song.flatMapIndexed { index, line -> heard(listOf(line), 2_000).words.take(if (index == 2) 1 else 9) })
+        assertEquals(setOf(0, 1, 3, 4, 5), SungAlignment.linesMs(alone, fromTheStart, song, 2_000).keys)
+        // Heard elsewhere in the song, none are.
+        assertEquals(emptyMap<Int, Long>(), SungAlignment.linesMs(Sung(0, heard(song, 2_000).words.map { it.copy(atMs = it.atMs + 60_000) }), fromTheStart, song, 2_000))
+        assertEquals(emptyMap<Int, Long>(), SungAlignment.linesMs(Sung(0, listOf(HeardWord("♪", 0))), fromTheStart, song, 0))
+    }
+
+    @Test
+    fun aLineTimedWordByWordIsPlacedByMostOfItsWords() {
+        val words = listOf(
+            LyricLine(1_000, "Take me now", listOf(TimedWord(1_000, "Take "), TimedWord(1_400, "me "), TimedWord(1_800, "now"))),
+            LyricLine(3_000, "Never let me go", listOf(TimedWord(3_000, "Never "), TimedWord(3_300, "let me "), TimedWord(3_900, "go")))
+        )
+        fun sung(vararg words: Pair<String, Long>) = Sung(0, words.map { (word, at) -> HeardWord(word, at + SungAlignment.HEARD_LATE_MS) })
+        // The second line sung 400 ms later than the first, by its words "let" and "go", whatever "Never" says.
+        val heard = sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_300L, "let" to 3_000L, "me" to 3_300L, "go" to 3_600L)
+        assertEquals(mapOf(0 to 300L, 1 to 2_700L), SungAlignment.linesMs(heard, fromTheStart, words, -700))
+        // Heard by one of its timed words only, it isn't placed.
+        assertEquals(setOf(0), SungAlignment.linesMs(sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_700L, "me" to 3_300L), fromTheStart, words, -700).keys)
+    }
+
+    /** A verse of eight lines, then a chorus of three sung twice, three seconds a line. */
+    private val verseAndChorus = timed(
+        "Every time I think of you", "I feel shot right through with a bolt of blue", "It is no problem of mine",
+        "But it is a problem I find", "Living a life that I cannot leave behind", "There is no sense in telling me",
+        "The wisdom of a fool will not set you free", "But that is the way that it goes",
+        "Every time I see you falling", "I get down on my knees and pray", "I am waiting for that final moment",
+        "Every time I see you falling", "I get down on my knees and pray", "I am waiting for that final moment"
+    )
+
+    @Test
+    fun linesTimedMuchFurtherOffAreFoundWhereByFarTheMostWordsAgree() {
+        // The verse sung 23.6 s later than timed, as YouTube Music's own words for a release with a longer intro.
+        assertEquals(23_600L, SungAlignment.shiftMs(heard(verseAndChorus.take(5), 23_600), fromTheStart, verseAndChorus))
+        // Or earlier.
+        assertEquals(-15_000L, SungAlignment.shiftMs(heard(verseAndChorus.subList(5, 8), -15_000), fromTheStart, verseAndChorus))
+        // A chorus sung as much in two places tells nothing that far off.
+        assertNull(SungAlignment.shiftMs(heard(verseAndChorus.subList(8, 11), 20_000), fromTheStart, verseAndChorus))
+        // Nor do too few words.
+        assertNull(SungAlignment.shiftMs(heard(verseAndChorus.take(1), 23_600), fromTheStart, verseAndChorus))
     }
 
     @Test
@@ -183,15 +234,17 @@ class SungWordsTest {
     }
 
     @Test
-    fun wordsTimedTooFarOffAreForAnotherPartOfTheSong() {
-        // 9.4 seconds later still is; 10.6 seconds earlier isn't.
+    fun wordsTimedOverTenSecondsOffTakeManyWordsToPlace() {
         val lines = timed("Sing to me tonight", "Under the yellow moon", "Every river finds the sea", "Hold the morning light", "Dancing on the water", startMs = 20_000)
         assertEquals(9_400L, SungAlignment.shiftMs(heard(lines, 9_400), fromTheStart, lines))
-        assertNull(SungAlignment.shiftMs(heard(lines, -10_600), fromTheStart, lines))
         assertEquals(-9_000L, SungAlignment.shiftMs(heard(lines, -9_000), fromTheStart, lines))
         assertEquals(-10_000L, SungAlignment.shiftMs(heard(lines, -10_000), fromTheStart, lines))
-        // Lines more than 10 seconds before or after what was heard aren't looked at at all.
-        assertNull(SungAlignment.shiftMs(heard(lines, 10_800), fromTheStart, lines))
+        // Further off, every line heard places them.
+        assertEquals(-10_600L, SungAlignment.shiftMs(heard(lines, -10_600), fromTheStart, lines))
+        assertEquals(10_800L, SungAlignment.shiftMs(heard(lines, 10_800), fromTheStart, lines))
+        // Three lines still do; two, as near, don't.
+        assertEquals(10_800L, SungAlignment.shiftMs(heard(lines.take(3), 10_800), fromTheStart, lines))
+        assertNull(SungAlignment.shiftMs(heard(lines.take(2), 10_800), fromTheStart, lines))
     }
 
     @Test
