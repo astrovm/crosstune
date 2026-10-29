@@ -171,6 +171,7 @@ internal data class ScreenActions(
     val onClosePlayer: () -> Unit = {},
     val onPlayerOpenApp: () -> Unit = {},
     val onPlayerOpenWith: () -> Unit = {},
+    val onPlayerMenu: () -> Unit = {},
     val onPlayerPlayPause: () -> Unit = {},
     val onPlayerSkip: (next: Boolean) -> Unit = {},
     val onPlayerShuffle: () -> Unit = {},

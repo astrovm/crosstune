@@ -1344,6 +1344,15 @@ internal class MainViewModel(
         effectChannel.trySend(Effect.Show(app, finishAfterOpen = false, saysWhenItFails = false))
     }
 
+    /**
+     * The player's song's card under it, for its menu: looked up once that's opened on a song the
+     * card isn't of, e.g. the next one its app went on to, rather than each song as it plays.
+     */
+    fun playerMenu() {
+        val song = uiState.player?.song ?: return
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+    }
+
     /** Closes the player on the song's card, with the apps to open it in over it. */
     fun playerOpenWith() {
         closePlayer()

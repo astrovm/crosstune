@@ -518,6 +518,7 @@ class MainActivity : ComponentActivity() {
         onClosePlayer = viewModel::closePlayer,
         onPlayerOpenApp = viewModel::openPlayerApp,
         onPlayerOpenWith = viewModel::playerOpenWith,
+        onPlayerMenu = viewModel::playerMenu,
         onPlayerPlayPause = viewModel::playerPlayPause,
         onPlayerSkip = viewModel::playerSkip,
         onPlayerShuffle = viewModel::playerShuffle,
