@@ -96,7 +96,7 @@ internal fun CardTypesPanel(line: SavedLine, types: List<CardType>, turned: Bool
     var fixing by remember { mutableStateOf(false) }
     val type = types.firstOrNull { it.id == editing }
     val inside = fixing || type != null
-    val goingBack = swipedAway(shown = inside) { if (fixing) fixing = false else if (editing != null) editing = null else onClose() }
+    val goingBack = swipedAway(shown = editing to fixing) { if (fixing) fixing = false else if (editing != null) editing = null else onClose() }
     val change = { list: List<CardType>, save: Boolean -> actions.onCardTypesChange(list, save) }
     LaunchedEffect(type?.id) { if (type == null) onPreview(null) }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.42f

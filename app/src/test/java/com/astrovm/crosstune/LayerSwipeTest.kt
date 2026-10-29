@@ -11,6 +11,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -234,7 +240,7 @@ class LayerSwipeTest {
         compose.waitForIdle()
         // Half way, it's half off, the list a little way out from under it.
         assertEquals(width / 2, compose.onNodeWithText("Page").getBoundsInRoot().left)
-        assertEquals(-width / 10, compose.onNodeWithText("List").getBoundsInRoot().left)
+        assertEquals(-width / 10, compose.onNodeWithText("List").getUnclippedBoundsInRoot().left)
         compose.runOnIdle { back.dispatchOnBackCancelled() }
         compose.waitForIdle()
         compose.onNodeWithText("List").assertDoesNotExist()
@@ -243,8 +249,47 @@ class LayerSwipeTest {
         compose.runOnIdle { back.onBackPressed() }
         compose.waitForIdle()
         compose.onNodeWithText("Page").assertDoesNotExist()
-        assertEquals(0.dp, compose.onNodeWithText("List").getBoundsInRoot().left)
+        assertEquals(0.dp, compose.onNodeWithText("List").getUnclippedBoundsInRoot().left)
         // At the first page, Back is left to whatever's behind it.
         compose.runOnIdle { assertFalse(back.hasEnabledCallbacks()) }
     }
+    @Test
+    fun anInScreenModeFollowsCancelsClosesAndReopensWithoutKeepingItsOldSwipe() {
+        var enabled by mutableStateOf(true)
+        var mode by mutableStateOf("first")
+        lateinit var away: () -> Float
+        compose.setContent {
+            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            away = swipedAway(enabled = enabled, shown = mode) { enabled = false; said += "closed" }
+            if (enabled) Box(Modifier.size(200.dp).goingAway(away, TransformOrigin(0f, 0f)).testTag("mode"))
+        }
+        swipeBack(0.5f)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(0.5f, away(), 0.001f) }
+        assertEquals(190.dp, compose.onNodeWithTag("mode").getUnclippedBoundsInRoot().width)
+        compose.runOnIdle { back.dispatchOnBackCancelled() }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(0f, away(), 0.001f) }
+        assertTrue(said.isEmpty())
+        swipeBack(0.5f)
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
+        assertEquals(listOf("closed"), said)
+        compose.onNodeWithTag("mode").assertDoesNotExist()
+        compose.runOnIdle { assertFalse(back.hasEnabledCallbacks()); enabled = true }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(0f, away(), 0.001f) }
+        // A nested mode returning to its parent is a new view even while the panel stays open.
+        swipeBack(0.4f)
+        compose.waitForIdle()
+        compose.runOnIdle { mode = "parent" }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(0f, away(), 0.001f); back.dispatchOnBackCancelled() }
+        compose.waitForIdle()
+        // A button press of Back takes the same way out, without progress events.
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
+        assertEquals(listOf("closed", "closed"), said)
+    }
+
 }
