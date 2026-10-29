@@ -341,12 +341,17 @@ class ListeningTest {
         // Its menu is still there, the next song not looked up till it's opened, so Recent only gets songs that are.
         assertTrue(HistoryStore(prefs()).load().none { it.metadata == next })
         click(string(R.string.more_button))
+        // Looking it up leaves the player open, its menu over it.
+        assertEquals(next, controllerModel().uiState.player?.song)
         val copy = hasText(string(R.string.copy_link_button)) and isEnabled()
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(copy).fetchSemanticsNodes().isNotEmpty() }
         assertEquals("Slide", controllerModel().uiState.result?.title)
+        composeRule.onNodeWithContentDescription(string(R.string.dismiss_button)).assertExists()
         composeRule.onNode(copy).performClick()
         composeRule.waitForIdle()
-        assertEquals(controllerModel().uiState.link?.url, app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString())
+        // The link copied is the next song's, not the one the card was of before.
+        val copied = app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString()
+        assertTrue(copied, copied.contains("Slide") && !copied.contains("Iris"))
         // Still in the player, which is on the song the card now is.
         assertEquals(next, controllerModel().uiState.player?.song)
     }

@@ -908,10 +908,10 @@ internal class MainViewModel(
     }
 
     /** Shows [song] as a result, like a pasted link, by the Shazam page [appleMusicId] names when it's known. */
-    private fun showSong(song: MusicMetadata, appleMusicId: String? = null) {
+    private fun showSong(song: MusicMetadata, appleMusicId: String? = null, underPlayer: Boolean = false) {
         val input = appleMusicId?.let { MusicLinks.parse("https://www.shazam.com/song/$it") } ?: MusicLinks.recognizedSong(song)
         uiState = uiState.copy(linkText = (input as? LinkInput.RecognizedSong)?.text ?: (input as LinkInput.Link).link.url)
-        resolve(input, openWhenReady = false)
+        resolve(input, openWhenReady = false, underPlayer = underPlayer)
     }
 
     private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
@@ -941,8 +941,8 @@ internal class MainViewModel(
      * nothing until YouTube Music says it's music, and then only if nothing else has been shown since.
      * A link that came [here], as links do, plays as soon as it's found when set to.
      */
-    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false) {
-        cancelContentWork()
+    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false) {
+        cancelContentWork(closesPlayer = !underPlayer)
         lastRequest = Request(input, openWhenReady, destination, here)
         pendingOpen = openWhenReady
         pendingPlay = here && uiState.playsRightAway
@@ -1350,7 +1350,8 @@ internal class MainViewModel(
      */
     fun playerMenu() {
         val song = uiState.player?.song ?: return
-        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song)
+        // Under the player, so its menu stays open over it while the song's links are found.
+        if (uiState.result?.let { sameSong(it, song) } != true) showSong(song, underPlayer = true)
     }
 
     /** Closes the player on the song's card, with the apps to open it in over it. */
@@ -3522,7 +3523,7 @@ internal class MainViewModel(
     }
 
     /** A new song or an empty screen replaces every operation owned by the previous content. */
-    private fun cancelContentWork() {
+    private fun cancelContentWork(closesPlayer: Boolean = true) {
         job?.cancel()
         job = null
         lastRequest = null
@@ -3531,7 +3532,7 @@ internal class MainViewModel(
         retryListens = false
         dismissSongSearch()
         dismissLyrics()
-        closePlayer()
+        if (closesPlayer) closePlayer()
         cancelTrackWork()
         coverJob?.cancel()
         coverJob = null
