@@ -1149,7 +1149,7 @@ internal class MainViewModel(
                 openPlayer(first, app, queue.url)
                 // Before the app's asked, so what it played until then isn't taken for the list's start.
                 playOn(all, service, destination, queue, name)
-                val asked = app != null && playback?.playList(app, queue.url) == true
+                val asked = app != null && playback?.playList(app, queue.url, mustStart = true) == true
                 if (!playThere(first, app, queue.url, asked, exact = true)) effectChannel.send(Effect.Open(queue.url, app, finishAfterOpen = false))
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
@@ -1168,7 +1168,7 @@ internal class MainViewModel(
         cancelTrackWork()
         trackJob = viewModelScope.launch {
             openPlayer(first, app)
-            if (playback?.playSong(first, app) == true) {
+            if (playback?.playSong(first, app, mustStart = true) == true) {
                 playQueue?.play(tracks, service, app, 1, listOf(first), name)
             } else {
                 closePlayer()
@@ -1260,7 +1260,7 @@ internal class MainViewModel(
                     return@launch
                 }
                 // Asked by name, other apps find it; YouTube Music only plays its own link.
-                val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link) == true
+                val asked = (exact || destination.service != MusicService.YOUTUBE_MUSIC) && source?.playSong(song, app, link, mustStart = true) == true
                 if (!playThere(song, app, link, asked, exact)) open(destination, finishAfterOpen = false, tapped = true)
             } finally {
                 uiState = uiState.copy(playingResult = false)

@@ -981,8 +981,8 @@ class MainActivity : ComponentActivity() {
 
     private fun open(effect: Effect.Open) {
         val uri = effect.url.toUri()
-        // A music app may be installed as a build patched from it, under a name of its own, or as its TV app.
-        val apps = effect.packageName?.let { MusicService.ofPackage(it)?.appLinks(effect.url) ?: listOf(it to effect.url) }.orEmpty()
+        // A service's own app stands in for the builds patched from it and its TV app, whichever is installed; a build chosen by name is only itself.
+        val apps = effect.packageName?.let { MusicService.appLinksIn(it, effect.url) }.orEmpty()
         val opened = apps.any { (app, link) -> tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app)) } ||
             openOutsideCrosstune(uri)
         when {

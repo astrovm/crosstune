@@ -23,10 +23,12 @@ import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
 
@@ -152,9 +154,11 @@ internal interface PlaybackSource {
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
      * [link] there when it's known. Not running, [app] is woken in the background to; with no [link],
-     * the music app that last played is asked when [app] can't be. False with no app to ask.
+     * the music app that last played is asked when [app] can't be. False with no app to ask, and, when
+     * [mustStart], when the app says it can't play it or hasn't started within a couple of seconds, as
+     * YouTube Music in the background without Premium: the caller then opens the song in the app.
      */
-    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null): Boolean
+    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null, mustStart: Boolean = false): Boolean
 
     /**
      * Opens [app] on a song's [link], for when it isn't running and so has nothing to ask in the
@@ -179,8 +183,8 @@ internal interface PlaybackSource {
     @MainThread
     fun plays(app: String): Flow<AppPlays?>
 
-    /** Has [app] play the list of songs at [link], from its first, in the background where it can; false with no app to ask. */
-    suspend fun playList(app: String, link: String): Boolean
+    /** Has [app] play the list of songs at [link], from its first, in the background where it can; false with no app to ask, or, if [mustStart], see [playSong]. */
+    suspend fun playList(app: String, link: String, mustStart: Boolean = false): Boolean
 
     /**
      * Whether Android holds this access back until "Allow restricted settings" is turned on for
@@ -198,6 +202,8 @@ internal class MediaSessionPlayback(
     private val context: Context,
     private val now: () -> Long = SystemClock::elapsedRealtime,
     private val waker: AppWaker = MediaBrowserWaker(context),
+    /** How long an app asked to play has to start. */
+    private val startMs: Long = START_MS,
     private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
@@ -338,15 +344,41 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
         val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
         val asked = apps.firstOrNull { sameApp(app, it.packageName) }
-            ?: app?.let { waker.wake(MusicService.ofPackage(it)?.packageNames ?: listOf(it)) }
+            ?: app?.let { waker.wake(MusicService.appsFor(it)) }
             ?: apps.takeIf { link == null }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
             ?: return false
-        return runCatching { ask(asked, song, link) }.isSuccess
+        return watchStart(asked, mustStart) { ask(asked, song, link) }
+    }
+
+    /**
+     * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
+     * can't play in the background says so with an error, or says nothing, and plays nothing either way.
+     * One already playing, e.g. another song, is taken to go on with this one.
+     */
+    private suspend fun watchStart(asked: MediaController, mustStart: Boolean, ask: () -> Unit): Boolean {
+        val verdict = CompletableDeferred<Boolean>()
+        val callback = object : MediaController.Callback() {
+            override fun onPlaybackStateChanged(state: PlaybackState?) {
+                when (state?.state) {
+                    PlaybackState.STATE_PLAYING -> verdict.complete(true)
+                    PlaybackState.STATE_ERROR -> verdict.complete(false)
+                }
+            }
+        }
+        // Listening before it's asked, so an answer that comes at once isn't missed.
+        if (mustStart) asked.registerCallback(callback, handler)
+        try {
+            if (runCatching(ask).isFailure) return false
+            if (!mustStart || asked.playbackState?.state == PlaybackState.STATE_PLAYING) return true
+            return withTimeoutOrNull(startMs) { verdict.await() } == true
+        } finally {
+            if (mustStart) asked.unregisterCallback(callback)
+        }
     }
 
     // Asked the way a voice assistant asks, which music apps answer without coming to the front.
@@ -362,7 +394,7 @@ internal class MediaSessionPlayback(
     }
 
     // The app may be installed as a build patched from it, under a name of its own, or as its TV app.
-    override fun openSong(app: String, link: String): Boolean = (MusicService.ofPackage(app)?.appLinks(link) ?: listOf(app to link)).any { (packageName, its) ->
+    override fun openSong(app: String, link: String): Boolean = MusicService.appLinksIn(app, link).any { (packageName, its) ->
         runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true
@@ -435,11 +467,11 @@ internal class MediaSessionPlayback(
         return state.state in STILL && state.position >= duration - ENDED_WITHIN_MS
     }
 
-    override suspend fun playList(app: String, link: String): Boolean {
+    override suspend fun playList(app: String, link: String, mustStart: Boolean): Boolean {
         val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName) }
-            ?: waker.wake(MusicService.ofPackage(app)?.packageNames ?: listOf(app))
+            ?: waker.wake(MusicService.appsFor(app))
             ?: return false
-        return runCatching { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }.isSuccess
+        return watchStart(asked, mustStart) { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }
     }
 
     /** What [read] says, again whenever an app starts, pauses, stops, changes songs or its queue. */
@@ -604,6 +636,9 @@ internal class MediaSessionPlayback(
 
 /** Installed from a file rather than by an app store, which Android 13 and later restrict settings for. */
 private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, PackageInstaller.PACKAGE_SOURCE_DOWNLOADED_FILE)
+
+/** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
+internal const val START_MS = 3_000L
 
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
 internal const val LEFT_BEHIND_MS = 10 * 60_000L

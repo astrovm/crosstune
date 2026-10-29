@@ -537,7 +537,8 @@ private val RISING = setOf(Screen.LYRICS, Screen.PLAYER)
 @Composable
 internal fun Destination.label(): String =
     if (this is Destination.Service) {
-        stringResource(service.labelRes)
+        // A patched build is named as Android shows it, e.g. "YT Music Morphe", as it has no name of ours.
+        build?.let { appLabel(it) } ?: stringResource(service.labelRes)
     } else if (this is Destination.Alternative) {
         frontend.label
     } else {
@@ -546,7 +547,14 @@ internal fun Destination.label(): String =
 
 @Composable
 internal fun Destination.openLabel(): String =
-    if (this is Destination.Service) stringResource(service.openLabelRes) else stringResource(R.string.open_in_custom, label())
+    if (this is Destination.Service && build == null) stringResource(service.openLabelRes) else stringResource(R.string.open_in_custom, label())
+
+/** The name Android gives the app [packageName], or null if it's not installed. */
+@Composable
+private fun appLabel(packageName: String): String? {
+    val packageManager = LocalContext.current.packageManager
+    return remember(packageName) { runCatching { packageManager.getApplicationInfo(packageName, 0).loadLabel(packageManager).toString() }.getOrNull() }
+}
 
 /** Page scaffold shared by every screen: a flat top bar (none when [title] is null) and a centered, scrollable column. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1914,8 +1922,7 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
                         }
                     }
                 }
-                val hidden = state.pickerHides?.let(Destination::Service)
-                val choices = state.destinations.filter { it != hidden }
+                val choices = state.destinations.filter { it !is Destination.Service || it.service != state.pickerHides }
                 var all by rememberSaveable { mutableStateOf(false) }
                 val short = choices.shortList(state.installed, null).takeUnless { all }
                 (short ?: choices.installedFirst(state.installed)).forEach { destination ->

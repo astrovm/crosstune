@@ -16,7 +16,8 @@ class DestinationStoreTest {
 
     private val preferences = ApplicationProvider.getApplicationContext<Context>()
         .getSharedPreferences("destinations_test", Context.MODE_PRIVATE)
-    private val store = DestinationStore(preferences)
+    // No patched builds installed, unless a test says so.
+    private val store = DestinationStore(preferences) { false }
     private val deezer = Destination.Service(MusicService.DEEZER)
 
     @Test
@@ -43,6 +44,38 @@ class DestinationStoreTest {
         // A chosen frontend survives as the default by its key.
         onlyNewPipe.setDefault(Destination.Alternative(Frontend.NEWPIPE))
         assertEquals(Destination.Alternative(Frontend.NEWPIPE), onlyNewPipe.defaultDestination())
+    }
+
+    @Test
+    fun aPatchedBuildIsAnAppOfItsOwnOnlyWhileInstalledAndFallsBackToItsServiceOnceGone() {
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val installed = mutableSetOf(morphe, "app.revanced.android.youtube")
+        val patched = DestinationStore(preferences) { it in installed }
+        val music = Destination.Service(MusicService.YOUTUBE_MUSIC)
+        val inMorphe = Destination.Service(MusicService.YOUTUBE_MUSIC, morphe)
+
+        // Each build comes right after its service, and plain services keep their own key and app.
+        val services = patched.allDestinations().filterIsInstance<Destination.Service>()
+        assertEquals(listOf(music, inMorphe), services.filter { it.service == MusicService.YOUTUBE_MUSIC })
+        assertEquals(listOf(Destination.Service(MusicService.YOUTUBE), Destination.Service(MusicService.YOUTUBE, "app.revanced.android.youtube")), services.filter { it.service == MusicService.YOUTUBE })
+        assertEquals(morphe, inMorphe.packageName)
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageName, music.packageName)
+        assertEquals("YOUTUBE_MUSIC@$morphe", inMorphe.key)
+        assertEquals("YOUTUBE_MUSIC", music.key)
+
+        // Chosen as the default and as a rule, it comes back as itself.
+        patched.setDefault(inMorphe)
+        patched.setRule(MusicService.SPOTIFY, inMorphe)
+        assertEquals(inMorphe, patched.defaultDestination())
+        assertEquals(inMorphe, patched.rule(MusicService.SPOTIFY))
+        assertTrue(patched.hasDefault())
+
+        // Uninstalled, the choice is its service again, not nothing.
+        installed.clear()
+        assertEquals(music, patched.defaultDestination())
+        assertEquals(music, patched.rule(MusicService.SPOTIFY))
+        assertTrue(patched.hasDefault())
+        assertEquals(emptyList<Destination>(), patched.allDestinations().filterIsInstance<Destination.Service>().filter { it.build != null })
     }
 
     @Test

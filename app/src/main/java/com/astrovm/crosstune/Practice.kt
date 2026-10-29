@@ -176,7 +176,7 @@ internal class PracticeCards(
                 val asking = from ?: MusicService.YOUTUBE_MUSIC.packageName.takeIf { link != null }
                 // An app that can't be woken in the background is opened on the song, as it is with no
                 // app to ask at all, and left again once it has it.
-                val asked = source.playSong(song, asking, link)
+                val asked = source.playSong(song, asking, link, mustStart = true)
                 opened = !asked && link != null && source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link)
                 (asked || opened) && withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) { ready() } != null
             }

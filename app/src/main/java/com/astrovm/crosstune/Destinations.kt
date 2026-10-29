@@ -26,11 +26,15 @@ internal sealed class Destination {
     /** Turns a link to [matchService] into one this destination opens. */
     open fun adapt(url: String): String = url
 
-    data class Service(val service: MusicService) : Destination() {
-        override val key: String get() = service.name
+    /**
+     * [service]'s own app, which stands in for a build patched from it when it isn't installed, or, with
+     * [build], that build's package alone, e.g. YouTube Music by Morphe, which has an app of its own to open.
+     */
+    data class Service(val service: MusicService, val build: String? = null) : Destination() {
+        override val key: String get() = if (build == null) service.name else "${service.name}$BUILD_SEPARATOR$build"
         override fun searchUrl(query: String) = service.searchUrl(query)
         override val matchService: MusicService get() = service
-        override val packageName: String get() = service.packageName
+        override val packageName: String get() = build ?: service.packageName
     }
 
     /** [instance] is the site a web frontend opens on, e.g. "https://yewtu.be"; null for apps. */
@@ -52,6 +56,7 @@ internal sealed class Destination {
         const val QUERY_PLACEHOLDER = "{query}"
         const val CUSTOM_PREFIX = "custom:"
         const val FRONTEND_PREFIX = "frontend:"
+        const val BUILD_SEPARATOR = "@"
 
         /** A template needs the placeholder and a URI scheme so Android can route it to an app or browser. */
         fun isValidTemplate(template: String): Boolean {
@@ -63,7 +68,7 @@ internal sealed class Destination {
 
 /**
  * Persists the default destination, per-source rules, custom destinations and the sites web
- * frontends open on. Frontend apps are offered only while [isInstalled].
+ * frontends open on. Frontend apps and patched builds are offered only while [isInstalled].
  */
 internal class DestinationStore(
     private val preferences: SharedPreferences,
@@ -82,8 +87,12 @@ internal class DestinationStore(
         }
     }
 
-    fun allDestinations(): List<Destination> =
-        MusicService.entries.map(Destination::Service) + frontends() + customDestinations()
+    fun allDestinations(): List<Destination> = services() + frontends() + customDestinations()
+
+    /** Each service, then the builds patched from it that are installed, each an app of its own. */
+    private fun services(): List<Destination.Service> = MusicService.entries.flatMap { service ->
+        listOf(Destination.Service(service)) + service.builds.filter(isInstalled).map { Destination.Service(service, it) }
+    }
 
     private fun frontends(): List<Destination.Alternative> {
         // Some apps, like NewPipe, are frontends for several services; Android is asked about each once.
@@ -155,7 +164,10 @@ internal class DestinationStore(
         }
     }
 
-    private fun find(key: String?, all: List<Destination>): Destination? = key?.let { wanted -> all.firstOrNull { it.key == wanted } }
+    // A build that was chosen and is gone falls back to its service.
+    private fun find(key: String?, all: List<Destination>): Destination? = key?.let { wanted ->
+        all.firstOrNull { it.key == wanted } ?: all.firstOrNull { it.key == wanted.substringBefore(Destination.BUILD_SEPARATOR) }
+    }
 
     private fun saveCustom(list: List<Destination.Custom>) {
         val array = JSONArray()

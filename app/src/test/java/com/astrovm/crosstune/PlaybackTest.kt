@@ -25,6 +25,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -59,7 +60,7 @@ class PlaybackTest {
     private val modes = FakeModes()
     /** Each app's queue, by its package, as Robolectric shows none. */
     private val queues = mutableMapOf<String, List<MediaSession.QueueItem>>()
-    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, modes = modes, queueOf = { queues[it.packageName] })
+    private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] })
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
 
@@ -1189,6 +1190,46 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAppAskedToStartIsTakenToPlayOnlyOnceItSaysSo() = runBlocking {
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=other000000"
+        allow()
+        val youTubeMusic = player(music, "YouTube Music", "Other", "Band", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(youTubeMusic)
+        val says = { state: Int -> shadowOf(youTubeMusic).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
+        val asks = { CoroutineScope(Dispatchers.Unconfined).async { playback.playSong(song, music, link, mustStart = true) } }
+        // Playing it, it did.
+        val plays = asks()
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(plays.await())
+        // Failing to, as YouTube Music does in the background without Premium, it can't, however soon it says so.
+        shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
+        val fails = asks()
+        says(PlaybackState.STATE_ERROR)
+        assertTrue(fails.isCompleted)
+        assertFalse(fails.await())
+        // Saying nothing, or only that it's loading, it hasn't started in time.
+        assertFalse(asks().await())
+        val loading = asks()
+        says(PlaybackState.STATE_BUFFERING)
+        assertFalse(loading.await())
+        // Already playing, as after another song, it goes on to this one; not asked to start, it's only asked.
+        shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
+        assertTrue(playback.playSong(song, music, link, mustStart = true))
+        shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
+        assertTrue(playback.playSong(song, music, link))
+        // Nothing keeps listening to it once it has answered.
+        assertTrue(shadowOf(youTubeMusic).getCallbacks().isEmpty())
+        // A list is the same.
+        val list = CoroutineScope(Dispatchers.Unconfined).async { playback.playList(music, link, mustStart = true) }
+        says(PlaybackState.STATE_ERROR)
+        assertFalse(list.await())
+        val played = CoroutineScope(Dispatchers.Unconfined).async { playback.playList(music, link, mustStart = true) }
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(played.await())
+    }
+
+    @Test
     fun anAppNotRunningIsWokenInTheBackgroundToBeAsked() = runBlocking {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val link = "https://music.youtube.com/watch?v=other000000"
@@ -1209,6 +1250,39 @@ class PlaybackTest {
         assertTrue(playback.playSong(song, "com.spotify.music", link))
         assertTrue(playback.playSong(song, null))
         assertTrue(woken.isEmpty())
+    }
+
+    @Test
+    fun aBuildChosenByNameIsAskedAndOpenedAsThatBuildAlone() {
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val revanced = "app.revanced.android.apps.youtube.music"
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=other000000"
+        // The official app and another build have a session too, which the chosen one is not.
+        wakes = player(morphe, "YT Music Morphe", "Other", "Band", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(player(official, "YouTube Music", "Other", "Band"))
+        shadowOf(sessions).addController(player(revanced, "YT Music", "Other", "Band"))
+        allow()
+        assertTrue(runBlocking { playback.playSong(song, morphe, link) })
+        assertEquals(listOf(morphe), woken.single())
+        assertTrue(sameApp(morphe, morphe))
+        assertFalse(sameApp(morphe, official))
+        assertFalse(sameApp(morphe, revanced))
+        assertTrue(sameApp(official, morphe))
+        // Opened in it, though the official app would take the link too.
+        shadowOf(app).checkActivities(true)
+        for (opener in listOf(official, morphe)) {
+            val opens = ComponentName(opener, "$opener.UrlActivity")
+            shadowOf(app.packageManager).addActivityIfNotPresent(opens)
+            shadowOf(app.packageManager).addIntentFilterForActivity(
+                opens, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https") }
+            )
+        }
+        assertTrue(playback.openSong(morphe, link))
+        assertEquals(morphe, shadowOf(app).nextStartedActivity.`package`)
+        assertEquals(listOf(morphe to link), MusicService.appLinksIn(morphe, link))
+        assertEquals(MusicService.YOUTUBE_MUSIC.appLinks(link), MusicService.appLinksIn(official, link))
+        assertEquals(MusicService.YOUTUBE_MUSIC.packageNames, MusicService.appsFor(official))
     }
 
     @Test

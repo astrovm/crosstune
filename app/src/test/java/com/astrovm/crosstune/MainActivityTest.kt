@@ -3460,6 +3460,64 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongItsAppWontPlayInTheBackgroundIsOpenedThereAtOnce() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        // As YouTube Music without Premium, which asked says it can't, or never starts.
+        val phone = FakePlayback().apply { access = true; startsInBackground = false }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped(link)
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        // Without waiting for it to give up, and left again once it plays there.
+        waitUntil { phone.opened.isNotEmpty() }
+        assertEquals(youTubeMusic to link, phone.opened.single())
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = youTubeMusic) }
+        waitUntil { phone.cameBack == 1 }
+    }
+
+    @Test
+    fun aPatchedBuildIsAnAppOfItsOwnToPlayAndOpenInNextToTheOfficialOne() {
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(official, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morphe, "YT Music Morphe"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC@$morphe").commit()
+        launch()
+        resolveTyped(link)
+
+        // Named as Android names it, and played in, not the official app, which is installed too.
+        val play = string(R.string.play_in_background, "YT Music Morphe")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitUntil { phone.songsAsked.isNotEmpty() }
+        assertEquals(MusicMetadata("Dakare Ni Kita Onna", "Kingo Hamada") to morphe, phone.songsAsked.single())
+        assertEquals(link, phone.linksAsked.single())
+        click(string(R.string.dismiss_button))
+
+        // Open goes to it as well.
+        click(string(R.string.open_in_custom, "YT Music Morphe"))
+        assertEquals(morphe, nextStartedActivity()!!.`package`)
+
+        // The plain choice is still the official app, one tap away on the card.
+        chooseDefault(string(R.string.target_youtube_music))
+        val playOfficial = string(R.string.play_in_background, string(R.string.target_youtube_music))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(playOfficial) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(playOfficial)
+        waitUntil { phone.songsAsked.size == 2 }
+        assertEquals(official, phone.songsAsked.last().second)
+    }
+
+    @Test
     fun aSongAlreadyInItsAppIsNotStartedAgainOnPlay() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }
