@@ -338,10 +338,6 @@
     <string name="lyrics_song_meaning_failed">Şarkı açıklanamadı.</string>
     <string name="explanation_in_song">Şarkıda</string>
     <string name="explanation_language">Dil</string>
-    <string name="song_about">Şarkı hakkında</string>
-    <string name="song_story">Hikâye</string>
-    <string name="song_mood">Duygu</string>
-    <string name="song_key_lines">Önemli dizeler</string>
     <string name="chatgpt_limit_reached">ChatGPT planın şimdilik doldu.</string>
     <string name="lyrics_repeat_line">Bu satırı tekrarla</string>
     <string name="lyrics_stop_repeating">Tekrarı durdur</string>
@@ -359,9 +355,6 @@
     <string name="lyrics_ask_song">Şarkı hakkında sor</string>
     <string name="song_original">Cover:</string>
     <string name="song_samples">Sample\'lar</string>
-    <string name="artist_who">Kim</string>
-    <string name="artist_style">Tarz</string>
-    <string name="artist_known_for">Bilinen eserleri</string>
     <string name="songs_like_label">Benzeri:</string>
     <string name="song_search_playlist">Çalma listesi yap</string>
     <string name="error_no_songs_like">Benzer şarkı bulunamadı.</string>

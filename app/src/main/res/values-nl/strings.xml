@@ -338,10 +338,6 @@
     <string name="lyrics_song_meaning_failed">Kon het nummer niet uitleggen.</string>
     <string name="explanation_in_song">In het nummer</string>
     <string name="explanation_language">Taal</string>
-    <string name="song_about">Over het nummer</string>
-    <string name="song_story">Verhaal</string>
-    <string name="song_mood">Sfeer</string>
-    <string name="song_key_lines">Belangrijke regels</string>
     <string name="chatgpt_limit_reached">Je ChatGPT-abonnement is voorlopig op.</string>
     <string name="lyrics_repeat_line">Deze regel herhalen</string>
     <string name="lyrics_stop_repeating">Stoppen met herhalen</string>
@@ -359,9 +355,6 @@
     <string name="lyrics_ask_song">Vraag over het nummer</string>
     <string name="song_original">Cover van</string>
     <string name="song_samples">Samples</string>
-    <string name="artist_who">Wie</string>
-    <string name="artist_style">Stijl</string>
-    <string name="artist_known_for">Bekend van</string>
     <string name="songs_like_label">Nummers zoals</string>
     <string name="song_search_playlist">Playlist maken</string>
     <string name="error_no_songs_like">Geen vergelijkbare nummers gevonden.</string>

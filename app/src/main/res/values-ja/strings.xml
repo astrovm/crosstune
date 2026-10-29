@@ -339,10 +339,6 @@
     <string name="lyrics_song_meaning_failed">この曲を解説できませんでした。</string>
     <string name="explanation_in_song">曲の中で</string>
     <string name="explanation_language">言葉</string>
-    <string name="song_about">曲について</string>
-    <string name="song_story">ストーリー</string>
-    <string name="song_mood">雰囲気</string>
-    <string name="song_key_lines">注目の歌詞</string>
     <string name="chatgpt_limit_reached">ChatGPT プランの上限に達しました。</string>
     <string name="lyrics_repeat_line">この行をくり返す</string>
     <string name="lyrics_stop_repeating">くり返しを止める</string>
@@ -360,9 +356,6 @@
     <string name="lyrics_ask_song">この曲について質問</string>
     <string name="song_original">カバー元</string>
     <string name="song_samples">サンプリング</string>
-    <string name="artist_who">どんな人</string>
-    <string name="artist_style">スタイル</string>
-    <string name="artist_known_for">代表作</string>
     <string name="songs_like_label">似た曲：</string>
     <string name="song_search_playlist">プレイリストを作る</string>
     <string name="error_no_songs_like">似た曲が見つかりませんでした。</string>

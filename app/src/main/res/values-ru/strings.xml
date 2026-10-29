@@ -338,10 +338,6 @@
     <string name="lyrics_song_meaning_failed">Не удалось объяснить песню.</string>
     <string name="explanation_in_song">В песне</string>
     <string name="explanation_language">Язык</string>
-    <string name="song_about">О песне</string>
-    <string name="song_story">История</string>
-    <string name="song_mood">Настроение</string>
-    <string name="song_key_lines">Ключевые строки</string>
     <string name="chatgpt_limit_reached">Лимит вашего плана ChatGPT пока исчерпан.</string>
     <string name="lyrics_repeat_line">Повторять эту строку</string>
     <string name="lyrics_stop_repeating">Больше не повторять</string>
@@ -359,9 +355,6 @@
     <string name="lyrics_ask_song">Спроси о песне</string>
     <string name="song_original">Кавер на</string>
     <string name="song_samples">Семплы</string>
-    <string name="artist_who">Кто</string>
-    <string name="artist_style">Стиль</string>
-    <string name="artist_known_for">Известен по</string>
     <string name="songs_like_label">Песни как</string>
     <string name="song_search_playlist">Создать плейлист</string>
     <string name="error_no_songs_like">Похожие песни не найдены.</string>
