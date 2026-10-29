@@ -106,6 +106,9 @@ internal enum class MusicService(
         else -> emptyList()
     }
 
+    /** The builds patched from the app, and YouTube's TV app, each of which can be chosen on its own. */
+    val builds: List<String> get() = packageNames.drop(1)
+
     /**
      * Every app that plays this service's songs: its [packageNames], then, for YouTube Music, YouTube's
      * TV app, where on a TV its songs play; see [appLinks].
@@ -129,13 +132,29 @@ internal enum class MusicService(
 
         fun fromName(name: String?): MusicService? = entries.firstOrNull { it.name == name }
 
+        /** The service whose own app, not a build patched from it, has [packageName]. */
+        fun ofOwnApp(packageName: String?): MusicService? = entries.firstOrNull { it.packageName == packageName }
+
+        /**
+         * The packages an app chosen as [app] may be woken as. A service's own app stands for it and its
+         * patched builds, whichever is installed; a build chosen by name is only itself.
+         */
+        fun appsFor(app: String): List<String> = ofOwnApp(app)?.packageNames ?: listOf(app)
+
+        /** Each app a [link] may open in when [app] is chosen, with the link it takes there; see [appsFor]. */
+        fun appLinksIn(app: String, link: String): List<Pair<String, String>> = ofOwnApp(app)?.appLinks(link) ?: listOf(app to link)
+
         /** The service whose app, or a build patched from it, has [packageName]. */
         fun ofPackage(packageName: String?): MusicService? = entries.firstOrNull { packageName in it.packageNames }
     }
 }
 
-/** Whether [one] and [other] are the same app, or [other] is a build patched from [one], or plays its songs, as YouTube's TV app does YouTube Music's. */
-internal fun sameApp(one: String?, other: String?): Boolean = one == other || MusicService.ofPackage(one)?.appPackages?.contains(other) == true
+/**
+ * Whether [one] and [other] are the same app, or [one] is a service's own app and [other] is a build
+ * patched from it, or plays its songs, as YouTube's TV app does YouTube Music's. A build chosen by
+ * name is only itself: another build of the same app is not it.
+ */
+internal fun sameApp(one: String?, other: String?): Boolean = one == other || MusicService.ofOwnApp(one)?.appPackages?.contains(other) == true
 
 private fun querySearchUrl(baseUrl: String, parameter: String): (String) -> String = { query ->
     baseUrl.toHttpUrl().newBuilder().addQueryParameter(parameter, query).build().toString()

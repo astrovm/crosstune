@@ -31,6 +31,8 @@ internal class FakePlayback : PlaybackSource {
     val linksAsked: MutableList<String?> = CopyOnWriteArrayList()
     /** Whether there's an app to ask for a song. */
     var canPlaySongs = true
+    /** Whether an app asked to play in the background starts; false as YouTube Music without Premium, which never does. */
+    var startsInBackground = true
     /** The apps that can be asked for songs in the background, running or woken; any, when null. */
     var running: Set<String>? = null
     /** Each app opened on a song's link, and the link. */
@@ -65,9 +67,10 @@ internal class FakePlayback : PlaybackSource {
         plays += play
     }
 
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?): Boolean {
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
         // An app that can't be, with a link only it has, leaves no other to ask.
         if (!canPlaySongs || (app != null && link != null && running?.contains(app) == false)) return false
+        if (mustStart && !startsInBackground) return false
         songsAsked += song to app
         linksAsked += link
         return true
@@ -116,8 +119,8 @@ internal class FakePlayback : PlaybackSource {
     /** Each list an app was asked to play, and its link. */
     val listsAsked: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
 
-    override suspend fun playList(app: String, link: String): Boolean {
-        if (!canPlaySongs) return false
+    override suspend fun playList(app: String, link: String, mustStart: Boolean): Boolean {
+        if (!canPlaySongs || (mustStart && !startsInBackground)) return false
         listsAsked += app to link
         return true
     }
