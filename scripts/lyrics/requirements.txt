@@ -8,7 +8,7 @@ av==19.0.2
     # via faster-whisper
 click==8.5.0
     # via huggingface-hub
-ctranslate2==4.8.3
+ctranslate2==4.8.4
     # via faster-whisper
 faster-whisper==1.2.1
     # via -r /tmp/crosstune-smart/requirements.txt
