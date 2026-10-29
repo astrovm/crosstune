@@ -364,6 +364,8 @@ class PlaybackTest {
 
         says(0, PLAYED_AT + 700)
         assertEquals(started, seen.last()!!.clock)
+        says(899, PLAYED_AT + 900)
+        assertEquals(started, seen.last()!!.clock)
         // Up to a second behind, it's still where it was playing on to.
         says(1_000, PLAYED_AT + 1_000 + STALE_CLOCK_MS)
         assertEquals(started, seen.last()!!.clock)
