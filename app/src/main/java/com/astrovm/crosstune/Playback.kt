@@ -39,21 +39,29 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
 }
 
 /**
- * Where an app says it paused can be a moment behind where the song really stopped, as YouTube
- * Music's often is, by up to half a second. The song plays on from where it really stopped, so the
- * words would come in late after every pause: where it was playing on to is believed instead, until
- * the app says it's somewhere else, e.g. moved to another place.
+ * An app's clock can be a moment behind the song, as YouTube Music's often is, by up to half a
+ * second or so. The song plays on from where it really is, so the words would come in late.
+ *
+ * Where it says it paused can be behind where the song really stopped: where it was playing on to is
+ * believed instead, until the app says it's somewhere else, e.g. moved to another place.
+ *
+ * While it keeps playing, saying it's a moment back is stale too: as each song starts, YouTube
+ * Music says it's at the start, then says so again most of a second later. Where it was playing on to
+ * is kept. Further back is a move, e.g. to an earlier part, and so is any move Crosstune asks for.
  */
-internal class SteadyPause {
+internal class SteadyClock {
     private var last: PlaybackClock? = null
     /** Where the app said it paused, when that was a moment behind; and where it had really got to. */
     private var said: Long? = null
     private var stopped = 0L
 
     fun of(clock: PlaybackClock): PlaybackClock {
-        val behind = last?.takeIf { it.playing && !clock.playing }?.let { it.positionAt(clock.atMs) - clock.positionMs }
-        if (behind != null) {
-            said = clock.positionMs.takeIf { behind in 1..STALE_PAUSE_MS }
+        val was = last
+        val behind = was?.takeIf { it.playing }?.let { it.positionAt(clock.atMs) - clock.positionMs }
+        val stale = behind != null && behind in 1..STALE_CLOCK_MS
+        if (was != null && stale && clock.playing && clock.speed == was.speed) return was
+        if (behind != null && !clock.playing) {
+            said = clock.positionMs.takeIf { stale }
             stopped = clock.positionMs + behind
         } else if (clock.positionMs != said) {
             said = null
@@ -195,6 +203,8 @@ internal class MediaSessionPlayback(
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
     private val audio: AudioManager = context.getSystemService(AudioManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
+    /** How many times Crosstune has moved a song, so a move a moment back isn't taken for a stale clock. */
+    private var moves = 0
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 
@@ -206,9 +216,14 @@ internal class MediaSessionPlayback(
         var followed: MediaController? = null
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
-        var pauses = SteadyPause()
+        var clocks = SteadyClock()
+        var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
-        fun steadily(controller: MediaController) = following(controller)?.let { it.copy(clock = pauses.of(it.clock), upNext = upNext(controller)) }
+        fun steadily(controller: MediaController) = following(controller)?.let {
+            // Moved by Crosstune, where the app says next is believed, even a moment back.
+            if (moves != movesSeen) clocks = SteadyClock().also { movesSeen = moves }
+            it.copy(clock = clocks.of(it.clock), upNext = upNext(controller))
+        }
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 trySend(followed?.let(::steadily))
@@ -225,7 +240,7 @@ internal class MediaSessionPlayback(
                 followed?.unregisterCallback(callback)
                 modesWatched()
                 followed = playing
-                pauses = SteadyPause()
+                clocks = SteadyClock()
                 playing?.registerCallback(callback, handler)
                 // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
                 modesWatched = playing?.let { app -> modes.watch(app, handler) { trySend(steadily(app)) } } ?: {}
@@ -266,6 +281,7 @@ internal class MediaSessionPlayback(
         controllers.filter { it.plays(song) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long) {
+        moves++
         // Taken back meanwhile, the words just stay where they are.
         runCatching { appFor(song)?.transportControls?.seekTo(positionMs) }
     }
@@ -590,8 +606,8 @@ internal const val LEFT_BEHIND_MS = 10 * 60_000L
 private val SIZED_COVER = Regex("=w\\d+-h\\d+")
 private const val QUEUED_COVER_PX = 180
 
-/** How far behind where it was playing an app may say it paused, and still be believed to have stopped there instead. */
-internal const val STALE_PAUSE_MS = 1_000L
+/** How far behind where it was playing on to an app may say it is, and still be believed to be there instead. */
+internal const val STALE_CLOCK_MS = 1_000L
 
 /** Where an app puts the cover it shows, the song's own before its album's. */
 private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)

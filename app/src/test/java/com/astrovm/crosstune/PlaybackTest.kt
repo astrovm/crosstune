@@ -337,15 +337,55 @@ class PlaybackTest {
         says(PlaybackState.STATE_PAUSED, 100_500, PLAYED_AT + 45_000)
         assertEquals(100_500L, seen.last()!!.clock.positionMs)
         says(PlaybackState.STATE_PLAYING, 100_500, PLAYED_AT + 50_000)
-        says(PlaybackState.STATE_PAUSED, 105_500 - STALE_PAUSE_MS - 1, PLAYED_AT + 55_000)
-        assertEquals(105_500 - STALE_PAUSE_MS - 1, seen.last()!!.clock.positionMs)
+        says(PlaybackState.STATE_PAUSED, 105_500 - STALE_CLOCK_MS - 1, PLAYED_AT + 55_000)
+        assertEquals(105_500 - STALE_CLOCK_MS - 1, seen.last()!!.clock.positionMs)
         // Up to a second behind is still taken as where it stopped.
         says(PlaybackState.STATE_PLAYING, 110_000, PLAYED_AT + 60_000)
-        says(PlaybackState.STATE_PAUSED, 115_000 - STALE_PAUSE_MS, PLAYED_AT + 65_000)
+        says(PlaybackState.STATE_PAUSED, 115_000 - STALE_CLOCK_MS, PLAYED_AT + 65_000)
         assertEquals(115_000L, seen.last()!!.clock.positionMs)
         // Moved while paused, it's where it was moved to.
         says(PlaybackState.STATE_PAUSED, 30_000, PLAYED_AT + 70_000)
         assertEquals(30_000L, seen.last()!!.clock.positionMs)
+    }
+
+    @Test
+    fun aClockSaidAMomentBehindWhileItPlaysOnIsStale() {
+        allow()
+        // YouTube Music starts the song at PLAYED_AT, then says it's at the start again 700 ms later.
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
+        shadowOf(sessions).addController(music)
+        val seen = followed()
+        fun says(position: Long, at: Long, speed: Float = 1f) {
+            shadowOf(music).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, speed, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        val started = PlaybackClock(0, PLAYED_AT, 1f, true)
+        assertEquals(started, seen.last()!!.clock)
+
+        says(0, PLAYED_AT + 700)
+        assertEquals(started, seen.last()!!.clock)
+        // Up to a second behind, it's still where it was playing on to.
+        says(1_000, PLAYED_AT + 1_000 + STALE_CLOCK_MS)
+        assertEquals(started, seen.last()!!.clock)
+        // Right where it was playing on to, or ahead, it's believed.
+        says(2_000, PLAYED_AT + 2_000)
+        assertEquals(PlaybackClock(2_000, PLAYED_AT + 2_000, 1f, true), seen.last()!!.clock)
+        says(3_200, PLAYED_AT + 3_000)
+        assertEquals(PlaybackClock(3_200, PLAYED_AT + 3_000, 1f, true), seen.last()!!.clock)
+        // Further back is a move to an earlier part.
+        says(4_200 - STALE_CLOCK_MS - 1, PLAYED_AT + 4_000)
+        assertEquals(PlaybackClock(4_200 - STALE_CLOCK_MS - 1, PLAYED_AT + 4_000, 1f, true), seen.last()!!.clock)
+        // Played at another speed, it's believed even a moment back.
+        says(5_000, PLAYED_AT + 6_000, 1.5f)
+        assertEquals(PlaybackClock(5_000, PLAYED_AT + 6_000, 1.5f, true), seen.last()!!.clock)
+
+        // Moved a moment back by Crosstune, e.g. to the start of the line being sung, it's where it was moved to.
+        playback.seekTo(song, 6_000)
+        says(6_000, PLAYED_AT + 7_000, 1.5f)
+        assertEquals(PlaybackClock(6_000, PLAYED_AT + 7_000, 1.5f, true), seen.last()!!.clock)
+        // And from then on, a moment back is stale again.
+        says(6_000, PLAYED_AT + 7_500, 1.5f)
+        assertEquals(PlaybackClock(6_000, PLAYED_AT + 7_000, 1.5f, true), seen.last()!!.clock)
     }
 
     @Test

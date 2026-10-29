@@ -2,3 +2,4 @@ Lyrics are timed for the version of a song that plays, not another edit or mix w
 Lyrics timed for another version offer to be put in time by hand, as they likely need it.
 Songs open in Apple Music, Deezer, TIDAL and YouTube Music as the same version, not another one with the same name.
 A song named by listening gets lyrics timed for the recording Shazam heard.
+Lyrics keep in time with YouTube Music from the start of each song, rather than most of a second late.
