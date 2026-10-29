@@ -272,20 +272,21 @@ internal fun Modifier.swipedInFromSides(away: Animatable<Float, AnimationVector1
         coroutineScope {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                val inward = when {
-                    down.position.x <= side -> 1f
-                    down.position.x >= size.width - side -> -1f
+                val fromLeft = when {
+                    down.position.x <= side -> true
+                    down.position.x >= size.width - side -> false
                     else -> return@awaitEachGesture
                 }
+                // Taken as a swipe once it's past the slop, which leaves it to nothing else, like a tap.
                 val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
-                var gone = 0f
+                var inward = 0f
                 horizontalDrag(start.id) { change ->
-                    change.consume()
-                    gone = ((change.position.x - down.position.x) * inward / size.width).coerceIn(0f, 1f)
-                    launch { away.snapTo(gone) }
+                    val moved = change.position.x - down.position.x
+                    inward = if (fromLeft) moved else -moved
+                    launch { away.snapTo((inward / size.width).coerceIn(0f, 1f)) }
                 }
                 launch {
-                    if (gone < SIDE_SWIPE_DONE) {
+                    if (inward < size.width * SIDE_SWIPE_DONE) {
                         away.animateTo(0f, Motion.away)
                     } else {
                         away.animateTo(1f, Motion.away)

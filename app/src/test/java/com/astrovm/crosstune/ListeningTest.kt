@@ -69,6 +69,7 @@ import android.provider.Settings
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import java.text.NumberFormat
@@ -2200,27 +2201,95 @@ class ListeningTest {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
-        click(string(R.string.visuals_options))
-        click(string(R.string.visuals_only))
-        waitUntil(TIMEOUT_MS) { !shown("Demo one") }
-        val showWords = string(R.string.visuals_show_words)
-        val visualsOnly = composeRule.onNode(SemanticsMatcher("shows the words") {
-            androidx.compose.ui.semantics.SemanticsActions.OnClick in it.config && it.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label == showWords
-        })
-        // Partway in from the left, the words come as far as the finger has, and go again as it's let go short.
-        visualsOnly.performTouchInput {
-            down(Offset(2f, centerY))
-            moveTo(Offset(width * 0.05f, centerY))
-            moveTo(Offset(width * 0.1f, centerY))
+        val visualsOnly = onlyVisuals()
+        // Partway in from either side, the words come as far as the finger has, and go again as it's let go short.
+        for (side in listOf(2f, -2f)) {
+            visualsOnly.performTouchInput {
+                val from = if (side > 0) side else width + side
+                val way = if (side > 0) 1f else -1f
+                down(Offset(from, centerY))
+                moveTo(Offset(from + way * width * 0.05f, centerY))
+                moveTo(Offset(from + way * width * 0.1f, centerY))
+            }
+            waitUntil(TIMEOUT_MS) { shown("Demo one") }
+            visualsOnly.performTouchInput { up() }
+            waitUntil(TIMEOUT_MS) { !shown("Demo one") }
         }
-        waitUntil(TIMEOUT_MS) { shown("Demo one") }
-        visualsOnly.performTouchInput { up() }
-        waitUntil(TIMEOUT_MS) { !shown("Demo one") }
-        // Further, from the right, they're back for good.
+        // Further, they're back for good.
         visualsOnly.performTouchInput { swipe(Offset(width - 2f, centerY), Offset(width * 0.4f, centerY)) }
         waitUntil(TIMEOUT_MS) { shown("Demo one") }
         assertTrue(described(string(R.string.visuals_options)))
         assertTrue(visualsShown().isNotEmpty())
+        // A slide that starts away from the sides isn't one, so the words don't follow it.
+        val again = onlyVisuals()
+        again.performTouchInput {
+            down(center)
+            moveTo(center + Offset(width * 0.1f, 0f))
+            moveTo(center + Offset(width * 0.3f, 0f))
+        }
+        composeRule.waitForIdle()
+        assertFalse(shown("Demo one"))
+        again.performTouchInput { up() }
+    }
+
+    @Test
+    fun backBringsTheWordsBackFromOnlyTheVisuals() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        onlyVisuals()
+        controller!!.get().onBackPressedDispatcher.onBackPressed()
+        // The words, not the screen before them, with their tools working again.
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        click(string(R.string.visuals_options))
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.visuals_only)) }
+    }
+
+    @Test
+    fun aSwipeCountsFromRightAtTheSidesEdgeAndBringsTheWordsBackFromAFifthOfTheWay() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        val side = with(composeRule.density) { 32.dp.toPx() }
+        // Starting right at the edge of either side's strip, the words follow.
+        for (fromLeft in listOf(true, false)) {
+            val visualsOnly = onlyVisuals()
+            visualsOnly.performTouchInput {
+                val from = if (fromLeft) side else width - side
+                val way = if (fromLeft) 1f else -1f
+                down(Offset(from, centerY))
+                moveTo(Offset(from + way * width * 0.05f, centerY))
+                moveTo(Offset(from + way * width * 0.1f, centerY))
+            }
+            waitUntil(TIMEOUT_MS) { shown("Demo one") }
+            visualsOnly.performTouchInput { up() }
+            waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+            visualsOnly.performClick()
+            waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        }
+        // Let go exactly a fifth of the way across, they're back.
+        val visualsOnly = onlyVisuals()
+        visualsOnly.performTouchInput {
+            val fifth = width * 0.2f
+            down(Offset(0f, centerY))
+            moveTo(Offset(fifth / 2, centerY))
+            moveTo(Offset(fifth, centerY))
+            up()
+        }
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        click(string(R.string.visuals_options))
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.visuals_only)) }
+    }
+
+    /** Only the visuals shown, from the words with them; gives what a tap or a swipe on them lands on. */
+    private fun onlyVisuals(): SemanticsNodeInteraction {
+        click(string(R.string.visuals_options))
+        click(string(R.string.visuals_only))
+        waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+        val showWords = string(R.string.visuals_show_words)
+        return composeRule.onNode(SemanticsMatcher("shows the words") {
+            androidx.compose.ui.semantics.SemanticsActions.OnClick in it.config && it.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label == showWords
+        })
     }
 
     @Test
