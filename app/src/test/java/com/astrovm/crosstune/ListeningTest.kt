@@ -2281,6 +2281,40 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown(string(R.string.visuals_only)) }
     }
 
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aTenthOfTheWayInTheWordsAreOnlyFaintlyBack() {
+        demoWords(FakeHearing())
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        val visualsOnly = onlyVisuals()
+        visualsOnly.performTouchInput {
+            down(Offset(2f, centerY))
+            moveTo(Offset(2f + width * 0.05f, centerY))
+            moveTo(Offset(2f + width * 0.1f, centerY))
+        }
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        composeRule.waitForIdle()
+        val faint = inked("Demo one")
+        visualsOnly.performTouchInput { up() }
+        waitUntil(TIMEOUT_MS) { !shown("Demo one") }
+        visualsOnly.performClick()
+        waitUntil(TIMEOUT_MS) { shown("Demo one") }
+        composeRule.waitForIdle()
+        assertTrue("$faint against ${inked("Demo one")}", faint * 2 < inked("Demo one"))
+    }
+
+    /** How far the letters of [text]'s line stand out from what's behind them, summed across a row through it. */
+    private fun inked(text: String): Float {
+        val image = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        val line = composeRule.onNodeWithText(text).getBoundsInRoot()
+        val density = composeRule.density.density
+        val y = ((line.top.value + line.bottom.value) / 2 * density).toInt()
+        val background = android.graphics.Color.luminance(image.getPixel(1, y))
+        return ((line.left.value * density).toInt() until (line.right.value * density).toInt())
+            .sumOf { kotlin.math.abs(android.graphics.Color.luminance(image.getPixel(it, y)) - background).toDouble() }.toFloat()
+    }
+
     /** Only the visuals shown, from the words with them; gives what a tap or a swipe on them lands on. */
     private fun onlyVisuals(): SemanticsNodeInteraction {
         click(string(R.string.visuals_options))
