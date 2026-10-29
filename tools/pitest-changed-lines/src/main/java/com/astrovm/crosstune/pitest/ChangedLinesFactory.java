@@ -57,7 +57,7 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
 
     private static final class ChangedLines implements MutationInterceptor {
         private final Set<String> lines;
-        private final Map<MethodNode, Optional<ComposeBookkeeping>> composables = new HashMap<>();
+        private final Map<MethodNode, Optional<GeneratedCode>> methods = new HashMap<>();
         private ClassTree clazz;
 
         ChangedLines(Set<String> lines) {
@@ -72,7 +72,7 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
         @Override
         public void begin(ClassTree clazz) {
             this.clazz = clazz;
-            composables.clear();
+            methods.clear();
         }
 
         @Override
@@ -83,7 +83,7 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
         @Override
         public void end() {
             clazz = null;
-            composables.clear();
+            methods.clear();
         }
 
         private boolean changed(MutationDetails mutation) {
@@ -93,22 +93,26 @@ public final class ChangedLinesFactory implements MutationInterceptorFactory {
         }
 
         /**
-         * Kotlin's own null checks, which no test of the app's behavior can tell are gone, and what
-         * Compose adds to a composable to skip it and trace it, which only makes it slower: its calls,
-         * named in their mutants' descriptions, and its masks and checks, which aren't.
+         * What Kotlin and Compose add to the app's code, which no test of the app's behavior can tell
+         * is changed: Kotlin's null checks and a coroutine's checks on its result, and what Compose
+         * adds to a composable to skip it and trace it, which only makes it slower. Calls are named in
+         * their mutants' descriptions; the rest is told by GeneratedCode.
          */
         private boolean isJunk(MutationDetails mutation) {
             String description = mutation.getDescription();
             return description.contains("kotlin/jvm/internal/Intrinsics")
+                || description.contains("kotlin/ResultKt")
                 || description.contains("androidx/compose/runtime/Composer")
                 || description.contains("androidx/compose/runtime/ComposerKt")
-                || isComposeBookkeeping(mutation);
+                || isGenerated(mutation);
         }
 
-        private boolean isComposeBookkeeping(MutationDetails mutation) {
+        private boolean isGenerated(MutationDetails mutation) {
+            String owner = clazz.name().asInternalName();
+            String superName = clazz.rawNode().superName;
             return clazz.method(mutation.getId().getLocation())
-                .flatMap(method -> composables.computeIfAbsent(method.rawNode(), node -> Optional.ofNullable(ComposeBookkeeping.of(clazz.name().asInternalName(), node))))
-                .map(bookkeeping -> bookkeeping.at(mutation.getInstructionIndex()))
+                .flatMap(method -> methods.computeIfAbsent(method.rawNode(), node -> Optional.ofNullable(GeneratedCode.of(owner, superName, node))))
+                .map(generated -> generated.at(mutation.getInstructionIndex()))
                 .orElse(false);
         }
     }
