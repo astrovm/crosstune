@@ -239,8 +239,6 @@ val shots = tasks.register<Test>("shots") {
     filter.includeTestsMatching("com.astrovm.crosstune.shots.*")
     systemProperty("shots.out", layout.buildDirectory.dir("shots").get().asFile.path)
     systemProperty("shots.visuals", providers.gradleProperty("shotsVisuals").getOrElse(rootProject.file("build/shots-visuals").path))
-    // Robolectric's native graphics load a library, which the JDK warns about otherwise.
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
     outputs.upToDateWhen { false }
 }
 
@@ -282,10 +280,13 @@ val robolectricDeps = tasks.register("robolectricDeps") {
     }
 }
 
-// Robolectric's Android 16 runtime reaches into JDK internals.
+// Robolectric's Android 16 runtime reaches into JDK internals, its native graphics load a library,
+// and DataStore's protobuf reads memory through sun.misc.Unsafe; the JDK warns of the last two otherwise.
 val robolectricJvmArgs = listOf(
     "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
     "--add-opens=java.base/java.io=ALL-UNNAMED",
+    "--enable-native-access=ALL-UNNAMED",
+    "--sun-misc-unsafe-memory-access=allow",
 )
 
 tasks.withType<Test>().configureEach {
