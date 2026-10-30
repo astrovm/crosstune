@@ -596,7 +596,7 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun spotifyHasNoSuchSongWhenListenBrainzKnowsNoneOrNoneIsTheArtists() {
+    fun spotifyFindsNothingWhenListenBrainzKnowsNoneOrNoneIsTheArtists() {
         val song = MusicMetadata("Song", "Band")
         spotifyKnows(emptyList(), emptyMap())
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.SPOTIFY, song) })
@@ -1486,10 +1486,11 @@ class ExactMatcherTest {
         assertEquals(false, canMatchExactly(MusicService.QOBUZ, ItemType.ARTIST))
         assertEquals(true, canMatchExactly(MusicService.QOBUZ, ItemType.ALBUM))
         // Where only the artist's own page counts, a release on a label's isn't found, so it isn't said
-        // not to be there; a playlist with no songs known is someone's own, so it is, anywhere.
+        // not to be there, nor is a Spotify song ListenBrainz doesn't know; a playlist with no songs
+        // known is someone's own, so it is, anywhere.
         val song = MusicMetadata("Song", "Band")
         assertEquals(true, canBeMissing(MusicService.DEEZER, song))
-        listOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK).forEach { assertEquals(it.name, false, canBeMissing(it, song)) }
+        listOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY).forEach { assertEquals(it.name, false, canBeMissing(it, song)) }
         assertEquals(true, canBeMissing(MusicService.BANDCAMP, MusicMetadata("Mix", "", ItemType.PLAYLIST)))
         fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
         assertNull(find(MusicService.QOBUZ, MusicMetadata("Other", "Band")))
