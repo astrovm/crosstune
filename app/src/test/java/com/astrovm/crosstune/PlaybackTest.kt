@@ -1246,6 +1246,23 @@ class PlaybackTest {
     }
 
     @Test
+    fun aBuildSeenToPlayOnlyInFrontStandsInForTheAppItsBuiltFrom() = runBlocking {
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        val morphe = "app.morphe.android.apps.youtube.music"
+        allow()
+        val build = player(morphe, "YT Music Morphe", "Other", "Band", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(build)
+        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.playSong(song, morphe, "https://music.youtube.com/watch?v=other000000", mustStart = true) }
+        shadowOf(build).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(fails.await())
+        // YouTube Music asked for while only the build is installed is the build; installed, it's an app of its own, not seen yet.
+        assertTrue(playback.playsOnlyInFront(official))
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = official })
+        assertFalse(playback.playsOnlyInFront(official))
+    }
+
+    @Test
     fun anAppNotRunningIsWokenInTheBackgroundToBeAsked() = runBlocking {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val link = "https://music.youtube.com/watch?v=other000000"
