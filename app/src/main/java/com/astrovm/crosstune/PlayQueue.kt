@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -21,13 +22,15 @@ import java.io.IOException
  * A playlist longer than YouTube takes in one queue, played through by Crosstune: YouTube or YouTube
  * Music is asked for [MainViewModel.MAX_QUEUE] songs at a time, and for the next ones as the last of
  * those ends. An app that takes no list, [MusicService.playsSongBySong], is asked for one song at a
- * time instead. Kept on disk, so it carries on after Android stops Crosstune, which it starts again
+ * time instead, or opened on it, by its own link, where it plays none asked for. Kept on disk, so it carries on after Android stops Crosstune, which it starts again
  * to show it what plays. A list as short as one part is followed too, for the player to show it.
  */
 internal class PlayQueue(
     private val playback: PlaybackSource,
     /** [tracks] as one queue in a [MusicService], see [ExactMatcher.youtubeQueue]. */
     private val queueOf: suspend (MusicService, List<MusicMetadata>) -> YouTubeQueue?,
+    /** A song's own link in a [MusicService], see [ExactMatcher.find]; null where it isn't found. */
+    private val linkOf: suspend (MusicService, MusicMetadata) -> String?,
     private val file: File,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -178,9 +181,10 @@ internal class PlayQueue(
             // Still what played before the part.
             at < 0 -> Unit
             // On from the part's last song, or shuffled, from all of them, to what the app plays after it;
-            // one by one, what comes right after the song in the app's queue, as its radio does.
+            // one by one, what comes right after the song in the app's queue, as its radio does, or, as
+            // Spotify keeps nothing before the song in its queue, what it numbers next, as its album.
             (at == part.lastIndex || queue.heard.size == part.size) && when {
-                numbered && queue.bySong -> now.previousId == first
+                numbered && queue.bySong -> now.previousId == first || now.queueId == first + 1
                 numbered -> index == part.size
                 else -> index < 0
             } -> playNext()
@@ -229,12 +233,23 @@ internal class PlayQueue(
         }
     }
 
-    /** The next of [queue]'s songs, asked of its app by name, as it takes no list. */
+    /**
+     * The next of [queue]'s songs, asked of its app by name, as it takes no list, or opened there on
+     * its own link where it plays none asked for; one that isn't found there is left out.
+     */
     private suspend fun playSong(queue: Playing) {
         val song = queue.tracks.getOrNull(queue.to) ?: return stop()
         at = -1
         save(queue.copy(to = queue.to + 1, part = listOf(song), first = null, heard = emptySet()))
-        if (!playback.playSong(song, queue.app)) stop()
+        if (queue.service.playsAskedSongs) {
+            if (!playback.playSong(song, queue.app)) stop()
+            return
+        }
+        val link = linkOf(queue.service, song) ?: return playSong(checkNotNull(playing))
+        if (!playback.openSong(queue.app, link)) return stop()
+        // Back over the app once it plays the song, as the words are Crosstune's; not before, as Spotify
+        // plays one opened with the screen off only once it's in front as the screen wakes.
+        if (withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) { playback.plays(queue.app).first { it != null && sameEntry(song, it.song) } } != null) playback.comesBack()
     }
 
     private suspend fun save(queue: Playing) {

@@ -1162,13 +1162,31 @@ internal class MainViewModel(
     /**
      * Plays [tracks] in the app [destination] is, which takes no list, one after another: the first
      * asked for here, with the player on it, and [playQueue] asking for each next one as the one before
-     * ends. With no app to ask, the first opens there, as it would on its own.
+     * ends. With no app to ask, the first opens there, as it would on its own. An app that plays none
+     * asked for is opened on each song's own link instead, coming to the front for it.
      */
     private fun playSongBySong(tracks: List<MusicMetadata>, service: MusicService, destination: Destination, name: String?) {
         val app = destination.packageName ?: return
         val first = tracks.first()
         cancelTrackWork()
         trackJob = viewModelScope.launch {
+            if (!service.playsAskedSongs) {
+                uiState = uiState.copy(isMatching = true)
+                val link = try {
+                    matcher.find(service, first)
+                } finally {
+                    if (isActive) uiState = uiState.copy(isMatching = false)
+                }
+                link ?: return@launch openTrack(first)
+                openPlayer(first, app, link)
+                // Before the app's opened, so what it played until then isn't taken for the list's start.
+                playQueue?.play(tracks, service, app, 1, listOf(first), name)
+                if (!playThere(first, app, link, asked = false, exact = true)) {
+                    playQueue?.stop()
+                    effectChannel.send(Effect.Open(link, app, finishAfterOpen = false))
+                }
+                return@launch
+            }
             openPlayer(first, app)
             if (playback?.playSong(first, app, mustStart = true) == true) {
                 playQueue?.play(tracks, service, app, 1, listOf(first), name)

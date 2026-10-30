@@ -1291,6 +1291,91 @@ class MainActivityTest {
     }
 
     @Test
+    fun aPlaylistPlaysInSpotifyOpenedOnEachSongsOwnLink() {
+        val spotify = MusicService.SPOTIFY.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        val ids = mapOf("First Song" to "1firstAAAAAAAAAAAAAAAA", "Second Song" to "2secondBBBBBBBBBBBBBBB")
+        fake.handler = { request ->
+            when (request.url.host) {
+                "api.deezer.com" -> FakeSpotify.html(
+                    request,
+                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}}]}}"""
+                )
+                // ListenBrainz knows each by its name, and Spotify's page says it's the band's.
+                "labs.api.listenbrainz.org" -> FakeSpotify.html(
+                    request,
+                    """[{"spotify_track_ids":["${ids.entries.first { "\"${it.key}\"" in FakeSpotify.bodyOf(request) }.value}"]}]"""
+                )
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage(ids.entries.first { it.value == request.url.pathSegments.last() }.key, "Band · Mix · Song · 2020"))
+            }
+        }
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
+        launch()
+        resolveTyped("https://www.deezer.com/playlist/9")
+        waitForText("First Song")
+        // Held while the first song is found, so it can be seen it can't be asked twice.
+        val found = CountDownLatch(1)
+        val answer = fake.handler
+        fake.handler = { request -> if (request.url.host == "labs.api.listenbrainz.org") found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS); answer(request) }
+        // Spotify plays no song asked for, so each opens there on its own link.
+        click(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes)))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes))) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        found.countDown()
+        waitUntil { phone.opened.isNotEmpty() }
+        assertEquals(spotify to "https://open.spotify.com/track/${ids["First Song"]}", phone.opened.single())
+        assertTrue(phone.songsAsked.isEmpty())
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "Spotify", canSeek = true, appPackage = spotify) }
+        // Playing there, Crosstune comes back over it, with the list going on and nothing else opened.
+        waitUntil { phone.cameBack == 1 }
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("First Song", "Band"), 3) }
+        // On to its album's next song, the list's next opens.
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 4) }
+        waitUntil { phone.opened.size == 2 }
+        assertEquals(spotify to "https://open.spotify.com/track/${ids["Second Song"]}", phone.opened.last())
+
+        // Spotify not opening it there, the first song opens as it would on its own.
+        phone.opens = false
+        click(string(R.string.dismiss_button))
+        // Done looking, it can play the list again.
+        val playAll = hasContentDescription(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes))) and isEnabled()
+        waitUntil { composeRule.onAllNodes(playAll).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(playAll).performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("https://open.spotify.com/track/${ids["First Song"]}", nextStartedActivity()!!.dataString)
+        // And the list isn't left to play on from it.
+        waitUntil { !File(app.noBackupFilesDir, "play_queue.json").exists() }
+    }
+
+    @Test
+    fun aPlaylistWhoseFirstSongIsntOnSpotifyOpensItAsItWouldOnItsOwn() {
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        fake.handler = { request ->
+            when (request.url.host) {
+                "api.deezer.com" -> FakeSpotify.html(
+                    request,
+                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}}]}}"""
+                )
+                // Nobody knows it on Spotify.
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
+        launch()
+        resolveTyped("https://www.deezer.com/playlist/9")
+        waitForText("First Song")
+        click(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(MusicService.SPOTIFY.searchUrl("First Song Band"), nextStartedActivity()!!.dataString)
+        assertTrue(phone.opened.isEmpty())
+        assertFalse(File(app.noBackupFilesDir, "play_queue.json").exists())
+    }
+
+    @Test
     fun aYouTubePlaylistOpensAsItselfInYouTubeMusic() {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """<meta property="og:title" content="Road Trip">""") }

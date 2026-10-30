@@ -21,9 +21,10 @@ class UiStateTest {
         // YouTube Music makes a queue of any list of videos, installed or not.
         assertTrue(tidal.copy(selectedDestination = Destination.Service(MusicService.YOUTUBE_MUSIC), installed = emptySet()).canPlayAll)
         assertFalse(tidal.copy(result = list.copy(tracks = emptyList())).canPlayAll)
-        // An app that takes a list plays it as itself, and one that takes none but TIDAL's one by one isn't asked.
+        // An app that takes a list plays it as itself; of those that take none, TIDAL and Spotify play it one by one, and others aren't asked.
         assertFalse(tidal.copy(link = MusicLink(MusicService.TIDAL, ItemType.PLAYLIST, "1", "https://tidal.com/playlist/1")).canPlayAll)
-        assertFalse(tidal.copy(selectedDestination = Destination.Service(MusicService.SPOTIFY), installed = setOf(MusicService.SPOTIFY)).canPlayAll)
+        assertTrue(tidal.copy(selectedDestination = Destination.Service(MusicService.SPOTIFY), installed = setOf(MusicService.SPOTIFY)).canPlayAll)
+        assertFalse(tidal.copy(selectedDestination = Destination.Service(MusicService.AMAZON_MUSIC), installed = setOf(MusicService.AMAZON_MUSIC)).canPlayAll)
     }
 
     @Test

@@ -36,9 +36,15 @@ class PlayQueueTest {
     /** Whether a part's songs are found; each part is found whole, linked by its first song. */
     private var finds = true
 
+    /** Each song's own link in the app, where the list's songs are found but [missing]. */
+    private fun linkOf(song: MusicMetadata) = "https://open.spotify.com/track/${song.title}".takeUnless { song in missing }
+
+    private val missing = mutableSetOf<MusicMetadata>()
+
     private fun queue(file: File = this.file, scope: CoroutineScope = this.scope) = PlayQueue(
         phone,
         { _, songs -> looked += songs; if (finds) YouTubeQueue("https://music.youtube.com/watch?v=${songs.first().title}&list=TL", songs) else null },
+        { _, song -> linkOf(song) },
         file,
         scope,
         Dispatchers.Unconfined
@@ -154,7 +160,7 @@ class PlayQueueTest {
     fun stoppedItLetsGoOfTheAppAndOfALookupStillGoing() {
         val lookup = CompletableDeferred<YouTubeQueue?>()
         var cancelled = false
-        val queue = PlayQueue(phone, { _, _ -> try { lookup.await() } catch (stop: CancellationException) { cancelled = true; throw stop } }, file, scope, Dispatchers.Unconfined)
+        val queue = PlayQueue(phone, { _, _ -> try { lookup.await() } catch (stop: CancellationException) { cancelled = true; throw stop } }, { _, _ -> null }, file, scope, Dispatchers.Unconfined)
         queue.playing()
         plays(1, 100)
         assertEquals(1, phone.inApp(music).subscriptionCount.value)
@@ -570,6 +576,44 @@ class PlayQueueTest {
         assertTrue(phone.skips.isEmpty())
     }
 
+    private val spotify = MusicService.SPOTIFY.packageName
+
+    /** Spotify plays [song], numbered [id] in its queue, which keeps nothing before the song playing. */
+    private fun spotifyPlays(song: String, id: Long) {
+        phone.inApp(spotify).value = AppPlays(MusicMetadata(song, "Band"), id, ended = false)
+    }
+
+    @Test
+    fun anAppThatPlaysNoSongAskedForIsOpenedOnEachSongsOwnLink() {
+        missing += tracks[1]
+        spotifyPlays("Before", 2)
+        val queue = queue()
+        runBlocking { queue.play(tracks.take(4), MusicService.SPOTIFY, spotify, 1, tracks.take(1)) }
+        spotifyPlays("Song 1", 3)
+        assertTrue(phone.opened.isEmpty())
+        // On to what Spotify numbers next, the album's next song: the list's next found there opens
+        // on its own link, one not found left out, and Crosstune's back over it once it plays it.
+        spotifyPlays("Album", 4)
+        assertEquals(listOf(spotify to "https://open.spotify.com/track/Song 3"), phone.opened)
+        assertEquals(0, phone.cameBack)
+        spotifyPlays("Song 3", 5)
+        assertEquals(1, phone.cameBack)
+        spotifyPlays("Album", 6)
+        spotifyPlays("Song 4", 7)
+        assertTrue(phone.songsAsked.isEmpty())
+        // The last has nothing after it: done, and nothing kept.
+        spotifyPlays("Album", 8)
+        assertEquals(2, phone.opened.size)
+        assertFalse(file.exists())
+        // Where it can't be opened, it stops.
+        runBlocking { queue.play(tracks.take(2), MusicService.SPOTIFY, spotify, 1, tracks.take(1)) }
+        spotifyPlays("Song 1", 9)
+        phone.opens = false
+        missing.clear()
+        spotifyPlays("Album", 10)
+        assertFalse(file.exists())
+    }
+
     /** Whether the app playing [number] can skip on from it, as Crosstune shows. */
     private fun PlaybackSource.canSkipOn(number: Int) = runBlocking { follow(MusicMetadata("Song $number", "Band")).first() }?.canSkipNext
 
@@ -683,7 +727,7 @@ class PlayQueueTest {
     @Test
     fun skippedOnWhileTheAppMovesOnTooTheNextPartPlaysOnce() {
         val lookup = CompletableDeferred<YouTubeQueue?>()
-        val queue = PlayQueue(phone, { _, _ -> lookup.await() }, file, scope, Dispatchers.Unconfined)
+        val queue = PlayQueue(phone, { _, _ -> lookup.await() }, { _, _ -> null }, file, scope, Dispatchers.Unconfined)
         val playback = queue.skipping(phone)
         phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
         queue.playing()

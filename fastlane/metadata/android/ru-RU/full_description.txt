@@ -5,7 +5,7 @@
 <b>Возможности</b>
 <ul>
 <li>Понимает ссылки Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp и Audiomack и открывает их в любом из этих сервисов или в Amazon Music и Qobuz.</li>
-<li>Плейлисты и альбомы показывают треки: откройте любой в выбранном приложении, скопируйте список, поделитесь им или слушайте всё по порядку или вперемешку в YouTube Music, YouTube или TIDAL.</li>
+<li>Плейлисты и альбомы показывают треки: откройте любой в выбранном приложении, скопируйте список, поделитесь им или слушайте всё по порядку или вперемешку в YouTube Music, YouTube, TIDAL или Spotify.</li>
 <li>Для каждого сервиса можно выбрать своё приложение: например, ссылки YouTube открывать в YouTube Music, а все остальные в Apple Music.</li>
 <li>Сначала показывать в Crosstune: трек играет в выбранном приложении, а вы остаётесь здесь.</li>
 <li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud и Audiomack могут открыть саму песню, альбом или исполнителя, а не результаты поиска, Bandcamp и Qobuz песню или альбом, а YouTube песню.</li>

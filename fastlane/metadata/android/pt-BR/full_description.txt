@@ -5,7 +5,7 @@ Receba um link de um serviço de música e abra a mesma música no seu app favor
 <b>Recursos</b>
 <ul>
 <li>Lê links do Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp e Audiomack, e abre em qualquer um deles ou no Amazon Music e no Qobuz.</li>
-<li>Playlists e álbuns mostram suas músicas: abra qualquer uma no app que você escolheu, copie ou compartilhe a lista, ou toque tudo, em ordem ou no aleatório, no YouTube Music, no YouTube ou no TIDAL.</li>
+<li>Playlists e álbuns mostram suas músicas: abra qualquer uma no app que você escolheu, copie ou compartilhe a lista, ou toque tudo, em ordem ou no aleatório, no YouTube Music, no YouTube, no TIDAL ou no Spotify.</li>
 <li>Envie cada serviço para um lugar diferente, como links do YouTube para o YouTube Music e todo o resto para o Apple Music.</li>
 <li>Mostrar primeiro no Crosstune: a música toca no app que você escolheu enquanto você fica aqui.</li>
 <li>Onde o app permite, abre a própria música, álbum ou artista em vez de uma busca.</li>
