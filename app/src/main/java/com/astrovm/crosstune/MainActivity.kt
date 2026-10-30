@@ -285,6 +285,9 @@ class MainActivity : ComponentActivity() {
 
         /** How long a song not found somewhere stays not found there, before it's looked for again. */
         private const val MISSING_FOR_MS = 30 * 60 * 1000L
+
+        /** How long a lookup for Crosstune's own queue has, there being no screen waiting on it. */
+        private const val QUEUE_LOOKUP_MS = 15_000L
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_MICROPHONE_FOR = "microphone_for"
         private const val STATE_INCOMING_LINK = "incoming_link"
@@ -327,9 +330,11 @@ class MainActivity : ComponentActivity() {
                 app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty(),
                 LookupCache(File(app.cacheDir, "queue_musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
             )
+            // Given longer than a screen's lookups, as nobody waits on them: a new Spotify song's artist, looked up
+            // on MusicBrainz first, took over the 5 seconds, and the song was left out of the list.
             val matcher = ExactMatcher(
                 client, cache = LookupCache(File(app.cacheDir, "queue_lookups.json"), lookupDispatcher),
-                missingForMs = MISSING_FOR_MS, spotifyArtist = musicBrainz::spotifyArtist
+                missingForMs = MISSING_FOR_MS, timeoutMs = QUEUE_LOOKUP_MS, spotifyArtist = musicBrainz::spotifyArtist
             )
             return PlayQueue(
                 playbackFactory(app),
