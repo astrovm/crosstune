@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -60,12 +62,13 @@ class LyricsLineSheetTest {
         lyrics: String = "Night sky\nStars",
         word: WordMeaning? = null,
         saved: List<SavedLine> = emptyList(),
-        repeating: Int? = null
+        repeating: Int? = null,
+        canSeek: Boolean = true
     ) = UiState(
         lyricsFor = song,
         lyrics = lyrics,
         lyricLines = if (timed) lyrics.lines().mapIndexed { i, line -> LyricLine(1_000L * (i + 1), line) } else emptyList(),
-        following = if (timed) Following(PlaybackClock(1_500, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true) else null,
+        following = if (timed) Following(PlaybackClock(1_500, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = canSeek) else null,
         canFollowApps = timed,
         // Words without timings are a page, until something helps read them line by line.
         learning = if (timed) learning else learning.copy(translation = true),
@@ -289,5 +292,57 @@ class LyricsLineSheetTest {
             runCatching { compose.onAllNodes(hasText("Night")).onLast().performFirstLinkClick() }.isSuccess
         }
         assertEquals("look Night 0", calls.last())
+    }
+
+    @Test
+    fun aLineSavedFromAnotherSongOrByAnotherArtistIsNotSavedHere() {
+        open(base(saved = listOf(
+            SavedLine("Night sky", title = "Other", artist = song.artist),
+            SavedLine("Night sky", title = song.title, artist = "Other"),
+            SavedLine("Stars", title = song.title, artist = song.artist)
+        )))
+        compose.onNodeWithText("Save line").assertExists()
+    }
+
+    @Test
+    fun aMusicAppThatCantBeMovedHasNoLineToRepeat() {
+        open(base(timed = true, canSeek = false))
+        compose.onAllNodesWithText("Repeat this line").assertCountEquals(0)
+    }
+
+    @Test
+    fun theWordsGoneWhileALineIsOpenTakeTheSheetWithThem() {
+        open(base(), line = "Stars")
+        compose.onNodeWithText("Save line").assertExists()
+        state = base(lyrics = "Night sky")
+        // It fades out rather than going at once.
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Save line").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun anExplanationKeepsItsPartsInOrderLeavingOutEmptyOnesAndUnlabelledOnesHaveNoLabel() {
+        open(base(Learning(explanation = LineExplanation(0, "Night.\n---\n \n---\nA third part.", done = true)), signedIn = true))
+        compose.onNodeWithText("Night.").assertExists()
+        compose.onNodeWithText("A third part.").assertExists()
+        compose.onAllNodesWithText("In the song").assertCountEquals(1)
+        compose.onAllNodesWithText("Language").assertCountEquals(0)
+    }
+
+    @Test
+    fun aQuestionIsSentFromTheKeyboardOnlyWhenThereIsOneAndNoneIsBeingAnswered() {
+        val explained = Learning(explanation = LineExplanation(0, "Night.", done = true), questionsAbout = 0)
+        open(base(explained, signedIn = true))
+        val field = compose.onNode(hasSetTextAction())
+        field.performScrollTo().performImeAction()
+        assertEquals(false, calls.any { it.startsWith("ask") })
+        field.performTextInput("And stars?")
+        field.performImeAction()
+        assertEquals("ask 0 And stars?", calls.last())
+        // One is being answered, so another waits.
+        state = base(explained.copy(questions = listOf(LineQuestion("And stars?"))), signedIn = true)
+        compose.waitForIdle()
+        field.performTextInput("More?")
+        field.performImeAction()
+        assertEquals(1, calls.count { it.startsWith("ask") })
     }
 }

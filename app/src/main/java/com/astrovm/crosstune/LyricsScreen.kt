@@ -2423,14 +2423,15 @@ private fun SongMeaning(state: UiState, actions: ScreenActions) {
 @Composable
 private fun WordsToKnow(state: UiState, actions: ScreenActions) {
     val asking = state.learning.wordsToKnow
+    val found = asking?.value
     val song = state.lyricsFor
     when {
-        asking == null || asking.loading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        asking.failed -> {
+        asking?.failed == true -> {
             Text(stringResource(R.string.lyrics_words_to_know_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             OutlinedButton(onClick = actions.onFindWordsToKnow, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.retry_button)) }
         }
-        else -> asking.value.orEmpty().forEach { word ->
+        found == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        else -> found.forEach { word ->
             val saved = state.savedLines.any { it.text == word.word && it.title == song?.title && it.artist == song?.artist }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {

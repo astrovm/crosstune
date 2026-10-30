@@ -238,4 +238,67 @@ class LyricsSongSheetTest {
         compose.onNodeWithText("Songs like this").performScrollTo().performClick()
         assertEquals("like River Road", calls.last())
     }
+
+    @Test
+    fun aSongOnlySamplingOthersShowsWhatItSamplesAndNotACover() {
+        open(Learning(songExplanation = LineExplanation(0, "A walk home.", done = true), songFacts = SongFacts(null, listOf("Sampled Song" to "Beat Maker"))))
+        compose.onAllNodesWithText("Cover of").assertCountEquals(0)
+        compose.onNodeWithText("Samples").assertExists()
+    }
+
+    @Test
+    fun aSongWithoutAnArtistNamedShowsOnlyItsTitle() {
+        val state = UiState(lyricsFor = MusicMetadata("River Road", ""), lyrics = "x", chatGpt = signedIn)
+        compose.setContent { CrosstuneTheme { LyricsScreen(state, actions) } }
+        compose.onNodeWithContentDescription("About the song").performClick()
+        compose.waitForIdle()
+        assertShown("River Road", times = 2)
+    }
+
+    @Test
+    fun theTitleInLatinLettersIsLeftOutWhenItIsTheTitleOrNothing() {
+        val same = LineReading(listOf(Ruby("River Road")), "", "River Road")
+        val none = LineReading(listOf(Ruby("The Walkers")), "", " ")
+        open(Learning(romanized = true, names = listOf(same, none)))
+        assertShown("River Road", times = 2)
+        assertShown("The Walkers", times = 2)
+    }
+
+    @Test
+    fun anArtistBeingWrittenShowsProgress() {
+        open(Learning(artist = LineExplanation(0, "")), tab = "Artist")
+        compose.onNode(waiting).assertExists()
+    }
+
+    @Test
+    fun anArtistWhosePlanRanOutCanBeAskedAgain() {
+        open(Learning(artist = LineExplanation(0, limitReached = true)), tab = "Artist")
+        compose.onNodeWithText("Your ChatGPT plan is used up for now.").assertExists()
+        compose.onNodeWithText("Try again").performClick()
+        assertEquals("artist", calls.last())
+    }
+
+    @Test
+    fun anArtistWithOnlyFactsShowsJustThem() {
+        open(Learning(artist = LineExplanation(0, "Origin: Dublin", done = true)), tab = "Artist")
+        compose.onNodeWithText("Dublin").assertExists()
+    }
+
+    @Test
+    fun wordsSavedForAnotherSongOrAnotherArtistAreNotMarkedSavedHere() {
+        val words = listOf(KeyWord("道", "みち", "road"))
+        val saved = listOf(
+            SavedLine("道", title = "Other", artist = song.artist),
+            SavedLine("道", title = song.title, artist = "Other"),
+            SavedLine("川", title = song.title, artist = song.artist)
+        )
+        open(Learning(wordsToKnow = Asking(words)), saved = saved, tab = "Words")
+        compose.onNodeWithContentDescription("Save 道").assertExists()
+    }
+
+    @Test
+    fun theKeyLineAndTheOtherPartsOfAnArtistAreShownOnlyWhenThereAreSome() {
+        open(Learning(artist = LineExplanation(0, "\"We walk\"", done = true)), tab = "Artist")
+        compose.onNodeWithText("\"We walk\"").assertExists()
+    }
 }
