@@ -236,7 +236,7 @@ tasks.named("check") {
 
 // detekt keeps new logic from tangling: a function with too many paths, a condition with too many
 // parts, blocks nested too deep. It runs on its own classpath, apart from the Kotlin the app builds with.
-val detektCli by configurations.creating
+val detektCli = configurations.create("detektCli")
 dependencies {
     detektCli("io.gitlab.arturbosch.detekt:detekt-cli:1.23.8")
 }
