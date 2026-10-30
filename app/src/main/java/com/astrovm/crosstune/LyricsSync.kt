@@ -28,10 +28,29 @@ internal object LyricsSync {
         val before = (if (after < 0) points.lastIndex else after - 1).takeIf { it >= 0 }?.let(points::get)
         val next = points.getOrNull(after)
         return when {
-            before == null -> lineMs + (next!!.songMs - next.lineMs)
-            next == null -> lineMs + (before.songMs - before.lineMs)
+            before?.lineMs == lineMs -> before.songMs
+            before == null || next == null -> along(lineMs, points, before ?: next!!)
             else -> before.songMs + (lineMs - before.lineMs) * (next.songMs - before.songMs) / (next.lineMs - before.lineMs)
         }
+    }
+
+    /**
+     * Where [lineMs], past the first or last of [points], is: as far off as the [nearest] one, or
+     * on the line all of them lie along when they're far enough apart to tell. Words timed for
+     * another take may be sung a little faster or slower all through, so they drift on as much,
+     * and one line heard or tapped a little off shouldn't move all those past it.
+     */
+    private fun along(lineMs: Long, points: List<SyncPoint>, nearest: SyncPoint): Long {
+        val offset = lineMs + nearest.songMs - nearest.lineMs
+        if (points.last().lineMs - points.first().lineMs < PACE_SPAN_MS) return offset
+        val lineAt = points.map { it.lineMs.toDouble() }.average()
+        val songAt = points.map { it.songMs.toDouble() }.average()
+        val pace = points.sumOf { (it.lineMs - lineAt) * (it.songMs - songAt) } / points.sumOf { (it.lineMs - lineAt) * (it.lineMs - lineAt) }
+        // Further off than a take is sung, it's lines timed out of place, not a pace to go on at.
+        if (abs(pace - 1) > MAX_PACE) return offset
+        val fit = (songAt + (lineMs - lineAt) * pace).toLong()
+        // Still after the last line put in time, or before the first, so the lines keep their order.
+        return if (lineMs > nearest.lineMs) maxOf(fit, nearest.songMs) else minOf(fit, nearest.songMs)
     }
 
     /**
@@ -63,6 +82,10 @@ internal object LyricsSync {
 
     /** How far from where they agree a line may be heard before it's a slip. */
     private const val SLIP_MS = 2_500L
+
+    /** How far apart the lines put in time must be to tell the song's pace, and how far off the words' it can be. */
+    private const val PACE_SPAN_MS = 20_000L
+    private const val MAX_PACE = 0.05
 }
 
 /**

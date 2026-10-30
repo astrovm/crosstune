@@ -33,6 +33,16 @@ class SungWordsTest {
     }
 
     @Test
+    fun theSoundTheModelTellsOfIsntAVoice() {
+        fun sung(vararg words: String) = Sung(0, words.mapIndexed { at, text -> HeardWord(text, at * 100L) })
+        assertNull(sung("[MUSIC]").voiceAtMs)
+        assertNull(sung("(upbeat", "music)", "♪").voiceAtMs)
+        assertNull(sung("[BLANK_AUDIO]", "(rock").voiceAtMs)
+        assertEquals(100L, sung("♪", "Every", "time", "♪").voiceAtMs)
+        assertEquals(200L, sung("(rock", "music)", "Every").voiceAtMs)
+    }
+
+    @Test
     fun wordsHeardAreReadFromWhatWhisperGives() {
         val bytes = "0\tFirst\n320\t Oh,\n820\tshow\n-1\tlost\nnot a time\tskipped\n900\t \n1200\tcorazón\n".toByteArray()
         assertEquals(listOf(HeardWord("First", 0), HeardWord("Oh,", 320), HeardWord("show", 820), HeardWord("corazón", 1200)), HeardWords.parse(bytes))

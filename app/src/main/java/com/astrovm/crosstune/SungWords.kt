@@ -24,7 +24,18 @@ internal fun interface WordHearing {
 }
 
 /** What was heard sung, from [startedAtMs] on the clock that counts since the phone started. */
-internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>)
+internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>) {
+    /** When, into what was heard, the first word's sung, not just the sound the model tells of, as "[MUSIC]", "(upbeat music)" or "♪"; null when none is. */
+    val voiceAtMs: Long?
+        get() {
+            var told = false
+            return words.firstOrNull { word ->
+                val sound = told || word.text.startsWith('[') || word.text.startsWith('(')
+                told = sound && !word.text.endsWith(']') && !word.text.endsWith(')')
+                !sound && word.text.any { it.isLetterOrDigit() }
+            }?.atMs
+        }
+}
 
 /** Hears the words of the song the phone plays now; null when it can't, or heard none. */
 internal interface SingingHearing {
