@@ -1238,6 +1238,7 @@ class PlaybackTest {
         says(PlaybackState.STATE_PLAYING)
         assertTrue(played.await())
         // It wouldn't play in the background, so opened on the song, it's left in front, where it plays: behind Crosstune it'd stop.
+        assertTrue(playback.playsOnlyInFront(music))
         assertTrue(playback.openSong(music, link))
         assertEquals(music, shadowOf(app).nextStartedActivity.`package`)
         playback.comesBack()
@@ -1307,6 +1308,8 @@ class PlaybackTest {
     @Test
     fun anAppNotRunningIsOpenedOnTheSongAndCrosstuneComesBackOverIt() {
         val youTubeMusic = "com.google.android.apps.youtube.music"
+        // Never seen failing to play in the background, it's taken to play there.
+        assertFalse(playback.playsOnlyInFront(youTubeMusic))
         // Opened on the song's link, in that app.
         assertTrue(playback.openSong(youTubeMusic, "https://music.youtube.com/watch?v=other000000"))
         val opened = shadowOf(app).nextStartedActivity
