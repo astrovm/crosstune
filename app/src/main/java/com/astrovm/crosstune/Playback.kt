@@ -140,12 +140,12 @@ internal interface PlaybackSource {
     /**
      * Has the app [song] is paused in play it on, from where it is, in the background. False when it
      * says it can't or hasn't started within a couple of seconds, as YouTube Music without Premium,
-     * then known to [playsOnlyInFront], or when no app has it.
+     * then known to [playsOnlyInFront], or already known to; or when no app has it.
      */
     suspend fun resume(song: MusicMetadata): Boolean
 
     /** Brings the app [song] is paused in to the front and has it play on there, from where it is; false when it can't be. */
-    fun bringToFront(song: MusicMetadata): Boolean
+    suspend fun bringToFront(song: MusicMetadata): Boolean
 
     /** Has the app playing [song] go on to its [next] song, or back to the one before, and play it. */
     fun skip(song: MusicMetadata, next: Boolean)
@@ -327,15 +327,27 @@ internal class MediaSessionPlayback(
     }
 
     // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
-    override fun bringToFront(song: MusicMetadata): Boolean = runCatching {
-        val app = appFor(song) ?: return false
+    override suspend fun bringToFront(song: MusicMetadata): Boolean {
+        val app = runCatching { appFor(song) }.getOrNull() ?: return false
         val opens = context.packageManager.getLaunchIntentForPackage(app.packageName) ?: return false
-        context.startActivity(opens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        opened = app.packageName
-        // In front, it takes the ask it wouldn't from behind.
-        app.transportControls.play()
-        true
-    }.getOrDefault(false)
+        val back = CompletableDeferred<Unit>()
+        val callback = object : MediaController.Callback() {
+            override fun onPlaybackStateChanged(state: PlaybackState?) {
+                if (state?.state == PlaybackState.STATE_PAUSED || state?.state == PlaybackState.STATE_PLAYING) back.complete(Unit)
+            }
+        }
+        app.registerCallback(callback, handler)
+        try {
+            if (runCatching { context.startActivity(opens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isFailure) return false
+            opened = app.packageName
+            // Back in front, YouTube Music puts the song where it was, paused; asked to play before that, it starts it over.
+            withTimeoutOrNull(startMs) { back.await() }
+            runCatching { app.transportControls.play() }
+            return true
+        } finally {
+            app.unregisterCallback(callback)
+        }
+    }
 
     override fun skip(song: MusicMetadata, next: Boolean) = moveOn(song) { if (next) skipToNext() else skipToPrevious() }
 
@@ -394,9 +406,11 @@ internal class MediaSessionPlayback(
     /**
      * Runs [ask]; false if it throws. If [mustStart], also waits for [asked] to say it plays: an app that
      * can't play in the background says so with an error, or says nothing, and plays nothing either way.
-     * One already playing, e.g. another song, is taken to go on with this one.
+     * One already playing, e.g. another song, is taken to go on with this one. One known to play only in front isn't asked unless it plays, in front.
      */
     private suspend fun watchStart(asked: MediaController, mustStart: Boolean, ask: () -> Unit): Boolean {
+        // Known to play only in front, it isn't asked from behind again: YouTube Music, stopped, opens itself on the song from the start.
+        if (mustStart && asked.packageName in onlyInFront && asked.playbackState?.state != PlaybackState.STATE_PLAYING) return false
         val verdict = CompletableDeferred<Boolean>()
         val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {

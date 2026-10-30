@@ -76,7 +76,7 @@ internal class FakePlayback : PlaybackSource {
     /** Each song an app was brought to the front to play on. */
     val broughtToFront: MutableList<MusicMetadata> = CopyOnWriteArrayList()
 
-    override fun bringToFront(song: MusicMetadata): Boolean {
+    override suspend fun bringToFront(song: MusicMetadata): Boolean {
         if (!opens) return false
         broughtToFront += song
         return true
