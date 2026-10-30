@@ -74,7 +74,8 @@ internal object ChordSheets {
      * "LAm" is "Am", "SOL7/SI" is "G7/B", "LAm7b5" is "Am7b5". Roots are capitalised as such, so "Fadd9" stays.
      */
     fun letterName(name: String): String {
-        val (root, accidental, rest, bass, bassAccidental) = solfegeChord.matchEntire(name)?.destructured ?: return name
+        val match = solfegeChord.matchEntire(name) ?: return name
+        val (root, accidental, rest, bass, bassAccidental) = match.destructured
         val letters = StringBuilder(solfege.getValue(root)).append(accidental).append(rest)
         if (bass.isNotEmpty()) letters.append('/').append(solfege.getValue(bass)).append(bassAccidental)
         return letters.toString()

@@ -409,4 +409,45 @@ class MusicLinksTest {
         assertNull(link("https://audiomack.com/burna-boy/podcast/episode"))
         assertEquals(MusicService.AUDIOMACK, MusicLinks.serviceFor("https://audiomack.com/burna-boy"))
     }
+
+    @Test
+    fun aSharedSongWithOnlyBlankInPlaceOfItsTitleIsNoSong() {
+        assertNull(MusicLinks.parse(nowPlaying("„ “ von Band")))
+    }
+
+    @Test
+    fun googleSearchesAreSongsOnlyWithBothAnIdAndATitle() {
+        listOf(
+            "https://www.google.com/search?q=Iris&kgmid=",
+            "https://www.google.com/search?q=Iris&kgmid=%20",
+            "https://www.google.com/search?q=&kgmid=/g/1",
+            "https://www.google.com/search?q=%20%20&kgmid=/g/1",
+            "https://www.google.com/search?kgmid=/g/1"
+        ).forEach { assertNull(it, MusicLinks.parse(it)) }
+    }
+
+    @Test
+    fun textThatIsNoAddressIsNoLinkAndNoService() {
+        assertNull(MusicLinks.serviceFor("just words"))
+        assertNull(MusicLinks.linkFor("just words"))
+        assertNull(MusicLinks.extractFirstUrl("just words"))
+        assertEquals(MusicService.SPOTIFY, MusicLinks.serviceFor("  https://open.spotify.com/anything  "))
+        assertEquals("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT", MusicLinks.extractFirstUrl("hear (https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT)."))
+    }
+
+    @Test
+    fun pagesOfYouTubeMusicAndAppleMusicWithPartsMissingAreNoLink() {
+        listOf(
+            "https://music.youtube.com/channel/abc",
+            "https://music.youtube.com/browse/abc",
+            "https://music.youtube.com/channel",
+            "https://music.apple.com/",
+            "https://music.apple.com/us/album",
+            "https://www.shazam.com/track",
+            "https://www.shazam.com/track/abc/some-name",
+            "https://www.shazam.com/charts/top"
+        ).forEach { assertNull(it, link(it)) }
+        // No region in it: the United States'.
+        assertEquals("us", link("https://music.apple.com/album/slug/1499385848")?.region)
+    }
 }
