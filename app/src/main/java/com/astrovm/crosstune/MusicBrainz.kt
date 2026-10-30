@@ -175,7 +175,7 @@ internal class MusicBrainz(
     private companion object {
         /** Whose turn it is to ask, and when it last was: the app's, and its queue's, which looks songs up on its own. */
         val turn = Mutex()
-        var askedAt = 0L
+        private var askedAt = 0L
 
         const val API = "https://musicbrainz.org/ws/2"
         val SPOTIFY_ARTIST = Regex("""https://open\.spotify\.com/artist/([A-Za-z0-9]{22})""")

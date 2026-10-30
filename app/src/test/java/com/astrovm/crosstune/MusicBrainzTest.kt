@@ -252,6 +252,9 @@ class MusicBrainzTest {
         // No answer isn't kept: it's asked again.
         fake.handler = { request -> FakeSpotify.html(request, "", code = 503) }
         assertNull(spotifyArtist("Later"))
+        // Nor is an answer that isn't MusicBrainz's, as a captive Wi-Fi page.
+        fake.handler = { request -> FakeSpotify.html(request, "<html>Sign in</html>") }
+        assertNull(spotifyArtist("Later"))
         knowing(listOf("later" to "Later"), mapOf("later" to listOf("https://open.spotify.com/artist/1LaterAAAAAAAAAAAAAAAA")))
         assertEquals("1LaterAAAAAAAAAAAAAAAA", spotifyArtist("Later"))
     }
