@@ -37,10 +37,7 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
         val cover = entry.metadata.artworkUrl?.let { loadArtwork(it) }
         return ShortcutInfo.Builder(context, RECENT_PREFIX + entry.link.url)
             .setShortLabel(entry.metadata.title)
-            .setIcon(
-                cover?.let { Icon.createWithBitmap(it.asAndroidBitmap()) }
-                    ?: Icon.createWithResource(context, R.drawable.ic_shortcut_open_link)
-            )
+            .setIcon(if (cover == null) Icon.createWithResource(context, R.drawable.ic_shortcut_open_link) else Icon.createWithBitmap(cover.asAndroidBitmap()))
             .setIntent(Intent(Intent.ACTION_VIEW, entry.link.url.toUri()).setClass(context, MainActivity::class.java))
             .setRank(rank)
             .build()
@@ -90,7 +87,8 @@ internal class AppShortcuts(private val context: Context, private val loadArtwor
         private const val ACTION_PREFIX = "action:"
 
         fun chosenAction(intent: Intent): ShareAction? {
-            val name = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)?.removePrefix(ACTION_PREFIX) ?: return null
+            val shortcutId = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID) ?: return null
+            val name = shortcutId.removePrefix(ACTION_PREFIX)
             return ShareAction.entries.firstOrNull { it.name == name }
         }
 

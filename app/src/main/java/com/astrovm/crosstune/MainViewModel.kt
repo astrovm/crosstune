@@ -195,6 +195,8 @@ internal class MainViewModel(
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             playingBar = preferences.getBoolean(KEY_PLAYING_BAR, true),
+            linesEarlyMs = preferences.getLong(KEY_LINES_EARLY, LINES_EARLY_MS),
+            nextLineFirst = preferences.getBoolean(KEY_NEXT_LINE_FIRST, false),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             visualsSettings = VisualsStore(preferences).load(),
@@ -1755,8 +1757,10 @@ internal class MainViewModel(
         val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || restoreJob?.isActive == true || learning.translating || uiState.chords.loading
         if (uiState.lyrics.isEmpty() || working) return
         val key = RecordingKey.of(song)
+        // Where lines were heard this time only isn't kept: next time the app's clock may be sure.
+        val lines = if (heardPoints.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, syncPoints))
         val words = KeptWords(
-            uiState.lyrics, uiState.lyricLines, uiState.lyricsSynced, found, foundLines, restored, syncPoints,
+            uiState.lyrics, lines, uiState.lyricsSynced, found, foundLines, restored, syncPoints,
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
@@ -2494,6 +2498,16 @@ internal class MainViewModel(
     fun setPlayingBar(on: Boolean) {
         preferences.edit { putBoolean(KEY_PLAYING_BAR, on) }
         uiState = uiState.copy(playingBar = on)
+    }
+
+    fun setLinesEarly(ms: Long) {
+        preferences.edit { putLong(KEY_LINES_EARLY, ms) }
+        uiState = uiState.copy(linesEarlyMs = ms)
+    }
+
+    fun setNextLineFirst(on: Boolean) {
+        preferences.edit { putBoolean(KEY_NEXT_LINE_FIRST, on) }
+        uiState = uiState.copy(nextLineFirst = on)
     }
 
     /** Kept only once let go, [save], rather than at every step of the slider. */
@@ -3934,6 +3948,8 @@ internal class MainViewModel(
         private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
         private const val KEY_PLAYING_BAR = "playing_bar"
+        private const val KEY_LINES_EARLY = "lines_early_ms"
+        private const val KEY_NEXT_LINE_FIRST = "next_line_first"
         private const val KEY_VISUALS = "visuals"
         private const val KEY_VISUALS_SHADE = "visuals_shade"
         private const val KEY_READINGS = "lyrics_readings"

@@ -86,7 +86,7 @@ internal class ShazamGapStore(private val preferences: SharedPreferences) {
         "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}\u0000${wordsMs / 1000}\u0000"
 
     private fun all(): JSONObject = try {
-        JSONObject(preferences.getString("shazam_gaps", "{}").orEmpty())
+        JSONObject(preferences.getString("shazam_gaps", null) ?: "{}")
     } catch (_: JSONException) {
         JSONObject()
     }
@@ -107,7 +107,7 @@ internal class LeadStore(private val preferences: SharedPreferences) {
     }
 
     private fun all(): JSONObject = try {
-        JSONObject(preferences.getString("video_timing", "{}").orEmpty())
+        JSONObject(preferences.getString("video_timing", null) ?: "{}")
     } catch (_: JSONException) {
         JSONObject()
     }

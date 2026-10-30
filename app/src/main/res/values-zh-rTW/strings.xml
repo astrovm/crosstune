@@ -253,6 +253,8 @@
     <string name="palette_rose">玫瑰</string>
     <string name="setting_pure_black">純黑</string>
     <string name="setting_playing_bar">顯示正在播放的內容</string>
+    <string name="setting_lines_early">提前顯示歌詞行</string>
+    <string name="setting_next_line_first">提前點亮下一行</string>
     <string name="follow_help_title">讓歌詞跟隨你的音樂</string>
     <string name="follow_turn_on">開啟</string>
     <string name="setting_lyrics_follow">歌詞跟隨音樂應用程式</string>

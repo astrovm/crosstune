@@ -144,6 +144,7 @@ internal class ExactMatcher(
                         MusicService.DEEZER -> Answer(findOnDeezer(metadata))
                         MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
                         MusicService.TIDAL -> Answer(findOnTidal(metadata))
+                        MusicService.SPOTIFY -> Answer(findOnSpotify(metadata))
                         MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
                         MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
                         MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
@@ -250,7 +251,7 @@ internal class ExactMatcher(
             val name = result.optString(nameKey).removeSuffix(" - Single").removeSuffix(" - EP")
             matches(metadata, name, result.optString("artistName"))
         }
-        return asLongAs(metadata, named) { it.optLong("trackTimeMillis") }?.optString(urlKey)?.linkTo(MusicService.APPLE_MUSIC)
+        return asLongAs(metadata, named) { it.optLong("trackTimeMillis") }?.let { it.optString(urlKey).linkTo(MusicService.APPLE_MUSIC) }
     }
 
     private suspend fun findOnDeezer(metadata: MusicMetadata): String? {
@@ -259,7 +260,7 @@ internal class ExactMatcher(
             val artist = result.optJSONObject("artist")?.optString("name") ?: name
             matches(metadata, name, artist)
         }
-        return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.optString("link")?.linkTo(MusicService.DEEZER)
+        return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.let { it.optString("link").linkTo(MusicService.DEEZER) }
     }
 
     /**
@@ -366,7 +367,7 @@ internal class ExactMatcher(
             val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("trackName")))
             val credit = SongNames.normalize(result.optString("artistName"))
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
-        }?.optString("artworkUrl100")?.ifBlank { null }?.replace("100x100bb", "600x600bb")
+        }?.let { it.optString("artworkUrl100").ifBlank { null }?.replace("100x100bb", "600x600bb") }
     }
 
     private suspend fun deezerCoverNamed(metadata: MusicMetadata): String? {
@@ -380,7 +381,7 @@ internal class ExactMatcher(
             val name = SongNames.normalize(SongNames.withoutEditionTag(MetadataParsers.deezerTitle(result)))
             val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
-        }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
+        }?.optJSONObject("album")?.let { it.optString("cover_big").ifBlank { null } }
     }
 
     /** TIDAL's catalogue is the labels' own, so a match by name and artist is the item itself. */
@@ -401,6 +402,18 @@ internal class ExactMatcher(
     }
 
     /**
+     * Spotify's search needs an account, but ListenBrainz knows which Spotify songs go by a name, and
+     * each song's own page says its name, artist and length, so the one that's this song is picked
+     * from the first few. Only songs: ListenBrainz knows no albums or artists, see [canMatchExactly].
+     */
+    private suspend fun findOnSpotify(metadata: MusicMetadata): String? {
+        val ids = apis.spotifyIds(metadata.title, metadata.artist).take(SPOTIFY_PAGES)
+        val songs = coroutineScope { ids.map { id -> async { apis.spotifySong(id) } }.awaitAll() }.filterNotNull()
+        val named = songs.filter { matches(metadata, it.title, it.artist) }
+        return asLongAs(metadata, named) { it.lengthMs }?.url
+    }
+
+    /**
      * Anyone can upload to SoundCloud under any name, so a song or album counts only when it's the
      * artist's own, or a verified account's, and an artist only when verified.
      */
@@ -418,7 +431,7 @@ internal class ExactMatcher(
                 result.optBoolean("verified") && matches(metadata, result.optString("username"), "")
             }
         }
-        return found?.optString("permalink_url")?.linkTo(MusicService.SOUNDCLOUD)
+        return found?.let { it.optString("permalink_url").linkTo(MusicService.SOUNDCLOUD) }
     }
 
     /** Like SoundCloud, anyone can upload to Audiomack, so only the artist's own or a verified account's upload counts. */
@@ -440,7 +453,7 @@ internal class ExactMatcher(
         } ?: return null
         val slug = found.optString("url_slug").ifBlank { return null }
         if (metadata.type == ItemType.ARTIST) return "https://audiomack.com/$slug"
-        val owner = found.optJSONObject("uploader")?.optString("url_slug")?.ifBlank { null } ?: return null
+        val owner = found.optJSONObject("uploader")?.let { it.optString("url_slug").ifBlank { null } } ?: return null
         return "https://audiomack.com/$owner/${if (metadata.type == ItemType.TRACK) "song" else "album"}/$slug"
     }
 
@@ -504,7 +517,7 @@ internal class ExactMatcher(
         return results.objects().firstOrNull { result ->
             matches(metadata, result.optString("name"), result.optString("band_name").ifEmpty { result.optString("name") }) &&
                 isOnArtistsOwnPage(metadata, result.optString("item_url_root"))
-        }?.optString("item_url_path")?.linkTo(MusicService.BANDCAMP)
+        }?.let { it.optString("item_url_path").linkTo(MusicService.BANDCAMP) }
     }
 
     /**
@@ -557,10 +570,9 @@ internal class ExactMatcher(
             val same = if (loose) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name }, album)
             if (!same) return null
             return when (metadata.type) {
-                ItemType.TRACK -> item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null }
+                ItemType.TRACK -> item.optJSONObject("playlistItemData")?.let { it.optString("videoId").ifBlank { null } }
                     ?.let { watchUrl + it }
-                else -> item.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")
-                    ?.ifBlank { null }
+                else -> item.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")?.let { it.optString("browseId").ifBlank { null } }
                     ?.let { (if (metadata.type == ItemType.ALBUM) YOUTUBE_MUSIC_ALBUM_URL else YOUTUBE_MUSIC_ARTIST_URL) + it }
             }
         }
@@ -620,7 +632,7 @@ internal class ExactMatcher(
             ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }.orEmpty()
         val details = columns.getOrNull(1).orEmpty().split(" • ")
         return Row(
-            item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null },
+            item.optJSONObject("playlistItemData")?.let { it.optString("videoId").ifBlank { null } },
             columns.firstOrNull().orEmpty(), details, lengthMs(details.last())
         )
     }
@@ -838,6 +850,9 @@ internal class ExactMatcher(
     private companion object {
         const val TIMEOUT_MS = 5_000L
 
+        /** How many of the Spotify songs ListenBrainz knows by a name are read to find the one. */
+        const val SPOTIFY_PAGES = 6
+
         /** How long ChatGPT has to pick a song, after the searches it picks from; it takes a few seconds. */
         const val PICK_TIMEOUT_MS = 8_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6
@@ -906,10 +921,10 @@ internal class ExactMatcher(
     }
 }
 
-/** The apps whose search needs no account. */
+/** The apps whose search needs no account. Spotify's does, so its songs are found another way, but not its albums or artists. */
 private val matchable = setOf(
     MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE,
-    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.QOBUZ
+    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.QOBUZ, MusicService.SPOTIFY
 )
 
 /**
@@ -918,7 +933,8 @@ private val matchable = setOf(
  * Qobuz's artists aren't told apart, see ExactMatcher.findOnQobuz.
  */
 internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
-    type != ItemType.PLAYLIST && target in matchable && !(target == MusicService.QOBUZ && type == ItemType.ARTIST)
+    type != ItemType.PLAYLIST && target in matchable && !(target == MusicService.QOBUZ && type == ItemType.ARTIST) &&
+        !(target == MusicService.SPOTIFY && type != ItemType.TRACK)
 
 /**
  * Whether [item] not being on [target] is worth saying, rather than searching for it: a song or album
@@ -927,7 +943,10 @@ internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
  * label's page isn't found, though it's there, so it's searched for.
  */
 internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
-    (canMatchExactly(target, item.type) && target !in ownPagesOnly) || (item.type == ItemType.PLAYLIST && item.tracks.isEmpty())
+    (canMatchExactly(target, item.type) && target !in partlyKnown) || (item.type == ItemType.PLAYLIST && item.tracks.isEmpty())
 
-/** The apps a song is only matched on from its artist's own page or a verified account. */
-private val ownPagesOnly = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK)
+/**
+ * The apps where a song not found may still be there: on Bandcamp, SoundCloud and Audiomack only its
+ * artist's own page or a verified account counts, and ListenBrainz doesn't know every Spotify song.
+ */
+private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY)

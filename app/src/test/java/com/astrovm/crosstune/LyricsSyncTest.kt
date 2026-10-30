@@ -3,6 +3,8 @@ package com.astrovm.crosstune
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -170,5 +172,20 @@ class LyricsSyncTest {
         val store = LyricsSyncStore(prefs)
         store.save(song, lines, listOf(heardLater(10_000, 10_400), heardLater(20_000, 4_900), heardLater(30_000, 10_300), heardLater(40_000, 10_500)))
         assertEquals(points, store.load(song, lines))
+    }
+
+    @Test
+    fun keptLinesMissingTheirPointsOrWithBrokenOnesKeepWhatIsLeft() {
+        val store = LyricsSyncStore(prefs)
+        store.save(song, lines, listOf(SyncPoint(10_000, 12_000)))
+        val all = JSONObject(prefs.getString("lyrics_sync", null)!!)
+        val key = all.keys().next()
+        val kept = all.getJSONObject(key)
+        kept.put("points", JSONArray("""[3, [30000, 33000]]"""))
+        prefs.edit().putString("lyrics_sync", all.toString()).commit()
+        assertEquals(listOf(SyncPoint(30_000, 33_000)), store.load(song, lines))
+        kept.remove("points")
+        prefs.edit().putString("lyrics_sync", all.toString()).commit()
+        assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
     }
 }

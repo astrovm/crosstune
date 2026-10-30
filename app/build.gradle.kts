@@ -150,7 +150,7 @@ kover {
                 }
                 // Not every branch is worth a test, so this only keeps the share from falling.
                 rule("Branches") {
-                    minBound(85, CoverageUnit.BRANCH)
+                    minBound(88, CoverageUnit.BRANCH)
                 }
             }
         }
@@ -217,7 +217,7 @@ dependencies {
 // Everything CI verifies, so `./gradlew :app:ci` locally runs exactly what the CI job does.
 tasks.register("ci") {
     group = "verification"
-    description = "Unit tests with the 100% line and 85% branch coverage gates, lint, detekt, and the debug and minified release APKs."
+    description = "Unit tests with the 100% line and 88% branch coverage gates, lint, detekt, and the debug and minified release APKs."
     dependsOn(
         "testDebugUnitTest",
         ":pitest-changed-lines:test",

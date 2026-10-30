@@ -71,7 +71,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         entries.forEach { entry ->
             array.put(
                 JSONObject()
-                    .put("service", entry.link.service?.name ?: "RECOGNIZED_SONG")
+                    .put("service", entry.link.service.let { if (it == null) "RECOGNIZED_SONG" else it.name })
                     .put("type", entry.link.type.name)
                     .put("id", entry.link.id)
                     .put("url", entry.link.url)

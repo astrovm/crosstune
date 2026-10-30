@@ -7,8 +7,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -138,6 +140,31 @@ internal class ServiceApis(
 
     // Audiomack
 
+    // Spotify, whose own search needs an account
+
+    /**
+     * The Spotify songs ListenBrainz knows by [title] and [artist], the likeliest first: a song's
+     * releases, remasters and compilations, each its own song on Spotify.
+     */
+    suspend fun spotifyIds(title: String, artist: String): List<String> {
+        val asked = JSONArray().put(JSONObject().put("artist_name", artist).put("release_name", "").put("track_name", title))
+        val request = Request.Builder().url(LISTENBRAINZ_SPOTIFY_IDS).post(asked.toString().toRequestBody("application/json".toMediaType())).build()
+        val answer = client.newCall(request).answer(ioDispatcher) { response ->
+            if (!response.isSuccessful) throw ServiceException(response.code)
+            JSONTokener(response.body.stringAtMost()).nextValue()
+        } as? JSONArray ?: throw JSONException("Not a list")
+        val ids = answer.optJSONObject(0)?.optJSONArray("spotify_track_ids") ?: return emptyList()
+        return (0 until ids.length()).map(ids::optString).filter { it.isNotBlank() }
+    }
+
+    /** A Spotify song's name, artist and length, from its own page, which anyone can read; null when it's gone. */
+    suspend fun spotifySong(id: String): MusicMetadata? {
+        val url = "https://open.spotify.com/track/$id"
+        return client.newCall(Request.Builder().url(url).get().build()).answer(ioDispatcher) { response ->
+            if (response.isSuccessful) MetadataParsers.spotify(response.body.stringAtMost(), ItemType.TRACK)?.copy(url = url) else null
+        }
+    }
+
     /**
      * Audiomack's API wants each request signed, OAuth 1.0 style, with the key its website signs
      * with; no account, so no token.
@@ -181,6 +208,7 @@ internal class ServiceApis(
 
     companion object {
         const val TIDAL_API = "https://api.tidal.com/v1"
+        const val LISTENBRAINZ_SPOTIFY_IDS = "https://labs.api.listenbrainz.org/spotify-id-from-metadata/json"
         /** The token TIDAL's own web player asks its API with. */
         const val TIDAL_TOKEN = "CzET4vdadNUFQ5JU"
         const val SOUNDCLOUD_URL = "https://soundcloud.com/"
@@ -219,7 +247,7 @@ internal class ServiceApis(
         /** A SoundCloud upload, by the artist it credits, or else by whoever uploaded it. */
         fun soundCloudTrack(json: JSONObject): MusicMetadata? {
             val title = json.optString("title").ifBlank { return null }
-            val credited = json.optJSONObject("publisher_metadata")?.optString("artist")?.takeIf { it.isNotBlank() }
+            val credited = json.optJSONObject("publisher_metadata")?.let { it.optString("artist").takeIf { artist -> artist.isNotBlank() } }
             return MusicMetadata(
                 title,
                 credited ?: json.optJSONObject("user")?.optString("username").orEmpty(),

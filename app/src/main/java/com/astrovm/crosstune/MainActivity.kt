@@ -621,6 +621,8 @@ class MainActivity : ComponentActivity() {
         },
         onPureBlackChange = viewModel::setPureBlack,
         onPlayingBarChange = viewModel::setPlayingBar,
+        onLinesEarlyChange = viewModel::setLinesEarly,
+        onNextLineFirstChange = viewModel::setNextLineFirst,
         onFloat = ::float,
         onVisualsShadeChange = viewModel::setVisualsShade,
         onNextVisual = viewModel::nextVisual,

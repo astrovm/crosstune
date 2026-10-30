@@ -69,7 +69,7 @@
   "privacy_link": "Politique de confidentialité",
   "language_label": "Langue",
   "privacy_title": "Politique de confidentialité de Crosstune",
-  "updated": "Dernière mise à jour : 26 octobre 2026",
+  "updated": "Dernière mise à jour : 30 octobre 2026",
   "short_h2": "En bref",
   "short_items": [
     "Aucun compte, aucune publicité, aucune statistique d'utilisation.",
@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "Pour ouvrir directement l'élément, l'application envoie le titre et l'artiste de l'élément au service de recherche de la destination : Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack ou Qobuz. Si les liens vont directement dans une application et que « Lire tout de suite » est désactivé, une recherche s'y ouvre à la place, et rien n'est envoyé. Quand vous ouvrez une destination, l'application ou le site choisi reçoit le lien de destination ou les termes de recherche. Quand vous utilisez « Tout lire » ou « Aléatoire » sur une playlist ou un album, l'application envoie le titre et l'artiste de chaque morceau à la recherche de YouTube Music, puis envoie la liste des vidéos trouvées à YouTube, qui renvoie une playlist temporaire. Les destinations personnalisées reçoivent les termes de recherche dans le modèle d'URL que vous configurez. Partager un résultat l'envoie à l'application ou au destinataire que vous choisissez."
+      "Pour ouvrir directement l'élément, l'application envoie le titre et l'artiste de l'élément au service de recherche de la destination : Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack ou Qobuz. Un titre sur Spotify est plutôt trouvé via ListenBrainz : son titre et son artiste sont envoyés à ListenBrainz, qui sait quels titres Spotify portent ce nom, puis les pages publiques Spotify de ces titres sont lues. Si les liens vont directement dans une application et que « Lire tout de suite » est désactivé, une recherche s'y ouvre à la place, et rien n'est envoyé. Quand vous ouvrez une destination, l'application ou le site choisi reçoit le lien de destination ou les termes de recherche. Quand vous utilisez « Tout lire » ou « Aléatoire » sur une playlist ou un album, l'application envoie le titre et l'artiste de chaque morceau à la recherche de YouTube Music, puis envoie la liste des vidéos trouvées à YouTube, qui renvoie une playlist temporaire. Les destinations personnalisées reçoivent les termes de recherche dans le modèle d'URL que vous configurez. Partager un résultat l'envoie à l'application ou au destinataire que vous choisissez."
     ],
     [
       "p",

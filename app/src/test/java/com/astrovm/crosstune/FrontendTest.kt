@@ -54,4 +54,10 @@ class FrontendTest {
         assertNull(custom.packageName)
         assertEquals(video, custom.adapt(video))
     }
+
+    @Test
+    fun aSearchWithNothingToSearchForKeepsYouTubesPath() {
+        assertEquals("https://yewtu.be/results", Frontend.INVIDIOUS.onSite("https://www.youtube.com/results", "https://yewtu.be"))
+        assertEquals("not a link", Frontend.INVIDIOUS.onSite("not a link", "https://yewtu.be"))
+    }
 }

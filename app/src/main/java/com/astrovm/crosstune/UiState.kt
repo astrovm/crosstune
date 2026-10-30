@@ -92,6 +92,10 @@ internal data class UiState(
     val pureBlack: Boolean = false,
     /** Whether what's playing shows as a bar at the bottom of the main screen. */
     val playingBar: Boolean = true,
+    /** How far ahead of the voice a line lights, so it's read as it's sung. */
+    val linesEarlyMs: Long = LINES_EARLY_MS,
+    /** Whether the line coming next brightens a moment before it's lit. */
+    val nextLineFirst: Boolean = false,
     /** Whether MilkDrop visuals move behind the words, to what the phone plays. */
     val visuals: Boolean = false,
     /** How dark the ground over the visuals is, from 0, none, to 1, black. */
@@ -314,6 +318,12 @@ internal enum class NotFoundAction { ASK, ORIGINAL, SEARCH }
 /** How dark the ground over the visuals is to start with: enough for the words to read. */
 internal const val DEFAULT_VISUALS_SHADE = 0.45f
 
+/** How far ahead of the voice a line lights unless set otherwise: enough to have read its first word as it's sung. */
+internal const val LINES_EARLY_MS = 400L
+
+/** How far ahead of the voice a line can be set to light, from on the voice to a second and a half before. */
+internal val LINES_EARLY_STEPS = (0L..1500L step 100L).toList()
+
 /**
  * A [word] and its [meaning], once found; null while [looking], or when it [failed] or needs none.
  * [type] is what kind of word it is, e.g. "noun", when the dictionary says.
@@ -486,9 +496,7 @@ internal fun Learning.insteadOf(index: Int): String? {
 internal val Learning.showsAs: WordsAs get() = if (wordsAs == WordsAs.KANA && script != Script.JAPANESE) WordsAs.WRITTEN else wordsAs
 
 /** Something asked of ChatGPT: [value] once it's come, or that it [failed]; on its way until either. */
-internal data class Asking<T>(val value: T? = null, val failed: Boolean = false) {
-    val loading get() = value == null && !failed
-}
+internal data class Asking<T>(val value: T? = null, val failed: Boolean = false)
 
 /** Sentences using [word], from line [index], once they've come, or that they couldn't be had. */
 internal data class WordExamples(val word: Word, val index: Int, val asking: Asking<List<Example>> = Asking())

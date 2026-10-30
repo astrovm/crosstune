@@ -162,4 +162,38 @@ class UpdatesTest {
     private companion object {
         const val DAY_MS = 24 * 60 * 60 * 1000L
     }
+
+    @Test
+    fun anApkWithNoDownloadAddressIsNoUpdate() = runBlocking {
+        fake.handler = { request -> FakeSpotify.html(request, """{"tag_name":"v2.9.0","assets":[{"name":"Crosstune.apk"}]}""") }
+        assertNull(checker().newer())
+    }
+
+    @Test
+    fun aClockSetBackAsksGithubAgainInsteadOfTrustingWhatWasKept() = runBlocking {
+        release("v2.9.0", "Crosstune-v2.9.0.apk")
+        assertEquals("2.9.0", checker().newer()?.version)
+        clock -= 1_000
+        release("v2.10.0", "Crosstune-v2.10.0.apk")
+        assertEquals("2.10.0", checker().newer()?.version)
+        assertEquals(2, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun halfOfWhatWasKeptIsNothingKept() = runBlocking {
+        fake.handler = { request -> FakeSpotify.html(request, "", code = 503) }
+        prefs.edit().putLong("update_checked", clock).putString("update_apk", "https://example.com/a.apk").commit()
+        assertNull(checker().newer())
+        prefs.edit().remove("update_apk").putString("update_version", "2.9.0").commit()
+        assertNull(checker().newer())
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+    }
+
+    @Test
+    fun anAppAndroidDoesntKnowIsNotInstalledFromAFile() {
+        val stranger = object : android.content.ContextWrapper(app) {
+            override fun getPackageName() = "com.example.stranger"
+        }
+        assertFalse(installedFromAFile(stranger))
+    }
 }

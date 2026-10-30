@@ -3,7 +3,9 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageInfo
+import android.content.pm.ResolveInfo
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
@@ -270,6 +272,28 @@ class LinkInterceptionTest {
         assertEquals(setOf(linkApp(MusicService.SPOTIFY)), state.blockingApps(setOf(MusicService.SPOTIFY)))
         assertEquals(emptySet<LinkApp>(), state.blockingApps(setOf(MusicService.TIDAL)))
         assertEquals(listOf(linkApp(MusicService.SPOTIFY)), state.installedSourceApps(setOf(MusicService.SPOTIFY, MusicService.DEEZER)))
+    }
+
+    @Test
+    fun aSourceNoAppClaimsLinksForHasNoClaimingApps() {
+        installApp(MusicService.SPOTIFY)
+        FakeDomainVerification.installPerPackage(app) {
+            mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED)
+        }
+        // SoundCloud's links are never intercepted when tapped, so no host of its is looked at.
+        assertEquals(emptyMap<LinkApp, Boolean>(), interception.linkState().claimingApps(setOf(MusicService.SOUNDCLOUD)))
+    }
+
+    @Test
+    fun anAppUninstalledWhileLookingIsNamedByItsPackage() {
+        val gone = "gone.player"
+        val filter = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/")).addCategory(Intent.CATEGORY_BROWSABLE)
+        val found = ResolveInfo().apply { activityInfo = ActivityInfo().apply { packageName = gone; name = "Open" } }
+        shadowOf(app.packageManager).addResolveInfoForIntent(filter, found)
+        FakeDomainVerification.installPerPackage(app) { packageName ->
+            if (packageName == gone) mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) else null
+        }
+        assertEquals(mapOf(LinkApp(gone, gone) to true), interception.linkState().claimingApps(setOf(MusicService.SPOTIFY)))
     }
 
     @Test

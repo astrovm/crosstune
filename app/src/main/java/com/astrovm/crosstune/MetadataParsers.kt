@@ -88,10 +88,13 @@ internal object MetadataParsers {
             rawTitle
         }
         val count = songCountRegex.find(html)?.groupValues?.get(1)?.toIntOrNull()
-        return MusicMetadata(title, artist, type, tags.image(), trackCount = count)
+        // A song's page says how long it is, in seconds, which tells its versions apart.
+        val length = songLengthRegex.find(html)?.groupValues?.get(1)?.toLongOrNull()?.takeIf { type == ItemType.TRACK }?.times(1000)
+        return MusicMetadata(title, artist, type, tags.image(), trackCount = count, lengthMs = length)
     }
 
     private val songCountRegex = Regex("""<meta name="music:song_count" content="(\d+)"""")
+    private val songLengthRegex = Regex("""<meta name="music:duration" content="(\d+)"""")
 
     private val spotifyStateRegex = Regex("""<script id="initialState" type="text/plain">([^<]*)</script>""")
 
@@ -110,7 +113,7 @@ internal object MetadataParsers {
                 val sources = song.optJSONObject("albumOfTrack")?.optJSONObject("coverArt")?.optJSONArray("sources") ?: return@mapNotNull null
                 // The 300px one: sharp in a list without downloading the 640px one.
                 val cover = (0 until sources.length()).mapNotNull(sources::optJSONObject)
-                    .minByOrNull { kotlin.math.abs(it.optInt("width") - 300) }?.optString("url")?.ifBlank { null }
+                    .minByOrNull { kotlin.math.abs(it.optInt("width") - 300) }?.let { it.optString("url").ifBlank { null } }
                 cover?.let { url to it }
             }.toMap()
     }
@@ -138,7 +141,7 @@ internal object MetadataParsers {
         val channel = text("longBylineText").substringBefore(" • ").trim()
         val type = musicVideoTypeIn(video)
         val thumbnails = video.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-        val artwork = thumbnails?.optJSONObject(thumbnails.length() - 1)?.optString("url")?.ifBlank { null }
+        val artwork = thumbnails?.optJSONObject(thumbnails.length() - 1)?.let { it.optString("url").ifBlank { null } }
         val song = type == "ATV"
         val named = (if (song || type == "OMV") youtubeVideo(title, "$channel - Topic") else youtubeVideo(title, channel)) ?: return null
         val lengthMs = text("lengthText").takeIf { song }?.split(":")?.mapNotNull(String::toLongOrNull)?.takeIf { it.size in 2..3 }
@@ -169,7 +172,7 @@ internal object MetadataParsers {
             }
         }
         collect(json)
-        return MusicMetadata(title, artist, ItemType.ALBUM, thumbnails?.optString("url")?.ifBlank { null }, songs)
+        return MusicMetadata(title, artist, ItemType.ALBUM, thumbnails?.let { it.optString("url").ifBlank { null } }, songs)
     }
 
     /** The first object anywhere in [value] that [pick] picks. */
@@ -337,8 +340,8 @@ internal object MetadataParsers {
             val title = value.optString("title")
             if (isSong && title.isNotBlank()) {
                 // The cover's address has its size left for the app to fill in.
-                val artwork = value.optJSONObject("artwork")?.optJSONObject("dictionary")?.optString("url")
-                    ?.replace("{w}x{h}bb.{f}", "300x300bb.jpg")?.ifBlank { null }
+                val artwork = value.optJSONObject("artwork")?.optJSONObject("dictionary")
+                    ?.let { it.optString("url").replace("{w}x{h}bb.{f}", "300x300bb.jpg").ifBlank { null } }
                 listOf(MusicMetadata(title, value.optString("artistName"), artworkUrl = artwork))
             } else {
                 value.keys().asSequence().flatMap { appleSongs(value.opt(it)) }.toList()
@@ -388,7 +391,7 @@ internal object MetadataParsers {
             deezerTitle(track).ifBlank { return@mapNotNull null },
             track.optJSONObject("artist")?.optString("name").orEmpty(),
             // The 250px size: sharp in a list.
-            artworkUrl = track.optJSONObject("album")?.optString("cover_medium")?.ifBlank { null }
+            artworkUrl = track.optJSONObject("album")?.let { it.optString("cover_medium").ifBlank { null } }
         )
     }
 
@@ -464,8 +467,8 @@ internal object MetadataParsers {
         val artist = album.optJSONObject("byArtist")?.optString("name").orEmpty()
         val list = album.optJSONObject("track")?.optJSONArray("itemListElement") ?: return emptyList()
         return (0 until list.length()).mapNotNull { index ->
-            val name = list.optJSONObject(index)?.optJSONObject("item")?.optString("name")
-            name?.ifBlank { null }?.let { MusicMetadata(it, artist) }
+            val name = list.optJSONObject(index)?.optJSONObject("item")?.let { it.optString("name").ifBlank { null } }
+            name?.let { MusicMetadata(it, artist) }
         }
     }
 

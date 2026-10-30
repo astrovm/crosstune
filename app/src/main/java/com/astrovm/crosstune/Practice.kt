@@ -211,7 +211,7 @@ internal class PracticeCards(
     fun turn() {
         val practice = uiState.practice?.takeIf { !it.turned } ?: return
         uiState = uiState.copy(practice = practice.copy(turned = true))
-        if (practice.sound == LineSound.PLAYED && practice.line?.let(::typeOf)?.options?.back?.sound == true) replay()
+        if (practice.sound == LineSound.PLAYED && practice.line?.let { typeOf(it).options.back.sound } == true) replay()
     }
 
     /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */

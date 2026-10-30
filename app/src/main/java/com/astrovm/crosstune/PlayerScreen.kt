@@ -277,7 +277,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 AppIcon(R.drawable.ic_queue_music, contentDescription = stringResource(R.string.player_up_next))
             }
         }
-        if (hasWords && words.isNotEmpty()) LyricsPeek(words, following, tint, actions.onPlayerLyrics, Modifier.padding(top = 8.dp))
+        if (hasWords && words.isNotEmpty()) LyricsPeek(words, following?.ahead(state.linesEarlyMs), tint, actions.onPlayerLyrics, Modifier.padding(top = 8.dp))
     }
     val queue: @Composable (Modifier, Morph) -> Unit = { modifier, moving ->
         // Only while it's open, which its list being there says.

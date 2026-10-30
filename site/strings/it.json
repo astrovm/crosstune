@@ -69,7 +69,7 @@
   "privacy_link": "Informativa sulla privacy",
   "language_label": "Lingua",
   "privacy_title": "Informativa sulla privacy di Crosstune",
-  "updated": "Ultimo aggiornamento: 26 ottobre 2026",
+  "updated": "Ultimo aggiornamento: 30 ottobre 2026",
   "short_h2": "In breve",
   "short_items": [
     "Nessun account, pubblicità o analisi.",
@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "Per aprire direttamente l'elemento, l'app invia il titolo e l'artista dell'elemento al servizio di ricerca della destinazione: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack o Qobuz. Se i link vanno direttamente in un'app e «Riproduci subito» è disattivato, lì si apre invece una ricerca e non viene inviato nulla. Quando apri una destinazione, l'app o il sito selezionato riceve il link di destinazione o i termini di ricerca. Quando usi «Riproduci tutto» o «Casuale» su una playlist o un album, l'app invia il titolo e l'artista di ogni brano alla ricerca di YouTube Music, poi invia l'elenco dei video trovati a YouTube, che restituisce una playlist temporanea. Le destinazioni personalizzate ricevono i termini di ricerca nel modello di URL che configuri. Condividere un risultato lo invia all'app o al destinatario che selezioni."
+      "Per aprire direttamente l'elemento, l'app invia il titolo e l'artista dell'elemento al servizio di ricerca della destinazione: Apple Music, Deezer, YouTube Music, YouTube, Bandcamp, TIDAL, SoundCloud, Audiomack o Qobuz. Un brano su Spotify viene invece trovato tramite ListenBrainz: titolo e artista vanno a ListenBrainz, che sa quali brani di Spotify hanno quel nome, e vengono lette le pagine pubbliche di Spotify di quei brani. Se i link vanno direttamente in un'app e «Riproduci subito» è disattivato, lì si apre invece una ricerca e non viene inviato nulla. Quando apri una destinazione, l'app o il sito selezionato riceve il link di destinazione o i termini di ricerca. Quando usi «Riproduci tutto» o «Casuale» su una playlist o un album, l'app invia il titolo e l'artista di ogni brano alla ricerca di YouTube Music, poi invia l'elenco dei video trovati a YouTube, che restituisce una playlist temporanea. Le destinazioni personalizzate ricevono i termini di ricerca nel modello di URL che configuri. Condividere un risultato lo invia all'app o al destinatario che selezioni."
     ],
     [
       "p",

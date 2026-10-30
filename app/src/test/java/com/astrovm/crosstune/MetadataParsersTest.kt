@@ -32,6 +32,17 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun aSpotifySongSaysHowLongItIsButAnAlbumDoesnt() {
+        val html = """
+            <meta property="og:title" content="Bizarre Love Triangle">
+            <meta property="og:description" content="New Order · Brotherhood · Song · 1986">
+            <meta name="music:duration" content="261">
+        """
+        assertEquals(MusicMetadata("Bizarre Love Triangle", "New Order", lengthMs = 261_000), MetadataParsers.spotify(html, ItemType.TRACK))
+        assertNull(MetadataParsers.spotify(html, ItemType.ALBUM)?.lengthMs)
+    }
+
+    @Test
     fun missingOrBlankTitleIsNotATrack() {
         assertNull(MetadataParsers.spotify("<html></html>", ItemType.TRACK))
         assertNull(MetadataParsers.spotify("""<meta property="og:title" content="  ">""", ItemType.TRACK))
@@ -604,5 +615,231 @@ class MetadataParsersTest {
         assertEquals("봄날" to "BTS", song("BTS - 봄날 (가사)", "x"))
         // A real song name that merely looks like a tag stays.
         assertEquals("Sub" to "Band", song("Band - Sub", "x"))
+    }
+
+    private fun og(title: String?, description: String? = null) = buildString {
+        title?.let { append("""<meta property="og:title" content="$it">""") }
+        description?.let { append("""<meta property="og:description" content="$it">""") }
+    }
+
+    @Test
+    fun spotifyPagesMissingPartsGiveWhatIsThere() {
+        assertNull(MetadataParsers.spotify(og("   "), ItemType.TRACK))
+        // No description, no artist.
+        assertEquals(MusicMetadata("Song", ""), MetadataParsers.spotify(og("Song"), ItemType.TRACK))
+        // "by" the album's artist is only dropped when the title also has the album's name after a dash.
+        assertEquals("Name by Band", MetadataParsers.spotify(og("Name by Band", "Band · album · 2020"), ItemType.ALBUM)!!.title)
+        assertEquals("Name - Album by Other", MetadataParsers.spotify(og("Name - Album by Other", "Band · album · 2020"), ItemType.ALBUM)!!.title)
+        assertEquals("Name", MetadataParsers.spotify(og("Name - Album by Band", "Band · album · 2020"), ItemType.ALBUM)!!.title)
+        // A count too big to be one is no count.
+        val huge = og("Album", "Band · album · 2020") + """<meta name="music:song_count" content="99999999999">"""
+        assertNull(MetadataParsers.spotify(huge, ItemType.ALBUM)!!.trackCount)
+        assertEquals(12, MetadataParsers.spotify(og("Album", "Band · album · 2020") + """<meta name="music:song_count" content="12">""", ItemType.ALBUM)!!.trackCount)
+    }
+
+    @Test
+    fun playlistCoversSkipWhatTheServiceLeftOut() {
+        fun page(data: String) = """<script id="initialState" type="text/plain">${java.util.Base64.getEncoder().encodeToString(data.toByteArray())}</script>"""
+        fun song(uri: String, album: String) = """{"itemV2":{"data":{"uri":"$uri"$album}}}"""
+        fun art(sources: String) = ""","albumOfTrack":{"coverArt":{"sources":$sources}}"""
+        val items = listOf(
+            "5", "{}", """{"content":{}}""", """{"content":{"items":[5,{},{"itemV2":{}},
+                ${song("spotify:track:none", "")},
+                ${song("spotify:track:noart", ""","albumOfTrack":{}""")},
+                ${song("spotify:track:nosources", ""","albumOfTrack":{"coverArt":{}}""")},
+                ${song("spotify:track:nocovers", art("[]"))},
+                ${song("spotify:track:blank", art("""[{"url":"","width":300}]"""))},
+                ${song("spotify:track:ok", art("""[{"url":"https://img/640","width":640},{"url":"https://img/300","width":300}]"""))},
+                ${song("spotify:album:notasong", art("""[{"url":"https://img/x","width":300}]"""))}]}}"""
+        )
+        val state = """{"entities":{"items":{${items.mapIndexed { index, item -> "\"i$index\":$item" }.joinToString(",")}}}}"""
+        assertEquals(mapOf("https://open.spotify.com/track/ok" to "https://img/300"), MetadataParsers.spotifyCovers(page(state)))
+        assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers(page("{}")))
+        assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers(page("""{"entities":{}}""")))
+        assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers("""<script id="initialState" type="text/plain">%%%</script>"""))
+        assertEquals(emptyMap<String, String>(), MetadataParsers.spotifyCovers("<html></html>"))
+    }
+
+    private fun musicVideo(fields: String, type: String = "ATV") = json(
+        """{"panel":{"playlistPanelVideoRenderer":{"videoId":"v1",$fields,"navigationEndpoint":{"musicVideoType":"MUSIC_VIDEO_TYPE_$type"}}}}"""
+    )
+
+    private fun runs(text: String) = """{"runs":[{"text":"$text"}]}"""
+
+    @Test
+    fun youTubeMusicVideosKeepWhatItSaysAndLeaveOutWhatItDoesnt() {
+        fun named(fields: String, type: String = "ATV") = MetadataParsers.youtubeMusicVideo(musicVideo(fields, type), "v1")
+        val song = """"title":${runs("Song")},"longBylineText":${runs("Band • Album")}"""
+        assertNull(named(""""longBylineText":${runs("Band")}"""))
+        assertNull(named(""""title":${runs("(Official Video)")},"longBylineText":${runs("Band")}""", "OMV"))
+        // A song's length counts hours, minutes and seconds, and only those.
+        assertEquals(3_723_000L, named("""$song,"lengthText":${runs("1:02:03")}""")!!.lengthMs)
+        assertEquals(262_000L, named("""$song,"lengthText":${runs("4:22")}""")!!.lengthMs)
+        assertNull(named("""$song,"lengthText":${runs("4")}""")!!.lengthMs)
+        assertNull(named("""$song,"lengthText":${runs("1:2:3:4")}""")!!.lengthMs)
+        assertNull(named(song)!!.lengthMs)
+        // The cover is the last picture, if it has an address.
+        assertNull(named(song)!!.artworkUrl)
+        assertNull(named("""$song,"thumbnail":{}""")!!.artworkUrl)
+        assertNull(named("""$song,"thumbnail":{"thumbnails":[]}""")!!.artworkUrl)
+        assertNull(named("""$song,"thumbnail":{"thumbnails":[{"url":"https://a"},{}]}""")!!.artworkUrl)
+        assertEquals("https://b", named("""$song,"thumbnail":{"thumbnails":[{"url":"https://a"},{"url":"https://b"}]}""")!!.artworkUrl)
+        // Someone's upload has no length to read.
+        assertNull(named("""$song,"lengthText":${runs("4:22")}""", "UGC")!!.lengthMs)
+    }
+
+    @Test
+    fun youTubeMusicPagesWithLessThanAnAlbumHasStillGetTheirName() {
+        fun page(header: String, rest: String = "") = json("""{"header":{"musicDetailHeaderRenderer":$header}$rest}""")
+        fun named(header: String, rest: String = "") = MetadataParsers.youtubeMusicPage(page(header, rest), ItemType.ALBUM)
+        assertNull(named("{}"))
+        val withTitle = """"title":${runs("Pocket Park")}"""
+        assertEquals(MusicMetadata("Pocket Park", "", ItemType.ALBUM), named("{$withTitle}"))
+        assertNull(named("{$withTitle,\"thumbnail\":{\"thumbnails\":[]}}")!!.artworkUrl)
+        assertNull(named("{$withTitle,\"thumbnail\":{\"thumbnails\":[{}]}}")!!.artworkUrl)
+        // Rows with no name for a song aren't songs.
+        val row = { columns: String -> """{"musicResponsiveListItemRenderer":$columns}""" }
+        val rows = listOf(
+            row("{}"), row("""{"flexColumns":[]}"""), row("""{"flexColumns":[{}]}"""),
+            row("""{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":${runs(" ")}}}]}"""),
+            row("""{"flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{}}]}"""),
+        )
+        assertEquals(emptyList<MusicMetadata>(), named("{$withTitle}", ""","contents":[${rows.joinToString(",")}]""")!!.tracks)
+        // An artist's page is just the name.
+        assertEquals(MusicMetadata("Band", "", ItemType.ARTIST), MetadataParsers.youtubeMusicPage(json("""{"a":[{"musicVisualHeaderRenderer":{"title":${runs("Band")}}}]}"""), ItemType.ARTIST))
+        assertNull(MetadataParsers.youtubeMusicPage(json("""{"a":[{"musicVisualHeaderRenderer":{}}]}"""), ItemType.ARTIST))
+    }
+
+    @Test
+    fun aSongNamedBothWaysIsBySomeoneOnlyWhenTheChannelSaysWhoOrNobodyDoes() {
+        // With no channel to go by, the dash is the artist's.
+        assertEquals(MusicMetadata("Ciro y los Persas", "Luz"), MetadataParsers.youtubeVideo("Luz - Ciro y los Persas", ""))
+        // The channel is the right-hand name: the song is the left.
+        assertEquals(MusicMetadata("Luz", "Ciro y los Persas"), MetadataParsers.youtubeVideo("Luz - Ciro y los Persas", "Ciro y los Persas"))
+        // Both names are the channel's, so the dash is the artist's.
+        assertEquals(MusicMetadata("Ciro y los Persas", "Ciro y los Persas"), MetadataParsers.youtubeVideo("Ciro y los Persas - Ciro y los Persas", "Ciro y los Persas"))
+        // The channel is neither.
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song", "Somebody else"))
+    }
+
+    @Test
+    fun aSongSaidAgainInJapaneseNeedsItsArtistToBeInJapaneseToo() {
+        assertEquals("Plastic Love", MetadataParsers.beforeItInJapanese("Plastic Love 竹内まりや - プラスティック・ラブ 1984"))
+        // The second name isn't in Japanese, or the first one isn't all.
+        assertNull(MetadataParsers.beforeItInJapanese("Plastic Love 竹内まりや - Plastic Love"))
+        assertNull(MetadataParsers.beforeItInJapanese("Plastic Love 竹内まりや feat. Mari - プラスティック・ラブ"))
+        assertNull(MetadataParsers.beforeItInJapanese("Plastic Love - プラスティック・ラブ"))
+        assertNull(MetadataParsers.beforeItInJapanese("Plastic Love"))
+    }
+
+    private fun lockup(fields: String, type: String = "LOCKUP_CONTENT_TYPE_VIDEO") = """{"lockupViewModel":{"contentType":"$type",$fields}}"""
+
+    @Test
+    fun youTubePlaylistPagesListTheirVideosWhateverPartsTheyLackAndIgnoreOtherLockups() {
+        fun page(data: String?, title: String? = "Mix") = og(title) + (data?.let { """<script>var ytInitialData = $it;</script>""" } ?: "")
+        fun title(text: String) = """"title":{"content":"$text"}"""
+        fun metadata(inside: String) = """"metadata":{"lockupMetadataViewModel":{${title("Song")}$inside}}"""
+        val lockups = listOf(
+            // The channel is read from deep inside; any part of it missing leaves the video without one.
+            lockup(metadata("")),
+            lockup(metadata(""","metadata":{}""")),
+            lockup(metadata(""","metadata":{"contentMetadataViewModel":{}}""")),
+            lockup(metadata(""","metadata":{"contentMetadataViewModel":{"metadataRows":[]}}""")),
+            lockup(metadata(""","metadata":{"contentMetadataViewModel":{"metadataRows":[{}]}}""")),
+            lockup(metadata(""","metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[]}]}}""")),
+            lockup(metadata(""","metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{}]}]}}""")),
+            lockup(metadata(""","metadata":{"contentMetadataViewModel":{"metadataRows":[{"metadataParts":[{"text":{}}]}]}}"""), "LOCKUP_CONTENT_TYPE_VIDEO"),
+            // No title, no song; not a video, not looked into.
+            lockup("\"metadata\":{}"), lockup("\"contentId\":\"x\""), lockup(metadata(""), "LOCKUP_CONTENT_TYPE_PLAYLIST")
+        )
+        val videos = MetadataParsers.youtubePlaylist(page("""{"items":[${lockups.joinToString(",")},5]}"""))!!.tracks
+        assertEquals(List(8) { MusicMetadata("Song", "") }, videos)
+        // With an id, a video has its picture and link.
+        val withId = MetadataParsers.youtubePlaylist(page("""{"items":[${lockup("\"contentId\":\"abc\"," + metadata(""))}]}"""))!!.tracks.single()
+        assertEquals("https://www.youtube.com/watch?v=abc", withId.url)
+        assertEquals("https://i.ytimg.com/vi/abc/mqdefault.jpg", withId.artworkUrl)
+        // No title for the playlist, or nothing in its data to read, still gives what's there.
+        assertNull(MetadataParsers.youtubePlaylist(page(null, title = null)))
+        assertNull(MetadataParsers.youtubePlaylist(page(null, title = " ")))
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist(page(null))!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.youtubePlaylist(page("{"))!!.tracks)
+    }
+
+    @Test
+    fun appleLookupsAndPlaylistsWithLessThanTheyShouldStillAnswerOrNot() {
+        assertNull(MetadataParsers.appleMusic(json("{}"), ItemType.TRACK))
+        assertNull(MetadataParsers.appleMusic(json("""{"results":[]}"""), ItemType.TRACK))
+        // An album's songs are the track results after it; anything else there is left out.
+        val album = json("""{"results":[{"collectionName":"Album - EP","artistName":"Band"},5,{"wrapperType":"collection"},{"wrapperType":"track","trackName":""},{"wrapperType":"track","trackName":"One","artistName":"Band"}]}""")
+        assertEquals(listOf(MusicMetadata("One", "Band")), MetadataParsers.appleMusic(album, ItemType.ALBUM)!!.tracks)
+        // A playlist is named by its page.
+        fun playlist(data: String?, title: String? = "Mix on Apple Music") =
+            og(title) + (data?.let { """<script type="application/json" id="serialized-server-data">$it</script>""" } ?: "")
+        assertNull(MetadataParsers.applePlaylist(playlist(null, title = null)))
+        assertNull(MetadataParsers.applePlaylist(playlist(null, title = "   ")))
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(playlist(null))!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(playlist("{"))!!.tracks)
+        fun song(title: String, artwork: String) = """{"title":"$title","artistName":"Band","contentDescriptor":{"kind":"song"}$artwork}"""
+        val songs = MetadataParsers.applePlaylist(
+            playlist(
+                """[${song("A", "")},${song("B", ""","artwork":{}""")},${song("C", ""","artwork":{"dictionary":{}}""")},${song("D", ""","artwork":{"dictionary":{"url":""}}""")},
+                ${song("E", ""","artwork":{"dictionary":{"url":"https://img/{w}x{h}bb.{f}"}}""")},${song("", "")},{"title":"Not a song"},7]"""
+            )
+        )!!.tracks
+        assertEquals(listOf("A", "B", "C", "D", "E"), songs.map { it.title })
+        assertEquals(listOf(null, null, null, null, "https://img/300x300bb.jpg"), songs.map { it.artworkUrl })
+    }
+
+    @Test
+    fun spotifyEmbedPagesWithoutTheirSongListGiveNone() {
+        fun page(data: String) = """<script id="__NEXT_DATA__" type="application/json">$data</script>"""
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.spotifyEmbedTracks("<html></html>"))
+        val path = listOf("props", "pageProps", "state", "data", "entity")
+        for (depth in 0..path.size) {
+            val partial = path.take(depth).foldRight("{}") { key, inner -> """{"$key":$inner}""" }
+            assertEquals(partial, emptyList<MusicMetadata>(), MetadataParsers.spotifyEmbedTracks(page(partial)))
+        }
+        val tracks = """[5,{"title":""},{"title":"One","subtitle":"Band","uri":"spotify:track:1"}]"""
+        val entity = path.foldRight("""{"trackList":$tracks}""") { key, inner -> """{"$key":$inner}""" }
+        assertEquals(listOf(MusicMetadata("One", "Band", url = "https://open.spotify.com/track/1")), MetadataParsers.spotifyEmbedTracks(page(entity)))
+    }
+
+    @Test
+    fun deezerAnswersWithLessThanTheyShouldStillGiveTheirNameAndCover() {
+        // Without a cover of its own, the album's.
+        assertEquals("https://c/album", MetadataParsers.deezer(json("""{"title":"Song","album":{"cover_big":"https://c/album"}}"""), ItemType.TRACK)!!.artworkUrl)
+        assertNull(MetadataParsers.deezer(json("""{"title":"Song","album":{}}"""), ItemType.TRACK)!!.artworkUrl)
+        assertEquals("https://c/own", MetadataParsers.deezer(json("""{"title":"Album","cover_big":"https://c/own","picture_big":"https://c/picture"}"""), ItemType.ALBUM)!!.artworkUrl)
+        assertEquals("https://c/picture", MetadataParsers.deezer(json("""{"name":"Band","picture_big":"https://c/picture"}"""), ItemType.ARTIST)!!.artworkUrl)
+        // The list of songs may be missing, or empty of anything with a name.
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.deezer(json("""{"title":"Mix","tracks":{}}"""), ItemType.PLAYLIST)!!.tracks)
+        val tracks = """[5,{"title":""},{"title":"A","artist":{"name":"Band"},"album":{"cover_medium":"https://c/a"}},{"title":"B"},{"title":"C","album":{}},{"title":"D","album":{"cover_medium":""}}]"""
+        val listed = MetadataParsers.deezer(json("""{"title":"Mix","tracks":{"data":$tracks}}"""), ItemType.PLAYLIST)!!.tracks
+        assertEquals(listOf("A", "B", "C", "D"), listed.map { it.title })
+        assertEquals(listOf("Band", "", "", ""), listed.map { it.artist })
+        assertEquals(listOf("https://c/a", null, null, null), listed.map { it.artworkUrl })
+    }
+
+    @Test
+    fun tidalSoundCloudAndBandcampPagesLackingPartsGiveWhatIsThere() {
+        assertNull(MetadataParsers.tidal("<html></html>", ItemType.TRACK))
+        assertNull(MetadataParsers.tidal("<title>  on TIDAL</title>", ItemType.TRACK))
+        // An author who isn't the one the title says is not split from it.
+        assertEquals(MusicMetadata("Song by Somebody", "Band", ItemType.TRACK, "https://c/x"), MetadataParsers.soundCloud(json("""{"title":"Song by Somebody","author_name":"Band","thumbnail_url":"https://c/x"}"""), ItemType.TRACK))
+        assertEquals(MusicMetadata("Song", "", ItemType.TRACK), MetadataParsers.soundCloud(json("""{"title":"Song"}"""), ItemType.TRACK))
+        assertEquals(MusicMetadata("Song", "", ItemType.ARTIST), MetadataParsers.soundCloud(json("""{"title":"Song"}"""), ItemType.ARTIST))
+        // Bandcamp
+        assertNull(MetadataParsers.bandcamp("<html></html>", ItemType.ALBUM))
+        assertNull(MetadataParsers.bandcamp(og(" "), ItemType.ALBUM))
+        fun album(data: String?, image: String = "") = og("Volume Alpha, by C418") + image + (data?.let { """<script type="application/ld+json" id="x">$it</script>""" } ?: "")
+        assertNull(MetadataParsers.bandcamp(album(null, """<meta property="og:image" content=" ">"""), ItemType.ALBUM)!!.artworkUrl)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album(null), ItemType.ALBUM)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album("not json"), ItemType.ALBUM)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album("""{"byArtist":{"name":"C418"}}"""), ItemType.ALBUM)!!.tracks)
+        assertEquals(emptyList<MusicMetadata>(), MetadataParsers.bandcamp(album("""{"track":{}}"""), ItemType.ALBUM)!!.tracks)
+        val listed = MetadataParsers.bandcamp(
+            album("""{"track":{"itemListElement":[5,{},{"item":{}},{"item":{"name":""}},{"item":{"name":"Key"}}]}}"""), ItemType.ALBUM
+        )!!.tracks
+        assertEquals(listOf(MusicMetadata("Key", "")), listed)
     }
 }

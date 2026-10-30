@@ -1545,6 +1545,12 @@ private fun PlainLyrics(words: String, scale: Float, centered: Boolean) {
     )
 }
 
+/** How long before it's lit the line coming next brightens, when set to. */
+internal const val NEXT_LINE_FIRST_MS = 1000L
+
+/** The song as the words show it, [ms] ahead, so each line, its words and chords light that much before they're sung. */
+internal fun Following.ahead(ms: Long) = copy(clock = clock.copy(positionMs = clock.positionMs + ms))
+
 /**
  * The line of [lines] being sung, or -1 before the first or while nothing says where the song is.
  * Checked every frame while the song plays, so a line lights as it's sung; it only changes when the
@@ -1574,8 +1580,10 @@ private fun TimedLyrics(
     onStudy: (Int) -> Unit
 ) {
     val lines = state.lyricLines
-    val following = state.following
+    val following = state.following?.ahead(state.linesEarlyMs)
     val active = rememberSungLine(lines, following)
+    // Set to, the line coming next brightens a moment before it's lit, so the eye is there first.
+    val coming = rememberSungLine(lines, following?.takeIf { state.nextLineFirst }?.ahead(NEXT_LINE_FIRST_MS))
     val chords = rememberChords(state.chords, lines.map { it.text })
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     val look = WordsLook.on(state.phone)
@@ -1599,6 +1607,7 @@ private fun TimedLyrics(
                     chords = chords.getOrNull(index),
                     following = following,
                     place = following?.let { index.compareTo(active) },
+                    coming = index == coming && index > active,
                     // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
                     waiting = active < 0,
                     // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
@@ -1743,6 +1752,7 @@ private fun FollowOffer(actions: ScreenActions, fixing: Boolean, onDismiss: () -
 private fun LyricLineText(
     text: String,
     place: Int?,
+    coming: Boolean = false,
     words: List<TimedWord> = emptyList(),
     timeMs: Long = 0,
     nextMs: Long? = null,
@@ -1760,11 +1770,7 @@ private fun LyricLineText(
     val lit = place == 0
     // Shown in kana or Latin letters instead, as set.
     val instead = help?.instead
-    val alpha by animateFloatAsState(
-        if (place == null || waiting) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.6f,
-        spring(stiffness = Spring.StiffnessLow),
-        label = "line alpha"
-    )
+    val alpha by animateFloatAsState(lineAlpha(place, waiting, coming), spring(stiffness = Spring.StiffnessLow), label = "line alpha")
     val scale by animateFloatAsState(if (lit || place == null) 1f else 0.94f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow), label = "line scale")
     // Words with no timings, a page to read rather than lines to follow, are a little smaller.
     val size = look.size * (if (place == null) 22f / 26f else 1f) * textScale
@@ -1792,46 +1798,85 @@ private fun LyricLineText(
                 // Dimmed as each word is drawn, rather than drawing the line aside first to dim it, which a TV is too slow for line after line.
                 compositingStrategy = CompositingStrategy.ModulateAlpha
             }
-            // Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
-            // A gap, e.g. a solo, has no words to study, so it only moves the app there.
-            .then(
-                if (text.isNotBlank()) {
-                    Modifier.combinedClickable(
-                        onClickLabel = stringResource(if (onSeek != null) seekLabel else R.string.lyrics_study_line),
-                        onClick = onSeek ?: onStudy,
-                        onLongClickLabel = stringResource(R.string.lyrics_study_line),
-                        onLongClick = onStudy
-                    )
-                } else {
-                    onSeek?.let { Modifier.clickable(onClickLabel = stringResource(seekLabel), onClick = it) } ?: Modifier
-                }
-            )
+            .lineTaps(text, onSeek, onStudy, seekLabel)
             .padding(vertical = 6.dp)
     ) {
-        val reading = help?.reading
-        if (instead != null) {
-            Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
-        } else if (chords != null && !chords.isEmpty) {
-            // Chords sit over the letters they're played on, above the readings when those show too.
-            val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }
-            ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, following.takeIf { lit }, style, ruby, help?.readingScale ?: READING_SCALE)
-        } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
-            RubyLine(reading.parts, style, help.readingScale)
-        } else if (lit && following != null && words.isNotEmpty()) {
-            SungWords(words, following, style)
-        } else {
-            // A gap with no words, e.g. a solo, is a note rather than an empty line.
-            Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
-        }
-        val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f, textAlign = style.textAlign)
-        // Shown in them already, they'd say it twice.
-        if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
-            Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        help?.translation?.let {
-            val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale * look.translation, lineHeight = TRANSLATION_LINE * help.translationScale * look.translation, textAlign = style.textAlign)
-            Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
-        }
+        LineWords(text, instead, words, timeMs, nextMs, chords, following.takeIf { lit }, help, style)
+        LineHelps(help, instead, style, look)
+    }
+}
+
+/**
+ * How bright a line is by its [place]: the one being sung brightest, those to come less, those sung
+ * least; set to, the one [coming] next nearly as bright a moment before it's sung. Every line alike
+ * while nothing says where the song is, or [waiting] for its first line.
+ */
+internal fun lineAlpha(place: Int?, waiting: Boolean, coming: Boolean): Float = when {
+    place == null || waiting -> 0.9f
+    place == 0 -> 1f
+    coming -> 0.85f
+    place < 0 -> 0.4f
+    else -> 0.6f
+}
+
+/**
+ * Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
+ * A gap, e.g. a solo, has no words to study, so it only moves the app there.
+ */
+@Composable
+private fun Modifier.lineTaps(text: String, onSeek: (() -> Unit)?, onStudy: () -> Unit, seekLabel: Int): Modifier =
+    if (text.isNotBlank()) {
+        combinedClickable(
+            onClickLabel = stringResource(if (onSeek != null) seekLabel else R.string.lyrics_study_line),
+            onClick = onSeek ?: onStudy,
+            onLongClickLabel = stringResource(R.string.lyrics_study_line),
+            onLongClick = onStudy
+        )
+    } else {
+        onSeek?.let { clickable(onClickLabel = stringResource(seekLabel), onClick = it) } ?: this
+    }
+
+/** A line's words: as set, in kana or Latin letters [instead], under chords, with readings, lit word by word while [sung], or plain. */
+@Composable
+private fun LineWords(
+    text: String,
+    instead: String?,
+    words: List<TimedWord>,
+    timeMs: Long,
+    nextMs: Long?,
+    chords: LineChords?,
+    sung: Following?,
+    help: LineHelp?,
+    style: TextStyle
+) {
+    val reading = help?.reading
+    if (instead != null) {
+        Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
+    } else if (chords != null && !chords.isEmpty) {
+        // Chords sit over the letters they're played on, above the readings when those show too.
+        val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }
+        ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, sung, style, ruby, help?.readingScale ?: READING_SCALE)
+    } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
+        RubyLine(reading.parts, style, help.readingScale)
+    } else if (sung != null && words.isNotEmpty()) {
+        SungWords(words, sung, style)
+    } else {
+        // A gap with no words, e.g. a solo, is a note rather than an empty line.
+        Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** What helps read a line, under it: its Latin letters, and its translation, as switched on. */
+@Composable
+private fun LineHelps(help: LineHelp?, instead: String?, style: TextStyle, look: WordsLook) {
+    val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f, textAlign = style.textAlign)
+    // Shown in them already, they'd say it twice.
+    if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
+        Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    help?.translation?.let {
+        val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale * look.translation, lineHeight = TRANSLATION_LINE * help.translationScale * look.translation, textAlign = style.textAlign)
+        Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
     }
 }
 
@@ -2423,14 +2468,15 @@ private fun SongMeaning(state: UiState, actions: ScreenActions) {
 @Composable
 private fun WordsToKnow(state: UiState, actions: ScreenActions) {
     val asking = state.learning.wordsToKnow
+    val found = asking?.value
     val song = state.lyricsFor
     when {
-        asking == null || asking.loading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        asking.failed -> {
+        asking?.failed == true -> {
             Text(stringResource(R.string.lyrics_words_to_know_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             OutlinedButton(onClick = actions.onFindWordsToKnow, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.retry_button)) }
         }
-        else -> asking.value.orEmpty().forEach { word ->
+        found == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        else -> found.forEach { word ->
             val saved = state.savedLines.any { it.text == word.word && it.title == song?.title && it.artist == song.artist }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
