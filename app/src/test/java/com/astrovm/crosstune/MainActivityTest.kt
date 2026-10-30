@@ -1315,8 +1315,14 @@ class MainActivityTest {
         launch()
         resolveTyped("https://www.deezer.com/playlist/9")
         waitForText("First Song")
+        // Held while the first song is found, so it can be seen it can't be asked twice.
+        val found = CountDownLatch(1)
+        val answer = fake.handler
+        fake.handler = { request -> if (request.url.host == "labs.api.listenbrainz.org") found.await(TIMEOUT_MS, TimeUnit.MILLISECONDS); answer(request) }
         // Spotify plays no song asked for, so each opens there on its own link.
         click(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes)))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes))) and isNotEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        found.countDown()
         waitUntil { phone.opened.isNotEmpty() }
         assertEquals(spotify to "https://open.spotify.com/track/${ids["First Song"]}", phone.opened.single())
         assertTrue(phone.songsAsked.isEmpty())
