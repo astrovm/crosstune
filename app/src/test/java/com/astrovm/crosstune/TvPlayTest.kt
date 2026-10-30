@@ -427,10 +427,14 @@ class TvPlayTest {
         assertEquals(1, playback.opened.size)
     }
 
-    /** On a phone, Play pressed in an app that only plays in front, as YouTube Music without Premium: it opens on the song. */
+    /**
+     * On a phone, Play pressed in an app that only plays in front, as YouTube Music without Premium: running, it's asked
+     * from behind, where it won't, so it opens on the song.
+     */
     private fun playInFront() {
         phone = Phone.OTHER
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        playback.running = null
         playback.startsInBackground = false
         launch()
         click(play)
@@ -496,6 +500,50 @@ class TvPlayTest {
         waitUntil { playback.plays.isNotEmpty() }
         shadowOf(android.os.Looper.getMainLooper()).idle()
         assertNull(shadowOf(app).peekNextStartedService())
+    }
+
+    @Test
+    fun onAPhoneAnAppOpenedOnTheSongThatStopsOnceLeftIsBroughtBackCovered() {
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        // Not running, it can't be asked from behind, so it's opened on the song, not known yet to play only in front.
+        playback.running = emptySet()
+        playback.startsInBackground = false
+        launch()
+        click(play)
+        waitUntil { playback.opened.size == 1 }
+        // Crosstune comes back once it plays there, not as soon as it shows the song: YouTube Music, left before it starts, never does.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(0, playback.cameBack)
+        assertNull(shadowOf(app).peekNextStartedService())
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        waitUntil { playback.cameBack == 1 }
+        // Left, it stops, as it only plays in front: it's brought back there, covered, to play on.
+        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        waitUntil { playback.broughtToFront.size == 1 }
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+    }
+
+    @Test
+    fun onAPhoneAnAppOpenedOnTheSongThatPlaysOnOnceLeftIsLeftToIt() {
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        playback.running = emptySet()
+        launch()
+        click(play)
+        waitUntil { playback.opened.size == 1 }
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        waitUntil { playback.cameBack == 1 }
+        // Paused from Crosstune, it isn't taken for one that stopped once left.
+        click(string(R.string.lyrics_pause))
+        playback.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(listOf(false), playback.plays)
+        assertTrue(playback.broughtToFront.isEmpty())
     }
 
     @Test

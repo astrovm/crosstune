@@ -35,6 +35,8 @@ internal class FakePlayback : PlaybackSource {
     var startsInBackground = true
     /** The apps that can be asked for songs in the background, running or woken; any, when null. */
     var running: Set<String>? = null
+    /** Whether it was seen not to play in the background, as the phone learns it, by failing to when asked. */
+    private var onlyInFront = false
     /** Each app opened on a song's link, and the link. */
     val opened: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
     /** How many times Crosstune came back to the front. */
@@ -70,7 +72,7 @@ internal class FakePlayback : PlaybackSource {
     // Asked to play on, as the phone's, it does unless it only plays in front.
     override suspend fun resume(song: MusicMetadata): Boolean {
         plays += true
-        return startsInBackground
+        return startsInBackground.also { if (!it) onlyInFront = true }
     }
 
     /** Each song an app was brought to the front to play on. */
@@ -85,7 +87,7 @@ internal class FakePlayback : PlaybackSource {
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
         // An app that can't be, with a link only it has, leaves no other to ask.
         if (!canPlaySongs || (app != null && link != null && running?.contains(app) == false)) return false
-        if (mustStart && !startsInBackground) return false
+        if (mustStart && !startsInBackground) return false.also { onlyInFront = true }
         songsAsked += song to app
         linksAsked += link
         return true
@@ -100,11 +102,11 @@ internal class FakePlayback : PlaybackSource {
         return true
     }
 
-    // As the phone's: an app that wouldn't play in the background is left in front, where it plays.
-    override fun playsOnlyInFront(app: String) = !startsInBackground
+    // As the phone's: an app seen not to play in the background is left in front, where it plays.
+    override fun playsOnlyInFront(app: String) = onlyInFront
 
     override fun comesBack() {
-        if (startsInBackground) cameBack++
+        if (!onlyInFront) cameBack++
     }
 
     override fun skip(song: MusicMetadata, next: Boolean) {
@@ -138,7 +140,8 @@ internal class FakePlayback : PlaybackSource {
     val listsAsked: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
 
     override suspend fun playList(app: String, link: String, mustStart: Boolean): Boolean {
-        if (!canPlaySongs || (mustStart && !startsInBackground)) return false
+        if (!canPlaySongs) return false
+        if (mustStart && !startsInBackground) return false.also { onlyInFront = true }
         listsAsked += app to link
         return true
     }

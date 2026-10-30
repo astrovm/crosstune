@@ -141,6 +141,7 @@ internal class MainViewModel(
 
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
             override fun playPause(song: MusicMetadata, play: Boolean) {
+                leftJob?.cancel()
                 if (!play) return source.playPause(song, false)
                 viewModelScope.launch {
                     if (source.resume(song)) return@launch
@@ -1313,9 +1314,27 @@ internal class MainViewModel(
         // Played in that app, not another that has it too.
         if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null && sameApp(app, it.appPackage, interception::isInstalled) } } != null)) return true
         val back = source?.takeIf { exact && sees && app != null && it.openSong(app, link) } ?: return false.also { closePlayer() }
-        withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && sameApp(app, it.appPackage, interception::isInstalled) } }
+        // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does.
+        withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && it.clock.playing && sameApp(app, it.appPackage, interception::isInstalled) } }
         back.comesBack()
+        watchLeft(song)
         return true
+    }
+
+    private var leftJob: Job? = null
+
+    /**
+     * An app that stops as soon as Crosstune comes back over it only plays in front, as YouTube Music without Premium,
+     * which Crosstune can't learn by asking it from behind when it isn't running: asked to play on, it's brought back
+     * there, covered. Paused from Crosstune meanwhile, it's left paused.
+     */
+    private fun watchLeft(song: MusicMetadata) {
+        leftJob?.cancel()
+        val source = playback ?: return
+        if (uiState.coveringApp) return
+        leftJob = viewModelScope.launch {
+            if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing } } != null) source.playPause(song, true)
+        }
     }
 
     private var playerJob: Job? = null
