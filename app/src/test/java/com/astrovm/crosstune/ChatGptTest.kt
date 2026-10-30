@@ -692,6 +692,45 @@ class ChatGptTest {
     }
 
     @Test
+    fun theYearAndAlbumAreGivenToTheSongsMeaningAndNotLookedUp() {
+        var facts: ReleaseFacts? = ReleaseFacts(1990, "Canción animal")
+        var asked = 0
+        val answers = LookupCache(File(folder.root, "facts.json"), Dispatchers.Unconfined)
+        val tutor = ChatGptTutor(signedIn(), answers, releaseOf = { asked++; facts })
+        val song = MusicMetadata("De Música Ligera", "Soda Stereo")
+        answering("Came out: 1990")
+        runBlocking { tutor.explainSong(song, listOf("Ella durmió"), "es") {} }
+        var request = openAi.asked.last()
+        assertEquals("Song: De Música Ligera by Soda Stereo\nCame out: 1990\nAlbum: Canción animal\n\nLyrics:\nElla durmió", request.getJSONArray("input").getJSONObject(0).getString("content"))
+        var instructions = request.getString("instructions")
+        assertTrue(instructions.contains("The user also sends the year it came out and its album, checked: state them as given, and never search for or change them."))
+        // The web is still searched, for what the year and album don't say.
+        assertTrue(instructions.contains("First search the web for this exact song: who wrote it, and any story behind it."))
+        assertFalse(instructions.contains("when and on what album"))
+        assertEquals("web_search", request.getJSONArray("tools").getJSONObject(0).getString("type"))
+        // A song with no album on record is given its year alone.
+        facts = ReleaseFacts(1990, null)
+        runBlocking { tutor.explainSong(song.copy(title = "Other"), listOf("Line"), "es") {} }
+        request = openAi.asked.last()
+        assertTrue(request.getString("instructions").contains("The user also sends the year it came out, checked: state it as given, and never search for or change it."))
+        assertEquals("Song: Other by Soda Stereo\nCame out: 1990\n\nLyrics:\nLine", request.getJSONArray("input").getJSONObject(0).getString("content"))
+        // One MusicBrainz isn't sure of is asked as before.
+        facts = null
+        runBlocking { tutor.explainSong(song.copy(title = "Third"), listOf("Line"), "es") {} }
+        request = openAi.asked.last()
+        instructions = request.getString("instructions")
+        assertTrue(instructions.contains("First search the web for this exact song: when and on what album it came out, who wrote it, and any story behind it."))
+        assertFalse(instructions.contains("The user also sends"))
+        assertEquals("Song: Third by Soda Stereo\n\nLyrics:\nLine", request.getJSONArray("input").getJSONObject(0).getString("content"))
+        // An answer kept asks for nothing, MusicBrainz included, and one from before they were given is asked again.
+        val before = asked
+        runBlocking { tutor.explainSong(song.copy(title = "Third"), listOf("Line"), "es") {} }
+        assertEquals(before, asked)
+        runBlocking { answers.put("song6|gpt-6.1-sol|es|Fourth|Soda Stereo", "Said 1991") }
+        assertEquals(ChatGptReply.Answer("Came out: 1990"), runBlocking { tutor.explainSong(song.copy(title = "Fourth"), listOf("Line"), "es") {} })
+    }
+
+    @Test
     fun eachLineKeepsItsOwnPartAndLinesTranslatedBeforeThatAreAskedAgain() {
         answering("[\"que nunca viste\"]")
         assertEquals(listOf("que nunca viste"), runBlocking { tutor().translate(listOf("見た事もないような"), "es") })

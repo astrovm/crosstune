@@ -74,7 +74,13 @@ class MainActivity : ComponentActivity() {
                 val tutor = ChatGptTutor(
                     chatGpt,
                     LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000),
-                    lines = LookupCache(File(cacheDir, "chatgpt_lines.json"), lookupDispatcher, maxEntries = 6000)
+                    lines = LookupCache(File(cacheDir, "chatgpt_lines.json"), lookupDispatcher, maxEntries = 6000),
+                    // The year and album come from MusicBrainz, which gives a song the same ones every time.
+                    releaseOf = MusicBrainz(
+                        client,
+                        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
+                        LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
+                    )::release
                 )
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
