@@ -1,4 +1,5 @@
 import java.lang.management.ManagementFactory
+import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 
 plugins {
     id("com.android.application")
@@ -147,6 +148,10 @@ kover {
                 rule {
                     minBound(100)
                 }
+                // Not every branch is worth a test, so this only keeps the share from falling.
+                rule("Branches") {
+                    minBound(85, CoverageUnit.BRANCH)
+                }
             }
         }
     }
@@ -210,7 +215,7 @@ dependencies {
 // Everything CI verifies, so `./gradlew :app:ci` locally runs exactly what the CI job does.
 tasks.register("ci") {
     group = "verification"
-    description = "Unit tests with the 100% line coverage gate, lint, and the debug and minified release APKs."
+    description = "Unit tests with the 100% line and 85% branch coverage gates, lint, detekt, and the debug and minified release APKs."
     dependsOn(
         "testDebugUnitTest",
         ":pitest-changed-lines:test",
@@ -218,6 +223,7 @@ tasks.register("ci") {
         "koverXmlReportDebug",
         "koverVerifyDebug",
         "lintDebug",
+        "detekt",
         "assembleDebug",
         "assembleRelease"
     )
@@ -225,7 +231,35 @@ tasks.register("ci") {
 
 // Kover doesn't hook its gate into `check`, so without this a local check passes below 100%.
 tasks.named("check") {
-    dependsOn("koverVerifyDebug")
+    dependsOn("koverVerifyDebug", "detekt")
+}
+
+// detekt keeps new logic from tangling: a function with too many paths, a condition with too many
+// parts, blocks nested too deep. It runs on its own classpath, apart from the Kotlin the app builds with.
+val detektCli by configurations.creating
+dependencies {
+    detektCli("io.gitlab.arturbosch.detekt:detekt-cli:1.23.8")
+}
+tasks.register<JavaExec>("detekt") {
+    group = "verification"
+    description = "Checks the app's code for tangled logic, past what config/detekt/baseline.xml already lists."
+    val sources = layout.projectDirectory.dir("src/main/java")
+    val config = rootProject.layout.projectDirectory.file("config/detekt/detekt.yml")
+    val baseline = rootProject.layout.projectDirectory.file("config/detekt/baseline.xml")
+    val report = layout.buildDirectory.file("reports/detekt/detekt.txt")
+    inputs.dir(sources).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(config, baseline).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(report)
+    classpath = detektCli
+    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
+    // The Kotlin compiler inside detekt reads memory the old way, which Java 24 and up warn about.
+    jvmArgs("--sun-misc-unsafe-memory-access=allow")
+    args(
+        "--input", sources.asFile.path,
+        "--config", config.asFile.path,
+        "--baseline", baseline.asFile.path,
+        "--report", "txt:" + report.get().asFile.path,
+    )
 }
 
 // The store's screenshots and the site's clips, drawn on this computer frame by frame: one test
