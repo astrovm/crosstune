@@ -138,4 +138,12 @@ class CardTypesTest {
         assertEquals(listOf(READ_TYPE, TRANSLATE_TYPE), lines[0].cardsDue(100, both).map { it.cardType })
         assertTrue(line("Nothing", translation = null).cardsDue(Long.MAX_VALUE, both).isEmpty())
     }
+
+    @Test
+    fun aKindOfOwnMakingStartsFromTheCardAsItWasForSidesNotKept() {
+        prefs.edit().putString("card_types", """[{"id":"mine","on":true,"front":{"words":false}}]""").commit()
+        val mine = loadCardTypes(prefs).first()
+        assertFalse(mine.options.front.words)
+        assertEquals(READ_IT.options.back, mine.options.back)
+    }
 }

@@ -201,6 +201,21 @@ class SongSearcherTest {
     }
 
     @Test
+    fun aCoverThatIsBlankIsNoCoverAndWordsMadeOfMarksAreNoMoreThanTheRest() {
+        respond("""{"data":[{"id":1,"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":"Band"},"album":{"cover_big":""}}]}""")
+        assertEquals(listOf(MusicMetadata("Song", "Band", url = "https://www.deezer.com/track/1")), found(" Song !! "))
+    }
+
+    @Test
+    fun appleIsAskedForNoStoreWhenTheCountryIsUnknown() {
+        respond("""{"data":[]}""")
+        runBlocking { SongSearcher(fake.client(), country = "").search("Song") }
+        val apple = fake.requestedUrls.filter { it.startsWith("https://itunes.apple.com/") }
+        // The Chinese search asks Hong Kong's store; the other asks no store at all.
+        assertTrue(apple.toString(), apple.any { "country=" !in it } && apple.none { "country=" in it && !it.endsWith("country=HK") })
+    }
+
+    @Test
     fun noServiceAndNoTimeBothFindNothing() {
         fake.handler = { throw IOException("offline") }
         assertEquals(emptyList<MusicMetadata>(), found("Song"))

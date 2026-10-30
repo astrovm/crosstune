@@ -42,10 +42,11 @@ internal object SyncedLyrics {
      * stamp aren't words, and are left out.
      */
     fun parse(lrc: String): List<LyricLine> {
-        val offset = offsetTag.find(lrc)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        val offset = offsetTag.find(lrc)?.let { it.groupValues[1].toLongOrNull() } ?: 0L
         return lrc.lineSequence().flatMap { raw ->
             val stamps = generateSequence(stamp.matchAt(raw, 0)) { stamp.matchAt(raw, it.range.last + 1) }.toList()
-            val rest = raw.substring(stamps.lastOrNull()?.range?.last?.plus(1) ?: return@flatMap emptySequence())
+            val last = stamps.lastOrNull() ?: return@flatMap emptySequence()
+            val rest = raw.substring(last.range.last + 1)
             // Enhanced LRC times each word too; a line sung more than once can't say which time they're for.
             val words = if (stamps.size == 1) timedWords(rest, wordStamp) { it.toMillis() - offset } else emptyList()
             val text = wordStamp.replace(rest, "").trim()
@@ -59,7 +60,8 @@ internal object SyncedLyrics {
      */
     fun parseWordByWord(yrc: String): List<LyricLine> =
         yrc.lineSequence().mapNotNull { raw ->
-            val (start, length, rest) = netEaseLine.matchEntire(raw.trim())?.destructured ?: return@mapNotNull null
+            val match = netEaseLine.matchEntire(raw.trim()) ?: return@mapNotNull null
+            val (start, length, rest) = match.destructured
             val words = timedWords(rest, netEaseWord) { it.groupValues[1].toLong() }
             LyricLine(start.toLong(), words.joinToString("") { it.text }.trim(), words, (start.toLong() + length.toLong()).takeIf { length.toLong() > 0 })
         }.filter { it.text.isNotEmpty() }.sortedBy { it.timeMs }.toList()
@@ -73,7 +75,8 @@ internal object SyncedLyrics {
         if (found.isEmpty() || text.substring(0, found.first().range.first).isNotBlank()) return emptyList()
         val words = mutableListOf<TimedWord>()
         found.forEachIndexed { index, match ->
-            val piece = text.substring(match.range.last + 1, found.getOrNull(index + 1)?.range?.first ?: text.length)
+            val next = found.getOrNull(index + 1)
+            val piece = text.substring(match.range.last + 1, if (next == null) text.length else next.range.first)
             // Only a space, it goes with the word before; a last stamp with nothing after only says when the line ends.
             if (piece.isNotBlank()) words += TimedWord(timeOf(match).coerceAtLeast(0), piece)
             else if (words.isNotEmpty()) words[words.lastIndex] = words.last().let { it.copy(text = it.text + piece) }
@@ -120,7 +123,7 @@ internal object SyncedLyrics {
     /** The fraction is decimals of a second: ".5" is half of one, ".05" a twentieth. */
     private fun MatchResult.toMillis(): Long {
         val (minutes, seconds, fraction) = destructured
-        val millis = fraction.padEnd(3, '0').take(3).ifEmpty { "0" }.toLong()
+        val millis = fraction.padEnd(3, '0').take(3).toLong()
         return (minutes.toLong() * 60 + seconds.toLong()) * 1000 + millis
     }
 }

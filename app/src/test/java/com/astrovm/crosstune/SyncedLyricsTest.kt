@@ -41,6 +41,8 @@ class SyncedLyricsTest {
         assertEquals(listOf(LyricLine(10_250, "Line")), SyncedLyrics.parse("[OFFSET: -250]\n[00:10.00] Line"))
         // A broken one changes nothing.
         assertEquals(listOf(LyricLine(10_000, "Line")), SyncedLyrics.parse("[offset:soon]\n[00:10.00] Line"))
+        // So does one too big to count.
+        assertEquals(listOf(LyricLine(10_000, "Line")), SyncedLyrics.parse("[offset:99999999999999999999]\n[00:10.00] Line"))
     }
 
     @Test

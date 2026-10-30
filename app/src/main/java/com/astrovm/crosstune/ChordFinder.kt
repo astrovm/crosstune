@@ -142,7 +142,7 @@ internal class ChordFinder(
     /** U-FRET's sheet [id], if it [fits]. */
     private suspend fun sheetOnUFret(id: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val url = "$U_FRET_SONG_URL$id"
-        val lines = uFretSheet.find(sheetPage(url))?.groupValues?.get(1) ?: return null
+        val lines = uFretSheet.firstGroup(sheetPage(url)) ?: return null
         return ChordSheet(ChordSheets.fromUFret(JSONArray(lines)), site = ChordSite.U_FRET, url = url).takeIf(fits)
     }
 
@@ -254,7 +254,7 @@ internal class ChordFinder(
      */
     private suspend fun searchLaCuerda(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> laCuerdaSheets(song, title, key) }, fits) { url ->
-            val sheet = laCuerdaSheet.find(sheetPage(url))?.groupValues?.get(1) ?: return@firstSheet null
+            val sheet = laCuerdaSheet.firstGroup(sheetPage(url)) ?: return@firstSheet null
             // Its chords as Ultimate Guitar marks them, over the words they're played on.
             val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
             ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url)
@@ -266,8 +266,8 @@ internal class ChordFinder(
         // A search that finds nothing is answered with a 500 and no page at all.
         val page = fetch(search.toString()) { code, body -> code == 500 && body.isBlank() }
         // Each song's page, by its row counted from the last.
-        val files = laCuerdaFiles.find(page)?.groupValues?.get(1)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
-        val last = laCuerdaLast.find(page)?.groupValues?.get(1)?.toInt() ?: return emptyList()
+        val files = laCuerdaFiles.firstGroup(page)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
+        val last = laCuerdaLast.firstGroup(page)?.toInt() ?: return emptyList()
         var artist: Pair<String, String>? = null
         val found = mutableListOf<Pair<Boolean, String>>()
         laCuerdaResult.findAll(page).forEach { match ->
@@ -297,10 +297,10 @@ internal class ChordFinder(
     private suspend fun searchCifraClub(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> cifraClubSheets(song, title, key) }, fits) { url ->
             val page = sheetPage(url, asPhone = true)
-            val sheet = cifraClubSheet.find(page)?.groupValues?.get(1) ?: return@firstSheet null
+            val sheet = cifraClubSheet.firstGroup(page) ?: return@firstSheet null
             // Its chords as Ultimate Guitar marks them, over the words they're played on, without its tabs.
             val content = unescape(sheet.replace(cifraClubTabs, "").replace(cifraClubChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, "").replace("\u200B", ""))
-            ChordSheet(ChordSheets.fromUltimateGuitar(content), capo = cifraClubCapo.find(page)?.groupValues?.get(1)?.toInt() ?: 0, site = ChordSite.CIFRA_CLUB, url = url)
+            ChordSheet(ChordSheets.fromUltimateGuitar(content), capo = cifraClubCapo.firstGroup(page)?.toInt() ?: 0, site = ChordSite.CIFRA_CLUB, url = url)
         }
 
     /** The pages of Cifra Club's sheets for [title] by [song]'s artist, searched for by [key]: by the artist first, as its search puts them. */
@@ -356,21 +356,24 @@ internal class ChordFinder(
             .addQueryParameter("limit", "10")
             .build()
         val list = JSONObject(fetch(search.toString(), NETEASE_REFERER)).optJSONObject("result")?.optJSONArray("songs")
-        val songs = (0 until (list?.length() ?: 0)).mapNotNull { list?.optJSONObject(it) }
+        val songs = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
         val titles = songs.map { it.optString("name") }.filter(::japanese).distinct().take(MAX_NAMES)
         val names = listOf(song.title) + titleParts(song.title)
         val artists = songs.filter { found -> names.any { SongNames.same(found.optString("name"), it) } }.flatMap { found ->
-            found.optJSONArray("artists")?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it)?.optString("name") } }.orEmpty()
+            found.optJSONArray("artists")?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) }.map { it.optString("name") } }.orEmpty()
         }.distinct()
         return OtherNames(titles, artists)
     }
+
+    /** What the first group of this matches in [text], if it does. */
+    private fun Regex.firstGroup(text: String): String? = find(text)?.let { it.groupValues[1] }
 
     /** Whether [text] is written in Japanese, kana or kanji. */
     private fun japanese(text: String) = text.any { it in '぀'..'ヿ' || it in '一'..'鿿' }
 
     /** What Ultimate Guitar's page has for its app to show, written into the page. */
     private fun ugStore(page: String): JSONObject? =
-        ugData.find(page)?.groupValues?.get(1)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
+        ugData.firstGroup(page)?.let { JSONObject(unescape(it)).optJSONObject("store")?.optJSONObject("page") }
 
     /** A sheet's page. One that's gone, though the site's search still lists it, has no sheet in it: that sheet isn't there, it's not a site that won't answer. */
     private suspend fun sheetPage(url: String, asPhone: Boolean = false) = fetch(url, asPhone = asPhone) { code, _ -> code == 404 }

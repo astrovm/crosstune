@@ -486,9 +486,7 @@ internal fun Learning.insteadOf(index: Int): String? {
 internal val Learning.showsAs: WordsAs get() = if (wordsAs == WordsAs.KANA && script != Script.JAPANESE) WordsAs.WRITTEN else wordsAs
 
 /** Something asked of ChatGPT: [value] once it's come, or that it [failed]; on its way until either. */
-internal data class Asking<T>(val value: T? = null, val failed: Boolean = false) {
-    val loading get() = value == null && !failed
-}
+internal data class Asking<T>(val value: T? = null, val failed: Boolean = false)
 
 /** Sentences using [word], from line [index], once they've come, or that they couldn't be had. */
 internal data class WordExamples(val word: Word, val index: Int, val asking: Asking<List<Example>> = Asking())

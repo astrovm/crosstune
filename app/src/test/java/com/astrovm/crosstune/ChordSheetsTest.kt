@@ -262,4 +262,20 @@ class ChordSheetsTest {
         assertEquals(0, ChordSheets.playing(byWord, chords, 13_000, 10_500))
         assertEquals(1, ChordSheets.playing(byWord, chords, 13_000, 11_500))
     }
+
+    @Test
+    fun wordsInJapaneseAgainstASheetOfAnotherSongAreNotPlacedAndPunctuationAloneIsKept() {
+        val texts = listOf("君が好きだと言えないまま", "…", "夜空に星が流れていく")
+        val other = sheet(SheetLine("Walking down the river road", listOf(Chord(0, "G"))), SheetLine("Singing to the morning light", listOf(Chord(0, "D"))))
+        assertNull(ChordSheets.place(other, texts))
+        // Words in no script at all are not read in Latin letters either.
+        assertNull(ChordSheets.place(other, listOf("12345", "67890", "…", "!!!!!!")))
+    }
+
+    @Test
+    fun wordsInFullWidthLettersLineUpWithASheetInPlainOnes() {
+        val sheet = sheet(SheetLine("I love you so much tonight", listOf(Chord(0, "Am"), Chord(7, "G"))))
+        val placed = ChordSheets.place(sheet, listOf("Ｉ　ｌｏｖｅ　ｙｏｕ　ｓｏ　ｍｕｃｈ　ｔｏｎｉｇｈｔ"))!!
+        assertEquals(listOf("Am", "G"), placed.single().over.map { it.name })
+    }
 }

@@ -219,7 +219,7 @@ internal class ServiceApis(
         /** A SoundCloud upload, by the artist it credits, or else by whoever uploaded it. */
         fun soundCloudTrack(json: JSONObject): MusicMetadata? {
             val title = json.optString("title").ifBlank { return null }
-            val credited = json.optJSONObject("publisher_metadata")?.optString("artist")?.takeIf { it.isNotBlank() }
+            val credited = json.optJSONObject("publisher_metadata")?.let { it.optString("artist").takeIf { artist -> artist.isNotBlank() } }
             return MusicMetadata(
                 title,
                 credited ?: json.optJSONObject("user")?.optString("username").orEmpty(),

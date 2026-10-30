@@ -49,7 +49,7 @@ internal class ArtworkLoader(
     suspend fun load(url: String): ImageBitmap? {
         cache[url]?.let { return it }
         // A cover a music app showed, kept here as a file; none other is read.
-        if (url.startsWith("file:")) return withContext(ioDispatcher) { kept(url)?.let(::readCached) }?.asImageBitmap()?.also { cache.put(url, it) }
+        if (url.startsWith("file:")) return withContext(ioDispatcher) { kept(url)?.let(::readCached) }?.let { bitmap -> bitmap.asImageBitmap().also { cache.put(url, it) } }
         val file = cacheDir?.let { File(it, fileName(url)) }
         val bitmap = file?.let { withContext(ioDispatcher) { readCached(it) } } ?: download(url, file) ?: return null
         return bitmap.asImageBitmap().also { cache.put(url, it) }
@@ -57,7 +57,7 @@ internal class ArtworkLoader(
 
     /** The file [url] names, when it's one kept with the covers. */
     private fun kept(url: String): File? {
-        val dir = cacheDir?.canonicalFile ?: return null
+        val dir = (cacheDir ?: return null).canonicalFile
         val file = runCatching { File(URI(url)).canonicalFile }.getOrNull() ?: return null
         return file.takeIf { it.parentFile == dir }
     }
@@ -82,9 +82,11 @@ internal class ArtworkLoader(
     /** Keeps the newest covers: a few long playlists' worth, besides Recent. */
     private fun save(file: File, bytes: ByteArray) {
         try {
-            file.parentFile?.mkdirs()
+            // A cover's file is always inside the cache directory, so it has a parent.
+            val dir = file.parentFile
+            dir.mkdirs()
             file.writeBytes(bytes)
-            file.parentFile?.listFiles()?.sortedByDescending(File::lastModified)?.drop(MAX_ON_DISK)?.forEach(File::delete)
+            dir.listFiles()?.let { kept -> kept.sortedByDescending(File::lastModified).drop(MAX_ON_DISK).forEach(File::delete) }
         } catch (_: IOException) {
             // A cover that isn't kept is just downloaded again next time.
         }

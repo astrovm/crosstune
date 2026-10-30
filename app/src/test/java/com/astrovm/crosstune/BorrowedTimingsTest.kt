@@ -80,4 +80,18 @@ class BorrowedTimingsTest {
         assertFalse(BorrowedTimings.agrees(rough, rough.take(2)))
         assertFalse(BorrowedTimings.agrees(emptyList(), emptyList()))
     }
+
+    @Test
+    fun aLineThereWithNoLettersToSayLendsNoTime() {
+        val other = listOf(LyricLine(5_000, "♪"), LyricLine(10_000, "One two three"), LyricLine(20_000, "Four five six"), LyricLine(30_000, "Seven eight nine"), LyricLine(40_000, "Ten eleven twelve"))
+        val timed = BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })
+        assertEquals(listOf(10_000L, 20_000L, 30_000L, 40_000L), timed?.map { it.timeMs })
+    }
+
+    @Test
+    fun noLettersOnEitherSideLineUpWithNothing() {
+        assertEquals(listOf(-1, -1), BorrowedTimings.lineUp("abc", "xy")?.toList())
+        assertEquals(0, BorrowedTimings.lineUp("abc", "")?.size)
+        assertEquals(listOf(-1, -1), BorrowedTimings.lineUp("", "ab")?.toList())
+    }
 }

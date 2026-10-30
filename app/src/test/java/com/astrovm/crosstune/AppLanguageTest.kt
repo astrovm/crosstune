@@ -45,6 +45,20 @@ class AppLanguageTest {
     }
 
     @Test
+    fun newerAndroidKeepsTheLanguageWithAndroidAndFollowsThePhoneWhenNoneIsPicked() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        AppLanguage.set(activity, "ja")
+        assertEquals("ja", AppLanguage.current(activity))
+        AppLanguage.set(activity, null)
+        assertNull(AppLanguage.current(activity))
+    }
+
+    @Test
+    fun aTagThatNamesNoLanguageHasNoName() {
+        assertEquals("", AppLanguage.displayName("und"))
+    }
+
+    @Test
     fun namesEachLanguageInThatLanguage() {
         assertEquals("Español", AppLanguage.displayName("es"))
         assertEquals("日本語", AppLanguage.displayName("ja"))

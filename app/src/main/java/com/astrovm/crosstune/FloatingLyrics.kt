@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -204,7 +205,6 @@ internal class FloatingActions(
 internal fun FloatingOverApps(state: UiState, actions: FloatingActions, controls: Boolean, onControls: (Boolean) -> Unit) {
     var settings by remember { mutableStateOf(false) }
     LaunchedEffect(controls) { if (!controls) settings = false }
-    LaunchedEffect(settings) { if (!settings) actions.onEditorAt(null) }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         FloatingLyrics(
             state,
@@ -288,6 +288,8 @@ private fun FloatingButtons(state: UiState, actions: FloatingActions, onSettings
 private fun FloatingSettings(state: UiState, actions: FloatingActions, onLock: () -> Unit, onDone: () -> Unit) {
     val options = state.floating
     var words by remember { mutableStateOf(false) }
+    // The panel keeps its place while it fades out, so only once it's gone is there no editor to touch.
+    DisposableEffect(Unit) { onDispose { actions.onEditorAt(null) } }
     Surface(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,

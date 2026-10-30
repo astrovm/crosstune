@@ -14,8 +14,8 @@ internal object TrackingLinks {
     private val kept = setOf("search_query")
 
     fun clean(url: String): String {
-        if (MusicLinks.serviceFor(url) == null) return url
         val parsed = url.trim().toHttpUrlOrNull() ?: return url
+        if (MusicLinks.serviceFor(url) == null) return url
         val tracking = parsed.queryParameterNames.filter(::isTracking)
         if (tracking.isEmpty()) return url
         return parsed.newBuilder().apply { tracking.forEach(::removeAllQueryParameters) }.build().toString()

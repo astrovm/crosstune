@@ -557,4 +557,59 @@ class ReadingsTest {
         // Brackets of anything else are words.
         assertEquals("きみ (きみ)", reading("君 (きみ)").reading)
     }
+
+    @Test
+    fun jamoAndRareKanjiCountAsKoreanAndChinese() {
+        assertEquals(Script.KOREAN, Readings.scriptOf(listOf("가")))
+        assertEquals(Script.KOREAN, Readings.scriptOf(listOf("ㅋㅋㅋ")))
+        assertEquals(Script.CHINESE, Readings.scriptOf(listOf("㐀")))
+        assertEquals(Script.CHINESE, Readings.scriptOf(listOf("々")))
+        assertNull(Readings.scriptOf(listOf("ĀŌ")))
+    }
+
+    @Test
+    fun marksAloneAreNoWordsToLookUp() {
+        assertEquals(emptyList<Word>(), Readings.words("♪ … ♪", Script.JAPANESE))
+        assertEquals(emptyList<Word>(), Readings.words("123 !!", Script.JAPANESE))
+    }
+
+    @Test
+    fun aDigitAtTheEndOfALineIsLeftAsWritten() {
+        assertEquals("人 2", reading("人 2").parts.joinToString("") { it.text })
+        assertEquals("2", reading("2").reading)
+        assertEquals("100人", reading("100人").parts.joinToString("") { it.text })
+    }
+
+    @Test
+    fun cyrillicKeepsWhatHasNoLettersInIt() {
+        val read = Readings.of(listOf("Мир, 12 ветер"), Script.CYRILLIC).single().romanized
+        assertEquals("Mir, 12 veter", read)
+    }
+
+    @Test
+    fun koreanSoundsChangeWhereASyllableEndsInRAndTheNextStartsWithIt() {
+        fun romanized(line: String) = Readings.of(listOf(line), Script.KOREAN).single().romanized
+        assertEquals("dalla", romanized("달라"))
+        assertEquals("rara", romanized("라라"))
+        assertEquals("dal", romanized("달"))
+    }
+
+    @Test
+    fun aBopomofoOneIsAReadingNextToBopomofoOnEitherSide() {
+        fun read(line: String) = Readings.of(listOf(line), Script.CHINESE).single().reading
+        assertEquals(read("ㄇㄧ"), read("ㄇ一"))
+        assertEquals(read("ㄧㄇ"), read("一ㄇ"))
+    }
+
+    @Test
+    fun aFixNeedsTheKanjiToBeReadAndOnlyChangesAReadingItDiffersFrom() {
+        val read = listOf(LineReading(listOf(Ruby("君", "くん"), Ruby("は"), Ruby("君", "きみ")), "くんはきみ", "kun wa kimi"))
+        // The kana の isn't a kanji with a reading: nothing to put right.
+        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "は", "き"))))
+        // The same reading it has is no fix.
+        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "君", "くん"))))
+        // Only the kanji read as the first was.
+        val fixed = Readings.corrected(read, listOf(ReadingFix(0, "君", "きみ")))[0]
+        assertEquals(listOf("きみ", null, "きみ"), fixed.parts.map { it.reading })
+    }
 }

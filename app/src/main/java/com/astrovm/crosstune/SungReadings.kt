@@ -124,7 +124,7 @@ internal class SungReadings(
 
         /** The words on a song's page, line by line, each in pieces, kanji with how they're sung. */
         fun linesOf(page: String): List<List<Ruby>> {
-            val body = words.find(page)?.groupValues?.get(1) ?: return emptyList()
+            val body = words.find(page)?.let { it.groupValues[1] } ?: return emptyList()
             return body.split(lineBreak).map(String::trim).map { line ->
                 val parts = mutableListOf<Ruby>()
                 var at = 0

@@ -171,4 +171,23 @@ class SungReadingsTest {
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
         assertTrue(ReadingFix(0, "都会", "まち") in ask(cache)!!)
     }
+
+    @Test
+    fun linesWithNoReadingFromTheDictionaryAreMatchedAsWrittenAndAPageWithNoLinesGivesNothing() {
+        val theirs = SungReadings.linesOf(page)
+        // The dictionary read fewer lines than there are: the rest are compared as written.
+        val fixes = SungReadings.matched(lines, read(lines.take(1)), theirs)
+        assertTrue(ReadingFix(2, "存在", "こと") in fixes)
+        assertEquals(emptyList<ReadingFix>(), SungReadings.matched(lines, read(), emptyList()))
+    }
+
+    @Test
+    fun onlyKanjiOfTheLineWithAReadingThereAreTaken() {
+        val there = """<div class="hiragana" >${ruby("", "ひ")}${ruby("星", "ほし")}が${ruby("ラ", "ら")}${ruby("月", "つき")}<br /></div>"""
+        // A ruby with nothing under it, one over kana, and kanji the line doesn't have, give nothing; the plain "が" has no reading.
+        val parts = SungReadings.linesOf(there).single()
+        assertEquals(listOf(Ruby("", "ひ"), Ruby("星", "ほし"), Ruby("が"), Ruby("ラ", "ら"), Ruby("月", "つき")), parts)
+        val fixes = SungReadings.matched(listOf("星がラ"), read(listOf("星がラ")), listOf(parts))
+        assertEquals(listOf(ReadingFix(0, "星", "ほし")), fixes)
+    }
 }
