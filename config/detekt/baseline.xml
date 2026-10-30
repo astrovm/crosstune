@@ -1,0 +1,103 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:Chords.kt$ChordSheets$words != null &amp;&amp; words.isNotBlank() &amp;&amp; !ugChord.containsMatchIn(words) &amp;&amp; !section.matches(words)</ID>
+    <ID>ComplexCondition:LayerSwipe.kt$downFromTop &amp;&amp; amount &gt; 0f &amp;&amp; !swipe.swiping &amp;&amp; !atTop[0]</ID>
+    <ID>ComplexCondition:LinkResolver.kt$LinkResolver$(response.code == 401 || response.code == 403) &amp;&amp; link.service == MusicService.SOUNDCLOUD &amp;&amp; link.type == ItemType.TRACK</ID>
+    <ID>ComplexCondition:LyricsFinder.kt$LyricsFinder$first is Lyrics.Found &amp;&amp; romanized == null &amp;&amp; !untimed &amp;&amp; !otherTake</ID>
+    <ID>ComplexCondition:LyricsFinder.kt$line.isNotEmpty() &amp;&amp; (label == null || label.none(Char::isLetter) || sungPart.matches(label) || label.split(' ').size &gt; 3)</ID>
+    <ID>ComplexCondition:LyricsScreen.kt$about == null || about.writing || about.done || about.limitReached</ID>
+    <ID>ComplexCondition:LyricsScreen.kt$explanation == null || explanation.writing || explanation.done || explanation.limitReached</ID>
+    <ID>ComplexCondition:LyricsScreen.kt$signedIn &amp;&amp; (explanation == null || explanation.failed || explanation.limitReached)</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$!chords.on || uiState.lyrics.isEmpty() || chords.loading || chords.tried</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$(learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) &amp;&amp; script != null &amp;&amp; learning.lines.isEmpty() &amp;&amp; readingsJob?.isActive != true</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$asked &amp;&amp; (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null &amp;&amp; sameApp(app, it.appPackage, interception::isInstalled) } } != null)</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$at != null &amp;&amp; clock != null &amp;&amp; clock.playing &amp;&amp; heardSong?.let { sameSong(it, shown) } == true &amp;&amp; clock.positionAt(now()) &gt;= SAME_RECORDING_AFTER_MS &amp;&amp; abs(at.positionAt(now()) - clock.positionAt(now())) &lt;= SAME_RECORDING_MS</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$entry.metadata.type == ItemType.PLAYLIST &amp;&amp; entry.metadata.tracks.isNotEmpty() &amp;&amp; (service == MusicService.YOUTUBE_MUSIC || service == MusicService.YOUTUBE)</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty() || handGap != null</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$if (clockSure) (uiState.lyricsSynced &amp;&amp; !liningUp) || timedByHand || handGap != null || sungStore.heard(song, lines) else heardThisTime</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$learning.translation &amp;&amp; uiState.lyrics.isNotEmpty() &amp;&amp; learning.translations.isEmpty() &amp;&amp; !learning.translating</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$pendingOpen &amp;&amp; uiState.selectedDestination == null &amp;&amp; !opensWhole &amp;&amp; uiState.result?.type == ItemType.PLAYLIST &amp;&amp; uiState.result?.tracks.orEmpty().isNotEmpty()</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$playing != null &amp;&amp; playing.clock.playing &amp;&amp; (lines || learnsGap(playing)) &amp;&amp; !calibrationAttempted &amp;&amp; mayCalibrate()</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$playing?.video == true &amp;&amp; appLeadMs == null &amp;&amp; !calibrationAttempted &amp;&amp; syncPoints.isEmpty()</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$prepared != null &amp;&amp; prepared.url.forSharing() == url &amp;&amp; !prepared.exact &amp;&amp; prepared.matchingEnabled &amp;&amp; service != null &amp;&amp; canBeMissing(service, entry.metadata)</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$singingJob?.isActive == true || singingTries &gt;= SINGING_TRIES || (lining &amp;&amp; alongJob?.isActive == true) || nextPaused</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$syncPoints.isEmpty() &amp;&amp; (hand == null || hand.lineMs == line.timeMs) &amp;&amp; moveGap(song, point.songMs - point.lineMs, line.timeMs)</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$timedByHand &amp;&amp; (syncPoints.isNotEmpty() || handGap != null) &amp;&amp; autoReports.allowed == true</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) &gt; STEADY_CLOCK_MS</ID>
+    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$worked &amp;&amp; follow &amp;&amp; playback?.hasAccess() != true &amp;&amp; waits++ &lt; FOLLOW_WAITS</ID>
+    <ID>ComplexCondition:MetadataParsers.kt$MetadataParsers$!first.substring(artist).all { japanese(it) || it.isWhitespace() || it == '・' } || title.substring(dash).none(::japanese)</ID>
+    <ID>ComplexCondition:PlayQueue.kt$PlayQueue$numbered &amp;&amp; !queue.bySong &amp;&amp; named &gt;= 0 &amp;&amp; index in part.indices &amp;&amp; !sameEntry(part[index], now.song)</ID>
+    <ID>ComplexCondition:Playback.kt$MediaSessionPlayback$title.isBlank() || artist.isBlank() || ('.' in artist &amp;&amp; title.startsWith("$artist/"))</ID>
+    <ID>ComplexCondition:Playback.kt$SteadyClock$was != null &amp;&amp; !was.playing &amp;&amp; clock.playing &amp;&amp; was.positionMs - clock.positionMs in 1..STALE_CLOCK_MS</ID>
+    <ID>ComplexCondition:Playback.kt$SteadyClock$was != null &amp;&amp; stale &amp;&amp; clock.playing &amp;&amp; clock.speed == was.speed</ID>
+    <ID>ComplexCondition:SettingsScreen.kt$(item.on || item.onToggle == null) &amp;&amp; item.rule != null &amp;&amp; !item.notAllowed &amp;&amp; !item.locked</ID>
+    <ID>ComplexCondition:UniDic.kt$UniDic$files.isDirectory || (fetch &amp;&amp; mayFetch() &amp;&amp; fetched())</ID>
+    <ID>CyclomaticComplexMethod:BorrowedTimings.kt$BorrowedTimings$fun lineUp(a: String, b: String): IntArray?</ID>
+    <ID>CyclomaticComplexMethod:CardTypesPanel.kt$@Composable internal fun CardSideEditor(line: SavedLine, side: CardSide, onPlay: () -&gt; Unit, canPlay: Boolean, onChange: (CardSide) -&gt; Unit)</ID>
+    <ID>CyclomaticComplexMethod:CardTypesPanel.kt$@Composable internal fun CardTypesPanel(line: SavedLine, types: List&lt;CardType&gt;, turned: Boolean, actions: ScreenActions, onClose: () -&gt; Unit, onPreview: (CardPreview?) -&gt; Unit = {})</ID>
+    <ID>CyclomaticComplexMethod:ChatGpt.kt$ChatGpt$suspend fun ask( instructions: String, input: String, webSearch: Boolean = false, /** How hard it thinks before answering, "low" for quick ones, or the model's own when null. */ effort: String? = null, /** Set when asked again with a renewed token, after the last one was turned down. */ renewed: Boolean = false, onText: (String) -&gt; Unit = {} ): ChatGptReply</ID>
+    <ID>CyclomaticComplexMethod:ChatGpt.kt$ChatGpt$suspend fun signIn(open: suspend (String) -&gt; Unit, timeoutMs: Long = SIGN_IN_TIMEOUT_MS): ChatGptSignInResult</ID>
+    <ID>CyclomaticComplexMethod:ChatGptTutor.kt$internal fun sheet(text: String): Sheet</ID>
+    <ID>CyclomaticComplexMethod:Chords.kt$ChordSheets$private fun placeIn(sheet: ChordSheet, texts: List&lt;String&gt;): List&lt;LineChords&gt;?</ID>
+    <ID>CyclomaticComplexMethod:CrosstuneScreen.kt$@Composable @OptIn(ExperimentalTransitionApi::class) internal fun CrosstuneScreen(state: UiState, actions: ScreenActions)</ID>
+    <ID>CyclomaticComplexMethod:CrosstuneScreen.kt$@Composable private fun LinkField(state: UiState, actions: ScreenActions)</ID>
+    <ID>CyclomaticComplexMethod:CrosstuneScreen.kt$@Composable private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: () -&gt; Unit, onOpenPractice: () -&gt; Unit)</ID>
+    <ID>CyclomaticComplexMethod:CrosstuneScreen.kt$@Composable private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenActions, onMainButtonShown: (Boolean) -&gt; Unit = {})</ID>
+    <ID>CyclomaticComplexMethod:ExactMatcher.kt$ExactMatcher$private suspend fun findOnAudiomack(metadata: MusicMetadata): String?</ID>
+    <ID>CyclomaticComplexMethod:ExactMatcher.kt$ExactMatcher$private suspend fun findOnYouTubeMusic(metadata: MusicMetadata, watchUrl: String, loosely: Boolean): Answer</ID>
+    <ID>CyclomaticComplexMethod:ExactMatcher.kt$ExactMatcher$private suspend fun lookUp(target: MusicService, metadata: MusicMetadata, loosely: Boolean = false, retrying: Boolean = false): Match</ID>
+    <ID>CyclomaticComplexMethod:FixCenter.kt$@Composable internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List&lt;FixStep&gt;</ID>
+    <ID>CyclomaticComplexMethod:FloatingLyrics.kt$@Composable internal fun FloatingLyrics(state: UiState, modifier: Modifier)</ID>
+    <ID>CyclomaticComplexMethod:LinkResolver.kt$LinkResolver$private suspend fun resolveLink(link: MusicLink): Resolution</ID>
+    <ID>CyclomaticComplexMethod:LyricsFinder.kt$LyricsFinder$private suspend fun best(metadata: MusicMetadata, timeoutMs: Long): Best</ID>
+    <ID>CyclomaticComplexMethod:LyricsFinder.kt$LyricsFinder$private suspend fun fromLetras(metadata: MusicMetadata, timeoutMs: Long): Lyrics</ID>
+    <ID>CyclomaticComplexMethod:LyricsFinder.kt$LyricsFinder$private suspend fun fromNetEase(metadata: MusicMetadata, lengthMs: Long?, timeoutMs: Long, alsoBy: String = metadata.artist): Lyrics</ID>
+    <ID>CyclomaticComplexMethod:LyricsFinder.kt$LyricsFinder$private suspend fun timedWell(metadata: MusicMetadata, found: Lyrics.Found, timeoutMs: Long): Lyrics.Found</ID>
+    <ID>CyclomaticComplexMethod:LyricsFinder.kt$LyricsFinder$private suspend fun underName(metadata: MusicMetadata, timeoutMs: Long): Lyrics</ID>
+    <ID>CyclomaticComplexMethod:LyricsScreen.kt$@Composable internal fun LyricsScreen(state: UiState, actions: ScreenActions)</ID>
+    <ID>CyclomaticComplexMethod:LyricsScreen.kt$@Composable internal fun WordsOptions(learning: Learning, actions: ScreenActions, centered: Boolean? = null)</ID>
+    <ID>CyclomaticComplexMethod:LyricsScreen.kt$@Composable private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, style: TextStyle, ruby: List&lt;Ruby&gt;?, readingScale: Float)</ID>
+    <ID>CyclomaticComplexMethod:LyricsScreen.kt$@Composable private fun LyricLineText( text: String, place: Int?, words: List&lt;TimedWord&gt; = emptyList(), timeMs: Long = 0, nextMs: Long? = null, chords: LineChords? = null, following: Following? = null, onSeek: (() -&gt; Unit)?, onStudy: () -&gt; Unit, help: LineHelp? = null, waiting: Boolean = false, seekLabel: Int = R.string.lyrics_jump, textScale: Float, centered: Boolean, look: WordsLook )</ID>
+    <ID>CyclomaticComplexMethod:LyricsScreen.kt$@Composable private fun LyricsActions( state: UiState, actions: ScreenActions, syncing: Boolean, onOnlyVisuals: () -&gt; Unit, onSync: () -&gt; Unit, /** Opens the song's lines to choose from, to practise after when true. */ onChooseLines: (Boolean) -&gt; Unit, menu: BarMenu?, onMenuChange: (BarMenu?) -&gt; Unit, /** Where a TV remote lands on the bar. */ focus: FocusRequester, modifier: Modifier = Modifier )</ID>
+    <ID>CyclomaticComplexMethod:LyricsScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable internal fun ChooseLinesSheet( song: MusicMetadata, texts: List&lt;String&gt;, words: List&lt;String&gt;, kept: List&lt;SavedLine&gt;, loadArtwork: suspend (String) -&gt; ImageBitmap?, practise: Boolean, onSave: (add: List&lt;Int&gt;, remove: List&lt;SavedLine&gt;) -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
+    <ID>CyclomaticComplexMethod:LyricsScreen.kt$@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class) @Composable private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDismiss: () -&gt; Unit)</ID>
+    <ID>CyclomaticComplexMethod:MainActivity.kt$MainActivity$override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun follow(song: MusicMetadata)</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun hearSinging()</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun heardAlong(hearing: Heard.Song)</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun learn()</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false)</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false)</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private suspend fun prepareResult()</ID>
+    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String?</ID>
+    <ID>CyclomaticComplexMethod:MetadataParsers.kt$MetadataParsers$fun youtubeMusicPage(json: JSONObject, type: ItemType): MusicMetadata?</ID>
+    <ID>CyclomaticComplexMethod:Milkdrop.kt$GlThread$private fun draw()</ID>
+    <ID>CyclomaticComplexMethod:MusicLinks.kt$MusicLinks$fun fromUrl(url: HttpUrl): MusicLink?</ID>
+    <ID>CyclomaticComplexMethod:MusicLinks.kt$MusicLinks$private fun serviceForHost(host: String): MusicService?</ID>
+    <ID>CyclomaticComplexMethod:MusicLinks.kt$MusicLinks$private fun youtubeWatch(service: MusicService, url: HttpUrl, segments: List&lt;String&gt;): MusicLink?</ID>
+    <ID>CyclomaticComplexMethod:PlayQueue.kt$PlayQueue$private suspend fun heard(now: AppPlays)</ID>
+    <ID>CyclomaticComplexMethod:Playback.kt$SteadyClock$fun of(clock: PlaybackClock): PlaybackClock</ID>
+    <ID>CyclomaticComplexMethod:PlayerScreen.kt$@Composable private fun UpNextList(player: PlayerState, cover: String?, following: Following, actions: ScreenActions, pull: UpNextPull, onClose: () -&gt; Unit, modifier: Modifier)</ID>
+    <ID>CyclomaticComplexMethod:PlayerScreen.kt$@OptIn(ExperimentalSharedTransitionApi::class) @Composable internal fun PlayerScreen(state: UiState, actions: ScreenActions)</ID>
+    <ID>CyclomaticComplexMethod:PracticeScreen.kt$@Composable internal fun PracticeScreen(state: UiState, actions: ScreenActions)</ID>
+    <ID>CyclomaticComplexMethod:PracticeScreen.kt$@Composable private fun Card(line: SavedLine, practice: Practice, types: List&lt;CardType&gt;, actions: ScreenActions, preview: CardPreview? = null, onSide: (CardSide) -&gt; Unit = {})</ID>
+    <ID>CyclomaticComplexMethod:PracticeScreen.kt$@Composable private fun CardSideContent(line: SavedLine, side: CardSide, back: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:Readings.kt$Readings$fun romaji(kana: String, typed: Boolean = false): String</ID>
+    <ID>CyclomaticComplexMethod:Readings.kt$Readings$private fun grouped(pieces: List&lt;Piece&gt;): List&lt;List&lt;Piece&gt;&gt;</ID>
+    <ID>CyclomaticComplexMethod:Readings.kt$Readings$private fun joined(end: String, start: Char, vowel: String): Pair&lt;String, Char&gt;</ID>
+    <ID>CyclomaticComplexMethod:Readings.kt$Readings$private fun together(pieces: List&lt;Piece&gt;): List&lt;Piece&gt;</ID>
+    <ID>CyclomaticComplexMethod:SavedLines.kt$SavedLinesStore.Companion$fun answered(line: SavedLine, grade: Grade, now: Long): SavedLine</ID>
+    <ID>CyclomaticComplexMethod:SongListener.kt$SongListener$override suspend fun listen(): Heard</ID>
+    <ID>CyclomaticComplexMethod:Translator.kt$Translator$private suspend fun google(lines: List&lt;String&gt;, target: String, onFound: suspend (String, String) -&gt; Unit): Boolean</ID>
+    <ID>NestedBlockDepth:ChatGpt.kt$ChatGpt.Callback$suspend fun await(): HttpUrl</ID>
+    <ID>NestedBlockDepth:Fetched.kt$internal fun OkHttpClient.fetchChecked(url: String, sha256: String, file: File): Boolean</ID>
+    <ID>NestedBlockDepth:LinkResolver.kt$LinkResolver$private fun metadataUrl(link: MusicLink): String</ID>
+    <ID>NestedBlockDepth:Milkdrop.kt$GlThread$private fun draw()</ID>
+    <ID>NestedBlockDepth:Readings.kt$Readings$private fun readAs(parts: List&lt;Ruby&gt;): LineReading</ID>
+    <ID>NestedBlockDepth:SongListener.kt$PlayedSound$override fun open(): Recording?</ID>
+    <ID>NestedBlockDepth:SungReadings.kt$SungReadings$private suspend fun found(song: MusicMetadata, lines: List&lt;String&gt;, read: List&lt;LineReading&gt;): List&lt;ReadingFix&gt;</ID>
+    <ID>NestedBlockDepth:UniDic.kt$UniDic$private fun fetched(): Boolean</ID>
+  </CurrentIssues>
+</SmellBaseline>
