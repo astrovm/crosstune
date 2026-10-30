@@ -38,7 +38,7 @@ numpy==2.5.4
     # via
     #   ctranslate2
     #   onnxruntime
-onnxruntime==1.31.0
+onnxruntime==1.31.1
     # via faster-whisper
 packaging==26.3
     # via
