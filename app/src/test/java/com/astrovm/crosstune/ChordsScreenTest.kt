@@ -117,6 +117,14 @@ class ChordsScreenTest {
     }
 
     @Test
+    fun aLineTheSheetHasNoChordsOnStillLightsAsSung() {
+        val bare = sheet.copy(lines = listOf(SheetLine(lines[0].text, emptyList())) + sheet.lines.drop(2))
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(ChordsState(on = true, sheet = bare), pausedAt(2_100)), ScreenActions()) } }
+        composeRule.waitForIdle()
+        assertEquals("Walking down the ".length, litLetters(lines[0].text))
+    }
+
+    @Test
     fun chordsShowOverTheWordsWithTheCapo() {
         // Paused partway into the first line, sung word by word: its chord being played lights.
         val following = Following(PlaybackClock(1_700, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)

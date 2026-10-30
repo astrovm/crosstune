@@ -57,6 +57,15 @@ class BorrowedTimingsTest {
     }
 
     @Test
+    fun twoLinesThereStartingTogetherCountOnceAndTheNextIsTimedBetween() {
+        val other = listOf(LyricLine(10_000, "One two three"), LyricLine(20_000, "Four five six"), LyricLine(20_000, "Seven eight nine"), LyricLine(40_000, "Ten eleven twelve"))
+        val timed = BorrowedTimings.retime(words, sounds, other, other.map { BorrowedTimings.sound(it.text) })!!.map { it.timeMs }
+        // The second at 20 s stands in for nothing, so the third is placed by the letters before it.
+        assertTrue(timed.toString(), timed[2] in 21_000L..39_000L)
+        assertEquals(40_000L, timed[3])
+    }
+
+    @Test
     fun wordsTooLongToLineUpAreLeftAsTheyAre() {
         val long = "la".repeat(2_500)
         val lines = listOf(long, long)

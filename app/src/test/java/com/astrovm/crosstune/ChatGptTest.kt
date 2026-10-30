@@ -1016,6 +1016,27 @@ class ChatGptTest {
     }
 
     @Test
+    fun theReadingsDescriptionsAndSongsLikeOneAnsweredAreStillKeptAfterARestart() {
+        val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
+        val lines = listOf("Shock!　君はアスファルト・レディ")
+        val read = listOf(LineReading(listOf(Ruby("Shock!　"), Ruby("君", "くん"), Ruby("はアスファルト・レディ")), "Shock!　くんはアスファルト・レディ", "Shock! kun wa asufaruto redi"))
+        val answers = listOf(
+            "[{\"line\": 1, \"kanji\": \"君\", \"reading\": \"きみ\"}]" to { tutor: ChatGptTutor -> runBlocking { tutor.checkReadings(song, lines, read) } },
+            "[{\"title\": \"Stay With Me\", \"artist\": \"Miki Matsubara\"}]" to { tutor: ChatGptTutor -> runBlocking { tutor.songsFor("city pop") } },
+            "[{\"title\": \"Remember Summer Days\", \"artist\": \"Anri\"}]" to { tutor: ChatGptTutor -> runBlocking { tutor.songsLike(song) } }
+        )
+        answers.forEach { (reply, ask) ->
+            answering(reply)
+            val asked = openAi.asked.size
+            val found = ask(tutor())
+            assertEquals(asked + 1, openAi.asked.size)
+            // A new cache reads the file, as the app does when it starts again; the answer is in it already.
+            assertEquals(found, ask(tutor()))
+            assertEquals(asked + 1, openAi.asked.size)
+        }
+    }
+
+    @Test
     fun aQuestionAboutTheWholeSongIsAnsweredWithWhatWasSaidBefore() {
         val tutor = tutor()
         val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")

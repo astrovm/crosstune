@@ -14,6 +14,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -182,6 +183,14 @@ class LyricsAlignmentTest {
         assertEquals((layout.getBoundingBox(3).left + layout.getBoundingBox(3).right) / 2, places[1].center, 0.5f)
         assertTrue(places[0].center > padding * 2)
         shot("READINGS_SCREENSHOT")
+    }
+
+    @Test
+    fun aLineWithNoReadingsToPutOverItIsPlainWords() {
+        // Nothing in it has a reading, so there's no room to leave for any.
+        val learning = Learning(readings = true, script = Script.JAPANESE, lines = listOf(LineReading(listOf(Ruby("Walking down")), "Walking down", "wokingu daun")))
+        show(state(learning))
+        composeRule.onAllNodesWithText("Walking down", useUnmergedTree = true).fetchSemanticsNodes().single().let { assertFalse(it.config.contains(ReadingsShown)) }
     }
 
     @Test

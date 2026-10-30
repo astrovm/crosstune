@@ -4050,9 +4050,12 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(1_000L, prefs().getLong("lines_early_ms", 0))
         assertTextShown("1 sec")
-        composeRule.onNodeWithText(string(R.string.setting_next_line_first)).performScrollTo().performClick()
+        val nextFirst = composeRule.onNode(isToggleable() and hasText(string(R.string.setting_next_line_first)))
+        nextFirst.performScrollTo().assertIsOff().performClick()
         composeRule.waitForIdle()
         assertTrue(prefs().getBoolean("next_line_first", false))
+        // The switch follows, not only the saved setting.
+        nextFirst.assertIsOn()
     }
 
     @Test
@@ -4243,8 +4246,12 @@ class MainActivityTest {
         val playback = timedSong()
         playback.access = true
         controller!!.pause().resume()
+        fun tapLabel() = composeRule.onNodeWithText("Two").fetchSemanticsNode().config[SemanticsActions.OnClick].label
+        // With nowhere to move the app, a tap opens the line to study.
+        assertEquals(string(R.string.lyrics_study_line), tapLabel())
         playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.lyrics_following_app, "Spotify")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(string(R.string.lyrics_jump), tapLabel())
         // Held, a line opens to study; tapped, it still moves the app there.
         composeRule.onNodeWithText("Two").performTouchInput { longClick() }
         composeRule.waitForIdle()
