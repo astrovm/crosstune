@@ -64,7 +64,8 @@ class MainViewModelTest {
         sleepTimer: SleepTimer? = null,
         phone: Phone = Phone.OTHER,
         lyricsFinder: LyricsFinder? = null,
-        songSearcher: SongSearcher? = null
+        songSearcher: SongSearcher? = null,
+        reports: ReportSender? = null
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -84,7 +85,8 @@ class MainViewModelTest {
             keptOnDisk = keptOnDisk,
             sleepTimer = sleepTimer,
             phone = phone,
-            songSearcher = songSearcher
+            songSearcher = songSearcher,
+            reports = reports
         ).also { made += it }
     }
 
@@ -194,10 +196,10 @@ class MainViewModelTest {
         Following(PlaybackClock(1_000, android.os.SystemClock.elapsedRealtime(), playing = playing), "Spotify", seek, app, canSkipNext = skipNext, canSkipPrevious = skipPrevious, shuffle = shuffle, repeat = repeat, like = like)
 
     /** A model whose music app plays [song], offered as playing now, with the player open on it when [open]. */
-    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null): MainViewModel {
+    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null): MainViewModel {
         playback.access = true
         playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
-        val model = model(playback = playback, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder)
+        val model = model(playback = playback, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         if (open) {
@@ -407,15 +409,28 @@ class MainViewModelTest {
     private val timed = """[{"trackName":"Hush","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] One\n[00:10.00] Two\n[00:20.00] Three"}]"""
 
     /** The words of [song] shown over its player, timed as LRCLIB has them, followed in a music app that plays them. */
-    private fun lyricsModel(playback: FakePlayback, answer: String = timed, app: Following = following()): MainViewModel {
-        fake.handler = { request -> if (request.url.host == "lrclib.net") FakeSpotify.html(request, answer) else FakeSpotify.html(request, "") }
+    private fun lyricsModel(
+        playback: FakePlayback,
+        answer: String? = timed,
+        app: Following = following(),
+        keptOnDisk: LookupCache? = null,
+        reports: ReportSender? = null,
+        words: Boolean = true
+    ): MainViewModel {
+        fake.handler = { request ->
+            // No answer at all is a service that can't be reached.
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, answer ?: throw java.io.IOException("offline")) else FakeSpotify.html(request, "")
+        }
         playback.playing.value = app
         val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0)
-        val model = playingModel(playback, lyricsFinder = finder)
+        val model = playingModel(playback, lyricsFinder = finder, keptOnDisk = keptOnDisk, reports = reports)
         model.playerLyrics()
-        until("found the words") { model.uiState.lyrics.isNotEmpty() }
+        if (words) until("found the words") { model.uiState.lyrics.isNotEmpty() }
+        else until("looked for the words") { model.uiState.lyricsFor != null && !model.uiState.isLoadingLyrics }
         return model
     }
+
+    private fun lrclibAsked() = fake.requestedUrls.count { "lrclib.net" in it }
 
     @Test
     fun timedWordsFollowTheAppAndItsButtonsMoveIt() {
@@ -732,5 +747,93 @@ class MainViewModelTest {
         val bare = model()
         bare.songsLike(song)
         assertEquals(before, bare.uiState)
+    }
+
+    @Test
+    fun wordsLeftAreKeptAndComeBackWithoutAskingAgain() {
+        val model = lyricsModel(FakePlayback())
+        val asked = lrclibAsked()
+        assertTrue(asked > 0)
+        model.keep()
+        model.dismissLyrics()
+        assertEquals("", model.uiState.lyrics)
+        model.playerLyrics()
+        idle()
+        assertEquals("One\nTwo\nThree", model.uiState.lyrics)
+        assertEquals(3, model.uiState.lyricLines.size)
+        assertEquals(asked, lrclibAsked())
+        assertFalse(model.uiState.isLoadingLyrics)
+    }
+
+    @Test
+    fun wordsKeptOnDiskShowAtOnceInTheNextSession() {
+        val disk = File(app.cacheDir, "kept-vm.json").apply { delete() }
+        val first = lyricsModel(FakePlayback(), keptOnDisk = LookupCache(disk, Dispatchers.Unconfined))
+        first.keep()
+        first.dismissLyrics()
+        idle()
+        // Another session whose services have nothing shows the words it kept.
+        val second = lyricsModel(FakePlayback(), answer = "[]", keptOnDisk = LookupCache(disk, Dispatchers.Unconfined))
+        assertEquals("One\nTwo\nThree", second.uiState.lyrics)
+    }
+
+    @Test
+    fun wordsNoServiceHasOfferToReportAndAreReportedOnceTheUserAllows() {
+        val sender = ReportSender(fake.client(), "9.9.9", Dispatchers.Unconfined)
+        val model = lyricsModel(FakePlayback(), answer = "[]", reports = sender, words = false)
+        assertEquals("", model.uiState.lyrics)
+        assertFalse(model.uiState.lyricsFailed)
+        assertTrue(model.uiState.reportOffer)
+        assertTrue(fake.requestedUrls.none { it.startsWith(ReportSender.URL) })
+        model.allowAutoReports(true)
+        assertFalse(model.uiState.reportOffer)
+        assertTrue(model.uiState.autoReports == true)
+        until("reported") { fake.requestedUrls.any { it.startsWith(ReportSender.URL) } }
+        until("remembered") { AutoReports(prefs()).reported(song, SongProblem.NO_LYRICS) }
+        // Reported once: finding the same again sends nothing more.
+        model.dismissLyrics()
+        val sent = fake.requestedUrls.count { it.startsWith(ReportSender.URL) }
+        model.playerLyrics()
+        until("looked again") { model.uiState.lyricsFor != null && !model.uiState.isLoadingLyrics }
+        idle()
+        assertEquals(sent, fake.requestedUrls.count { it.startsWith(ReportSender.URL) })
+    }
+
+    @Test
+    fun wordsNoServiceHasAreNotOfferedAgainOnceTheUserRefused() {
+        val model = lyricsModel(FakePlayback(), answer = "[]", reports = ReportSender(fake.client(), "9.9.9", Dispatchers.Unconfined), words = false)
+        assertTrue(model.uiState.reportOffer)
+        model.allowAutoReports(false)
+        assertFalse(model.uiState.reportOffer)
+        model.dismissLyrics()
+        model.playerLyrics()
+        until("looked again") { model.uiState.lyricsFor != null && !model.uiState.isLoadingLyrics }
+        assertFalse(model.uiState.reportOffer)
+        assertTrue(fake.requestedUrls.none { it.startsWith(ReportSender.URL) })
+    }
+
+    @Test
+    fun wordsThatCantBeLookedUpSayItAndRetryAsksAgain() {
+        val playback = FakePlayback()
+        val model = lyricsModel(playback, answer = null, words = false)
+        assertTrue(model.uiState.lyricsFailed)
+        assertEquals("", model.uiState.lyrics)
+        fake.handler = { request -> if (request.url.host == "lrclib.net") FakeSpotify.html(request, timed) else FakeSpotify.html(request, "") }
+        model.showLyrics()
+        until("found the words") { model.uiState.lyrics.isNotEmpty() }
+        assertFalse(model.uiState.lyricsFailed)
+    }
+
+    @Test
+    fun aReportIsSentWithTheCommentAndSaysHowItWent() {
+        val model = lyricsModel(FakePlayback(), reports = ReportSender(fake.client(), "9.9.9", Dispatchers.Unconfined))
+        model.sendReport("Out of time")
+        until("sent") { model.uiState.report == ReportStatus.SENT }
+        assertTrue(fake.requestedUrls.any { it.startsWith(ReportSender.URL) })
+        model.closeReport()
+        assertNull(model.uiState.report)
+        val none = model()
+        none.sendReport("Nothing to send with")
+        assertNull(none.uiState.report)
     }
 }
