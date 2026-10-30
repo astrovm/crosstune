@@ -364,6 +364,9 @@ internal data class ScreenActions(
     val onPaletteChange: (Palette) -> Unit = {},
     val onPureBlackChange: (Boolean) -> Unit = {},
     val onPlayingBarChange: (Boolean) -> Unit = {},
+    /** How far ahead of the voice a line lights, one of [LINES_EARLY_STEPS]. */
+    val onLinesEarlyChange: (Long) -> Unit = {},
+    val onNextLineFirstChange: (Boolean) -> Unit = {},
     /** Floats the words over other apps now, asking Android first if need be. */
     val onFloat: () -> Unit = {},
     /** Visuals on or off behind the words; on asks for the microphone, which Android needs to share what plays. */

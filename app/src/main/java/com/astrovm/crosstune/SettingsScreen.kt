@@ -211,6 +211,15 @@ private fun SettingsList(
                 checked = state.canFollowApps,
                 onCheckedChange = { on -> if (on) actions.onAllowFollowing() else actions.onOpenFollowAccess() }
             )
+            GroupDivider()
+            LinesEarlyRow(state.linesEarlyMs, actions.onLinesEarlyChange)
+            GroupDivider()
+            SettingSwitch(
+                label = stringResource(R.string.setting_next_line_first),
+                description = null,
+                checked = state.nextLineFirst,
+                onCheckedChange = actions.onNextLineFirstChange
+            )
         }
 
         // The AI features run on the user's ChatGPT plan, once signed in.
@@ -561,10 +570,31 @@ private fun changeEveryText(ms: Long): String {
  * what it's set to beside it. Also in the visuals' own menu.
  */
 @Composable
-internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier, inset: Dp = 20.dp, @DrawableRes icon: Int? = null) {
-    val steps = VisualsSettings.CHANGE_EVERY
-    val label = stringResource(R.string.setting_visuals_change)
-    val shown = changeEveryText(changeMs)
+internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier: Modifier = Modifier, inset: Dp = 20.dp, @DrawableRes icon: Int? = null) =
+    StepsRow(stringResource(R.string.setting_visuals_change), changeEveryText(changeMs), VisualsSettings.CHANGE_EVERY, changeMs, onChange, modifier, inset, icon)
+
+/**
+ * How far ahead of the voice a line lights, on a slider from on the voice to a second and a half
+ * before, with what it's set to beside it.
+ */
+@Composable
+private fun LinesEarlyRow(earlyMs: Long, onChange: (Long) -> Unit) {
+    val format = android.icu.text.MeasureFormat.getInstance(LocalConfiguration.current.locales[0], android.icu.text.MeasureFormat.FormatWidth.SHORT)
+    StepsRow(stringResource(R.string.setting_lines_early), format.format(Measure(earlyMs / 1000.0, MeasureUnit.SECOND)), LINES_EARLY_STEPS, earlyMs, onChange)
+}
+
+/** A setting picked from [steps] on a slider, labeled, with what it's set to, [shown], beside it. */
+@Composable
+private fun StepsRow(
+    label: String,
+    shown: String,
+    steps: List<Long>,
+    value: Long,
+    onChange: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    inset: Dp = 20.dp,
+    @DrawableRes icon: Int? = null
+) {
     Column(modifier = modifier.fillMaxWidth().padding(start = inset, end = inset, top = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) AppIcon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(22.dp))
@@ -572,8 +602,8 @@ internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier
             Text(shown, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
         AppSlider(
-            value = steps.indexOf(changeMs).coerceAtLeast(0).toFloat(),
-            onValueChange = { at -> steps[at.roundToInt().coerceIn(steps.indices)].takeIf { it != changeMs }?.let(onChange) },
+            value = steps.indexOf(value).coerceAtLeast(0).toFloat(),
+            onValueChange = { at -> steps[at.roundToInt().coerceIn(steps.indices)].takeIf { it != value }?.let(onChange) },
             valueRange = 0f..steps.lastIndex.toFloat(),
             steps = steps.size - 2,
             modifier = Modifier.heightIn(min = 48.dp).slidesSideways().semantics {

@@ -4016,6 +4016,48 @@ class MainActivityTest {
         composeRule.onNode(hasText(line) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).assertExists()
 
     @Test
+    fun aLineLightsAMomentBeforeItsSung() {
+        val playback = timedSong()
+        playback.access = true
+        controller!!.pause().resume()
+        // 0.3 s before "Two" is sung it's lit already, so it's been read by then.
+        playback.playing.value = Following(PlaybackClock(19_700, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        waitUntil(TIMEOUT_MS) { lit("Two") }
+        // Not as early as a second before.
+        playback.playing.value = Following(PlaybackClock(19_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        waitUntil(TIMEOUT_MS) { lit("One") }
+    }
+
+    @Test
+    fun setToLightOnTheVoiceALineWaitsForItWhileTheNextBrightensAhead() {
+        prefs().edit().putLong("lines_early_ms", 0).putBoolean("next_line_first", true).commit()
+        val playback = timedSong()
+        playback.access = true
+        controller!!.pause().resume()
+        playback.playing.value = Following(PlaybackClock(19_700, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        waitUntil(TIMEOUT_MS) { lit("One") }
+        assertFalse(lit("Two"))
+        playback.playing.value = Following(PlaybackClock(20_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        waitUntil(TIMEOUT_MS) { lit("Two") }
+    }
+
+    @Test
+    fun howEarlyLinesLightAndWhetherTheNextBrightensAheadAreSetInSettings() {
+        launch()
+        click(string(R.string.settings_button))
+        // A moment before the voice unless set otherwise, said beside it.
+        assertTextShown("0.4 sec")
+        composeRule.onNode(hasContentDescription(string(R.string.setting_lines_early))).performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(LINES_EARLY_STEPS.indexOf(1_000L).toFloat()) }
+        composeRule.waitForIdle()
+        assertEquals(1_000L, prefs().getLong("lines_early_ms", 0))
+        assertTextShown("1 sec")
+        composeRule.onNodeWithText(string(R.string.setting_next_line_first)).performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertTrue(prefs().getBoolean("next_line_first", false))
+    }
+
+    @Test
     fun wordsOfASongNotPlayingYetStartItInItsAppThenFollowIt() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))

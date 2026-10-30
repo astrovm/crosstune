@@ -195,6 +195,8 @@ internal class MainViewModel(
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             playingBar = preferences.getBoolean(KEY_PLAYING_BAR, true),
+            linesEarlyMs = preferences.getLong(KEY_LINES_EARLY, LINES_EARLY_MS),
+            nextLineFirst = preferences.getBoolean(KEY_NEXT_LINE_FIRST, false),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             visualsSettings = VisualsStore(preferences).load(),
@@ -2496,6 +2498,16 @@ internal class MainViewModel(
         uiState = uiState.copy(playingBar = on)
     }
 
+    fun setLinesEarly(ms: Long) {
+        preferences.edit { putLong(KEY_LINES_EARLY, ms) }
+        uiState = uiState.copy(linesEarlyMs = ms)
+    }
+
+    fun setNextLineFirst(on: Boolean) {
+        preferences.edit { putBoolean(KEY_NEXT_LINE_FIRST, on) }
+        uiState = uiState.copy(nextLineFirst = on)
+    }
+
     /** Kept only once let go, [save], rather than at every step of the slider. */
     fun setVisualsShade(shade: Float, save: Boolean) {
         if (save) preferences.edit { putFloat(KEY_VISUALS_SHADE, shade) }
@@ -3934,6 +3946,8 @@ internal class MainViewModel(
         private const val KEY_NOT_FOUND = "not_found"
         private const val KEY_PURE_BLACK = "pure_black"
         private const val KEY_PLAYING_BAR = "playing_bar"
+        private const val KEY_LINES_EARLY = "lines_early_ms"
+        private const val KEY_NEXT_LINE_FIRST = "next_line_first"
         private const val KEY_VISUALS = "visuals"
         private const val KEY_VISUALS_SHADE = "visuals_shade"
         private const val KEY_READINGS = "lyrics_readings"

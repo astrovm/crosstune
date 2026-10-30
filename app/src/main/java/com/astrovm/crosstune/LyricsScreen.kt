@@ -1545,6 +1545,12 @@ private fun PlainLyrics(words: String, scale: Float, centered: Boolean) {
     )
 }
 
+/** How long before it's lit the line coming next brightens, when set to. */
+internal const val NEXT_LINE_FIRST_MS = 1000L
+
+/** The song as the words show it, [ms] ahead, so each line, its words and chords light that much before they're sung. */
+internal fun Following.ahead(ms: Long) = copy(clock = clock.copy(positionMs = clock.positionMs + ms))
+
 /**
  * The line of [lines] being sung, or -1 before the first or while nothing says where the song is.
  * Checked every frame while the song plays, so a line lights as it's sung; it only changes when the
@@ -1574,8 +1580,10 @@ private fun TimedLyrics(
     onStudy: (Int) -> Unit
 ) {
     val lines = state.lyricLines
-    val following = state.following
+    val following = state.following?.ahead(state.linesEarlyMs)
     val active = rememberSungLine(lines, following)
+    // Set to, the line coming next brightens a moment before it's lit, so the eye is there first.
+    val coming = rememberSungLine(lines, following?.takeIf { state.nextLineFirst }?.ahead(NEXT_LINE_FIRST_MS))
     val chords = rememberChords(state.chords, lines.map { it.text })
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     val look = WordsLook.on(state.phone)
@@ -1599,6 +1607,7 @@ private fun TimedLyrics(
                     chords = chords.getOrNull(index),
                     following = following,
                     place = following?.let { index.compareTo(active) },
+                    coming = index == coming && index > active,
                     // Before the first line, e.g. in an intro, none is lit, so none is dimmed either.
                     waiting = active < 0,
                     // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
@@ -1743,6 +1752,7 @@ private fun FollowOffer(actions: ScreenActions, fixing: Boolean, onDismiss: () -
 private fun LyricLineText(
     text: String,
     place: Int?,
+    coming: Boolean = false,
     words: List<TimedWord> = emptyList(),
     timeMs: Long = 0,
     nextMs: Long? = null,
@@ -1761,7 +1771,7 @@ private fun LyricLineText(
     // Shown in kana or Latin letters instead, as set.
     val instead = help?.instead
     val alpha by animateFloatAsState(
-        if (place == null || waiting) 0.9f else if (lit) 1f else if (place < 0) 0.4f else 0.6f,
+        if (place == null || waiting) 0.9f else if (lit) 1f else if (coming) 0.85f else if (place < 0) 0.4f else 0.6f,
         spring(stiffness = Spring.StiffnessLow),
         label = "line alpha"
     )
