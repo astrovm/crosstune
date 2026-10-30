@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "為了直接開啟該項目，應用程式會將該項目的標題和藝人傳送到目標的搜尋服務：Apple Music、Deezer、YouTube Music、YouTube、Bandcamp、TIDAL、SoundCloud、Audiomack 或 Qobuz。Spotify 上的歌曲則透過 ListenBrainz 尋找：歌曲的標題和藝人會傳送到 ListenBrainz，它知道 Spotify 上哪些歌曲叫這個名字，然後讀取這些歌曲在 Spotify 上的公開頁面。如果連結直接在應用程式中開啟且「立即播放」已關閉，則會改為在那裡開啟搜尋，不會傳送任何內容。當你開啟目標時，所選應用程式或網站會收到目標連結或搜尋詞。在播放清單或專輯中使用「全部播放」或「隨機播放」時，應用程式會將每首歌曲的標題和藝人傳送到 YouTube Music 的搜尋，然後將找到的影片清單傳送到 YouTube，YouTube 會傳回一個臨時播放清單。在 Spotify 中，每首歌曲會在輪到它時透過 ListenBrainz 查找。你自行新增的應用程式和網站會透過你設定的網址範本收到搜尋詞。分享結果時，結果會傳送給你選擇的應用程式或接收者。"
+      "為了直接開啟該項目，應用程式會將該項目的標題和藝人傳送到目標的搜尋服務：Apple Music、Deezer、YouTube Music、YouTube、Bandcamp、TIDAL、SoundCloud、Audiomack 或 Qobuz。Spotify 上的歌曲則透過 ListenBrainz 尋找：歌曲的標題和藝人會傳送到 ListenBrainz，它知道 Spotify 上哪些歌曲叫這個名字，然後讀取這些歌曲在 Spotify 上的公開頁面。ListenBrainz 還不知道的歌曲，會在該藝人最常播放的歌曲中尋找：藝人的名字會傳送到 MusicBrainz，並讀取該藝人在 Spotify 上的公開頁面。如果連結直接在應用程式中開啟且「立即播放」已關閉，則會改為在那裡開啟搜尋，不會傳送任何內容。當你開啟目標時，所選應用程式或網站會收到目標連結或搜尋詞。在播放清單或專輯中使用「全部播放」或「隨機播放」時，應用程式會將每首歌曲的標題和藝人傳送到 YouTube Music 的搜尋，然後將找到的影片清單傳送到 YouTube，YouTube 會傳回一個臨時播放清單。在 Spotify 中，每首歌曲會在輪到它時透過 ListenBrainz 查找。你自行新增的應用程式和網站會透過你設定的網址範本收到搜尋詞。分享結果時，結果會傳送給你選擇的應用程式或接收者。"
     ],
     [
       "p",
