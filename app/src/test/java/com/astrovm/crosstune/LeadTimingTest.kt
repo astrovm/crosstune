@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -148,5 +149,13 @@ class LeadTimingTest {
         assertEquals(10_000L, heard(30_000, 40_000))
         repeat(7) { heard(40_000 + it * 10_000L) }
         assertEquals(10_000L, heard(120_000))
+    }
+
+    @Test fun aKeptIntroPastFiveMinutesEitherWayIsNotTrusted() {
+        val store = LeadStore(prefs)
+        prefs.edit().putString("video_timing", JSONObject().put(RecordingKey.of(song), 300_001L).toString()).commit()
+        assertNull(store.load(song))
+        prefs.edit().putString("video_timing", JSONObject().put(RecordingKey.of(song), -300_001L).toString()).commit()
+        assertNull(store.load(song))
     }
 }

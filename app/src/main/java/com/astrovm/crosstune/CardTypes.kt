@@ -51,7 +51,7 @@ internal fun loadCardTypes(preferences: SharedPreferences): List<CardType> {
     val kept = (0 until array.length()).mapNotNull { index ->
         val json = array.optJSONObject(index) ?: return@mapNotNull null
         val id = json.optString("id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-        val preset = DEFAULT_CARD_TYPES.firstOrNull { it.id == id }?.options ?: READ_IT.options
+        val preset = (DEFAULT_CARD_TYPES.firstOrNull { it.id == id } ?: READ_IT).options
         CardType(
             id, json.optString("name").takeIf { json.has("name") && !json.isNull("name") }, json.optBoolean("on"),
             CardOptions(CardSide.fromJson(json.optJSONObject("front") ?: JSONObject(), preset.front), CardSide.fromJson(json.optJSONObject("back") ?: JSONObject(), preset.back))

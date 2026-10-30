@@ -34,4 +34,9 @@ class TrackingLinksTest {
         val clean = "https://www.deezer.com/track/1"
         assertEquals(clean, TrackingLinks.clean(clean))
     }
+
+    @Test
+    fun textThatIsNoLinkIsLeftAlone() {
+        assertEquals("Song Artist", TrackingLinks.clean("Song Artist"))
+    }
 }

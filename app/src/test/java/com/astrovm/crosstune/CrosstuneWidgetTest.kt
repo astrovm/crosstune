@@ -213,4 +213,15 @@ class CrosstuneWidgetTest {
         /** Glance gives up after 2 seconds, which a busy CI machine can take just to start. */
         val WIDGET_TIMEOUT = 10.seconds
     }
+
+    @Test
+    fun aSongWithNoCoverIsShownWithout() = runBlocking {
+        val store = HistoryStore(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        store.add(HistoryEntry(MusicLink(MusicService.SPOTIFY, ItemType.TRACK, "1", "https://open.spotify.com/track/1"), MusicMetadata("Track", "Band")))
+
+        val songs = CrosstuneWidget.widgetSongs(app)
+
+        assertEquals(listOf("Track"), songs.map { it.title })
+        assertNull(songs[0].cover)
+    }
 }
