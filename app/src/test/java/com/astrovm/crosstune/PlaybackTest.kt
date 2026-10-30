@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.content.ActivityNotFoundException
+import android.content.ContextWrapper
 import android.content.ComponentName
 import android.content.IntentFilter
 import android.content.Intent
@@ -916,13 +918,28 @@ class PlaybackTest {
         assertEquals(icon, opened.component)
         assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertFalse(brought.isCompleted)
+        // Still stopped, or loading, it isn't back yet.
+        says(PlaybackState.STATE_STOPPED)
+        says(PlaybackState.STATE_BUFFERING)
+        assertFalse(brought.isCompleted)
         says(PlaybackState.STATE_PAUSED)
+        assertTrue(brought.isCompleted)
         assertTrue(brought.await())
         assertTrue(shadowOf(youTubeMusic).getCallbacks().isEmpty())
         playback.comesBack()
         assertNull(shadowOf(app).nextStartedActivity)
+        // Back already playing, it's back too.
+        val playing = CoroutineScope(Dispatchers.Unconfined).async { playback.bringToFront(song) }
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(playing.isCompleted)
         // Saying nothing, it's asked anyway, a moment later.
         assertTrue(playback.bringToFront(song))
+        // Gone by the time it's opened, it can't be.
+        val gone = object : ContextWrapper(app) {
+            override fun startActivity(intent: Intent) = throw ActivityNotFoundException()
+        }
+        assertFalse(MediaSessionPlayback(gone, now = { NOW }, startMs = 200, modes = modes).bringToFront(song))
+        assertTrue(shadowOf(youTubeMusic).getCallbacks().isEmpty())
         // No app has it: nothing to play on, or bring.
         val other = MusicMetadata("Other", "Band")
         assertFalse(playback.resume(other))
