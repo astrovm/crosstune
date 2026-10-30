@@ -70,17 +70,18 @@ class MainActivity : ComponentActivity() {
                 val client = httpClientFactory()
                 // Left out of backups, so the tokens never leave the phone.
                 val chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
+                val musicBrainz = MusicBrainz(
+                    client,
+                    packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
+                    LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
+                )
                 // What ChatGPT said is kept, so a song read again asks nothing.
                 val tutor = ChatGptTutor(
                     chatGpt,
                     LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000),
                     lines = LookupCache(File(cacheDir, "chatgpt_lines.json"), lookupDispatcher, maxEntries = 6000),
                     // The year and album come from MusicBrainz, which gives a song the same ones every time.
-                    releaseOf = MusicBrainz(
-                        client,
-                        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
-                        LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
-                    )::release
+                    releaseOf = musicBrainz::release
                 )
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
@@ -91,7 +92,10 @@ class MainActivity : ComponentActivity() {
                 val playback = order.ordering(queue.skipping(playbackFactory(applicationContext)))
                 // What was found for songs is kept, so a playlist played again needs no lookups.
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
-                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong, missingForMs = MISSING_FOR_MS)
+                val matcher = ExactMatcher(
+                    client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong,
+                    missingForMs = MISSING_FOR_MS, spotifyArtist = musicBrainz::spotifyArtist
+                )
                 MainViewModel(
                     LinkResolver(client, apis = apis),
                     matcher,
@@ -317,7 +321,16 @@ class MainActivity : ComponentActivity() {
             // One made for another app, as each test makes, is done with.
             playQueue?.second?.stop()
             // Its own lookups, as it may play on with no screen to share them with.
-            val matcher = ExactMatcher(httpClientFactory(), cache = LookupCache(File(app.cacheDir, "queue_lookups.json"), lookupDispatcher), missingForMs = MISSING_FOR_MS)
+            val client = httpClientFactory()
+            val musicBrainz = MusicBrainz(
+                client,
+                app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty(),
+                LookupCache(File(app.cacheDir, "queue_musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
+            )
+            val matcher = ExactMatcher(
+                client, cache = LookupCache(File(app.cacheDir, "queue_lookups.json"), lookupDispatcher),
+                missingForMs = MISSING_FOR_MS, spotifyArtist = musicBrainz::spotifyArtist
+            )
             return PlayQueue(
                 playbackFactory(app),
                 { service, tracks -> matcher.youtubeQueue(service, tracks) {} },

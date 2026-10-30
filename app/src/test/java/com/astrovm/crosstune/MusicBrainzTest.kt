@@ -215,6 +215,60 @@ class MusicBrainzTest {
         assertEquals(ReleaseFacts(1990, "Canción animal"), facts(brainz = brainz))
     }
 
+    /** MusicBrainz knowing artists by name, each an id to their name, and the links it keeps of each, by id. */
+    private fun knowing(artists: List<Pair<String, String>>, links: Map<String, List<String>> = emptyMap()) {
+        fake.handler = { request ->
+            val body = if (request.url.encodedPath == "/ws/2/artist") {
+                JSONObject().put("artists", JSONArray(artists.map { (id, name) -> JSONObject().put("id", id).put("name", name) }))
+            } else {
+                JSONObject().put("relations", JSONArray(links[request.url.pathSegments.last()].orEmpty().map { JSONObject().put("url", JSONObject().put("resource", it)) }))
+            }
+            FakeSpotify.html(request, body.toString())
+        }
+    }
+
+    private fun spotifyArtist(name: String, file: File = File(folder.root, "musicbrainz.json")) = runBlocking { brainz(file).spotifyArtist(name) }
+
+    @Test
+    fun anArtistsSpotifyIdIsFromTheLinksMusicBrainzKeepsOfTheArtistOfThatName() {
+        knowing(
+            listOf("tribute" to "Stella Lefty Tribute", "her" to "STELLA LEFTY"),
+            mapOf("her" to listOf("https://www.instagram.com/stellalefty/", "https://open.spotify.com/artist/6hp2uD84OrQ3u3ukmTjLz2"))
+        )
+        assertEquals("6hp2uD84OrQ3u3ukmTjLz2", spotifyArtist("Stella Lefty"))
+        assertEquals("artist:\"Stella Lefty\"", fake.requestedUrls.first().toHttpUrl().queryParameter("query"))
+        assertEquals("https://musicbrainz.org/ws/2/artist/her?inc=url-rels", fake.requestedUrls.last())
+        // Kept, also after the app starts again, and so is having none.
+        val asked = fake.requestedUrls.size
+        assertEquals("6hp2uD84OrQ3u3ukmTjLz2", spotifyArtist("Stella Lefty"))
+        assertEquals(asked, fake.requestedUrls.size)
+        knowing(listOf("nobody" to "Nobody"), mapOf("nobody" to listOf("https://www.instagram.com/nobody/")))
+        assertNull(spotifyArtist("Nobody"))
+        assertNull(spotifyArtist("Nobody"))
+        assertEquals(asked + 2, fake.requestedUrls.size)
+        // No artist of that name is none too.
+        assertNull(spotifyArtist("Somebody Else"))
+        assertEquals(asked + 3, fake.requestedUrls.size)
+        // No answer isn't kept: it's asked again.
+        fake.handler = { request -> FakeSpotify.html(request, "", code = 503) }
+        assertNull(spotifyArtist("Later"))
+        knowing(listOf("later" to "Later"), mapOf("later" to listOf("https://open.spotify.com/artist/1LaterAAAAAAAAAAAAAAAA")))
+        assertEquals("1LaterAAAAAAAAAAAAAAAA", spotifyArtist("Later"))
+    }
+
+    @Test
+    fun requestsKeepToTheOneASecondMusicBrainzAllowsAlsoFromAnotherOfItsUsers() {
+        knowing(listOf("her" to "Stella Lefty"))
+        val times = mutableListOf<Long>()
+        val answer = fake.handler
+        fake.handler = { request -> times += System.nanoTime(); answer(request) }
+        // As the app's own lookups and its queue's each ask it.
+        runBlocking { brainz(gapMs = 150).spotifyArtist("Stella Lefty") }
+        runBlocking { brainz(File(folder.root, "queue.json"), gapMs = 150).spotifyArtist("Stella Lefty") }
+        assertEquals(4, times.size)
+        assertTrue("${(times[2] - times[1]) / 1_000_000} ms between them", times[2] - times[1] >= 140_000_000)
+    }
+
     @Test
     fun requestsKeepToTheOneASecondMusicBrainzAllows() {
         val times = mutableListOf<Long>()

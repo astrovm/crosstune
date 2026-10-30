@@ -32,9 +32,6 @@ internal class MusicBrainz(
     /** How long to leave between two requests, which MusicBrainz limits to one a second; tests pass 0. */
     private val gapMs: Long = ASK_GAP_MS
 ) {
-    private val turn = Mutex()
-    private var askedAt = 0L
-
     /** [song]'s facts; null when MusicBrainz isn't sure which song it is, or couldn't be asked. */
     suspend fun release(song: MusicMetadata): ReleaseFacts? {
         val artist = SongNames.artistNames(song.artist).firstOrNull() ?: return null
@@ -53,6 +50,35 @@ internal class MusicBrainz(
         cache.put(key, facts?.let { JSONObject().put("year", it.year).put("album", it.album).toString() }.orEmpty())
         cache.save()
         return facts
+    }
+
+    /**
+     * The Spotify id of the artist called [name], from the links MusicBrainz keeps of them; null when it
+     * has none, knows no artist of that name, or couldn't be asked. Kept in [cache] like the facts.
+     */
+    suspend fun spotifyArtist(name: String): String? {
+        val key = "spotify-artist|$name"
+        cache.get(key)?.let { return it.ifEmpty { null } }
+        val id = try {
+            findSpotifyArtist(name)
+        } catch (_: IOException) {
+            return null
+        } catch (_: JSONException) {
+            return null
+        }
+        cache.put(key, id.orEmpty())
+        cache.save()
+        return id
+    }
+
+    private suspend fun findSpotifyArtist(name: String): String? {
+        val search = "$API/artist".toHttpUrl().newBuilder().addQueryParameter("query", "artist:${quoted(name)}").addQueryParameter("limit", "5").build()
+        // The first called just that, not one with more to their name, as a tribute act has. Should it be another artist
+        // who goes by it, the song isn't among their songs, so none is found.
+        val artist = get(search).optJSONArray("artists").objects().firstOrNull { SongNames.normalize(it.optString("name")) == SongNames.normalize(name) } ?: return null
+        val links = get("$API/artist/${artist.getString("id")}".toHttpUrl().newBuilder().addQueryParameter("inc", "url-rels").build())
+        return links.optJSONArray("relations").objects()
+            .firstNotNullOfOrNull { SPOTIFY_ARTIST.matchEntire(it.optJSONObject("url")?.optString("resource").orEmpty())?.groupValues?.get(1) }
     }
 
     private fun read(kept: String): ReleaseFacts? =
@@ -77,8 +103,6 @@ internal class MusicBrainz(
 
     /** The recordings MusicBrainz has of [title] by [artist] on official albums, singles and EPs, 100 at most. */
     private suspend fun search(title: String, artist: String): List<JSONObject> {
-        // Quotes and backslashes are all that mean anything inside a quoted phrase.
-        fun quoted(text: String) = "\"${text.replace("\"", "").replace("\\", "")}\""
         val url = "$API/recording".toHttpUrl().newBuilder()
             .addQueryParameter("query", "recording:${quoted(title)} AND artist:${quoted(artist)} AND status:official AND primarytype:(album OR single OR ep)")
             .addQueryParameter("limit", "100")
@@ -127,6 +151,9 @@ internal class MusicBrainz(
         return albums.filter { it.getString("first-release-date") == first }.map { it.optString("title") }.distinct().singleOrNull()
     }
 
+    /** [text] as a phrase in a search; quotes and backslashes are all that mean anything inside one. */
+    private fun quoted(text: String) = "\"${text.replace("\"", "").replace("\\", "")}\""
+
     private fun strings(array: JSONArray?): List<String> = array?.let { list -> (0 until list.length()).map(list::optString) }.orEmpty()
 
     private fun yearOf(date: String): Int? = date.take(YEAR_DIGITS).takeIf { it.length == YEAR_DIGITS }?.toIntOrNull()
@@ -146,7 +173,12 @@ internal class MusicBrainz(
     }
 
     private companion object {
+        /** Whose turn it is to ask, and when it last was: the app's, and its queue's, which looks songs up on its own. */
+        val turn = Mutex()
+        var askedAt = 0L
+
         const val API = "https://musicbrainz.org/ws/2"
+        val SPOTIFY_ARTIST = Regex("""https://open\.spotify\.com/artist/([A-Za-z0-9]{22})""")
         const val ASK_GAP_MS = 1100L
         const val YEAR_DIGITS = 4
 
