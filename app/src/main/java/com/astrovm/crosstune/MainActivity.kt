@@ -315,6 +315,7 @@ class MainActivity : ComponentActivity() {
             return PlayQueue(
                 playbackFactory(app),
                 { service, tracks -> matcher.youtubeQueue(service, tracks) {} },
+                matcher::find,
                 File(app.noBackupFilesDir, "play_queue.json"),
                 CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
                 lookupDispatcher,

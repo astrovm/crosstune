@@ -5,7 +5,7 @@ Recevez un lien d'un service de musique et ouvrez le même morceau dans votre ap
 <b>Fonctionnalités</b>
 <ul>
 <li>Lit les liens de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud, Bandcamp et Audiomack, et les ouvre dans n'importe lequel de ces services ou dans Amazon Music et Qobuz.</li>
-<li>Les playlists et les albums affichent leurs titres : ouvrez-en un dans l'application de votre choix, copiez ou partagez la liste, ou lisez-la, dans l'ordre ou en aléatoire, dans YouTube Music, YouTube ou TIDAL.</li>
+<li>Les playlists et les albums affichent leurs titres : ouvrez-en un dans l'application de votre choix, copiez ou partagez la liste, ou lisez-la, dans l'ordre ou en aléatoire, dans YouTube Music, YouTube, TIDAL ou Spotify.</li>
 <li>Envoyez chaque service ailleurs, comme YouTube vers YouTube Music et le reste vers Apple Music.</li>
 <li>Afficher d'abord dans Crosstune : le titre se lance dans l'application de votre choix pendant que vous restez.</li>
 <li>Si l'application le permet, le titre, l'album ou l'artiste s'ouvre directement, sans recherche.</li>

@@ -88,10 +88,11 @@ internal enum class MusicService(
     val playsAskedSongs: Boolean get() = this != SPOTIFY && this != AMAZON_MUSIC
 
     /**
-     * Whether its app takes no list of songs, but plays one asked for by name in the background, so
-     * a playlist plays there one song after another, see [PlayQueue]: TIDAL.
+     * Whether its app takes no list of songs, so a playlist plays there one song after another, see
+     * [PlayQueue]: TIDAL, asked for each by name in the background, and Spotify, which plays none
+     * asked for ([playsAskedSongs]), opened on each song's own link, coming to the front for it.
      */
-    val playsSongBySong: Boolean get() = this == TIDAL
+    val playsSongBySong: Boolean get() = this == TIDAL || this == SPOTIFY
 
     /**
      * The app's own package, then those of builds patched from it, e.g. ReVanced's, which open its
