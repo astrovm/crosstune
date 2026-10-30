@@ -32,7 +32,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageInfo
-import android.content.pm.ResolveInfo
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.content.pm.verify.domain.DomainVerificationUserState
@@ -2313,8 +2312,7 @@ class MainActivityTest {
         click(string(R.string.share_link_button))
         val chooser = nextStartedActivity()
         assertEquals(Intent.ACTION_CHOOSER, chooser!!.action)
-        @Suppress("DEPRECATION")
-        val shared = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+        val shared = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
         assertEquals(Intent.ACTION_SEND, shared!!.action)
         assertEquals(
             "https://music.youtube.com/search?q=Cut%20To%20The%20Feeling%20Carly%20Rae%20Jepsen",
@@ -4275,7 +4273,7 @@ class MainActivityTest {
         assertEquals(listOf(android.Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         // Turned down, though Android would ask again, nothing is wrong yet: it was only asked.
         shadowOf(app.packageManager).setShouldShowRequestPermissionRationale(android.Manifest.permission.RECORD_AUDIO, true)
-        activity.onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(android.content.pm.PackageManager.PERMISSION_DENIED))
+        activity.answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.error_microphone))
 
@@ -4410,7 +4408,7 @@ class MainActivityTest {
         val asked = shadowOf(controller!!.get()).lastRequestedPermission
         assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
         assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", nextStartedActivity()!!.action)
-        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(android.content.pm.PackageManager.PERMISSION_DENIED))
+        controller!!.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
         assertEquals(ChatGptSignInService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
@@ -5017,7 +5015,7 @@ class MainActivityTest {
         val clipboard = app.getSystemService(ClipboardManager::class.java)
         assertEquals("https://music.apple.com/us/song/1", clipboard.primaryClip!!.getItemAt(0).text.toString())
         click(string(R.string.share_link_button))
-        val shared = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        val shared = nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
         assertEquals("https://music.apple.com/us/song/1", shared.getStringExtra(Intent.EXTRA_TEXT))
         val requestsBeforeOpen = fake.requestedUrls.size
         click(string(R.string.open_in_apple_music))
@@ -5129,7 +5127,7 @@ class MainActivityTest {
         click(string(R.string.share_link_button))
         assertEquals(
             "https://music.youtube.com/watch?v=first000000",
-            nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!.getStringExtra(Intent.EXTRA_TEXT)
+            nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!.getStringExtra(Intent.EXTRA_TEXT)
         )
         click(string(R.string.open_in_youtube_music))
         assertEquals("https://music.youtube.com/watch?v=first000000", nextStartedActivity()!!.dataString)
@@ -5334,7 +5332,7 @@ class MainActivityTest {
 
         click(string(R.string.share_link_button))
         @Suppress("DEPRECATION")
-        val shared = nextStartedActivity()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        val shared = nextStartedActivity()!!.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
         assertEquals("https://music.youtube.com/watch?v=4NRXx6U8ABQ", shared.getStringExtra(Intent.EXTRA_TEXT))
     }
 
@@ -5414,12 +5412,9 @@ class MainActivityTest {
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, true)
         shadowOf(app).checkActivities(true)
         val browser = ComponentName("com.example.browser", "com.example.browser.Browser")
-        installActivity(browser, browserFilter())
+        // Set to open such links, it's ahead of the other.
+        installActivity(browser, browserFilter().apply { priority = 1000 })
         installActivity(ComponentName("com.example.other", "com.example.other.Browser"), browserFilter())
-        shadowOf(app.packageManager).addResolveInfoForIntent(
-            Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$TRACK_ID")).addCategory(Intent.CATEGORY_BROWSABLE),
-            ResolveInfo().apply { activityInfo = ActivityInfo().apply { packageName = browser.packageName; name = browser.className }; isDefault = true; priority = 1000 }
-        )
         respondWithTrack("Default", "Artist · Song")
         launch()
         resolveTyped()

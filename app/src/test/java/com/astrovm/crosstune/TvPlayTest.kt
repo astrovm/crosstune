@@ -357,7 +357,7 @@ class TvPlayTest {
         val floating = playCovered()
         playing()
         waitUntil { shown("Demo one") }
-        floating.withIntent(Intent(app, FloatingLyricsService::class.java)).startCommand(0, 2)
+        floating.get().onStartCommand(Intent(app, FloatingLyricsService::class.java), 0, 2)
         composeRule.waitForIdle()
         // A window of their own, which lets the remote's keys go on to YouTube.
         assertTrue(params(floating.get()).flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE != 0)

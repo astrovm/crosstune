@@ -361,7 +361,7 @@ class TranslatorTest {
         assertEquals("zh-CN", Translator.languageOf(Locale.SIMPLIFIED_CHINESE))
         assertEquals("pt-BR", Translator.languageOf(Locale.forLanguageTag("pt-BR")))
         assertEquals("id", Translator.languageOf(Locale.forLanguageTag("id")))
-        assertEquals("id", Translator.languageOf(Locale("in")))
+        assertEquals("id", Translator.languageOf(Locale.of("in")))
         assertEquals("ja", Translator.languageOf(Locale.JAPAN))
         // Where it's spoken, when that changes the words.
         assertEquals("es-AR", Translator.languageOf(Locale.forLanguageTag("es-AR")))

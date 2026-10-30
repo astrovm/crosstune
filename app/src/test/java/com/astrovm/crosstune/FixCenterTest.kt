@@ -170,7 +170,7 @@ class FixCenterTest {
         val asked = shadowOf(activity).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         if (granted) allowMicrophone()
-        activity.onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(if (granted) PackageManager.PERMISSION_GRANTED else PackageManager.PERMISSION_DENIED))
+        activity.answer(asked, if (granted) PackageManager.PERMISSION_GRANTED else PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
     }
 

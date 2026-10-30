@@ -341,7 +341,7 @@ class LiveChordSweepTest {
             youTubeMusicSong = { song -> runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) }?.substringAfter("watch?v=", "")?.ifEmpty { null } }
         )
         val chords = ChordFinder(client)
-        val file = File(reportPath).apply { parentFile.mkdirs() }
+        val file = File(reportPath).apply { parentFile?.mkdirs() }
         val baseColumns = listOf("title", "artist", "genre", "country", "lyrics", "lyric_lines", "result", "site", "url", "ms", "error")
         file.writeText((baseColumns + if (everything) qualityColumns else emptyList()).joinToString("\t") + "\n")
 
