@@ -97,7 +97,9 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
     val ink = Color.White
     val outline = if (options.background < OUTLINED_BELOW) Shadow(Color.Black.copy(alpha = 0.9f), Offset(0f, 2f), blurRadius = 8f) else null
     val lines = state.lyricLines
-    val sung = rememberSungLine(lines, state.following)
+    val following = state.following?.ahead(state.linesEarlyMs)
+    val sung = rememberSungLine(lines, following)
+    val coming = rememberSungLine(lines, following?.takeIf { state.nextLineFirst }?.ahead(NEXT_LINE_FIRST_MS))
     // As tall as the tallest lines so far, so a shorter line doesn't pull up what's under them; until
     // the song, the size or which lines show changes.
     var tallest by remember(song, options.scale, options.previousLine, options.nextLine) { mutableIntStateOf(0) }
@@ -156,7 +158,8 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
                         }
                         Line(text, lit = false, options.scale * layerScale, ink, outline)
                     }
-                    if (options.nextLine) second?.let { Line(it, lit = false, options.scale * learning.wordsScale, ink, outline) }
+                    // Set to, it brightens a moment before it's sung.
+                    if (options.nextLine) second?.let { Line(it, lit = false, options.scale * learning.wordsScale, ink, outline, coming = current != null && coming > line) }
                 }
             }
         }
@@ -164,8 +167,8 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
 }
 
 @Composable
-private fun Line(text: String, lit: Boolean, scale: Float, ink: Color, outline: Shadow?) {
-    Text(text, style = lineStyle(lit, scale, outline), color = ink.copy(alpha = if (lit) 1f else DIM_ALPHA), modifier = Modifier.fillMaxWidth())
+private fun Line(text: String, lit: Boolean, scale: Float, ink: Color, outline: Shadow?, coming: Boolean = false) {
+    Text(text, style = lineStyle(lit, scale, outline), color = ink.copy(alpha = if (lit) 1f else if (coming) COMING_ALPHA else DIM_ALPHA), modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
@@ -179,6 +182,9 @@ private fun lineStyle(lit: Boolean, scale: Float, outline: Shadow?) = MaterialTh
 
 /** How bright the lines around the one being sung, and what helps read it, are beside it. */
 private const val DIM_ALPHA = 0.7f
+
+/** How bright the line coming next is a moment before it's sung, when set to. */
+private const val COMING_ALPHA = 0.9f
 
 /** What the words floating over other apps can do, besides showing. */
 internal class FloatingActions(

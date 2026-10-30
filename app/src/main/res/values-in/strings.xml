@@ -253,6 +253,8 @@
     <string name="palette_rose">Mawar</string>
     <string name="setting_pure_black">Hitam pekat</string>
     <string name="setting_playing_bar">Tampilkan yang sedang diputar</string>
+    <string name="setting_lines_early">Tampilkan baris lebih awal</string>
+    <string name="setting_next_line_first">Terangkan baris berikutnya lebih dulu</string>
     <string name="follow_help_title">Biarkan lirik mengikuti musikmu</string>
     <string name="follow_turn_on">Aktifkan</string>
     <string name="setting_lyrics_follow">Lirik mengikuti aplikasi musikmu</string>

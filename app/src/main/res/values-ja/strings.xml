@@ -254,6 +254,8 @@
     <string name="palette_rose">ローズ</string>
     <string name="setting_pure_black">純黒</string>
     <string name="setting_playing_bar">再生中の曲を表示</string>
+    <string name="setting_lines_early">行を早めに表示</string>
+    <string name="setting_next_line_first">次の行を先に明るくする</string>
     <string name="follow_help_title">歌詞を音楽に合わせる</string>
     <string name="follow_turn_on">オンにする</string>
     <string name="setting_lyrics_follow">歌詞を音楽アプリに合わせる</string>

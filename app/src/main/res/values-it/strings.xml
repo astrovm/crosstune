@@ -254,6 +254,8 @@
     <string name="palette_rose">Rosa</string>
     <string name="setting_pure_black">Nero puro</string>
     <string name="setting_playing_bar">Mostra cosa è in riproduzione</string>
+    <string name="setting_lines_early">Mostra le righe in anticipo</string>
+    <string name="setting_next_line_first">Illumina in anticipo la riga successiva</string>
     <string name="follow_help_title">Fai seguire la tua musica al testo</string>
     <string name="follow_turn_on">Attiva</string>
     <string name="setting_lyrics_follow">Il testo segue la tua app di musica</string>

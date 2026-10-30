@@ -253,6 +253,8 @@
     <string name="palette_rose">Rosa</string>
     <string name="setting_pure_black">Negro puro</string>
     <string name="setting_playing_bar">Mostrar lo que suena</string>
+    <string name="setting_lines_early">Mostrar las líneas antes</string>
+    <string name="setting_next_line_first">Iluminar antes la línea siguiente</string>
     <string name="follow_help_title">Hacé que la letra siga tu música</string>
     <string name="follow_turn_on">Activar</string>
     <string name="setting_lyrics_follow">La letra sigue a tu app de música</string>
