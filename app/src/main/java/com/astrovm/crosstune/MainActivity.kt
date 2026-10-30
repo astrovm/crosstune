@@ -794,12 +794,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Opened from the screen covering another app, an app would show under it, so it goes first. */
-    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+    override fun startActivity(intent: Intent, options: Bundle?) {
         if (viewModel.uiState.coveringApp) {
             FloatingLyricsService.stop(this)
             floatingHost.closed()
         }
-        super.startActivityForResult(intent, requestCode, options)
+        super.startActivity(intent, options)
     }
 
     /** Back in sight, the words stop floating, and listening along with them, and on to the next song, picks up again. */

@@ -1726,7 +1726,7 @@ internal class MainViewModel(
                     if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
                 }
                 follow(song)
-                first?.takeIf { !it.final }?.let { retime(song, it.lyrics) }
+                first.takeIf { !it.final }?.let { retime(song, it.lyrics) }
                 // Not timed even after looking further.
                 if (found?.lines?.isEmpty() == true) problemFound(SongProblem.NO_TIMING)
             }

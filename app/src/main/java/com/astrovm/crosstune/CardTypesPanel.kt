@@ -324,7 +324,7 @@ private fun CardLayer(
     val bigger = stringResource(R.string.practice_bigger)
     val smaller = stringResource(R.string.practice_smaller)
     var latest by remember(scale) { mutableFloatStateOf(scale) }
-    val pinch = rememberTransformableState { zoom, _, _ ->
+    val pinch = rememberTransformableState { _, zoom, _, _ ->
         latest = (latest * zoom).coerceIn(range)
         onScale(latest)
     }
