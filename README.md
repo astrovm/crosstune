@@ -57,7 +57,7 @@ Once you've opened something, anything left or broken later shows as **Things to
 
 | Service | Reads | Exact match |
 | --- | --- | --- |
-| Spotify | Songs, albums, artists, playlists, `spotify.link`, `spotify:` URIs, track IDs | Search |
+| Spotify | Songs, albums, artists, playlists, `spotify.link`, `spotify:` URIs, track IDs | Songs |
 | YouTube Music | Songs, videos and playlists | Songs, albums, artists |
 | YouTube | Videos, Shorts, live streams, playlists, `youtu.be` | Songs |
 | Apple Music | Songs, albums, artists, playlists | Songs, albums, artists |
@@ -82,7 +82,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 ## Privacy
 
 - No account, analytics or ads. History stays on your device.
-- A link's service is asked only for its title, artist and cover. To open the song itself, the title and artist also go to the search of the app it opens in. Going straight to the app with **Play right away** off, a search opens there instead, and nothing is sent.
+- A link's service is asked only for its title, artist and cover. To open the song itself, the title and artist also go to the search of the app it opens in. For Spotify, whose search needs an account, they go to [ListenBrainz](https://listenbrainz.org) instead, which knows Spotify's songs by name, and Spotify's public song pages are read. Going straight to the app with **Play right away** off, a search opens there instead, and nothing is sent.
 - Lyrics, chords and translations are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music, [Letras](https://www.letras.com), [Ultimate Guitar](https://www.ultimate-guitar.com), [Cifra Club](https://www.cifraclub.com.br), [LaCuerda](https://acordes.lacuerda.net), [U-FRET](https://www.ufret.jp), [Google Translate](https://translate.google.com), [MyMemory](https://mymemory.translated.net) and [Wiktionary](https://en.wiktionary.org). Readings are worked out on your phone. For Japanese, a bigger dictionary, UniDic, is downloaded once from [Maven Central](https://central.sonatype.com/artifact/com.atilika.kuromoji/kuromoji-unidic), on Wi-Fi.
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask. Your sign-in stays on your phone.
 - Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. Apple is then asked how long the recording Shazam named is, so its lyrics are timed for it. The visuals use it to move to your music, and record and send nothing. Lining the words up to the singing hears it on your phone and sends nothing. Its speech model is downloaded once from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp).

@@ -32,6 +32,17 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun aSpotifySongSaysHowLongItIsButAnAlbumDoesnt() {
+        val html = """
+            <meta property="og:title" content="Bizarre Love Triangle">
+            <meta property="og:description" content="New Order · Brotherhood · Song · 1986">
+            <meta name="music:duration" content="261">
+        """
+        assertEquals(MusicMetadata("Bizarre Love Triangle", "New Order", lengthMs = 261_000), MetadataParsers.spotify(html, ItemType.TRACK))
+        assertNull(MetadataParsers.spotify(html, ItemType.ALBUM)?.lengthMs)
+    }
+
+    @Test
     fun missingOrBlankTitleIsNotATrack() {
         assertNull(MetadataParsers.spotify("<html></html>", ItemType.TRACK))
         assertNull(MetadataParsers.spotify("""<meta property="og:title" content="  ">""", ItemType.TRACK))

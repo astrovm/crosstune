@@ -279,7 +279,8 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
 
         fake.requestedUrls.clear()
-        assertNull(runBlocking { matcher().find(MusicService.SPOTIFY, song) })
+        // Spotify's songs are found, but not its albums, which nothing lists without an account.
+        assertNull(runBlocking { matcher().find(MusicService.SPOTIFY, song.copy(type = ItemType.ALBUM)) })
         // A playlist with its songs known is matched song by song, never as itself.
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song.copy(type = ItemType.PLAYLIST, tracks = listOf(song))) })
         assertTrue(fake.requestedUrls.isEmpty())
@@ -554,7 +555,57 @@ class ExactMatcherTest {
         respond("""{"data":[{"title":"Song","link":"https://www.deezer.com/track/1","artist":{"name":"Band"}}]}""")
         assertEquals(ExactMatcher.Match.Found("https://www.deezer.com/track/1"), runBlocking { matcher().lookFor(MusicService.DEEZER, song) })
         // An app that can't be searched without an account has nothing to say either way.
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.AMAZON_MUSIC, song) })
+    }
+
+    /** A Spotify song's own page, as much of it as says what the song is. */
+    private fun spotifyPage(title: String, description: String, seconds: Int) =
+        """<meta property="og:title" content="$title"/><meta property="og:description" content="$description"/><meta name="music:duration" content="$seconds"/>"""
+
+    /** ListenBrainz knowing [ids] by a name, and Spotify's pages for some of them; any other is gone. */
+    private fun spotifyKnows(ids: List<String>, pages: Map<String, String>) {
+        fake.handler = { request ->
+            if (request.url.host == "labs.api.listenbrainz.org") {
+                FakeSpotify.html(request, """[{"spotify_track_ids":[${ids.joinToString(",") { "\"$it\"" }}]}]""")
+            } else {
+                pages[request.url.pathSegments.last()]?.let { FakeSpotify.html(request, it) } ?: FakeSpotify.html(request, "", code = 404)
+            }
+        }
+    }
+
+    @Test
+    fun aSpotifySongIsTheOneListenBrainzKnowsByItsNameThatsTheArtistsAndAsLong() {
+        val cover = "1coverAAAAAAAAAAAAAAAA"
+        val edit = "2editBBBBBBBBBBBBBBBBB"
+        val album = "3albumCCCCCCCCCCCCCCCC"
+        spotifyKnows(
+            listOf(cover, "4goneDDDDDDDDDDDDDDDDD", edit, album),
+            mapOf(
+                cover to spotifyPage("Bizarre Love Triangle", "Frente! · Marvin the Album · Song · 1994", 120),
+                edit to spotifyPage("Bizarre Love Triangle", "New Order · Substance · Song · 1987", 222),
+                album to spotifyPage("Bizarre Love Triangle", "New Order · Brotherhood · Song · 1986", 261)
+            )
+        )
+        val song = MusicMetadata("Bizarre Love Triangle", "New Order", lengthMs = 261_500)
+        assertEquals("https://open.spotify.com/track/$album", runBlocking { matcher().find(MusicService.SPOTIFY, song) })
+        // Asked by the song's name and artist.
+        val asked = fake.requestBodies.single { "track_name" in it }
+        assertTrue("\"track_name\":\"Bizarre Love Triangle\"" in asked && "\"artist_name\":\"New Order\"" in asked)
+        // How long it is unknown, the artist's first.
+        assertEquals("https://open.spotify.com/track/$edit", runBlocking { matcher().find(MusicService.SPOTIFY, song.copy(lengthMs = null)) })
+    }
+
+    @Test
+    fun spotifyHasNoSuchSongWhenListenBrainzKnowsNoneOrNoneIsTheArtists() {
+        val song = MusicMetadata("Song", "Band")
+        spotifyKnows(emptyList(), emptyMap())
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.SPOTIFY, song) })
+        val other = "1otherAAAAAAAAAAAAAAAA"
+        spotifyKnows(listOf(other), mapOf(other to spotifyPage("Song", "Someone Else · Album · Song · 2001", 200)))
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher().lookFor(MusicService.SPOTIFY, song.copy(title = "Other Song")) })
+        // ListenBrainz down says nothing about whether Spotify has it.
+        fake.handler = { request -> FakeSpotify.html(request, "", code = 503) }
+        assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.SPOTIFY, song.copy(title = "Third Song")) })
     }
 
     @Test

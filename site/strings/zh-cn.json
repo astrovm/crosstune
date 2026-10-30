@@ -69,7 +69,7 @@
   "privacy_link": "隐私政策",
   "language_label": "语言",
   "privacy_title": "Crosstune 隐私政策",
-  "updated": "最后更新：2026年10月26日",
+  "updated": "最后更新：2026年10月30日",
   "short_h2": "简要说明",
   "short_items": [
     "没有账号、广告或数据分析。",
@@ -115,7 +115,7 @@
     ],
     [
       "p",
-      "为了直接打开该项目，应用会将该项目的标题和艺人发送到目标的搜索服务：Apple Music、Deezer、YouTube Music、YouTube、Bandcamp、TIDAL、SoundCloud、Audiomack 或 Qobuz。如果链接直接在应用中打开且“立即播放”已关闭，则会改为在那里打开搜索，不会发送任何内容。当你打开目标时，所选应用或网站会收到目标链接或搜索词。在播放列表或专辑中使用“全部播放”或“随机播放”时，应用会将每首歌曲的标题和艺人发送到 YouTube Music 的搜索，然后将找到的视频列表发送到 YouTube，YouTube 会返回一个临时播放列表。你自行添加的应用和网站会通过你配置的网址模板收到搜索词。分享结果时，结果会发送给你选择的应用或接收者。"
+      "为了直接打开该项目，应用会将该项目的标题和艺人发送到目标的搜索服务：Apple Music、Deezer、YouTube Music、YouTube、Bandcamp、TIDAL、SoundCloud、Audiomack 或 Qobuz。Spotify 上的歌曲则通过 ListenBrainz 查找：歌曲的标题和艺人会发送到 ListenBrainz，它知道 Spotify 上哪些歌曲叫这个名字，然后读取这些歌曲在 Spotify 上的公开页面。如果链接直接在应用中打开且“立即播放”已关闭，则会改为在那里打开搜索，不会发送任何内容。当你打开目标时，所选应用或网站会收到目标链接或搜索词。在播放列表或专辑中使用“全部播放”或“随机播放”时，应用会将每首歌曲的标题和艺人发送到 YouTube Music 的搜索，然后将找到的视频列表发送到 YouTube，YouTube 会返回一个临时播放列表。你自行添加的应用和网站会通过你配置的网址模板收到搜索词。分享结果时，结果会发送给你选择的应用或接收者。"
     ],
     [
       "p",
