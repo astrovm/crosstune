@@ -1091,6 +1091,9 @@ class ChatGptTest {
         assertTrue(input, input.contains("Lyrics:\n突然のキスや") && input.contains("What you said about it:\nUna mujer que no se enamora."))
         assertTrue(input, input.endsWith("Question: ¿Quién canta?\nAnswer: Ella.\n\nQuestion: ¿Por qué plástico?"))
         assertTrue(asked.getString("instructions").contains("you can only help with the song"))
+        // It can look up what the words don't say, as who made the song.
+        assertEquals("web_search", asked.getJSONArray("tools").getJSONObject(0).getString("type"))
+        assertTrue(asked.getString("instructions").contains("search the web"))
         runBlocking { tutor.askAboutSong(song, emptyList(), null, emptyList(), "¿Y?", "es") {} }
         assertTrue(!openAi.asked.last().getJSONArray("input").getJSONObject(0).getString("content").contains("What you said"))
     }
