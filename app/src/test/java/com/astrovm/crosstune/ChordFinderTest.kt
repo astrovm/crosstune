@@ -1126,4 +1126,62 @@ Singing to the morning light</div>"""
             notFound(chords(kimi, japanese))
         }
     }
+
+    @Test
+    fun aSheetPageMissingWhatTheSiteAlwaysHasIsNoSheetAndTheNextSiteIsAsked() {
+        val ugUrl = "https://tabs.ultimate-guitar.com/tab/walkers-1"
+        val ugListed = ugSearch(ugResult(ugUrl, "River Road", "The Walkers", 10))
+        val cifraListed = cifraClubSearch(cifraClubDoc("2", "River Road", "The Walkers", "the-walkers", "river-road"))
+        val laCuerdaListed = laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "RT-21", "river_road"))))
+        val uFretListed = uFretResult(7, "River Road", "The Walkers")
+        fun pages(ug: String, cifra: String, laCuerda: String, uFretSong: String) = { request: Request ->
+            when {
+                request.url.host == "solr.sscdn.co" -> FakeSpotify.html(request, cifraListed)
+                request.url.host == "acordes.lacuerda.net" && request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaListed)
+                request.url.host == "acordes.lacuerda.net" -> FakeSpotify.html(request, laCuerda)
+                request.url.host == "www.ufret.jp" && request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, uFretListed)
+                request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, uFretSong)
+                request.url.toString().startsWith(ugUrl) -> FakeSpotify.html(request, ug)
+                request.url.host == "www.cifraclub.com.br" -> FakeSpotify.html(request, cifra)
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugListed)
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        // No store in Ultimate Guitar's page, no sheet in Cifra Club's, no row list in LaCuerda's and no chords in U-FRET's.
+        fake.handler = pages(ug = "<html></html>", cifra = "<html></html>", laCuerda = "<html></html>", uFretSong = "<html></html>")
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        // A store with no page in it, and a page with no sheet view.
+        fake.requestedUrls.clear()
+        val storeWithoutPage = """<div class="js-store" data-content="{&quot;store&quot;:{}}"></div>"""
+        fake.handler = pages(ug = storeWithoutPage, cifra = "<html></html>", laCuerda = "<html></html>", uFretSong = "<html></html>")
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+        fake.handler = pages(ug = ugPage(JSONObject()), cifra = "<html></html>", laCuerda = "<html></html>", uFretSong = "<html></html>")
+        assertEquals(ChordFinder.Chords.None, chords(river, english))
+    }
+
+    @Test
+    fun aKanaOnlyTitleOrAnArtistListThatIsNoObjectIsTakenFromNetEaseAsItIs() {
+        val bad = JSONObject().put(
+            "result",
+            JSONObject().put("songs", JSONArray(listOf(JSONObject().put("name", "ひとつ").put("artists", JSONArray(listOf("not an object", JSONObject().put("name", "歩く人")))), "no song at all")))
+        ).toString()
+        fake.handler = uFret(
+            mapOf("ひとつ 歩く人" to uFretResult(5, "ひとつ", "歩く人")),
+            mapOf("https://music.163.com/api/search/get" to bad, "https://www.ufret.jp/song.php?data=5" to uFretSong("[C]川の道を歩いていく", "朝の光に歌っている"))
+        )
+        assertEquals("https://www.ufret.jp/song.php?data=5", (chords(MusicMetadata("ひとつ", "Aruku Hito"), japanese) as ChordFinder.Chords.Found).sheet.url)
+        // A sheet of other words than the song's is none of its own.
+        val uFretOnly = uFret(
+            mapOf("ひとつ Aruku Hito" to uFretResult(5, "ひとつ", "Aruku Hito")),
+            mapOf("https://music.163.com/api/search/get" to "{}", "https://www.ufret.jp/song.php?data=5" to uFretSong("[C]全然違う歌詞です"))
+        )
+        fake.handler = { request ->
+            when (request.url.host) {
+                "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch(), code = 404)
+                "acordes.lacuerda.net" -> FakeSpotify.html(request, "", code = 500)
+                else -> uFretOnly(request)
+            }
+        }
+        assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("ひとつ", "Aruku Hito"), japanese))
+    }
 }
