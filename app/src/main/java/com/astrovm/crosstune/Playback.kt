@@ -348,7 +348,7 @@ internal class MediaSessionPlayback(
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
         val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
-        val asked = apps.firstOrNull { sameApp(app, it.packageName) }
+        val asked = apps.firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
             ?: apps.takeIf { link == null }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
             ?: return false
@@ -434,7 +434,7 @@ internal class MediaSessionPlayback(
 
     override fun plays(app: String): Flow<AppPlays?> = changes {
         runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { sameApp(app, it.packageName) }
+            .filter { sameApp(app, it.packageName, context::hasApp) }
             .firstNotNullOfOrNull { controller ->
                 val ended = controller.ended()
                 controller.takeIf { ended || (it.playbackState?.state ?: PlaybackState.STATE_NONE) !in NOT_PLAYING }
@@ -468,7 +468,7 @@ internal class MediaSessionPlayback(
     }
 
     override suspend fun playList(app: String, link: String, mustStart: Boolean): Boolean {
-        val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName) }
+        val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: waker.wake(MusicService.appsFor(app))
             ?: return false
         return watchStart(asked, mustStart) { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }

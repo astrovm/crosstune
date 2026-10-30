@@ -1254,7 +1254,7 @@ internal class MainViewModel(
                 val app = destination.packageName
                 openPlayer(song, app, link)
                 // Already in that app, playing or paused, it carries on from where it is, not from the start.
-                val there = source?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(app, it.appPackage) }
+                val there = source?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(app, it.appPackage, interception::isInstalled) }
                 if (there != null) {
                     if (!there.clock.playing) source.playPause(song, true)
                     return@launch
@@ -1278,9 +1278,9 @@ internal class MainViewModel(
         val source = playback
         val sees = source?.hasAccess() == true
         // Played in that app, not another that has it too.
-        if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null && sameApp(app, it.appPackage) } } != null)) return true
+        if (asked && (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null && sameApp(app, it.appPackage, interception::isInstalled) } } != null)) return true
         val back = source?.takeIf { exact && sees && app != null && it.openSong(app, link) } ?: return false.also { closePlayer() }
-        withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && sameApp(app, it.appPackage) } }
+        withTimeoutOrNull(LOAD_SONG_MS) { back.follow(song).first { it != null && sameApp(app, it.appPackage, interception::isInstalled) } }
         back.comesBack()
         return true
     }
@@ -1502,7 +1502,7 @@ internal class MainViewModel(
         // Already in that app, playing or paused, it's brought forward, not asked for again, which would restart it.
         // Only a song plays: an album or a playlist named as the song playing opens as itself.
         val there = uiState.result?.takeIf { tapped && it.type == ItemType.TRACK }?.let { song ->
-            playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage) }
+            playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage, interception::isInstalled) }
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
         effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))

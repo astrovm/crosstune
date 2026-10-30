@@ -417,7 +417,8 @@ class TvPlayTest {
         launch()
         click(play)
         waitUntil { playback.opened.size == 1 }
-        playing()
+        // The phone's own app plays it, as it's installed.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
         waitUntil { playback.cameBack == 1 }
         playback.playing.value = null
         composeRule.waitForIdle()
@@ -429,7 +430,8 @@ class TvPlayTest {
     @Test
     fun youTubesTvAppPlaysYouTubeMusicsSongs() {
         assertTrue(MusicService.YOUTUBE_MUSIC in LinkInterception(app).installedServices())
-        assertTrue(sameApp(youTubeMusic, MusicService.YOUTUBE_TV))
+        // Its phone app isn't on a TV, so YouTube's TV app stands in for it.
+        assertTrue(sameApp(youTubeMusic, MusicService.YOUTUBE_TV, app::hasApp))
         assertFalse(MusicService.YOUTUBE_TV in MusicService.SPOTIFY.appPackages)
     }
 

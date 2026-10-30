@@ -3508,13 +3508,16 @@ class MainActivityTest {
         click(string(R.string.open_in_custom, "YT Music Morphe"))
         assertEquals(morphe, nextStartedActivity()!!.`package`)
 
-        // The plain choice is still the official app, one tap away on the card.
+        // The plain choice is still the official app, one tap away on the card: with Morphe paused on the
+        // song, it's the official app that's asked, rather than Morphe played on.
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YT Music Morphe", canSeek = true, appPackage = morphe) }
         chooseDefault(string(R.string.target_youtube_music))
         val playOfficial = string(R.string.play_in_background, string(R.string.target_youtube_music))
         waitUntil { composeRule.onAllNodes(hasContentDescription(playOfficial) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         click(playOfficial)
         waitUntil { phone.songsAsked.size == 2 }
         assertEquals(official, phone.songsAsked.last().second)
+        assertEquals(emptyList<Boolean>(), phone.plays)
     }
 
     @Test

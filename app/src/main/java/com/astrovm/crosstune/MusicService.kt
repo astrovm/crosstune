@@ -1,5 +1,7 @@
 package com.astrovm.crosstune
 
+import android.content.Context
+
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -150,11 +152,13 @@ internal enum class MusicService(
 }
 
 /**
- * Whether [one] and [other] are the same app, or [one] is a service's own app and [other] is a build
- * patched from it, or plays its songs, as YouTube's TV app does YouTube Music's. A build chosen by
- * name is only itself: another build of the same app is not it.
+ * Whether [one] and [other] are the same app, or [one] is a service's own app, not [installed], and
+ * [other] stands in for it: a build patched from it, or one that plays its songs, as YouTube's TV app
+ * does YouTube Music's. Installed, it's only itself, as each build is an app of its own, and so is a
+ * build chosen by name.
  */
-internal fun sameApp(one: String?, other: String?): Boolean = one == other || MusicService.ofOwnApp(one)?.appPackages?.contains(other) == true
+internal fun sameApp(one: String?, other: String?, installed: (String) -> Boolean): Boolean =
+    one == other || (one != null && !installed(one) && MusicService.ofOwnApp(one)?.appPackages?.contains(other) == true)
 
 private fun querySearchUrl(baseUrl: String, parameter: String): (String) -> String = { query ->
     baseUrl.toHttpUrl().newBuilder().addQueryParameter(parameter, query).build().toString()
@@ -167,3 +171,6 @@ private fun pathSearchUrl(baseUrl: String): (String) -> String = { query ->
 /** Without a tag that names no other recording, which some services' names leave out, and then find nothing. */
 internal fun searchQuery(metadata: MusicMetadata): String =
     listOf(SongNames.withoutEditionTag(metadata.title), metadata.artist).filter { it.isNotBlank() }.joinToString(" ")
+
+/** Whether the app with [packageName] is installed, as Android lets Crosstune see it. */
+internal fun Context.hasApp(packageName: String): Boolean = runCatching { packageManager.getPackageInfo(packageName, 0) }.isSuccess

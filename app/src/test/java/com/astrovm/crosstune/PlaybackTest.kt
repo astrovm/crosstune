@@ -1265,10 +1265,14 @@ class PlaybackTest {
         allow()
         assertTrue(runBlocking { playback.playSong(song, morphe, link) })
         assertEquals(listOf(morphe), woken.single())
-        assertTrue(sameApp(morphe, morphe))
-        assertFalse(sameApp(morphe, official))
-        assertFalse(sameApp(morphe, revanced))
-        assertTrue(sameApp(official, morphe))
+        val installed = { packageName: String -> packageName == official }
+        assertTrue(sameApp(morphe, morphe, installed))
+        assertFalse(sameApp(morphe, official, installed))
+        assertFalse(sameApp(morphe, revanced, installed))
+        // Installed, the official app is only itself; without it, a build stands in for it.
+        assertFalse(sameApp(official, morphe, installed))
+        assertTrue(sameApp(official, morphe) { false })
+        assertFalse(sameApp(null, morphe) { false })
         // Opened in it, though the official app would take the link too.
         shadowOf(app).checkActivities(true)
         for (opener in listOf(official, morphe)) {
