@@ -1238,10 +1238,28 @@ class PlaybackTest {
         says(PlaybackState.STATE_PLAYING)
         assertTrue(played.await())
         // It wouldn't play in the background, so opened on the song, it's left in front, where it plays: behind Crosstune it'd stop.
+        assertTrue(playback.playsOnlyInFront(music))
         assertTrue(playback.openSong(music, link))
         assertEquals(music, shadowOf(app).nextStartedActivity.`package`)
         playback.comesBack()
         assertNull(shadowOf(app).nextStartedActivity)
+    }
+
+    @Test
+    fun aBuildSeenToPlayOnlyInFrontStandsInForTheAppItsBuiltFrom() = runBlocking {
+        val official = MusicService.YOUTUBE_MUSIC.packageName
+        val morphe = "app.morphe.android.apps.youtube.music"
+        allow()
+        val build = player(morphe, "YT Music Morphe", "Other", "Band", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(build)
+        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.playSong(song, morphe, "https://music.youtube.com/watch?v=other000000", mustStart = true) }
+        shadowOf(build).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(fails.await())
+        // YouTube Music asked for while only the build is installed is the build; installed, it's an app of its own, not seen yet.
+        assertTrue(playback.playsOnlyInFront(official))
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = official })
+        assertFalse(playback.playsOnlyInFront(official))
     }
 
     @Test
@@ -1307,6 +1325,8 @@ class PlaybackTest {
     @Test
     fun anAppNotRunningIsOpenedOnTheSongAndCrosstuneComesBackOverIt() {
         val youTubeMusic = "com.google.android.apps.youtube.music"
+        // Never seen failing to play in the background, it's taken to play there.
+        assertFalse(playback.playsOnlyInFront(youTubeMusic))
         // Opened on the song's link, in that app.
         assertTrue(playback.openSong(youTubeMusic, "https://music.youtube.com/watch?v=other000000"))
         val opened = shadowOf(app).nextStartedActivity

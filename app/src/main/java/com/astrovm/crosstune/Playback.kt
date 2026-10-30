@@ -171,6 +171,9 @@ internal interface PlaybackSource {
     /** Brings Crosstune back to the front, over the app [openSong] opened, unless it only plays in front. */
     fun comesBack()
 
+    /** Whether [app] was seen to play only in front, as YouTube Music without Premium, so [comesBack] leaves it there. */
+    fun playsOnlyInFront(app: String): Boolean
+
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
     fun nowPlaying(): Heard.Song?
 
@@ -408,6 +411,8 @@ internal class MediaSessionPlayback(
             true
         }.getOrDefault(false)
     }
+
+    override fun playsOnlyInFront(app: String) = onlyInFront.any { sameApp(app, it, context::hasApp) }
 
     // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
     // Behind it too when the app opened wouldn't play in the background, as it would stop as soon as it's left.

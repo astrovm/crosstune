@@ -127,20 +127,22 @@ internal class MainViewModel(
     private val sleepTimer: SleepTimer? = null
 ) : ViewModel() {
     /**
-     * On a TV, an app opened on a song is covered rather than left, once Android lets Crosstune show
-     * over other apps: brought in front of it, YouTube stops playing.
+     * An app opened on a song is covered rather than left, once Android lets Crosstune show over other
+     * apps: on a TV, where brought in front of it, YouTube stops playing, and on a phone, when the app
+     * only plays in front, as YouTube Music without Premium, which stops as soon as it's left.
      */
-    private val playback: PlaybackSource? = playback?.takeIf { phone == Phone.TV }?.let { source ->
+    private val playback: PlaybackSource? = playback?.let { source ->
         object : PlaybackSource by source {
+            // Covered as it's opened, while Crosstune's still in sight, which Android wants for the cover to listen along.
             override fun openSong(app: String, link: String): Boolean {
-                if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
+                if (uiState.canFloatOverApps && (phone == Phone.TV || source.playsOnlyInFront(app))) uiState = uiState.copy(coveringApp = true)
                 return source.openSong(app, link).also { if (!it) uncover() }
             }
 
             // Already in front of it, the words of the song just played show there.
             override fun comesBack() = if (!uiState.coveringApp) source.comesBack() else if (uiState.lyricsFor == null) playerLyrics() else Unit
         }
-    } ?: playback
+    }
 
 
     private val historyStore = HistoryStore(preferences)
