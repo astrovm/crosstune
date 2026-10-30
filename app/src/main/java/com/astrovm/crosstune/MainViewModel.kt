@@ -1755,8 +1755,10 @@ internal class MainViewModel(
         val working = uiState.isLoadingLyrics || lyricsJob?.isActive == true || readingsJob?.isActive == true || restoreJob?.isActive == true || learning.translating || uiState.chords.loading
         if (uiState.lyrics.isEmpty() || working) return
         val key = RecordingKey.of(song)
+        // Where lines were heard this time only isn't kept: next time the app's clock may be sure.
+        val lines = if (heardPoints.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, syncPoints))
         val words = KeptWords(
-            uiState.lyrics, uiState.lyricLines, uiState.lyricsSynced, found, foundLines, restored, syncPoints,
+            uiState.lyrics, lines, uiState.lyricsSynced, found, foundLines, restored, syncPoints,
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
