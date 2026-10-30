@@ -65,7 +65,8 @@ class MainViewModelTest {
         phone: Phone = Phone.OTHER,
         lyricsFinder: LyricsFinder? = null,
         songSearcher: SongSearcher? = null,
-        reports: ReportSender? = null
+        reports: ReportSender? = null,
+        listener: SongHearing = SongHearing { Heard.Nothing }
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -76,7 +77,7 @@ class MainViewModelTest {
             preferences = prefs(),
             interception = LinkInterception(app),
             artwork = ArtworkLoader(client, Dispatchers.Unconfined),
-            listener = SongHearing { Heard.Nothing },
+            listener = listener,
             systemDispatcher = Dispatchers.Unconfined,
             chatGpt = chatGpt,
             tutor = tutor,
@@ -196,10 +197,10 @@ class MainViewModelTest {
         Following(PlaybackClock(1_000, android.os.SystemClock.elapsedRealtime(), playing = playing), "Spotify", seek, app, canSkipNext = skipNext, canSkipPrevious = skipPrevious, shuffle = shuffle, repeat = repeat, like = like)
 
     /** A model whose music app plays [song], offered as playing now, with the player open on it when [open]. */
-    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null): MainViewModel {
+    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null, listener: SongHearing = SongHearing { Heard.Nothing }): MainViewModel {
         playback.access = true
         playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
-        val model = model(playback = playback, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports)
+        val model = model(playback = playback, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports, listener = listener)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         if (open) {
@@ -412,10 +413,11 @@ class MainViewModelTest {
     private fun lyricsModel(
         playback: FakePlayback,
         answer: String? = timed,
-        app: Following = following(),
+        app: Following? = following(),
         keptOnDisk: LookupCache? = null,
         reports: ReportSender? = null,
-        words: Boolean = true
+        words: Boolean = true,
+        listener: SongHearing = SongHearing { Heard.Nothing }
     ): MainViewModel {
         fake.handler = { request ->
             // No answer at all is a service that can't be reached.
@@ -423,7 +425,7 @@ class MainViewModelTest {
         }
         playback.playing.value = app
         val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0)
-        val model = playingModel(playback, lyricsFinder = finder, keptOnDisk = keptOnDisk, reports = reports)
+        val model = playingModel(playback, lyricsFinder = finder, keptOnDisk = keptOnDisk, reports = reports, listener = listener)
         model.playerLyrics()
         if (words) until("found the words") { model.uiState.lyrics.isNotEmpty() }
         else until("looked for the words") { model.uiState.lyricsFor != null && !model.uiState.isLoadingLyrics }
@@ -835,5 +837,70 @@ class MainViewModelTest {
         val none = model()
         none.sendReport("Nothing to send with")
         assertNull(none.uiState.report)
+    }
+
+    /** Hears one thing after another, then nothing. */
+    private class ScriptedEars(vararg heard: Heard) : SongHearing {
+        val queue = ArrayDeque(heard.toList())
+        var asked = 0
+        override suspend fun listen(): Heard {
+            asked++
+            return queue.removeFirstOrNull() ?: Heard.Nothing
+        }
+    }
+
+    private fun heardNow(of: MusicMetadata = song, at: Long = 12_000, match: String? = "m1", appleMusicId: String? = null) =
+        Heard.Song(of, appleMusicId, offsetMs = at, startedAtMs = android.os.SystemClock.elapsedRealtime(), matchId = match)
+
+    @Test
+    fun wordsListenedAlongToFollowTheSongHeardItsSilenceItsSkipsAndTheNextSong() {
+        val ears = ScriptedEars(heardNow())
+        val playback = FakePlayback()
+        val model = lyricsModel(playback, app = null, listener = ears)
+        // No app says what plays, so only the microphone does.
+        playback.onThePhone = null
+        model.listenAlong()
+        // A second ask while it listens does nothing more.
+        model.listenAlong()
+        assertTrue(model.uiState.listeningAlong)
+        idle()
+        assertEquals(1, ears.asked)
+        val first = model.uiState.following!!
+        assertNull(first.app)
+        assertTrue(first.clock.playing)
+        assertTrue(first.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 12_000)
+        // Heard nothing: the music most likely stopped, so the words stop where they are.
+        pass(8_500)
+        assertEquals(2, ears.asked)
+        assertFalse(model.uiState.following!!.clock.playing)
+        // Heard again, far from where the words are, it's where the song is now.
+        ears.queue.add(heardNow(at = 50_000))
+        pass(8_500)
+        assertTrue(model.uiState.following!!.clock.playing)
+        assertTrue(model.uiState.following!!.clock.positionAt(android.os.SystemClock.elapsedRealtime()) >= 50_000)
+        // Heard a moment off, nothing moves.
+        val placed = model.uiState.following!!.clock
+        ears.queue.add(heardNow(at = 50_000 + 8_500 + 700))
+        pass(8_500)
+        assertEquals(placed, model.uiState.following!!.clock)
+        // The next song takes over the words, and joins Recent.
+        val next = MusicMetadata("Moon", "Luna")
+        ears.queue.add(heardNow(of = next, at = 1_000, match = "m2", appleMusicId = "1234"))
+        pass(8_500)
+        repeat(6) { if (model.uiState.lyricsFor != next) pass(2_000) }
+        assertEquals("asked ${ears.asked}, left ${ears.queue.size}, ${model.uiState.error}, history ${model.uiState.history.map { it.metadata.title }}, loading ${model.uiState.isLoadingLyrics}, following ${model.uiState.following}", next, model.uiState.lyricsFor)
+        assertEquals(next, model.uiState.history.first().metadata)
+        // The network failing is tried again, the microphone going is the end of it.
+        val asked = ears.asked
+        ears.queue.add(Heard.Failed(AppError.NETWORK))
+        pass(8_500)
+        pass(16_000)
+        assertTrue(ears.asked > asked + 1)
+        assertTrue(model.uiState.listeningAlong)
+        ears.queue.add(Heard.Failed(AppError.MICROPHONE))
+        pass(8_500)
+        assertEquals(AppError.MICROPHONE, model.uiState.error)
+        assertFalse(model.uiState.canRetry)
+        assertFalse(model.uiState.listeningAlong)
     }
 }
