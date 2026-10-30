@@ -52,12 +52,18 @@ class ChatGptTest {
         chatGpt: ChatGpt = chatGpt(),
         timeoutMs: Long = 10_000,
         answer: (HttpUrl) -> String? = { "code=the-code&state=${it.queryParameter("state")}&client_id=oaiapp_1" }
-    ) = runBlocking {
-        chatGpt.signIn(open = { url ->
-            openAi.authorize = url.toHttpUrl()
-            val query = answer(openAi.authorize) ?: return@signIn
-            thread { backPage = openAi.comeBack(query) }
-        }, timeoutMs = timeoutMs)
+    ): ChatGptSignInResult {
+        var browser: Thread? = null
+        val result = runBlocking {
+            chatGpt.signIn(open = { url ->
+                openAi.authorize = url.toHttpUrl()
+                val query = answer(openAi.authorize) ?: return@signIn
+                browser = thread { backPage = openAi.comeBack(query) }
+            }, timeoutMs = timeoutMs)
+        }
+        // Signed in once the code's back, which can be before the browser has read the page it got.
+        browser?.join(timeoutMs)
+        return result
     }
 
     private fun tokenForms() = fake.requestedUrls.indices
