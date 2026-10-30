@@ -4,9 +4,13 @@ import android.content.Context
 import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.os.Handler
-import android.support.v4.media.session.MediaControllerCompat
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
+import android.os.Looper
+import androidx.media3.common.Player
+import androidx.media3.session.SessionToken
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executor
+import androidx.media3.session.MediaController as Media3Controller
 
 /** How a music app repeats: not at all, its whole list, or the one song. */
 internal enum class Repeat { OFF, ALL, ONE }
@@ -31,63 +35,94 @@ internal interface AppModes {
 
 /**
  * Most music apps' sessions are the support library's, which has words for shuffle and repeat,
- * asked and told its own way through the app's session. That needs a real app's session, on a
- * phone, where it's checked; what's shown of it and asked is tested.
+ * asked and told its own way through the app's session, which Media3 speaks. That needs a real app's
+ * session, on a phone, where it's checked; what's shown of it and asked is tested.
  */
 internal class SessionModes(private val context: Context) : AppModes {
-    /** One for each app's session, as each first asks the app for its way to tell, which takes a moment. */
-    private val compat = mutableMapOf<MediaSession.Token, MediaControllerCompat>()
+    private val main = Handler(Looper.getMainLooper())
+    private val onMain = Executor { main.post(it) }
 
-    private fun of(app: MediaController) =
-        compat.getOrPut(app.sessionToken) { MediaControllerCompat(context, MediaSessionCompat.Token.fromToken(app.sessionToken)) }
+    /** One for each app's session, as each first connects to the app, which takes a moment. */
+    private val apps = ConcurrentHashMap<MediaSession.Token, Session>()
+
+    private fun of(app: MediaController) = apps.computeIfAbsent(app.sessionToken) { Session(it) }
 
     /** Whether [app] says it can be told to [action]: one that can't says so. */
     private fun lets(app: MediaController, action: Long) = ((app.playbackState?.actions ?: 0L) and action) != 0L
 
-    override fun shuffles(app: MediaController): Boolean? {
-        if (!lets(app, PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE)) return null
-        return when (of(app).shuffleMode) {
-            PlaybackStateCompat.SHUFFLE_MODE_NONE -> false
-            PlaybackStateCompat.SHUFFLE_MODE_ALL, PlaybackStateCompat.SHUFFLE_MODE_GROUP -> true
-            else -> null
+    override fun shuffles(app: MediaController): Boolean? = if (lets(app, ACTION_SET_SHUFFLE_MODE)) of(app).shuffles else null
+
+    override fun shuffle(app: MediaController, on: Boolean) = of(app).tell { it.shuffleModeEnabled = on }
+
+    override fun repeats(app: MediaController): Repeat? = if (lets(app, ACTION_SET_REPEAT_MODE)) of(app).repeats else null
+
+    override fun repeat(app: MediaController, how: Repeat) = of(app).tell {
+        it.repeatMode = when (how) {
+            Repeat.OFF -> Player.REPEAT_MODE_OFF
+            Repeat.ALL -> Player.REPEAT_MODE_ALL
+            Repeat.ONE -> Player.REPEAT_MODE_ONE
         }
-    }
-
-    override fun shuffle(app: MediaController, on: Boolean) {
-        of(app).transportControls.setShuffleMode(if (on) PlaybackStateCompat.SHUFFLE_MODE_ALL else PlaybackStateCompat.SHUFFLE_MODE_NONE)
-    }
-
-    override fun repeats(app: MediaController): Repeat? {
-        if (!lets(app, PlaybackStateCompat.ACTION_SET_REPEAT_MODE)) return null
-        return when (of(app).repeatMode) {
-            PlaybackStateCompat.REPEAT_MODE_NONE -> Repeat.OFF
-            PlaybackStateCompat.REPEAT_MODE_ALL, PlaybackStateCompat.REPEAT_MODE_GROUP -> Repeat.ALL
-            PlaybackStateCompat.REPEAT_MODE_ONE -> Repeat.ONE
-            else -> null
-        }
-    }
-
-    override fun repeat(app: MediaController, how: Repeat) {
-        of(app).transportControls.setRepeatMode(
-            when (how) {
-                Repeat.OFF -> PlaybackStateCompat.REPEAT_MODE_NONE
-                Repeat.ALL -> PlaybackStateCompat.REPEAT_MODE_ALL
-                Repeat.ONE -> PlaybackStateCompat.REPEAT_MODE_ONE
-            }
-        )
     }
 
     override fun watch(app: MediaController, handler: Handler, changed: () -> Unit): () -> Unit {
-        val callback = object : MediaControllerCompat.Callback() {
-            override fun onShuffleModeChanged(shuffleMode: Int) = changed()
+        val watcher = { handler.post(changed); Unit }
+        val watched = of(app)
+        watched.watchers += watcher
+        return { watched.watchers -= watcher }
+    }
 
-            override fun onRepeatModeChanged(repeatMode: Int) = changed()
+    /**
+     * An app's session, through Media3, which only answers on the thread it was made on, so what the
+     * app last said is kept here for any thread to read.
+     */
+    private inner class Session(token: MediaSession.Token) : Player.Listener {
+        private var controller: Media3Controller? = null
 
-            // Until the app has said how it's told, how it shuffles and repeats is unknown.
-            override fun onSessionReady() = changed()
+        /** Null until connected, or when it doesn't say. */
+        @Volatile
+        var shuffles: Boolean? = null
+
+        @Volatile
+        var repeats: Repeat? = null
+
+        val watchers = CopyOnWriteArrayList<() -> Unit>()
+
+        init {
+            val made = SessionToken.createSessionToken(context, token)
+            made.addListener({
+                // An app that won't let Crosstune in, or is gone meanwhile, says nothing.
+                val connecting = runCatching { Media3Controller.Builder(context, made.get()).setApplicationLooper(Looper.getMainLooper()).buildAsync() }.getOrNull()
+                connecting?.addListener({
+                    controller = runCatching { connecting.get() }.getOrNull()?.also {
+                        it.addListener(this)
+                        read(it)
+                    }
+                }, onMain)
+            }, onMain)
         }
-        val controller = of(app)
-        controller.registerCallback(callback, handler)
-        return { controller.unregisterCallback(callback) }
+
+        /** Has the app do [what], once connected. */
+        fun tell(what: (Player) -> Unit) {
+            main.post { controller?.let(what) }
+        }
+
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.containsAny(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED)) read(player)
+        }
+
+        private fun read(player: Player) {
+            shuffles = player.shuffleModeEnabled
+            repeats = when (player.repeatMode) {
+                Player.REPEAT_MODE_OFF -> Repeat.OFF
+                Player.REPEAT_MODE_ALL -> Repeat.ALL
+                Player.REPEAT_MODE_ONE -> Repeat.ONE
+                else -> null
+            }
+            watchers.forEach { it() }
+        }
     }
 }
+
+// The support library's words, in what an app says it can be told, which Android's own have none for.
+private const val ACTION_SET_REPEAT_MODE = 1L shl 18
+private const val ACTION_SET_SHUFFLE_MODE = 1L shl 21

@@ -82,11 +82,10 @@ internal class ArtworkLoader(
     /** Keeps the newest covers: a few long playlists' worth, besides Recent. */
     private fun save(file: File, bytes: ByteArray) {
         try {
-            // A cover's file is always inside the cache directory, so it has a parent.
             val dir = file.parentFile
-            dir.mkdirs()
+            dir?.mkdirs()
             file.writeBytes(bytes)
-            dir.listFiles()?.let { kept -> kept.sortedByDescending(File::lastModified).drop(MAX_ON_DISK).forEach(File::delete) }
+            dir?.listFiles()?.let { kept -> kept.sortedByDescending(File::lastModified).drop(MAX_ON_DISK).forEach(File::delete) }
         } catch (_: IOException) {
             // A cover that isn't kept is just downloaded again next time.
         }

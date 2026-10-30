@@ -69,7 +69,7 @@ internal class UpdateChecker(
             return new.zip(old).firstOrNull { (a, b) -> a != b }?.let { (a, b) -> a > b } ?: false
         }
 
-        private fun parts(version: String) = version.substringBefore('-').split('.').map { it.toIntOrNull() ?: return null }.takeIf { it.size == 3 }
+        private fun parts(version: String): List<Int>? = version.substringBefore('-').split('.').map { it.toIntOrNull() ?: return null }.takeIf { it.size == 3 }
     }
 }
 

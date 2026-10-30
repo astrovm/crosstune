@@ -191,8 +191,10 @@ dependencies {
     implementation("dev.rikka.shizuku:provider:13.1.5")
 
     // A music app's shuffle, which Android's own media sessions have no word for; most apps' sessions
-    // are the support library's, which has.
-    implementation("androidx.media:media:1.8.0")
+    // are the support library's, which has, and Media3 speaks it.
+    implementation("androidx.media3:media3-session:1.11.1")
+    // Media3's own is older, with a known flaw (GHSA-xxph-c9ww-hj94).
+    implementation("com.google.guava:guava:33.7.2-android")
 
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.1")

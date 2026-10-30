@@ -152,8 +152,8 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
                     }
                     helps.forEach { text ->
                         val layerScale = when (text) {
-                            reading?.reading -> (help?.readingScale ?: READING_SCALE) / READING_SCALE
-                            help?.translation -> help?.translationScale ?: 1f
+                            reading?.reading -> help.readingScale / READING_SCALE
+                            help?.translation -> help.translationScale
                             else -> learning.wordsScale
                         }
                         Line(text, lit = false, options.scale * layerScale, ink, outline)

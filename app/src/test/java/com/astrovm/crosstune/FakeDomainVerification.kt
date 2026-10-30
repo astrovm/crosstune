@@ -5,7 +5,8 @@ import android.content.Context
 import android.content.pm.verify.domain.DomainVerificationManager
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.os.Process
-import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadow.api.Shadow
+import org.robolectric.shadows.ShadowContextImpl
 import java.lang.reflect.Proxy
 import java.util.UUID
 
@@ -39,7 +40,7 @@ internal object FakeDomainVerification {
             .getDeclaredConstructor(Context::class.java, binder)
             .apply { isAccessible = true }
             .newInstance(app, service)
-        shadowOf(app).setSystemService(Context.DOMAIN_VERIFICATION_SERVICE, manager)
+        Shadow.extract<ShadowContextImpl>(app.baseContext).setSystemService(Context.DOMAIN_VERIFICATION_SERVICE, manager)
     }
 
     /** The binder's way of saying the package is unknown; the manager turns it into NameNotFoundException. */

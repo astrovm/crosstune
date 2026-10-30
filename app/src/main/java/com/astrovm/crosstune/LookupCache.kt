@@ -73,8 +73,7 @@ internal class LookupCache(
 
     private fun write(json: String) {
         try {
-            // The cache file is always inside the app's cache directory.
-            file.parentFile.mkdirs()
+            file.parentFile?.mkdirs()
             // Written aside first, so a crash midway never leaves a broken file.
             val temporary = File(file.path + ".tmp")
             temporary.writeText(json)

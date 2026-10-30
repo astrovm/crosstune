@@ -3,9 +3,8 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.ActivityInfo
+import android.content.IntentFilter
 import android.content.pm.PackageInfo
-import android.content.pm.ResolveInfo
 import android.content.pm.verify.domain.DomainVerificationUserState
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
@@ -287,9 +286,15 @@ class LinkInterceptionTest {
     @Test
     fun anAppUninstalledWhileLookingIsNamedByItsPackage() {
         val gone = "gone.player"
-        val filter = Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/")).addCategory(Intent.CATEGORY_BROWSABLE)
-        val found = ResolveInfo().apply { activityInfo = ActivityInfo().apply { packageName = gone; name = "Open" } }
-        shadowOf(app.packageManager).addResolveInfoForIntent(filter, found)
+        val found = ComponentName(gone, "Open")
+        shadowOf(app.packageManager).addActivityIfNotPresent(found)
+        shadowOf(app.packageManager).addIntentFilterForActivity(found, IntentFilter(Intent.ACTION_VIEW).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            addDataScheme("https")
+            addDataAuthority("open.spotify.com", null)
+        })
+        // Gone by the time it's named: Android no longer knows its app.
+        shadowOf(app.packageManager).getInternalMutablePackageInfo(gone).applicationInfo = null
         FakeDomainVerification.installPerPackage(app) { packageName ->
             if (packageName == gone) mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) else null
         }

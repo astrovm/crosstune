@@ -2184,7 +2184,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     val reading = learning.lines.getOrNull(index)
     // Japanese loads its dictionary the first time, a moment better spent away from the screen.
     val words by produceState(emptyList<Word>(), text, learning.script) { value = withContext(Dispatchers.Default) { Readings.words(text, learning.script) } }
-    val saved = state.savedLines.any { it.text == text && it.title == state.lyricsFor?.title && it.artist == state.lyricsFor?.artist }
+    val saved = state.savedLines.any { it.text == text && it.title == state.lyricsFor?.title && it.artist == state.lyricsFor.artist }
     // Open all the way, so one back closes it rather than lowering it halfway first.
     ScreenSheet(onDismiss) {
         // Scrolled, so a long explanation is read to its end.
@@ -2477,7 +2477,7 @@ private fun WordsToKnow(state: UiState, actions: ScreenActions) {
         }
         found == null -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
         else -> found.forEach { word ->
-            val saved = state.savedLines.any { it.text == word.word && it.title == song?.title && it.artist == song?.artist }
+            val saved = state.savedLines.any { it.text == word.word && it.title == song?.title && it.artist == song.artist }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

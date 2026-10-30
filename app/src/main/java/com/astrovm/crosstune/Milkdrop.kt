@@ -32,6 +32,8 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
 import java.io.File
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -728,29 +730,31 @@ private const val VISUALS_SCALE = 2
 
 /** The thread [renderer] draws on, into [target], with an OpenGL ES 3 context of its own, then [release]s it. */
 private class GlThread(private val target: Any, private val renderer: MilkdropRenderer, private val release: () -> Unit = {}) : Thread("Milkdrop") {
-    private val lock = Object()
+    private val lock = ReentrantLock()
+    /** Told whenever the size, a pause or finishing changes, which the thread waits on between frames. */
+    private val changed = lock.newCondition()
     private var width = 0
     private var height = 0
     private var sized = false
     private var paused = false
     private var done = false
 
-    fun resize(width: Int, height: Int) = synchronized(lock) {
+    fun resize(width: Int, height: Int) = lock.withLock {
         this.width = width
         this.height = height
         sized = true
-        lock.notifyAll()
+        changed.signalAll()
     }
 
-    fun pause(paused: Boolean) = synchronized(lock) {
+    fun pause(paused: Boolean) = lock.withLock {
         this.paused = paused
-        lock.notifyAll()
+        changed.signalAll()
     }
 
     /** Stops after the frame it's on, then lets the surface go, so nothing draws into it once it's gone. */
-    fun finish() = synchronized(lock) {
+    fun finish() = lock.withLock {
         done = true
-        lock.notifyAll()
+        changed.signalAll()
     }
 
     override fun run() = try {
@@ -787,8 +791,8 @@ private class GlThread(private val target: Any, private val renderer: MilkdropRe
         if (window != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(display, window, window, context)) try {
             renderer.created()
             while (true) {
-                val size = synchronized(lock) {
-                    while (!done && (paused || !sized)) lock.wait()
+                val size = lock.withLock {
+                    while (!done && (paused || !sized)) changed.await()
                     if (done) null else Pair(width, height)
                 } ?: break
                 // The surface's own size, which Android may change back behind the view's back, as when

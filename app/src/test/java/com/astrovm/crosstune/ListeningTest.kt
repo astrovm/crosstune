@@ -779,7 +779,7 @@ class ListeningTest {
         val asked = shadowOf(activity).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         assertEquals(0, microphone.opened)
-        activity.onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_DENIED))
+        activity.answer(asked, PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
         waitForText(string(R.string.error_microphone))
         // No Try again: Android won't ask again, so the way is in its settings.
@@ -817,7 +817,7 @@ class ListeningTest {
         // Turned while Android asks, then allowed: it listens along, rather than for a new song.
         controller!!.recreate()
         allowMicrophone()
-        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        controller!!.get().answer(asked, PackageManager.PERMISSION_GRANTED)
         hearing.song("Demo", 3.0)
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
         assertFalse(controllerModel().uiState.listening)
@@ -839,7 +839,7 @@ class ListeningTest {
         val asked = shadowOf(controller!!.get()).lastRequestedPermission
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         allowMicrophone()
-        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        controller!!.get().answer(asked, PackageManager.PERMISSION_GRANTED)
         waitUntil(TIMEOUT_MS) { hearing.listens > before }
         // Asked once: back again, it isn't asked again.
         controller!!.pause().stop()
@@ -2200,7 +2200,7 @@ class ListeningTest {
 
         // Allowed, they start over, hearing it, and the menu has nothing to fix.
         allowMicrophone()
-        controller!!.get().onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        controller!!.get().answer(asked, PackageManager.PERMISSION_GRANTED)
         controller!!.pause().resume()
         waitUntil(TIMEOUT_MS) { visualsShown().singleOrNull()?.let { it !== deaf } == true }
         click(string(R.string.visuals_options))
@@ -2480,7 +2480,7 @@ class ListeningTest {
         assertEquals(listOf(Manifest.permission.RECORD_AUDIO), asked.requestedPermissions.toList())
         assertTrue(visualsShown().isEmpty())
         allowMicrophone()
-        activity.onRequestPermissionsResult(asked.requestCode, asked.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+        activity.answer(asked, PackageManager.PERMISSION_GRANTED)
         composeRule.waitForIdle()
         waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
     }
@@ -2703,7 +2703,7 @@ class ListeningTest {
     }
 
     private fun ServiceController<FloatingLyricsService>.command(action: String) {
-        withIntent(Intent(app, FloatingLyricsService::class.java).setAction(action)).startCommand(0, 2)
+        get().onStartCommand(Intent(app, FloatingLyricsService::class.java).setAction(action), 0, 2)
         composeRule.waitForIdle()
     }
 
@@ -3027,7 +3027,7 @@ class ListeningTest {
         assertTrue(prefs().getBoolean("asked_floating_notifications", false))
         shadowOf(controller!!.get()).getLastRequestedPermission()?.let { request ->
             shadowOf(controller!!.get()).grantPermissions(*request.requestedPermissions)
-            controller!!.get().onRequestPermissionsResult(request.requestCode, request.requestedPermissions, intArrayOf(PackageManager.PERMISSION_GRANTED))
+            controller!!.get().answer(request, PackageManager.PERMISSION_GRANTED)
         }
         composeRule.waitForIdle()
         assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)

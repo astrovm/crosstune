@@ -11,8 +11,7 @@ import java.security.MessageDigest
  * [sha256]: one cut short or changed is no use. Written to a part first, so [file] is whole or not there.
  */
 internal fun OkHttpClient.fetchChecked(url: String, sha256: String, file: File): Boolean {
-    // Always a file in the app's own folders, so it has a parent.
-    file.parentFile.mkdirs()
+    file.parentFile?.mkdirs()
     val part = File(file.path + ".part")
     try {
         newCall(Request.Builder().url(url).build()).execute().use { response ->

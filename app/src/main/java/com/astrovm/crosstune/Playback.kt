@@ -619,7 +619,11 @@ internal class MediaSessionPlayback(
     }
 
     /** Playing on another device, e.g. a TV a music app casts to, or a computer KDE Connect shows here. */
-    private fun MediaController.remote(): Boolean = playbackInfo?.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
+    private fun MediaController.remote(): Boolean {
+        // Up to Android 14, a session gone meanwhile answers null, though the newest SDK says it never does.
+        val info: MediaController.PlaybackInfo? = playbackInfo
+        return info?.playbackType == MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE
+    }
 
     /** A music app's own song, cast to a TV: still the phone's, played and paused from it. */
     private fun MediaController.cast(): Boolean = remote() && MusicService.ofPackage(packageName) != null

@@ -3,9 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.content.pm.ResolveInfo
-import android.content.pm.ServiceInfo
+import android.content.IntentFilter
 import android.media.browse.MediaBrowser
 import android.media.session.MediaSession
 import android.media.session.MediaSession.Token
@@ -40,10 +38,9 @@ class AppWakerTest {
     @Before
     fun service() {
         Browser.latest = null
-        shadowOf(app.packageManager).addResolveInfoForIntent(
-            Intent(MediaBrowserService.SERVICE_INTERFACE).setPackage(PACKAGE),
-            ResolveInfo().apply { serviceInfo = ServiceInfo().apply { packageName = PACKAGE; name = "MusicBrowser" } }
-        )
+        val browser = ComponentName(PACKAGE, "MusicBrowser")
+        shadowOf(app.packageManager).addServiceIfNotPresent(browser)
+        shadowOf(app.packageManager).addIntentFilterForService(browser, IntentFilter(MediaBrowserService.SERVICE_INTERFACE))
     }
 
     @Test

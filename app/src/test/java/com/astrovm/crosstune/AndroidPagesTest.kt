@@ -2,9 +2,9 @@ package com.astrovm.crosstune
 
 import android.app.Activity
 import android.app.Application
+import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.ActivityInfo
-import android.content.pm.ResolveInfo
+import android.content.IntentFilter
 import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -23,8 +23,9 @@ class AndroidPagesTest {
     private val activity: Activity = Robolectric.buildActivity(Activity::class.java).setup().get()
 
     private fun opens(action: String) {
-        val page = ResolveInfo().apply { activityInfo = ActivityInfo().apply { packageName = "com.android.settings"; name = action } }
-        shadowOf(app.packageManager).addResolveInfoForIntent(Intent(action), page)
+        val page = ComponentName("com.android.settings", action)
+        shadowOf(app.packageManager).addActivityIfNotPresent(page)
+        shadowOf(app.packageManager).addIntentFilterForActivity(page, IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) })
     }
 
     @Test
