@@ -439,10 +439,13 @@ internal class ChatGptTutor(
     ): ChatGptReply = chatGpt.ask(
         "You help someone understand the songs they listen to, often in a language they're learning. The user sends a song's lyrics, what you already said about it, and their question about it, maybe after earlier ones. " +
             "Answer the last question in ${nameOf(language)}, about this song, in at most 80 words of plain text, without headings or Markdown. " +
+            "When it asks what the lyrics and what you said don't tell, such as who made the song, search the web for this exact song, and only state what a page you found gives for it by name. " +
             "If the question isn't about the song, its artist or learning its language, say briefly that you can only help with the song.",
         "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}\n\n" +
             explanation?.let { "What you said about it:\n$it\n\n" }.orEmpty() +
             earlier.takeLast(EARLIER_QUESTIONS).joinToString("") { (asked, answered) -> "Question: $asked\nAnswer: $answered\n\n" } + "Question: $question",
+        // Asked what only the web knows, it said it couldn't look, and told the user to search themselves.
+        webSearch = true,
         effort = "low",
         onText = onText
     )
