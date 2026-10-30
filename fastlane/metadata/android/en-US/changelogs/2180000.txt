@@ -1,0 +1,5 @@
+Play all works in Spotify, and Spotify songs open as themselves, new ones too, not as a search.
+Each line lights a moment before it's sung, so you've read it by then.
+Lyrics are timed for the version that plays, and keep in time with YouTube Music by the singing.
+Songs play in the app you chose. One that can't play in the background opens in front.
+Asked about a song, ChatGPT can search the web, and knows its year and album.
