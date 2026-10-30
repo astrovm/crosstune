@@ -3474,11 +3474,12 @@ class MainActivityTest {
         val play = string(R.string.play_in_background, "YouTube Music")
         waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         click(play)
-        // Without waiting for it to give up, and left again once it plays there.
+        // Without waiting for it to give up, and left there once it plays, as behind Crosstune it would stop.
         waitUntil { phone.opened.isNotEmpty() }
         assertEquals(youTubeMusic to link, phone.opened.single())
         composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "YouTube Music", canSeek = true, appPackage = youTubeMusic) }
-        waitUntil { phone.cameBack == 1 }
+        composeRule.waitForIdle()
+        assertEquals(0, phone.cameBack)
     }
 
     @Test

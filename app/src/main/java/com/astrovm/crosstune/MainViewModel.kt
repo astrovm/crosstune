@@ -1271,7 +1271,8 @@ internal class MainViewModel(
     /**
      * [song] playing in [app], with the player on it, once [app] was [asked] to play it in the background: seen to play it
      * there, or with no way to see, that's that, as an app may say yes and not play it. An app that couldn't be asked is
-     * opened on its [exact] [link], and, when Crosstune can see it play there, left again once it does, as practice does.
+     * opened on its [exact] [link], and, when Crosstune can see it play there, left again once it does, as practice does,
+     * unless it wouldn't play in the background, where it would stop.
      * False, with the player closed, when it could be neither.
      */
     private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean): Boolean {

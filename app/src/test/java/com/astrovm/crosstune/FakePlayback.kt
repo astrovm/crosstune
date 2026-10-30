@@ -85,8 +85,9 @@ internal class FakePlayback : PlaybackSource {
         return true
     }
 
+    // As the phone's: an app that wouldn't play in the background is left in front, where it plays.
     override fun comesBack() {
-        cameBack++
+        if (startsInBackground) cameBack++
     }
 
     override fun skip(song: MusicMetadata, next: Boolean) {

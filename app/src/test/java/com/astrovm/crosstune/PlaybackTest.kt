@@ -1227,6 +1227,11 @@ class PlaybackTest {
         val played = CoroutineScope(Dispatchers.Unconfined).async { playback.playList(music, link, mustStart = true) }
         says(PlaybackState.STATE_PLAYING)
         assertTrue(played.await())
+        // It wouldn't play in the background, so opened on the song, it's left in front, where it plays: behind Crosstune it'd stop.
+        assertTrue(playback.openSong(music, link))
+        assertEquals(music, shadowOf(app).nextStartedActivity.`package`)
+        playback.comesBack()
+        assertNull(shadowOf(app).nextStartedActivity)
     }
 
     @Test
