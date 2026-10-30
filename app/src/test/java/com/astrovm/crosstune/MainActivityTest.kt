@@ -1443,6 +1443,26 @@ class MainActivityTest {
     }
 
     @Test
+    fun twoVersionsOfASongInRecentSayHowLongEachIs() {
+        val store = HistoryStore(prefs())
+        listOf(174_000L, 262_000L).forEach { length ->
+            val song = MusicMetadata("Kite", "Band", lengthMs = length)
+            val url = MusicLinks.recognizedSong(song).url
+            store.add(HistoryEntry(MusicLink(null, ItemType.TRACK, url, url), song))
+        }
+        // One of its name alone has no need to.
+        val alone = MusicMetadata("Lone", "Band", lengthMs = 200_000)
+        MusicLinks.recognizedSong(alone).url.let { store.add(HistoryEntry(MusicLink(null, ItemType.TRACK, it, it), alone)) }
+        val model = ViewModelProvider(launch())[MainViewModel::class.java]
+        assertTextShown("Band, 4:22")
+        assertTextShown("Band, 2:54")
+        assertTextAbsent("Band, 3:20")
+        // Each opens as itself.
+        composeRule.onNodeWithText("Band, 2:54").performScrollTo().performClick()
+        waitUntil { model.uiState.result?.lengthMs == 174_000L }
+    }
+
+    @Test
     fun aLongRecentListCanBeSearchedByTitleOrArtist() {
         val store = HistoryStore(prefs())
         (1..6).forEach { n ->

@@ -1294,6 +1294,21 @@ class ListeningTest {
     }
 
     @Test
+    fun twoVersionsOfASongHeardAlongAreTwoInRecent() {
+        // Of one name, as a song's single and album take can be, each as long as its app says, which is all YouTube Music tells them apart by.
+        fun kite(lengthMs: Long) = Heard.Song(
+            MusicMetadata("Kite", "Band", lengthMs = lengthMs, recordingId = RecordingKey.playing("music", null, lengthMs)), null, 0, SystemClock.elapsedRealtime()
+        )
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        hearing.next.trySend(kite(174_000))
+        waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().first().metadata.title == "Kite" }
+        hearing.next.trySend(kite(262_000))
+        waitUntil(TIMEOUT_MS) { HistoryStore(prefs()).load().first().metadata.lengthMs == 262_000L }
+        assertEquals(listOf(262_000L, 174_000L), HistoryStore(prefs()).load().filter { it.metadata.title == "Kite" }.map { it.metadata.lengthMs })
+    }
+
+    @Test
     fun aSongHeardByAnotherNameDoesntReplaceTheWordsOfTheOneAnAppPlays() {
         val phone = FakePlayback().apply {
             access = true

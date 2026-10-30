@@ -335,11 +335,15 @@ internal object MusicLinks {
     /** Google's own sites, e.g. google.com or google.com.ar, but not "notgoogle.com". */
     private fun String.isGoogle() = googleHostRegex.matches(this)
 
-    /** A song known only by name, kept as a Google search for it, as Now Playing shares it. */
+    /**
+     * A song known only by name, kept as a Google search for it, as Now Playing shares it. Its length,
+     * when the app playing it says, comes after, as a single and an album take can share a name.
+     */
     fun recognizedSong(metadata: MusicMetadata): LinkInput.RecognizedSong {
-        val canonical = "https://www.google.com/search".toHttpUrl().newBuilder()
-            .addQueryParameter("q", if (metadata.artist.isBlank()) metadata.title else "${metadata.title} by ${metadata.artist}").build().toString()
-        return LinkInput.RecognizedSong(canonical, metadata)
+        val search = "https://www.google.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("q", if (metadata.artist.isBlank()) metadata.title else "${metadata.title} by ${metadata.artist}")
+        metadata.lengthMs?.let { search.fragment("length=$it") }
+        return LinkInput.RecognizedSong(search.build().toString(), metadata)
     }
 
     private fun deezer(segments: List<String>): MusicLink? = typedItem(segments) { type, id ->

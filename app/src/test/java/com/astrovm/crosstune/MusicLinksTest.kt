@@ -348,6 +348,11 @@ class MusicLinksTest {
     fun aSongRecognizedWithoutAnArtistIsLookedUpByItsNameAlone() {
         assertEquals("https://www.google.com/search?q=Hallelujah", MusicLinks.recognizedSong(MusicMetadata("Hallelujah", "")).url)
         assertEquals("https://www.google.com/search?q=Hallelujah%20by%20Jeff%20Buckley", MusicLinks.recognizedSong(MusicMetadata("Hallelujah", "Jeff Buckley")).url)
+        // Its length, known from the app playing it, says which version it is, and the search stays the same.
+        assertEquals(
+            "https://www.google.com/search?q=Hallelujah%20by%20Jeff%20Buckley#length=413000",
+            MusicLinks.recognizedSong(MusicMetadata("Hallelujah", "Jeff Buckley", lengthMs = 413_000)).url
+        )
     }
 
     @Test

@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.abs
 
 /** A prepared destination URL, including whether matching was enabled when it was produced. */
 internal data class PreparedLink(val url: String, val exact: Boolean, val matchingEnabled: Boolean)
@@ -84,6 +85,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                         entry.metadata.tracks.forEach { put(JSONArray().put(it.title).put(it.artist).put(it.artworkUrl.orEmpty()).put(it.url.orEmpty())) }
                     })
                     .putOpt("trackCount", entry.metadata.trackCount)
+                    .putOpt("length", entry.metadata.lengthMs)
                     .put("destinations", JSONObject().apply {
                         entry.destinationLinks.forEach { (key, prepared) ->
                             put(key, JSONObject().put("url", prepared.url).put("exact", prepared.exact)
@@ -122,7 +124,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
             }
         }.orEmpty()
         val count = optInt("trackCount").takeIf { it > 0 }
-        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count), prepared)
+        val length = optLong("length").takeIf { it > 0 }
+        return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count, lengthMs = length), prepared)
     }
 
     private companion object {
@@ -134,11 +137,23 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
 /**
  * The same thing, however it was linked: one link, or the same item on the same service, e.g. a song
  * shared once from its album's page and once on its own, or one song from two apps, or searched for.
- * Two of a name on one service are two versions of it, as an upload and a release can be.
+ * Two of a name on one service are two versions of it, as an upload and a release can be, and so are
+ * two of a name as long as two versions are.
  */
 private fun HistoryEntry.isSameAs(other: HistoryEntry): Boolean =
     link.url == other.link.url ||
         (link.service != null && link.service == other.link.service && link.type == other.link.type && link.id == other.link.id) ||
         (link.type == ItemType.TRACK && other.link.type == ItemType.TRACK && (link.service == null || link.service != other.link.service) &&
-            SongNames.normalize(metadata.title).let { it.isNotEmpty() && it == SongNames.normalize(other.metadata.title) } &&
-            SongNames.normalize(metadata.artist) == SongNames.normalize(other.metadata.artist))
+            metadata.isNamedAs(other.metadata) && mayBeAsLongAs(other))
+
+/** The same name, by the same artist, as Recent tells a song's versions apart by. */
+internal fun MusicMetadata.isNamedAs(other: MusicMetadata) =
+    SongNames.normalize(title).let { it.isNotEmpty() && it == SongNames.normalize(other.title) } &&
+        SongNames.normalize(artist) == SongNames.normalize(other.artist)
+
+/** Not known to be of different lengths, a second or so apart being the same, as apps don't always agree on one. */
+private fun HistoryEntry.mayBeAsLongAs(other: HistoryEntry): Boolean {
+    val length = metadata.lengthMs ?: return true
+    val otherLength = other.metadata.lengthMs ?: return true
+    return abs(length - otherLength) <= SAME_RECORDING_LENGTH_MS
+}
