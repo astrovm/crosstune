@@ -86,11 +86,17 @@ internal data class SavedLine(
     fun readAs(readings: List<String>): SavedLine {
         val parts = ruby
         if (parts == null) {
-            val word = readings.firstOrNull()?.trim()?.let(Readings::hiragana)?.takeIf { it.isNotEmpty() && it.all(Readings::isKana) && line != null } ?: return this
+            val first = readings.firstOrNull() ?: return this
+            val word = Readings.hiragana(first.trim())
+            if (word.isEmpty() || !word.all(Readings::isKana) || line == null) return this
             return copy(reading = word, romanized = Readings.romaji(word), readByHand = true, typed = Readings.romaji(word, typed = true).takeIf { it != Readings.romaji(word) })
         }
         val shown = readable
-        val fixes = shown.indices.mapNotNull { index -> readings.getOrNull(index)?.trim()?.takeIf { it != shown[index].reading }?.let { ReadingFix(0, shown[index].text, it) } }
+        val fixes = shown.indices.mapNotNull { index ->
+            val given = readings.getOrNull(index) ?: return@mapNotNull null
+            val fixed = given.trim()
+            if (fixed == shown[index].reading) null else ReadingFix(0, shown[index].text, fixed)
+        }
         val read = Readings.corrected(listOf(LineReading(parts, reading ?: text, romanized.orEmpty(), typed ?: romanized.orEmpty())), fixes).first()
         if (read.parts == parts) return this
         return copy(ruby = read.parts, reading = read.reading, romanized = read.romanized.takeIf { it.isNotBlank() }, readByHand = true, typed = read.typed.takeIf { it.isNotBlank() && it != read.romanized })
@@ -245,12 +251,13 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     /** Keeps each line kept as the first of [changes] as the second, practised as far as it had been. */
     fun replaceAll(changes: List<Pair<SavedLine, SavedLine>>): List<SavedLine> =
-        save(load().map { kept -> changes.firstOrNull { it.first.isSame(kept) }?.second ?: kept })
+        save(load().map { kept -> changes.firstOrNull { it.first.isSame(kept) }.let { change -> if (change == null) kept else change.second } })
 
     /** Puts how [lines] read, as kept, on the same lines kept before, but for those read by hand. */
     fun reread(lines: List<SavedLine>): List<SavedLine> = save(
         load().map { kept ->
-            lines.firstOrNull { it.isSame(kept) }?.takeIf { !kept.readByHand }?.let { kept.copy(reading = it.reading, romanized = it.romanized, ruby = it.ruby, typed = it.typed) } ?: kept
+            val again = lines.firstOrNull { it.isSame(kept) }
+            if (again == null || kept.readByHand) kept else kept.copy(reading = again.reading, romanized = again.romanized, ruby = again.ruby, typed = again.typed)
         }
     )
 
@@ -299,11 +306,12 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     /** The days it waits, or, saved before Anki's way, as long as its old box did. */
     private fun JSONObject.interval(): Int = if (has("interval")) optInt("interval") else optInt("box").let { if (it > 0) LEGACY_DAYS[minOf(it, LEGACY_DAYS.size) - 1] else 0 }
 
-    private fun JSONObject.reviews(): Map<String, Review> = optJSONObject("reviews")?.let { json ->
-        json.keys().asSequence().mapNotNull { id ->
+    private fun JSONObject.reviews(): Map<String, Review> {
+        val json = optJSONObject("reviews") ?: return emptyMap()
+        return json.keys().asSequence().mapNotNull { id ->
             json.optJSONObject(id)?.let { id to Review(it.optInt("interval"), it.optInt("ease", START_EASE), it.optInt("step"), it.optLong("due")) }
         }.toMap()
-    } ?: emptyMap()
+    }
 
     private fun reviewsJson(reviews: Map<String, Review>) = JSONObject().apply {
         reviews.forEach { (id, review) -> put(id, JSONObject().put("interval", review.interval).put("ease", review.ease).put("step", review.step).put("due", review.due)) }

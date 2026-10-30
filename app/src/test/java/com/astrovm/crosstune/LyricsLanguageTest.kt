@@ -95,7 +95,7 @@ class LyricsLanguageTest {
     @Test
     fun withoutAnAndroidTextClassifierServiceItCantBeTold() = runBlocking {
         val without = object : android.content.ContextWrapper(app) {
-            override fun <T : Any?> getSystemService(serviceClass: Class<T>): T? = null
+            override fun getSystemServiceName(serviceClass: Class<*>): String? = null
         }
         assertNull(AndroidLyricsLanguage(without, Dispatchers.Unconfined).of(listOf("Night sky")))
     }

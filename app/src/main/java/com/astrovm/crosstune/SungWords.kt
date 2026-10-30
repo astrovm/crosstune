@@ -62,16 +62,14 @@ internal class SingingListener(
     override suspend fun hear(language: String?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
         val recording = withContext(recordDispatcher) { sound.open() } ?: return null
-        var model: File? = null
+        val file: File
         val heard = recording.use {
             // The model first, so what's heard is fresh when it's listened to.
-            model = this.model()
-            missesModel = model == null
-            if (model == null) return null
+            file = this.model().also { missesModel = it == null } ?: return null
             withContext(recordDispatcher) { record(recording) }
         } ?: return null
         val words = withContext(computeDispatcher) {
-            val hears = hearing(model ?: return@withContext null) ?: return@withContext null
+            val hears = hearing(file) ?: return@withContext null
             try {
                 hears.words(FloatArray(heard.second.size) { heard.second[it] / 32768f }, language)
             } finally {
@@ -183,7 +181,7 @@ internal object SungAlignment {
         return pairs.groupBy { (_, t) -> timed[t].line }.mapNotNull { (line, its) ->
             val startMs = if (lines[line].words.isNotEmpty()) {
                 val offs = its.mapNotNull { (h, t) -> timed[t].ms?.let { heard[h].second - it } }
-                offs.takeIf { it.size >= 2 }?.sorted()?.let { it[it.size / 2] + lines[line].timeMs }
+                if (offs.size >= 2) offs.sorted().let { it[it.size / 2] + lines[line].timeMs } else null
             } else {
                 val (h, t) = its.first()
                 val before = t - timed.indexOfFirst { it.line == line }
@@ -337,7 +335,10 @@ internal class SungStore(private val preferences: SharedPreferences) {
         preferences.edit { putString(KEY, all.joinToString("\n")) }
     }
 
-    private fun all(): Set<String> = preferences.getString(KEY, null)?.split('\n')?.toCollection(LinkedHashSet()) ?: emptySet()
+    private fun all(): Set<String> {
+        val kept = preferences.getString(KEY, null) ?: return emptySet()
+        return kept.split('\n').toCollection(LinkedHashSet())
+    }
 
     /** Other words for the song are timed their own way, so they're heard again. */
     private fun keyOf(song: MusicMetadata, lines: List<LyricLine>) =

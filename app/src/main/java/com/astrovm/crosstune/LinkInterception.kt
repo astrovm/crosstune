@@ -155,7 +155,7 @@ internal class LinkInterception(private val context: Context) {
     @RequiresApi(Build.VERSION_CODES.S)
     private fun claims(states: List<Pair<LinkApp, DomainVerificationUserState>>, wanted: List<String>): Map<LinkApp, Boolean> =
         states.filter { (_, state) ->
-            state.hostToStateMap.any { (host, hostState) ->
+            state.hostToStateMap.any { (host, hostState: Int) ->
                 hostState != DomainVerificationUserState.DOMAIN_STATE_NONE && wanted.any { covers(it, host) }
             }
         }.associate { (app, state) -> app to state.isLinkHandlingAllowed }

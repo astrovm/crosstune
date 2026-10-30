@@ -13,9 +13,11 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 /** The launcher's shortcuts: the latest songs, and where a shortcut that was used leads. */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AppShortcutsTest {
 
     private val app: Application = ApplicationProvider.getApplicationContext()
@@ -41,7 +43,7 @@ class AppShortcutsTest {
     fun withoutAShortcutServiceNothingIsChanged() = runBlocking {
         shortcuts().update(listOf(song(1, null)), shareSheet = false, app = null)
         val without = object : ContextWrapper(app) {
-            override fun <T : Any?> getSystemService(serviceClass: Class<T>): T? = null
+            override fun getSystemServiceName(serviceClass: Class<*>): String? = null
         }
         shortcuts(without).update(emptyList(), shareSheet = false, app = null)
         assertEquals(listOf("Title 1"), listed())

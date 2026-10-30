@@ -418,6 +418,29 @@ class SungWordsTest {
         assertEquals(1, listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null)!!.words.size)
     }
 
+    @Test
+    fun aModelThatFailsWhileHearingIsStillClosedIfItNeedsToBe() = runBlocking {
+        val closing = object : WordHearing, Closeable {
+            var closed = false
+            override fun words(samples: FloatArray, language: String?): List<HeardWord> = error("no ears")
+            override fun close() {
+                closed = true
+            }
+        }
+        val failed = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = closing).hear(null) }
+        assertEquals("no ears", failed.exceptionOrNull()?.message)
+        assertTrue(closing.closed)
+        // One that isn't closed needn't be, and fails the same.
+        val open = WordHearing { _, _ -> error("no ears either") }
+        val failedOpen = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null) }
+        assertEquals("no ears either", failedOpen.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun aSingleWordHeardOfTheSongIsntEnoughToFindLinesFarOff() {
+        assertNull(SungAlignment.shiftMs(Sung(0, listOf(HeardWord("Every", 500))), fromTheStart, verseAndChorus))
+    }
+
     private val modelBytes = "a model, as far as a test knows".toByteArray()
     private val modelSha = MessageDigest.getInstance("SHA-256").digest(modelBytes).joinToString("") { "%02x".format(it) }
 

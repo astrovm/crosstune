@@ -49,7 +49,7 @@ internal class ArtworkLoader(
     suspend fun load(url: String): ImageBitmap? {
         cache[url]?.let { return it }
         // A cover a music app showed, kept here as a file; none other is read.
-        if (url.startsWith("file:")) return withContext(ioDispatcher) { kept(url)?.let(::readCached) }?.asImageBitmap()?.also { cache.put(url, it) }
+        if (url.startsWith("file:")) return withContext(ioDispatcher) { kept(url)?.let(::readCached) }?.let { bitmap -> bitmap.asImageBitmap().also { cache.put(url, it) } }
         val file = cacheDir?.let { File(it, fileName(url)) }
         val bitmap = file?.let { withContext(ioDispatcher) { readCached(it) } } ?: download(url, file) ?: return null
         return bitmap.asImageBitmap().also { cache.put(url, it) }
@@ -57,7 +57,7 @@ internal class ArtworkLoader(
 
     /** The file [url] names, when it's one kept with the covers. */
     private fun kept(url: String): File? {
-        val dir = cacheDir?.canonicalFile ?: return null
+        val dir = (cacheDir ?: return null).canonicalFile
         val file = runCatching { File(URI(url)).canonicalFile }.getOrNull() ?: return null
         return file.takeIf { it.parentFile == dir }
     }

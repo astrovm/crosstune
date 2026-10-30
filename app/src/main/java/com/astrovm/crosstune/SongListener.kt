@@ -130,17 +130,20 @@ internal class Shazam(
         val title = track.optString("title").takeIf { it.isNotBlank() } ?: return Heard.Nothing
         val actions = track.optJSONObject("hub")?.optJSONArray("actions") ?: JSONArray()
         val appleMusicId = (0 until actions.length()).mapNotNull(actions::optJSONObject)
-            .firstOrNull { it.optString("type") == "applemusicplay" }?.optString("id")?.takeIf { it.isNotBlank() }
+            .firstOrNull { it.optString("type") == "applemusicplay" }.text("id")
         val metadata = MusicMetadata(
             title = title,
             artist = track.optString("subtitle"),
-            artworkUrl = track.optJSONObject("images")?.optString("coverart")?.takeIf { it.isNotBlank() }
+            artworkUrl = track.optJSONObject("images").text("coverart")
         )
         val match = JSONObject(body).optJSONArray("matches")?.optJSONObject(0)
         // How far into the song the sound sent starts, in seconds.
         val offset = match?.optDouble("offset")?.takeIf { it.isFinite() && it >= 0 }
-        return Heard.Song(metadata, appleMusicId, offset?.let { (it * 1000).toLong() }, matchId = match?.optString("id")?.takeIf { it.isNotBlank() })
+        return Heard.Song(metadata, appleMusicId, offset?.let { (it * 1000).toLong() }, matchId = match.text("id"))
     }
+
+    /** What Shazam says under [key], when it says anything. */
+    private fun JSONObject?.text(key: String): String? = if (this == null) null else optString(key).takeIf { it.isNotBlank() }
 
     companion object {
         private val JSON = "application/json".toMediaType()

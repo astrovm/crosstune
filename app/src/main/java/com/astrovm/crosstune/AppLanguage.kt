@@ -71,7 +71,7 @@ internal object AppLanguage {
         if (sdk >= Build.VERSION_CODES.TIRAMISU) {
             // Android recreates the screen in the new language.
             activity.getSystemService(LocaleManager::class.java).applicationLocales =
-                tag?.let(LocaleList::forLanguageTags) ?: LocaleList.getEmptyLocaleList()
+                if (tag == null) LocaleList.getEmptyLocaleList() else LocaleList.forLanguageTags(tag)
         } else {
             preferences(activity).edit { if (tag == null) remove(KEY) else putString(KEY, tag) }
             activity.recreate()
