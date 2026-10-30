@@ -681,9 +681,12 @@ class MainViewModelTest {
         // A song with a link of its own is opened as that link, as if it had been pasted.
         model.chooseSong(MusicMetadata("Hush", "Band", url = "https://www.deezer.com/track/4"))
         assertEquals("https://www.deezer.com/track/4", model.uiState.linkText)
+        // Its lookup runs on another thread and ends by clearing the box, which would clear the next song's name as well.
+        until("looked the link up") { !model.uiState.isLoading }
         // One without is looked up by its name.
         model.chooseSong(MusicMetadata("Moon", "Luna"))
         assertEquals(MusicLinks.recognizedSong(MusicMetadata("Moon", "Luna")).text, model.uiState.linkText)
+        until("looked the song up") { !model.uiState.isLoading }
         model.openNamedSong("Stars", "Orbit")
         assertEquals(MusicLinks.recognizedSong(MusicMetadata("Stars", "Orbit")).text, model.uiState.linkText)
     }
@@ -1077,5 +1080,108 @@ class MainViewModelTest {
         assertTrue(model.readyForCopy)
         model.onUrlChange("https://open.spotify.com/track/abc")
         assertFalse(model.readyForCopy)
+    }
+
+    private val ytMusic = MusicService.YOUTUBE_MUSIC.packageName
+    private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
+
+    /** A model with YouTube Music on the phone and set as where songs go, and [ytLink] looked up, shown as the result. */
+    private fun ytMusicModel(playback: FakePlayback, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null): MainViewModel {
+        shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
+        val model = model(playback = playback, phone = phone, oneTap = oneTap)
+        model.refreshSystemState()
+        idle()
+        model.onUrlChange(ytLink)
+        model.resolveTypedInput()
+        until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
+        return model
+    }
+
+    private fun appPlays(playback: FakePlayback, playing: Boolean = true) {
+        playback.playing.value = Following(PlaybackClock(0, android.os.SystemClock.elapsedRealtime(), playing = playing), "Music", canSeek = true, appPackage = ytMusic)
+    }
+
+    @Test
+    fun aSongAskedOfItsAppPlaysInThePlayerAndOnlyOpensTheAppWhenItWouldNot() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        assertTrue(model.uiState.canPlayResult)
+        // Asked, and seen playing: Crosstune stays, in its player.
+        model.playResult()
+        idle()
+        assertEquals(ytLink, playback.linksAsked.single())
+        assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
+        assertTrue(model.uiState.playingResult)
+        appPlays(playback)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(effects.isEmpty())
+        // Already in its app, paused: it carries on, not asked again.
+        model.closePlayer()
+        appPlays(playback, playing = false)
+        model.playResult()
+        until("carried on") { playback.plays.isNotEmpty() }
+        assertEquals(listOf(true), playback.plays.toList())
+        assertEquals(1, playback.songsAsked.size)
+        // Asked, never playing: opened on its link, left to come back.
+        model.closePlayer()
+        playback.playing.value = null
+        model.playResult()
+        idle()
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("opened there") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+        // And it waits again for the app to play it there, before leaving it.
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("came back") { playback.cameBack == 1 }
+        // Its app gone, there is no player: the app is opened by the system.
+        model.closePlayer()
+        playback.opens = false
+        model.playResult()
+        pass(MainViewModel.LOAD_SONG_MS + 1_000)
+        until("opened by the system") { effects.isNotEmpty() }
+        assertNull(model.uiState.player)
+        assertTrue(effects.single() is Effect.Open)
+    }
+
+    @Test
+    fun aSongItsAppCantBeAskedForIsOpenedThereAndWithNoAccessIsTakenAsPlayed() {
+        val playback = FakePlayback().apply { access = false; canPlaySongs = false }
+        val model = ytMusicModel(playback)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.playResult()
+        until("opened by the system") { effects.isNotEmpty() }
+        assertTrue(playback.songsAsked.isEmpty())
+        assertNull(model.uiState.player)
+        // With no way to see the app play, being asked is enough.
+        playback.canPlaySongs = true
+        model.playResult()
+        until("asked") { playback.songsAsked.isNotEmpty() }
+        until("done") { !model.uiState.playingResult }
+        assertEquals(1, effects.size)
+        assertEquals("Dakare Ni Kita Onna", model.uiState.player?.song?.title)
+    }
+
+    @Test
+    fun onATvPlayingWaitsForTheWordsToBeAllowedOverTheApp() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback, phone = Phone.TV)
+        model.playResult()
+        idle()
+        assertEquals(Need.Float, model.uiState.fixes?.need)
+        assertTrue(playback.songsAsked.isEmpty())
+        model.closeFixes()
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("asked") { playback.songsAsked.isNotEmpty() }
+        // Nothing to play with no song, or from a destination that isn't an app.
+        val bare = model()
+        bare.playResult()
+        idle()
+        assertNull(bare.uiState.player)
     }
 }
