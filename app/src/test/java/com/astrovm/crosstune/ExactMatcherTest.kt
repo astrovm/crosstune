@@ -8,8 +8,6 @@ import okhttp3.Request
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.ForwardingSource
 import okio.buffer
-import org.json.JSONArray
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -613,11 +611,6 @@ class ExactMatcherTest {
     }
 
     /** An artist's most played songs, as Spotify's embed page for them lists them: name, artists, id and length. */
-    private fun artistPage(vararg songs: Triple<String, String, Int>) = """<script id="__NEXT_DATA__" type="application/json">""" +
-        JSONObject().put("props", JSONObject().put("pageProps", JSONObject().put("state", JSONObject().put("data", JSONObject().put("entity", JSONObject().put("trackList", JSONArray(
-            songs.map { (title, id, seconds) -> JSONObject().put("title", title).put("subtitle", "Stella Lefty, Someone").put("uri", "spotify:track:$id").put("duration", seconds * 1000) }
-        ))))))).toString() + "</script>"
-
     @Test
     fun aNewSpotifySongListenBrainzDoesntKnowYetIsFoundAmongItsArtistsMostPlayed() {
         val single = "1singleAAAAAAAAAAAAAAA"
@@ -625,7 +618,7 @@ class ExactMatcherTest {
         fake.handler = { request ->
             when (request.url.host) {
                 "labs.api.listenbrainz.org" -> FakeSpotify.html(request, """[{"spotify_track_ids":[]}]""")
-                else -> FakeSpotify.html(request, artistPage(Triple("Other", "3otherCCCCCCCCCCCCCCCC", 200), Triple("Boston", acoustic, 150), Triple("Boston", single, 171)))
+                else -> FakeSpotify.html(request, FakeSpotify.artistPage("Stella Lefty, Someone", Triple("Other", "3otherCCCCCCCCCCCCCCCC", 200), Triple("Boston", acoustic, 150), Triple("Boston", single, 171)))
             }
         }
         val asked = mutableListOf<String>()
@@ -638,6 +631,10 @@ class ExactMatcherTest {
         // Not among them, or an artist Spotify's unknown for, it isn't found.
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.SPOTIFY, song.copy(title = "Jaded")) })
         assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.SPOTIFY, song.copy(artist = "Nobody")) })
+        // With no artist named, there's no one's songs to look among.
+        val before = asked.size
+        assertNull(runBlocking { matcher.find(MusicService.SPOTIFY, song.copy(artist = "")) })
+        assertEquals(before, asked.size)
     }
 
     @Test

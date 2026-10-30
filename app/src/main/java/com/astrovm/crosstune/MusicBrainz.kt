@@ -172,17 +172,19 @@ internal class MusicBrainz(
         }
     }
 
-    private companion object {
+    companion object {
         /** Whose turn it is to ask, and when it last was: the app's, and its queue's, which looks songs up on its own. */
-        val turn = Mutex()
+        private val turn = Mutex()
         private var askedAt = 0L
 
-        const val API = "https://musicbrainz.org/ws/2"
-        val SPOTIFY_ARTIST = Regex("""https://open\.spotify\.com/artist/([A-Za-z0-9]{22})""")
+        /** How long to leave between two requests, as MusicBrainz takes one a second. */
         const val ASK_GAP_MS = 1100L
-        const val YEAR_DIGITS = 4
+
+        private const val API = "https://musicbrainz.org/ws/2"
+        private val SPOTIFY_ARTIST = Regex("""https://open\.spotify\.com/artist/([A-Za-z0-9]{22})""")
+        private const val YEAR_DIGITS = 4
 
         /** A song's recordings from its first year whose albums are looked at, to stay inside MusicBrainz's one request a second. */
-        const val RECORDINGS_TRIED = 3
+        private const val RECORDINGS_TRIED = 3
     }
 }

@@ -73,7 +73,8 @@ class MainActivity : ComponentActivity() {
                 val musicBrainz = MusicBrainz(
                     client,
                     packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
-                    LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
+                    LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000),
+                    gapMs = musicBrainzGapMs
                 )
                 // What ChatGPT said is kept, so a song read again asks nothing.
                 val tutor = ChatGptTutor(
@@ -328,7 +329,8 @@ class MainActivity : ComponentActivity() {
             val musicBrainz = MusicBrainz(
                 client,
                 app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty(),
-                LookupCache(File(app.cacheDir, "queue_musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
+                LookupCache(File(app.cacheDir, "queue_musicbrainz.json"), lookupDispatcher, maxEntries = 1000),
+                gapMs = musicBrainzGapMs
             )
             // Given longer than a screen's lookups, as nobody waits on them: a new Spotify song's artist, looked up
             // on MusicBrainz first, took over the 5 seconds, and the song was left out of the list.
@@ -372,6 +374,10 @@ class MainActivity : ComponentActivity() {
         /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */
         @VisibleForTesting
         internal var lookAheadLyrics: Boolean = true
+
+        /** How long MusicBrainz is left between requests; tests don't wait. */
+        @VisibleForTesting
+        internal var musicBrainzGapMs: Long = MusicBrainz.ASK_GAP_MS
 
         /** How long lyrics wait before asking a busy LRCLIB again; tests don't wait. */
         @VisibleForTesting
