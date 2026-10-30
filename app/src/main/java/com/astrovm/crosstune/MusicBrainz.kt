@@ -62,8 +62,12 @@ internal class MusicBrainz(
         val wanted = SongNames.artists(song.artist)
         // The same recordings of the song by the same artist, the earliest out first. The first of them is
         // where the song first came out: its live takes, remixes and covers come after it.
-        val recordings = search(title, artist).filter { isTheSong(it, song.title, wanted) }.sortedBy { it.getString("first-release-date") }
+        val found = search(title, artist).filter { isTheSong(it, song.title, wanted) }.sortedBy { it.getString("first-release-date") }
+        val recordings = found.filter { it.optString("disambiguation").isEmpty() }
         val year = recordings.firstOrNull()?.let { yearOf(it.getString("first-release-date")) } ?: return null
+        // A recording with a note, "live, 1997" or "radio edit", isn't the song's first. But one from before that
+        // year might be, as the original of "Creep" is noted "explicit": it isn't sure when the song came out.
+        if (found.any { (yearOf(it.getString("first-release-date")) ?: year) < year }) return null
         // The album is looked for on the recordings from that year, as the one asked about may be on none that
         // MusicBrainz lists with it: a plain album is its song's own, a compilation's or a live one is another's.
         val album = recordings.filter { yearOf(it.getString("first-release-date")) == year }.take(RECORDINGS_TRIED)
@@ -83,13 +87,13 @@ internal class MusicBrainz(
     }
 
     /**
-     * Whether [recording] is the song [title] by [wanted] and not another take of it: a recording with a note,
-     * "live, 1997" or "radio edit", or only on live albums, is one. Nor does one without a date say when.
+     * Whether [recording] is the song [title] by [wanted] and not another take of it: one only on live albums is
+     * one. Nor does one without a date say when.
      */
     private fun isTheSong(recording: JSONObject, title: String, wanted: Set<String>): Boolean {
         val releases = recording.optJSONArray("releases").objects()
         val live = releases.isNotEmpty() && releases.all { release -> "Live" in strings(release.optJSONObject("release-group")?.optJSONArray("secondary-types")) }
-        return recording.optString("disambiguation").isEmpty() && !live && yearOf(recording.optString("first-release-date")) != null &&
+        return !live && yearOf(recording.optString("first-release-date")) != null &&
             SongNames.same(recording.optString("title"), title) && credited(recording).any(wanted::contains)
     }
 

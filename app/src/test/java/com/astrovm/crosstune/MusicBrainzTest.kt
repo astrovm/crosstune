@@ -120,7 +120,7 @@ class MusicBrainzTest {
         assertEquals(ReleaseFacts(1990, "Canción animal"), facts())
         // The first three of that year only.
         assertEquals(listOf("a", "b", "c"), fake.requestedUrls.drop(1).map { it.toHttpUrl().queryParameter("recording") })
-        answering(listOf(recording("a", "1990")), mapOf("a" to listOf(group("Hits", "1990", listOf("Compilation")))))
+        answering(listOf(recording("a", "1990", title = "Other")), mapOf("a" to listOf(group("Hits", "1990", listOf("Compilation")))))
         assertEquals(ReleaseFacts(1990, null), facts(MusicMetadata("Other", "Soda Stereo"), brainz(File(folder.root, "other.json"))))
     }
 
@@ -128,10 +128,10 @@ class MusicBrainzTest {
     fun anAlbumTheYearAfterCountsAndTwoAlbumsOutTheSameDayAreNone() {
         answering(listOf(recording("a", "1990")), mapOf("a" to listOf(group("Second", "1991-02"), group("Third", "1992"))))
         assertEquals(ReleaseFacts(1990, "Second"), facts())
-        answering(listOf(recording("a", "1990")), mapOf("a" to listOf(group("First", "1990-04"), group("Other", "1990-04"), group("Second", "1990-05"))))
+        answering(listOf(recording("a", "1990", title = "Another")), mapOf("a" to listOf(group("First", "1990-04"), group("Other", "1990-04"), group("Second", "1990-05"))))
         assertEquals(ReleaseFacts(1990, null), facts(MusicMetadata("Another", "Soda Stereo"), brainz(File(folder.root, "tie.json"))))
         // The same album twice, as two editions of it, isn't two.
-        answering(listOf(recording("a", "1990")), mapOf("a" to listOf(group("First", "1990-04", id = "one"), group("First", "1990-04", id = "two"))))
+        answering(listOf(recording("a", "1990", title = "Third")), mapOf("a" to listOf(group("First", "1990-04", id = "one"), group("First", "1990-04", id = "two"))))
         assertEquals(ReleaseFacts(1990, "First"), facts(MusicMetadata("Third", "Soda Stereo"), brainz(File(folder.root, "twice.json"))))
     }
 
@@ -144,15 +144,25 @@ class MusicBrainzTest {
                 recording("other-artist", "1982", credit = "Soda Stereo Tribute"),
                 recording("no-date", null),
                 recording("live-only", "1983", on = listOf(group("En vivo", "1983", listOf("Live")), group("En vivo 2", "1984", listOf("Live", "Compilation")))),
-                recording("noted", "1984", note = "radio edit"),
+                recording("noted", "1992", note = "radio edit"),
                 recording("studio", "1991")
             ),
             mapOf("studio" to listOf(group("Canción animal", "1991")))
         )
         assertEquals(ReleaseFacts(1991, "Canción animal"), facts())
         // Nothing left is no answer.
-        answering(listOf(recording("noted", "1984", note = "live")))
+        answering(listOf(recording("noted", "1984", title = "Another", note = "live")))
         assertNull(facts(MusicMetadata("Another", "Soda Stereo"), brainz(File(folder.root, "none.json"))))
+    }
+
+    @Test
+    fun aNotedRecordingFromBeforeTheFirstOneLeavesItUnsure() {
+        // The year of one that came out in 1992 with a note, and the next in 1995 without, isn't known.
+        answering(listOf(recording("explicit", "1992", note = "explicit"), recording("plain", "1995")), mapOf("plain" to listOf(group("Canción animal", "1995"))))
+        assertNull(facts())
+        // The same year, or after, isn't a doubt.
+        answering(listOf(recording("explicit", "1995", note = "explicit"), recording("plain", "1995")), mapOf("plain" to listOf(group("Canción animal", "1995"))))
+        assertEquals(ReleaseFacts(1995, "Canción animal"), facts(brainz = brainz(File(folder.root, "same.json"))))
     }
 
     @Test
