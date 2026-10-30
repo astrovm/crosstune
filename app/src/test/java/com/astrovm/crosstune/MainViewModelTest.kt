@@ -66,7 +66,8 @@ class MainViewModelTest {
         lyricsFinder: LyricsFinder? = null,
         songSearcher: SongSearcher? = null,
         reports: ReportSender? = null,
-        listener: SongHearing = SongHearing { Heard.Nothing }
+        listener: SongHearing = SongHearing { Heard.Nothing },
+        queueOrder: QueueOrder? = null
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -87,7 +88,8 @@ class MainViewModelTest {
             sleepTimer = sleepTimer,
             phone = phone,
             songSearcher = songSearcher,
-            reports = reports
+            reports = reports,
+            queueOrder = queueOrder
         ).also { made += it }
     }
 
@@ -193,14 +195,14 @@ class MainViewModelTest {
 
     private val song = MusicMetadata("Hush", "Band")
 
-    private fun following(playing: Boolean = true, app: String = "com.spotify", skipNext: Boolean = false, skipPrevious: Boolean = false, seek: Boolean = true, shuffle: Boolean? = null, repeat: Repeat? = null, like: AppAction? = null) =
-        Following(PlaybackClock(1_000, android.os.SystemClock.elapsedRealtime(), playing = playing), "Spotify", seek, app, canSkipNext = skipNext, canSkipPrevious = skipPrevious, shuffle = shuffle, repeat = repeat, like = like)
+    private fun following(playing: Boolean = true, app: String = "com.spotify", skipNext: Boolean = false, skipPrevious: Boolean = false, seek: Boolean = true, shuffle: Boolean? = null, repeat: Repeat? = null, like: AppAction? = null, upNext: List<Queued> = emptyList()) =
+        Following(PlaybackClock(1_000, android.os.SystemClock.elapsedRealtime(), playing = playing), "Spotify", seek, app, canSkipNext = skipNext, canSkipPrevious = skipPrevious, shuffle = shuffle, repeat = repeat, like = like, upNext = upNext)
 
     /** A model whose music app plays [song], offered as playing now, with the player open on it when [open]. */
-    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null, listener: SongHearing = SongHearing { Heard.Nothing }): MainViewModel {
+    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null, listener: SongHearing = SongHearing { Heard.Nothing }, queueOrder: QueueOrder? = null): MainViewModel {
         playback.access = true
         playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
-        val model = model(playback = playback, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports, listener = listener)
+        val model = model(playback = queueOrder?.ordering(playback) ?: playback, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports, listener = listener, queueOrder = queueOrder)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         if (open) {
@@ -1183,5 +1185,101 @@ class MainViewModelTest {
         bare.playResult()
         idle()
         assertNull(bare.uiState.player)
+    }
+
+    @Test
+    fun thePlayersUpNextIsMovedAmongTheAppsSongsAndTheListsOwnApartWhereTheyCantMeet() {
+        val playback = FakePlayback()
+        val order = QueueOrder(playback, MainScope())
+        playback.playing.value = following(upNext = listOf(Queued("A", "x", 1), Queued("B", "x", 2), Queued("L1", "y"), Queued("L2", "y")))
+        val model = playingModel(playback, queueOrder = order)
+        val upNext = { model.uiState.player?.following?.upNext?.map { it.title } }
+        until("following") { upNext() != null }
+        // One of the app's onto one of the list's, or either one out of the queue, is no move.
+        model.playerMoveQueued(0, 2)
+        model.playerMoveQueued(2, 0)
+        model.playerMoveQueued(9, 0)
+        model.playerMoveQueued(0, 9)
+        // The list's own are the list's to move, and there is none here.
+        model.playerMoveQueued(2, 3)
+        model.playerPlayLater(2)
+        idle()
+        assertEquals(listOf("A", "B", "L1", "L2"), upNext())
+        assertTrue(model.uiState.player?.played == true)
+        // The app's are moved by the order Crosstune keeps over theirs.
+        model.playerMoveQueued(0, 1)
+        until("moved") { upNext() == listOf("B", "A", "L1", "L2") }
+        order.off()
+    }
+
+    @Test
+    fun aPlayerTheAppLetGoIsAskedAgainAndOnATvOpenedCoveredWhenItWontPlayInTheBackground() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback, phone = Phone.TV)
+        model.setCanFloatOverApps(true)
+        model.playResult()
+        until("asked") { playback.songsAsked.isNotEmpty() }
+        // Still being asked for, a second ask would start it over.
+        model.playerPlayPause()
+        idle()
+        assertEquals(1, playback.songsAsked.size)
+        appPlays(playback)
+        until("done") { !model.uiState.playingResult }
+        // The app lets go; asked again, it won't, and on a TV it is opened on the song, covered.
+        playback.playing.value = null
+        until("let go") { model.uiState.player?.following == null }
+        playback.canPlaySongs = false
+        model.playerPlayPause()
+        until("opened on it") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to ytLink, playback.opened.single())
+    }
+
+    @Test
+    fun aSongOfAListOpensAsItsOwnLinkOrAsTheVideoOfTheOtherYouTubeOrIsLookedUpAndSaysWhenMissing() {
+        val playback = FakePlayback().apply { access = true }
+        val model = ytMusicModel(playback)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.openTrack(MusicMetadata("A", "x", url = ytLink))
+        until("opened") { effects.size == 1 }
+        assertTrue((effects[0] as Effect.Open).url.contains("sPmul8b17AU") && (effects[0] as Effect.Open).packageName == ytMusic)
+        model.openTrack(MusicMetadata("B", "x", url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"))
+        until("opened the video") { effects.size == 2 }
+        assertTrue((effects[1] as Effect.Open).url.startsWith("https://music.youtube.com/") && "dQw4w9WgXcQ" in (effects[1] as Effect.Open).url)
+        // One with no link is looked up, and where it isn't, searched, or offered, or opened where it came from, as set.
+        val search = "https://music.youtube.com/search?q=Moon%20Luna"
+        val searched = { effects.map { it as Effect.Open }.takeLast(1).map { it.url to it.packageName } }
+        model.selectNotFoundAction(NotFoundAction.SEARCH)
+        model.openTrack(MusicMetadata("Moon", "Luna"))
+        until("searched") { effects.size == 3 }
+        assertEquals(listOf(search to ytMusic), searched())
+        assertEquals("SEARCH", prefs().getString("not_found", null))
+        // With no link it came from, "where it came from" is a search too.
+        model.selectNotFoundAction(NotFoundAction.ORIGINAL)
+        model.openTrack(MusicMetadata("Moon", "Luna"))
+        until("searched again") { effects.size == 4 }
+        assertEquals(listOf(search to ytMusic), searched())
+        // With one, it opens there.
+        val spotify = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"
+        model.openTrack(MusicMetadata("Moon", "Luna", url = spotify))
+        until("opened where it came from") { effects.size == 5 }
+        assertEquals(listOf(spotify to MusicService.SPOTIFY.packageName), searched())
+        // Asked, it is offered both ways, and either one is taken or the offer is let go.
+        model.selectNotFoundAction(NotFoundAction.ASK)
+        model.openTrack(MusicMetadata("Moon", "Luna", url = spotify))
+        until("offered") { model.uiState.notFoundOffer != null }
+        model.takeNotFoundOffer(original = true)
+        assertNull(model.uiState.notFoundOffer)
+        assertEquals(listOf(spotify to MusicService.SPOTIFY.packageName), searched())
+        model.openTrack(MusicMetadata("Moon", "Luna", url = spotify))
+        until("offered again") { model.uiState.notFoundOffer != null }
+        model.takeNotFoundOffer(original = false)
+        assertEquals(listOf(search to ytMusic), searched())
+        model.takeNotFoundOffer(original = true)
+        assertEquals(7, effects.size)
+        model.openTrack(MusicMetadata("Moon", "Luna"))
+        until("offered with nothing to open") { model.uiState.notFoundOffer != null }
+        model.takeNotFoundOffer(original = true)
+        assertEquals(listOf(search to ytMusic), searched())
     }
 }
