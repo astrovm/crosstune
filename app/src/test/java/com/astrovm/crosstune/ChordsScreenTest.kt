@@ -73,7 +73,9 @@ class ChordsScreenTest {
         lyricLines = lines,
         following = following,
         canFollowApps = true,
-        chords = chords
+        chords = chords,
+        // Lit on the voice, so the times here are when each word is sung.
+        linesEarlyMs = 0
     )
 
     private fun string(id: Int, vararg args: Any) = context.getString(id, *args)
