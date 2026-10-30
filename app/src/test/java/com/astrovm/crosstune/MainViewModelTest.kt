@@ -5,6 +5,8 @@ import android.content.Context
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
@@ -685,12 +687,16 @@ class MainViewModelTest {
         assertEquals("https://www.deezer.com/track/4", model.uiState.linkText)
         // Its lookup runs on another thread and ends by clearing the box, which would clear the next song's name as well.
         until("looked the link up") { !model.uiState.isLoading }
-        // One without is looked up by its name.
+        // One without is looked up by its name. Its cover is held, as the box empties once it's found.
+        val coverHeld = CountDownLatch(1)
+        val answer = fake.handler
+        fake.handler = { request -> coverHeld.await(5, TimeUnit.SECONDS); answer(request) }
         model.chooseSong(MusicMetadata("Moon", "Luna"))
         assertEquals(MusicLinks.recognizedSong(MusicMetadata("Moon", "Luna")).text, model.uiState.linkText)
-        until("looked the song up") { !model.uiState.isLoading }
         model.openNamedSong("Stars", "Orbit")
         assertEquals(MusicLinks.recognizedSong(MusicMetadata("Stars", "Orbit")).text, model.uiState.linkText)
+        coverHeld.countDown()
+        until("looked the song up") { !model.uiState.isLoading }
     }
 
     @Test
