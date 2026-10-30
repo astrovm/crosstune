@@ -252,6 +252,22 @@ class SingingTest {
     }
 
     @Test
+    fun heardNoSingingWhereTheWordsAreTimedItHearsOnWithNothingElseHappening() {
+        // Timed into an intro, as YouTube Music's words for an edit can be: the first while hears only music.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { if (singing.hears == 1) Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) else sungAt(times, times.map { 1_000L }) }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears == 1 }
+        assertFalse(model().uiState.lyricsSynced)
+        // The song just plays on, and where the words are sung next, they're heard.
+        passes(32_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertEquals(31_000L, model().uiState.lyricLines[3].timeMs)
+    }
+
+    @Test
     fun resetPartwayThroughTheSongTheSingingIsntHeardOn() {
         val times = listOf(2, 5, 8, 30, 33, 36)
         lyricsTimedFor(null, times)
@@ -540,6 +556,18 @@ class SingingTest {
         waitUntil { singing.hears == 6 }
         composeRule.waitForIdle()
         assertEquals(6, singing.hears)
+    }
+
+    @Test
+    fun noSingingHeardIsTriedThreeTimesToo() {
+        // Words of another song, or a song whisper.cpp can't make out: what's heard never matches.
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }
+        openLyrics()
+        repeat(5) { plays(positionMs = it.toLong()) }
+        waitUntil { singing.hears == 3 }
+        passes(60_000)
+        assertEquals(3, singing.hears)
+        assertFalse(model().uiState.lyricsSynced)
     }
 
     @Test

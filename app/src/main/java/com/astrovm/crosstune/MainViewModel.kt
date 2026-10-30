@@ -2081,7 +2081,14 @@ internal class MainViewModel(
                 // Moved, paused or gone on to another song meanwhile, what was heard can't be placed.
                 val playing = uiState.following?.clock
                 if (uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
-                val shift = SungAlignment.shiftMs(sung, clock::positionAt, shown) ?: return@launch
+                // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
+                // while is heard straight on: the song may only play on, with nothing else to start it.
+                val shift = SungAlignment.shiftMs(sung, clock::positionAt, shown)
+                if (shift == null) {
+                    if (singingTries >= SINGING_TRIES) return@launch
+                    heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
+                    continue
+                }
                 if (!clockSure) {
                     // Off by the app's clock as much as by the words, it's put right for this time only.
                     heardThisTime = true
