@@ -55,9 +55,9 @@ internal object BorrowedTimings {
             anchors += matchedAt[first] to other[line].timeMs
         }
         if (good < other.count { it.text.isNotBlank() } * GOOD_LINES) return null
-        // Each later than the last, in the words and in time.
+        // Each later than the last in time; in the words they always are, as the lines up are in order.
         val kept = anchors.fold(mutableListOf<Pair<Int, Long>>()) { kept, anchor ->
-            kept.also { if (it.isEmpty() || (anchor.first > it.last().first && anchor.second > it.last().second)) it += anchor }
+            kept.also { if (it.isEmpty() || anchor.second > it.last().second) it += anchor }
         }
         if (kept.size < 2) return null
         return lines.mapIndexed { index, text -> LyricLine(timeAt(starts[index], kept), text) }

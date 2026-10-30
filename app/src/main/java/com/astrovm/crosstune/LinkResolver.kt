@@ -83,7 +83,7 @@ internal class LinkResolver(
         val metadata = MusicMetadata(
             title = song.optString("title").takeIf { it.isNotBlank() } ?: return Resolution.Failed(AppError.METADATA_UNAVAILABLE),
             artist = song.optString("subtitle"),
-            artworkUrl = song.optJSONObject("images")?.optString("coverart")?.takeIf { it.isNotEmpty() }
+            artworkUrl = song.optJSONObject("images")?.let { it.optString("coverart").takeIf { cover -> cover.isNotEmpty() } }
         )
         val recognized = MusicLinks.recognizedSong(metadata)
         return Resolution.Resolved(MusicLink(null, ItemType.TRACK, recognized.url, recognized.url), metadata)

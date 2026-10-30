@@ -158,4 +158,42 @@ class QueueOrderTest {
         passes(200_000)
         assertTrue(phone.queuedPlayed.isEmpty())
     }
+
+    @Test
+    fun aMoveToAPlaceNotInTheQueueChangesNothing() {
+        plays(10, listOf(a, b))
+        order.move(following(), 0, 2)
+        order.move(following(), 0, -1)
+        assertEquals(listOf(a, b), shown())
+        passes(200_000)
+        assertTrue(phone.queuedPlayed.isEmpty())
+    }
+
+    @Test
+    fun theOrderWaitsWhileTheAppSaysNothingOfWhatItPlaysOrWhenItPlaysTheSameSongAgain() {
+        plays(10, listOf(a, b))
+        order.move(following(), 1, 0)
+        // The app plays nothing for a moment, or something it has no number for.
+        phone.inApp(music).value = null
+        passes(0)
+        phone.inApp(music).value = AppPlays(MusicMetadata("Song 10", "Band"), null)
+        passes(0)
+        assertEquals(listOf(b, a), shown())
+        // The same song again, e.g. repeated, is no going its own way.
+        phone.inApp(music).value = AppPlays(MusicMetadata("Song 10 again", "Band"), 10)
+        passes(0)
+        assertEquals(listOf(b, a), shown())
+        passes(200_000)
+        assertEquals(listOf(2L), phone.queuedPlayed)
+    }
+
+    @Test
+    fun theOrderWaitsWhileTheAppHasNothingToFollow() {
+        plays(10, listOf(a, b))
+        order.move(following(), 1, 0)
+        phone.playing.value = null
+        passes(0)
+        passes(200_000)
+        assertTrue(phone.queuedPlayed.isEmpty())
+    }
 }

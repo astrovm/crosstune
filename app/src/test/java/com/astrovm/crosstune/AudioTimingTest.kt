@@ -37,4 +37,14 @@ class AudioTimingTest {
             assertTrue(kotlin.math.abs(result.songMs - result.lineMs - offset) <= 500)
         }
     }
+
+    @Test fun threeAgreeingLinesThatAllSitCloseTogetherAreNotEnoughToConfirm() {
+        // An odd one out far earlier leaves only the three together, within two seconds.
+        val bunched = listOf(SyncPoint(0, 20_000), SyncPoint(10_000, 15_000), SyncPoint(11_000, 16_000), SyncPoint(12_000, 17_000))
+        assertTrue(AudioTiming.confirmed(bunched).isEmpty())
+    }
+
+    @Test fun aTrackPlayedTooSlowlyIsNotConfirmedAsADrift() {
+        assertTrue(AudioTiming.confirmed(listOf(SyncPoint(0, 0), SyncPoint(15_000, 10_000), SyncPoint(30_000, 20_000))).isEmpty())
+    }
 }

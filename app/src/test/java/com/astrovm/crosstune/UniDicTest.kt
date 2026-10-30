@@ -98,7 +98,10 @@ class UniDicTest {
         // And made-up lines, kana and common kanji in no order, which find words all through the dictionary.
         val random = Random(352)
         val letters = ('ぁ'..'ゖ') + ('ァ'..'ヺ') + "日本人生心愛夢空海山川花雨風雪月星光道時間今何私君僕彼女子供手目口耳声歌音色白黒赤青春夏秋冬朝夜明暗".toList()
-        for (line in lines + List(300) { String(CharArray(40) { letters.random(random) }) }) {
+        // Kanji from all over the block too, most of them in no word at all, so the dictionary is left at once.
+        val kanji = ('一'..'鿿').toList()
+        val wide = List(300) { String(CharArray(40) { if (it % 4 == 0) letters.random(random) else kanji.random(random) }) }
+        for (line in lines + List(300) { String(CharArray(40) { letters.random(random) }) } + wide) {
             assertEquals(own.tokenize(line).map { "${it.position} ${it.surface} ${it.allFeatures}" }, TestUniDic.tokenizer.tokenize(line).map { "${it.position} ${it.surface} ${it.allFeatures}" })
         }
     }

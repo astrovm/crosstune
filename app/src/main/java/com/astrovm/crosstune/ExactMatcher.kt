@@ -250,7 +250,7 @@ internal class ExactMatcher(
             val name = result.optString(nameKey).removeSuffix(" - Single").removeSuffix(" - EP")
             matches(metadata, name, result.optString("artistName"))
         }
-        return asLongAs(metadata, named) { it.optLong("trackTimeMillis") }?.optString(urlKey)?.linkTo(MusicService.APPLE_MUSIC)
+        return asLongAs(metadata, named) { it.optLong("trackTimeMillis") }?.let { it.optString(urlKey).linkTo(MusicService.APPLE_MUSIC) }
     }
 
     private suspend fun findOnDeezer(metadata: MusicMetadata): String? {
@@ -259,7 +259,7 @@ internal class ExactMatcher(
             val artist = result.optJSONObject("artist")?.optString("name") ?: name
             matches(metadata, name, artist)
         }
-        return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.optString("link")?.linkTo(MusicService.DEEZER)
+        return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.let { it.optString("link").linkTo(MusicService.DEEZER) }
     }
 
     /**
@@ -366,7 +366,7 @@ internal class ExactMatcher(
             val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("trackName")))
             val credit = SongNames.normalize(result.optString("artistName"))
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
-        }?.optString("artworkUrl100")?.ifBlank { null }?.replace("100x100bb", "600x600bb")
+        }?.let { it.optString("artworkUrl100").ifBlank { null }?.replace("100x100bb", "600x600bb") }
     }
 
     private suspend fun deezerCoverNamed(metadata: MusicMetadata): String? {
@@ -380,7 +380,7 @@ internal class ExactMatcher(
             val name = SongNames.normalize(SongNames.withoutEditionTag(MetadataParsers.deezerTitle(result)))
             val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
             title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
-        }?.optJSONObject("album")?.optString("cover_big")?.ifBlank { null }
+        }?.optJSONObject("album")?.let { it.optString("cover_big").ifBlank { null } }
     }
 
     /** TIDAL's catalogue is the labels' own, so a match by name and artist is the item itself. */
@@ -418,7 +418,7 @@ internal class ExactMatcher(
                 result.optBoolean("verified") && matches(metadata, result.optString("username"), "")
             }
         }
-        return found?.optString("permalink_url")?.linkTo(MusicService.SOUNDCLOUD)
+        return found?.let { it.optString("permalink_url").linkTo(MusicService.SOUNDCLOUD) }
     }
 
     /** Like SoundCloud, anyone can upload to Audiomack, so only the artist's own or a verified account's upload counts. */
@@ -440,7 +440,7 @@ internal class ExactMatcher(
         } ?: return null
         val slug = found.optString("url_slug").ifBlank { return null }
         if (metadata.type == ItemType.ARTIST) return "https://audiomack.com/$slug"
-        val owner = found.optJSONObject("uploader")?.optString("url_slug")?.ifBlank { null } ?: return null
+        val owner = found.optJSONObject("uploader")?.let { it.optString("url_slug").ifBlank { null } } ?: return null
         return "https://audiomack.com/$owner/${if (metadata.type == ItemType.TRACK) "song" else "album"}/$slug"
     }
 
@@ -504,7 +504,7 @@ internal class ExactMatcher(
         return results.objects().firstOrNull { result ->
             matches(metadata, result.optString("name"), result.optString("band_name").ifEmpty { result.optString("name") }) &&
                 isOnArtistsOwnPage(metadata, result.optString("item_url_root"))
-        }?.optString("item_url_path")?.linkTo(MusicService.BANDCAMP)
+        }?.let { it.optString("item_url_path").linkTo(MusicService.BANDCAMP) }
     }
 
     /**
@@ -557,10 +557,9 @@ internal class ExactMatcher(
             val same = if (loose) looselyMatches(metadata, name, artist) else matches(metadata, name, artist.ifEmpty { name }, album)
             if (!same) return null
             return when (metadata.type) {
-                ItemType.TRACK -> item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null }
+                ItemType.TRACK -> item.optJSONObject("playlistItemData")?.let { it.optString("videoId").ifBlank { null } }
                     ?.let { watchUrl + it }
-                else -> item.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")
-                    ?.ifBlank { null }
+                else -> item.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")?.let { it.optString("browseId").ifBlank { null } }
                     ?.let { (if (metadata.type == ItemType.ALBUM) YOUTUBE_MUSIC_ALBUM_URL else YOUTUBE_MUSIC_ARTIST_URL) + it }
             }
         }
@@ -620,7 +619,7 @@ internal class ExactMatcher(
             ?.map { it.optJSONObject("musicResponsiveListItemFlexColumnRenderer")?.text().orEmpty() }.orEmpty()
         val details = columns.getOrNull(1).orEmpty().split(" • ")
         return Row(
-            item.optJSONObject("playlistItemData")?.optString("videoId")?.ifBlank { null },
+            item.optJSONObject("playlistItemData")?.let { it.optString("videoId").ifBlank { null } },
             columns.firstOrNull().orEmpty(), details, lengthMs(details.last())
         )
     }

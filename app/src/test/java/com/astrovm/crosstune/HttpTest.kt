@@ -26,4 +26,9 @@ class HttpTest {
     fun biggerBodiesFailInsteadOfFillingMemory() {
         assertThrows(IOException::class.java) { byteArrayOf(1, 2, 3, 4).toResponseBody().bytesAtMost(3) }
     }
+
+    @Test
+    fun aCharsetNobodyKnowsReadsAsUtf8() {
+        assertEquals("héllo", "héllo".toResponseBody("text/html; charset=nonsense-9".toMediaType()).stringAtMost())
+    }
 }
