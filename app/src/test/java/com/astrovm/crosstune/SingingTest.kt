@@ -559,6 +559,22 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpPartwayItHearsOnAsTheWordsDriftFurtherOff() {
+        // Timed for another take: a second off at first, and two and a half further on.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, listOf(1_000L, 1_000L, 1_000L, 2_500L, 2_500L, 2_500L)) }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && followedAt() == 800 + SystemClock.elapsedRealtime() - startedAt }
+        // The song just plays on, and where the words are sung next, they're heard again, for this time only too.
+        passes(30_000)
+        waitUntil { singing.hears == 2 && followedAt() == -700 + SystemClock.elapsedRealtime() - startedAt }
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("sung_heard"))
+    }
+
+    @Test
     fun noSingingHeardIsTriedThreeTimesToo() {
         // Words of another song, or a song whisper.cpp can't make out: what's heard never matches.
         singing.answer = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }

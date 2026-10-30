@@ -2090,11 +2090,15 @@ internal class MainViewModel(
                     continue
                 }
                 if (!clockSure) {
-                    // Off by the app's clock as much as by the words, it's put right for this time only.
+                    // Off by the app's clock as much as by the words, it's put right for this time only, and
+                    // heard on through the song, as words timed for another take drift further off as it goes.
                     heardThisTime = true
                     heardShiftMs += shift
                     uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
-                    return@launch
+                    singingTries = 0
+                    // Where it was heard to, by the clock as it's put right now.
+                    heardTo = clock.positionAt(sung.startedAtMs) - shift + SingingListener.SECONDS * 1000L
+                    continue
                 }
                 singingTries = 0
                 if (heardTo == null && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
