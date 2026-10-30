@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Where in a song it is: [positionMs] at [atMs] on the clock that counts since the phone started,
@@ -162,11 +163,12 @@ internal interface PlaybackSource {
 
     /**
      * Opens [app] on a song's [link], for when it isn't running and so has nothing to ask in the
-     * background; false when it can't be. It comes to the front, so Crosstune [comesBack] once it plays.
+     * background, or won't play there; false when it can't be. It comes to the front, so Crosstune
+     * [comesBack] once it plays, unless it won't play in the background.
      */
     fun openSong(app: String, link: String): Boolean
 
-    /** Brings Crosstune back to the front, over the app [openSong] opened. */
+    /** Brings Crosstune back to the front, over the app [openSong] opened, unless it only plays in front. */
     fun comesBack()
 
     /** The song an app on the phone is playing right now, and where it is; null when none is, or none can be seen. */
@@ -215,6 +217,11 @@ internal class MediaSessionPlayback(
     private val handler = Handler(Looper.getMainLooper())
     /** How many times Crosstune has moved a song, so a move a moment back isn't taken for a stale clock. */
     private var moves = 0
+    /** The apps that wouldn't play in the background when asked, as YouTube Music without Premium; see [comesBack]. */
+    private val onlyInFront: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /** The app [openSong] last opened. */
+    @Volatile
+    private var opened: String? = null
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 
@@ -348,7 +355,7 @@ internal class MediaSessionPlayback(
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
         val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
-        val asked = apps.firstOrNull { sameApp(app, it.packageName) }
+        val asked = apps.firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
             ?: apps.takeIf { link == null }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
             ?: return false
@@ -375,7 +382,7 @@ internal class MediaSessionPlayback(
         try {
             if (runCatching(ask).isFailure) return false
             if (!mustStart || asked.playbackState?.state == PlaybackState.STATE_PLAYING) return true
-            return withTimeoutOrNull(startMs) { verdict.await() } == true
+            return (withTimeoutOrNull(startMs) { verdict.await() } == true).also { if (!it) onlyInFront += asked.packageName }
         } finally {
             if (mustStart) asked.unregisterCallback(callback)
         }
@@ -397,12 +404,15 @@ internal class MediaSessionPlayback(
     override fun openSong(app: String, link: String): Boolean = MusicService.appLinksIn(app, link).any { (packageName, its) ->
         runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            opened = packageName
             true
         }.getOrDefault(false)
     }
 
     // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
+    // Behind it too when the app opened wouldn't play in the background, as it would stop as soon as it's left.
     override fun comesBack() {
+        if (opened in onlyInFront) return
         runCatching { context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
     }
 
@@ -434,7 +444,7 @@ internal class MediaSessionPlayback(
 
     override fun plays(app: String): Flow<AppPlays?> = changes {
         runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { sameApp(app, it.packageName) }
+            .filter { sameApp(app, it.packageName, context::hasApp) }
             .firstNotNullOfOrNull { controller ->
                 val ended = controller.ended()
                 controller.takeIf { ended || (it.playbackState?.state ?: PlaybackState.STATE_NONE) !in NOT_PLAYING }
@@ -468,7 +478,7 @@ internal class MediaSessionPlayback(
     }
 
     override suspend fun playList(app: String, link: String, mustStart: Boolean): Boolean {
-        val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName) }
+        val asked = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: waker.wake(MusicService.appsFor(app))
             ?: return false
         return watchStart(asked, mustStart) { asked.transportControls.playFromUri(Uri.parse(link), Bundle()) }

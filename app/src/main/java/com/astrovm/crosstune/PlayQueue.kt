@@ -30,7 +30,9 @@ internal class PlayQueue(
     private val queueOf: suspend (MusicService, List<MusicMetadata>) -> YouTubeQueue?,
     private val file: File,
     private val scope: CoroutineScope,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Whether an app is installed; see [sameApp]. */
+    private val installed: (String) -> Boolean = { false }
 ) {
     private var playing: Playing? = null
         set(value) {
@@ -81,7 +83,7 @@ internal class PlayQueue(
             if (following == null) return@combine null
             val skips = if (last != null && sameEntry(last, song)) following.copy(canSkipNext = true) else following
             // In the app it's played through, not another that happens to play one of its songs.
-            list?.takeIf { sameApp(it.app, following.appPackage) && it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
+            list?.takeIf { sameApp(it.app, following.appPackage, installed) && it.tracks.any { track -> sameEntry(track, song) } }?.let { skips.playedFrom(it) } ?: skips
         }
 
         override fun skip(song: MusicMetadata, next: Boolean) {

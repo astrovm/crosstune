@@ -162,8 +162,7 @@ internal class LinkInterception(private val context: Context) {
     /** Apps in [OTHER_LINK_APPS] that are installed. */
     private fun installedOtherApps(): List<String> = OTHER_LINK_APPS.filter(::isInstalled)
 
-    fun isInstalled(packageName: String): Boolean =
-        runCatching { context.packageManager.getPackageInfo(packageName, 0) }.isSuccess
+    fun isInstalled(packageName: String): Boolean = context.hasApp(packageName)
 
     /** Other apps with a link filter for any of [hosts]; whether they verified them is checked separately. */
     private fun appsOpening(hosts: List<String>): Set<String> = hosts.flatMap { host ->
