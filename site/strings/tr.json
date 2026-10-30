@@ -154,6 +154,10 @@
       "Giriş yaptığın sürece Crosstune her özelliğin ihtiyacını OpenAI'ye gönderir: bir şarkının adı, sanatçısı ve sözleri; bunları çevirmek ya da açıklamak, Japonca okunuşları düzeltmek, Latin harfleriyle bulunan sözleri Japonca veya Korece yazmak veya öğrenmeye değer kelimeleri seçmek için; bir kelime ve satırı, anlamına bakmak için; bir satır ya da şarkı hakkında sorduğun sorular; ve eşleşen şarkıları bulmak için yazdığın bir açıklama ya da bir şarkı. OpenAI bunları kendi gizlilik politikasına göre işler ve planının kullanımına sayılırlar."
     ],
     [
+      "p",
+      "Bir şarkının anlamını açtığında Crosstune, çıktığı yılı ve albümünü öğrenmek için şarkının adını ve sanatçısını, hesap ya da anahtar gerektirmeyen, MetaBrainz'in müzik veritabanı MusicBrainz'e de gönderir; böylece anlam her seferinde aynılarını verir. Gelen yanıt telefonunda saklanır, yani bir şarkı için yalnızca bir kez sorulur."
+    ],
+    [
       "h2",
       "İzinler ve güvenlik"
     ],

@@ -154,6 +154,10 @@
       "Solange du angemeldet bist, sendet Crosstune an OpenAI, was jede Funktion braucht: Titel, Künstler und Text eines Songs, um ihn zu übersetzen oder zu erklären, japanische Lesungen zu korrigieren, in lateinischen Buchstaben gefundene Texte auf Japanisch oder Koreanisch zu schreiben oder lernenswerte Wörter auszuwählen; ein Wort mit seiner Zeile, um es nachzuschlagen; deine Fragen zu einer Zeile oder einem Song; und eine Beschreibung, die du eintippst, oder einen Song, um passende Songs zu finden. OpenAI verarbeitet diese Daten nach seiner eigenen Datenschutzerklärung, und sie zählen zur Nutzung deines Abos."
     ],
     [
+      "p",
+      "Wenn du die Bedeutung eines Songs öffnest, sendet Crosstune außerdem Titel und Künstler an MusicBrainz, eine Musikdatenbank von MetaBrainz, die kein Konto und keinen Schlüssel braucht, um das Erscheinungsjahr und das Album zu erfahren, damit die Bedeutung jedes Mal dieselben nennt. Die Antwort bleibt auf deinem Handy gespeichert, sodass pro Song nur einmal gefragt wird."
+    ],
+    [
       "h2",
       "Berechtigungen und Sicherheit"
     ],

@@ -154,6 +154,10 @@
       "Finché hai effettuato l'accesso, Crosstune invia a OpenAI ciò che serve a ogni funzione: titolo, artista e testo di un brano per tradurlo o spiegarlo, correggere le letture giapponesi, scrivere in giapponese o coreano testi trovati in lettere latine o scegliere le parole da imparare; una parola e la sua riga per cercarla; le domande che fai su una riga o un brano; e una descrizione che scrivi, o un brano, per trovare brani corrispondenti. OpenAI li tratta secondo la propria informativa sulla privacy, e contano nell'uso del tuo piano."
     ],
     [
+      "p",
+      "Quando apri il significato di un brano, Crosstune invia anche titolo e artista a MusicBrainz, un database musicale di MetaBrainz che non richiede account né chiave, per ottenere l'anno di uscita e l'album, così il significato dà sempre gli stessi. La risposta resta sul tuo telefono, quindi per ogni brano si chiede una volta sola."
+    ],
+    [
       "h2",
       "Autorizzazioni e sicurezza"
     ],

@@ -11,7 +11,13 @@ import java.util.Locale
  * nothing; each line translated in [lines], so a song's many lines don't push out answers that
  * took longer, e.g. from the web.
  */
-internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: LookupCache, private val lines: LookupCache = cache) {
+internal class ChatGptTutor(
+    private val chatGpt: ChatGpt,
+    private val cache: LookupCache,
+    private val lines: LookupCache = cache,
+    /** When a song came out and on what album, from a source that keeps to one answer; null where there's none to give. */
+    private val releaseOf: suspend (MusicMetadata) -> ReleaseFacts? = { null }
+) {
 
     /**
      * [lines] in [language], translated together as the song they are, each line's translation, or
@@ -69,15 +75,18 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         val model = chatGpt.model() ?: return ChatGptReply.Failed
         val key = songKey(model, language, song)
         cache.get(key)?.let { return ChatGptReply.Answer(it) }
+        // Searching the web, it gave another year or album each time it was asked, so they're given.
+        val release = releaseOf(song)
         // Tried on real songs with GPT-6-Luna: told to go by the lyrics alone, it never searched;
         // told to search first, it found the album, year and writers, but now and then gave a song
         // another's writers, from a page listing many. Held to pages about the song by name, it
         // got none wrong in 20 tries, leaving the writers out when unsure.
         val reply = chatGpt.ask(
             "You help someone understand the songs they listen to, often in a language they're learning. The user sends a song's lyrics. " +
-                "First search the web for this exact song: when and on what album it came out, who wrote it, and any story behind it. " +
+                "First search the web for this exact song: ${if (release == null) "when and on what album it came out, who wrote it" else "who wrote it"}, and any story behind it. " +
                 "Only state a fact when a page you found gives it for this song by name: pages listing many of the artist's songs mix them up. " +
                 "Leave out who wrote it unless a page names them for this song. " +
+                givenInstruction(release) +
                 "Then, in ${nameOf(language)}, explain the song in four parts, separated by a line with only $PART_BREAK: " +
                 "first what you found about it, as two to four lines of the form \"Label: value\", with short labels like the year, the album or the song it covers; " +
                 "then its story, who's speaking, to whom and what happens, in one or two short sentences; " +
@@ -85,7 +94,9 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 "then one of its key lines, quoted as written on a line of its own, and under it, in one short sentence, what it means. " +
                 "About 60 words in all. Never say what you didn't find, or that something is missing or absent. " +
                 "Plain text, without headings, links or Markdown.",
-            "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
+            "Song: ${song.title} by ${song.artist}\n" +
+                givenLines(release) +
+                "\nLyrics:\n${lines.joinToString("\n")}",
             webSearch = true,
             onText = onText
         )
@@ -446,7 +457,18 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         return if (title.isEmpty() || artist.isEmpty()) null else title to artist
     }
 
-    private fun songKey(model: String, language: String, song: MusicMetadata) = "song6|$model|$language|${song.title}|${song.artist}"
+    /** What the prompt says of the year and album it's given, so they're stated as they are rather than looked up. */
+    private fun givenInstruction(release: ReleaseFacts?): String = when {
+        release == null -> ""
+        release.album == null -> "The user also sends the year it came out, checked: state it as given, and never search for or change it. "
+        else -> "The user also sends the year it came out and its album, checked: state them as given, and never search for or change them. "
+    }
+
+    private fun givenLines(release: ReleaseFacts?): String =
+        release?.let { "Came out: ${it.year}\n" + it.album?.let { album -> "Album: $album\n" }.orEmpty() }.orEmpty()
+
+    // The version moves when the prompt does, so meanings kept with a year ChatGPT searched for are asked again.
+    private fun songKey(model: String, language: String, song: MusicMetadata) = "song7|$model|$language|${song.title}|${song.artist}"
 
     /** An answer kept, so it's not asked again; what couldn't be answered is. */
     private suspend fun keep(key: String, reply: ChatGptReply) {
