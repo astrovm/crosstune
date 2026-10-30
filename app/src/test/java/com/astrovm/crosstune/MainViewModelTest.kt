@@ -1041,4 +1041,41 @@ class MainViewModelTest {
         assertFalse(model.uiState.chords.on || model.uiState.chords.loading)
         assertTrue(prefs().contains("lyrics_chords") && !prefs().getBoolean("lyrics_chords", true))
     }
+
+    @Test
+    fun textThatIsNoMusicLinkIsRejectedAndAServiceLinkItCantConvertGoesStraightToItsApp() {
+        val model = model()
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        for (text in listOf("hello there", null, "https://example.com/page")) {
+            model.onUrlChange("")
+            model.resolveIncoming(text)
+            idle()
+            assertEquals(text.toString(), AppError.INVALID_URL, model.uiState.error)
+            assertNull(model.uiState.result)
+        }
+        assertTrue(effects.isEmpty())
+        model.resolveIncoming("see https://soundcloud.com/discover.")
+        idle()
+        val open = effects.single() as Effect.Open
+        assertEquals(Triple("https://soundcloud.com/discover", "com.soundcloud.android", true), Triple(open.url, open.packageName, open.finishAfterOpen))
+    }
+
+    @Test
+    fun anEmptyClipboardSaysSoWhetherItIsPastedOrCameFromTheTile() {
+        val model = model()
+        for (text in listOf(null, "", "  ")) {
+            model.onUrlChange("")
+            model.pasteLink(text)
+            assertEquals(AppError.CLIPBOARD_EMPTY, model.uiState.error)
+            model.onUrlChange("")
+            assertNull(model.uiState.error)
+            model.resolveClipboard(text, null, show = false, after = AfterLookup.OPEN)
+            assertEquals(AppError.CLIPBOARD_EMPTY, model.uiState.error)
+        }
+        assertEquals("", model.uiState.linkText)
+        assertTrue(model.readyForCopy)
+        model.onUrlChange("https://open.spotify.com/track/abc")
+        assertFalse(model.readyForCopy)
+    }
 }
