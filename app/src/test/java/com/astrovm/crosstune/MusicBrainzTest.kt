@@ -176,6 +176,13 @@ class MusicBrainzTest {
     }
 
     @Test
+    fun aCreditWithoutItsArtistsEntryCountsByTheNameItsCreditedAs() {
+        val bare = recording("bare", "1990").put("artist-credit", JSONArray().put(JSONObject().put("name", "Soda Stereo").put("joinphrase", "")))
+        answering(listOf(bare), mapOf("bare" to listOf(group("Canción animal", "1990"))))
+        assertEquals(ReleaseFacts(1990, "Canción animal"), facts())
+    }
+
+    @Test
     fun theQuestionNamesTheFirstArtistAndNotTheEditionOrQuotes() {
         answering(listOf(recording("studio", "1990", title = "Song \"One\"", credit = "A")))
         facts(MusicMetadata("Song \"One\" - Remastered 2012", "A \\ B & C feat. D"))
