@@ -52,7 +52,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 val so = finishedStrings(text).take(missing.size)
                 onLines(shown(kept + missing.zip(so).toMap()))
             }
-            val translated = (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray) ?: return null
+            val translated = reply.written()?.let(::jsonArray) ?: return null
             if (translated.length() != missing.size) return null
             missing.indices.associate { missing[it] to translated.getString(it).trim() }
         }
@@ -171,7 +171,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 asked.toString(),
                 effort = "low"
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString()?.also {
+            reply.written()?.let(::jsonArray)?.toString()?.also {
                 cache.put(key, it)
                 cache.save()
             } ?: return null
@@ -196,7 +196,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                     "Reply with only a JSON array of objects with \"title\" and \"artist\", as the songs are named on music services.",
                 description.trim()
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.also { if (it.length() > 0) cache.put(key, it.toString()) }?.toString()?.also {
+            reply.written()?.let(::jsonArray)?.also { if (it.length() > 0) cache.put(key, it.toString()) }?.toString()?.also {
                 cache.save()
             } ?: return null
         }
@@ -228,7 +228,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 effort = "low"
             )
         }
-        val number = (reply as? ChatGptReply.Answer)?.text?.trim()?.takeWhile(Char::isDigit)?.toIntOrNull() ?: return null
+        val number = reply.written()?.trim()?.takeWhile(Char::isDigit)?.toIntOrNull() ?: return null
         return (number - 1).takeIf { it in rows.indices }
     }
 
@@ -258,7 +258,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 JSONObject().put("song", "${song.title} by ${song.artist}").put("lines", JSONArray(lines)).toString(),
                 effort = "low"
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
+            reply.written()?.let(::jsonArray)?.toString() ?: return null
         }
         val japanese = JSONArray(kept).let { list -> (0 until list.length()).map { list.optString(it) } }
         if (japanese.size != lines.size) return null
@@ -286,7 +286,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 "Song: ${song.title} by ${song.artist}\n\nLyrics:\n${lines.joinToString("\n")}",
                 effort = "low"
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
+            reply.written()?.let(::jsonArray)?.toString() ?: return null
         }
         val words = objects(kept).mapNotNull { json ->
             val word = json.optString("word").trim()
@@ -315,7 +315,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 webSearch = true,
                 effort = "low"
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonObject)?.toString() ?: return null
+            reply.written()?.let(::jsonObject)?.toString() ?: return null
         }
         val json = JSONObject(kept)
         val original = json.optJSONObject("original")?.let(::named)
@@ -373,7 +373,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 JSONObject().put("word", word).put("line", line).put("song", "${song.title} by ${song.artist}").toString(),
                 effort = "low"
             )
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.toString() ?: return null
+            reply.written()?.let(::jsonArray)?.toString() ?: return null
         }
         val examples = objects(kept).mapNotNull { json ->
             val sentence = json.optString("sentence").trim()
@@ -402,7 +402,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                 effort = "low"
             )
             // None found isn't kept, so it's asked again another time.
-            (reply as? ChatGptReply.Answer)?.text?.let(::jsonArray)?.also { if (it.length() > 0) cache.put(key, it.toString()) }?.toString()?.also {
+            reply.written()?.let(::jsonArray)?.also { if (it.length() > 0) cache.put(key, it.toString()) }?.toString()?.also {
                 cache.save()
             } ?: return null
         }
@@ -464,7 +464,7 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
                     "and \"type\", what kind of word it is there, in one or two words of $name, such as a noun, or a verb in the past tense.",
                 JSONObject().put("line", line).put("word", word).toString()
             )
-            (reply as? ChatGptReply.Answer)?.text ?: return null
+            reply.written() ?: return null
         }
         val json = jsonObject(answer) ?: return null
         val meaning = json.optString("meaning").trim().ifEmpty { return null }
@@ -472,6 +472,9 @@ internal class ChatGptTutor(private val chatGpt: ChatGpt, private val cache: Loo
         cache.save()
         return Definition(json.optString("type").trim().ifEmpty { null }, meaning)
     }
+
+    /** What the reply says, when it's an answer. */
+    private fun ChatGptReply.written(): String? = (this as? ChatGptReply.Answer)?.text
 
     /** The JSON array in [text], which may come with words or a code block around it. */
     private fun jsonArray(text: String): JSONArray? = try {

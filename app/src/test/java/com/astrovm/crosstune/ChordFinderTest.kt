@@ -1057,4 +1057,73 @@ Singing to the morning light</div>"""
         assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
         assertTrue(fake.requestedUrls.none { "music.163.com" in it })
     }
+
+    private fun notFound(result: ChordFinder.Chords) = assertFalse(result.toString(), result is ChordFinder.Chords.Found)
+
+    @Test
+    fun pagesWithPartsMissingAreNoSheetAndNeverACrash() {
+        val result = ugResult("https://tabs.ultimate-guitar.com/tab/river-1", "River Road", "The Walkers", 900)
+        val laCuerda = laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road"))))
+        fun everyoneElse(request: Request) = when {
+            request.url.host == "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch())
+            request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, "<table></table>")
+            else -> FakeSpotify.html(request, "", code = 404)
+        }
+        // Ultimate Guitar: a search page with no app data, with data but no results, a sheet with no page data, with no sheet in it.
+        listOf("<html></html>", ugPage(JSONObject()), ugSearch(result)).forEachIndexed { index, search ->
+            fake.handler = { request ->
+                when {
+                    request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, search)
+                    request.url.host == "tabs.ultimate-guitar.com" -> FakeSpotify.html(request, if (index == 2) "<html></html>" else ugTab(ugWalking))
+                    else -> everyoneElse(request)
+                }
+            }
+            notFound(chords(river, english))
+        }
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, ugSearch(result))
+                request.url.host == "tabs.ultimate-guitar.com" -> FakeSpotify.html(request, ugPage(JSONObject().put("tab_view", JSONObject())))
+                else -> everyoneElse(request)
+            }
+        }
+        notFound(chords(river, english))
+
+        // U-FRET lists a sheet whose page has no chords in it.
+        fake.handler = uFret(mapOf("川の道 歩く人" to uFretResult(2, "川の道", "歩く人")), mapOf("https://www.ufret.jp/song.php?data=2" to "<html></html>"))
+        notFound(chords(kawa, japanese))
+
+        // LaCuerda: results with no list of pages, or with none for their row.
+        listOf(laCuerda.substringBefore("<script>"), laCuerda.replace(Regex("var fns=\\[.*?];"), "var fns=[];")).forEach { search ->
+            fake.handler = { request ->
+                if (request.url.encodedPath == "/busca.php") FakeSpotify.html(request, search) else if (request.url.host == "solr.sscdn.co") FakeSpotify.html(request, cifraClubSearch()) else FakeSpotify.html(request, "", code = 404)
+            }
+            notFound(chords(river, english))
+        }
+
+        // Cifra Club: an answer with no response in it, and a sheet with no capo (so, none).
+        fake.handler = { request -> if (request.url.host == "solr.sscdn.co") FakeSpotify.html(request, """({"response":{}})""") else everyoneElse(request) }
+        notFound(chords(river, english))
+        fake.handler = { request ->
+            when {
+                request.url.host == "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch(cifraClubDoc("2", "River Road", "The Walkers", "the-walkers", "river-road")))
+                request.url.host == "www.cifraclub.com.br" -> FakeSpotify.html(request, cifraClubPage(cifraClubWalking).replace("""\"capo\":0,""", ""))
+                else -> everyoneElse(request)
+            }
+        }
+        val found = chords(river, english) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.CIFRA_CLUB, found.sheet.site)
+        assertEquals(0, found.sheet.capo)
+    }
+
+    @Test
+    fun whatNetEaseCallsASongNeedsAnArtistAndAJapaneseNameToMatter() {
+        val kimi = MusicMetadata("Kimi ha 1000%", "1986 OMEGA TRIBE")
+        // No result in its answer, no songs in it, a song with no artists, and one of another name with some.
+        listOf("""{"result":{}}""", """{"code":200}""", """{"result":{"songs":[{"name":"君は1000%"}]}}""", """{"result":{"songs":[{"name":"Other","artists":[{"name":"誰か"}]}]}}""").forEach { answer ->
+            fake.requestedUrls.clear()
+            fake.handler = uFret(emptyMap(), mapOf("https://music.163.com/api/search/get" to answer))
+            notFound(chords(kimi, japanese))
+        }
+    }
 }

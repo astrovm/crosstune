@@ -1003,4 +1003,136 @@ class ChatGptTest {
         val keys = JSONArray(File(folder.root, "answers.json").readText()).let { kept -> (0 until kept.length()).map { kept.getJSONArray(it).getString(0) } }
         assertEquals(listOf("hangul", "romaji"), keys.map { it.substringBefore('|') })
     }
+
+    private val aSong = MusicMetadata("Song", "Band")
+
+    /** Every question the tutor answers with a list or an object, asked of [tutor]; each gives nothing when it couldn't be answered. */
+    private fun everyLookup(tutor: ChatGptTutor): List<Any?> = runBlocking {
+        listOf(
+            tutor.translate(listOf("Hola"), "en"),
+            tutor.checkReadings(aSong, listOf("君"), emptyList()),
+            tutor.songsFor("a rainy song"),
+            tutor.pickSong(aSong, listOf("Song | Band")),
+            tutor.pickSong(aSong, listOf("Song | Band"), videos = true),
+            tutor.fromRomaji(aSong, listOf("kimi")),
+            tutor.wordsToKnow(aSong, listOf("Hola"), "en"),
+            tutor.songFacts(aSong),
+            tutor.examples("hola", "Hola amigo", aSong, "en"),
+            tutor.songsLike(aSong),
+            tutor.meaning("hola", "Hola amigo", "en")
+        )
+    }
+
+    private fun everyExplanation(tutor: ChatGptTutor): List<ChatGptReply> = runBlocking {
+        listOf(
+            tutor.explainSong(aSong, listOf("Hola"), "en") {},
+            tutor.explain(aSong, listOf("Hola"), 0, "en") {},
+            tutor.aboutArtist(aSong, "en") {},
+            tutor.askAboutSong(aSong, listOf("Hola"), "It's about a greeting.", listOf("Why?" to "Because."), "Who?", "en") {}
+        )
+    }
+
+    @Test
+    fun signedOutTheTutorAsksNothingAndAnswersNothing() {
+        val tutor = tutor(chatGpt())
+        assertTrue(everyLookup(tutor).all { it == null })
+        assertEquals(listOf(ChatGptReply.Failed), everyExplanation(tutor).distinct())
+        assertTrue(openAi.asked.isEmpty())
+    }
+
+    @Test
+    fun anAnswerThatIsNoAnswerOrNotWhatWasAskedForIsNothing() {
+        val tutor = tutor()
+        // Plain failure, then an answer with no JSON in it.
+        listOf<() -> Pair<Int, String>>({ 500 to "" }, { 200 to FakeOpenAi.stream("Sorry, I can't.") }).forEach { reply ->
+            openAi.reply = { reply() }
+            assertTrue(everyLookup(tutor).all { it == null })
+        }
+        openAi.reply = { 500 to "" }
+        assertEquals(listOf(ChatGptReply.Failed), everyExplanation(tutor).distinct())
+        // Nothing was kept from any of it, and none found isn't kept either.
+        answering("[]")
+        assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsFor("a rainy song") })
+        answering("""[{"title":"Plastic Love","artist":"Mariya Takeuchi"}]""")
+        assertEquals(listOf("Plastic Love" to "Mariya Takeuchi"), runBlocking { tutor.songsFor("a rainy song") })
+    }
+
+    @Test
+    fun anAnswerWithNothingUsableInItIsNothingAndIsAskedAgain() {
+        val tutor = tutor()
+        // Songs with no title or no artist are no songs; none left is an empty list, which isn't kept.
+        answering("""[{"title":"Plastic Love"},{"artist":"Mariya Takeuchi"},{"title":" ","artist":"x"},"text"]""")
+        assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsFor("plastic algo") })
+        assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsLike(aSong) })
+        // Words, examples and a meaning without both parts are none.
+        answering("""[{"word":"","meaning":"x"},{"word":"hola","meaning":" "}]""")
+        assertNull(runBlocking { tutor.wordsToKnow(aSong, listOf("Hola"), "en") })
+        answering("""[{"sentence":"","meaning":"x"},{"sentence":"Hola","meaning":""}]""")
+        assertNull(runBlocking { tutor.examples("hola", "Hola amigo", aSong, "en") })
+        answering("""{"meaning":" ","type":"noun"}""")
+        assertNull(runBlocking { tutor.meaning("hola", "Hola amigo", "en") })
+        // A reading that is the word itself isn't one.
+        answering("""[{"word":"hola","reading":"hola","meaning":"hello"},{"word":"君","reading":"きみ","meaning":"you"},{"word":"hola","reading":"","meaning":"again"}]""")
+        assertEquals(
+            listOf(KeyWord("hola", null, "hello"), KeyWord("君", "きみ", "you")),
+            runBlocking { tutor.wordsToKnow(aSong, listOf("Hola"), "en") }
+        )
+        // A meaning with no kind of word still has its meaning.
+        answering("""{"meaning":"hello","type":""}""")
+        assertEquals(Definition(null, "hello"), runBlocking { tutor.meaning("hola", "Hola amigo", "en") })
+    }
+
+    @Test
+    fun aSongThatCoversOrSamplesIsToldAndOneThatDoesntIsNone() {
+        val tutor = tutor()
+        answering("""{"original":null,"samples":[]}""")
+        assertNull(runBlocking { tutor.songFacts(aSong) })
+        answering("""{"original":{"title":"Orig","artist":"Them"},"samples":[{"title":"Bit","artist":"Else"},{"title":"No artist"},"text"]}""")
+        assertEquals(SongFacts(Pair("Orig", "Them"), listOf(Pair("Bit", "Else"))), runBlocking { tutor.songFacts(MusicMetadata("Cover", "Us")) })
+        answering("""{"original":{"title":"Orig"},"samples":[{"title":"Bit","artist":"Else"}]}""")
+        assertEquals(SongFacts(null, listOf(Pair("Bit", "Else"))), runBlocking { tutor.songFacts(MusicMetadata("Cover 2", "Us")) })
+        answering("""{"samples":null}""")
+        assertNull(runBlocking { tutor.songFacts(MusicMetadata("Cover 3", "Us")) })
+    }
+
+    @Test
+    fun theSearchResultPickedIsTheOneNumberedOrNone() {
+        val tutor = tutor()
+        val rows = listOf("A | X", "B | Y")
+        listOf("2" to 1, "1." to 0, "3" to null, "0" to null, "none" to null, "" to null).forEach { (text, picked) ->
+            answering(text)
+            assertEquals(text, picked, runBlocking { tutor.pickSong(aSong, rows) })
+            assertEquals(text, picked, runBlocking { tutor.pickSong(aSong, rows, videos = true) })
+        }
+        assertTrue(openAi.asked.last().getString("instructions").contains("YouTube videos"))
+        // No rows, nothing to ask.
+        val before = openAi.asked.size
+        assertNull(runBlocking { tutor.pickSong(aSong, emptyList()) })
+        assertEquals(before, openAi.asked.size)
+    }
+
+    @Test
+    fun linesTheModelReturnsInTheWrongNumberAreNotRomajiFixes() {
+        val tutor = tutor()
+        answering("""["a"]""")
+        assertNull(runBlocking { tutor.fromRomaji(aSong, listOf("a", "b")) })
+        // Blank lines stay as they were, and the rest is trimmed.
+        answering("""["  きみ ", "x"]""")
+        assertEquals(listOf("きみ", " "), runBlocking { tutor.fromRomaji(aSong, listOf("kimi", " ")) })
+    }
+
+    @Test
+    fun aLineOfWordsIsSortedIntoItsSheetPartsByHowItReads() {
+        // Five parts are no mood, nor are parts with a number or a full stop in them.
+        listOf("one · two · three · four · five", "one · 2", "one · two.", "one two three four · five").forEach { line ->
+            assertEquals(line, emptyList<String>(), sheet(line).mood)
+        }
+        assertEquals(listOf("tender", "wistful"), sheet("tender · wistful").mood)
+        // Once there is one, the next such line is part of the story.
+        assertEquals(listOf("" to "a · b"), sheet("tender · wistful\na · b").facts)
+        // Once the story has begun, a line with a colon is part of it.
+        val sheet = sheet("It's a story, told long.\nYear: 1984")
+        assertEquals(emptyList<Pair<String, String>>(), sheet.facts)
+        assertEquals("It's a story, told long. Year: 1984", sheet.text)
+    }
 }
