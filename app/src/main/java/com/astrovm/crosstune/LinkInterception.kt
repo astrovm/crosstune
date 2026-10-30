@@ -99,8 +99,9 @@ internal class LinkInterception(private val context: Context) {
      * the system, so it's read away from the main thread and each call is made only once.
      */
     fun linkState(): LinkState {
-        val installed = installedServices()
-        val serviceApps = installed.associateWith { appFor(installedPackage(it) ?: it.packageName) }
+        val packages = MusicService.entries.mapNotNull { service -> installedPackage(service)?.let { service to it } }.toMap()
+        val installed = packages.keys
+        val serviceApps = packages.mapValues { appFor(it.value) }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return LinkState(serviceApps, null, null)
         val own = ownState()
         val hosts = own?.hostToStateMap

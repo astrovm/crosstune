@@ -79,6 +79,11 @@ class SavedLinesEdgesTest {
     }
 
     @Test
+    fun aLineReadByHandAsItAlreadyIsStaysAsItWas() {
+        assertEquals(night, night.readAs(listOf("とかい", "よる")))
+    }
+
+    @Test
     fun aLineWithoutAWholeReadingIsReadByHandFromItsPieces() {
         val bare = night.copy(reading = null, romanized = null, typed = null)
         val read = bare.readAs(listOf("まち", "よる"))
@@ -129,6 +134,10 @@ class SavedLinesEdgesTest {
         // Only the line asked is read again.
         val again = store.reread(listOf(other.copy(reading = "せい")))
         assertEquals(listOf(night, other.copy(reading = "せい")), again)
+        // A line put right by hand isn't read over.
+        val byHand = SavedLine("月", reading = "つき", readByHand = true, title = "Demo", artist = "Band")
+        store.addAll(listOf(byHand))
+        assertEquals("つき", store.reread(listOf(byHand.copy(reading = "げつ"))).first { it.text == "月" }.reading)
     }
 
     @Test

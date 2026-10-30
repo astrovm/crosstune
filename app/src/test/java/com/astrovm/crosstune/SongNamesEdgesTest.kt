@@ -56,6 +56,8 @@ class SongNamesEdgesTest {
     @Test
     fun titlesWithoutLettersAreTheSameByTheirNotesAlone() {
         assertTrue(SongNames.wordsMatch("小幸运 (电影《我的少女时代》主题曲)", "小幸运"))
+        // Said in a note this doesn't know the words of, it's still a note.
+        assertTrue(SongNames.wordsMatch("小幸运 (我的少女时代)", "小幸运"))
         assertFalse(SongNames.wordsMatch("小幸运", "別の歌"))
         // Nothing but marks has no letters to be the same by.
         assertFalse(SongNames.wordsMatch("♪", "♪"))

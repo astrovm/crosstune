@@ -425,6 +425,12 @@ class ChatGptTest {
     }
 
     @Test
+    fun anAccountListingNoModelsHasNoneToAsk() {
+        openAi.models = { 200 to """{"models":[]}""" }
+        assertNull(runBlocking { signedIn().model() })
+    }
+
+    @Test
     fun aBrowserSendingNonsenseInsteadOfARequestIsIgnoredUntilItComesBack() {
         val result = runBlocking {
             chatGpt().signIn(open = { url ->
