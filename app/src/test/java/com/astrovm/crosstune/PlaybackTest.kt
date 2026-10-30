@@ -883,6 +883,42 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongPausedPlaysOnFromBehindOrInFrontWhereItWas() = runBlocking {
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        allow()
+        val youTubeMusic = player(music, "YouTube Music", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(youTubeMusic)
+        val says = { state: Int -> shadowOf(youTubeMusic).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
+        val resumes = { CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) } }
+        // Playing on, it did.
+        val plays = resumes()
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(plays.await())
+        assertFalse(playback.playsOnlyInFront(music))
+        // Failing to, as YouTube Music without Premium does from behind, it only plays in front.
+        shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
+        val fails = resumes()
+        says(PlaybackState.STATE_ERROR)
+        assertFalse(fails.await())
+        assertTrue(playback.playsOnlyInFront(music))
+        // Brought to the front as from its icon, on the screen it was on, not its link; and left there.
+        assertFalse(playback.bringToFront(song))
+        val icon = ComponentName(music, "$music.MusicActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(icon)
+        shadowOf(app.packageManager).addIntentFilterForActivity(icon, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        assertTrue(playback.bringToFront(song))
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals(icon, opened.component)
+        assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        playback.comesBack()
+        assertNull(shadowOf(app).nextStartedActivity)
+        // No app has it: nothing to play on, or bring.
+        val other = MusicMetadata("Other", "Band")
+        assertFalse(playback.resume(other))
+        assertFalse(playback.bringToFront(other))
+    }
+
+    @Test
     fun theAppPlayingItSaysHowLongTheSongIsWhenItKnows() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", duration = 200_000))

@@ -137,6 +137,16 @@ internal interface PlaybackSource {
     /** Has the app playing [song] [play] it, or pause it. */
     fun playPause(song: MusicMetadata, play: Boolean)
 
+    /**
+     * Has the app [song] is paused in play it on, from where it is, in the background. False when it
+     * says it can't or hasn't started within a couple of seconds, as YouTube Music without Premium,
+     * then known to [playsOnlyInFront], or when no app has it.
+     */
+    suspend fun resume(song: MusicMetadata): Boolean
+
+    /** Brings the app [song] is paused in to the front and has it play on there, from where it is; false when it can't be. */
+    fun bringToFront(song: MusicMetadata): Boolean
+
     /** Has the app playing [song] go on to its [next] song, or back to the one before, and play it. */
     fun skip(song: MusicMetadata, next: Boolean)
 
@@ -310,6 +320,22 @@ internal class MediaSessionPlayback(
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching { appFor(song)?.transportControls?.run { if (play) play() else pause() } }
     }
+
+    override suspend fun resume(song: MusicMetadata): Boolean {
+        val app = runCatching { appFor(song) }.getOrNull() ?: return false
+        return watchStart(app, mustStart = true) { app.transportControls.play() }
+    }
+
+    // Opened as from its icon, which brings back the screen it was on, song and all; a link would start it over.
+    override fun bringToFront(song: MusicMetadata): Boolean = runCatching {
+        val app = appFor(song) ?: return false
+        val opens = context.packageManager.getLaunchIntentForPackage(app.packageName) ?: return false
+        context.startActivity(opens.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        opened = app.packageName
+        // In front, it takes the ask it wouldn't from behind.
+        app.transportControls.play()
+        true
+    }.getOrDefault(false)
 
     override fun skip(song: MusicMetadata, next: Boolean) = moveOn(song) { if (next) skipToNext() else skipToPrevious() }
 

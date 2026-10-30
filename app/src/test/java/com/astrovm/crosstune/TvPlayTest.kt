@@ -468,6 +468,36 @@ class TvPlayTest {
         assertEquals(0, playback.cameBack)
     }
 
+    /** On a phone, Play pressed on a song paused in an app that only plays in front, as YouTube Music without Premium. */
+    private fun playOnPaused() {
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        playback.startsInBackground = false
+        playback.playing.value = Following(PlaybackClock(25_000, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        launch()
+        click(play)
+    }
+
+    @Test
+    fun onAPhoneASongPausedInAnAppThatOnlyPlaysInFrontPlaysOnThereCovered() {
+        playOnPaused()
+        // Asked from behind, it won't, so it's brought to the front on the song, where it was rather than from the start, and covered.
+        waitUntil { playback.broughtToFront.size == 1 }
+        assertEquals(listOf(true), playback.plays)
+        assertTrue(playback.opened.isEmpty())
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        assertTrue(shadowOf(app).nextStartedService.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+    }
+
+    @Test
+    fun onAPhoneASongPausedInAnAppThatCantBeBroughtToTheFrontIsntCovered() {
+        playback.opens = false
+        playOnPaused()
+        waitUntil { playback.plays.isNotEmpty() }
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertNull(shadowOf(app).peekNextStartedService())
+    }
+
     @Test
     fun youTubesTvAppPlaysYouTubeMusicsSongs() {
         assertTrue(MusicService.YOUTUBE_MUSIC in LinkInterception(app).installedServices())
