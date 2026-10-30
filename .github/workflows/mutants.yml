@@ -1,0 +1,89 @@
+name: Mutants
+
+# Mutation testing on the app's changed lines. It never blocks a merge: it isn't part of
+# CI / Required, and it only comments the changes no test caught, for a follow-up PR.
+on:
+  pull_request:
+    paths:
+      - app/src/main/java/**
+      - scripts/mutants.py
+      - tools/pitest-changed-lines/**
+      - .github/workflows/mutants.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutants-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  mutants:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # The whole history, so mutants.py finds where the branch left main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          # Main's runs of CI save the caches; this one only reads them.
+          cache-read-only: true
+
+      # mutants.py exits 1 when a change lived too, so only a run that never got to its tally fails.
+      - name: Mutation testing
+        run: |
+          set +e
+          python3 scripts/mutants.py --gradle "./gradlew --build-cache --configuration-cache" | tee "$RUNNER_TEMP/mutants.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -qE '^(No Kotlin lines changed in the app\.|[0-9]+ of [0-9]+ changes caught by a test\.)$' "$RUNNER_TEMP/mutants.txt" || exit "$status"
+
+      # One comment per pull request, kept up to date, and gone once every change is caught.
+      - name: Comment what lived
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          marker='<!-- mutants -->'
+          lived=$(grep -E '  (survived|no coverage): ' "$RUNNER_TEMP/mutants.txt" || true)
+          old=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
+          if [ -z "$lived" ]; then
+            if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$old"; fi
+            exit 0
+          fi
+          body="$marker
+          **Mutation testing:** $(tail -n 1 "$RUNNER_TEMP/mutants.txt")
+
+          \`\`\`
+          $lived
+          \`\`\`
+
+          Each one is a change to the code no test noticed. Not a blocker: real gaps get their own PR. [Full report]($RUN)"
+          printf '%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$old" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$old" -f body="$body" > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null
+          fi
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutants-report
+          path: app/build/reports/pitest/debug/
+          retention-days: 14
+          if-no-files-found: ignore

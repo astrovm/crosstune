@@ -10,7 +10,7 @@ git submodule update --init --recursive   # projectM is built from source for th
 ./gradlew :app:testDebugUnitTest --tests '*MainActivityTest.aSongPlays*'   # one test
 ./gradlew :app:ci                         # all tests + 100% line coverage + lint + APKs
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
-python3 scripts/mutants.py                # mutation testing on the lines this branch changed; slow, so in the background
+python3 scripts/mutants.py                # mutation testing on the lines this branch changed; slow, so only when asked, in the background
 python3 scripts/shots/shots.py            # store screenshots and site clips, through :app:shots; no phone needed
 node --test report/*.test.mjs             # the report Worker's tests
 ```
@@ -70,7 +70,7 @@ Where each feature starts:
 - Smallest proof first: the test you touched, not the whole suite. CI owns `:app:ci`.
 - Order, every time: 1) push, so the PR's CI starts; 2) the phone gets the app: when the user is testing with Live Edit, deploy from Studio and skip `assembleDebug`; otherwise `./gradlew :app:assembleDebug` alone, then install the APK; 3) `./gradlew :app:ci -x :app:assembleRelease` in the background. Install nothing on the POCO unless asked. Never put the build and the tests in one Gradle command: it runs the tests first, and one failing test means no APK.
 - Kover requires 100% line coverage. Only code that needs a real device is excluded (list in `app/build.gradle.kts`). Every new line needs a test that runs it.
-- Changed logic gets mutation testing too: `python3 scripts/mutants.py`. Each change it lists that lived is a test missing, unless it can't change what the app does.
+- Mutation testing never blocks a PR. The **Mutants** workflow runs it on each PR that changes the app's code, outside `CI / Required`, and comments the changes no test caught. The ones that can change what the app does get tests in their own PR. Locally, run `python3 scripts/mutants.py` only when asked.
 - Test behavior through Compose in `MainActivityTest` and friends, with the fakes behind `MainActivity`'s `@VisibleForTesting` factories (`FakePlayback`, `FakeSpotify`, ...).
 - Tapping a disabled Compose node does nothing: wait for `isEnabled()` first.
 - The fakes answer at once, on `Dispatchers.Unconfined`, so loading states and late answers never show. To test one, hold the fake's answer (a `CountDownLatch` in its handler) until the test has looked.
