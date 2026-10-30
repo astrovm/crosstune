@@ -15,6 +15,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -137,13 +140,66 @@ class FloatingLyricsTest {
         compose.onAllNodesWithText("夜").assertCountEquals(0)
     }
 
+    /** How [text] is drawn: its size and color. */
+    private fun styleOf(text: String): TextStyle {
+        val results = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(text).fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!(results)
+        return results.single().layoutInput.style
+    }
+
     @Test
     fun aTranslationAndAReadingEachHaveTheirOwnSize() {
         val learning = Learning(readings = true, translation = true, script = Script.JAPANESE, lines = listOf(LineReading(listOf(Ruby("夜")), "よる", "yoru")),
-            translations = listOf("Night"), readingScale = 1f, translationScale = 1.5f)
-        show(UiState(lyricsFor = song, lyricLines = listOf(LyricLine(0, "夜")), following = at(500), learning = learning))
-        compose.onNodeWithText("よる").assertExists()
-        compose.onNodeWithText("Night").assertExists()
+            translations = listOf("Night"), readingScale = READING_SCALE * 2, translationScale = 1.5f)
+        show(UiState(lyricsFor = song, lyricLines = listOf(LyricLine(0, "夜")), following = at(500), learning = learning, floating = FloatingOptions(scale = 1.2f)))
+        // The reading's size is how many times the usual one it's set to, the translation's as set; both on the dim lines' 14 sp.
+        assertEquals(14f * 1.2f * 2f, styleOf("よる").fontSize.value, 0.01f)
+        assertEquals(14f * 1.2f * 1.5f, styleOf("Night").fontSize.value, 0.01f)
+    }
+
+    @Test
+    fun theLineAfterTheOneSungIsSizedByTheWordsScaleAndTheFloatingScale() {
+        val learning = Learning(wordsScale = 1.5f)
+        show(UiState(lyricsFor = song, lyricLines = lines, following = at(500), learning = learning, floating = FloatingOptions(scale = 1.2f)))
+        assertEquals(14f * 1.2f * 1.5f, styleOf("Second").fontSize.value, 0.01f)
+    }
+
+    /** How bright [text] is drawn: 1 for the line sung, 0.9 for the one coming, 0.7 for the dim ones. */
+    private fun brightness(text: String) = styleOf(text).color.alpha
+
+    private val apart = listOf(LyricLine(0, "First"), LyricLine(5_000, "Second"))
+
+    @Test
+    fun theLatinLettersOfALineAreSizedByTheWordsScaleToo() {
+        val learning = Learning(romanized = true, script = Script.JAPANESE, lines = listOf(night), wordsScale = 1.5f)
+        show(UiState(lyricsFor = song, lyricLines = listOf(LyricLine(0, "夜")), following = at(500), learning = learning, floating = FloatingOptions(scale = 1.2f)))
+        assertEquals(14f * 1.2f * 1.5f, styleOf("yoru").fontSize.value, 0.01f)
+    }
+
+    @Test
+    fun setToTheLineAfterBrightensAMomentBeforeItIsSung() {
+        show(UiState(lyricsFor = song, lyricLines = lines, following = at(900), linesEarlyMs = 0, nextLineFirst = true))
+        assertEquals(1f, brightness("First"), 0.01f)
+        assertEquals(0.9f, brightness("Second"), 0.01f)
+    }
+
+    @Test
+    fun theLineAfterStaysDimWhenNotSetToBrighten() {
+        show(UiState(lyricsFor = song, lyricLines = lines, following = at(900), linesEarlyMs = 0, nextLineFirst = false))
+        assertEquals(0.7f, brightness("Second"), 0.01f)
+    }
+
+    @Test
+    fun theLineAfterStaysDimTillItIsNear() {
+        show(UiState(lyricsFor = song, lyricLines = apart, following = at(3_000), linesEarlyMs = 0, nextLineFirst = true))
+        assertEquals(0.7f, brightness("Second"), 0.01f)
+    }
+
+    @Test
+    fun theLineAfterStaysDimWhileNoLineIsSungYet() {
+        // The artist floats before the first line, and it isn't a line coming.
+        show(UiState(lyricsFor = song, lyricLines = listOf(LyricLine(1_500, "Late"), LyricLine(5_000, "Later")), following = at(1_000), linesEarlyMs = 0, nextLineFirst = true))
+        assertEquals(0.7f, brightness("Band"), 0.01f)
     }
 
     private var controls by mutableStateOf(true)

@@ -579,7 +579,7 @@ class ExactMatcherTest {
         val edit = "2editBBBBBBBBBBBBBBBBB"
         val album = "3albumCCCCCCCCCCCCCCCC"
         spotifyKnows(
-            listOf(cover, "4goneDDDDDDDDDDDDDDDDD", edit, album),
+            listOf(cover, "4goneDDDDDDDDDDDDDDDDD", "", edit, album),
             mapOf(
                 cover to spotifyPage("Bizarre Love Triangle", "Frente! · Marvin the Album · Song · 1994", 120),
                 edit to spotifyPage("Bizarre Love Triangle", "New Order · Substance · Song · 1987", 222),
@@ -591,6 +591,8 @@ class ExactMatcherTest {
         // Asked by the song's name and artist.
         val asked = fake.requestBodies.single { "track_name" in it }
         assertTrue("\"track_name\":\"Bizarre Love Triangle\"" in asked && "\"artist_name\":\"New Order\"" in asked)
+        // A blank id isn't a song to look up.
+        assertTrue(fake.requestedUrls.none { it.endsWith("/track/") })
         // How long it is unknown, the artist's first.
         assertEquals("https://open.spotify.com/track/$edit", runBlocking { matcher().find(MusicService.SPOTIFY, song.copy(lengthMs = null)) })
     }

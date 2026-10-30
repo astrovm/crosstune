@@ -58,6 +58,9 @@ class LinkResolverTest {
         assertEquals(MusicMetadata("Demo", "Band", artworkUrl = "https://example.com/cover.jpg"), named.metadata)
         assertEquals(null, named.link.service)
         assertEquals("https://www.google.com/search?q=Demo%20by%20Band", named.link.url)
+        // No cover is none, not an empty address to load.
+        respond("""{"title":"Demo","subtitle":"Band","images":{}}""")
+        assertEquals(MusicMetadata("Demo", "Band"), (resolve("https://www.shazam.com/track/5/demo") as Resolution.Resolved).metadata)
 
         // Shazam answers an unknown key with nothing, and one with no title isn't usable.
         respond("", code = 204)
