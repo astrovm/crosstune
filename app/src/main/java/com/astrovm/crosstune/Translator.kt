@@ -93,7 +93,8 @@ internal class Translator(
             // words come back as they were: "Nơi ấy em chờ (I'm in love)", "맞잖아, crime signs". Asked
             // from the song's language, they're translated too. Only lines with letters English doesn't
             // write, so "Buy you Dom Pérignon" stays English.
-            val language = rows.groupingBy { it.second }.eachCount().maxByOrNull { it.value }?.key
+            // A batch always has a line, so a row to read.
+            val language = rows.groupingBy { it.second }.eachCount().maxBy { it.value }.key
             val mixed = if (language == ENGLISH || language == target) emptyList()
             else batch.indices.filter { i -> rows[i].second == ENGLISH && letters[i].any { it.code > LATIN_1 && it.isLetter() } }
             // Pidgin and English around a Yoruba word in a song mostly in English are taken for English
@@ -102,7 +103,7 @@ internal class Translator(
             val found = rows.map { it.first }.toMutableList()
             for ((asked, from) in listOf(mixed to language, yoruba to YORUBA)) {
                 if (asked.isEmpty()) continue
-                val again = googleRows(asked.map { batch[it] }, checkNotNull(from), target) ?: return false
+                val again = googleRows(asked.map { batch[it] }, from, target) ?: return false
                 asked.forEachIndexed { at, i -> found[i] = again[at].first }
             }
             // Google at times answers a line with nothing, and asked again, translates it. Still
@@ -128,7 +129,10 @@ internal class Translator(
         val form = FormBody.Builder().apply { lines.forEach { add("q", written(it)) } }.build()
         val rows = JSONArray(call(Request.Builder().url(url).post(form).build()))
         if (rows.length() != lines.size) return null
-        return List(lines.size) { i -> rows.optJSONArray(i)?.let { it.getString(0).trim() to it.optString(1) } ?: (rows.getString(i).trim() to source) }
+        return List(lines.size) { i ->
+            val row = rows.optJSONArray(i)
+            if (row != null) row.getString(0).trim() to row.optString(1) else rows.getString(i).trim() to source
+        }
     }
 
     /**
@@ -147,7 +151,10 @@ internal class Translator(
             if (rows.size == batch.size) {
                 batch.zip(rows).forEach { (line, row) -> onFound(line, row) }
             } else {
-                batch.forEach { line -> onFound(line, myMemoryRows(written(line), target)?.joinToString(" ") ?: return false) }
+                batch.forEach { line ->
+                    val one = myMemoryRows(written(line), target) ?: return false
+                    onFound(line, one.joinToString(" "))
+                }
             }
         }
         return true

@@ -251,6 +251,16 @@ class PlayQueueTest {
     }
 
     @Test
+    fun aSongTheAppGivesNoNumberIsFollowedByItsNameOnceNumbersWereSeen() {
+        queue().playing()
+        plays(1, 100)
+        plays(2)
+        assertTrue(file.exists())
+        plays(50, ended = true)
+        assertEquals(1, phone.listsAsked.size)
+    }
+
+    @Test
     fun withoutNumbersTheAppsOwnNamesForTheSongsAreFollowed() {
         // As YouTube names what it found: another version of the song, its video, or something else.
         queue().playing()

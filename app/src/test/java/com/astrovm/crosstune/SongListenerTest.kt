@@ -327,6 +327,23 @@ class SongListenerTest {
     }
 
     @Test
+    fun aMicrophoneMadeButNotReadyIsReleasedAndNoRecording() {
+        val unready = AudioRecordMicrophone {
+            AudioRecord(MediaRecorder.AudioSource.MIC, 16_000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, 32_000).also { it.release() }
+        }
+        assertNull(unready.open())
+    }
+
+    @Test
+    fun whereTheSongIsIsKnownOnlyWhenBothWhereAndWhenHeardAre() {
+        val metadata = MusicMetadata("Iris", "The Goo Goo Dolls")
+        assertEquals(PlaybackClock(42_000, 400_000), Heard.Song(metadata, null, 42_000, 400_000).clock)
+        assertNull(Heard.Song(metadata, null, offsetMs = 42_000).clock)
+        assertNull(Heard.Song(metadata, null, startedAtMs = 400_000).clock)
+        assertNull(Heard.Song(metadata, null).clock)
+    }
+
+    @Test
     fun aMicrophoneThatFailsWhileRecordingIsAMicrophoneError() {
         // The phone's microphone answers a read with an error code once it has stopped working.
         ShadowAudioRecord.setSourceProvider {
@@ -427,6 +444,37 @@ class SongListenerTest {
             assertEquals((three.average() * 256).toInt().toShort(), sample)
         }
         assertTrue(tap.closed)
+    }
+
+    /** The 16 kHz sound [sound] makes from when the clock was at [startMs], [count] samples of it. */
+    private fun sixteenKilohertz(sound: ByteArray, startMs: Long, count: Int) = (0 until count).map { index ->
+        val three = (0 until 3).map { (sound[(startMs * 48).toInt() + index * 3 + it].toInt() and 0xFF) - 128 }
+        (three.average() * 256).toInt().toShort()
+    }
+
+    @Test
+    fun aTapThatGivesNothingForAMomentIsReadAgainUntilItDoes() {
+        val sound = music(3)
+        clock = 100
+        val inner = PlayingTap(sound) { clock }
+        var empty = 3
+        val flaky = object : SoundTap by inner {
+            override fun read(into: ByteArray) = if (empty-- > 0) 0 else inner.read(into)
+        }
+        val heard = played(flaky).open()!!.use { all(it, max = 1_600) }
+        assertEquals(1_600, heard.size)
+        assertTrue(heard.any { it != 0.toShort() })
+    }
+
+    @Test
+    fun soundIsHeardWholeEvenWhenTheClockSaysLessTimePassedThanDid() {
+        val sound = music(3)
+        clock = 100
+        val tap = PlayingTap(sound) { clock }
+        // A clock that's behind: the reads overlap by more than it says, so where they match is looked for.
+        val heard = PlayedSound({ tap }, now = { 0L }, sleep = { clock += 1 }).open()!!.use { all(it, max = 3_200) }
+        assertEquals(3_200, heard.size)
+        assertEquals(sixteenKilohertz(sound, 100, 3_200), heard.toList())
     }
 
     @Test

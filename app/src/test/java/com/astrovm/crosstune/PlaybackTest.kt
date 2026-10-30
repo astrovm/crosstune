@@ -504,6 +504,12 @@ class PlaybackTest {
         shadowOf(sessions).clearControllers()
         shadowOf(sessions).addController(uriId)
         assertEquals("spotify:track:4Z8W4fKeB5YxbusRsdQVPb", playback.nowPlaying()?.metadata?.url)
+        // An id that isn't a link, or none, gives no link.
+        for (art in listOf(mapOf(MediaMetadata.METADATA_KEY_MEDIA_ID to "video-one"), emptyMap())) {
+            shadowOf(sessions).clearControllers()
+            shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Demo", "Band", art = art))
+            assertNull(playback.nowPlaying()?.metadata?.url)
+        }
     }
 
     @Test
@@ -1213,6 +1219,10 @@ class PlaybackTest {
         val loading = asks()
         says(PlaybackState.STATE_BUFFERING)
         assertFalse(loading.await())
+        // With no state at all, it hasn't started either.
+        shadowOf(youTubeMusic).setPlaybackState(null)
+        assertFalse(asks().await())
+        shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
         // Already playing, as after another song, it goes on to this one; not asked to start, it's only asked.
         shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
         assertTrue(playback.playSong(song, music, link, mustStart = true))

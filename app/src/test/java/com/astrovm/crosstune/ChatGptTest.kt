@@ -256,6 +256,23 @@ class ChatGptTest {
     }
 
     @Test
+    fun aBrowserClosingAtOnceOrSendingOnlyAMethodIsIgnoredUntilItComesBack() {
+        val result = runBlocking {
+            chatGpt().signIn(open = { url ->
+                openAi.authorize = url.toHttpUrl()
+                val callback = openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl()
+                thread {
+                    // Closed without a word, then a request with no address.
+                    Socket("127.0.0.1", callback.port).close()
+                    Socket("127.0.0.1", callback.port).use { it.getOutputStream().write("GET\r\n".toByteArray()) }
+                    backPage = openAi.comeBack()
+                }
+            })
+        }
+        assertEquals(ChatGptSignInResult.SIGNED_IN, result)
+    }
+
+    @Test
     fun theFirstSignInsPortIsUsedWhenFreeAndAnyOtherWhenNot() {
         val free = ServerSocket(0).use { it.localPort }
         signIn(chatGpt(port = free))
@@ -400,6 +417,57 @@ class ChatGptTest {
         // Lines that aren't events, or events that aren't JSON, are skipped.
         openAi.reply = { 200 to ": keep-alive\n\ndata: [not json]\n\n" + FakeOpenAi.stream("Fine") }
         assertEquals(ChatGptReply.Answer("Fine"), runBlocking { chatGpt.ask("", "Hi") })
+    }
+
+    @Test
+    fun everyKindOfErrorEventIsTakenForALimitOrAFailureByWhatItSays() {
+        val chatGpt = signedIn()
+        val limit = """"code":"subscription_sharing_usage_limit_exceeded""""
+        listOf("response.failed", "response.incomplete", "error").forEach { type ->
+            openAi.reply = { 200 to FakeOpenAi.stream("Half", end = """{"type":"$type",$limit}""") }
+            assertEquals(type, ChatGptReply.LimitReached, runBlocking { chatGpt.ask("", "Hi") })
+            openAi.reply = { 200 to FakeOpenAi.stream("Half", end = """{"type":"$type","code":"server_error"}""") }
+            assertEquals(type, ChatGptReply.Failed, runBlocking { chatGpt.ask("", "Hi") })
+        }
+        // Events that aren't about the answer are passed over.
+        openAi.reply = { 200 to "data: {\"type\":\"response.created\"}\n\n" + FakeOpenAi.stream("Fine") }
+        assertEquals(ChatGptReply.Answer("Fine"), runBlocking { chatGpt.ask("", "Hi") })
+    }
+
+    @Test
+    fun withoutTheModelsListedAnAccountThatNeverAskedHasNoModel() {
+        openAi.models = { 500 to "" }
+        assertNull(runBlocking { chatGpt().model() })
+        assertNull(runBlocking { signedIn().model() })
+    }
+
+    @Test
+    fun withoutTheModelsListedTheOneAskedLastIsAskedAgainForWhoeverIsSignedIn() {
+        runBlocking { signedIn().ask("", "Hi") }
+        openAi.models = { 500 to "" }
+        // A fresh start reads the account from its file, where the last model it asked is kept.
+        assertEquals("gpt-6.1-sol", runBlocking { chatGpt().model() })
+    }
+
+    @Test
+    fun anAccountListingNoModelsHasNoneToAsk() {
+        openAi.models = { 200 to """{"models":[]}""" }
+        assertNull(runBlocking { signedIn().model() })
+    }
+
+    @Test
+    fun aBrowserSendingNonsenseInsteadOfARequestIsIgnoredUntilItComesBack() {
+        val result = runBlocking {
+            chatGpt().signIn(open = { url ->
+                openAi.authorize = url.toHttpUrl()
+                val callback = openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl()
+                thread {
+                    Socket("127.0.0.1", callback.port).use { it.getOutputStream().write("GET nonsense HTTP/1.1\r\n\r\n".toByteArray()) }
+                    backPage = openAi.comeBack()
+                }
+            })
+        }
+        assertEquals(ChatGptSignInResult.SIGNED_IN, result)
     }
 
     private fun tutor(chatGpt: ChatGpt = signedIn()) = ChatGptTutor(chatGpt, LookupCache(File(folder.root, "answers.json"), Dispatchers.Unconfined))

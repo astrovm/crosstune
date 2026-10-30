@@ -93,6 +93,14 @@ class LyricsLanguageTest {
     }
 
     @Test
+    fun withoutAnAndroidTextClassifierServiceItCantBeTold() = runBlocking {
+        val without = object : android.content.ContextWrapper(app) {
+            override fun getSystemServiceName(serviceClass: Class<*>): String? = null
+        }
+        assertNull(AndroidLyricsLanguage(without, Dispatchers.Unconfined).of(listOf("Night sky")))
+    }
+
+    @Test
     fun androidsOwnIsAskedByDefault() = runBlocking {
         // Robolectric's Android has no classifier of its own to answer with, which is no answer.
         assertNull(AndroidLyricsLanguage(app, Dispatchers.Unconfined).of(listOf("Night sky")))

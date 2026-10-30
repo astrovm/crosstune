@@ -444,6 +444,44 @@ class SungWordsTest {
         assertEquals(1, listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null, null)!!.words.size)
     }
 
+    @Test
+    fun aModelThatFailsWhileHearingIsStillClosedIfItNeedsToBe() = runBlocking {
+        val closing = object : WordHearing, Closeable {
+            var closed = false
+            override fun words(samples: FloatArray, language: String?): List<HeardWord> = error("no ears")
+            override fun close() {
+                closed = true
+            }
+        }
+        val failed = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = closing).hear(null) }
+        assertEquals("no ears", failed.exceptionOrNull()?.message)
+        assertTrue(closing.closed)
+        // One that isn't closed needn't be, and fails the same.
+        val open = WordHearing { _, _ -> error("no ears either") }
+        val failedOpen = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null) }
+        assertEquals("no ears either", failedOpen.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun linesFarOffAreFoundWhateverHowTheyAreTimedAndAFewWordsElsewhereDontSplitThem() {
+        // Lines that end as well as start are moved with their ends.
+        val ending = verseAndChorus.map { it.copy(endMs = it.timeMs + 2_500) }
+        assertEquals(23_600L, SungAlignment.shiftMs(heard(ending.take(5), 23_600), fromTheStart, ending))
+        // A chorus sung twice, with the line before it only once: the second time is a lesser place for the words to be.
+        assertEquals(20_000L, SungAlignment.shiftMs(heard(verseAndChorus.subList(2, 11), 20_000), fromTheStart, verseAndChorus))
+    }
+
+    @Test
+    fun wordsHeardWhereNoLineIsTimedPlaceNoLine() {
+        val sung = heard(song.take(2), 100_000)
+        assertEquals(emptyMap<Int, Long>(), SungAlignment.linesMs(sung, fromTheStart, song, 0))
+    }
+
+    @Test
+    fun aSingleWordHeardOfTheSongIsntEnoughToFindLinesFarOff() {
+        assertNull(SungAlignment.shiftMs(Sung(0, listOf(HeardWord("Every", 500))), fromTheStart, verseAndChorus))
+    }
+
     private val modelBytes = "a model, as far as a test knows".toByteArray()
     private val modelSha = MessageDigest.getInstance("SHA-256").digest(modelBytes).joinToString("") { "%02x".format(it) }
 
