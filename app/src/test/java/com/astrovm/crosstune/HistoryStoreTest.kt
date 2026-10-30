@@ -89,6 +89,16 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun twoVersionsOfASongOnOneServiceAreTwoEntries() {
+        // Another upload or release of it, timed and sounding its own way, as YouTube Music has.
+        val one = HistoryEntry(MusicLink(MusicService.YOUTUBE_MUSIC, ItemType.TRACK, "aaaaaaaaaaa", "https://music.youtube.com/watch?v=aaaaaaaaaaa"), MusicMetadata("Plastic Love", "Mariya Takeuchi"))
+        val other = HistoryEntry(MusicLink(MusicService.YOUTUBE_MUSIC, ItemType.TRACK, "bbbbbbbbbbb", "https://music.youtube.com/watch?v=bbbbbbbbbbb"), MusicMetadata("Plastic Love", "Mariya Takeuchi"))
+        store.add(one)
+        store.add(other)
+        assertEquals(listOf(other, one), HistoryStore(preferences).load())
+    }
+
+    @Test
     fun keepsNewestFirstWithoutDuplicatesAndCapsAtTwenty() {
         (1..25).forEach { store.add(entry(it)) }
         store.add(entry(10))

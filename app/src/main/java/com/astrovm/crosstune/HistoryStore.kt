@@ -134,10 +134,11 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
 /**
  * The same thing, however it was linked: one link, or the same item on the same service, e.g. a song
  * shared once from its album's page and once on its own, or one song from two apps, or searched for.
+ * Two of a name on one service are two versions of it, as an upload and a release can be.
  */
 private fun HistoryEntry.isSameAs(other: HistoryEntry): Boolean =
     link.url == other.link.url ||
         (link.service != null && link.service == other.link.service && link.type == other.link.type && link.id == other.link.id) ||
-        (link.type == ItemType.TRACK && other.link.type == ItemType.TRACK &&
+        (link.type == ItemType.TRACK && other.link.type == ItemType.TRACK && (link.service == null || link.service != other.link.service) &&
             SongNames.normalize(metadata.title).let { it.isNotEmpty() && it == SongNames.normalize(other.metadata.title) } &&
             SongNames.normalize(metadata.artist) == SongNames.normalize(other.metadata.artist))
