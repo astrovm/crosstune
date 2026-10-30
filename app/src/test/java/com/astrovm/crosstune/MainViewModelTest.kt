@@ -903,4 +903,142 @@ class MainViewModelTest {
         assertFalse(model.uiState.canRetry)
         assertFalse(model.uiState.listeningAlong)
     }
+
+    @Test
+    fun stepsToFixGoOneByOneAndComeBackToTheListOnlyIfTheyCameFromIt() {
+        val model = model()
+        // With nothing being fixed there is nothing to go on or back from.
+        model.nextFix()
+        model.fixBack()
+        assertNull(model.uiState.fixes)
+        model.fixSteps(listOf(Need.Links, Need.Follow))
+        assertEquals(Need.Links, model.uiState.fixes?.need)
+        model.nextFix()
+        assertEquals(Need.Follow, model.uiState.fixes?.need)
+        // After the last step, out: they didn't come from the list.
+        model.nextFix()
+        assertNull(model.uiState.fixes)
+        model.fixSteps(listOf(Need.Links))
+        model.fixBack()
+        assertNull(model.uiState.fixes)
+        // From the list, they come back to it.
+        model.openFixes()
+        model.fixSteps(listOf(Need.Links, Need.Follow))
+        assertEquals(Fixes(list = true, steps = listOf(Need.Links, Need.Follow)), model.uiState.fixes)
+        model.nextFix()
+        model.nextFix()
+        assertEquals(Fixes(list = true), model.uiState.fixes)
+        model.fixSteps(listOf(Need.Float))
+        model.fixBack()
+        assertEquals(Fixes(list = true), model.uiState.fixes)
+        model.closeFixes()
+        assertNull(model.uiState.fixes)
+    }
+
+    @Test
+    fun thePlayersAppOpensInFrontFromTheAppItFollowsOrElseTheOneItWasOpenedWith() {
+        val playback = FakePlayback()
+        playback.playing.value = following(app = "com.tidal")
+        val model = playingModel(playback)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        until("following the app") { model.uiState.player?.following?.appPackage == "com.tidal" }
+        model.openPlayerApp()
+        idle()
+        assertEquals(listOf<Effect>(Effect.Show("com.tidal", finishAfterOpen = false, saysWhenItFails = false)), effects)
+        // The app let go: the one the song plays in is still the one to open.
+        playback.playing.value = null
+        until("the app let go") { model.uiState.player?.following == null }
+        val opened = model.uiState.player?.app
+        assertTrue(opened != null)
+        model.openPlayerApp()
+        idle()
+        assertEquals(Effect.Show(opened!!, finishAfterOpen = false, saysWhenItFails = false), effects.last())
+        assertEquals(2, effects.size)
+    }
+
+    @Test
+    fun theReadingSettingsAreKeptAndShownAtOnce() {
+        val model = model()
+        model.setReadings(true)
+        model.setRomanized(true)
+        model.setTranslation(true)
+        model.setRomajiTyped(true)
+        model.setWordsCentered(true)
+        model.setWordsAs(WordsAs.KANA)
+        model.setChatGptTranslation(false)
+        idle()
+        val learning = model.uiState.learning
+        assertTrue(learning.readings && learning.romanized && learning.translation && learning.romajiTyped)
+        assertEquals(true, learning.centered)
+        assertEquals(WordsAs.KANA, learning.wordsAs)
+        assertFalse(learning.chatGptTranslation)
+        val kept = prefs()
+        assertTrue(kept.getBoolean("lyrics_readings", false) && kept.getBoolean("lyrics_romanized", false) && kept.getBoolean("lyrics_translation", false))
+        assertTrue(kept.getBoolean("lyrics_romaji_typed", false) && kept.getBoolean("words_centered", false))
+        assertEquals("KANA", kept.getString("lyrics_words_as", null))
+        assertTrue(kept.contains("translation_chatgpt") && !kept.getBoolean("translation_chatgpt", true))
+        model.retryTranslation()
+        assertFalse(model.uiState.learning.translationFailed)
+        // A second model starts the way the first was left.
+        assertEquals(learning.wordsAs, model().uiState.learning.wordsAs)
+    }
+
+    @Test
+    fun theSizesAreKeptOnlyOnceLetGo() {
+        val model = model()
+        model.setReadingScale(0.7f, save = false)
+        model.setWordsScale(1.4f, save = false)
+        model.setTranslationScale(0.8f, save = false)
+        assertEquals(listOf(0.7f, 1.4f, 0.8f), model.uiState.learning.let { listOf(it.readingScale, it.wordsScale, it.translationScale) })
+        assertFalse(prefs().contains("reading_scale") || prefs().contains("words_scale") || prefs().contains("translation_scale"))
+        model.setReadingScale(0.6f, save = true)
+        model.setWordsScale(1.5f, save = true)
+        model.setTranslationScale(0.9f, save = true)
+        assertEquals(listOf(0.6f, 1.5f, 0.9f), listOf("reading_scale", "words_scale", "translation_scale").map { prefs().getFloat(it, 0f) })
+    }
+
+    @Test
+    fun theLanguagesAreKeptOnlyIfTheAppKnowsThemAndTranslatingAgainStartsAfresh() {
+        val model = model()
+        model.setUntranslated(setOf("es", "ja", "xx"))
+        assertEquals(setOf("es", "ja"), model.uiState.learning.untranslated)
+        assertEquals(setOf("es", "ja"), prefs().getStringSet("untranslated_languages", null))
+        model.setTranslateInto("es-AR")
+        assertEquals("es-AR", model.uiState.learning.into)
+        assertEquals("es-AR", prefs().getString("translate_into", null))
+        // One it doesn't translate into is the app's own language.
+        model.setTranslateInto("xx")
+        assertNull(model.uiState.learning.into)
+        assertFalse(prefs().contains("translate_into"))
+        model.setTranslateInto("de")
+        model.setTranslateInto(null)
+        assertNull(model.uiState.learning.into)
+        assertFalse(prefs().contains("translate_into"))
+    }
+
+    @Test
+    fun cardKindsAreKeptOnlyWhenAskedAndOneStaysOn() {
+        val model = model()
+        val kinds = model.uiState.cardTypes
+        model.setCardTypes(kinds.map { it.copy(on = false) }, save = false)
+        assertEquals(kinds.mapIndexed { index, _ -> index == 0 }, model.uiState.cardTypes.map { it.on })
+        assertFalse(prefs().contains("card_types"))
+        val second = kinds.mapIndexed { index, type -> type.copy(on = index == 1) }
+        model.setCardTypes(second, save = true)
+        assertEquals(second, model.uiState.cardTypes)
+        assertTrue(prefs().contains("card_types"))
+        assertEquals(second.map { it.on }, loadCardTypes(prefs()).map { it.on })
+    }
+
+    @Test
+    fun chordsSwitchedOnAndOffAreKeptAndStopLookingThemUp() {
+        val model = model()
+        model.setChords(true)
+        assertTrue(model.uiState.chords.on)
+        assertTrue(prefs().getBoolean("lyrics_chords", false))
+        model.setChords(false)
+        assertFalse(model.uiState.chords.on || model.uiState.chords.loading)
+        assertTrue(prefs().contains("lyrics_chords") && !prefs().getBoolean("lyrics_chords", true))
+    }
 }
