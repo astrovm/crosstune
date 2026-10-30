@@ -268,6 +268,22 @@ class SingingTest {
     }
 
     @Test
+    fun wordsTimedFarEarlierThanSungAreHeardStraightOnNotWhereTheyreTimed() {
+        // Timed for a take with a shorter intro: where the words are timed next, the singing's long gone.
+        val times = listOf(2, 5, 8, 11, 44, 47)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 17_000L }) }
+        openLyrics()
+        plays()
+        // The first while has a line at most, too little to tell.
+        waitUntil { singing.hears == 1 }
+        assertFalse(model().uiState.lyricsSynced)
+        passes(20_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertEquals(22_000L, model().uiState.lyricLines[1].timeMs)
+    }
+
+    @Test
     fun resetPartwayThroughTheSongTheSingingIsntHeardOn() {
         val times = listOf(2, 5, 8, 30, 33, 36)
         lyricsTimedFor(null, times)
@@ -580,6 +596,11 @@ class SingingTest {
         singing.answer = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }
         openLyrics()
         repeat(5) { plays(positionMs = it.toLong()) }
+        // Heard straight on, a while at a time.
+        waitUntil { singing.hears == 1 }
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        passes(20_000)
         waitUntil { singing.hears == 3 }
         passes(60_000)
         assertEquals(3, singing.hears)

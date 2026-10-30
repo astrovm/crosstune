@@ -2065,11 +2065,13 @@ internal class MainViewModel(
         singingJob = viewModelScope.launch {
             // Where in the song the singing was heard up to, so the next while heard is further on.
             var heardTo: Long? = null
+            // Heard nothing to match, the words may be timed far off, so where they're timed says nothing.
+            var straightOn = false
             while (true) {
                 // Heard against the lines as they're shown, so already where they're sung, a little off at most.
                 val shown = LyricsSync.adjust(lines, syncPoints)
                 // Heard where lines are sung, so there are words to hear.
-                delay(untilSung(shown, uiState.following?.clock ?: return@launch, heardTo) ?: return@launch)
+                delay(untilSung(shown, uiState.following?.clock ?: return@launch, heardTo, straightOn) ?: return@launch)
                 val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return@launch
                 singingTries++
                 val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'))
@@ -2082,8 +2084,9 @@ internal class MainViewModel(
                 val playing = uiState.following?.clock
                 if (uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
                 // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
-                // while is heard straight on: the song may only play on, with nothing else to start it.
+                // while is heard straight on, wherever the words are timed: the singing may be well after them.
                 val shift = SungAlignment.shiftMs(sung, clock::positionAt, shown)
+                straightOn = shift == null
                 if (shift == null) {
                     if (singingTries >= SINGING_TRIES) return@launch
                     heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
@@ -2159,14 +2162,15 @@ internal class MainViewModel(
 
     /**
      * How long until what's heard from then on has lines sung in it, by [clock]; null when no stretch
-     * of the song left has enough. Only from [after] on, when the song was heard up to there.
+     * of the song left has enough. Only from [after] on, when the song was heard up to there, and
+     * [straightOn] from there, wherever the lines are timed.
      */
-    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?): Long? {
+    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?, straightOn: Boolean = false): Long? {
         val here = clock.positionAt(now())
         val at = maxOf(here, after ?: here)
         val heardMs = SingingListener.SECONDS * 1000L
         return (listOf(at) + lines.map { it.timeMs }.filter { it > at }).firstOrNull { from ->
-            lines.count { it.text.isNotBlank() && it.timeMs in from until from + heardMs - SINGING_TAIL_MS } >= SINGING_LINES
+            straightOn || lines.count { it.text.isNotBlank() && it.timeMs in from until from + heardMs - SINGING_TAIL_MS } >= SINGING_LINES
         }?.let { ((it - here) / clock.speed).toLong() }
     }
 
