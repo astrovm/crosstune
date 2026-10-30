@@ -88,10 +88,13 @@ internal object MetadataParsers {
             rawTitle
         }
         val count = songCountRegex.find(html)?.groupValues?.get(1)?.toIntOrNull()
-        return MusicMetadata(title, artist, type, tags.image(), trackCount = count)
+        // A song's page says how long it is, in seconds, which tells its versions apart.
+        val length = songLengthRegex.find(html)?.groupValues?.get(1)?.toLongOrNull()?.takeIf { type == ItemType.TRACK }?.times(1000)
+        return MusicMetadata(title, artist, type, tags.image(), trackCount = count, lengthMs = length)
     }
 
     private val songCountRegex = Regex("""<meta name="music:song_count" content="(\d+)"""")
+    private val songLengthRegex = Regex("""<meta name="music:duration" content="(\d+)"""")
 
     private val spotifyStateRegex = Regex("""<script id="initialState" type="text/plain">([^<]*)</script>""")
 

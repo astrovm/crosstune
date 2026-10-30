@@ -144,6 +144,7 @@ internal class ExactMatcher(
                         MusicService.DEEZER -> Answer(findOnDeezer(metadata))
                         MusicService.BANDCAMP -> Answer(findOnBandcamp(metadata))
                         MusicService.TIDAL -> Answer(findOnTidal(metadata))
+                        MusicService.SPOTIFY -> Answer(findOnSpotify(metadata))
                         MusicService.SOUNDCLOUD -> Answer(findOnSoundCloud(metadata))
                         MusicService.AUDIOMACK -> Answer(findOnAudiomack(metadata))
                         MusicService.QOBUZ -> Answer(findOnQobuz(metadata))
@@ -398,6 +399,18 @@ internal class ExactMatcher(
             }
         }
         return asLongAs(metadata, named) { it.optLong("duration") * 1000 }?.let { "https://tidal.com/browse/$path/${it.optLong("id")}" }
+    }
+
+    /**
+     * Spotify's search needs an account, but ListenBrainz knows which Spotify songs go by a name, and
+     * each song's own page says its name, artist and length, so the one that's this song is picked
+     * from the first few. Only songs: ListenBrainz knows no albums or artists, see [canMatchExactly].
+     */
+    private suspend fun findOnSpotify(metadata: MusicMetadata): String? {
+        val ids = apis.spotifyIds(metadata.title, metadata.artist).take(SPOTIFY_PAGES)
+        val songs = coroutineScope { ids.map { id -> async { apis.spotifySong(id) } }.awaitAll() }.filterNotNull()
+        val named = songs.filter { matches(metadata, it.title, it.artist) }
+        return asLongAs(metadata, named) { it.lengthMs }?.url
     }
 
     /**
@@ -837,6 +850,9 @@ internal class ExactMatcher(
     private companion object {
         const val TIMEOUT_MS = 5_000L
 
+        /** How many of the Spotify songs ListenBrainz knows by a name are read to find the one. */
+        const val SPOTIFY_PAGES = 6
+
         /** How long ChatGPT has to pick a song, after the searches it picks from; it takes a few seconds. */
         const val PICK_TIMEOUT_MS = 8_000L
         const val QUEUE_LOOKUPS_AT_ONCE = 6
@@ -905,10 +921,10 @@ internal class ExactMatcher(
     }
 }
 
-/** The apps whose search needs no account. */
+/** The apps whose search needs no account. Spotify's does, so its songs are found another way, but not its albums or artists. */
 private val matchable = setOf(
     MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.BANDCAMP, MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE,
-    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.QOBUZ
+    MusicService.TIDAL, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.QOBUZ, MusicService.SPOTIFY
 )
 
 /**
@@ -917,7 +933,8 @@ private val matchable = setOf(
  * Qobuz's artists aren't told apart, see ExactMatcher.findOnQobuz.
  */
 internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
-    type != ItemType.PLAYLIST && target in matchable && !(target == MusicService.QOBUZ && type == ItemType.ARTIST)
+    type != ItemType.PLAYLIST && target in matchable && !(target == MusicService.QOBUZ && type == ItemType.ARTIST) &&
+        !(target == MusicService.SPOTIFY && type != ItemType.TRACK)
 
 /**
  * Whether [item] not being on [target] is worth saying, rather than searching for it: a song or album
@@ -926,7 +943,10 @@ internal fun canMatchExactly(target: MusicService, type: ItemType): Boolean =
  * label's page isn't found, though it's there, so it's searched for.
  */
 internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
-    (canMatchExactly(target, item.type) && target !in ownPagesOnly) || (item.type == ItemType.PLAYLIST && item.tracks.isEmpty())
+    (canMatchExactly(target, item.type) && target !in partlyKnown) || (item.type == ItemType.PLAYLIST && item.tracks.isEmpty())
 
-/** The apps a song is only matched on from its artist's own page or a verified account. */
-private val ownPagesOnly = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK)
+/**
+ * The apps where a song not found may still be there: on Bandcamp, SoundCloud and Audiomack only its
+ * artist's own page or a verified account counts, and ListenBrainz doesn't know every Spotify song.
+ */
+private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY)
