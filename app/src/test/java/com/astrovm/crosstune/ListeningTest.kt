@@ -1325,7 +1325,7 @@ class ListeningTest {
     fun theWordsStopWhereTheAppStopped() {
         val phone = FakePlayback().apply {
             access = true
-            playing.value = Following(PlaybackClock(39_990, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true)
+            playing.value = Following(PlaybackClock(39_500, SystemClock.elapsedRealtime(), playing = false), "Music", canSeek = true)
         }
         MainActivity.playbackFactory = { phone }
         val hearing = FakeHearing()
