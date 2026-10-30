@@ -1282,4 +1282,86 @@ class MainViewModelTest {
         model.takeNotFoundOffer(original = true)
         assertEquals(listOf(search to ytMusic), searched())
     }
+
+    private val playlistLink = "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+    private val queueLink = "https://music.youtube.com/watch?v=first000000&list=TLGGqueue"
+
+    /** A model whose songs go to [service], on the phone, with a playlist of two songs looked up and shown, YouTube finding the first. */
+    private fun playlistModel(playback: FakePlayback, service: MusicService, found: Boolean = true): MainViewModel {
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":""}]}}}}}}</script>"""
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
+                    .header("Location", "https://www.youtube.com/watch?v=first000000&list=TLGGqueue").build()
+                request.url.host == "music.youtube.com" && found -> FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                    "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"First Song"}]}}},
+                    {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                    "playlistItemData":{"videoId":"first000000"}}}]}""")
+                request.url.host == "music.youtube.com" -> FakeSpotify.html(request, "{}")
+                else -> FakeSpotify.html(request, FakeSpotify.trackPage("Road Trip | Spotify", "playlist"))
+            }
+        }
+        shadowOf(app.packageManager).installPackage(installedApp(service.packageName, "Music"))
+        prefs().edit().putString("default_target", service.name).commit()
+        val model = model(playback = playback)
+        model.refreshSystemState()
+        idle()
+        model.onUrlChange(playlistLink)
+        model.resolveTypedInput()
+        until("looked the playlist up") { model.uiState.result?.tracks?.size == 2 && !model.uiState.isLoading }
+        return model
+    }
+
+    @Test
+    fun aPlaylistPlaysAllAtOnceInTheMusicAppsPlayerOrSaysWhenYouTubeFindsNone() {
+        val playback = FakePlayback().apply { access = true }
+        val model = playlistModel(playback, MusicService.YOUTUBE_MUSIC)
+        // The app plays the list as soon as it is asked.
+        appPlays(playback)
+        model.playAll()
+        until("asked for the list") { playback.listsAsked.isNotEmpty() }
+        assertEquals(listOf(ytMusic to queueLink), playback.listsAsked.toList())
+        assertEquals("First Song", model.uiState.player?.song?.title)
+        until("done asking") { model.uiState.queueProgress == null }
+        // Shuffled, the whole list is, then asked for the same way.
+        model.closePlayer()
+        model.playAll(shuffled = true)
+        until("asked again") { playback.listsAsked.size == 2 }
+        until("done asking again") { model.uiState.queueProgress == null }
+        // The app won't play it in the background: it is opened on the list, no player.
+        model.closePlayer()
+        playback.canPlaySongs = false
+        model.playAll()
+        until("opened") { playback.opened.isNotEmpty() }
+        assertEquals(ytMusic to queueLink, playback.opened.single())
+        until("done opening") { model.uiState.queueProgress == null }
+        // Where YouTube finds none of its songs there is nothing to play.
+        val none = playlistModel(FakePlayback().apply { access = true }, MusicService.YOUTUBE_MUSIC, found = false)
+        none.playAll()
+        until("said so") { none.uiState.error == AppError.NOT_FOUND }
+        assertNull(none.uiState.queueProgress)
+        assertNull(none.uiState.player)
+    }
+
+    @Test
+    fun aPlaylistForAnAppThatTakesNoListPlaysItsFirstSongByNameOrOpensItThereWhenItCant() {
+        val playback = FakePlayback().apply { access = true }
+        val model = playlistModel(playback, MusicService.TIDAL)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.playAll()
+        until("asked for the first song") { playback.songsAsked.isNotEmpty() }
+        assertEquals(MusicMetadata("First Song", "Band") to MusicService.TIDAL.packageName, playback.songsAsked.single().let { (song, app) -> song.copy(url = null, type = ItemType.TRACK) to app })
+        assertEquals("First Song", model.uiState.player?.song?.title)
+        assertTrue(effects.isEmpty())
+        // Not asked in the background, the player is closed and the song opened in the app.
+        model.closePlayer()
+        playback.canPlaySongs = false
+        model.playAll()
+        until("opened in the app") { effects.isNotEmpty() }
+        assertNull(model.uiState.player)
+        assertEquals(MusicService.TIDAL.packageName, (effects.single() as Effect.Open).packageName)
+    }
 }
