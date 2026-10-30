@@ -453,12 +453,12 @@ class SungWordsTest {
                 closed = true
             }
         }
-        val failed = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = closing).hear(null) }
+        val failed = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = closing).hear(null, null) }
         assertEquals("no ears", failed.exceptionOrNull()?.message)
         assertTrue(closing.closed)
         // One that isn't closed needn't be, and fails the same.
         val open = WordHearing { _, _ -> error("no ears either") }
-        val failedOpen = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null) }
+        val failedOpen = runCatching { listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null, null) }
         assertEquals("no ears either", failedOpen.exceptionOrNull()?.message)
     }
 

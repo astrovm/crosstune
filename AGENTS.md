@@ -70,7 +70,7 @@ Where each feature starts:
 
 - Smallest proof first: the test you touched, not the whole suite. CI owns `:app:ci`.
 - Order, every time: 1) push, so the PR's CI starts; 2) the phone gets the app: when the user is testing with Live Edit, deploy from Studio and skip `assembleDebug`; otherwise `./gradlew :app:assembleDebug` alone, then install the APK; 3) `./gradlew :app:ci -x :app:assembleRelease` in the background. Install nothing on the POCO unless asked. Never put the build and the tests in one Gradle command: it runs the tests first, and one failing test means no APK.
-- Kover requires 100% line coverage. Only code that needs a real device is excluded (list in `app/build.gradle.kts`). Every new line needs a test that runs it. Branch coverage only has to stay at 85% or more.
+- Kover requires 100% line coverage. Only code that needs a real device is excluded (list in `app/build.gradle.kts`). Every new line needs a test that runs it. Branch coverage only has to stay at 88% or more.
 - `./gradlew :app:detekt` fails on new tangled logic: too many paths in a function, a condition with too many parts, blocks nested too deep. Split it up. `config/detekt/baseline.xml` lists what was already there; never add to it.
 - Mutation testing never blocks a PR. The **Mutants** workflow runs it on each PR that changes the app's code, outside `CI / Required`, and comments the changes no test caught. The ones that can change what the app does get tests in their own PR. Locally, run `python3 scripts/mutants.py` only when asked.
 - Test behavior through Compose in `MainActivityTest` and friends, with the fakes behind `MainActivity`'s `@VisibleForTesting` factories (`FakePlayback`, `FakeSpotify`, ...).
