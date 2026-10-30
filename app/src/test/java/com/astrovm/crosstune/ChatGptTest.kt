@@ -256,6 +256,23 @@ class ChatGptTest {
     }
 
     @Test
+    fun aBrowserClosingAtOnceOrSendingOnlyAMethodIsIgnoredUntilItComesBack() {
+        val result = runBlocking {
+            chatGpt().signIn(open = { url ->
+                openAi.authorize = url.toHttpUrl()
+                val callback = openAi.authorize.queryParameter("redirect_uri")!!.toHttpUrl()
+                thread {
+                    // Closed without a word, then a request with no address.
+                    Socket("127.0.0.1", callback.port).close()
+                    Socket("127.0.0.1", callback.port).use { it.getOutputStream().write("GET\r\n".toByteArray()) }
+                    backPage = openAi.comeBack()
+                }
+            })
+        }
+        assertEquals(ChatGptSignInResult.SIGNED_IN, result)
+    }
+
+    @Test
     fun theFirstSignInsPortIsUsedWhenFreeAndAnyOtherWhenNot() {
         val free = ServerSocket(0).use { it.localPort }
         signIn(chatGpt(port = free))
@@ -422,6 +439,14 @@ class ChatGptTest {
         openAi.models = { 500 to "" }
         assertNull(runBlocking { chatGpt().model() })
         assertNull(runBlocking { signedIn().model() })
+    }
+
+    @Test
+    fun withoutTheModelsListedTheOneAskedLastIsAskedAgainForWhoeverIsSignedIn() {
+        runBlocking { signedIn().ask("", "Hi") }
+        openAi.models = { 500 to "" }
+        // A fresh start reads the account from its file, where the last model it asked is kept.
+        assertEquals("gpt-6.1-sol", runBlocking { chatGpt().model() })
     }
 
     @Test
