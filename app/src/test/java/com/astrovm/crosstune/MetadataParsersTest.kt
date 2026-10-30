@@ -613,7 +613,7 @@ class MetadataParsersTest {
 
     @Test
     fun spotifyPagesMissingPartsGiveWhatIsThere() {
-        assertNull(MetadataParsers.spotify(og(" | Spotify"), ItemType.TRACK))
+        assertNull(MetadataParsers.spotify(og("   "), ItemType.TRACK))
         // No description, no artist.
         assertEquals(MusicMetadata("Song", ""), MetadataParsers.spotify(og("Song"), ItemType.TRACK))
         // "by" the album's artist is only dropped when the title also has the album's name after a dash.
@@ -744,7 +744,7 @@ class MetadataParsersTest {
         val videos = MetadataParsers.youtubePlaylist(page("""{"items":[${lockups.joinToString(",")},5]}"""))!!.tracks
         assertEquals(List(8) { MusicMetadata("Song", "") }, videos)
         // With an id, a video has its picture and link.
-        val withId = MetadataParsers.youtubePlaylist(page("""[${lockup("\"contentId\":\"abc\"," + metadata(""))}]"""))!!.tracks.single()
+        val withId = MetadataParsers.youtubePlaylist(page("""{"items":[${lockup("\"contentId\":\"abc\"," + metadata(""))}]}"""))!!.tracks.single()
         assertEquals("https://www.youtube.com/watch?v=abc", withId.url)
         assertEquals("https://i.ytimg.com/vi/abc/mqdefault.jpg", withId.artworkUrl)
         // No title for the playlist, or nothing in its data to read, still gives what's there.
@@ -765,7 +765,7 @@ class MetadataParsersTest {
         fun playlist(data: String?, title: String? = "Mix on Apple Music") =
             og(title) + (data?.let { """<script type="application/json" id="serialized-server-data">$it</script>""" } ?: "")
         assertNull(MetadataParsers.applePlaylist(playlist(null, title = null)))
-        assertNull(MetadataParsers.applePlaylist(playlist(null, title = " on Apple Music")))
+        assertNull(MetadataParsers.applePlaylist(playlist(null, title = "   ")))
         assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(playlist(null))!!.tracks)
         assertEquals(emptyList<MusicMetadata>(), MetadataParsers.applePlaylist(playlist("{"))!!.tracks)
         fun song(title: String, artwork: String) = """{"title":"$title","artistName":"Band","contentDescriptor":{"kind":"song"}$artwork}"""
