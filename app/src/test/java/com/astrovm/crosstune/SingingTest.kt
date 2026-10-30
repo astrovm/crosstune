@@ -718,6 +718,22 @@ class SingingTest {
         assertTrue(withMemory(3L * 1024 * 1024 * 1024) is SingingListener)
     }
 
+    @Test
+    fun theLinesHeardThisTimeAreNotKeptWithTheWords() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 1_000L }) }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[0].timeMs == 3_000L }
+        // Closed and opened again, they're as timed till they're heard again.
+        singing.answer = { CompletableDeferred<Sung?>().await() }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
     /** Hears what a test gives it. */
     private class FakeSinging : SingingHearing {
         val languages: MutableList<String?> = CopyOnWriteArrayList()
