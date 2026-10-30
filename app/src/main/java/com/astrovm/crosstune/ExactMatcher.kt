@@ -52,7 +52,9 @@ internal class ExactMatcher(
     private val now: () -> Long = System::currentTimeMillis,
     /** How long a search has, and then ChatGPT to pick from what it found. */
     private val timeoutMs: Long = TIMEOUT_MS,
-    private val pickTimeoutMs: Long = PICK_TIMEOUT_MS
+    private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,
+    /** A Spotify artist's id by their name, see [MusicBrainz.spotifyArtist]; none by default. */
+    private val spotifyArtist: suspend (String) -> String? = { null }
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
@@ -410,7 +412,15 @@ internal class ExactMatcher(
         val ids = apis.spotifyIds(metadata.title, metadata.artist).take(SPOTIFY_PAGES)
         val songs = coroutineScope { ids.map { id -> async { apis.spotifySong(id) } }.awaitAll() }.filterNotNull()
         val named = songs.filter { matches(metadata, it.title, it.artist) }
-        return asLongAs(metadata, named) { it.lengthMs }?.url
+        // ListenBrainz learns of a song a while after it's out; a new one is among its artist's most played.
+        val found = named.ifEmpty { artistsSongs(metadata).filter { matches(metadata, it.title, it.artist) } }
+        return asLongAs(metadata, found) { it.lengthMs }?.url
+    }
+
+    /** The most played songs on Spotify of the first artist [metadata] credits. */
+    private suspend fun artistsSongs(metadata: MusicMetadata): List<MusicMetadata> {
+        val artist = SongNames.artistNames(metadata.artist).firstOrNull() ?: return emptyList()
+        return spotifyArtist(artist)?.let { apis.spotifyArtistSongs(it) }.orEmpty()
     }
 
     /**

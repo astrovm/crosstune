@@ -70,17 +70,19 @@ class MainActivity : ComponentActivity() {
                 val client = httpClientFactory()
                 // Left out of backups, so the tokens never leave the phone.
                 val chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
+                val musicBrainz = MusicBrainz(
+                    client,
+                    packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
+                    LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000),
+                    gapMs = musicBrainzGapMs
+                )
                 // What ChatGPT said is kept, so a song read again asks nothing.
                 val tutor = ChatGptTutor(
                     chatGpt,
                     LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000),
                     lines = LookupCache(File(cacheDir, "chatgpt_lines.json"), lookupDispatcher, maxEntries = 6000),
                     // The year and album come from MusicBrainz, which gives a song the same ones every time.
-                    releaseOf = MusicBrainz(
-                        client,
-                        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
-                        LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000)
-                    )::release
+                    releaseOf = musicBrainz::release
                 )
                 // One of each, so SoundCloud's key is read once for both.
                 val apis = ServiceApis(client, Locale.getDefault().country)
@@ -91,7 +93,10 @@ class MainActivity : ComponentActivity() {
                 val playback = order.ordering(queue.skipping(playbackFactory(applicationContext)))
                 // What was found for songs is kept, so a playlist played again needs no lookups.
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
-                val matcher = ExactMatcher(client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong, missingForMs = MISSING_FOR_MS)
+                val matcher = ExactMatcher(
+                    client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong,
+                    missingForMs = MISSING_FOR_MS, spotifyArtist = musicBrainz::spotifyArtist
+                )
                 MainViewModel(
                     LinkResolver(client, apis = apis),
                     matcher,
@@ -281,6 +286,9 @@ class MainActivity : ComponentActivity() {
 
         /** How long a song not found somewhere stays not found there, before it's looked for again. */
         private const val MISSING_FOR_MS = 30 * 60 * 1000L
+
+        /** How long a lookup for Crosstune's own queue has, there being no screen waiting on it. */
+        private const val QUEUE_LOOKUP_MS = 15_000L
         private const val STATE_PENDING_CLIPBOARD_READ = "pending_clipboard_read"
         private const val STATE_MICROPHONE_FOR = "microphone_for"
         private const val STATE_INCOMING_LINK = "incoming_link"
@@ -317,7 +325,19 @@ class MainActivity : ComponentActivity() {
             // One made for another app, as each test makes, is done with.
             playQueue?.second?.stop()
             // Its own lookups, as it may play on with no screen to share them with.
-            val matcher = ExactMatcher(httpClientFactory(), cache = LookupCache(File(app.cacheDir, "queue_lookups.json"), lookupDispatcher), missingForMs = MISSING_FOR_MS)
+            val client = httpClientFactory()
+            val musicBrainz = MusicBrainz(
+                client,
+                app.packageManager.getPackageInfo(app.packageName, 0).versionName.orEmpty(),
+                LookupCache(File(app.cacheDir, "queue_musicbrainz.json"), lookupDispatcher, maxEntries = 1000),
+                gapMs = musicBrainzGapMs
+            )
+            // Given longer than a screen's lookups, as nobody waits on them: a new Spotify song's artist, looked up
+            // on MusicBrainz first, took over the 5 seconds, and the song was left out of the list.
+            val matcher = ExactMatcher(
+                client, cache = LookupCache(File(app.cacheDir, "queue_lookups.json"), lookupDispatcher),
+                missingForMs = MISSING_FOR_MS, timeoutMs = QUEUE_LOOKUP_MS, spotifyArtist = musicBrainz::spotifyArtist
+            )
             return PlayQueue(
                 playbackFactory(app),
                 { service, tracks -> matcher.youtubeQueue(service, tracks) {} },
@@ -354,6 +374,10 @@ class MainActivity : ComponentActivity() {
         /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */
         @VisibleForTesting
         internal var lookAheadLyrics: Boolean = true
+
+        /** How long MusicBrainz is left between requests; tests don't wait. */
+        @VisibleForTesting
+        internal var musicBrainzGapMs: Long = MusicBrainz.ASK_GAP_MS
 
         /** How long lyrics wait before asking a busy LRCLIB again; tests don't wait. */
         @VisibleForTesting

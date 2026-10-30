@@ -351,14 +351,17 @@ internal object MetadataParsers {
         else -> emptyList()
     }
 
-    /** Spotify's embed page lists an album's or playlist's first songs, each with its title and artists. */
+    /** Spotify's embed page lists an album's, playlist's or artist's first songs, each with its title, artists and length. */
     fun spotifyEmbedTracks(html: String): List<MusicMetadata> {
         val data = spotifyDataRegex.find(html)?.groupValues?.get(1) ?: return emptyList()
         val list = JSONObject(data).optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")
             ?.optJSONObject("data")?.optJSONObject("entity")?.optJSONArray("trackList") ?: return emptyList()
         return (0 until list.length()).mapNotNull { index ->
             val track = list.optJSONObject(index) ?: return@mapNotNull null
-            MusicMetadata(track.optString("title").ifBlank { return@mapNotNull null }, track.optString("subtitle"), url = spotifyTrackUrl(track.optString("uri")))
+            MusicMetadata(
+                track.optString("title").ifBlank { return@mapNotNull null }, track.optString("subtitle"),
+                url = spotifyTrackUrl(track.optString("uri")), lengthMs = track.optLong("duration").takeIf { it > 0 }
+            )
         }
     }
 

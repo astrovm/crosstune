@@ -90,6 +90,12 @@ class FakeSpotify : Interceptor {
                 .build()
         }
 
+        /** Spotify's embedded page of an artist, with their most played [songs] by title, id and seconds, each credited to [credit]. */
+        fun artistPage(credit: String, vararg songs: Triple<String, String, Int>): String = """<script id="__NEXT_DATA__" type="application/json">""" +
+            """{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[""" +
+            songs.joinToString(",") { (title, id, seconds) -> """{"title":"$title","subtitle":"$credit","uri":"spotify:track:$id","duration":${seconds * 1000}}""" } +
+            "]}}}}}}</script>"
+
         fun trackPage(title: String?, description: String?, image: String? = null): String = buildString {
             append("<html><head>")
             if (title != null) append("<meta property=\"og:title\" content=\"$title\"/>")

@@ -165,6 +165,14 @@ internal class ServiceApis(
         }
     }
 
+    /** An artist's most played songs on Spotify, from the embed page anyone can read for them. */
+    suspend fun spotifyArtistSongs(id: String): List<MusicMetadata> {
+        val request = Request.Builder().url("https://open.spotify.com/embed/artist/$id").get().build()
+        return client.newCall(request).answer(ioDispatcher) { response ->
+            if (response.isSuccessful) MetadataParsers.spotifyEmbedTracks(response.body.stringAtMost()) else emptyList()
+        }
+    }
+
     /**
      * Audiomack's API wants each request signed, OAuth 1.0 style, with the key its website signs
      * with; no account, so no token.

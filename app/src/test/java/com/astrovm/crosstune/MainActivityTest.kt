@@ -130,7 +130,9 @@ class MainActivityTest {
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
+        listOf("musicbrainz.json", "queue_musicbrainz.json", "queue_lookups.json").forEach { File(app.cacheDir, it).delete() }
         MainActivity.lyricsBusyPauseMs = 0
+        MainActivity.musicBrainzGapMs = 0
         // Each song shown would look up its lyrics too, which tests counting what's asked don't expect.
         MainActivity.lookAheadLyrics = false
     }
@@ -143,6 +145,7 @@ class MainActivityTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
+        MainActivity.musicBrainzGapMs = MusicBrainz.ASK_GAP_MS
         MainActivity.lookAheadLyrics = true
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.checksForUpdates = ::looksForUpdates
@@ -1347,6 +1350,41 @@ class MainActivityTest {
         assertEquals("https://open.spotify.com/track/${ids["First Song"]}", nextStartedActivity()!!.dataString)
         // And the list isn't left to play on from it.
         waitUntil { !File(app.noBackupFilesDir, "play_queue.json").exists() }
+    }
+
+    @Test
+    fun aPlaylistOfNewSongsPlaysInSpotifyFromAmongTheirArtistsMostPlayed() {
+        val spotify = MusicService.SPOTIFY.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        val first = "1firstAAAAAAAAAAAAAAAA"
+        val second = "2secondBBBBBBBBBBBBBBB"
+        fake.handler = { request ->
+            when {
+                request.url.host == "api.deezer.com" -> FakeSpotify.html(
+                    request,
+                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}}]}}"""
+                )
+                // Too new for ListenBrainz, but MusicBrainz knows the band's Spotify page, which has both.
+                request.url.host == "labs.api.listenbrainz.org" -> FakeSpotify.html(request, """[{"spotify_track_ids":[]}]""")
+                request.url.encodedPath == "/ws/2/artist" -> FakeSpotify.html(request, """{"artists":[{"id":"band","name":"Band"}]}""")
+                request.url.host == "musicbrainz.org" -> FakeSpotify.html(request, """{"relations":[{"url":{"resource":"https://open.spotify.com/artist/6hp2uD84OrQ3u3ukmTjLz2"}}]}""")
+                else -> FakeSpotify.html(request, FakeSpotify.artistPage("Band", Triple("First Song", first, 200), Triple("Second Song", second, 180)))
+            }
+        }
+        shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))
+        launch()
+        resolveTyped("https://www.deezer.com/playlist/9")
+        waitForText("First Song")
+        click(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes)))
+        waitUntil { phone.opened.isNotEmpty() }
+        assertEquals(spotify to "https://open.spotify.com/track/$first", phone.opened.single())
+        composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "Spotify", canSeek = true, appPackage = spotify) }
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("First Song", "Band"), 3) }
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 4) }
+        waitUntil { phone.opened.size == 2 }
+        assertEquals(spotify to "https://open.spotify.com/track/$second", phone.opened.last())
     }
 
     @Test

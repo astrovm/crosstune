@@ -610,6 +610,33 @@ class ExactMatcherTest {
         assertEquals(ExactMatcher.Match.Failed, runBlocking { matcher().lookFor(MusicService.SPOTIFY, song.copy(title = "Third Song")) })
     }
 
+    /** An artist's most played songs, as Spotify's embed page for them lists them: name, artists, id and length. */
+    @Test
+    fun aNewSpotifySongListenBrainzDoesntKnowYetIsFoundAmongItsArtistsMostPlayed() {
+        val single = "1singleAAAAAAAAAAAAAAA"
+        val acoustic = "2acousticBBBBBBBBBBBBB"
+        fake.handler = { request ->
+            when (request.url.host) {
+                "labs.api.listenbrainz.org" -> FakeSpotify.html(request, """[{"spotify_track_ids":[]}]""")
+                else -> FakeSpotify.html(request, FakeSpotify.artistPage("Stella Lefty, Someone", Triple("Other", "3otherCCCCCCCCCCCCCCCC", 200), Triple("Boston", acoustic, 150), Triple("Boston", single, 171)))
+            }
+        }
+        val asked = mutableListOf<String>()
+        val matcher = ExactMatcher(fake.client(), "AR", spotifyArtist = { name -> asked += name; "6hp2uD84OrQ3u3ukmTjLz2".takeIf { name == "Stella Lefty" } })
+        // The first of the credited artists, and the one of their songs as long as it.
+        val song = MusicMetadata("Boston", "Stella Lefty, Someone", lengthMs = 170_000)
+        assertEquals("https://open.spotify.com/track/$single", runBlocking { matcher.find(MusicService.SPOTIFY, song) })
+        assertEquals(listOf("Stella Lefty"), asked)
+        assertTrue("https://open.spotify.com/embed/artist/6hp2uD84OrQ3u3ukmTjLz2" in fake.requestedUrls)
+        // Not among them, or an artist Spotify's unknown for, it isn't found.
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.SPOTIFY, song.copy(title = "Jaded")) })
+        assertEquals(ExactMatcher.Match.Missing, runBlocking { matcher.lookFor(MusicService.SPOTIFY, song.copy(artist = "Nobody")) })
+        // With no artist named, there's no one's songs to look among.
+        val before = asked.size
+        assertNull(runBlocking { matcher.find(MusicService.SPOTIFY, song.copy(artist = "")) })
+        assertEquals(before, asked.size)
+    }
+
     @Test
     fun aSongNotFoundStaysNotFoundForAWhileButNoAnswerIsAskedAgain() {
         var clock = 0L
