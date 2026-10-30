@@ -92,7 +92,7 @@ internal object SongNames {
         while (true) {
             val unfeatured = stripped.replace(featuring, "")
             val tag = editionTag.find(unfeatured)?.value.orEmpty()
-            if (words(tag).any { it in OTHER_RECORDING }) return unfeatured.takeIf { it.isNotBlank() } ?: stripped
+            if (words(tag).any { it in OTHER_RECORDING }) return unfeatured
             val shorter = unfeatured.replace(editionTag, "")
             if (shorter == stripped || shorter.isBlank()) return stripped
             stripped = shorter

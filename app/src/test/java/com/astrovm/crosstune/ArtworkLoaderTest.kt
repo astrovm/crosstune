@@ -94,6 +94,20 @@ class ArtworkLoaderTest {
         assertNotNull(ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = File(notADirectory, "artwork")).load(COVER))
     }
 
+    @Test
+    fun aCoverFileIsOnlyReadWhereCoversAreKeptAndByAnAddressThatIsOne() = runBlocking {
+        // With nowhere to keep covers, no file is one.
+        assertNull(loader.load("file:/tmp/playing-1.jpg"))
+        val dir = createTempDirectory().toFile()
+        val withDir = ArtworkLoader(fake.client(), Dispatchers.Unconfined, dir)
+        // Not a way to a file: it has spaces, or isn't a path from the root.
+        assertNull(withDir.load("file:/tmp/a b.jpg"))
+        assertNull(withDir.load("file:playing-1.jpg"))
+        assertEquals(emptyList<String>(), fake.requestedUrls)
+        dir.deleteRecursively()
+        Unit
+    }
+
     private companion object {
         const val COVER = "https://img.example/cover.jpg"
     }

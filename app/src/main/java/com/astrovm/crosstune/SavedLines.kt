@@ -375,7 +375,7 @@ private fun plainWords(line: String) = Readings.inJapansKanji(line).lowercase().
 
 /** How alike [one] and [other] are, from 0 to 1, by the pairs of letters they share. */
 private fun likeness(one: String, other: String): Double {
-    if (one.length < 2 || other.length < 2) return if (one == other) 1.0 else 0.0
+    if (one.length < 2 || other.length < 2) return 0.0
     val left = other.windowed(2).groupingBy { it }.eachCount().toMutableMap()
     var shared = 0
     one.windowed(2).forEach { pair ->

@@ -245,6 +245,64 @@ class TranslatorTest {
     }
 
     @Test
+    fun theLanguageMostLinesAreReadAsDecidesWhichEnglishLinesAreMixed() {
+        // Mostly Vietnamese, with the English line first: the Vietnamese is what's counted.
+        val song = listOf("Buy you Dom Pérignon", "Em đẹp lắm", "Anh vẫn đợi em", "Anh đã quên em", "Nơi ấy em chờ (I'm in love)")
+        googleReads { if (it.startsWith("Buy") || it.startsWith("Nơi")) "en" else "vi" }
+        val auto = google
+        google = { request -> if (request.url.queryParameter("sl") == "vi") FakeSpotify.html(request, JSONArray(asked(request).map { "(vi) $it" }).toString()) else auto(request) }
+        assertEquals(listOf("<Buy you Dom Pérignon>", "<Em đẹp lắm>", "<Anh vẫn đợi em>", "<Anh đã quên em>", "(vi) Nơi ấy em chờ (I'm in love)"), translate(song))
+    }
+
+    @Test
+    fun linesGoogleReadsAsTheLanguageAskedForAreNotAskedAgain() {
+        googleReads { "es" }
+        assertEquals(listOf("<Nơi ấy em chờ (I'm in love)>"), translate(listOf("Nơi ấy em chờ (I'm in love)")))
+        assertEquals(1, googleAsked().size)
+    }
+
+    @Test
+    fun googleNotAnsweringTheLinesAskedAgainFromTheSongsLanguageLeavesItToMyMemory() {
+        myMemory()
+        googleReads { if (it.startsWith("Em")) "vi" else "en" }
+        val reads = google
+        google = { request -> if (request.url.queryParameter("sl") == "vi") FakeSpotify.html(request, "[]") else reads(request) }
+        assertEquals(listOf("[Em đẹp lắm]", "[Nơi ấy em chờ (I'm in love)]"), translate(listOf("Em đẹp lắm", "Nơi ấy em chờ (I'm in love)")))
+    }
+
+    @Test
+    fun aBlankLineGoogleDoesntAnswerWhenAskedAgainIsLeftOut() {
+        var asks = 0
+        google = { request ->
+            asks++
+            val lines = asked(request)
+            // The first time a line is blank; asked again, the answer has other rows than the lines.
+            FakeSpotify.html(request, if (asks == 1) JSONArray(lines.map { JSONArray().put(if (it == "ਸ਼ਾਮ") "" else "<$it>").put("pa") }).toString() else "[]")
+        }
+        assertEquals(listOf("<ਚੰਗੇਆ ਨਾ>", null), translate(listOf("ਚੰਗੇਆ ਨਾ", "ਸ਼ਾਮ")))
+        assertEquals(2, googleAsked().size)
+    }
+
+    @Test
+    fun aLineMyMemoryCantTranslateWhenAskedAloneStopsTheTranslation() {
+        // Two lines read back as one, and then the day's translations run out.
+        others = { request: Request ->
+            val text = request.url.queryParameter("q").orEmpty()
+            val body = if ("\n" in text) JSONObject().put("responseData", JSONObject().put("translatedText", "all at once")).put("responseStatus", 200)
+            else JSONObject().put("responseData", JSONObject().put("translatedText", "MYMEMORY WARNING")).put("responseStatus", 429)
+            FakeSpotify.html(request, body.toString())
+        }
+        assertNull(translate(listOf("One", "Two")))
+        assertEquals(2, myMemoryAsked().size)
+    }
+
+    @Test
+    fun aDictionaryEntryThatIsNotAListOfSensesGivesNoDefinition() {
+        others = { request -> FakeSpotify.html(request, """{"en":"not senses"}""") }
+        assertNull(runBlocking { translator().define("word", "en") })
+    }
+
+    @Test
     fun aWordInTheAppsLanguageIsLookedUpInWiktionary() {
         others = { request ->
             when (request.url.encodedPathSegments.last()) {
