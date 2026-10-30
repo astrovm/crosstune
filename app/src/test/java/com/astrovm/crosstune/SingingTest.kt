@@ -718,6 +718,165 @@ class SingingTest {
         assertTrue(withMemory(3L * 1024 * 1024 * 1024) is SingingListener)
     }
 
+    /** Words heard, none of them sung: the sound the model tells of, as it does for music alone. */
+    private fun musicAlone() = Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380)))
+
+    /**
+     * What's heard from [songMs] on in the song: the first word of each line, the lines [sungAtMs]
+     * (by index, where in the song) as whisper.cpp hears them, a little late. Too few words for a
+     * line to be placed by them, but enough lines to tell how far off the words are as a whole.
+     */
+    private fun heardFirstWords(songMs: Long, sungAtMs: Map<Int, Long>) =
+        Sung(startedAt + songMs - startedFromMs, sungAtMs.map { (line, at) -> HeardWord(lines[line].substringBefore(' '), at + SungAlignment.HEARD_LATE_MS - songMs) })
+
+    @Test
+    fun singingFoundBeforeIsntDoubtedByWhatsHeardAfter() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val last = CompletableDeferred<Sung?>()
+        singing.answer = { if (singing.hears == 1) sungAt(times, times.map { 1_000L }) else if (singing.hears < 4) musicAlone() else last.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
+        // Music alone for a while, as in a break: the words were sung where they're timed, as were found.
+        passes(30_000)
+        waitUntil { singing.hears == 2 }
+        passes(20_000)
+        waitUntil { singing.hears == 3 }
+        passes(20_000)
+        waitUntil { singing.hears == 4 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        last.complete(null)
+    }
+
+    @Test
+    fun aVoiceThatMatchesNothingIsntSingingFoundSoMusicAloneAfterDoubtsTheTiming() {
+        // Not the words of the song, or not made out, but sung where they should be: nothing's doubted yet.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val last = CompletableDeferred<Sung?>()
+        singing.answer = { if (singing.hears == 1) Sung(startedAt, listOf(HeardWord("la", 1_000))) else if (singing.hears == 2) musicAlone() else last.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        // Then none's heard where the words are timed, and the singing has still not been found.
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        passes(20_000)
+        waitUntil { singing.hears == 3 }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.following!!.timingKnown)
+        last.complete(null)
+    }
+
+    /** Sung the first seconds of lines timed at 0, 3, 6, ... seconds, with a voice [voiceMs] into them, told as soon as it's heard. */
+    private fun voiceHeardAt(voiceMs: Long): Boolean {
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { Sung(startedAt, listOf(HeardWord("la", voiceMs))) }
+        singing.answer = { rest.await() }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        return model().uiState.following!!.timingKnown.also { rest.complete(null) }
+    }
+
+    @Test
+    fun aVoiceBeforeTheThirdLineIsSungIsInTime() {
+        // As the third line, at 6 seconds, starts: the voice is there.
+        assertTrue(voiceHeardAt(6_000))
+    }
+
+    @Test
+    fun aVoiceAfterTheThirdLineIsSungDoubtsTheTimingCountingTheLineSungAsHeardStarts() {
+        // The line timed where it's heard from counts, so the third is the one at 6 seconds, not 9.
+        assertFalse(voiceHeardAt(7_000))
+    }
+
+    @Test
+    fun wordsOneHundredAndFiftyMillisecondsOffMoveEvenWhenNoLineIsHeardWordAfterWord() {
+        // The second word of each line isn't heard: no line is told by a pair of words, so each is as far off as the whole.
+        singing.answer = {
+            Sung(startedAt, lines.flatMapIndexed { index, line ->
+                line.split(' ').mapIndexed { word, text -> HeardWord(text, index * 3_000L + 150 + SungAlignment.HEARD_LATE_MS + word * 300L) }.filterIndexed { word, _ -> word != 1 }
+            })
+        }
+        openLyrics()
+        plays()
+        waitUntil { model().uiState.lyricsSynced }
+        assertEquals(150L, firstLineMs())
+    }
+
+    @Test
+    fun linesHeardOnTheirOwnAreShownThereThisTimeOnly() {
+        // A second off as a whole, one line a little later, one a little sooner.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, listOf(1_000L, 1_300L, 700L, 1_000L, 1_000L, 1_000L)) }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 8_700L }
+        assertEquals(listOf(3_000L, 6_300L, 8_700L), model().uiState.lyricLines.take(3).map { it.timeMs })
+    }
+
+    /** The lines shown once a second hearing tells the first words of the last three, sung [offMs] later than timed; the first three were heard a second late. */
+    private fun linesAfterOnlyFirstWordsAreHeard(offMs: Long): List<Long> {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        // Heard from a second and a half before the fourth, which the first hearing says is at 31 seconds.
+        singing.answer = {
+            if (singing.hears == 1) sungAt(times, listOf(1_000L, 1_000L, 1_000L, 0L, 0L, 0L))
+            else heardFirstWords(29_500, (3..5).associateWith { times[it] * 1_000L + offMs })
+        }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 9_000L }
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs != 31_000L }
+        return model().uiState.lyricLines.map { it.timeMs }
+    }
+
+    @Test
+    fun linesHeardOnlyByTheirFirstWordsAreAsFarOffAsTheFirstOfThem() {
+        // Three seconds late, two more than where they were put: the fourth line is the first to be heard.
+        assertEquals(listOf(3_000L, 6_000L, 9_000L, 33_000L, 36_000L, 39_000L), linesAfterOnlyFirstWordsAreHeard(3_000))
+    }
+
+    @Test
+    fun aLineSungAsTheHearingStartsIsTheFirstHeardOnlyByItsFirstWord() {
+        // Sung as it starts, a second and a half before where the fourth was put, so it's the first heard.
+        assertEquals(listOf(3_000L, 6_000L, 9_000L, 29_500L, 32_500L, 35_500L), linesAfterOnlyFirstWordsAreHeard(-500))
+    }
+
+    @Test
+    fun hearingStartsNowWhereALineJustPastIsTheFirstOfThoseLeftToHear() {
+        // At 1.5 seconds in, the line at 0 is just as far past as hearing starts before a line, so the first words are heard now,
+        // not from before the line at 4. A clock that barely moves, so where it is stays put.
+        lyricsTimedFor(null, listOf(0, 4, 5, 6, 7, 30))
+        openLyrics()
+        plays(positionMs = 1_500, speed = 0.001f)
+        waitUntil { singing.hears == 1 }
+    }
+
+    @Test
+    fun startedAgainTheLinesHeardThisTimeAreShownAsTimedAtOnce() {
+        val heard = CompletableDeferred<Sung?>()
+        singing.answer = { if (singing.hears == 1) sung(SHIFT_MS) else heard.await() }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 6_000 + SHIFT_MS }
+        // The app says it's at the start, which is sure, so what was heard this time is gone while it's heard for good.
+        plays(positionMs = 100)
+        waitUntil { singing.hears == 2 }
+        assertEquals(6_000L, model().uiState.lyricLines[2].timeMs)
+        heard.complete(null)
+    }
+
     @Test
     fun theLinesHeardThisTimeAreNotKeptWithTheWords() {
         val times = listOf(2, 5, 8, 30, 33, 36)
@@ -732,6 +891,27 @@ class SingingTest {
         composeRule.runOnIdle { model().showLyrics() }
         waitUntil { model().uiState.lyricLines.size == lines.size }
         assertEquals(times.map { it * 1_000L }, model().uiState.lyricLines.map { it.timeMs })
+    }
+
+    @Test
+    fun theLinesHeardThisTimeAreForgottenWhenTheWordsAreLeft() {
+        // Two hearings of a song in another take: lines at a second off, and then at two and a half.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, listOf(1_000L, 1_000L, 1_000L, 2_500L, 2_500L, 2_500L)) }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 31_000L }
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 32_500L }
+        // Opened again and heard on its first lines only, the rest is no longer where it was heard the other time.
+        composeRule.runOnIdle { model().dismissLyrics() }
+        val heard = singing.hears
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears > heard && model().uiState.lyricLines[3].timeMs == 31_000L }
+        assertEquals(listOf(3_000L, 6_000L, 9_000L, 31_000L, 34_000L, 37_000L), model().uiState.lyricLines.map { it.timeMs })
     }
 
     /** Hears what a test gives it. */

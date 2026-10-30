@@ -74,6 +74,12 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun lineExactlyAsFarApartAsTheyNeedToBeTellAPace() {
+        // 20 seconds apart, and 3% slower: past the last, it goes on at that pace, not a third of a second off.
+        assertEquals(51_200L, LyricsSync.timeOf(50_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(30_000, 30_600))))
+    }
+
+    @Test
     fun aLinePutInTimeAgainOrOutOfOrderReplacesWhatItContradicts() {
         var points = LyricsSync.with(emptyList(), SyncPoint(20_000, 23_000))
         points = LyricsSync.with(points, SyncPoint(40_000, 45_000))
