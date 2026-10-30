@@ -1,0 +1,10 @@
+# Only the rules about tangled logic. Composables are long and take many parameters by nature,
+# so length and parameter counts aren't checked. What was already there is in baseline.xml.
+complexity:
+  active: true
+  CyclomaticComplexMethod:
+    active: true
+  ComplexCondition:
+    active: true
+  NestedBlockDepth:
+    active: true
