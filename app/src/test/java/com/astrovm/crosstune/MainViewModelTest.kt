@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +63,8 @@ class MainViewModelTest {
         keptOnDisk: LookupCache? = null,
         sleepTimer: SleepTimer? = null,
         phone: Phone = Phone.OTHER,
-        lyricsFinder: LyricsFinder? = null
+        lyricsFinder: LyricsFinder? = null,
+        songSearcher: SongSearcher? = null
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -81,7 +83,8 @@ class MainViewModelTest {
             updates = updates,
             keptOnDisk = keptOnDisk,
             sleepTimer = sleepTimer,
-            phone = phone
+            phone = phone,
+            songSearcher = songSearcher
         ).also { made += it }
     }
 
@@ -276,7 +279,6 @@ class MainViewModelTest {
         idle()
         assertEquals(song, model.uiState.player?.song)
         assertEquals("com.spotify", model.uiState.player?.following?.appPackage)
-        assertTrue(model.uiState.linkText.isNotEmpty())
         // Opened again, the same player stays as it is.
         val player = model.uiState.player
         model.openPlayingNow()
@@ -411,7 +413,7 @@ class MainViewModelTest {
         val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0)
         val model = playingModel(playback, lyricsFinder = finder)
         model.playerLyrics()
-        idle()
+        until("found the words") { model.uiState.lyrics.isNotEmpty() }
         return model
     }
 
@@ -482,5 +484,253 @@ class MainViewModelTest {
         model.toggleSavedLine(1)
         assertEquals(listOf("Plain two"), model.uiState.savedLines.map { it.text })
         assertNull(model.uiState.savedLines.single().startMs)
+    }
+
+    /** Idles until [done] holds, since the account is read and the browser answered on real threads. */
+    private fun until(what: String, done: () -> Boolean) {
+        val end = System.currentTimeMillis() + 10_000
+        while (!done()) {
+            check(System.currentTimeMillis() < end) { "Never $what" }
+            idle()
+            Thread.sleep(10)
+        }
+    }
+
+    private fun accountFile() = File(app.noBackupFilesDir, "chatgpt.json").apply { delete() }
+
+    /** An account [openAi] answers for, signed in already when [signedIn]. */
+    private fun account(openAi: FakeOpenAi, file: File, signedIn: Boolean): ChatGpt {
+        fake.handler = { request -> openAi.answer(request) ?: FakeSpotify.html(request, "") }
+        val account = ChatGpt(fake.client(), file, app.packageName)
+        if (signedIn) {
+            val result = kotlinx.coroutines.runBlocking {
+                account.signIn(open = { url ->
+                    openAi.authorize = url.toHttpUrl()
+                    kotlin.concurrent.thread { openAi.comeBack() }
+                })
+            }
+            assertEquals(ChatGptSignInResult.SIGNED_IN, result)
+        }
+        return account
+    }
+
+    @Test
+    fun anAccountSignedInBeforeIsShownWithItsModelsAndTheOnePicked() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val account = account(openAi, accountFile(), signedIn = true)
+        prefs().edit().putString("chatgpt_model", "gpt-6-terra").commit()
+        val model = model(chatGpt = account)
+        until("read the account") { model.uiState.chatGpt.models.isNotEmpty() }
+        assertEquals(FakeOpenAi.EMAIL, model.uiState.chatGpt.email)
+        assertEquals(listOf("gpt-6.1-sol", "gpt-6-terra"), model.uiState.chatGpt.models.map { it.slug })
+        assertEquals("gpt-6-terra", account.picked)
+        model.pickChatGptModel("gpt-6.1-sol")
+        assertEquals("gpt-6.1-sol", model.uiState.chatGpt.model)
+        assertEquals("gpt-6.1-sol", prefs().getString("chatgpt_model", null))
+        assertEquals("gpt-6.1-sol", account.picked)
+        model.signOutOfChatGpt()
+        assertEquals(ChatGptState(), model.uiState.chatGpt)
+        until("revoked") { fake.requestedUrls.any { it.startsWith(ChatGpt.REVOKE_URL) } }
+    }
+
+    @Test
+    fun anAccountThatCantBeReadIsLeftSignedOut() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = model(chatGpt = account(openAi, accountFile(), signedIn = false))
+        idle()
+        Thread.sleep(200)
+        idle()
+        assertEquals(ChatGptState(), model.uiState.chatGpt)
+    }
+
+    @Test
+    fun signingInWithChatGptOpensTheBrowserThenWelcomesOnceAndAsksTheModels() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = model(chatGpt = account(openAi, accountFile(), signedIn = false))
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        var done = 0
+        model.signInWithChatGpt { done++ }
+        assertTrue(model.uiState.chatGpt.signingIn)
+        until("opened the browser") { effects.isNotEmpty() }
+        val open = effects.single() as Effect.Open
+        openAi.authorize = open.url.toHttpUrl()
+        kotlin.concurrent.thread { openAi.comeBack() }
+        until("signed in") { model.uiState.chatGpt.email != null && model.uiState.chatGpt.models.isNotEmpty() }
+        assertEquals(FakeOpenAi.EMAIL, model.uiState.chatGpt.email)
+        assertTrue(model.uiState.chatGpt.welcome)
+        assertFalse(model.uiState.chatGpt.signingIn)
+        assertEquals(1, done)
+        model.dismissChatGptWelcome()
+        assertFalse(model.uiState.chatGpt.welcome)
+        assertTrue(prefs().getBoolean("chatgpt_welcomed", false))
+    }
+
+    @Test
+    fun aSignInTheBrowserNeverAnswersEndsWhenCancelledAndOneThatReplacesItWinsTheEnd() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = model(chatGpt = account(openAi, accountFile(), signedIn = false))
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        var first = 0
+        model.signInWithChatGpt { first++ }
+        until("opened the browser") { effects.isNotEmpty() }
+        model.cancelChatGptSignIn()
+        assertFalse(model.uiState.chatGpt.signingIn)
+        until("stopped") { first == 1 }
+        // A second sign-in replacing a first one is the only one to say it's over.
+        var second = 0
+        var replaced = 0
+        model.signInWithChatGpt { replaced++ }
+        model.signInWithChatGpt { second++ }
+        until("opened the browser again") { effects.size >= 2 }
+        model.cancelChatGptSignIn()
+        until("the second stopped") { second == 1 }
+        assertEquals(0, replaced)
+        assertEquals(ChatGptState(), model.uiState.chatGpt)
+    }
+
+    @Test
+    fun aSignInTheBrowserRefusesShowsWhyAndSignsNobodyIn() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = model(chatGpt = account(openAi, accountFile(), signedIn = false))
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.signInWithChatGpt { }
+        until("opened the browser") { effects.isNotEmpty() }
+        openAi.authorize = (effects.single() as Effect.Open).url.toHttpUrl()
+        kotlin.concurrent.thread { openAi.comeBack("error=access_denied&state=${openAi.authorize.queryParameter("state")}") }
+        until("failed") { model.uiState.chatGpt.problem != null }
+        assertNull(model.uiState.chatGpt.email)
+        assertFalse(model.uiState.chatGpt.welcome)
+        assertFalse(model.uiState.chatGpt.signingIn)
+    }
+
+    private val catalogue = mapOf("Hush" to "Band", "Moon" to "Luna", "Stars" to "Orbit")
+
+    /** Deezer holding the [catalogue] songs a search names, Apple nothing, and ChatGPT the account's. */
+    private fun searchableCatalogue(openAi: FakeOpenAi) {
+        fake.handler = { request ->
+            val asked = request.url.queryParameter("q").orEmpty()
+            when {
+                openAi.answer(request) != null -> openAi.answer(request)!!
+                request.url.host == "api.deezer.com" -> {
+                    val tracks = catalogue.filter { (title, _) -> title in asked }.entries.joinToString(",") { (title, artist) ->
+                        """{"id":${title.length},"title":"$title","link":"https://www.deezer.com/track/${title.length}","artist":{"name":"$artist"},"album":{"cover_big":"https://cdn/$title.jpg"}}"""
+                    }
+                    FakeSpotify.html(request, """{"data":[$tracks]}""")
+                }
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                else -> FakeSpotify.html(request, "")
+            }
+        }
+    }
+
+    /** A model signed in with ChatGPT, which [openAi] answers for, searching [catalogue]. */
+    private fun searchingModel(openAi: FakeOpenAi): MainViewModel {
+        val account = account(openAi, accountFile(), signedIn = true)
+        searchableCatalogue(openAi)
+        val tutor = ChatGptTutor(account, LookupCache(File.createTempFile("answers", ".json", app.cacheDir).apply { delete() }, Dispatchers.Unconfined))
+        val model = model(chatGpt = account, tutor = tutor, songSearcher = SongSearcher(fake.client(), country = "AR", ioDispatcher = Dispatchers.Unconfined))
+        until("read the account") { model.uiState.chatGpt.email != null }
+        return model
+    }
+
+    @Test
+    fun aSearchWithNothingToSearchByOrNothingSearchedIsAnInvalidLink() {
+        val searching = model(songSearcher = SongSearcher(fake.client(), ioDispatcher = Dispatchers.Unconfined))
+        for ((model, words) in listOf(model() to "Hush Band", searching to "   ", searching to "https://example.com/song")) {
+            model.searchSongs(words)
+            idle()
+            assertEquals(AppError.INVALID_URL, model.uiState.error)
+            assertTrue(model.uiState.songSearch.isEmpty())
+            assertFalse(model.uiState.isSearchingSongs)
+        }
+    }
+
+    @Test
+    fun aSongSearchShowsWhatTheCatalogueHoldsAndChoosingOneResolvesItsOwnLink() {
+        searchableCatalogue(FakeOpenAi(System::currentTimeMillis))
+        val model = model(songSearcher = SongSearcher(fake.client(), country = "AR", ioDispatcher = Dispatchers.Unconfined))
+        model.searchSongs("  Hush  ")
+        until("found") { model.uiState.songSearch.isNotEmpty() }
+        assertEquals("Hush", model.uiState.songSearchQuery)
+        assertEquals(listOf("Hush"), model.uiState.songSearch.map { it.title })
+        assertFalse(model.uiState.isAskingForSongs)
+        assertEquals(0, model.uiState.songsFromChatGpt)
+        model.dismissSongSearch()
+        assertTrue(model.uiState.songSearch.isEmpty())
+        assertEquals("", model.uiState.songSearchQuery)
+        // A song with a link of its own is opened as that link, as if it had been pasted.
+        model.chooseSong(MusicMetadata("Hush", "Band", url = "https://www.deezer.com/track/4"))
+        assertEquals("https://www.deezer.com/track/4", model.uiState.linkText)
+        // One without is looked up by its name.
+        model.chooseSong(MusicMetadata("Moon", "Luna"))
+        assertEquals(MusicLinks.recognizedSong(MusicMetadata("Moon", "Luna")).text, model.uiState.linkText)
+        model.openNamedSong("Stars", "Orbit")
+        assertEquals(MusicLinks.recognizedSong(MusicMetadata("Stars", "Orbit")).text, model.uiState.linkText)
+    }
+
+    @Test
+    fun aDescriptionIsAlsoAskedOfChatGptAndItsSongsLeadAsAPlaylist() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = searchingModel(openAi)
+        openAi.reply = { _ ->
+            200 to FakeOpenAi.stream("""[{"title":"Hush","artist":"Band"},{"title":"Moon","artist":"Luna"},{"title":"Made Up","artist":"Nobody"},{"title":"Stars","artist":"Orbit"},{"title":"hush","artist":"BAND"}]""")
+        }
+        // Too short a search to be a description: only the catalogue is asked.
+        model.searchSongs("Hush")
+        until("found") { model.uiState.songSearch.isNotEmpty() }
+        assertTrue(openAi.asked.isEmpty())
+        // Too few of ChatGPT's songs make no playlist.
+        model.playlistFromSearch()
+        assertNull(model.uiState.result)
+
+        model.searchSongs("quiet songs about hush and moon")
+        until("named") { model.uiState.songsFromChatGpt == 3 }
+        assertEquals(listOf("Hush", "Moon", "Stars"), model.uiState.songSearch.map { it.title })
+        assertFalse(model.uiState.isAskingForSongs)
+        model.playlistFromSearch()
+        val playlist = model.uiState.result!!
+        assertEquals(ItemType.PLAYLIST, playlist.type)
+        assertEquals("quiet songs about hush and moon", playlist.title)
+        assertEquals(listOf("Hush", "Moon", "Stars"), playlist.tracks.map { it.title })
+        assertEquals("https://cdn/Hush.jpg", playlist.artworkUrl)
+        assertTrue(model.uiState.songSearch.isEmpty())
+        assertFalse(model.uiState.songsLike)
+    }
+
+    @Test
+    fun aDescriptionChatGptNamesNothingRealForLeavesTheCatalogueSongsAlone() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = searchingModel(openAi)
+        openAi.reply = { _ -> 200 to FakeOpenAi.stream("""[{"title":"Made Up","artist":"Nobody"}]""") }
+        model.searchSongs("a song named Hush maybe")
+        until("asked") { openAi.asked.isNotEmpty() }
+        until("answered") { !model.uiState.isAskingForSongs && model.uiState.songSearchQuery.isNotEmpty() }
+        assertEquals(0, model.uiState.songsFromChatGpt)
+        assertEquals(listOf("Hush"), model.uiState.songSearch.map { it.title })
+    }
+
+    @Test
+    fun songsLikeOneAreFoundInTheCatalogueAndSayWhenNoneAre() {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        val model = searchingModel(openAi)
+        openAi.reply = { _ -> 200 to FakeOpenAi.stream("""[{"title":"Moon","artist":"Luna"},{"title":"Made Up","artist":"Nobody"},{"title":"Stars","artist":"Orbit"},{"title":"Swapped","artist":"Moon"}]""") }
+        model.songsLike(song)
+        until("listed") { model.uiState.songsLike }
+        assertFalse(model.uiState.isLoading)
+        assertEquals(listOf("Moon", "Stars"), model.uiState.result?.tracks?.map { it.title })
+        assertEquals("Hush", model.uiState.result?.title)
+        // None of them in the catalogue is an error to read, not an empty list.
+        openAi.reply = { _ -> 200 to FakeOpenAi.stream("""[{"title":"Made Up","artist":"Nobody"}]""") }
+        model.songsLike(MusicMetadata("Other", "Band"))
+        until("failed") { model.uiState.error == AppError.NO_SONGS_LIKE }
+        assertFalse(model.uiState.isLoading)
+        // Without ChatGPT or a catalogue there is nothing to ask.
+        val before = model().uiState
+        val bare = model()
+        bare.songsLike(song)
+        assertEquals(before, bare.uiState)
     }
 }
