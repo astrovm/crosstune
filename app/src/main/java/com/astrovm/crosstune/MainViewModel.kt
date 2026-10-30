@@ -2089,7 +2089,7 @@ internal class MainViewModel(
             delay(untilSung(shown, uiState.following?.clock ?: return, heardTo, straightOn) ?: return)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return
             singingTries++
-            val sung = hearOnce(hearing, lines) ?: return
+            val sung = hearOnce(hearing, lines, if (heardTo == null) voiceStarted(song, lines, clock, shown) else null) ?: return
             if (!stillPlays(song, lines, clock)) return
             // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
             // while is heard straight on, wherever the words are timed: the singing may be well after them.
@@ -2108,9 +2108,17 @@ internal class MainViewModel(
         }
     }
 
-    /** What's heard sung, in the words' language; null when nothing is, as for want of the speech model, which is offered then. */
-    private suspend fun hearOnce(hearing: SingingHearing, lines: List<LyricLine>): Sung? {
-        val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'))
+    /**
+     * Whether the voice has started where the [shown] lines are timed, told by the first few seconds
+     * the first while's heard: lines timed into an intro aren't shown sung all the while it's heard.
+     */
+    private fun voiceStarted(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>): suspend (Sung) -> Unit = { heard ->
+        if (stillPlays(song, lines, clock) && noVoice(heard, clock, shown)) doubtTiming(true)
+    }
+
+    /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when nothing is, as for want of the speech model, which is offered then. */
+    private suspend fun hearOnce(hearing: SingingHearing, lines: List<LyricLine>, first: (suspend (Sung) -> Unit)?): Sung? {
+        val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'), first)
         // The model isn't fetched on mobile data by itself: it's offered by hand.
         if (sung == null && hearing.missesModel && !modelClosed) uiState = uiState.copy(singingModel = ModelOffer.MISSING)
         return sung

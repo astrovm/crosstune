@@ -273,6 +273,56 @@ class SingingTest {
     }
 
     @Test
+    fun noVoiceInTheFirstSecondsHeardNoLineIsShownSungWhileTheRestIsHeard() {
+        // Timed into an intro: the first seconds heard are music alone.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }
+        singing.answer = { rest.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.following?.timingKnown == false }
+        // Only the first while is told so early.
+        singing.early = null
+        rest.complete(sungAt(times, times.map { 1_000L }))
+        waitUntil { model().uiState.following?.timingKnown == true }
+    }
+
+    @Test
+    fun aVoiceInTheFirstSecondsLeavesTheLinesShownSung() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { sungAt(times, times.map { 0L }) }
+        singing.answer = { rest.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        rest.complete(null)
+    }
+
+    @Test
+    fun movedWhileTheFirstSecondsAreHeardTheyTellNothing() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val early = CompletableDeferred<Unit>()
+        singing.early = { early.await(); Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        plays(positionMs = 60_000)
+        early.complete(Unit)
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+    }
+
+    @Test
     fun wordsTimedFarEarlierThanSungAreHeardStraightOnNotWhereTheyreTimed() {
         // Timed for a take with a shorter intro: where the words are timed next, the singing's long gone.
         val times = listOf(2, 5, 8, 11, 44, 47)
@@ -699,8 +749,13 @@ class SingingTest {
             return fetched()
         }
 
-        override suspend fun hear(language: String?): Sung? {
+        /** What the first few seconds of each hearing are told to have, when they're told. */
+        @Volatile
+        var early: (suspend () -> Sung?)? = null
+
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? {
             languages += language
+            if (first != null) early?.invoke()?.let { first(it) }
             if (missing) return null
             return try {
                 answer()

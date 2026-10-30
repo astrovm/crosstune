@@ -14,7 +14,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -95,11 +97,15 @@ class SyncReplayTest {
         val asked = JSONObject(File(dir, "replay.json").readText())
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
+        workMs = asked.optLong("work", WORK_MS)
         val lyrics = JSONArray(File(dir, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
-        val heard = JSONObject(File(dir, "$song.windows20.json").readText()).let { windows ->
-            windows.keys().asSequence().associate { start -> start.toLong() to windows.getJSONArray(start).let { words -> (0 until words.length()).map { words.getJSONArray(it).let { word -> word.getLong(0) to word.getString(1) } } } }
+        // What was heard in each stretch, by how long it is in seconds and where it starts.
+        val heard = listOf(SingingListener.SECONDS, SingingListener.FIRST_SECONDS).associateWith { seconds ->
+            JSONObject(File(dir, "$song.windows$seconds.json").readText()).let { windows ->
+                windows.keys().asSequence().associate { start -> start.toLong() to windows.getJSONArray(start).let { words -> (0 until words.length()).map { words.getJSONArray(it).let { word -> word.getLong(0) to word.getString(1) } } } }
+            }
         }
-        val lengthMs = heard.keys.max() + SingingListener.SECONDS * 1000L
+        val lengthMs = heard.getValue(SingingListener.SECONDS).keys.max() + SingingListener.SECONDS * 1000L
         MainActivity.singingFactory = { _, _ -> Replayed(heard) }
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear()
             .putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
@@ -155,25 +161,36 @@ class SyncReplayTest {
 
     private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
 
-    /**
-     * What whisper.cpp heard in the 20 seconds from where the song is when it's asked, from the
-     * stretch heard beforehand that starts nearest, given back once hearing it would be done.
-     */
+    /** How long the phone takes to work out the words in what it heard, after hearing it. */
+    private var workMs = WORK_MS
+
     /** Each stretch heard: where the song was, which stretch heard beforehand stood for it, and what was in it. */
     private val heardLog = JSONArray()
 
-    private inner class Replayed(private val heard: Map<Long, List<Pair<Long, String>>>) : SingingHearing {
+    /**
+     * What whisper.cpp heard in the seconds asked for from where the song is when it's asked, from the
+     * stretch heard beforehand that starts nearest, given back once hearing it would be done.
+     */
+    private inner class Replayed(private val heard: Map<Int, Map<Long, List<Pair<Long, String>>>>) : SingingHearing {
         override val missesModel = false
 
         override suspend fun fetchModel() = true
 
-        override suspend fun hear(language: String?): Sung? {
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? = coroutineScope {
             val at = SystemClock.elapsedRealtime()
             val from = playback.playing.value!!.clock.positionAt(at)
-            val start = heard.keys.minBy { kotlin.math.abs(it - from) }
-            delay(SingingListener.SECONDS * 1000L + WORK_MS)
-            heardLog.put(JSONObject().put("from", from).put("start", start).put("words", heard.getValue(start).joinToString(" ") { it.second.trim() }))
-            return Sung(at, heard.getValue(start).filter { it.first >= 0 }.map { (ms, text) -> HeardWord(text.trim(), ms + start - from) }.filter { it.text.isNotEmpty() })
+            if (first != null) launch { first(heard(SingingListener.FIRST_SECONDS, at, from)) }
+            heard(SingingListener.SECONDS, at, from)
+        }
+
+        /** What was heard in the [seconds] from [from] in the song, at [at], once it's worked out. */
+        private suspend fun heard(seconds: Int, at: Long, from: Long): Sung {
+            val stretches = heard.getValue(seconds)
+            val start = stretches.keys.minBy { kotlin.math.abs(it - from) }
+            // Working out the words takes as long however much there is: the model always works on 30 seconds.
+            delay(seconds * 1000L + workMs)
+            heardLog.put(JSONObject().put("from", from).put("start", start).put("seconds", seconds).put("words", stretches.getValue(start).joinToString(" ") { it.second.trim() }))
+            return Sung(at, stretches.getValue(start).filter { it.first >= 0 }.map { (ms, text) -> HeardWord(text.trim(), ms + start - from) }.filter { it.text.isNotEmpty() })
         }
     }
 
@@ -192,7 +209,7 @@ class SyncReplayTest {
         const val TIMEOUT_MS = 10_000L
         const val STEP_MS = 100L
 
-        /** How long the phone takes to work out the words in what it heard, after hearing it. */
+        /** About how long a phone takes to work out the words in what it heard, after hearing it. */
         const val WORK_MS = 2_500L
     }
 }

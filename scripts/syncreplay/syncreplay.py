@@ -11,7 +11,8 @@ e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), se
 (demucs), finds when each line is really sung (faster-whisper medium on the voice, word by word),
 and what whisper.cpp tiny, the app's own model, hears in each stretch of it, as the phone would.
 `run` plays it through the app (SyncReplayTest), from MS into the song: 0 is from the start, as the
-app's clock is sure then; later is picked up partway. `--gradle "podman exec box ./gradlew"` runs
+app's clock is sure then; later is picked up partway. `--work MS` is how long the phone takes to
+work out the words each time; try a few, as where each later stretch is heard moves with it. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
 Wants ffmpeg, yt-dlp, cmake, and demucs, faster-whisper and numpy in the Python running it.
 """
@@ -123,7 +124,7 @@ def prep(args):
 def run(args):
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
-    asked.write_text(json.dumps({"song": args.id, "from": args.start}))
+    asked.write_text(json.dumps({"song": args.id, "from": args.start, "work": args.work}))
     try:
         done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
     finally:
@@ -160,6 +161,8 @@ def score(args):
     print(f"{args.id} from {args.start} ms: lines sung after the first fix at {fixed:.1f} s: "
           f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, median {statistics.median(abs(x) for x in live):.2f} s, "
           f"worst {max(live, key=abs):+.1f} s; never shown {sum(k not in first for k in sung)}")
+    early = [lag for lag in lags.values() if lag < -ON_TIME_S]
+    print(f"shown sung early, before its voice: {len(early)}/{len(lags)} lines" + (f", by up to {-min(early):.1f} s" if early else ""))
 
 
 def main():
@@ -177,6 +180,8 @@ def main():
         p.set_defaults(go=go)
         if name == "run":
             p.add_argument("--gradle", default="./gradlew --max-workers=4")
+            # The phone takes about this long, but it varies, and where each later stretch is heard with it.
+            p.add_argument("--work", type=int, default=2500, help="ms the phone takes to work out what it heard")
     args = parser.parse_args()
     args.go(args)
 
