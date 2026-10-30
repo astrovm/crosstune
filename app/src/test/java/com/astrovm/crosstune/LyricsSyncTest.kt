@@ -57,6 +57,21 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun pastTheLinesPutInTimeTheOthersGoOnAtTheirPace() {
+        // Timed for a take sung 5% slower: each line heard a little off, but along one pace.
+        val points = listOf(SyncPoint(10_000, 13_100), SyncPoint(20_000, 22_400), SyncPoint(40_000, 41_600))
+        assertEquals(22_400L, LyricsSync.timeOf(20_000, points))
+        assertEquals(60_585L, LyricsSync.timeOf(60_000, points))
+        assertEquals(3_500L, LyricsSync.timeOf(0, points))
+        // Just past the last, where the pace would put it before that one, it stays after it.
+        assertEquals(40_000L, LyricsSync.timeOf(40_100, listOf(SyncPoint(10_000, 10_000), SyncPoint(20_000, 19_000), SyncPoint(40_000, 40_000))))
+        // So far off a pace it's lines timed out of place: past the last, they keep to it.
+        assertEquals(41_700L, LyricsSync.timeOf(40_100, listOf(SyncPoint(10_000, 10_000), SyncPoint(20_000, 20_000), SyncPoint(40_000, 41_600))))
+        // Too close together to tell a pace, they keep to the nearest.
+        assertEquals(51_600L, LyricsSync.timeOf(50_000, listOf(SyncPoint(30_000, 30_000), SyncPoint(40_000, 41_600))))
+    }
+
+    @Test
     fun aLinePutInTimeAgainOrOutOfOrderReplacesWhatItContradicts() {
         var points = LyricsSync.with(emptyList(), SyncPoint(20_000, 23_000))
         points = LyricsSync.with(points, SyncPoint(40_000, 45_000))

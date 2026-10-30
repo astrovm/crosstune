@@ -12,6 +12,7 @@ git submodule update --init --recursive   # projectM is built from source for th
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
 python3 scripts/mutants.py                # mutation testing on the lines this branch changed; slow, so only when asked, in the background
 python3 scripts/shots/shots.py            # store screenshots and site clips, through :app:shots; no phone needed
+python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed on a real recording, line by line against when it's sung; prep first, see the script
 node --test report/*.test.mjs             # the report Worker's tests
 ```
 
