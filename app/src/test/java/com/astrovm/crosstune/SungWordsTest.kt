@@ -33,6 +33,16 @@ class SungWordsTest {
     }
 
     @Test
+    fun theSoundTheModelTellsOfIsntAVoice() {
+        fun sung(vararg words: String) = Sung(0, words.mapIndexed { at, text -> HeardWord(text, at * 100L) })
+        assertNull(sung("[MUSIC]").voiceAtMs)
+        assertNull(sung("(upbeat", "music)", "♪").voiceAtMs)
+        assertNull(sung("[BLANK_AUDIO]", "(rock").voiceAtMs)
+        assertEquals(100L, sung("♪", "Every", "time", "♪").voiceAtMs)
+        assertEquals(200L, sung("(rock", "music)", "Every").voiceAtMs)
+    }
+
+    @Test
     fun wordsHeardAreReadFromWhatWhisperGives() {
         val bytes = "0\tFirst\n320\t Oh,\n820\tshow\n-1\tlost\nnot a time\tskipped\n900\t \n1200\tcorazón\n".toByteArray()
         assertEquals(listOf(HeardWord("First", 0), HeardWord("Oh,", 320), HeardWord("show", 820), HeardWord("corazón", 1200)), HeardWords.parse(bytes))
@@ -321,7 +331,7 @@ class SungWordsTest {
         val words = FakeWords(listOf(HeardWord("Oh", 320), HeardWord("show", 820)))
         val models = mutableListOf<File>()
         val listener = SingingListener(microphone, { File("model") }, { models += it; words }, Dispatchers.Unconfined, Dispatchers.Unconfined, clock = { 1_234L })
-        assertEquals(Sung(1_234, listOf(HeardWord("Oh", 320), HeardWord("show", 820))), listener.hear("es"))
+        assertEquals(Sung(1_234, listOf(HeardWord("Oh", 320), HeardWord("show", 820))), listener.hear("es", null))
         assertEquals(listOf(File("model")), models)
         assertEquals("es", words.language)
         // 16 kHz, as whisper.cpp hears, from -1 to 1.
@@ -334,9 +344,25 @@ class SungWordsTest {
     }
 
     @Test
+    fun theFirstSecondsAreToldAsSoonAsTheyreHeardWhileTheRestIs() = runBlocking {
+        val microphone = FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }
+        val lengths = mutableListOf<Int>()
+        val listener = listener(microphone, hearing = { samples, _ -> lengths += samples.size; listOf(HeardWord("Oh", 320)) })
+        val told = mutableListOf<Sung>()
+        assertEquals(Sung(1_234, listOf(HeardWord("Oh", 320))), listener.hear(null) { told += it })
+        assertEquals(listOf(Sung(1_234, listOf(HeardWord("Oh", 320)))), told)
+        assertEquals(listOf(16_000 * SingingListener.FIRST_SECONDS, 16_000 * SingingListener.SECONDS), lengths)
+        // Nothing heard in them, or sound that ends before they're in, tells nothing.
+        val none = mutableListOf<Sung>()
+        listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = FakeWords(emptyList())).hear(null) { none += it }
+        listener(FakeMicrophone().apply { play(SingingListener.FIRST_SECONDS - 1.0); end() }).hear(null) { none += it }
+        assertEquals(emptyList<Sung>(), none)
+    }
+
+    @Test
     fun aPhoneThatWontShareItsSoundFetchesNoModel() = runBlocking {
         var asked = 0
-        assertNull(listener(FakeMicrophone(works = false), modelAsked = { asked++ }).hear(null))
+        assertNull(listener(FakeMicrophone(works = false), modelAsked = { asked++ }).hear(null, null))
         assertEquals(0, asked)
     }
 
@@ -345,7 +371,7 @@ class SungWordsTest {
         val microphone = FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }
         val words = FakeWords(listOf(HeardWord("Oh", 320)))
         val listener = listener(microphone, model = null, hearing = words)
-        assertNull(listener.hear(null))
+        assertNull(listener.hear(null, null))
         assertTrue(microphone.closed)
         assertNull(words.samples)
         // It's the model that was missed, so it can be offered.
@@ -356,15 +382,15 @@ class SungWordsTest {
     fun theModelIsMissedOnlyWhenItWasWantedAndWasntThere() = runBlocking {
         // A phone that won't share its sound never got as far as wanting it.
         val silent = listener(FakeMicrophone(works = false), model = null)
-        silent.hear(null)
+        silent.hear(null, null)
         assertFalse(silent.missesModel)
         // Missed once, then there: it's no longer missed.
         var model: File? = null
         val listener = SingingListener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()); play(SingingListener.SECONDS.toDouble()) }, { model }, { FakeWords(listOf(HeardWord("Oh", 320))) }, Dispatchers.Unconfined, Dispatchers.Unconfined, clock = { 1_234L })
-        listener.hear(null)
+        listener.hear(null, null)
         assertTrue(listener.missesModel)
         model = File("model")
-        listener.hear(null)
+        listener.hear(null, null)
         assertFalse(listener.missesModel)
     }
 
@@ -382,7 +408,7 @@ class SungWordsTest {
     fun soundThatEndsTooSoonIsntHeard() = runBlocking {
         val microphone = FakeMicrophone().apply { play(SingingListener.SECONDS - 1.0); end() }
         val words = FakeWords(listOf(HeardWord("Oh", 320)))
-        assertNull(listener(microphone, hearing = words).hear(null))
+        assertNull(listener(microphone, hearing = words).hear(null, null))
         assertTrue(microphone.closed)
         assertNull(words.samples)
     }
@@ -392,7 +418,7 @@ class SungWordsTest {
         // Pieces that don't fill the reads evenly: the last read takes only what's left.
         val microphone = FakeMicrophone().apply { play(7.0001); play(13.0) }
         val words = FakeWords(listOf(HeardWord("Oh", 320)))
-        assertEquals(1, listener(microphone, hearing = words).hear(null)!!.words.size)
+        assertEquals(1, listener(microphone, hearing = words).hear(null, null)!!.words.size)
         assertEquals(16_000 * SingingListener.SECONDS, words.samples!!.size)
     }
 
@@ -404,18 +430,18 @@ class SungWordsTest {
                 override fun close() = Unit
             }
         }
-        assertNull(listener(silent).hear(null))
+        assertNull(listener(silent).hear(null, null))
     }
 
     @Test
     fun aModelThatWontLoadOrHearsNoWordsHearsNothing() = runBlocking {
-        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null))
+        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null, null))
         val words = FakeWords(emptyList())
-        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = words).hear(null))
+        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = words).hear(null, null))
         assertTrue(words.closed)
         // One that isn't closed needn't be.
         val open = WordHearing { _, _ -> listOf(HeardWord("Oh", 320)) }
-        assertEquals(1, listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null)!!.words.size)
+        assertEquals(1, listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null, null)!!.words.size)
     }
 
     private val modelBytes = "a model, as far as a test knows".toByteArray()

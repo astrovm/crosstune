@@ -199,13 +199,14 @@ class SingingTest {
         singing.answer = { sung(SHIFT_MS) }
         openLyrics()
         plays(positionMs = 3_000)
-        waitUntil { singing.hears == 1 && followedAt() == 3_000 - SHIFT_MS + SystemClock.elapsedRealtime() - startedAt }
-        // The words stay as they're timed, and nothing's kept for next time.
-        assertEquals(0L, firstLineMs())
+        // The lines heard move to where they're sung by the app's clock, and nothing's kept for next time.
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 6_000 + SHIFT_MS }
+        assertEquals(3_000 + SystemClock.elapsedRealtime() - startedAt, followedAt())
         assertFalse(model().uiState.lyricsSynced)
         assertFalse(prefs().contains("sung_heard"))
+        assertFalse(prefs().contains("lyrics_sync"))
         // A line tapped moves the app to where it's sung by its clock.
-        composeRule.runOnIdle { model().seekLyrics(6_000) }
+        composeRule.runOnIdle { model().seekLyrics(model().uiState.lyricLines[2].timeMs) }
         assertEquals(6_000 + SHIFT_MS, playback.seeks.last())
         // Played on from where it was, it isn't heard again.
         plays(positionMs = 3_000 + SystemClock.elapsedRealtime() - startedAt)
@@ -238,9 +239,11 @@ class SingingTest {
         singing.answer = { sungAt(times, listOf(1_000, 1_000, 1_300, 1_300, 900, 1_300)) }
         openLyrics()
         plays()
+        // Heard from just before the first line.
+        passes(500)
         waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
-        // The lines heard are where they're sung, and those after keep to how far off they were as a whole.
-        assertEquals(listOf(3_000L, 6_000L, 9_300L, 31_000L, 34_000L, 37_000L), model().uiState.lyricLines.map { it.timeMs })
+        // The lines heard are where they're sung, and those after keep to how far off the last of them was.
+        assertEquals(listOf(3_000L, 6_000L, 9_300L, 31_300L, 34_300L, 37_300L), model().uiState.lyricLines.map { it.timeMs })
         assertFalse(prefs().contains("sung_heard"))
         // Where the next lines are sung, they're heard too, and that's the song.
         passes(32_000)
@@ -252,12 +255,101 @@ class SingingTest {
     }
 
     @Test
+    fun heardNoSingingWhereTheWordsAreTimedItHearsOnWithNothingElseHappening() {
+        // Timed into an intro, as YouTube Music's words for an edit can be: the first while hears only music.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { if (singing.hears == 1) Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) else sungAt(times, times.map { 1_000L }) }
+        openLyrics()
+        plays()
+        // Heard from just before the first line.
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        assertFalse(model().uiState.lyricsSynced)
+        // The song just plays on, and where the words are sung next, they're heard.
+        passes(32_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertEquals(31_000L, model().uiState.lyricLines[3].timeMs)
+    }
+
+    @Test
+    fun noVoiceInTheFirstSecondsHeardNoLineIsShownSungWhileTheRestIsHeard() {
+        // Timed into an intro: the first seconds heard are music alone.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }
+        singing.answer = { rest.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.following?.timingKnown == false }
+        // Only the first while is told so early.
+        singing.early = null
+        rest.complete(sungAt(times, times.map { 1_000L }))
+        waitUntil { model().uiState.following?.timingKnown == true }
+    }
+
+    @Test
+    fun aVoiceInTheFirstSecondsLeavesTheLinesShownSung() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { sungAt(times, times.map { 0L }) }
+        singing.answer = { rest.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        rest.complete(null)
+    }
+
+    @Test
+    fun movedWhileTheFirstSecondsAreHeardTheyTellNothing() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val early = CompletableDeferred<Unit>()
+        singing.early = { early.await(); Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        plays(positionMs = 60_000)
+        early.complete(Unit)
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun wordsTimedFarEarlierThanSungAreHeardStraightOnNotWhereTheyreTimed() {
+        // Timed for a take with a shorter intro: where the words are timed next, the singing's long gone.
+        val times = listOf(2, 5, 8, 11, 44, 47)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 17_000L }) }
+        openLyrics()
+        plays()
+        // Heard from just before the first line.
+        passes(500)
+        // The first while has a line at most, too little to tell, so no line is shown sung till the singing's found.
+        waitUntil { singing.hears == 1 && model().uiState.following?.timingKnown == false }
+        assertFalse(model().uiState.lyricsSynced)
+        passes(20_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertEquals(22_000L, model().uiState.lyricLines[1].timeMs)
+        assertTrue(model().uiState.following!!.timingKnown)
+    }
+
+    @Test
     fun resetPartwayThroughTheSongTheSingingIsntHeardOn() {
         val times = listOf(2, 5, 8, 30, 33, 36)
         lyricsTimedFor(null, times)
         singing.answer = { sungAt(times, times.map { 1_000L }) }
         openLyrics()
         plays()
+        // Heard from just before the first line.
+        passes(500)
         waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
         composeRule.runOnIdle { model().resetSync() }
         passes(40_000)
@@ -273,6 +365,8 @@ class SingingTest {
         singing.answer = { sungAt(times, times.map { 1_000L }) }
         openLyrics()
         plays()
+        // Heard from just before the first line.
+        passes(500)
         waitUntil { singing.hears == 1 && model().uiState.lyricsSynced }
         composeRule.runOnIdle { model().nudgeSync(200) }
         passes(40_000)
@@ -404,13 +498,13 @@ class SingingTest {
 
     @Test
     fun wherePastTheStartTheyWaitForLinesToBeSung() {
-        // A long break after the third line: at 7 seconds, the next lines sung are 23 seconds on,
-        // which at double speed is 11.5 seconds away.
+        // A long break after the third line: at 7 seconds, the next lines sung are 23 seconds on, heard
+        // from a second and a half before, which at double speed is 10.75 seconds away.
         lyricsTimedFor(null, times = listOf(0, 3, 6, 30, 33, 36))
         openLyrics()
         plays(positionMs = 7_000, speed = 2f)
         assertEquals(0, singing.hears)
-        passes(11_400)
+        passes(10_650)
         assertEquals(0, singing.hears)
         passes(200)
         assertEquals(1, singing.hears)
@@ -543,6 +637,42 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpPartwayItHearsOnAsTheWordsDriftFurtherOff() {
+        // Timed for another take: a second off at first, and two and a half further on.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, listOf(1_000L, 1_000L, 1_000L, 2_500L, 2_500L, 2_500L)) }
+        openLyrics()
+        plays(positionMs = 1_800)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[3].timeMs == 31_000L }
+        // The song just plays on, and where the words are sung next, they're heard again, for this time only too.
+        passes(30_000)
+        waitUntil { singing.hears == 2 && model().uiState.lyricLines[3].timeMs == 32_500L }
+        assertEquals(listOf(3_000L, 6_000L, 9_000L, 32_500L, 35_500L, 38_500L), model().uiState.lyricLines.map { it.timeMs })
+        assertFalse(model().uiState.lyricsSynced)
+        assertFalse(prefs().contains("sung_heard"))
+    }
+
+    @Test
+    fun noSingingHeardIsTriedThreeTimesToo() {
+        // Words of another song, or a song whisper.cpp can't make out: what's heard never matches.
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("[MUSIC]", 380))) }
+        openLyrics()
+        repeat(5) { plays(positionMs = it.toLong()) }
+        // Heard straight on, a while at a time.
+        waitUntil { singing.hears == 1 }
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        passes(20_000)
+        waitUntil { singing.hears == 3 }
+        passes(60_000)
+        assertEquals(3, singing.hears)
+        assertFalse(model().uiState.lyricsSynced)
+        // Given up on, the lines are shown sung as they're timed again, as nothing says they're wrong.
+        assertTrue(model().uiState.following!!.timingKnown)
+    }
+
+    @Test
     fun outOfSightItStopsAndBackInSightItHearsAgain() {
         val heard = CompletableDeferred<Sung?>()
         singing.answer = { heard.await() }
@@ -619,8 +749,13 @@ class SingingTest {
             return fetched()
         }
 
-        override suspend fun hear(language: String?): Sung? {
+        /** What the first few seconds of each hearing are told to have, when they're told. */
+        @Volatile
+        var early: (suspend () -> Sung?)? = null
+
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? {
             languages += language
+            if (first != null) early?.invoke()?.let { first(it) }
             if (missing) return null
             return try {
                 answer()

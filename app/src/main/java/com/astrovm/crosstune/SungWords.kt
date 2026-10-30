@@ -5,6 +5,8 @@ import android.os.SystemClock
 import androidx.core.content.edit
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,11 +26,27 @@ internal fun interface WordHearing {
 }
 
 /** What was heard sung, from [startedAtMs] on the clock that counts since the phone started. */
-internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>)
+internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>) {
+    /** When, into what was heard, the first word's sung, not just the sound the model tells of, as "[MUSIC]", "(upbeat music)" or "♪"; null when none is. */
+    val voiceAtMs: Long?
+        get() {
+            var told = false
+            return words.firstOrNull { word ->
+                val sound = told || word.text.startsWith('[') || word.text.startsWith('(')
+                told = sound && !word.text.endsWith(']') && !word.text.endsWith(')')
+                !sound && word.text.any { it.isLetterOrDigit() }
+            }?.atMs
+        }
+}
 
 /** Hears the words of the song the phone plays now; null when it can't, or heard none. */
 internal interface SingingHearing {
-    suspend fun hear(language: String?): Sung?
+    /**
+     * What's sung in the next while the phone plays, in [language] when it's known. Given [first],
+     * what's sung in its first [SingingListener.FIRST_SECONDS] is told it as soon as that's heard,
+     * while the rest still is.
+     */
+    suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung?
 
     /** Whether the last try heard nothing for want of the speech model, which wasn't fetched then, e.g. on mobile data. */
     val missesModel: Boolean
@@ -59,36 +77,51 @@ internal class SingingListener(
 
     override suspend fun fetchModel(): Boolean = fetch() != null
 
-    override suspend fun hear(language: String?): Sung? {
+    override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
         val recording = withContext(recordDispatcher) { sound.open() } ?: return null
-        var model: File? = null
-        val heard = recording.use {
+        val (file, heard) = recording.use {
             // The model first, so what's heard is fresh when it's listened to.
-            model = this.model()
-            missesModel = model == null
-            if (model == null) return null
-            withContext(recordDispatcher) { record(recording) }
-        } ?: return null
-        val words = withContext(computeDispatcher) {
-            val hears = hearing(model ?: return@withContext null) ?: return@withContext null
-            try {
-                hears.words(FloatArray(heard.second.size) { heard.second[it] / 32768f }, language)
-            } finally {
-                (hears as? Closeable)?.close()
-            }
-        } ?: return null
-        return Sung(heard.first, words).takeIf { words.isNotEmpty() }
+            val file = model()
+            missesModel = file == null
+            if (file == null) return null
+            file to (
+                coroutineScope {
+                    withContext(recordDispatcher) {
+                        record(recording) { startedAt, part ->
+                            // Told back where it was asked, while the rest is still heard.
+                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.let { first(Sung(startedAt, it)) } }
+                        }
+                    }
+                } ?: return null
+                )
+        }
+        val words = words(file, heard.second, language) ?: return null
+        return Sung(heard.first, words)
     }
 
-    /** When the sound started, and all of it; null when there's no sound to hear, or not all of it. */
-    private suspend fun record(recording: Recording): Pair<Long, ShortArray>? {
+    /** The words sung in [audio], heard with [model], in [language] when it's known; null when it can't be loaded, or hears none. */
+    private suspend fun words(model: File, audio: ShortArray, language: String?): List<HeardWord>? = withContext(computeDispatcher) {
+        val hears = hearing(model) ?: return@withContext null
+        try {
+            hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language).ifEmpty { null }
+        } finally {
+            (hears as? Closeable)?.close()
+        }
+    }
+
+    /**
+     * When the sound started, and all of it; null when there's no sound to hear, or not all of it.
+     * Its first [FIRST_SECONDS] are given to [heardFirst] as soon as they're in.
+     */
+    private suspend fun record(recording: Recording, heardFirst: (Long, ShortArray) -> Unit): Pair<Long, ShortArray>? {
         val audio = ShortArray(SAMPLES)
         val startedAt = clock()
         var recorded = 0
         while (recorded < audio.size) {
             val read = runInterruptible { recording.read(audio, recorded, minOf(CHUNK, audio.size - recorded)) }
             if (read <= 0) return null
+            if (recorded < FIRST_SAMPLES && recorded + read >= FIRST_SAMPLES) heardFirst(startedAt, audio.copyOf(FIRST_SAMPLES))
             recorded += read
         }
         return startedAt to audio
@@ -97,7 +130,10 @@ internal class SingingListener(
     companion object {
         /** Enough for a few lines, and short enough for a phone to hear in a few seconds. */
         const val SECONDS = 20
+        /** Enough to tell whether the voice has started, so a song's words timed into its intro are known to be soon. */
+        const val FIRST_SECONDS = 8
         private const val SAMPLES = ShazamSignature.SAMPLE_RATE * SECONDS
+        private const val FIRST_SAMPLES = ShazamSignature.SAMPLE_RATE * FIRST_SECONDS
         private const val CHUNK = ShazamSignature.SAMPLE_RATE / 10
     }
 }
