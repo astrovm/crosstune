@@ -1321,6 +1321,9 @@ class MainActivityTest {
         assertEquals(spotify to "https://open.spotify.com/track/${ids["First Song"]}", phone.opened.single())
         assertTrue(phone.songsAsked.isEmpty())
         composeRule.runOnIdle { phone.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime()), "Spotify", canSeek = true, appPackage = spotify) }
+        // Playing there, Crosstune comes back over it, with the list going on and nothing else opened.
+        waitUntil { phone.cameBack == 1 }
+        assertNull(shadowOf(app).peekNextStartedActivity())
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("First Song", "Band"), 3) }
         // On to its album's next song, the list's next opens.
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 4) }
@@ -1330,9 +1333,40 @@ class MainActivityTest {
         // Spotify not opening it there, the first song opens as it would on its own.
         phone.opens = false
         click(string(R.string.dismiss_button))
-        click(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes)))
+        // Done looking, it can play the list again.
+        val playAll = hasContentDescription(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes))) and isEnabled()
+        waitUntil { composeRule.onAllNodes(playAll).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(playAll).performClick()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("https://open.spotify.com/track/${ids["First Song"]}", nextStartedActivity()!!.dataString)
+        // And the list isn't left to play on from it.
+        waitUntil { !File(app.noBackupFilesDir, "play_queue.json").exists() }
+    }
+
+    @Test
+    fun aPlaylistWhoseFirstSongIsntOnSpotifyOpensItAsItWouldOnItsOwn() {
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "SPOTIFY").commit()
+        fake.handler = { request ->
+            when (request.url.host) {
+                "api.deezer.com" -> FakeSpotify.html(
+                    request,
+                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}}]}}"""
+                )
+                // Nobody knows it on Spotify.
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.SPOTIFY.packageName, "Spotify"))
+        launch()
+        resolveTyped("https://www.deezer.com/playlist/9")
+        waitForText("First Song")
+        click(string(R.string.play_all_in, string(MusicService.SPOTIFY.labelRes)))
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(MusicService.SPOTIFY.searchUrl("First Song Band"), nextStartedActivity()!!.dataString)
+        assertTrue(phone.opened.isEmpty())
+        assertFalse(File(app.noBackupFilesDir, "play_queue.json").exists())
     }
 
     @Test
