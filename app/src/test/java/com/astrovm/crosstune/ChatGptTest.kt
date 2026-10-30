@@ -938,6 +938,16 @@ class ChatGptTest {
     }
 
     @Test
+    fun noSongsLikeOneFoundIsNotKeptSoItIsAskedAgain() {
+        val tutor = tutor()
+        val song = MusicMetadata("Quiet", "Nobody")
+        answering("[]")
+        assertEquals(emptyList<Pair<String, String>>(), runBlocking { tutor.songsLike(song) })
+        runBlocking { tutor.songsLike(song) }
+        assertEquals(2, openAi.asked.size)
+    }
+
+    @Test
     fun aQuestionAboutTheWholeSongIsAnsweredWithWhatWasSaidBefore() {
         val tutor = tutor()
         val song = MusicMetadata("Plastic Love", "Mariya Takeuchi")
