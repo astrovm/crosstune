@@ -820,7 +820,7 @@ class MainActivity : ComponentActivity() {
         moveTaskToBack(true)
     }
 
-    /** On a TV, the whole screen covers the app a song plays in, which goes on playing under it. */
+    /** The whole screen covers the app a song plays in, which goes on playing under it. */
     private fun cover() {
         floatingOverApps = true
         FloatingLyricsService.start(this, floatingHost, whole = true)

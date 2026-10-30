@@ -427,6 +427,47 @@ class TvPlayTest {
         assertEquals(1, playback.opened.size)
     }
 
+    /** On a phone, Play pressed in an app that only plays in front, as YouTube Music without Premium: it opens on the song. */
+    private fun playInFront() {
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        playback.startsInBackground = false
+        launch()
+        click(play)
+        waitUntil { playback.opened.size == 1 }
+    }
+
+    @Test
+    fun onAPhoneAnAppThatOnlyPlaysInFrontIsCoveredWithTheSongsWordsAsOnATv() {
+        playInFront()
+        // Coming back would stop it, so Crosstune covers it instead, the whole screen, from as it's opened.
+        waitUntil { shadowOf(app).peekNextStartedService() != null }
+        val started = shadowOf(app).nextStartedService
+        assertTrue(started.getBooleanExtra(FloatingLyricsService.EXTRA_COVER, false))
+        controller!!.pause().stop()
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, started).create().startCommand(0, 1)
+        composeRule.waitForIdle()
+        assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).width)
+        assertEquals(WindowManager.LayoutParams.MATCH_PARENT, params(floating.get()).height)
+        // Once it plays there, its words show over it, and Crosstune stays behind.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        waitUntil { shown("Demo one") }
+        assertEquals(0, playback.cameBack)
+        // Back goes back through Crosstune, then leaves it to the app, which plays on.
+        backOut(floating)
+    }
+
+    @Test
+    fun onAPhoneNotAllowedToShowOverAppsAnAppThatOnlyPlaysInFrontIsLeftThere() {
+        ShadowSettings.setCanDrawOverlays(false)
+        playInFront()
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
+        composeRule.waitForIdle()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertNull(shadowOf(app).peekNextStartedService())
+        assertEquals(0, playback.cameBack)
+    }
+
     @Test
     fun youTubesTvAppPlaysYouTubeMusicsSongs() {
         assertTrue(MusicService.YOUTUBE_MUSIC in LinkInterception(app).installedServices())
