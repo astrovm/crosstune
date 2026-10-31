@@ -194,7 +194,7 @@ dependencies {
     // are the support library's, which has, and Media3 speaks it.
     implementation("androidx.media3:media3-session:1.11.1")
     // Media3's own is older, with a known flaw (GHSA-xxph-c9ww-hj94).
-    implementation("com.google.guava:guava:33.7.2-android")
+    implementation("com.google.guava:guava:33.7.2-jre")
 
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("com.squareup.okhttp3:okhttp-coroutines:5.5.1")
