@@ -9,7 +9,8 @@ far from where each line is really sung the app showed it.
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
 e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), separates the voice
 (demucs), finds when each line is really sung (faster-whisper medium on the voice, word by word),
-and what whisper.cpp tiny, the app's own model, hears in each stretch of it, as the phone would.
+and what whisper.cpp tiny, the app's own model, hears in each stretch of it, through the phone's
+visualizer, as the phone would.
 `run` plays it through the app (SyncReplayTest), from MS into the song: 0 is from the start, as the
 app's clock is sure then; later is picked up partway. `--work MS` is how long the phone takes to
 work out the words each time; try a few, as where each later stretch is heard moves with it. `--gradle "podman exec box ./gradlew"` runs
@@ -35,6 +36,8 @@ MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny
 # What the app hears at once, and at the start of a song, in ms.
 LENGTHS = (20_000, 8_000)
 STEP_MS = 1000
+# Samples in each block a phone's mixer hands its visualizer at 48 kHz: 20 ms.
+BLOCK = 960
 ON_TIME_S = 0.5
 
 
@@ -57,11 +60,26 @@ def heard_binary():
     return HEARD / "heard"
 
 
+def as_the_phone_hears(path):
+    """The recording as the app gets it from Android's visualizer: each mixer block of BLOCK samples
+    boosted by a power of two to fill 8 bits ("normalized" mode, so the sound pumps), then every 3
+    samples at 48 kHz averaged into one at 16 kHz, as PlayedSound does. Whisper.cpp tiny mishears it
+    the way the phone does, e.g. "Every time I see you call me" for "Every time I see you falling"."""
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(path), "-ac", "1", "-ar", "48000", "-f", "s16le", "-"], capture_output=True, check=True).stdout
+    a = np.frombuffer(raw, np.int16).astype(np.int64)
+    a = a[:len(a) // BLOCK * BLOCK].reshape(-1, BLOCK)
+    shift = np.maximum(0, np.ceil(np.log2(np.maximum(np.abs(a).max(axis=1), 1) + 1)).astype(np.int64) - 8)
+    byte = np.clip(a >> shift[:, None], -128, 127).ravel()
+    byte = byte[:len(byte) // 3 * 3].reshape(-1, 3).mean(axis=1)
+    return (byte * 256 / 32768).astype(np.float32)
+
+
 def windows(song, wav, length):
-    """What whisper.cpp tiny hears in each `length` ms from every STEP_MS, as the app hears it: 16-bit."""
-    out = OUT / f"{song}.windows{length // 1000}.json"
+    """What whisper.cpp tiny hears in each `length` ms from every STEP_MS, as the app hears it."""
+    out = OUT / f"{song}.heard{length // 1000}.json"
     done = json.loads(out.read_text()) if out.exists() else {}
-    a = audio(wav, "s16le")
+    a = as_the_phone_hears(wav)
     binary = heard_binary()
     starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
 
