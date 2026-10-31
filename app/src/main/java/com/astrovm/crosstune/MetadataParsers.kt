@@ -246,9 +246,14 @@ internal object MetadataParsers {
     /**
      * The song a player names. One that names no artist, as Android's "<unknown>" for a file with none,
      * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
+     * Without both there's no song to look up by name.
      */
     fun playerSong(title: String, artist: String): MusicMetadata? =
-        if (noOneArtist.matches(artist.trim())) youtubeVideo(title, "")?.takeIf { it.artist.isNotBlank() } else MusicMetadata(title, artist)
+        (if (noOneArtist.matches(artist.trim())) youtubeVideo(title, "") else MusicMetadata(title, artist))
+            ?.takeIf { it.title.isNotBlank() && it.artist.isNotBlank() && !namesAFile(it) }
+
+    /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */
+    private fun namesAFile(song: MusicMetadata) = '.' in song.artist && song.title.startsWith("${song.artist}/")
 
     /** No artist, or a compilation's many, as music stores and taggers name them in the app's languages. */
     private val noOneArtist = Regex(

@@ -398,6 +398,9 @@ internal data class LineQuestion(val question: String, val answer: String = "", 
 /** Line [index] explained by ChatGPT: [text] so far, until [done]; or why it couldn't be. */
 internal data class LineExplanation(val index: Int, val text: String = "", val done: Boolean = false, val failed: Boolean = false, val limitReached: Boolean = false) {
     val writing get() = !done && !failed && !limitReached
+
+    /** Ended with no answer: it can be asked again. */
+    val mayAskAgain get() = failed || limitReached
 }
 
 /** A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were found. */
