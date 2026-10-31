@@ -188,6 +188,7 @@ internal object MetadataParsers {
      * An Ancient Linux Terminal Problem" by "Brodie Robertson", is no song.
      */
     fun musicVideo(title: String, channel: String): MusicMetadata? {
+        spotifyPage(title)?.let { return it }
         val song = youtubeVideo(title, channel) ?: return null
         val says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.containsMatchIn(title) ||
             bracketedSongRegex.matches(title) || artistSeparator(title) > 0 ||
@@ -195,7 +196,67 @@ internal object MetadataParsers {
         return song.takeIf { says }
     }
 
+    /**
+     * How Spotify titles a song's page in each language it has, with a music video and without, "%s"
+     * being the artist: "Song - Song, Lyrics, and Music Video by Artist | Spotify". A browser playing
+     * the page names what it plays by that title.
+     */
+    private val spotifyPageWordings = listOf(
+        "Song, Lyrics, and Music Video by %s", "song and lyrics by %s",
+        "Song, Lyrics und Musikvideo von %s", "Musik und Lyrics von %s",
+        "canción, letra y vídeo musical de %s", "letra y música de %s",
+        "Canción, letra y video musical de %s", "música y letra de %s",
+        "Titre, paroles et vidéo de %s", "titre et paroles par %s",
+        "Lagu, Lirik, dan Video Musik oleh %s", "lagu dan lirik oleh %s",
+        "brano, testo e video musicale di %s", "musica e testo di %s",
+        "%sの曲、歌詞、ミュージックビデオ", "曲・歌詞：%s",
+        "%s의 곡, 가사 및 뮤직비디오", "%s의 곡 및 가사",
+        "música, letra e videoclipe de %s", "música e letra de %s",
+        "Şarkı, Şarkı Sözleri ve Müzik Videosu: %s", "müzik ve şarkı sözleri: %s",
+        "Bài hát, lời bài hát và video nhạc của %s", "nhạc và lời của %s",
+        "เพลง เนื้อเพลง และมิวสิกวิดีโอจาก %s", "เพลงและเนื้อเพลงจาก %s",
+        "أغنية وكلمات وفيديو موسيقي من إبداعات %s", "موسيقى وكلمات %s"
+    ).map { wording ->
+        // The song is all before the last dash or colon the wording follows, as a song's name may have one too.
+        Regex("""^(.+)(?: [-–‑] |: )""" + wording.split("%s").joinToString("(.+)") { Regex.escape(it) } + """ \| Spotify$""", RegexOption.IGNORE_CASE)
+    }
+
+    private val spotifyPageSeparators = listOf(" - ", " – ", " ‑ ")
+    private val anySpace = Regex("""\p{Zs}""")
+
+    /** The song a Spotify page's title names, by no artist when it's worded in a way not known, rather than a wrong one. */
+    private fun spotifyPage(said: String): MusicMetadata? {
+        // Some languages' titles keep the dash and the bar off the line's end with a no-break space.
+        val title = said.replace(anySpace, " ").trim()
+        val page = title.removeSuffix(" | Spotify").takeIf { it != title } ?: return null
+        val known = spotifyPageWordings.firstNotNullOfOrNull { it.matchEntire(title) }?.destructured
+        val (song, artist) = known?.let { (song, artist) -> song to artist } ?: (beforeDescription(page) to "")
+        // Arabic quotes the song.
+        return MusicMetadata(song.trim().removeSurrounding("\"").trim(), artist.trim())
+    }
+
+    /** A page's song, before what it says it is: after the last dash, or else a colon. */
+    private fun beforeDescription(page: String): String {
+        val at = spotifyPageSeparators.maxOf { page.lastIndexOf(it) }.takeIf { it > 0 } ?: page.indexOf(": ")
+        return if (at > 0) page.substring(0, at) else page
+    }
+
     private val musicVideoSign = Regex("""\b(official|lyrics?|visuali[sz]er|mv|m/v|audio|music\s+video|remaster(ed)?|remix|feat\.|ft\.)(\b|\s|$)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * The song a player names. One that names no artist, as Android's "<unknown>" for a file with none,
+     * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
+     */
+    fun playerSong(title: String, artist: String): MusicMetadata? =
+        if (noOneArtist.matches(artist.trim())) youtubeVideo(title, "")?.takeIf { it.artist.isNotBlank() } else MusicMetadata(title, artist)
+
+    /** No artist, or a compilation's many, as music stores and taggers name them in the app's languages. */
+    private val noOneArtist = Regex(
+        """<unknown>|various(?: artists?)?|v\.?\s?a\.?|v/a|varios(?: artistas)?|vários artistas|verschiedene(?: interpreten| künstler)?|""" +
+            """artistes (?:divers|variés)|artisti vari|diverse artiesten|różni wykonawcy|çeşitli sanatçılar|разные исполнители|""" +
+            """विभिन्न कलाकार|berbagai artis|ヴァリアス・アーティスト|여러 아티스트|群星|羣星""",
+        RegexOption.IGNORE_CASE
+    )
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {

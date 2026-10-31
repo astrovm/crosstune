@@ -963,6 +963,35 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSpotifyPagePlayingInABrowserIsItsSong() {
+        allow()
+        sounding()
+        // A browser names a page that says nothing of what it plays by its title, on its site (#590).
+        shadowOf(sessions).addController(player("com.android.chrome", "Chrome", "new trick – música, letra e videoclipe de ROSÉ | Spotify", "open.spotify.com"))
+        assertEquals(MusicMetadata("new trick", "ROSÉ"), playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun aFileOfNoArtistIsNoSongAndACompilationsIsReadFromItsTitle() {
+        allow()
+        sounding()
+        // Android's word for a file with no artist is no artist (#591).
+        shadowOf(sessions).addController(player("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", "<unknown>", album = "Downloads"))
+        assertNull(playback.nowPlaying())
+        // A compilation's file names its artist in the title, whatever the language it says so in.
+        for (various in listOf("Various Artists", "Varios Artistas", "VA")) {
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player("com.other.player", "Other", "Vanishing Point - Provision", various, album = "Metal Compilation"))
+            assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
+            assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.recording(MusicMetadata("Provision", "Vanishing Point"))?.copy(lengthMs = null, recordingId = null))
+        }
+        // With no artist in its title either, it's no song to look up.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(player("com.other.player", "Other", "Provision", "Various Artists", album = "Metal Compilation"))
+        assertNull(playback.nowPlaying())
+    }
+
+    @Test
     fun aFilePlayingInABrowserIsNoSong() {
         allow()
         sounding()
