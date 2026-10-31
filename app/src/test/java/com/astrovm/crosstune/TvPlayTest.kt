@@ -11,6 +11,7 @@ import android.provider.Settings
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
@@ -118,8 +119,9 @@ class TvPlayTest {
 
     private val play get() = string(R.string.play_in_background, "YouTube Music")
 
+    // Told of changes outside the screen, as a phone tells it each frame, so what watches them, like the cover, sees them.
     private fun waitUntil(condition: () -> Boolean) =
-        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
+        composeRule.waitUntil(TIMEOUT_MS) { Snapshot.sendApplyNotifications(); shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
 
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text) or hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty()
 
