@@ -160,6 +160,9 @@ class LyricsFinderTest {
         val store = fake.handler
         fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, """{"results":[{"trackName":""") else store(request) }
         assertEquals(Lyrics.None, found(cover))
+        // Nor with the store down.
+        fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, "", code = 503) else store(request) }
+        assertEquals(Lyrics.None, found(cover))
     }
 
     @Test
