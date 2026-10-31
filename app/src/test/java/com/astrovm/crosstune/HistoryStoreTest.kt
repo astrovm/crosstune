@@ -99,6 +99,28 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun twoVersionsOfASongKnownByNameAreTwoEntries() {
+        // A 2:54 single and a 4:22 album take of one name, each heard as an app played it.
+        fun named(lengthMs: Long?) = MusicMetadata("Plastic Love", "Mariya Takeuchi", lengthMs = lengthMs).let { song ->
+            MusicLinks.recognizedSong(song).let { HistoryEntry(MusicLink(null, ItemType.TRACK, it.url, it.url), song) }
+        }
+        val single = named(174_000)
+        val album = named(262_000)
+        store.add(named(null))
+        store.add(single)
+        store.add(album)
+        assertEquals(listOf(album, single), HistoryStore(preferences).load())
+        // Each keeps the link it opened in, as each is another recording there.
+        val opened = PreparedLink("https://music.youtube.com/watch?v=aaaaaaaaaaa", true, true)
+        store.remember(single.link.url, "YOUTUBE_MUSIC", opened)
+        assertEquals(listOf(album, single.copy(destinationLinks = mapOf("YOUTUBE_MUSIC" to opened))), HistoryStore(preferences).load())
+        // Said a second longer by another app, it's still the single.
+        val again = named(175_000)
+        store.add(again)
+        assertEquals(listOf(again, album), HistoryStore(preferences).load())
+    }
+
+    @Test
     fun keepsNewestFirstWithoutDuplicatesAndCapsAtTwenty() {
         (1..25).forEach { store.add(entry(it)) }
         store.add(entry(10))

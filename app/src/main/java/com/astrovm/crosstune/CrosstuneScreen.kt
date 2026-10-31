@@ -1690,7 +1690,9 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
             // Keyed, so swiping one away doesn't hand its swipe to the row that moves up.
             key(entry.link.url) {
                 // Only a row going somewhere other than the default app says where.
-                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index))
+                // Two versions of a song, as a single and an album take, say how long each is, to tell them apart.
+                val length = entry.metadata.lengthMs?.takeIf { history.any { other -> other !== entry && other.metadata.isNamedAs(entry.metadata) } }
+                HistoryRow(entry, state.ruleFor(entry.link)?.takeIf { it != state.defaultDestination }, state.installed, actions, Modifier.enterIn(index), length)
             }
         }
     }
@@ -1702,7 +1704,7 @@ private fun HistorySection(history: List<HistoryEntry>, state: UiState, actions:
  * either way removes it.
  */
 @Composable
-private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier) {
+private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: Set<MusicService>, actions: ScreenActions, modifier: Modifier = Modifier, lengthMs: Long? = null) {
     val swipe = rememberSwipeToDismissBoxState()
     val remove = stringResource(R.string.remove_button)
     SwipeToDismissBox(
@@ -1734,7 +1736,8 @@ private fun HistoryRow(entry: HistoryEntry, elsewhere: Destination?, installed: 
                     // Most are songs, so only other kinds say what they are.
                     text = listOf(
                         if (entry.link.type == ItemType.TRACK) "" else stringResource(entry.link.type.labelRes),
-                        entry.metadata.artist
+                        entry.metadata.artist,
+                        lengthMs?.let(::clockText).orEmpty()
                     )
                         .filter { it.isNotBlank() }
                         .joinToString(", "),
