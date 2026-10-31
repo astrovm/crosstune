@@ -6,6 +6,7 @@ import android.app.PictureInPictureParams
 import android.app.RemoteAction
 import android.content.res.Configuration
 import android.graphics.drawable.Icon
+import android.util.Log
 import android.util.Rational
 import android.app.UiModeManager
 import android.content.ClipData
@@ -426,7 +427,8 @@ class MainActivity : ComponentActivity() {
                 PlayedSound(soundTapFactory, context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)),
                 model::file,
                 NativeWhisper::open,
-                fetch = model::fetchAnyway
+                fetch = model::fetchAnyway,
+                keepTo = context.cacheDir.takeIf { Log.isLoggable(TIMING_LOG, Log.DEBUG) }
             ).takeIf { memory.totalMem >= SINGING_MEMORY }
         }
 

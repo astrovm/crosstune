@@ -37,6 +37,8 @@ import java.io.File
  * the song's length: what whisper.cpp heard in each stretch of it, worked out beforehand by
  * scripts/syncreplay, comes back after the time hearing takes, and when each line is shown is
  * written down, for the script to hold against when it's really sung. Only when the script asks.
+ * The music app's clock may be a little behind what it plays, as YouTube Music's is, by more or less
+ * each time; asked to, the song plays a second time, with what was learnt the first kept.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h900dp")
@@ -98,10 +100,11 @@ class SyncReplayTest {
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
         workMs = asked.optLong("work", WORK_MS)
+        val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
         val lyrics = JSONArray(File(dir, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
         // What was heard in each stretch, by how long it is in seconds and where it starts.
         val heard = listOf(SingingListener.SECONDS, SingingListener.FIRST_SECONDS).associateWith { seconds ->
-            JSONObject(File(dir, "$song.heard$seconds.json").readText()).let { windows ->
+            JSONObject(File(dir, "$song.heard$seconds${asked.optString("heard")}.json").readText()).let { windows ->
                 windows.keys().asSequence().associate { start -> start.toLong() to windows.getJSONArray(start).let { words -> (0 until words.length()).map { words.getJSONArray(it).let { word -> word.getLong(0) to word.getString(1) } } } }
             }
         }
@@ -125,6 +128,22 @@ class SyncReplayTest {
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(button)[0].performScrollTo().performClick()
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.lyricLines.isNotEmpty() }
+        behind.forEachIndexed { time, behindMs ->
+            val played = play(fromMs, lengthMs, behindMs)
+            File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
+            // Stopped at the end, then played again a while later.
+            playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, durationMs = lengthMs)
+            shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(AGAIN_MS))
+        }
+    }
+
+    /**
+     * The song played from [fromMs] to [lengthMs], the app's clock [behindMs] behind what it plays:
+     * each line shown, where the lines were put, and when they were known, all where the song really is.
+     */
+    private fun play(fromMs: Long, lengthMs: Long, behindMs: Long): JSONObject {
+        this.behindMs = behindMs
+        heardLog = JSONArray()
         val startedAt = SystemClock.elapsedRealtime()
         playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, durationMs = lengthMs)
         composeRule.waitForIdle()
@@ -142,21 +161,21 @@ class SyncReplayTest {
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(STEP_MS))
             atMs = fromMs + SystemClock.elapsedRealtime() - startedAt
             val state = model().uiState
-            if (state.following?.timingKnown != lastKnown) known.put(JSONObject().put("at", atMs).put("known", state.following?.timingKnown))
+            if (state.following?.timingKnown != lastKnown) known.put(JSONObject().put("at", atMs + behindMs).put("known", state.following?.timingKnown))
             lastKnown = state.following?.timingKnown
             val following = state.following?.takeIf { it.timingKnown } ?: continue
             val now = SystemClock.elapsedRealtime()
             // In the song, by the music app's own clock: the lines as shown, less how far the app's clock is put right.
             val off = playback.playing.value!!.clock.positionAt(now) - following.clock.positionAt(now)
-            val times = state.lyricLines.map { it.timeMs + off }
-            if (times != lastPlaced) placed.put(JSONObject().put("at", atMs).put("times", JSONArray(times)))
+            val times = state.lyricLines.map { it.timeMs + off + behindMs }
+            if (times != lastPlaced) placed.put(JSONObject().put("at", atMs + behindMs).put("times", JSONArray(times)))
             lastPlaced = times
             val index = SyncedLyrics.indexAt(state.lyricLines, following.clock.positionAt(now))
-            if (index != last && index >= 0) shown.put(JSONObject().put("line", index).put("text", state.lyricLines[index].text).put("at", atMs))
+            if (index != last && index >= 0) shown.put(JSONObject().put("line", index).put("text", state.lyricLines[index].text).put("at", atMs + behindMs))
             last = index
         }
         val lines = JSONArray(model().uiState.lyricLines.map { it.text })
-        File(dir, "$song.from$fromMs.shown.json").writeText(JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).toString())
+        return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog)
     }
 
     private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
@@ -164,8 +183,11 @@ class SyncReplayTest {
     /** How long the phone takes to work out the words in what it heard, after hearing it. */
     private var workMs = WORK_MS
 
+    /** How far the music app's clock is behind what it plays, this time. */
+    private var behindMs = 0L
+
     /** Each stretch heard: where the song was, which stretch heard beforehand stood for it, and what was in it. */
-    private val heardLog = JSONArray()
+    private var heardLog = JSONArray()
 
     /**
      * What whisper.cpp heard in the seconds asked for from where the song is when it's asked, from the
@@ -178,7 +200,8 @@ class SyncReplayTest {
 
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? = coroutineScope {
             val at = SystemClock.elapsedRealtime()
-            val from = playback.playing.value!!.clock.positionAt(at)
+            // What's heard is where the song really is, ahead of the app's clock.
+            val from = playback.playing.value!!.clock.positionAt(at) + behindMs
             if (first != null) launch { first(heard(SingingListener.FIRST_SECONDS, at, from)) }
             heard(SingingListener.SECONDS, at, from)
         }
@@ -211,5 +234,8 @@ class SyncReplayTest {
 
         /** About how long a phone takes to work out the words in what it heard, after hearing it. */
         const val WORK_MS = 2_500L
+
+        /** How long the song stays stopped before it's played again. */
+        const val AGAIN_MS = 5_000L
     }
 }

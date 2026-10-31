@@ -5,6 +5,8 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py prep ID LYRICS.json   # once per recording: see below
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
+  python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
+  python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
 e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), separates the voice
@@ -13,17 +15,26 @@ and what whisper.cpp tiny, the app's own model, hears in each stretch of it, thr
 visualizer, as the phone would.
 `run` plays it through the app (SyncReplayTest), from MS into the song: 0 is from the start, as the
 app's clock is sure then; later is picked up partway. `--work MS` is how long the phone takes to
-work out the words each time; try a few, as where each later stretch is heard moves with it. `--gradle "podman exec box ./gradlew"` runs
+work out the words each time; try a few, as where each later stretch is heard moves with it. `--behind MS`
+has the music app's clock that far behind what it plays, and `--behind-again MS` plays it a second
+time, keeping what was learnt, to score that. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
+`phone` checks the same on a real phone over adb, with the dev app installed and the phone unlocked:
+it plays the recording in YouTube Music (--app for another build of it) from the start, opens the
+words in Crosstune for S seconds, and times each line lit from the app's own log. Where the song
+really is comes from lining up what the app heard with the recording, as a music app's clock runs
+behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
 Wants ffmpeg, yt-dlp, cmake, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
 import json
+import os
 import re
 import shlex
 import statistics
 import subprocess
 import sys
+import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -31,14 +42,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "syncreplay"
 HEARD = OUT / "heard"
-MODEL = OUT / "ggml-tiny-q5_1.bin"
-MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin"
+# The app's speech model; others can be tried with `hear --model` and `run --model`.
+APP_MODEL = "tiny-q5_1"
+MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
 # What the app hears at once, and at the start of a song, in ms.
 LENGTHS = (20_000, 8_000)
 STEP_MS = 1000
 # Samples in each block a phone's mixer hands its visualizer at 48 kHz: 20 ms.
 BLOCK = 960
 ON_TIME_S = 0.5
+# The app's logcat tag for this, off unless set to DEBUG (TIMING_LOG in SungWords.kt).
+TIMING_LOG = "CrosstuneTiming"
+DEV_APP = "com.astrovm.crosstune.dev"
+# What the dev app learns of a song's timing, forgotten before each check unless --again.
+LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps")
 
 
 def norm(word):
@@ -55,9 +72,19 @@ def heard_binary():
     if not (HEARD / "heard").exists():
         subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
         subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
-    if not MODEL.exists():
-        subprocess.run(["curl", "-sSLo", str(MODEL), MODEL_URL], check=True)
     return HEARD / "heard"
+
+
+def model_file(model):
+    path = OUT / f"ggml-{model}.bin"
+    if not path.exists():
+        subprocess.run(["curl", "-sSLo", str(path), MODEL_URL.format(model)], check=True)
+    return path
+
+
+def heard_file(song, length, model):
+    """What `model` heard in each `length` ms of `song`: the app's model's is the plain one."""
+    return OUT / f"{song}.heard{length // 1000}{'' if model == APP_MODEL else '.' + model}.json"  # SyncReplayTest reads the same names
 
 
 def as_the_phone_hears(path):
@@ -75,17 +102,18 @@ def as_the_phone_hears(path):
     return (byte * 256 / 32768).astype(np.float32)
 
 
-def windows(song, wav, length):
-    """What whisper.cpp tiny hears in each `length` ms from every STEP_MS, as the app hears it."""
-    out = OUT / f"{song}.heard{length // 1000}.json"
+def windows(song, wav, length, model=APP_MODEL):
+    """What whisper.cpp hears with `model` in each `length` ms from every STEP_MS, as the app hears it."""
+    out = heard_file(song, length, model)
     done = json.loads(out.read_text()) if out.exists() else {}
     a = as_the_phone_hears(wav)
     binary = heard_binary()
+    weights = model_file(model)
     starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
 
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
-        text = subprocess.run([str(binary), str(MODEL), "en", ""], input=seg.tobytes(), capture_output=True).stdout.decode("utf-8", "replace")
+        text = subprocess.run([str(binary), str(weights), "en", ""], input=seg.tobytes(), capture_output=True).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
     with ThreadPoolExecutor(1) as pool:
@@ -120,11 +148,35 @@ def truth(song, wav, lines):
             i += 1
         else:
             j += 1
+    starts = {}
+    for n, line in enumerate(lines):
+        words = [j for j, (_, i) in enumerate(lyric) if i == n]
+        if words and words[0] in at and sum(j in at for j in words) * 2 > len(words):
+            starts[n] = at[words[0]]
+    write_truth(song, lines, voiced(vocals, starts))
+
+
+def voiced(vocals, starts):
+    """Each line's start moved on to where the voice is, when it's in silence: whisper times the first
+    word after a long rest early, by over a second (Tell It to My Heart's first three lines)."""
+    import numpy as np
+    a = audio(vocals)
+    # How loud the voice is each 10 ms, over 50 ms; quiet is well under how loud it mostly sings.
+    level = np.sqrt(np.convolve(a ** 2, np.ones(800) / 800, "same"))[::160]
+    quiet = np.percentile(level[level > 0], 60) / 4
+    moved = {}
+    for n, start in starts.items():
+        at = int(start * 100)
+        on = next((i for i in range(at, min(at + 200, len(level))) if level[i] > quiet), at)
+        moved[n] = on / 100
+    return moved
+
+
+def write_truth(song, lines, starts):
     with open(OUT / f"{song}.truth.jsonl", "w") as f:
         for n, line in enumerate(lines):
-            words = [j for j, (_, i) in enumerate(lyric) if i == n]
-            if words and words[0] in at and sum(j in at for j in words) * 2 > len(words):
-                f.write(json.dumps({"line": n, "text": line, "start": round(at[words[0]], 2)}) + "\n")
+            if n in starts:
+                f.write(json.dumps({"line": n, "text": line, "start": round(starts[n], 2)}) + "\n")
 
 
 def prep(args):
@@ -142,7 +194,10 @@ def prep(args):
 def run(args):
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
-    asked.write_text(json.dumps({"song": args.id, "from": args.start, "work": args.work}))
+    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
+    if args.behind_again is not None:
+        replay["behindAgain"] = args.behind_again
+    asked.write_text(json.dumps(replay))
     try:
         done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
     finally:
@@ -183,6 +238,153 @@ def score(args):
     print(f"shown sung early, before its voice: {len(early)}/{len(lags)} lines" + (f", by up to {-min(early):.1f} s" if early else ""))
 
 
+def adb(*command):
+    tool = os.environ.get("ADB", str(Path.home() / "Android" / "Sdk" / "platform-tools" / "adb"))
+    return subprocess.run([tool, *command], capture_output=True, check=True).stdout
+
+
+def shell(*command):
+    # The phone's shell reads the command again, so each part is quoted for it.
+    return adb("shell", " ".join(shlex.quote(part) for part in command)).decode("utf-8", "replace")
+
+
+def tap(text, tries=20):
+    """Taps the first thing on screen showing [text], or saying it to TalkBack; whether there was one."""
+    for _ in range(tries):
+        # The screen can't always be read, as while it moves: it's read again.
+        try:
+            shell("uiautomator", "dump", "/sdcard/window.xml")
+            screen = shell("cat", "/sdcard/window.xml")
+        except subprocess.CalledProcessError:
+            screen = ""
+        for node in re.findall(r"<node [^>]*>", screen):
+            if f'text="{text}"' in node or f'content-desc="{text}"' in node:
+                x1, y1, x2, y2 = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node).groups())
+                shell("input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
+                return True
+        time.sleep(0.5)
+    return False
+
+
+def shows(text, tries=20):
+    """Whether something on screen shows [text], soon."""
+    for _ in range(tries):
+        try:
+            shell("uiautomator", "dump", "/sdcard/window.xml")
+            if f'text="{text}"' in shell("cat", "/sdcard/window.xml"):
+                return True
+        except subprocess.CalledProcessError:
+            pass
+        time.sleep(0.5)
+    return False
+
+
+def playing(app):
+    """The song [app] plays, its title, and when by the phone's clock it was at 0 ms; None till it plays."""
+    session = shell("dumpsys", "media_session").split(f"package={app}")
+    if len(session) < 2:
+        return None
+    state = re.search(r"state=PLAYING\(3\), position=(\d+),.*?updated=(\d+)", session[1][:3000])
+    title = re.search(r"description=([^,]*),", session[1][:3000])
+    return (title.group(1), int(state.group(2)) - int(state.group(1))) if state and title else None
+
+
+def phone(args):
+    shell("setprop", f"log.tag.{TIMING_LOG}", "DEBUG")
+    # Started again, Crosstune reads the log level, and nothing's left from before.
+    shell("am", "force-stop", DEV_APP)
+    shell("am", "force-stop", args.app)
+    shell("run-as", DEV_APP, "find", "cache", "-name", "heard-*.pcm", "-delete")
+    if not args.again:
+        for key in LEARNT:
+            shell("run-as", DEV_APP, "sed", "-i", "-e", f"s#<string name=\"{key}\">[^<]*</string>##", "shared_prefs/crosstune_preferences.xml")
+        shell("run-as", DEV_APP, "rm", "-f", "cache/kept_words.json", "cache/lyrics.json", "cache/sung_readings.json", "cache/lookups.json")
+    adb("logcat", "-G", "16M")
+    adb("logcat", "-c")
+    shell("input", "keyevent", "KEYCODE_WAKEUP")
+    time.sleep(1)
+    # A lock screen without a PIN goes with a swipe up; one with a PIN needs the phone unlocked first.
+    if "NotificationShade" in shell("dumpsys", "window", "windows").split("mCurrentFocus", 1)[-1][:200]:
+        width, height = map(int, re.search(r"(\d+)x(\d+)", shell("wm", "size")).groups())
+        shell("input", "swipe", str(width // 2), str(height * 9 // 10), str(width // 2), str(height * 3 // 10), "200")
+    shell("am", "start", "-a", "android.intent.action.VIEW", "-d", f"https://music.youtube.com/watch?v={args.id}", "-p", args.app)
+    for _ in range(60):
+        song = playing(args.app)
+        if song:
+            break
+        time.sleep(0.5)
+    else:
+        sys.exit(f"{args.app} didn't play {args.id}")
+    title, zero = song
+    # Picked up as it plays, as when Crosstune is opened on a song already playing.
+    shell("monkey", "-p", DEV_APP, "-c", "android.intent.category.LAUNCHER", "1")
+    # The words of what's playing, not a song of the same name under Recent, which would open it again.
+    if not tap("Lyrics of what's playing"):
+        sys.exit("Couldn't open the words in Crosstune: is the phone unlocked?")
+    if not shows(title):
+        sys.exit(f"Crosstune opened the words of another song, not {title}")
+    while float(shell("cat", "/proc/uptime").split()[0]) * 1000 - zero < args.seconds * 1000:
+        # The words are only followed while they're in sight, so the screen is kept from sleeping.
+        shell("input", "keyevent", "KEYCODE_WAKEUP")
+        time.sleep(5)
+    shell("input", "keyevent", "KEYCODE_MEDIA_PAUSE")
+    log = adb("logcat", "-d", "-s", f"{TIMING_LOG}:D").decode()
+    kept = OUT / "phone" / args.id
+    kept.mkdir(parents=True, exist_ok=True)
+    for old in kept.glob("heard-*.pcm"):
+        old.unlink()
+    for name in shell("run-as", DEV_APP, "ls", "cache").split():
+        if name.startswith("heard-"):
+            (kept / name).write_bytes(adb("exec-out", "run-as", DEV_APP, "cat", f"cache/{name}"))
+    (kept / "log.txt").write_text(log)
+    shell("run-as", DEV_APP, "find", "cache", "-name", "heard-*.pcm", "-delete")
+    score_phone(args.id, kept)
+
+
+def behind(song, kept, lit):
+    """How far behind what's heard the app's clock is: each while kept, found in the recording, against where the app said the song was."""
+    import numpy as np
+    offs = []
+    for f in sorted(kept.glob("heard-*.pcm")):
+        started = int(re.search(r"heard-(\d+)", f.name).group(1))
+        clock = min(lit, key=lambda e: abs(e[1] - started))
+        app = clock[2] + started - clock[1]
+        heard = np.frombuffer(f.read_bytes(), np.int16).astype(np.float32)[:16000 * 8]
+        n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
+        match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
+        loud = np.sqrt(np.convolve(song ** 2, np.ones(len(heard)), "valid")[:len(match)]) + 1e-9
+        at = int(np.argmax(match / loud)) / 16
+        offs.append(at - app)
+        print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
+    return statistics.median(offs)
+
+
+def score_phone(song_id, kept):
+    lit = [(int(i), int(at), int(pos)) for i, at, pos in re.findall(r"lit (-?\d+) at (\d+) pos (-?\d+)", (kept / "log.txt").read_text())]
+    if not lit:
+        sys.exit("No lines lit in the log: was the dev app reinstalled after the log was added, and the words open?")
+    lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit)
+    sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{song_id}.truth.jsonl")}
+    # The app's lines are the found words', as in LYRICS.json given to prep; truth counts only those with words.
+    words = [line for _, line in json.loads((OUT / f"{song_id}.lyrics.json").read_text())]
+    nth = {i: k for k, i in enumerate(i for i, line in enumerate(words) if line.strip())}
+    first = {}
+    for i, _, pos in lit:
+        if nth.get(i) is not None and nth[i] not in first:
+            first[nth[i]] = (pos + lag) / 1000
+    lags = {k: first[k] - sung[k] for k in sung if k in first}
+    for k in sorted(sung):
+        text = words[next(i for i in nth if nth[i] == k)][:34]
+        print(f"{k:2d} sung {sung[k]:6.1f}  " + (f"lit {first[k]:6.1f} lag {lags[k]:+5.1f}  {text}" if k in lags else f"never lit   {text}"))
+    print(f"{song_id} on the phone, the app's clock {lag / 1000:.2f} s behind: {sum(abs(x) <= ON_TIME_S for x in lags.values())}/{len(lags)} within {ON_TIME_S} s, "
+          f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, median {statistics.median(abs(x) for x in lags.values()):.2f} s; never lit {sum(k not in first for k in sung)}")
+
+
+def hear(args):
+    for length in LENGTHS:
+        windows(args.id, OUT / f"{args.id}.wav", length, args.model)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     steps = parser.add_subparsers(dest="step", required=True)
@@ -200,6 +402,20 @@ def main():
             p.add_argument("--gradle", default="./gradlew --max-workers=4")
             # The phone takes about this long, but it varies, and where each later stretch is heard with it.
             p.add_argument("--work", type=int, default=2500, help="ms the phone takes to work out what it heard")
+            # YouTube Music's was 450 to 880 ms behind, each time a little different.
+            p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
+            p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
+            p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+    p = steps.add_parser("hear")
+    p.add_argument("id")
+    p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")
+    p.set_defaults(go=hear)
+    p = steps.add_parser("phone")
+    p.add_argument("id")
+    p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
+    p.add_argument("--again", action="store_true", help="keep what the app learnt of the song's timing")
+    p.add_argument("--app", default="com.google.android.apps.youtube.music", help="the YouTube Music build to play it in")
+    p.set_defaults(go=phone)
     args = parser.parse_args()
     args.go(args)
 
