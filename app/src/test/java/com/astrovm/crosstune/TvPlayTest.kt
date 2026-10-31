@@ -549,6 +549,22 @@ class TvPlayTest {
     }
 
     @Test
+    fun onAPhoneTheSongPlayingInAnotherBuildOfTheAppAskedIsntTakenForIt() {
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        playback.running = null
+        // Another build of YouTube Music plays it, not the one asked, which is on the phone.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YT Music Morphe", canSeek = true, appPackage = "app.morphe.android.apps.youtube.music")
+        launch()
+        click(play)
+        waitUntil { playback.songsAsked.isNotEmpty() }
+        // Not seen to play there, the app asked is opened on the song.
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.LOAD_SONG_MS))
+        waitUntil { playback.opened.isNotEmpty() }
+        assertEquals(listOf(youTubeMusic to link), playback.opened)
+    }
+
+    @Test
     fun youTubesTvAppPlaysYouTubeMusicsSongs() {
         assertTrue(MusicService.YOUTUBE_MUSIC in LinkInterception(app).installedServices())
         // Its phone app isn't on a TV, so YouTube's TV app stands in for it.
