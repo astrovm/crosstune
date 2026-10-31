@@ -287,7 +287,7 @@ internal class MediaSessionPlayback(
         lateinit var clocks: SteadyClock
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
-        fun steadily(controller: MediaController) = following(controller)?.let {
+        fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
             if (moves != movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller))
@@ -523,7 +523,7 @@ internal class MediaSessionPlayback(
             .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
             // plays() already checked the session's title and artist. YouTube's video-title
             // parser can mistake a bilingual title's first half for an artist.
-            .firstNotNullOfOrNull { playing(it)?.metadata?.copy(title = song.title, artist = song.artist) }
+            .firstNotNullOfOrNull { playing(it, song.lengthMs)?.metadata?.copy(title = song.title, artist = song.artist) }
     }
 
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = changes(::nowPlaying)
@@ -546,9 +546,27 @@ internal class MediaSessionPlayback(
             }
     }
 
-    /** How long the app says what it plays is, as it said before for the song; see [SteadyLengths]. */
-    private fun lengthOf(metadata: MediaMetadata): Long? = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }?.let {
-        lengths.of(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), it)
+    /**
+     * How long the app says what it plays is, as it said before for the song; see [SteadyLengths]. Under
+     * an ad, the song's: see [songUnderAd].
+     */
+    private fun MediaController.lengthOf(metadata: MediaMetadata, asked: Long? = null): Long? =
+        metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).takeIf { it > 0 }?.let {
+            songUnderAd(metadata, asked) ?: lengths.of(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), it)
+        }
+
+    /**
+     * How long the song is, when it's an ad that plays: free YouTube Music plays its ads under the next
+     * song's name, with all of the song's details but its length, the ad's, then starts the song over
+     * from 0. So shorter than any ad, said by YouTube Music for a song known to be longer, as [asked]
+     * or as said before, it's an ad. A short song of no longer length known is the song.
+     */
+    private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: Long? = null): Long? {
+        if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
+        if (metadata.getLong(MediaMetadata.METADATA_KEY_DURATION) !in 1 until LONGEST_AD_MS) return null
+        val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
+        // The one said last, of the song's versions, when not asked for one.
+        return (listOfNotNull(asked) + known.asReversed()).firstOrNull { it >= LONGEST_AD_MS }
     }
 
     /** What plays, as the app names it. */
@@ -559,7 +577,7 @@ internal class MediaSessionPlayback(
     /** Stopped or paused at its song's end, where it said it is. */
     private fun MediaController.ended(): Boolean {
         val state = playbackState ?: return false
-        val duration = metadata?.let(::lengthOf) ?: return false
+        val duration = metadata?.let { lengthOf(it) } ?: return false
         return state.state in STILL && state.position >= duration - ENDED_WITHIN_MS
     }
 
@@ -604,7 +622,8 @@ internal class MediaSessionPlayback(
         }
     }.distinctUntilChanged()
 
-    private fun playing(controller: MediaController): Heard.Song? {
+    /** What [controller] plays, as a song; [asked] is how long the song asked for is, when known. */
+    private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
         val metadata = controller.metadata ?: return null
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
@@ -617,17 +636,18 @@ internal class MediaSessionPlayback(
         // A music app's "Song - Remastered" stays whole.
         // A song's length tells its versions apart; a video's is the video's, which may open with more.
         val named = when {
-            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = lengthOf(metadata))
+            !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = controller.lengthOf(metadata, asked))
             MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist) ?: return null
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, named)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
-        val clock = following(controller)?.takeIf { !it.video }?.clock
+        // Nor where a song waiting for an ad to end is, as it isn't playing yet.
+        val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
         val id = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
         val uri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
-        val duration = lengthOf(metadata)
+        val duration = controller.lengthOf(metadata, asked)
         return Heard.Song(named.copy(
             artworkUrl = artwork,
             url = uri ?: id?.takeIf { MusicLinks.parse(it) is LinkInput.Link },
@@ -657,7 +677,7 @@ internal class MediaSessionPlayback(
         return file.toURI().toString()
     }
 
-    private fun following(controller: MediaController): Following? {
+    private fun following(controller: MediaController, asked: Long? = null): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
@@ -667,12 +687,15 @@ internal class MediaSessionPlayback(
         }.getOrNull()
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
-        val clock = PlaybackClock(state.position, at, state.playbackSpeed.takeIf { it > 0f } ?: 1f, state.state == PlaybackState.STATE_PLAYING)
+        val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
+        // Under an ad, the song waits at its start until the ad's over.
+        val ad = controller.metadata?.let { controller.songUnderAd(it, asked) } != null
+        val clock = if (ad) PlaybackClock(0, at, speed, playing = false) else PlaybackClock(state.position, at, speed, state.state == PlaybackState.STATE_PLAYING)
         return Following(
             clock, app, state.actions and PlaybackState.ACTION_SEEK_TO != 0L, controller.packageName, controller.isVideo(),
             canSkipNext = state.actions and PlaybackState.ACTION_SKIP_TO_NEXT != 0L,
             canSkipPrevious = state.actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS != 0L,
-            durationMs = controller.metadata?.let(::lengthOf),
+            durationMs = controller.metadata?.let { controller.lengthOf(it, asked) },
             shuffle = modes.shuffles(controller),
             repeat = modes.repeats(controller),
             like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon) }
@@ -719,7 +742,7 @@ internal class MediaSessionPlayback(
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
-        val length = lengthOf(playing)
+        val length = lengthOf(playing, song.lengthMs)
         val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), length)
         if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return true
         // Far from as long as the song, it's another version of it, e.g. the album's take of a single; a video may open with more.
@@ -763,6 +786,9 @@ internal const val STALE_CLOCK_MS = 2_000L
 
 /** A clock said this little behind is just how long saying it took, as YouTube Music says a song starts twice within a tenth or so. */
 internal const val SAYING_MS = 300L
+
+/** Longer than any free YouTube Music ad: the longest seen was 2:14. */
+internal const val LONGEST_AD_MS = 150_000L
 
 /** Two clocks this close go on from the same: what an app says on a clock is exact to the millisecond. */
 internal const val SAME_CLOCK_MS = 50L

@@ -46,7 +46,7 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
 
     @Synchronized
     fun of(title: String, artist: String, lengthMs: Long): Long {
-        val key = "${SongNames.normalize(title)}\u0000${SongNames.normalize(artist)}"
+        val key = keyOf(title, artist)
         val known = seen.optJSONArray(key) ?: JSONArray()
         (0 until known.length()).map(known::getLong).firstOrNull { abs(it - lengthMs) <= SAME_MS }?.let { return it }
         seen.remove(key)
@@ -56,6 +56,12 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
         preferences.edit { putString(KEY, seen.toString()) }
         return lengthMs
     }
+
+    /** The lengths said before for the song, by any app. */
+    @Synchronized
+    fun known(title: String, artist: String): List<Long> = seen.optJSONArray(keyOf(title, artist))?.let { known -> (0 until known.length()).map(known::getLong) }.orEmpty()
+
+    private fun keyOf(title: String, artist: String) = "${SongNames.normalize(title)}\u0000${SongNames.normalize(artist)}"
 
     companion object {
         const val SAME_MS = 1_500L
