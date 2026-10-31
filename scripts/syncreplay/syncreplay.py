@@ -14,7 +14,9 @@ and what whisper.cpp tiny, the app's own model, hears in each stretch of it, thr
 visualizer, as the phone would.
 `run` plays it through the app (SyncReplayTest), from MS into the song: 0 is from the start, as the
 app's clock is sure then; later is picked up partway. `--work MS` is how long the phone takes to
-work out the words each time; try a few, as where each later stretch is heard moves with it. `--gradle "podman exec box ./gradlew"` runs
+work out the words each time; try a few, as where each later stretch is heard moves with it. `--behind MS`
+has the music app's clock that far behind what it plays, and `--behind-again MS` plays it a second
+time, keeping what was learnt, to score that. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
 `phone` checks the same on a real phone over adb, with the dev app installed and the phone unlocked:
 it plays the recording in YouTube Music (--app for another build of it) from the start, opens the
@@ -133,11 +135,35 @@ def truth(song, wav, lines):
             i += 1
         else:
             j += 1
+    starts = {}
+    for n, line in enumerate(lines):
+        words = [j for j, (_, i) in enumerate(lyric) if i == n]
+        if words and words[0] in at and sum(j in at for j in words) * 2 > len(words):
+            starts[n] = at[words[0]]
+    write_truth(song, lines, voiced(vocals, starts))
+
+
+def voiced(vocals, starts):
+    """Each line's start moved on to where the voice is, when it's in silence: whisper times the first
+    word after a long rest early, by over a second (Tell It to My Heart's first three lines)."""
+    import numpy as np
+    a = audio(vocals)
+    # How loud the voice is each 10 ms, over 50 ms; quiet is well under how loud it mostly sings.
+    level = np.sqrt(np.convolve(a ** 2, np.ones(800) / 800, "same"))[::160]
+    quiet = np.percentile(level[level > 0], 60) / 4
+    moved = {}
+    for n, start in starts.items():
+        at = int(start * 100)
+        on = next((i for i in range(at, min(at + 200, len(level))) if level[i] > quiet), at)
+        moved[n] = on / 100
+    return moved
+
+
+def write_truth(song, lines, starts):
     with open(OUT / f"{song}.truth.jsonl", "w") as f:
         for n, line in enumerate(lines):
-            words = [j for j, (_, i) in enumerate(lyric) if i == n]
-            if words and words[0] in at and sum(j in at for j in words) * 2 > len(words):
-                f.write(json.dumps({"line": n, "text": line, "start": round(at[words[0]], 2)}) + "\n")
+            if n in starts:
+                f.write(json.dumps({"line": n, "text": line, "start": round(starts[n], 2)}) + "\n")
 
 
 def prep(args):
@@ -155,7 +181,10 @@ def prep(args):
 def run(args):
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
-    asked.write_text(json.dumps({"song": args.id, "from": args.start, "work": args.work}))
+    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind}
+    if args.behind_again is not None:
+        replay["behindAgain"] = args.behind_again
+    asked.write_text(json.dumps(replay))
     try:
         done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
     finally:
@@ -327,6 +356,9 @@ def main():
             p.add_argument("--gradle", default="./gradlew --max-workers=4")
             # The phone takes about this long, but it varies, and where each later stretch is heard with it.
             p.add_argument("--work", type=int, default=2500, help="ms the phone takes to work out what it heard")
+            # YouTube Music's was 450 to 880 ms behind, each time a little different.
+            p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
+            p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
     p = steps.add_parser("phone")
     p.add_argument("id")
     p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
