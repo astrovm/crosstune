@@ -3224,6 +3224,12 @@ class ListeningTest {
         tab?.let { click(string(it)) }
     }
 
+    /**
+     * How many times ChatGPT was asked something with [instruction] in its instructions. Opening the song's
+     * sheet asks what the song means too, from a network thread, so the count of every request isn't steady.
+     */
+    private fun FakeOpenAi.askedFor(instruction: String) = asked.count { instruction in it.getString("instructions") }
+
     /** Signed in with ChatGPT before Crosstune opens, which [openAi] answers for; it answers each feature as asked. */
     private fun signedInWithChatGpt(): FakeOpenAi {
         val openAi = FakeOpenAi(System::currentTimeMillis)
@@ -4617,12 +4623,12 @@ class ListeningTest {
         click(string(R.string.lyrics_word_saved, "sky"))
         assertTrue(SavedLinesStore(prefs()).load().isEmpty())
         // Closed and opened again, they're there, not asked again.
-        val asked = openAi.asked.size
+        val asked = openAi.askedFor("6 to 10 words")
         composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown("cielo") }
         aboutSong(R.string.song_tab_words)
         waitForText("cielo")
-        assertEquals(asked, openAi.asked.size)
+        assertEquals(asked, openAi.askedFor("6 to 10 words"))
         // Choosing the song's lines, those with words worth knowing say so.
         composeRule.onNode(hasText("cielo")).performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown("cielo") }
@@ -4645,12 +4651,12 @@ class ListeningTest {
         waitForText("Night pop.")
         assertTrue(shown("Origin") && shown("Rome") && shown("Sunrise") && shown("2020"))
         // Asked about again, it's there already.
-        val asked = openAi.asked.size
+        val asked = openAi.askedFor("get to know the artists")
         composeRule.onNode(hasText("Night pop.")).performTouchInput { swipeDown() }
         waitUntil(TIMEOUT_MS) { !shown("Night pop.") }
         aboutSong(R.string.song_tab_artist)
         waitForText("Night pop.")
-        assertEquals(asked, openAi.asked.size)
+        assertEquals(asked, openAi.askedFor("get to know the artists"))
     }
 
     @Test
