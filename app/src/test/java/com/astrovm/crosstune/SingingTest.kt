@@ -223,6 +223,20 @@ class SingingTest {
         assertEquals(3, singing.hears)
     }
 
+    @Test
+    fun pickedUpPartwayWordsHeardFarOffAreKeptForNextTime() {
+        // Timed for another take, the words are seconds off: far more than the app's clock can be behind.
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 6_000 + FAR_MS }
+        // So it's the words that are off, and the lines heard are kept: played again, they start where they're sung.
+        assertTrue(model().uiState.lyricsSynced)
+        assertTrue(prefs().contains("lyrics_sync"))
+        // The app's clock may still be a little behind, so the singing is heard again next time.
+        assertFalse(prefs().contains("sung_heard"))
+    }
+
     /** Lines at [times] seconds, each heard sung [offMs] later, from where the song is as it's heard, for as long as it is, or its first [seconds]. */
     private fun sungAt(times: List<Int>, offMs: List<Long>, seconds: Int = SingingListener.SECONDS) = SystemClock.elapsedRealtime().let { now ->
         val at = now - startedAt + startedFromMs
@@ -1025,5 +1039,6 @@ class SingingTest {
     private companion object {
         const val TIMEOUT_MS = 10_000L
         const val SHIFT_MS = -1_300L
+        const val FAR_MS = 4_000L
     }
 }
