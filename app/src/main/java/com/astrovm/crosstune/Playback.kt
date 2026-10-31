@@ -23,6 +23,7 @@ import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
+import kotlin.math.abs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -681,6 +682,9 @@ internal class MediaSessionPlayback(
         val playing = metadata ?: return false
         val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), lengthOf(playing))
         if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return false
+        // Far from as long as the song, it's another version of it, e.g. the album's take of a single; a video may open with more.
+        val length = lengthOf(playing)
+        if (!isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (title.isBlank()) return false

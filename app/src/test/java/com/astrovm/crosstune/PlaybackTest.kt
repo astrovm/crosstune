@@ -142,6 +142,27 @@ class PlaybackTest {
     }
 
     @Test
+    fun anotherVersionOfASongPausedInItsAppIsntTheOneAskedFor() {
+        allow()
+        // The 4:22 album take paused in YouTube Music, which tells its versions apart by length alone.
+        val album = player("com.google.android.apps.youtube.music", "YouTube Music", "Bizarre Love Triangle", "New Order", album = "Brotherhood",
+            state = PlaybackState.STATE_PAUSED, duration = 262_000)
+        shadowOf(sessions).addController(album)
+        // The 2:54 single, as Recent has it, isn't that one, so it's played, not carried on.
+        val single = MusicMetadata("Bizarre Love Triangle", "New Order", lengthMs = 174_000)
+        assertNull(playback.recording(single))
+        assertNull(followed(single).last())
+        // The album take is, said a second longer elsewhere too, and so is a song of no known length.
+        assertEquals(262_000L, playback.recording(single.copy(lengthMs = 263_000))?.lengthMs)
+        assertEquals(262_000L, playback.recording(single.copy(lengthMs = null))?.lengthMs)
+        // A video may open with more than its song, so its length tells nothing.
+        val video = player("com.google.android.apps.youtube.music", "YouTube Music", "Bizarre Love Triangle", "New Order", state = PlaybackState.STATE_PAUSED, duration = 262_000)
+        shadowOf(sessions).clearControllers()
+        shadowOf(sessions).addController(video)
+        assertEquals("Bizarre Love Triangle", playback.recording(single)?.title)
+    }
+
+    @Test
     fun songLengthsKeptAreTheLatestFiveHundred() {
         val prefs = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
         val lengths = SteadyLengths(prefs)
