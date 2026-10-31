@@ -2321,11 +2321,12 @@ internal class MainViewModel(
     private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?, straightOn: Boolean = false): Long? {
         val here = clock.positionAt(now())
         val at = maxOf(here, after ?: here)
-        val heardMs = SingingListener.SECONDS * 1000L
+        val heardMs = SingingListener.SECONDS * 1000L - SINGING_TAIL_MS
+        val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }.map { it.timeMs }
         // Heard from just before a line starts, or now, as one just has: a while opening on music alone, the model may hear only that.
-        val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }.map { maxOf(at, it.timeMs - SINGING_LEAD_MS) }
-        val from = if (straightOn) at else starts.firstOrNull { from ->
-            lines.count { it.text.isNotBlank() && it.timeMs in from until from + heardMs - SINGING_TAIL_MS } >= SINGING_LINES
+        // Less just before, when that's what lets enough lines after it be heard too, so the line isn't left to the next while.
+        val from = if (straightOn) at else starts.withIndex().firstNotNullOfOrNull { (index, line) ->
+            starts.getOrNull(index + SINGING_LINES - 1)?.let { last -> maxOf(at, line - SINGING_LEAD_MS, last - heardMs + 1).takeIf { it <= maxOf(at, line) } }
         } ?: return null
         return ((from - here) / clock.speed).toLong()
     }

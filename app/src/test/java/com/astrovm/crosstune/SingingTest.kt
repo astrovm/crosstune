@@ -269,6 +269,19 @@ class SingingTest {
     }
 
     @Test
+    fun aWhileStartsALittleLessBeforeALineWhenThatLetsItsThirdLineBeHeard() {
+        // Heard from a second and a half before the first line, the third would start in the while's last seconds, only half heard.
+        val times = listOf(2, 10, 18, 24, 28, 32)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 1_000L }) }
+        openLyrics()
+        plays()
+        // So it's heard from a little later, still before the first line, not from the second.
+        passes(1_500)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[0].timeMs == 3_000L }
+    }
+
+    @Test
     fun heardNoSingingWhereTheWordsAreTimedItHearsOnWithNothingElseHappening() {
         // Timed into an intro, as YouTube Music's words for an edit can be: the first while hears only music.
         val times = listOf(2, 5, 8, 30, 33, 36)
