@@ -22,7 +22,6 @@
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$playing != null &amp;&amp; playing.clock.playing &amp;&amp; (lines || learnsGap(playing)) &amp;&amp; !calibrationAttempted &amp;&amp; mayCalibrate()</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$playing?.video == true &amp;&amp; appLeadMs == null &amp;&amp; !calibrationAttempted &amp;&amp; syncPoints.isEmpty()</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$prepared != null &amp;&amp; prepared.url.forSharing() == url &amp;&amp; !prepared.exact &amp;&amp; prepared.matchingEnabled &amp;&amp; service != null &amp;&amp; canBeMissing(service, entry.metadata)</ID>
-    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$singingJob?.isActive == true || singingTries &gt;= SINGING_TRIES || (lining &amp;&amp; alongJob?.isActive == true) || nextPaused</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$syncPoints.isEmpty() &amp;&amp; (hand == null || hand.lineMs == line.timeMs) &amp;&amp; moveGap(song, point.songMs - point.lineMs, line.timeMs)</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$timedByHand &amp;&amp; (syncPoints.isNotEmpty() || handGap != null) &amp;&amp; autoReports.allowed == true</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) &gt; STEADY_CLOCK_MS</ID>
