@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.content.ActivityNotFoundException
+import android.content.ContextWrapper
 import android.content.ComponentName
 import android.content.IntentFilter
 import android.content.Intent
@@ -883,6 +885,68 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongPausedPlaysOnFromBehindOrInFrontWhereItWas() = runBlocking {
+        val music = MusicService.YOUTUBE_MUSIC.packageName
+        allow()
+        val youTubeMusic = player(music, "YouTube Music", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(youTubeMusic)
+        val says = { state: Int -> shadowOf(youTubeMusic).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
+        val resumes = { CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) } }
+        // Playing on, it did.
+        val plays = resumes()
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(plays.await())
+        assertFalse(playback.playsOnlyInFront(music))
+        // Failing to, as YouTube Music without Premium does from behind, it only plays in front.
+        shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
+        val fails = resumes()
+        says(PlaybackState.STATE_ERROR)
+        assertFalse(fails.await())
+        assertTrue(playback.playsOnlyInFront(music))
+        // Known to now, it isn't asked from behind again, nor waited on.
+        val known = resumes()
+        assertTrue(known.isCompleted)
+        assertFalse(known.await())
+        // Brought to the front as from its icon, on the screen it was on, not its link; and left there.
+        assertFalse(playback.bringToFront(song))
+        val icon = ComponentName(music, "$music.MusicActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(icon)
+        shadowOf(app.packageManager).addIntentFilterForActivity(icon, IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
+        // Asked to play once it says it's back, paused where it was.
+        val brought = CoroutineScope(Dispatchers.Unconfined).async { playback.bringToFront(song) }
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals(icon, opened.component)
+        assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        assertFalse(brought.isCompleted)
+        // Still stopped, or loading, it isn't back yet.
+        says(PlaybackState.STATE_STOPPED)
+        says(PlaybackState.STATE_BUFFERING)
+        assertFalse(brought.isCompleted)
+        says(PlaybackState.STATE_PAUSED)
+        assertTrue(brought.isCompleted)
+        assertTrue(brought.await())
+        assertTrue(shadowOf(youTubeMusic).getCallbacks().isEmpty())
+        playback.comesBack()
+        assertNull(shadowOf(app).nextStartedActivity)
+        // Back already playing, it's back too.
+        val playing = CoroutineScope(Dispatchers.Unconfined).async { playback.bringToFront(song) }
+        says(PlaybackState.STATE_PLAYING)
+        assertTrue(playing.isCompleted)
+        // Saying nothing, it's asked anyway, a moment later.
+        assertTrue(playback.bringToFront(song))
+        // Gone by the time it's opened, it can't be.
+        val gone = object : ContextWrapper(app) {
+            override fun startActivity(intent: Intent) = throw ActivityNotFoundException()
+        }
+        assertFalse(MediaSessionPlayback(gone, now = { NOW }, startMs = 200, modes = modes).bringToFront(song))
+        assertTrue(shadowOf(youTubeMusic).getCallbacks().isEmpty())
+        // No app has it: nothing to play on, or bring.
+        val other = MusicMetadata("Other", "Band")
+        assertFalse(playback.resume(other))
+        assertFalse(playback.bringToFront(other))
+    }
+
+    @Test
     fun theAppPlayingItSaysHowLongTheSongIsWhenItKnows() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", duration = 200_000))
@@ -1203,27 +1267,33 @@ class PlaybackTest {
         val youTubeMusic = player(music, "YouTube Music", "Other", "Band", state = PlaybackState.STATE_PAUSED)
         shadowOf(sessions).addController(youTubeMusic)
         val says = { state: Int -> shadowOf(youTubeMusic).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(state, 0, 1f, PLAYED_AT).build()); shadowOf(Looper.getMainLooper()).idle() }
-        val asks = { CoroutineScope(Dispatchers.Unconfined).async { playback.playSong(song, music, link, mustStart = true) } }
+        // Each failing way is seen by a Crosstune that hasn't learned yet that the app only plays in front.
+        val fresh = { MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] }) }
+        val asks = { by: MediaSessionPlayback -> CoroutineScope(Dispatchers.Unconfined).async { by.playSong(song, music, link, mustStart = true) } }
         // Playing it, it did.
-        val plays = asks()
+        val plays = asks(playback)
         says(PlaybackState.STATE_PLAYING)
         assertTrue(plays.await())
         // Failing to, as YouTube Music does in the background without Premium, it can't, however soon it says so.
         shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
-        val fails = asks()
+        val fails = asks(playback)
         says(PlaybackState.STATE_ERROR)
         assertTrue(fails.isCompleted)
         assertFalse(fails.await())
+        // Known to play only in front now, it isn't asked from behind again, nor waited on.
+        val known = asks(playback)
+        assertTrue(known.isCompleted)
+        assertFalse(known.await())
         // Saying nothing, or only that it's loading, it hasn't started in time.
-        assertFalse(asks().await())
-        val loading = asks()
+        assertFalse(asks(fresh()).await())
+        val loading = asks(fresh())
         says(PlaybackState.STATE_BUFFERING)
         assertFalse(loading.await())
         // With no state at all, it hasn't started either.
         shadowOf(youTubeMusic).setPlaybackState(null)
-        assertFalse(asks().await())
+        assertFalse(asks(fresh()).await())
         shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
-        // Already playing, as after another song, it goes on to this one; not asked to start, it's only asked.
+        // Already playing, as after another song or in front, it goes on to this one; not asked to start, it's only asked.
         shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).build())
         assertTrue(playback.playSong(song, music, link, mustStart = true))
         shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
@@ -1231,10 +1301,11 @@ class PlaybackTest {
         // Nothing keeps listening to it once it has answered.
         assertTrue(shadowOf(youTubeMusic).getCallbacks().isEmpty())
         // A list is the same.
-        val list = CoroutineScope(Dispatchers.Unconfined).async { playback.playList(music, link, mustStart = true) }
+        val lists = fresh()
+        val list = CoroutineScope(Dispatchers.Unconfined).async { lists.playList(music, link, mustStart = true) }
         says(PlaybackState.STATE_ERROR)
         assertFalse(list.await())
-        val played = CoroutineScope(Dispatchers.Unconfined).async { playback.playList(music, link, mustStart = true) }
+        val played = CoroutineScope(Dispatchers.Unconfined).async { fresh().playList(music, link, mustStart = true) }
         says(PlaybackState.STATE_PLAYING)
         assertTrue(played.await())
         // It wouldn't play in the background, so opened on the song, it's left in front, where it plays: behind Crosstune it'd stop.

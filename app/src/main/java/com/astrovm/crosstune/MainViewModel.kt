@@ -139,6 +139,16 @@ internal class MainViewModel(
                 return source.openSong(app, link).also { if (!it) uncover() }
             }
 
+            // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
+            override fun playPause(song: MusicMetadata, play: Boolean) {
+                if (!play) return source.playPause(song, false)
+                viewModelScope.launch {
+                    if (source.resume(song)) return@launch
+                    if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
+                    if (!source.bringToFront(song)) uncover()
+                }
+            }
+
             // Already in front of it, the words of the song just played show there.
             override fun comesBack() = if (!uiState.coveringApp) source.comesBack() else if (uiState.lyricsFor == null) playerLyrics() else Unit
         }

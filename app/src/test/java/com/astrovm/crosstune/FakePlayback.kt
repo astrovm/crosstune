@@ -67,6 +67,21 @@ internal class FakePlayback : PlaybackSource {
         plays += play
     }
 
+    // Asked to play on, as the phone's, it does unless it only plays in front.
+    override suspend fun resume(song: MusicMetadata): Boolean {
+        plays += true
+        return startsInBackground
+    }
+
+    /** Each song an app was brought to the front to play on. */
+    val broughtToFront: MutableList<MusicMetadata> = CopyOnWriteArrayList()
+
+    override suspend fun bringToFront(song: MusicMetadata): Boolean {
+        if (!opens) return false
+        broughtToFront += song
+        return true
+    }
+
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
         // An app that can't be, with a link only it has, leaves no other to ask.
         if (!canPlaySongs || (app != null && link != null && running?.contains(app) == false)) return false
