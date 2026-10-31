@@ -36,18 +36,20 @@ internal object LyricsSync {
 
     /**
      * Where [lineMs], past the first or last of [points], is: as far off as the [nearest] one, or
-     * on the line all of them lie along when they're far enough apart to tell. Words timed for
+     * on the line all of them lie along when they drift far enough apart to tell. Words timed for
      * another take may be sung a little faster or slower all through, so they drift on as much,
      * and one line heard or tapped a little off shouldn't move all those past it.
      */
     private fun along(lineMs: Long, points: List<SyncPoint>, nearest: SyncPoint): Long {
         val offset = lineMs + nearest.songMs - nearest.lineMs
-        if (points.last().lineMs - points.first().lineMs < PACE_SPAN_MS) return offset
+        // One line alone sets no pace.
+        if (points.size < 2) return offset
         val lineAt = points.map { it.lineMs.toDouble() }.average()
         val songAt = points.map { it.songMs.toDouble() }.average()
         val pace = points.sumOf { (it.lineMs - lineAt) * (it.songMs - songAt) } / points.sumOf { (it.lineMs - lineAt) * (it.lineMs - lineAt) }
-        // Further off than a take is sung, it's lines timed out of place, not a pace to go on at.
-        if (abs(pace - 1) > MAX_PACE) return offset
+        // Further off than a take is sung, it's lines timed out of place, not a pace to go on at; drifting
+        // less across them than two lines heard or tapped can be off from each other, it's no pace at all.
+        if (abs(pace - 1) > MAX_PACE || abs(pace - 1) * (points.last().lineMs - points.first().lineMs) < PACE_DRIFT_MS) return offset
         val fit = (songAt + (lineMs - lineAt) * pace).toLong()
         // Still after the last line put in time, or before the first, so the lines keep their order.
         return if (lineMs > nearest.lineMs) maxOf(fit, nearest.songMs) else minOf(fit, nearest.songMs)
@@ -83,8 +85,8 @@ internal object LyricsSync {
     /** How far from where they agree a line may be heard before it's a slip. */
     private const val SLIP_MS = 2_500L
 
-    /** How far apart the lines put in time must be to tell the song's pace, and how far off the words' it can be. */
-    private const val PACE_SPAN_MS = 20_000L
+    /** How far the lines put in time must drift apart to tell the song's pace, and how far off the words' it can be. */
+    private const val PACE_DRIFT_MS = 1_000L
     private const val MAX_PACE = 0.05
 }
 
