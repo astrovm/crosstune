@@ -1311,7 +1311,10 @@ class MainActivityTest {
                     request,
                     """[{"spotify_track_ids":["${ids.entries.first { "\"${it.key}\"" in FakeSpotify.bodyOf(request) }.value}"]}]"""
                 )
-                else -> FakeSpotify.html(request, FakeSpotify.trackPage(ids.entries.first { it.value == request.url.pathSegments.last() }.key, "Band · Mix · Song · 2020"))
+                "open.spotify.com" -> FakeSpotify.html(
+                    request, FakeSpotify.trackPage(ids.entries.first { it.value == request.url.pathSegments.last() }.key, "Band · Mix · Song · 2020")
+                )
+                else -> FakeSpotify.html(request, "", code = 404)
             }
         }
         shadowOf(app.packageManager).installPackage(installedApp(spotify, "Spotify"))

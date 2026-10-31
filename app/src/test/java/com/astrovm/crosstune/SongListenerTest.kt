@@ -42,10 +42,12 @@ class SongListenerTest {
         fake.handler = { FakeSpotify.html(it, body, code = code) }
     }
 
-    /** Answers each request in turn, after doing what it says, e.g. playing more sound meanwhile. */
+    /** Answers each of Shazam's requests in turn, after doing what it says, e.g. playing more sound meanwhile. */
     private fun answers(vararg steps: () -> String) {
         var next = 0
-        fake.handler = { request -> FakeSpotify.html(request, steps[next++]()) }
+        fake.handler = { request ->
+            if (request.url.host == "amp.shazam.com") FakeSpotify.html(request, steps[next++]()) else FakeSpotify.html(request, "", code = 404)
+        }
     }
 
     /** How many times Shazam was asked, besides the iTunes Store asked how long what it named is. */
