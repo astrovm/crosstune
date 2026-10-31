@@ -1898,10 +1898,13 @@ internal class MainViewModel(
     }
 
     /**
-     * Whether a music app is playing a release the words aren't timed for, not lined up yet: it says
-     * where it is, so it's heard instead, to tell how far off it is.
+     * Whether Shazam hears what a music app plays, though it says where it is: to tell how far off the
+     * words are ([leading]), or, timed for it, to learn Shazam's own gap to them.
      */
-    private val lining get() = appFollowing?.let { !it.video && it.clock.playing && (needsLead(it) && appLeadMs == null || learnsGap(it)) } == true
+    private val lining get() = leading || appFollowing?.let { !it.video && it.clock.playing && learnsGap(it) } == true
+
+    /** Whether a music app plays a release the words aren't timed for, and how far off they are isn't known yet. */
+    private val leading get() = appFollowing?.let { !it.video && it.clock.playing && needsLead(it) && appLeadMs == null } == true
 
     private fun listeningAlong() = viewModelScope.launch {
         var quiet = 0
@@ -2112,8 +2115,9 @@ internal class MainViewModel(
         val hearing = singing ?: return
         val song = uiState.lyricsFor ?: return
         val lines = foundLines
-        // Not while Shazam hears the phone's sound to line it up, which it hears first.
-        if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || (lining && alongJob?.isActive == true) || nextPaused) return
+        // Not while Shazam tells how far off the words are, which it hears first; while it only learns
+        // its own gap, which says nothing of where they're sung, both hear the same sound at once.
+        if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || (leading && alongJob?.isActive == true) || nextPaused) return
         if (lines.isEmpty() || !playingLinedUp() || !mayCalibrate()) return
         // With the app's clock sure, the words are heard once for the song; unsure, once each time it's picked up.
         if (if (clockSure) (uiState.lyricsSynced && !liningUp) || timedByHand || handGap != null || sungStore.heard(song, lines) else heardThisTime) return
