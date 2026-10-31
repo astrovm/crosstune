@@ -104,7 +104,7 @@ class SyncReplayTest {
         val lyrics = JSONArray(File(dir, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
         // What was heard in each stretch, by how long it is in seconds and where it starts.
         val heard = listOf(SingingListener.SECONDS, SingingListener.FIRST_SECONDS).associateWith { seconds ->
-            JSONObject(File(dir, "$song.heard$seconds.json").readText()).let { windows ->
+            JSONObject(File(dir, "$song.heard$seconds${asked.optString("heard")}.json").readText()).let { windows ->
                 windows.keys().asSequence().associate { start -> start.toLong() to windows.getJSONArray(start).let { words -> (0 until words.length()).map { words.getJSONArray(it).let { word -> word.getLong(0) to word.getString(1) } } } }
             }
         }

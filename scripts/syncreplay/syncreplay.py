@@ -6,6 +6,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
   python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
+  python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
 e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), separates the voice
@@ -41,8 +42,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "syncreplay"
 HEARD = OUT / "heard"
-MODEL = OUT / "ggml-tiny-q5_1.bin"
-MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin"
+# The app's speech model; others can be tried with `hear --model` and `run --model`.
+APP_MODEL = "tiny-q5_1"
+MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
 # What the app hears at once, and at the start of a song, in ms.
 LENGTHS = (20_000, 8_000)
 STEP_MS = 1000
@@ -70,9 +72,19 @@ def heard_binary():
     if not (HEARD / "heard").exists():
         subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
         subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
-    if not MODEL.exists():
-        subprocess.run(["curl", "-sSLo", str(MODEL), MODEL_URL], check=True)
     return HEARD / "heard"
+
+
+def model_file(model):
+    path = OUT / f"ggml-{model}.bin"
+    if not path.exists():
+        subprocess.run(["curl", "-sSLo", str(path), MODEL_URL.format(model)], check=True)
+    return path
+
+
+def heard_file(song, length, model):
+    """What `model` heard in each `length` ms of `song`: the app's model's is the plain one."""
+    return OUT / f"{song}.heard{length // 1000}{'' if model == APP_MODEL else '.' + model}.json"  # SyncReplayTest reads the same names
 
 
 def as_the_phone_hears(path):
@@ -90,17 +102,18 @@ def as_the_phone_hears(path):
     return (byte * 256 / 32768).astype(np.float32)
 
 
-def windows(song, wav, length):
-    """What whisper.cpp tiny hears in each `length` ms from every STEP_MS, as the app hears it."""
-    out = OUT / f"{song}.heard{length // 1000}.json"
+def windows(song, wav, length, model=APP_MODEL):
+    """What whisper.cpp hears with `model` in each `length` ms from every STEP_MS, as the app hears it."""
+    out = heard_file(song, length, model)
     done = json.loads(out.read_text()) if out.exists() else {}
     a = as_the_phone_hears(wav)
     binary = heard_binary()
+    weights = model_file(model)
     starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
 
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
-        text = subprocess.run([str(binary), str(MODEL), "en", ""], input=seg.tobytes(), capture_output=True).stdout.decode("utf-8", "replace")
+        text = subprocess.run([str(binary), str(weights), "en", ""], input=seg.tobytes(), capture_output=True).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
     with ThreadPoolExecutor(1) as pool:
@@ -181,7 +194,7 @@ def prep(args):
 def run(args):
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
-    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind}
+    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
     asked.write_text(json.dumps(replay))
@@ -351,6 +364,11 @@ def score_phone(song_id, kept):
           f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, median {statistics.median(abs(x) for x in lags.values()):.2f} s; never lit {sum(k not in first for k in sung)}")
 
 
+def hear(args):
+    for length in LENGTHS:
+        windows(args.id, OUT / f"{args.id}.wav", length, args.model)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     steps = parser.add_subparsers(dest="step", required=True)
@@ -370,7 +388,12 @@ def main():
             p.add_argument("--work", type=int, default=2500, help="ms the phone takes to work out what it heard")
             # YouTube Music's was 450 to 880 ms behind, each time a little different.
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
+            p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+    p = steps.add_parser("hear")
+    p.add_argument("id")
+    p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")
+    p.set_defaults(go=hear)
     p = steps.add_parser("phone")
     p.add_argument("id")
     p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
