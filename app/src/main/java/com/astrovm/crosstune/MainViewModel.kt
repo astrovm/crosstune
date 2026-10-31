@@ -2151,7 +2151,7 @@ internal class MainViewModel(
             delay(untilSung(shown, uiState.following?.clock ?: return, heardTo, straightOn) ?: return)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return
             singingTries++
-            val sung = hearOnce(hearing, lines, if (heardTo == null) voiceStarted(song, lines, clock, shown) else null) ?: return
+            val sung = hearOnce(hearing, lines, heardFirst(song, lines, clock, shown, heardTo == null)) ?: return
             if (!stillPlays(song, lines, clock)) return
             // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
             // while is heard straight on, wherever the words are timed: the singing may be well after them.
@@ -2171,11 +2171,24 @@ internal class MainViewModel(
     }
 
     /**
-     * Whether the voice has started where the [shown] lines are timed, told by the first few seconds
-     * the first while's heard: lines timed into an intro aren't shown sung all the while it's heard.
+     * The first few seconds of a while, told as soon as they're heard: lines sung in them are put where
+     * they're heard at once, not once the whole while is, as words timed far off are wrong all the while.
+     * On the song's [first] while, no voice where the [shown] lines are timed doubts them instead: lines
+     * timed into an intro aren't shown sung all the while it's heard.
      */
-    private fun voiceStarted(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>): suspend (Sung) -> Unit = { heard ->
-        if (stillPlays(song, lines, clock) && noVoice(heard, clock, shown)) doubtTiming(true)
+    private fun heardFirst(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>, first: Boolean): suspend (Sung) -> Unit = { heard ->
+        if (stillPlays(song, lines, clock)) {
+            val shift = SungAlignment.shiftMs(heard, clock::positionAt, shown)
+            if (shift != null) placeHeard(song, heard, clock, shown, shift)
+            else if (first && noVoice(heard, clock, shown)) doubtTiming(true)
+        }
+    }
+
+    /** The lines heard in [sung] put where they're sung, [shift] off as a whole, before the rest of the while is in. */
+    private fun placeHeard(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
+        doubtTiming(false)
+        if (!clockSure) placeThisTime(sung, clock, shown, shift)
+        else placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L))
     }
 
     /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when nothing is, as for want of the speech model, which is offered then. */
