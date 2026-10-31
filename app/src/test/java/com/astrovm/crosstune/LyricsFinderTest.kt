@@ -156,6 +156,10 @@ class LyricsFinderTest {
         // A title that doesn't say it's a cover is someone's own song.
         onlyBy("Evanescence", "Bring Me to Life", evanescence)
         assertEquals(Lyrics.None, found(MusicMetadata("Bring Me to Life", "TOKYO SAMURAI SYNDICATE")))
+        // The store's answer cut off, whose song it covers isn't known.
+        val store = fake.handler
+        fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, """{"results":[{"trackName":""") else store(request) }
+        assertEquals(Lyrics.None, found(cover))
     }
 
     @Test
