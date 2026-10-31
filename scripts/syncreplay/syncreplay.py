@@ -266,6 +266,19 @@ def tap(text, tries=20):
     return False
 
 
+def shows(text, tries=20):
+    """Whether something on screen shows [text], soon."""
+    for _ in range(tries):
+        try:
+            shell("uiautomator", "dump", "/sdcard/window.xml")
+            if f'text="{text}"' in shell("cat", "/sdcard/window.xml"):
+                return True
+        except subprocess.CalledProcessError:
+            pass
+        time.sleep(0.5)
+    return False
+
+
 def playing(app):
     """The song [app] plays, its title, and when by the phone's clock it was at 0 ms; None till it plays."""
     session = shell("dumpsys", "media_session").split(f"package={app}")
@@ -305,8 +318,11 @@ def phone(args):
     title, zero = song
     # Picked up as it plays, as when Crosstune is opened on a song already playing.
     shell("monkey", "-p", DEV_APP, "-c", "android.intent.category.LAUNCHER", "1")
-    if not (tap(title) and tap("Lyrics")):
+    # The words of what's playing, not a song of the same name under Recent, which would open it again.
+    if not tap("Lyrics of what's playing"):
         sys.exit("Couldn't open the words in Crosstune: is the phone unlocked?")
+    if not shows(title):
+        sys.exit(f"Crosstune opened the words of another song, not {title}")
     while float(shell("cat", "/proc/uptime").split()[0]) * 1000 - zero < args.seconds * 1000:
         # The words are only followed while they're in sight, so the screen is kept from sleeping.
         shell("input", "keyevent", "KEYCODE_WAKEUP")
