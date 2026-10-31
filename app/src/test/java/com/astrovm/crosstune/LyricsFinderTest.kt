@@ -124,6 +124,49 @@ class LyricsFinderTest {
         assertTrue(fake.requestedUrls.none { "itunes.apple.com" in it })
     }
 
+    /** The iTunes Store's songs named [title], as it answered a search for it alone, trimmed to what's read. */
+    private fun storeSongs(title: String) = javaClass.getResource("/itunes/${title.lowercase().replace(' ', '-')}.json")!!.readText()
+
+    /** LRCLIB with [words] for songs by [artist] alone, the iTunes Store as it answered for [title]; nothing anywhere else. */
+    private fun onlyBy(artist: String, title: String, words: String) {
+        fake.handler = { request ->
+            val asked = request.url.toString()
+            when {
+                request.url.host == "itunes.apple.com" && request.url.queryParameter("term") == title -> FakeSpotify.html(request, storeSongs(title))
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                request.url.host == "lrclib.net" && (artist.replace(" ", "+") in asked || artist.replace(" ", "%20") in asked) -> FakeSpotify.html(request, "[$words]")
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+    }
+
+    @Test
+    fun aCoverWithNoWordsOfItsOwnHasTheOriginals() {
+        // Auto report #21: an instrumental cover no one keeps words for, of a song whose first singer most of the store's songs of that name are by.
+        val evanescence = lasting(answer("Bring Me to Life", "Evanescence", "Wake me up inside", synced = "[00:20.00]Wake me up inside"), 235.0)
+        onlyBy("Evanescence", "Bring Me to Life", evanescence)
+        val cover = MusicMetadata("Bring Me to Life (Cyberpunk Shamisen Cover)", "TOKYO SAMURAI SYNDICATE", lengthMs = 201_000)
+        // The words, untimed, as they're timed for the original, which isn't as long.
+        assertEquals(Lyrics.Found("Wake me up inside", lengthMs = 235_000, source = "lrclib"), found(cover))
+        // Timed too, when it's as long.
+        assertEquals(listOf(LyricLine(20_000, "Wake me up inside")), (found(cover.copy(lengthMs = 235_500)) as Lyrics.Found).lines)
+        // A karaoke track names whose song it is.
+        onlyBy("Evanescence", "nothing", evanescence)
+        assertEquals("Wake me up inside", words(MusicMetadata("Bring Me to Life (In the Style of Evanescence) [Karaoke Version]", "Ameritz Karaoke")))
+        // A title that doesn't say it's a cover is someone's own song.
+        onlyBy("Evanescence", "Bring Me to Life", evanescence)
+        assertEquals(Lyrics.None, found(MusicMetadata("Bring Me to Life", "TOKYO SAMURAI SYNDICATE")))
+    }
+
+    @Test
+    fun aCoverOfANameManySongsShareHasNoOnesWords() {
+        // The store's songs named "Hello" are by many, none far ahead, Lionel Richie's 4 to Aqyila's 3: it's not known whose this covers.
+        onlyBy("Adele", "Hello", answer("Hello", "Adele", "Hello, it's me"))
+        assertEquals(Lyrics.None, found(MusicMetadata("Hello (Acoustic Cover)", "Someone")))
+        onlyBy("Lionel Richie", "Hello", answer("Hello", "Lionel Richie", "Is it me you're looking for"))
+        assertEquals(Lyrics.None, found(MusicMetadata("Hello (Acoustic Cover)", "Someone")))
+    }
+
     @Test
     fun theWordsOfAnotherSongAreNeverTaken() {
         // Someone else's song of the same name is no use at all.

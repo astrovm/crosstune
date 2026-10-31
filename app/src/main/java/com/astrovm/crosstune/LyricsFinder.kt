@@ -230,7 +230,7 @@ internal class LyricsFinder(
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(cleaned(words, metadata)), final = !provisional) } }
-        val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs) } ?: Best(Lyrics.Unavailable)
+        val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs) } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata) } ?: best
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
         // they're the recording's own, which no copy found elsewhere times better.
@@ -369,6 +369,46 @@ internal class LyricsFinder(
         // Another take's words, timed word by word, don't beat this one's, timed a line at a time.
         if (found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) return@withContext Best(found)
         Best(better(word, found))
+    }
+
+    /** With no words of its own for a cover, as its title says it is, the words of the song it covers. */
+    private suspend fun Best.orOriginal(metadata: MusicMetadata, timeoutMs: Long): Best =
+        if (lyrics is Lyrics.None || lyrics is Lyrics.Instrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
+
+    /**
+     * The words of the song [cover] covers, by its first singer: timed only when that recording is as
+     * long as this one, as a cover is sung in its own time.
+     */
+    private suspend fun original(cover: MusicMetadata, timeoutMs: Long): Lyrics.Found? {
+        val covered = SongNames.coverOf(cover.title) ?: return null
+        val artist = covered.artist ?: firstSinger(covered.title, cover.artist) ?: return null
+        val found = anywhere(cover.copy(title = covered.title, artist = artist, url = null, recordingId = null), timeoutMs) as? Lyrics.Found ?: return null
+        val asLong = found.lengthMs != null && cover.lengthMs != null && fits(found, cover)
+        return if (asLong) found else found.copy(lines = emptyList())
+    }
+
+    /**
+     * Who first sang [song], as most of the iTunes Store's songs of that name are theirs, many times
+     * more than anyone else's: a famous song's covers are many, but by as many singers. A name many
+     * songs share, as "Hello", has no one far ahead, so it's not known whose a cover of it is.
+     */
+    private suspend fun firstSinger(song: String, cover: String): String? = try {
+        val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("term", song)
+            .addQueryParameter("country", "us")
+            .addQueryParameter("entity", "song")
+            .addQueryParameter("limit", "$SONGS_OF_A_NAME")
+            .build()
+        val songs = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
+        val singers = songs.filter { SongNames.same(SongNames.bareTitle(it.optString("trackName")), song) }.map { it.optString("artistName") }
+            .filter { it.isNotBlank() && !SongNames.sameArtist(it, cover) }
+            .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
+        val next = singers.getOrNull(1)?.value ?: 0
+        singers.firstOrNull()?.takeIf { it.value >= MIN_FIRST_SINGER_SONGS && it.value >= FIRST_SINGER_LEAD * next }?.key
+    } catch (_: IOException) {
+        null
+    } catch (_: JSONException) {
+        null
     }
 
     /** What [best] found, and whether it's the recording's own words, timed for it. */
@@ -915,6 +955,17 @@ internal class LyricsFinder(
 
         // Where words came from, as reports name them.
         const val LRCLIB = "lrclib"
+
+        /** How many of the iTunes Store's songs of a name are asked for, to tell whose it first was. */
+        private const val SONGS_OF_A_NAME = 50
+
+        /**
+         * How many of them its first singer has, and how many times as many as anyone else: measured,
+         * Evanescence has 10 "Bring Me to Life"s to Halocene's 3, Bronski Beat 20 "Smalltown Boy"s to 3,
+         * and no one is that far ahead for "Hello" (4 to 3), "Home" (3 to 3) or "Creep" (6 to 5).
+         */
+        private const val MIN_FIRST_SINGER_SONGS = 5
+        private const val FIRST_SINGER_LEAD = 3
         const val YOUTUBE_MUSIC = "youtube_music"
         const val NETEASE = "netease"
         const val LETRAS = "letras"
