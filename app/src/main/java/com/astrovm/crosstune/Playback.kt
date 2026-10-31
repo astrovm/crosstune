@@ -677,14 +677,19 @@ internal class MediaSessionPlayback(
     /** Only shown here from another device, e.g. a computer's video through KDE Connect: what the phone plays is another one. */
     private fun MediaController.mirrored(): Boolean = remote() && !cast()
 
+    /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
+    private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
+        val length = lengthOf(playing)
+        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), length)
+        if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return true
+        // Far from as long as the song, it's another version of it, e.g. the album's take of a single; a video may open with more.
+        return !isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true
+    }
+
     /** Whether it's [song] this app plays: a video's title names more, e.g. "Artist - Song (Official Video)". */
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
-        val recording = RecordingKey.playing(packageName, playing.getString(MediaMetadata.METADATA_KEY_MEDIA_ID), lengthOf(playing))
-        if (song.recordingId?.startsWith("$packageName:") == true && recording != null && song.recordingId != recording) return false
-        // Far from as long as the song, it's another version of it, e.g. the album's take of a single; a video may open with more.
-        val length = lengthOf(playing)
-        if (!isVideo() && length != null && song.lengthMs?.let { abs(it - length) > SAME_RECORDING_LENGTH_MS } == true) return false
+        if (anotherRecording(playing, song)) return false
         val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
         val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
         if (title.isBlank()) return false
