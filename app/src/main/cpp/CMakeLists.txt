@@ -33,6 +33,9 @@ set(CMAKE_PROJECT_VERSION_MAJOR "${CMAKE_MATCH_1}")
 set(CMAKE_PROJECT_VERSION_MINOR "${CMAKE_MATCH_2}")
 set(CMAKE_PROJECT_VERSION_PATCH "${CMAKE_MATCH_3}")
 add_subdirectory("${PROJECT_ROOT}/third_party/projectm" projectm EXCLUDE_FROM_ALL)
+# projectM's expressions are built with -ffast-math in release, which takes NaN to never happen and so drops
+# their own checks that make one 0, e.g. pow(-8, 0.5): the NaN then reached the visuals. Still fast, but a NaN is one.
+target_compile_options(projectM_eval PRIVATE -fno-finite-math-only)
 
 add_library(milkdrop SHARED milkdrop.cpp)
 target_link_libraries(milkdrop PRIVATE libprojectM::projectM)
