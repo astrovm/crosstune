@@ -17,6 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import java.io.Closeable
 import java.io.File
 import java.security.MessageDigest
+import kotlin.io.path.createTempDirectory
 
 /** Hearing the words sung, and how far they are from the timed words. Robolectric for SharedPreferences. */
 @RunWith(RobolectricTestRunner::class)
@@ -392,6 +393,19 @@ class SungWordsTest {
         model = File("model")
         listener.hear(null, null)
         assertFalse(listener.missesModel)
+    }
+
+    @Test
+    fun whatsHeardIsKeptWhereTheTimingCheckAsks() = runBlocking<Unit> {
+        val dir = createTempDirectory().toFile()
+        val listener = SingingListener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, { File("model") }, { FakeWords(listOf(HeardWord("Oh", 320))) }, Dispatchers.Unconfined, Dispatchers.Unconfined, clock = { 1_234L }, keepTo = dir)
+        listener.hear(null, null)
+        // As heard, from when it started: 16 kHz, 16 bits, little-endian.
+        val kept = File(dir, "heard-1234.pcm").readBytes()
+        assertEquals(16_000 * 2 * SingingListener.SECONDS, kept.size)
+        assertEquals(99, kept[198].toInt())
+        assertEquals(0, kept[199].toInt())
+        dir.deleteRecursively()
     }
 
     @Test

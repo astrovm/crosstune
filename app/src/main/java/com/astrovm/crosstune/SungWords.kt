@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.Closeable
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.text.Normalizer
 import kotlin.math.abs
 
@@ -59,6 +61,13 @@ internal interface SingingHearing {
  * Hears [SECONDS] of what the phone plays, through [sound], and the words sung in it with the
  * speech model [model] gives, through [hearing]. The sound stays on the phone.
  */
+/**
+ * Logcat tag for checking the lyrics' timing on a phone, off unless turned on with
+ * `adb shell setprop log.tag.CrosstuneTiming DEBUG`: each line lit is logged with where the song is,
+ * and each while heard is kept, so `scripts/syncreplay/syncreplay.py phone` can tell how far off each line lit.
+ */
+internal const val TIMING_LOG = "CrosstuneTiming"
+
 internal class SingingListener(
     private val sound: Microphone,
     private val model: suspend () -> File?,
@@ -69,7 +78,9 @@ internal class SingingListener(
     private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     /** The speech model fetched now, whatever the network; null when it couldn't be. */
-    private val fetch: suspend () -> File? = { null }
+    private val fetch: suspend () -> File? = { null },
+    /** Where each while heard is kept, for checking the lyrics' timing against the song; nowhere unless that's turned on ([TIMING_LOG]). */
+    private val keepTo: File? = null
 ) : SingingHearing {
     @Volatile
     override var missesModel = false
@@ -96,6 +107,7 @@ internal class SingingListener(
                 } ?: return null
                 )
         }
+        keepTo?.let { File(it, "heard-${heard.first}.pcm").writeBytes(ByteBuffer.allocate(heard.second.size * 2).order(ByteOrder.LITTLE_ENDIAN).apply { asShortBuffer().put(heard.second) }.array()) }
         val words = words(file, heard.second, language) ?: return null
         return Sung(heard.first, words)
     }
