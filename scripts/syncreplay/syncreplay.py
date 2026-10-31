@@ -231,14 +231,19 @@ def adb(*command):
 
 
 def shell(*command):
-    return adb("shell", *command).decode("utf-8", "replace")
+    # The phone's shell reads the command again, so each part is quoted for it.
+    return adb("shell", " ".join(shlex.quote(part) for part in command)).decode("utf-8", "replace")
 
 
 def tap(text, tries=20):
     """Taps the first thing on screen showing [text], or saying it to TalkBack; whether there was one."""
     for _ in range(tries):
-        shell("uiautomator", "dump", "/sdcard/window.xml")
-        screen = shell("cat", "/sdcard/window.xml")
+        # The screen can't always be read, as while it moves: it's read again.
+        try:
+            shell("uiautomator", "dump", "/sdcard/window.xml")
+            screen = shell("cat", "/sdcard/window.xml")
+        except subprocess.CalledProcessError:
+            screen = ""
         for node in re.findall(r"<node [^>]*>", screen):
             if f'text="{text}"' in node or f'content-desc="{text}"' in node:
                 x1, y1, x2, y2 = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node).groups())
@@ -271,6 +276,11 @@ def phone(args):
     adb("logcat", "-G", "16M")
     adb("logcat", "-c")
     shell("input", "keyevent", "KEYCODE_WAKEUP")
+    time.sleep(1)
+    # A lock screen without a PIN goes with a swipe up; one with a PIN needs the phone unlocked first.
+    if "NotificationShade" in shell("dumpsys", "window", "windows").split("mCurrentFocus", 1)[-1][:200]:
+        width, height = map(int, re.search(r"(\d+)x(\d+)", shell("wm", "size")).groups())
+        shell("input", "swipe", str(width // 2), str(height * 9 // 10), str(width // 2), str(height * 3 // 10), "200")
     shell("am", "start", "-a", "android.intent.action.VIEW", "-d", f"https://music.youtube.com/watch?v={args.id}", "-p", args.app)
     for _ in range(60):
         song = playing(args.app)
@@ -285,7 +295,9 @@ def phone(args):
     if not (tap(title) and tap("Lyrics")):
         sys.exit("Couldn't open the words in Crosstune: is the phone unlocked?")
     while float(shell("cat", "/proc/uptime").split()[0]) * 1000 - zero < args.seconds * 1000:
-        time.sleep(1)
+        # The words are only followed while they're in sight, so the screen is kept from sleeping.
+        shell("input", "keyevent", "KEYCODE_WAKEUP")
+        time.sleep(5)
     shell("input", "keyevent", "KEYCODE_MEDIA_PAUSE")
     log = adb("logcat", "-d", "-s", f"{TIMING_LOG}:D").decode()
     kept = OUT / "phone" / args.id
