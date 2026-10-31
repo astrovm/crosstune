@@ -690,8 +690,9 @@ class SingingTest {
     }
 
     @Test
-    fun notWhileShazamHearsThePhonesSoundThenRightAfter() {
-        // Timed for the recording playing, with Shazam's gap not known yet: Shazam hears it first.
+    fun heardWhileShazamLearnsItsGap() {
+        // Timed for the recording playing, with Shazam's gap not known yet: Shazam's place says nothing
+        // of where the words are sung, so the singing is heard meanwhile, as the same sound is shared.
         lyricsTimedFor(60)
         val shazam = FakeHearing()
         MainActivity.hearingFactory = { shazam }
@@ -699,11 +700,25 @@ class SingingTest {
         openLyrics()
         plays(durationMs = 60_000)
         waitUntil { shazam.listens == 1 }
-        assertEquals(0, singing.hears)
-        // Done with it, here because nothing can be heard with.
-        shazam.next.trySend(Heard.Failed(AppError.MICROPHONE))
         waitUntil { model().uiState.lyricsSynced }
         assertEquals(1, singing.hears)
+        shazam.next.trySend(Heard.Failed(AppError.MICROPHONE))
+    }
+
+    @Test
+    fun notWhileShazamFindsTheLead() {
+        // Timed for another release of the song: Shazam tells how far off it is first.
+        lyricsTimedFor(90)
+        val shazam = FakeHearing()
+        MainActivity.hearingFactory = { shazam }
+        singing.answer = { sung(SHIFT_MS) }
+        openLyrics()
+        plays(durationMs = 60_000)
+        waitUntil { shazam.listens == 1 }
+        passes(5_000)
+        composeRule.waitForIdle()
+        assertEquals(0, singing.hears)
+        shazam.next.trySend(Heard.Failed(AppError.MICROPHONE))
     }
 
     @Test
