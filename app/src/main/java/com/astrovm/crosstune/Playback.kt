@@ -558,10 +558,10 @@ internal class MediaSessionPlayback(
     /**
      * How long the song is, when it's an ad that plays: free YouTube Music plays its ads under the next
      * song's name, with all of the song's details but its length, the ad's, then starts the song over
-     * from 0. So shorter than any ad, said by YouTube Music for a song known to be longer, as [asked]
+     * from 0. So shorter than the longest ad, said by YouTube Music for a song known to be longer, as [asked]
      * or as said before, it's an ad. A short song of no longer length known is the song.
      */
-    private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: Long? = null): Long? {
+    private fun MediaController.songUnderAd(metadata: MediaMetadata, asked: Long?): Long? {
         if (MusicService.ofPackage(packageName) != MusicService.YOUTUBE_MUSIC) return null
         if (metadata.getLong(MediaMetadata.METADATA_KEY_DURATION) !in 1 until LONGEST_AD_MS) return null
         val known = lengths.known(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty())
@@ -677,7 +677,7 @@ internal class MediaSessionPlayback(
         return file.toURI().toString()
     }
 
-    private fun following(controller: MediaController, asked: Long? = null): Following? {
+    private fun following(controller: MediaController, asked: Long?): Following? {
         // Stopped, or failing, e.g. a video that won't play in the background, it plays nothing to follow.
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
