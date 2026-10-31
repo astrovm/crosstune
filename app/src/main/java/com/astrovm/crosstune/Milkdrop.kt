@@ -182,9 +182,12 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
             var visualizer: Visualizer? = null
             return try {
                 create().also { visualizer = it }.apply {
-                    // Android's largest; a phone that allows less keeps its own, which reads take.
-                    captureSize = SAMPLES
-                    enabled = true
+                    // Already heard by the visuals, it's theirs, shared and running, which can't be sized again.
+                    if (!enabled) {
+                        // Android's largest; a phone that allows less keeps its own, which reads take.
+                        captureSize = SAMPLES
+                        enabled = true
+                    }
                 }.let(::OutputMixTap)
             } catch (_: RuntimeException) {
                 visualizer?.release()

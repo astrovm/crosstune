@@ -272,6 +272,30 @@ class MilkdropTest {
     }
 
     @Test
+    fun theTapSharesTheSoundTheVisualsAlreadyHear() {
+        // The visuals already hear the phone's sound: another made on it shares theirs, running, as it is.
+        val tap = OutputMixTap.open {
+            Visualizer(0).also {
+                // Sized and started by the visuals' own tap.
+                it.captureSize = OutputMixTap.SAMPLES
+                it.enabled = true
+                val shadow = Shadow.extract<ShadowVisualizer>(it)
+                shadow.setSource(object : ShadowVisualizer.VisualizerSource {
+                    override fun getWaveForm(waveform: ByteArray): Int {
+                        waveform.fill(7)
+                        return Visualizer.SUCCESS
+                    }
+                })
+            }
+        }
+        assertNotNull(tap)
+        val samples = ByteArray(OutputMixTap.SAMPLES)
+        assertEquals(OutputMixTap.SAMPLES, tap!!.read(samples))
+        assertArrayEquals(ByteArray(OutputMixTap.SAMPLES) { 7 }, samples)
+        tap.close()
+    }
+
+    @Test
     fun aPhoneThatWontShareItsSoundHasNoTap() {
         // Made, but not ready to use, as without the permission; it's let go of all the same.
         var released = false
