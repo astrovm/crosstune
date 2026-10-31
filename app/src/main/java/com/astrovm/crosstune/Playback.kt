@@ -106,10 +106,10 @@ internal class SteadyClock(
  * the song from elsewhere, or another song. A screen that starts following then would be that late.
  */
 internal data class LateClock(val clock: PlaybackClock, val lagMs: Long) {
-    /** [other] moved on by [lagMs] when it goes on from this clock; null when it doesn't. */
+    /** [other] moved on by [lagMs] of the song when it goes on from this clock; null when it doesn't. */
     fun ahead(other: PlaybackClock): PlaybackClock? = other.takeIf {
         it.playing && it.speed == clock.speed && abs(clock.positionAt(it.atMs) - it.positionMs) <= SAME_CLOCK_MS
-    }?.let { it.copy(positionMs = it.positionMs + (lagMs * it.speed).toLong()) }
+    }?.let { it.copy(positionMs = it.positionMs + lagMs) }
 }
 
 /**

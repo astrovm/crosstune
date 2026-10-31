@@ -519,6 +519,50 @@ class PlaybackTest {
     }
 
     @Test
+    fun aClockFallenBehindIsMovedOnByHowFarItFellAtAnySpeed() {
+        allow()
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
+        shadowOf(sessions).addController(music)
+        fun says(position: Long, at: Long, speed: Float) {
+            shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, speed, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
+            shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        fun pickedUp(): PlaybackClock? {
+            var clock: PlaybackClock? = null
+            CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { clock = it?.clock } }.also { shadowOf(Looper.getMainLooper()).idle() }.cancel()
+            return clock
+        }
+        // At twice the speed, said again from the start 400 ms on: 800 ms of the song behind.
+        says(0, PLAYED_AT, 2f)
+        val seen = followed()
+        says(0, PLAYED_AT + 400, 2f)
+        assertEquals(PlaybackClock(0, PLAYED_AT, 2f, true), seen.last()!!.clock)
+        collecting.forEach(Job::cancel)
+        // Picked up later, it's those 800 ms ahead, where the first said it would be.
+        says(2 * (NOW - PLAYED_AT - 400), NOW, 2f)
+        assertEquals(PlaybackClock(2 * (NOW - PLAYED_AT), NOW, 2f, true), pickedUp())
+    }
+
+    @Test
+    fun aClockSaidJustLongEnoughBehindToBeLateIsLearnt() {
+        allow()
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
+        shadowOf(sessions).addController(music)
+        fun says(position: Long, at: Long) {
+            shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
+            shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        followed()
+        says(0, PLAYED_AT + SAYING_MS)
+        collecting.forEach(Job::cancel)
+        var clock: PlaybackClock? = null
+        CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { clock = it?.clock } }.also { shadowOf(Looper.getMainLooper()).idle() }.cancel()
+        assertEquals(PlaybackClock(SAYING_MS, PLAYED_AT + SAYING_MS, 1f, true), clock)
+    }
+
+    @Test
     fun onlyTheSameSongByTheSameArtistIsFollowed() {
         allow()
         // Same name, someone else's; no name at all; no session at all.
