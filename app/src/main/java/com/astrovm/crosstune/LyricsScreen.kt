@@ -62,6 +62,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.PrimaryTabRow
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1588,6 +1589,7 @@ private fun TimedLyrics(
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     val look = WordsLook.on(state.phone)
     LaunchedEffect(active) {
+        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) SystemClock.elapsedRealtime().let { now -> Log.d(TIMING_LOG, "lit $active at $now pos ${state.following?.clock?.positionAt(now)}") }
         if (active >= 0) list.animateScrollToItem(active, scrollOffset = -third)
     }
     LazyColumn(

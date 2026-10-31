@@ -29,8 +29,6 @@
     <ID>ComplexCondition:MetadataParsers.kt$MetadataParsers$!first.substring(artist).all { japanese(it) || it.isWhitespace() || it == '・' } || title.substring(dash).none(::japanese)</ID>
     <ID>ComplexCondition:PlayQueue.kt$PlayQueue$numbered &amp;&amp; !queue.bySong &amp;&amp; named &gt;= 0 &amp;&amp; index in part.indices &amp;&amp; !sameEntry(part[index], now.song)</ID>
     <ID>ComplexCondition:Playback.kt$MediaSessionPlayback$title.isBlank() || artist.isBlank() || ('.' in artist &amp;&amp; title.startsWith("$artist/"))</ID>
-    <ID>ComplexCondition:Playback.kt$SteadyClock$was != null &amp;&amp; !was.playing &amp;&amp; clock.playing &amp;&amp; was.positionMs - clock.positionMs in 1..STALE_CLOCK_MS</ID>
-    <ID>ComplexCondition:Playback.kt$SteadyClock$was != null &amp;&amp; stale &amp;&amp; clock.playing &amp;&amp; clock.speed == was.speed</ID>
     <ID>ComplexCondition:SettingsScreen.kt$(item.on || item.onToggle == null) &amp;&amp; item.rule != null &amp;&amp; !item.notAllowed &amp;&amp; !item.locked</ID>
     <ID>ComplexCondition:UniDic.kt$UniDic$files.isDirectory || (fetch &amp;&amp; mayFetch() &amp;&amp; fetched())</ID>
     <ID>CyclomaticComplexMethod:BorrowedTimings.kt$BorrowedTimings$fun lineUp(a: String, b: String): IntArray?</ID>
@@ -76,7 +74,6 @@
     <ID>CyclomaticComplexMethod:MusicLinks.kt$MusicLinks$private fun serviceForHost(host: String): MusicService?</ID>
     <ID>CyclomaticComplexMethod:MusicLinks.kt$MusicLinks$private fun youtubeWatch(service: MusicService, url: HttpUrl, segments: List&lt;String&gt;): MusicLink?</ID>
     <ID>CyclomaticComplexMethod:PlayQueue.kt$PlayQueue$private suspend fun heard(now: AppPlays)</ID>
-    <ID>CyclomaticComplexMethod:Playback.kt$SteadyClock$fun of(clock: PlaybackClock): PlaybackClock</ID>
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@Composable private fun UpNextList(player: PlayerState, cover: String?, following: Following, actions: ScreenActions, pull: UpNextPull, onClose: () -&gt; Unit, modifier: Modifier)</ID>
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@OptIn(ExperimentalSharedTransitionApi::class) @Composable internal fun PlayerScreen(state: UiState, actions: ScreenActions)</ID>
     <ID>CyclomaticComplexMethod:PracticeScreen.kt$@Composable internal fun PracticeScreen(state: UiState, actions: ScreenActions)</ID>
