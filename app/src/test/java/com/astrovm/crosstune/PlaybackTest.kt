@@ -471,6 +471,50 @@ class PlaybackTest {
     }
 
     @Test
+    fun aClockPickedUpAsItPlaysIsAsFarBehindAsTheAppWasAsSongsStarted() {
+        allow()
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
+        shadowOf(sessions).addController(music)
+        fun says(position: Long, at: Long, state: Int = PlaybackState.STATE_PLAYING) {
+            shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
+            shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        fun pickedUp(from: MediaSessionPlayback = playback, song: MusicMetadata = this.song): PlaybackClock? {
+            var clock: PlaybackClock? = null
+            CoroutineScope(Dispatchers.Unconfined).launch { from.follow(song).collect { clock = it?.clock } }.also { shadowOf(Looper.getMainLooper()).idle() }.cancel()
+            return clock
+        }
+        // Before Crosstune has seen a song start there, it's where the app says.
+        assertEquals(PlaybackClock(0, PLAYED_AT, 1f, true), pickedUp())
+
+        // Seen as the song starts: it says so again 100 ms later, just how long saying it takes, then 800 ms on.
+        val seen = followed()
+        says(0, PLAYED_AT + 100)
+        says(0, PLAYED_AT + 800)
+        assertEquals(PlaybackClock(0, PLAYED_AT, 1f, true), seen.last()!!.clock)
+        // Picked up later, all that's left to see is the last, as far behind as it was then.
+        assertEquals(PlaybackClock(800, PLAYED_AT + 800, 1f, true), pickedUp())
+        // Kept from day to day.
+        assertEquals(PlaybackClock(800, PLAYED_AT + 800, 1f, true), pickedUp(MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = modes)))
+
+        // Another start, 1.2 s apart this time: a few songs are averaged.
+        says(0, PLAYED_AT + 50_000)
+        says(0, PLAYED_AT + 51_200)
+        assertEquals(PlaybackClock(900, PLAYED_AT + 51_200, 1f, true), pickedUp())
+        // Said less than that long ago, it may be the first of the two, so it's believed.
+        says(30_000, NOW - 500)
+        assertEquals(PlaybackClock(30_000, NOW - 500, 1f, true), pickedUp())
+        // Paused, it's where the app says.
+        says(30_000, PLAYED_AT + 60_000, PlaybackState.STATE_PAUSED)
+        assertEquals(PlaybackClock(30_000, PLAYED_AT + 60_000, 1f, false), pickedUp())
+
+        // Another app, never seen starting a song, is where it says.
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Save Your Tears", "The Weeknd"))
+        assertEquals(PlaybackClock(42_000, PLAYED_AT, 1f, true), pickedUp(song = MusicMetadata("Save Your Tears", "The Weeknd")))
+    }
+
+    @Test
     fun onlyTheSameSongByTheSameArtistIsFollowed() {
         allow()
         // Same name, someone else's; no name at all; no session at all.

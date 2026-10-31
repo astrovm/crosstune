@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.media.AudioManager
@@ -23,6 +24,7 @@ import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
+import androidx.core.content.edit
 import kotlin.math.abs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.awaitClose
@@ -33,6 +35,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import org.json.JSONObject
 
 /**
  * Where in a song it is: [positionMs] at [atMs] on the clock that counts since the phone started,
@@ -54,19 +57,25 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
  * Music says it's at the start, then says so again most of a second later. Where it was playing on to
  * is kept. Further back is a move, e.g. to an earlier part, and so is any move Crosstune asks for.
  */
-internal class SteadyClock {
+internal class SteadyClock(
+    /** How far behind its first the app's last word was as songs started there; see [ClockLags]. */
+    private val lagMs: Long,
+    private val now: () -> Long,
+    /** Told how far behind a stale clock was. */
+    private val learn: (Long) -> Unit
+) {
     private var last: PlaybackClock? = null
     /** Where the app said it paused, when that was a moment behind; and where it had really got to. */
     private var said: Long? = null
     private var stopped = 0L
 
     fun of(clock: PlaybackClock): PlaybackClock {
-        val was = last
-        val behind = was?.takeIf { it.playing }?.let { it.positionAt(clock.atMs) - clock.positionMs }
+        val was = last ?: return pickedUp(clock).also { last = it }
+        val behind = was.takeIf { it.playing }?.let { it.positionAt(clock.atMs) - clock.positionMs }
         val stale = behind != null && behind in 1..STALE_CLOCK_MS
-        if (was != null && stale && clock.playing && clock.speed == was.speed) return was
+        if (stale && clock.playing && clock.speed == was.speed) return was.also { if (behind >= SAYING_MS) learn(behind) }
         // Played again from a moment behind where it stopped, as YouTube Music says it is, it plays on from where it stopped.
-        if (was != null && !was.playing && clock.playing && was.positionMs - clock.positionMs in 1..STALE_CLOCK_MS) return clock.copy(positionMs = was.positionMs).also { last = it }
+        if (!was.playing && clock.playing && was.positionMs - clock.positionMs in 1..STALE_CLOCK_MS) return clock.copy(positionMs = was.positionMs).also { last = it }
         if (behind != null && !clock.playing) {
             said = clock.positionMs.takeIf { stale }
             stopped = clock.positionMs + behind
@@ -74,6 +83,38 @@ internal class SteadyClock {
             said = null
         }
         return (if (said != null) clock.copy(positionMs = stopped) else clock).also { last = it }
+    }
+
+    /**
+     * Picked up as it plays, the app's word is the last it said as the song started, behind by as much as
+     * it was then. Said less than that long ago, it may be the first, which is right.
+     */
+    private fun pickedUp(clock: PlaybackClock): PlaybackClock =
+        if (clock.playing && now() - clock.atMs >= lagMs) clock.copy(positionMs = clock.positionMs + (lagMs * clock.speed).toLong()) else clock
+}
+
+/**
+ * How far behind what it plays each music app says it is, when Crosstune picks it up as it plays. As
+ * a song starts, YouTube Music says it's at the start, which is right, then says so again most of a
+ * second later, and only that one is left to see later on: 0.7 to 1 s behind, a little more or less
+ * each time. Learnt from the songs Crosstune sees start, a few averaged, and kept from day to day.
+ */
+internal class ClockLags(private val preferences: SharedPreferences) {
+    private val seen: JSONObject by lazy { runCatching { JSONObject(preferences.getString(KEY, null) ?: "{}") }.getOrElse { JSONObject() } }
+
+    @Synchronized
+    fun of(app: String): Long = seen.optLong(app)
+
+    @Synchronized
+    fun learn(app: String, lagMs: Long) {
+        seen.put(app, if (seen.has(app)) (seen.getLong(app) * (AVERAGED - 1) + lagMs) / AVERAGED else lagMs)
+        preferences.edit { putString(KEY, seen.toString()) }
+    }
+
+    private companion object {
+        /** How many songs' lags make up the one used, about. */
+        const val AVERAGED = 4
+        const val KEY = "clock_lags"
     }
 }
 
@@ -223,7 +264,8 @@ internal class MediaSessionPlayback(
     private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
-    private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+    private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)),
+    private val lags: ClockLags = ClockLags(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -247,12 +289,13 @@ internal class MediaSessionPlayback(
         var followed: MediaController? = null
         var modesWatched: () -> Unit = {}
         var watched: List<MediaController> = emptyList()
-        var clocks = SteadyClock()
+        fun clock(app: String?, lagMs: Long) = SteadyClock(lagMs, now) { behind -> app?.let { lags.learn(it, behind) } }
+        var clocks = clock(null, 0)
         var movesSeen = moves
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
-            if (moves != movesSeen) clocks = SteadyClock().also { movesSeen = moves }
+            if (moves != movesSeen) clocks = clock(controller.packageName, 0).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller))
         }
         val callback = object : MediaController.Callback() {
@@ -271,7 +314,7 @@ internal class MediaSessionPlayback(
                 followed?.unregisterCallback(callback)
                 modesWatched()
                 followed = playing
-                clocks = SteadyClock()
+                clocks = playing?.packageName.let { clock(it, it?.let(lags::of) ?: 0) }
                 playing?.registerCallback(callback, handler)
                 // An app's shuffle and repeat aren't in what Android says of how it plays, so they're watched apart.
                 modesWatched = playing?.let { app -> modes.watch(app, handler) { trySend(steadily(app)) } } ?: {}
@@ -720,6 +763,9 @@ private const val QUEUED_COVER_PX = 180
 
 /** How far behind where it was playing on to an app may say it is, and still be believed to be there instead. */
 internal const val STALE_CLOCK_MS = 2_000L
+
+/** A clock said this little behind is just how long saying it took, as YouTube Music says a song starts twice within a tenth or so. */
+internal const val SAYING_MS = 300L
 
 /** Where an app puts the cover it shows, the song's own before its album's. */
 private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_DISPLAY_ICON)
