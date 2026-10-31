@@ -406,9 +406,12 @@ class MainActivity : ComponentActivity() {
         /** What draws the visuals behind the words; replaced in tests, which have no GPU or native library. */
         internal var milkdropFactory: (Context) -> Milkdrop = ::NativeMilkdrop
 
+        /** The phone's sound, one tap shared by whatever hears it: the visuals, Shazam and the singing. */
+        internal val phoneSound = SharedSoundTap { OutputMixTap.open() }
+
         @VisibleForTesting
-        /** What the visuals hear the phone play through. */
-        internal var soundTapFactory: () -> SoundTap? = { OutputMixTap.open() }
+        /** What the visuals, Shazam and the singing hear the phone play through. */
+        internal var soundTapFactory: () -> SoundTap? = phoneSound::open
 
         /**
          * What hears the words sung in what the phone plays: whisper.cpp's model, fetched once on an

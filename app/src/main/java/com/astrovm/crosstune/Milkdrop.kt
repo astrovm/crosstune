@@ -203,6 +203,40 @@ internal class OutputMixTap private constructor(private val visualizer: Visualiz
     }
 }
 
+/**
+ * The phone's sound through one tap that whatever hears it shares: the visuals, Shazam and the
+ * singing. Android hands the sound to the newest of an app's [Visualizer]s only, so a second one
+ * made would leave the first hearing nothing. Let go once nothing needs it.
+ */
+internal class SharedSoundTap(private val make: () -> SoundTap?) {
+    private var tap: SoundTap? = null
+    private var users = 0
+
+    /** A share of the sound, closed on its own; null when the phone won't share it. */
+    @Synchronized
+    fun open(): SoundTap? {
+        val shared = tap ?: make()?.also { tap = it } ?: return null
+        users++
+        return object : SoundTap {
+            @Volatile
+            private var closed = false
+
+            override fun read(into: ByteArray) = if (closed) 0 else shared.read(into)
+
+            override fun close() = synchronized(this@SharedSoundTap) {
+                if (closed) return@synchronized
+                closed = true
+                if (--users == 0) {
+                    shared.close()
+                    tap = null
+                }
+            }
+
+            override val rateHz = shared.rateHz
+        }
+    }
+}
+
 /** The presets that come with the app, in assets/milkdrop, by name: their file's, without .milk. */
 internal fun milkdropPresets(assets: AssetManager): List<String> =
     assets.list(PRESETS).orEmpty().filter { it.endsWith(".milk") }.sorted().map { it.removeSuffix(".milk") }
