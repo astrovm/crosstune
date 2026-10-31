@@ -152,8 +152,9 @@ class PlaybackTest {
         val single = MusicMetadata("Bizarre Love Triangle", "New Order", lengthMs = 174_000)
         assertNull(playback.recording(single))
         assertNull(followed(single).last())
-        // The album take is, said a second longer elsewhere too, and so is a song of no known length.
+        // The album take is, said a second longer elsewhere too, or as far off as one take's length is said to be, and so is a song of no known length.
         assertEquals(262_000L, playback.recording(single.copy(lengthMs = 263_000))?.lengthMs)
+        assertEquals(262_000L, playback.recording(single.copy(lengthMs = 262_000 + SAME_RECORDING_LENGTH_MS))?.lengthMs)
         assertEquals(262_000L, playback.recording(single.copy(lengthMs = null))?.lengthMs)
         // A video may open with more than its song, so its length tells nothing.
         val video = player("com.google.android.apps.youtube.music", "YouTube Music", "Bizarre Love Triangle", "New Order", state = PlaybackState.STATE_PAUSED, duration = 262_000)
