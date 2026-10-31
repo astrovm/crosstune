@@ -1,2 +1,3 @@
 Lyrics opened on a song already playing in YouTube Music are in time from the first line, not most of a second late.
 An ad YouTube Music plays before a song no longer moves its lyrics, or counts as another version of it.
+A Spotify page playing in your browser, and a file by "Various Artists" or no artist, are named as the song they play.
