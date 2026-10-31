@@ -96,7 +96,7 @@ class SingingTest {
         MainActivity.checksForUpdates = ::looksForUpdates
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.milkdropFactory = ::NativeMilkdrop
-        MainActivity.soundTapFactory = { OutputMixTap.open() }
+        MainActivity.soundTapFactory = MainActivity.phoneSound::open
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.lookAheadLyrics = true
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS

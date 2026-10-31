@@ -108,7 +108,7 @@ class LyricsToolsTest {
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.milkdropFactory = ::NativeMilkdrop
-        MainActivity.soundTapFactory = { OutputMixTap.open() }
+        MainActivity.soundTapFactory = MainActivity.phoneSound::open
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.lookAheadLyrics = true
     }

@@ -161,7 +161,7 @@ class ListeningTest {
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.lookAheadLyrics = true
         MainActivity.milkdropFactory = ::NativeMilkdrop
-        MainActivity.soundTapFactory = { OutputMixTap.open() }
+        MainActivity.soundTapFactory = MainActivity.phoneSound::open
         MainActivity.lyricsLanguageFactory = null
         MainActivity.phoneFactory = realPhone
         MainActivity.uniDicFactory = realUniDic

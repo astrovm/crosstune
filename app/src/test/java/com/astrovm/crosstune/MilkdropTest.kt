@@ -296,6 +296,46 @@ class MilkdropTest {
     }
 
     @Test
+    fun whateverHearsThePhonesSoundSharesOneTap() {
+        // Android hands the sound to the newest of an app's visualizers only, so a second would leave the first hearing nothing.
+        var made = 0
+        var released = 0
+        val sound = SharedSoundTap {
+            made++
+            object : SoundTap {
+                override fun read(into: ByteArray): Int = into.size.also { into.fill(7) }
+                override fun close() { released++ }
+                override val rateHz = 44_100
+            }
+        }
+        val visuals = sound.open()!!
+        val shazam = sound.open()!!
+        assertEquals(1, made)
+        assertEquals(44_100, shazam.rateHz)
+        val heard = ByteArray(4)
+        assertEquals(4, shazam.read(heard))
+        assertArrayEquals(ByteArray(4) { 7 }, heard)
+        // Shazam done with it, it hears no more, and the visuals still do; closing twice changes nothing.
+        shazam.close()
+        shazam.close()
+        assertEquals(0, released)
+        assertEquals(0, shazam.read(heard))
+        assertEquals(4, visuals.read(heard))
+        // Let go once nothing needs it, and opened again when something does.
+        visuals.close()
+        assertEquals(1, released)
+        sound.open()!!.close()
+        assertEquals(2, made)
+        assertEquals(2, released)
+        // A phone that won't share its sound gives none, and is asked again next time.
+        var asked = 0
+        val refused = SharedSoundTap { asked++; null }
+        assertNull(refused.open())
+        assertNull(refused.open())
+        assertEquals(2, asked)
+    }
+
+    @Test
     fun aPhoneThatWontShareItsSoundHasNoTap() {
         // Made, but not ready to use, as without the permission; it's let go of all the same.
         var released = false
