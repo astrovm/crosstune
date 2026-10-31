@@ -1663,7 +1663,8 @@ internal class MainViewModel(
     /**
      * Whether the app's clock is known to be where the song is: Crosstune saw it say so as the song
      * started. Picked up partway, or after a pause or a move, it may be most of a second behind, as
-     * YouTube Music's often is, so the singing heard then puts this time right, and only this time.
+     * YouTube Music's often is, so the singing heard then puts this time right, and only this time,
+     * unless the words are heard far further off than that.
      */
     private var clockSure = false
     /** The app's clock as last said, to tell when it jumps rather than plays on. */
@@ -2165,7 +2166,7 @@ internal class MainViewModel(
                 continue
             }
             singingTries = 0
-            if (!clockSure) placeThisTime(sung, clock, shown, shift)
+            if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
             else if (placeForGood(song, lines, sung, clock, shown, shift, first)) return
         }
     }
@@ -2187,7 +2188,7 @@ internal class MainViewModel(
     /** The lines heard in [sung] put where they're sung, [shift] off as a whole, before the rest of the while is in. */
     private fun placeHeard(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
         doubtTiming(false)
-        if (!clockSure) placeThisTime(sung, clock, shown, shift)
+        if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
         else placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L))
     }
 
@@ -2226,11 +2227,15 @@ internal class MainViewModel(
      * The lines heard in [sung] put where they're sung for this time only, the app's [clock] unsure:
      * it may be off as much as the words. Words timed for another take drift further off as it goes,
      * so it's heard on through the song. Lines heard but none told where, the first is [shift] off.
+     * Heard [WORDS_OFF_MS] off or more, it's the words that are off, not the clock, so what's heard
+     * this time is kept, and they start where they're sung next time; still unsure, it isn't done.
      */
-    private fun placeThisTime(sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
+    private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
         heardThisTime = true
         val placed = SungAlignment.linesMs(sung, clock::positionAt, shown, shift).ifEmpty { mapOf(shown.indexOfFirst { it.timeMs + shift >= clock.positionAt(sung.startedAtMs) }.coerceAtLeast(0) to null) }
-        heardPoints = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
+        val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
+        if (abs(shift) >= WORDS_OFF_MS) return setSync(song, heard)
+        heardPoints = heard
         showPoints()
     }
 
@@ -4089,6 +4094,8 @@ internal class MainViewModel(
 
         /** How far off the singing heard has to be from the words for them to be reported as off. */
         const val SUNG_OFF_MS = 1_000L
+        /** Heard this far off, twice what an app's clock picked up partway can be behind, the words are off themselves. */
+        const val WORDS_OFF_MS = 2_000L
         /** Where the song is may drift this much while it's heard, and still be where it was. */
         const val STEADY_CLOCK_MS = 300L
 
