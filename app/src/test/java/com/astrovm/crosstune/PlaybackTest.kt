@@ -118,6 +118,66 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAdYouTubeMusicPlaysUnderTheNextSongsNameIsntTakenForTheSong() {
+        allow()
+        sounding()
+        val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        // The song played before, 5:25 long.
+        lengths.of("It's Raining Men", "The Weather Girls", 325_474)
+        // Free YouTube Music plays a 15 second ad named as the song up next, with all of the song's details but its length.
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "It's Raining Men", "The Weather Girls", album = "Success",
+            position = 5_000, duration = 15_069)
+        shadowOf(sessions).addController(music)
+        val raining = MusicMetadata("It's Raining Men", "The Weather Girls")
+        val seen = followed(raining)
+        // It's the song, waiting at its start, as long as the song is, and the ad's length is never kept as one of the song's.
+        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), seen.last()!!.clock)
+        assertEquals(325_474L, seen.last()!!.durationMs)
+        assertEquals(325_474L, playback.nowPlaying()!!.metadata.lengthMs)
+        assertNull(playback.nowPlaying()!!.offsetMs)
+        assertEquals("com.google.android.apps.youtube.music:duration:325474", playback.recording(raining)?.recordingId)
+        assertEquals(listOf(325_474L), lengths.known("It's Raining Men", "The Weather Girls"))
+        // Then the song itself starts over from 0, and plays.
+        val song = MediaMetadata.Builder(music.metadata).putLong(MediaMetadata.METADATA_KEY_DURATION, 325_474).build()
+        shadowOf(music).setMetadata(song)
+        shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT + 15_069).setActions(PlaybackState.ACTION_SEEK_TO).build())
+        shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(PlaybackClock(0, PLAYED_AT + 15_069), seen.last()!!.clock)
+        assertEquals(325_474L, seen.last()!!.durationMs)
+    }
+
+    @Test
+    fun anAdIsKnownByTheLengthOfTheSongAskedFor() {
+        allow()
+        // Never played before, but opened from a link that says how long it is.
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Cross My Heart", "Jody Watley", album = "Larger Than Life",
+            position = 5_000, duration = 17_066)
+        shadowOf(sessions).addController(music)
+        val asked = MusicMetadata("Cross My Heart", "Jody Watley", lengthMs = 210_674)
+        assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), followed(asked).last()!!.clock)
+        assertEquals(210_674L, playback.recording(asked)?.lengthMs)
+    }
+
+    @Test
+    fun aShortSongIsntTakenForAnAd() {
+        allow()
+        sounding()
+        // Under the longest ad, but no longer length is known for it: it's the song, as long as it says.
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Her Majesty", "The Beatles", album = "Abbey Road", duration = 23_000)
+        shadowOf(sessions).addController(music)
+        val majesty = MusicMetadata("Her Majesty", "The Beatles")
+        assertEquals(PlaybackClock(42_000, PLAYED_AT), followed(majesty).last()!!.clock)
+        assertEquals(23_000L, playback.nowPlaying()!!.metadata.lengthMs)
+        // Nor a song said shorter in another app, where no ads play under a song's name.
+        val lengths = SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+        lengths.of("Bizarre Love Triangle", "New Order", 262_000)
+        val other = player("com.spotify.music", "Spotify", "Bizarre Love Triangle", "New Order", album = "Substance", duration = 120_000)
+        shadowOf(sessions).addController(other)
+        assertEquals(120_000L, playback.recording(MusicMetadata("Bizarre Love Triangle", "New Order"))?.lengthMs)
+    }
+
+    @Test
     fun aSongSaidASecondLongerIsStillTheSameRecording() {
         allow()
         // YouTube Music says the same song is 220 seconds long, then 221.
@@ -516,6 +576,50 @@ class PlaybackTest {
         // Another app it didn't happen in is where it says.
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Save Your Tears", "The Weeknd", position = NOW - 5 - PLAYED_AT - 800, at = NOW - 5))
         assertEquals(PlaybackClock(NOW - 5 - PLAYED_AT - 800, NOW - 5, 1f, true), pickedUp(MusicMetadata("Save Your Tears", "The Weeknd")))
+    }
+
+    @Test
+    fun aClockFallenBehindIsMovedOnByHowFarItFellAtAnySpeed() {
+        allow()
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
+        shadowOf(sessions).addController(music)
+        fun says(position: Long, at: Long, speed: Float) {
+            shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, speed, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
+            shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        fun pickedUp(): PlaybackClock? {
+            var clock: PlaybackClock? = null
+            CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { clock = it?.clock } }.also { shadowOf(Looper.getMainLooper()).idle() }.cancel()
+            return clock
+        }
+        // At twice the speed, said again from the start 400 ms on: 800 ms of the song behind.
+        says(0, PLAYED_AT, 2f)
+        val seen = followed()
+        says(0, PLAYED_AT + 400, 2f)
+        assertEquals(PlaybackClock(0, PLAYED_AT, 2f, true), seen.last()!!.clock)
+        collecting.forEach(Job::cancel)
+        // Picked up later, it's those 800 ms ahead, where the first said it would be.
+        says(2 * (NOW - PLAYED_AT - 400), NOW, 2f)
+        assertEquals(PlaybackClock(2 * (NOW - PLAYED_AT), NOW, 2f, true), pickedUp())
+    }
+
+    @Test
+    fun aClockSaidJustLongEnoughBehindToBeLateIsLearnt() {
+        allow()
+        val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
+        shadowOf(sessions).addController(music)
+        fun says(position: Long, at: Long) {
+            shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, position, 1f, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
+            shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        followed()
+        says(0, PLAYED_AT + SAYING_MS)
+        collecting.forEach(Job::cancel)
+        var clock: PlaybackClock? = null
+        CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { clock = it?.clock } }.also { shadowOf(Looper.getMainLooper()).idle() }.cancel()
+        assertEquals(PlaybackClock(SAYING_MS, PLAYED_AT + SAYING_MS, 1f, true), clock)
     }
 
     @Test
