@@ -471,47 +471,51 @@ class PlaybackTest {
     }
 
     @Test
-    fun aClockPickedUpAsItPlaysIsAsFarBehindAsTheAppWasAsSongsStarted() {
+    fun aClockPickedUpWhereTheAppFellBehindIsAsFarBehindAsItFell() {
         allow()
         val music = player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", position = 0)
         shadowOf(sessions).addController(music)
-        fun says(position: Long, at: Long, state: Int = PlaybackState.STATE_PLAYING) {
-            shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(state, position, 1f, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
+        fun says(position: Long, at: Long, state: Int = PlaybackState.STATE_PLAYING, speed: Float = 1f) {
+            shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(state, position, speed, at).setActions(PlaybackState.ACTION_SEEK_TO).build())
             shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
             shadowOf(Looper.getMainLooper()).idle()
         }
-        fun pickedUp(from: MediaSessionPlayback = playback, song: MusicMetadata = this.song): PlaybackClock? {
+        fun pickedUp(song: MusicMetadata = this.song): PlaybackClock? {
             var clock: PlaybackClock? = null
-            CoroutineScope(Dispatchers.Unconfined).launch { from.follow(song).collect { clock = it?.clock } }.also { shadowOf(Looper.getMainLooper()).idle() }.cancel()
+            CoroutineScope(Dispatchers.Unconfined).launch { playback.follow(song).collect { clock = it?.clock } }.also { shadowOf(Looper.getMainLooper()).idle() }.cancel()
             return clock
         }
-        // Before Crosstune has seen a song start there, it's where the app says.
+        // Before Crosstune has seen it fall behind, it's where the app says.
         assertEquals(PlaybackClock(0, PLAYED_AT, 1f, true), pickedUp())
 
-        // Seen as the song starts: it says so again 100 ms later, just how long saying it takes, then 800 ms on.
+        // Started from a link: it says so again 100 ms later, just how long saying it takes, then 800 ms on, which it goes on from.
         val seen = followed()
         says(0, PLAYED_AT + 100)
         says(0, PLAYED_AT + 800)
         assertEquals(PlaybackClock(0, PLAYED_AT, 1f, true), seen.last()!!.clock)
-        // Picked up later, all that's left to see is the last, as far behind as it was then.
-        assertEquals(PlaybackClock(800, PLAYED_AT + 800, 1f, true), pickedUp())
-        // Kept from day to day.
-        assertEquals(PlaybackClock(800, PLAYED_AT + 800, 1f, true), pickedUp(MediaSessionPlayback(app, now = { NOW }, waker = { null }, modes = modes)))
+        collecting.forEach(Job::cancel)
+        // Another screen picks it up as far behind, even said just now.
+        says(NOW - 5 - PLAYED_AT - 800, NOW - 5)
+        assertEquals(PlaybackClock(NOW - 5 - PLAYED_AT, NOW - 5, 1f, true), pickedUp())
+        // Within a moment of it, it's the same clock; further, it isn't.
+        says(NOW - PLAYED_AT - 800 + SAME_CLOCK_MS, NOW)
+        assertEquals(PlaybackClock(NOW - PLAYED_AT + SAME_CLOCK_MS, NOW, 1f, true), pickedUp())
+        says(NOW - PLAYED_AT - 800 - SAME_CLOCK_MS - 1, NOW)
+        assertEquals(PlaybackClock(NOW - PLAYED_AT - 800 - SAME_CLOCK_MS - 1, NOW, 1f, true), pickedUp())
+        // Paused, or at another speed, it's where the app says.
+        says(10_000, NOW - PLAYED_AT - 800 + 10_000 / 2, speed = 2f)
+        says(10_000, NOW, PlaybackState.STATE_PAUSED)
+        assertEquals(PlaybackClock(10_000, NOW, 1f, false), pickedUp())
+        says(NOW - PLAYED_AT - 800, NOW, speed = 2f)
+        assertEquals(PlaybackClock(NOW - PLAYED_AT - 800, NOW, 2f, true), pickedUp())
 
-        // Another start, 1.2 s apart this time: a few songs are averaged.
-        says(0, PLAYED_AT + 50_000)
-        says(0, PLAYED_AT + 51_200)
-        assertEquals(PlaybackClock(900, PLAYED_AT + 51_200, 1f, true), pickedUp())
-        // Said less than that long ago, it may be the first of the two, so it's believed.
-        says(30_000, NOW - 500)
-        assertEquals(PlaybackClock(30_000, NOW - 500, 1f, true), pickedUp())
-        // Paused, it's where the app says.
-        says(30_000, PLAYED_AT + 60_000, PlaybackState.STATE_PAUSED)
-        assertEquals(PlaybackClock(30_000, PLAYED_AT + 60_000, 1f, false), pickedUp())
+        // Played from the start again in the app, it's right, so it's where the app says.
+        says(0, NOW - 30_000)
+        assertEquals(PlaybackClock(30_000, NOW, 1f, true), pickedUp().let { it!!.copy(positionMs = it.positionAt(NOW), atMs = NOW) })
 
-        // Another app, never seen starting a song, is where it says.
-        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Save Your Tears", "The Weeknd"))
-        assertEquals(PlaybackClock(42_000, PLAYED_AT, 1f, true), pickedUp(song = MusicMetadata("Save Your Tears", "The Weeknd")))
+        // Another app it didn't happen in is where it says.
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Save Your Tears", "The Weeknd", position = NOW - 5 - PLAYED_AT - 800, at = NOW - 5))
+        assertEquals(PlaybackClock(NOW - 5 - PLAYED_AT - 800, NOW - 5, 1f, true), pickedUp(MusicMetadata("Save Your Tears", "The Weeknd")))
     }
 
     @Test

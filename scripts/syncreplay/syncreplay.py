@@ -323,17 +323,6 @@ def phone(args):
         sys.exit("Couldn't open the words in Crosstune: is the phone unlocked?")
     if not shows(title):
         sys.exit(f"Crosstune opened the words of another song, not {title}")
-    if args.watched:
-        # Started again as Crosstune watches, it sees how far behind the app's clock falls as a song starts.
-        shell("am", "start", "-a", "android.intent.action.VIEW", "-d", f"https://music.youtube.com/watch?v={args.id}", "-p", args.app)
-        for _ in range(60):
-            song = playing(args.app)
-            if song and song[1] > zero + 1000:
-                zero = song[1]
-                break
-            time.sleep(0.5)
-        else:
-            sys.exit(f"{args.app} didn't start {args.id} again")
     while float(shell("cat", "/proc/uptime").split()[0]) * 1000 - zero < args.seconds * 1000:
         # The words are only followed while they're in sight, so the screen is kept from sleeping.
         shell("input", "keyevent", "KEYCODE_WAKEUP")
@@ -426,7 +415,6 @@ def main():
     p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
     p.add_argument("--again", action="store_true", help="keep what the app learnt of the song's timing")
     p.add_argument("--app", default="com.google.android.apps.youtube.music", help="the YouTube Music build to play it in")
-    p.add_argument("--watched", action="store_true", help="start the song again once the words are open, as Crosstune watches; it learns then how far behind the app's clock is when picked up later")
     p.set_defaults(go=phone)
     args = parser.parse_args()
     args.go(args)
