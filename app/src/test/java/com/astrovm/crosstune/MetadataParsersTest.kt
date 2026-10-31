@@ -114,6 +114,51 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun aSpotifyPageTitleIsReadAsItsSongInEachLanguage() {
+        // As Spotify titles a song's page in each language it has, with a music video and without (#590).
+        val rick = MusicMetadata("Never Gonna Give You Up", "Rick Astley")
+        for (title in listOf(
+            "Never Gonna Give You Up - Song, Lyrics, and Music Video by Rick Astley | Spotify",
+            "Never Gonna Give You Up\u00a0– Song, Lyrics und Musikvideo von Rick Astley\u00a0| Spotify",
+            "Never Gonna Give You Up: canción, letra y vídeo musical de Rick Astley | Spotify",
+            "Never Gonna Give You Up - Canción, letra y video musical de Rick Astley | Spotify",
+            "Never Gonna Give You Up – Titre, paroles et vidéo de Rick Astley | Spotify",
+            "Never Gonna Give You Up - Lagu, Lirik, dan Video Musik oleh Rick Astley | Spotify",
+            "Never Gonna Give You Up - brano, testo e video musicale di Rick Astley | Spotify",
+            "Never Gonna Give You Up - Rick Astleyの曲、歌詞、ミュージックビデオ | Spotify",
+            "Never Gonna Give You Up - Rick Astley의 곡, 가사 및 뮤직비디오 | Spotify",
+            "Never Gonna Give You Up – música, letra e videoclipe de Rick Astley | Spotify",
+            "Never Gonna Give You Up: música, letra e videoclipe de Rick Astley | Spotify",
+            "Never Gonna Give You Up - Şarkı, Şarkı Sözleri ve Müzik Videosu: Rick Astley | Spotify",
+            "Never Gonna Give You Up – Bài hát, lời bài hát và video nhạc của Rick Astley | Spotify",
+            "Never Gonna Give You Up - เพลง เนื้อเพลง และมิวสิกวิดีโอจาก Rick Astley | Spotify",
+            "\"Never Gonna Give You Up\" - أغنية وكلمات وفيديو موسيقي من إبداعات Rick Astley | Spotify"
+        )) assertEquals(title, rick, MetadataParsers.musicVideo(title, "open.spotify.com"))
+        val queen = MusicMetadata("Bohemian Rhapsody - Remastered 2011", "Queen")
+        for (title in listOf(
+            "Bohemian Rhapsody - Remastered 2011 - song and lyrics by Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011\u00a0– Musik und Lyrics von Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - letra y música de Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - música y letra de Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011\u00a0- titre et paroles par Queen\u00a0| Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - lagu dan lirik oleh Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - musica e testo di Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 ‑ 曲・歌詞：Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - Queen의 곡 및 가사 | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 – música e letra de Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011: música e letra de Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - müzik ve şarkı sözleri: Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - nhạc và lời của Queen | Spotify",
+            "Bohemian Rhapsody - Remastered 2011 - เพลงและเนื้อเพลงจาก Queen | Spotify",
+            "\"Bohemian Rhapsody - Remastered 2011\" - موسيقى وكلمات Queen | Spotify"
+        )) assertEquals(title, queen, MetadataParsers.musicVideo(title, "open.spotify.com"))
+        // The page auto report #15 had.
+        assertEquals(MusicMetadata("new trick", "ROSÉ"), MetadataParsers.musicVideo("new trick – música, letra e videoclipe de ROSÉ | Spotify", "open.spotify.com"))
+        // Worded in a way not known, the song is still read, by no artist rather than a wrong one.
+        assertEquals(MusicMetadata("new trick", ""), MetadataParsers.musicVideo("new trick – Lied und Text von ROSÉ | Spotify", "open.spotify.com"))
+    }
+
+    @Test
     fun onlyAVideoThatSaysItsMusicIsASong() {
         assertNull(MetadataParsers.musicVideo("A New Approach To An Ancient Linux Terminal Problem", "Brodie Robertson"))
         assertNull(MetadataParsers.musicVideo("My Morning Routine (4K)", "Someone"))

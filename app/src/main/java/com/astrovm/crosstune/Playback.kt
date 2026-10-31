@@ -625,8 +625,7 @@ internal class MediaSessionPlayback(
     /** What [controller] plays, as a song; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
         val metadata = controller.metadata ?: return null
-        val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-        val artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+        val (title, artist) = MetadataParsers.playerSong(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
         // Without both there's no song to look up by name. A browser playing a bare file names it
         // by its address, under its site, e.g. "example.com/song.mp3" by "example.com": no song either.
         if (title.isBlank() || artist.isBlank() || ('.' in artist && title.startsWith("$artist/"))) return null
