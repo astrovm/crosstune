@@ -223,10 +223,24 @@ class SingingTest {
         assertEquals(3, singing.hears)
     }
 
-    /** Lines at [times] seconds, each heard sung [offMs] later, from where the song is as it's heard, for as long as it is. */
-    private fun sungAt(times: List<Int>, offMs: List<Long>) = SystemClock.elapsedRealtime().let { now ->
+    @Test
+    fun pickedUpPartwayWordsHeardFarOffAreKeptForNextTime() {
+        // Timed for another take, the words are seconds off: far more than the app's clock can be behind.
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 6_000 + FAR_MS }
+        // So it's the words that are off, and the lines heard are kept: played again, they start where they're sung.
+        assertTrue(model().uiState.lyricsSynced)
+        assertTrue(prefs().contains("lyrics_sync"))
+        // The app's clock may still be a little behind, so the singing is heard again next time.
+        assertFalse(prefs().contains("sung_heard"))
+    }
+
+    /** Lines at [times] seconds, each heard sung [offMs] later, from where the song is as it's heard, for as long as it is, or its first [seconds]. */
+    private fun sungAt(times: List<Int>, offMs: List<Long>, seconds: Int = SingingListener.SECONDS) = SystemClock.elapsedRealtime().let { now ->
         val at = now - startedAt + startedFromMs
-        Sung(now, lines.indices.filter { times[it] * 1_000L + offMs[it] in at until at + SingingListener.SECONDS * 1_000L }.flatMap { index ->
+        Sung(now, lines.indices.filter { times[it] * 1_000L + offMs[it] in at until at + seconds * 1_000L }.flatMap { index ->
             lines[index].split(' ').mapIndexed { word, text -> HeardWord(text, times[index] * 1_000L + offMs[index] + SungAlignment.HEARD_LATE_MS + word * 300L - at) }
         })
     }
@@ -252,6 +266,19 @@ class SingingTest {
         assertTrue(prefs().contains("sung_heard"))
         passes(30_000)
         assertEquals(2, singing.hears)
+    }
+
+    @Test
+    fun aWhileStartsALittleLessBeforeALineWhenThatLetsItsThirdLineBeHeard() {
+        // Heard from a second and a half before the first line, the third would start in the while's last seconds, only half heard.
+        val times = listOf(2, 10, 18, 24, 28, 32)
+        lyricsTimedFor(null, times)
+        singing.answer = { sungAt(times, times.map { 1_000L }) }
+        openLyrics()
+        plays()
+        // So it's heard from a little later, still before the first line, not from the second.
+        passes(1_500)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[0].timeMs == 3_000L }
     }
 
     @Test
@@ -339,6 +366,26 @@ class SingingTest {
         waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
         assertEquals(22_000L, model().uiState.lyricLines[1].timeMs)
         assertTrue(model().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun linesHeardInAWhilesFirstSecondsArePutInTimeBeforeTheRestIsIn() {
+        // Timed for a take with a shorter intro: the singing's found straight on, on the next while.
+        val times = listOf(2, 5, 8, 11, 44, 47)
+        lyricsTimedFor(null, times)
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { sungAt(times, times.map { 17_000L }, SingingListener.FIRST_SECONDS) }
+        singing.answer = { if (singing.hears == 1) sungAt(times, times.map { 17_000L }) else rest.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.following?.timingKnown == false }
+        passes(20_000)
+        // Its first seconds hold lines enough to tell, so they're put where they're sung without waiting on the rest.
+        waitUntil { singing.hears == 2 && model().uiState.lyricsSynced }
+        assertEquals(22_000L, model().uiState.lyricLines[1].timeMs)
+        assertTrue(model().uiState.following!!.timingKnown)
+        rest.complete(null)
     }
 
     @Test
@@ -1005,5 +1052,6 @@ class SingingTest {
     private companion object {
         const val TIMEOUT_MS = 10_000L
         const val SHIFT_MS = -1_300L
+        const val FAR_MS = 4_000L
     }
 }

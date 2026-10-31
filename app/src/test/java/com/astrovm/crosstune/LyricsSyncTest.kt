@@ -66,7 +66,7 @@ class LyricsSyncTest {
         assertEquals(60_585L, LyricsSync.timeOf(60_000, points))
         assertEquals(3_500L, LyricsSync.timeOf(0, points))
         // Just past the last, where the pace would put it before that one, it stays after it.
-        assertEquals(40_000L, LyricsSync.timeOf(40_100, listOf(SyncPoint(10_000, 10_000), SyncPoint(20_000, 19_000), SyncPoint(40_000, 40_000))))
+        assertEquals(41_000L, LyricsSync.timeOf(40_100, listOf(SyncPoint(10_000, 10_000), SyncPoint(20_000, 19_000), SyncPoint(40_000, 41_000))))
         // So far off a pace it's lines timed out of place: past the last, they keep to it.
         assertEquals(41_700L, LyricsSync.timeOf(40_100, listOf(SyncPoint(10_000, 10_000), SyncPoint(20_000, 20_000), SyncPoint(40_000, 41_600))))
         // Too close together to tell a pace, they keep to the nearest.
@@ -74,9 +74,19 @@ class LyricsSyncTest {
     }
 
     @Test
-    fun lineExactlyAsFarApartAsTheyNeedToBeTellAPace() {
-        // 20 seconds apart, and 3% slower: past the last, it goes on at that pace, not a third of a second off.
-        assertEquals(51_200L, LyricsSync.timeOf(50_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(30_000, 30_600))))
+    fun linesDriftingExactlyAsFarAsTheyNeedToTellAPace() {
+        // A second further off across them, 4% slower: past the last, it goes on at that pace.
+        assertEquals(56_800L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 36_000))))
+        // Less, it's as far as two lines heard can be off from each other, not a pace: past the last, they keep to it.
+        assertEquals(55_900L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 35_900))))
+    }
+
+    @Test
+    fun linesHeardALittleOffDontStretchTheRestOfTheSong() {
+        // Tell It to My Heart's first minute, heard: each line where it was heard, a few tenths apart.
+        val points = listOf(SyncPoint(18_550, 18_530), SyncPoint(26_680, 26_450), SyncPoint(49_450, 48_940), SyncPoint(59_470, 58_870))
+        // Its last line, two and a half minutes on, is as far off as the last heard, not 3 seconds early.
+        assertEquals(213_550L, LyricsSync.timeOf(214_150, points))
     }
 
     @Test

@@ -1663,7 +1663,8 @@ internal class MainViewModel(
     /**
      * Whether the app's clock is known to be where the song is: Crosstune saw it say so as the song
      * started. Picked up partway, or after a pause or a move, it may be most of a second behind, as
-     * YouTube Music's often is, so the singing heard then puts this time right, and only this time.
+     * YouTube Music's often is, so the singing heard then puts this time right, and only this time,
+     * unless the words are heard far further off than that.
      */
     private var clockSure = false
     /** The app's clock as last said, to tell when it jumps rather than plays on. */
@@ -2151,7 +2152,7 @@ internal class MainViewModel(
             delay(untilSung(shown, uiState.following?.clock ?: return, heardTo, straightOn) ?: return)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return
             singingTries++
-            val sung = hearOnce(hearing, lines, if (heardTo == null) voiceStarted(song, lines, clock, shown) else null) ?: return
+            val sung = hearOnce(hearing, lines, heardFirst(song, lines, clock, shown, heardTo == null)) ?: return
             if (!stillPlays(song, lines, clock)) return
             // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
             // while is heard straight on, wherever the words are timed: the singing may be well after them.
@@ -2165,17 +2166,30 @@ internal class MainViewModel(
                 continue
             }
             singingTries = 0
-            if (!clockSure) placeThisTime(sung, clock, shown, shift)
+            if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
             else if (placeForGood(song, lines, sung, clock, shown, shift, first)) return
         }
     }
 
     /**
-     * Whether the voice has started where the [shown] lines are timed, told by the first few seconds
-     * the first while's heard: lines timed into an intro aren't shown sung all the while it's heard.
+     * The first few seconds of a while, told as soon as they're heard: lines sung in them are put where
+     * they're heard at once, not once the whole while is, as words timed far off are wrong all the while.
+     * On the song's [first] while, no voice where the [shown] lines are timed doubts them instead: lines
+     * timed into an intro aren't shown sung all the while it's heard.
      */
-    private fun voiceStarted(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>): suspend (Sung) -> Unit = { heard ->
-        if (stillPlays(song, lines, clock) && noVoice(heard, clock, shown)) doubtTiming(true)
+    private fun heardFirst(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>, first: Boolean): suspend (Sung) -> Unit = { heard ->
+        if (stillPlays(song, lines, clock)) {
+            val shift = SungAlignment.shiftMs(heard, clock::positionAt, shown)
+            if (shift != null) placeHeard(song, heard, clock, shown, shift)
+            else if (first && noVoice(heard, clock, shown)) doubtTiming(true)
+        }
+    }
+
+    /** The lines heard in [sung] put where they're sung, [shift] off as a whole, before the rest of the while is in. */
+    private fun placeHeard(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
+        doubtTiming(false)
+        if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
+        else placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L))
     }
 
     /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when nothing is, as for want of the speech model, which is offered then. */
@@ -2213,11 +2227,15 @@ internal class MainViewModel(
      * The lines heard in [sung] put where they're sung for this time only, the app's [clock] unsure:
      * it may be off as much as the words. Words timed for another take drift further off as it goes,
      * so it's heard on through the song. Lines heard but none told where, the first is [shift] off.
+     * Heard [WORDS_OFF_MS] off or more, it's the words that are off, not the clock, so what's heard
+     * this time is kept, and they start where they're sung next time; still unsure, it isn't done.
      */
-    private fun placeThisTime(sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
+    private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
         heardThisTime = true
         val placed = SungAlignment.linesMs(sung, clock::positionAt, shown, shift).ifEmpty { mapOf(shown.indexOfFirst { it.timeMs + shift >= clock.positionAt(sung.startedAtMs) }.coerceAtLeast(0) to null) }
-        heardPoints = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
+        val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
+        if (abs(shift) >= WORDS_OFF_MS) return setSync(song, heard)
+        heardPoints = heard
         showPoints()
     }
 
@@ -2303,11 +2321,12 @@ internal class MainViewModel(
     private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?, straightOn: Boolean = false): Long? {
         val here = clock.positionAt(now())
         val at = maxOf(here, after ?: here)
-        val heardMs = SingingListener.SECONDS * 1000L
+        val heardMs = SingingListener.SECONDS * 1000L - SINGING_TAIL_MS
+        val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }.map { it.timeMs }
         // Heard from just before a line starts, or now, as one just has: a while opening on music alone, the model may hear only that.
-        val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }.map { maxOf(at, it.timeMs - SINGING_LEAD_MS) }
-        val from = if (straightOn) at else starts.firstOrNull { from ->
-            lines.count { it.text.isNotBlank() && it.timeMs in from until from + heardMs - SINGING_TAIL_MS } >= SINGING_LINES
+        // Less just before, when that's what lets enough lines after it be heard too, so the line isn't left to the next while.
+        val from = if (straightOn) at else starts.withIndex().firstNotNullOfOrNull { (index, line) ->
+            starts.getOrNull(index + SINGING_LINES - 1)?.let { last -> maxOf(at, line - SINGING_LEAD_MS, last - heardMs + 1).takeIf { it <= maxOf(at, line) } }
         } ?: return null
         return ((from - here) / clock.speed).toLong()
     }
@@ -4076,6 +4095,8 @@ internal class MainViewModel(
 
         /** How far off the singing heard has to be from the words for them to be reported as off. */
         const val SUNG_OFF_MS = 1_000L
+        /** Heard this far off, twice what an app's clock picked up partway can be behind, the words are off themselves. */
+        const val WORDS_OFF_MS = 2_000L
         /** Where the song is may drift this much while it's heard, and still be where it was. */
         const val STEADY_CLOCK_MS = 300L
 
