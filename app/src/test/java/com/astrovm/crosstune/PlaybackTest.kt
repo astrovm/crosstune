@@ -160,6 +160,24 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAdIsShorterThanTheLongestAdForASongNoShorterThanIt() {
+        allow()
+        val asked = MusicMetadata("Cross My Heart", "Jody Watley", lengthMs = 210_674)
+        fun said(duration: Long) = player("com.google.android.apps.youtube.music", "YouTube Music", "Cross My Heart", "Jody Watley", album = "Larger Than Life",
+            position = 1_000, duration = duration).also { ShadowMediaSessionManager.reset(); shadowOf(sessions).addController(it) }
+        // Just before each song, YouTube Music says it's 0 long for a moment: the song, where it says.
+        said(0)
+        assertEquals(PlaybackClock(1_000, PLAYED_AT), followed(asked).last()!!.clock)
+        // As long as the longest ad, it's a version of the song, though a longer one played before.
+        SteadyLengths(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).of("Cross My Heart", "Jody Watley", 210_674)
+        said(LONGEST_AD_MS)
+        assertEquals(LONGEST_AD_MS, playback.recording(asked.copy(lengthMs = null))?.lengthMs)
+        // And a song as long as the longest ad is longer than any.
+        said(17_066)
+        assertEquals(LONGEST_AD_MS, playback.recording(asked.copy(lengthMs = LONGEST_AD_MS))?.lengthMs)
+    }
+
+    @Test
     fun aShortSongIsntTakenForAnAd() {
         allow()
         sounding()
