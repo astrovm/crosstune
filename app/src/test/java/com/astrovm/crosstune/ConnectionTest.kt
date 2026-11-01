@@ -47,6 +47,20 @@ class ConnectionTest {
     }
 
     @Test
+    fun unmeteredWhileTheInternetCostsNoData() {
+        val network = connectivity.activeNetwork!!
+        val seen = mutableListOf<Boolean>()
+        val watching = CoroutineScope(Dispatchers.Unconfined).launch { AndroidConnection(app).unmetered().collect { seen += it } }
+        fun changed(to: NetworkCapabilities) = shadowOf(connectivity).networkCallbacks.toList().forEach { it.onCapabilitiesChanged(network, to) }
+        // Mobile data costs; Wi-Fi doesn't, but only once it reaches the internet.
+        changed(capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+        changed(capabilities(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+        changed(capabilities(NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+        assertEquals(listOf(false, true), seen)
+        watching.cancel()
+    }
+
+    @Test
     fun withNoNetworkAtAllItsOfflineFromTheStart() {
         shadowOf(connectivity).setDefaultNetworkActive(false)
         shadowOf(connectivity).setActiveNetworkInfo(null)

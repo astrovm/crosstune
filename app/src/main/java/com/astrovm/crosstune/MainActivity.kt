@@ -485,6 +485,9 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) { connectionFactory(applicationContext).online().collect(viewModel::connectionChanged) }
         }
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { connectionFactory(applicationContext).unmetered().collect(viewModel::unmeteredChanged) }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // Android limits how often a background app may change shortcuts, so only while shown.
                 // Converted links saved on an entry don't change its shortcut, so they don't restart it.
