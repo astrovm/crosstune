@@ -158,8 +158,9 @@ internal class PlayQueue(
         // Once one of the part's songs is seen with the app's number for it, the app's numbers say
         // where it is, whatever it calls the songs.
         // The song it was on, by another number, was numbered anew, as YouTube Music may as it fills a
-        // list it had stopped on with another, first saying the song by its old one: they count from there.
-        val kept = queue.first?.takeUnless { now.queueId != null && !queue.bySong && named >= 0 && named == at && now.queueId - named != it }
+        // list it had stopped on with another, first saying the song by its old one, and Spotify does
+        // as it loads a song opened, first saying it by the number of the one before: they count from there.
+        val kept = queue.first?.takeUnless { now.queueId != null && named >= 0 && named == at && now.queueId - named != it }
         val first = kept ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
         val numbered = first != null && now.queueId != null
         val index = if (numbered && !queue.bySong) (now.queueId - first).toInt() else named
