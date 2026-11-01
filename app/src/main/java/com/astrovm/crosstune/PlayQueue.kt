@@ -158,8 +158,9 @@ internal class PlayQueue(
         // Once one of the part's songs is seen with the app's number for it, the app's numbers say
         // where it is, whatever it calls the songs.
         // The song it was on, by another number, was numbered anew, as YouTube Music may as it fills a
-        // list it had stopped on with another, first saying the song by its old one: they count from there.
-        val kept = queue.first?.takeUnless { now.queueId != null && !queue.bySong && named >= 0 && named == at && now.queueId - named != it }
+        // list it had stopped on with another, first saying the song by its old one, and Spotify does
+        // as it loads a song opened, first saying it by the number of the one before: they count from there.
+        val kept = queue.first?.takeUnless { now.queueId != null && named >= 0 && named == at && now.queueId - named != it }
         val first = kept ?: now.queueId?.takeIf { named >= 0 }?.let { it - named }?.also { save(queue.copy(first = it)) }
         val numbered = first != null && now.queueId != null
         val index = if (numbered && !queue.bySong) (now.queueId - first).toInt() else named
@@ -246,9 +247,13 @@ internal class PlayQueue(
             return
         }
         val link = linkOf(queue.service, song) ?: return playSong(checkNotNull(playing))
+        // Spotify plays one opened with the screen off or locked only once it's in front, as the phone's
+        // unlocked, and plays its album on meanwhile: what it went on to is paused, so the list waits.
+        val locked = !playback.unlocked()
+        if (locked) playback.plays(queue.app).first()?.let { playback.playPause(it.song, play = false) }
         if (!playback.openSong(queue.app, link)) return stop()
-        // Back over the app once it plays the song, as the words are Crosstune's; not before, as Spotify
-        // plays one opened with the screen off only once it's in front as the screen wakes.
+        if (locked) return
+        // Back over the app once it plays the song, as the words are Crosstune's.
         if (withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) { playback.plays(queue.app).first { it != null && sameEntry(song, it.song) } } != null) playback.comesBack()
     }
 

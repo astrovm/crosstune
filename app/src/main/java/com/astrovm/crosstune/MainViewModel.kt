@@ -209,7 +209,8 @@ internal class MainViewModel(
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             playingBar = preferences.getBoolean(KEY_PLAYING_BAR, true),
             linesEarlyMs = preferences.getLong(KEY_LINES_EARLY, LINES_EARLY_MS),
-            nextLineFirst = preferences.getBoolean(KEY_NEXT_LINE_FIRST, false),
+            // Before it could be set, it was only on or off; on is the second it was then.
+            nextLineAheadMs = preferences.getLong(KEY_NEXT_LINE_AHEAD, if (preferences.getBoolean(KEY_NEXT_LINE_FIRST, false)) NEXT_LINE_AHEAD_MS else 0),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             visualsSettings = VisualsStore(preferences).load(),
@@ -566,6 +567,8 @@ internal class MainViewModel(
     }
 
     fun onUrlChange(text: String) {
+        // Typed over, the link waiting for the internet is no longer wanted.
+        linkWaits = false
         uiState = uiState.copy(linkText = text, error = null)
     }
 
@@ -815,6 +818,32 @@ internal class MainViewModel(
         resolve(input, openWhenReady, destination, here = here)
     }
 
+    /** Whether the link last looked up couldn't be for being offline, so it's looked up once back online. */
+    private var linkWaits = false
+
+    /**
+     * The phone reaching the internet, or not. Back online, what couldn't be done without it is done
+     * now: the link looked up, the words, their translation and the songs of a name. A song being
+     * named isn't listened for again, as what plays now may be another one.
+     */
+    fun connectionChanged(online: Boolean) {
+        val wasOffline = uiState.offline
+        // Said to have failed a moment before Android said it's offline, a link waits all the same.
+        if (!online && uiState.error == AppError.NETWORK && !retryListens) {
+            linkWaits = true
+            uiState = uiState.copy(error = null)
+        }
+        uiState = uiState.copy(offline = !online)
+        if (!online || !wasOffline) return
+        if (linkWaits) {
+            linkWaits = false
+            retry()
+        }
+        if (uiState.lyricsFailed) showLyrics()
+        if (uiState.learning.translationFailed) retryTranslation()
+        uiState.songSearchQuery.takeIf { it.isNotEmpty() && uiState.songSearch.isEmpty() && !uiState.isSearchingSongs }?.let(::searchSongs)
+    }
+
     /** Whether Try again listens again, since listening failed before a song was found. */
     var retryListens = false
         private set
@@ -1001,13 +1030,17 @@ internal class MainViewModel(
                 return@launch openAsIs(video)
             }
             when (val resolution = lookup.await()) {
-                is Resolution.Failed -> uiState = uiState.copy(
-                    isLoading = false,
-                    error = resolution.error,
-                    canRetry = resolution.error.canRetry,
-                    link = resolution.link,
-                    handingOff = false
-                )
+                is Resolution.Failed -> {
+                    // Offline, the link waits for the internet, as the field's icon says, and is looked up once it's back.
+                    linkWaits = resolution.error == AppError.NETWORK && uiState.offline
+                    uiState = uiState.copy(
+                        isLoading = false,
+                        error = resolution.error.takeUnless { linkWaits },
+                        canRetry = resolution.error.canRetry,
+                        link = resolution.link,
+                        handingOff = false
+                    )
+                }
                 // A search page saved while exact matching was on means matching failed that time,
                 // e.g. on a flaky network, so a new request for the link tries it again.
                 is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled })
@@ -2583,9 +2616,9 @@ internal class MainViewModel(
         uiState = uiState.copy(linesEarlyMs = ms)
     }
 
-    fun setNextLineFirst(on: Boolean) {
-        preferences.edit { putBoolean(KEY_NEXT_LINE_FIRST, on) }
-        uiState = uiState.copy(nextLineFirst = on)
+    fun setNextLineAhead(ms: Long) {
+        preferences.edit { putLong(KEY_NEXT_LINE_AHEAD, ms) }
+        uiState = uiState.copy(nextLineAheadMs = ms)
     }
 
     /** Kept only once let go, [save], rather than at every step of the slider. */
@@ -4028,6 +4061,7 @@ internal class MainViewModel(
         private const val KEY_PLAYING_BAR = "playing_bar"
         private const val KEY_LINES_EARLY = "lines_early_ms"
         private const val KEY_NEXT_LINE_FIRST = "next_line_first"
+        private const val KEY_NEXT_LINE_AHEAD = "next_line_ahead_ms"
         private const val KEY_VISUALS = "visuals"
         private const val KEY_VISUALS_SHADE = "visuals_shade"
         private const val KEY_READINGS = "lyrics_readings"

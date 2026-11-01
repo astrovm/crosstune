@@ -170,6 +170,7 @@ class ListeningTest {
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
+        MainActivity.connectionFactory = ::AndroidConnection
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -4501,6 +4502,36 @@ class ListeningTest {
         waitForText("Night sky")
         waitUntil(TIMEOUT_MS) { fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it } }
         assertTrue(fake.requestedUrls.toString(), fake.requestedUrls.any { GOOGLE_TRANSLATE_HOST in it && "tl=ja" in it })
+    }
+
+    @Test
+    fun offlineTheWordsWaitForTheInternetAndComeOnceItsBack() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        var down = true
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars", sites = { if (down) throw IOException("offline") else null })
+        // Where the words would be, it says it's offline, with nothing to tap, and the bar says so too.
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithContentDescription(string(R.string.offline)).fetchSemanticsNodes().size == 2 }
+        assertFalse(described(string(R.string.retry_button)))
+        down = false
+        connection.online.value = true
+        waitForText("Night sky")
+        assertFalse(described(string(R.string.offline)))
+    }
+
+    @Test
+    fun offlineATranslationWaitsAndComesOnceBack() {
+        val connection = FakeConnection()
+        MainActivity.connectionFactory = { connection }
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        wordsOf("[00:00.00] Night sky\\n[00:30.00] Stars", "Night sky\\nStars", translations = 503)
+        waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_translation_failed)) }
+        // Offline, the bar says why, rather than a button to try again that can't work yet.
+        connection.online.value = false
+        waitUntil(TIMEOUT_MS) { described(string(R.string.offline)) && !described(string(R.string.lyrics_translation_failed)) }
+        fake.handler = { request -> translation(request) }
+        connection.online.value = true
+        waitUntil(TIMEOUT_MS) { shown("[Stars]") }
     }
 
     @Test

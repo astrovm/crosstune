@@ -82,6 +82,14 @@ internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier
     Icon(painterResource(id), contentDescription = contentDescription, modifier = modifier, tint = tint)
 }
 
+/** That the phone can't reach the internet, in the error color: a state, not a button. */
+@Composable
+internal fun Offline(modifier: Modifier = Modifier, iconSize: Dp = 24.dp) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        AppIcon(R.drawable.ic_cloud_off, contentDescription = stringResource(R.string.offline), modifier = Modifier.size(iconSize), tint = MaterialTheme.colorScheme.error)
+    }
+}
+
 /**
  * The launcher icon's note and arrow without its badge, tinted from the theme so they read on both
  * light and dark backgrounds. (Compose can't paint the adaptive icon itself.)

@@ -89,6 +89,7 @@
     <string name="picker_title">Öffnen mit</string>
     <string name="cancel_button">Abbrechen</string>
     <string name="retry_button">Erneut versuchen</string>
+    <string name="offline">Offline</string>
     <string name="more_button">Mehr</string>
     <string name="history_title">Zuletzt</string>
     <string name="search_recent">In Zuletzt suchen</string>
@@ -255,6 +256,7 @@
     <string name="setting_playing_bar">Zeigen, was gerade läuft</string>
     <string name="setting_lines_early">Zeilen früher zeigen</string>
     <string name="setting_next_line_first">Nächste Zeile vorher aufhellen</string>
+    <string name="setting_off">Aus</string>
     <string name="follow_help_title">Lass den Text deiner Musik folgen</string>
     <string name="follow_turn_on">Aktivieren</string>
     <string name="setting_lyrics_follow">Liedtext folgt deiner Musik-App</string>

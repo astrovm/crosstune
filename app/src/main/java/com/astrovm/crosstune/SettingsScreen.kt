@@ -214,12 +214,7 @@ private fun SettingsList(
             GroupDivider()
             LinesEarlyRow(state.linesEarlyMs, actions.onLinesEarlyChange)
             GroupDivider()
-            SettingSwitch(
-                label = stringResource(R.string.setting_next_line_first),
-                description = null,
-                checked = state.nextLineFirst,
-                onCheckedChange = actions.onNextLineFirstChange
-            )
+            NextLineAheadRow(state.nextLineAheadMs, actions.onNextLineAheadChange)
         }
 
         // The AI features run on the user's ChatGPT plan, once signed in.
@@ -581,6 +576,14 @@ internal fun VisualsChangeRow(changeMs: Long, onChange: (Long) -> Unit, modifier
 private fun LinesEarlyRow(earlyMs: Long, onChange: (Long) -> Unit) {
     val format = android.icu.text.MeasureFormat.getInstance(LocalConfiguration.current.locales[0], android.icu.text.MeasureFormat.FormatWidth.SHORT)
     StepsRow(stringResource(R.string.setting_lines_early), format.format(Measure(earlyMs / 1000.0, MeasureUnit.SECOND)), LINES_EARLY_STEPS, earlyMs, onChange)
+}
+
+/** How long before it's lit the line coming next brightens, on a slider from off to three seconds, with what it's set to beside it. */
+@Composable
+private fun NextLineAheadRow(aheadMs: Long, onChange: (Long) -> Unit) {
+    val format = android.icu.text.MeasureFormat.getInstance(LocalConfiguration.current.locales[0], android.icu.text.MeasureFormat.FormatWidth.SHORT)
+    val shown = if (aheadMs == 0L) stringResource(R.string.setting_off) else format.format(Measure(aheadMs / 1000.0, MeasureUnit.SECOND))
+    StepsRow(stringResource(R.string.setting_next_line_first), shown, NEXT_LINE_AHEAD_STEPS, aheadMs, onChange)
 }
 
 /** A setting picked from [steps] on a slider, labeled, with what it's set to, [shown], beside it. */
