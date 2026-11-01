@@ -514,21 +514,20 @@ internal class MediaSessionPlayback(
     override fun nowPlaying(): Heard.Song? {
         if (!hasAccess()) return null
         // An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
-        // playing on the phone is only believed while the phone is playing something. Cast to a TV,
-        // the phone itself stays quiet.
+        // playing on the phone is only believed while the phone is playing something. Cast to a TV, or
+        // played on a computer, the phone itself stays quiet.
         val sounding = audio.isMusicActive
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && !it.mirrored() && (sounding || it.cast()) }
-            // What the phone itself plays over what it casts, then the one that last said where it is, over one that said so long ago.
-            .sortedWith(compareBy<MediaController> { it.cast() }.thenByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L })
+            .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && (sounding || it.remote()) }
+            .sortedWith(nearestFirst)
             .firstNotNullOfOrNull(::playing)
     }
 
     override fun recording(song: MusicMetadata): MusicMetadata? {
         if (!hasAccess()) return null
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
-            .filter { it.packageName != context.packageName && it.plays(song) && !it.mirrored() }
-            .sortedByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            .filter { it.packageName != context.packageName && it.plays(song) }
+            .sortedWith(nearestFirst)
             // plays() already checked the session's title and artist. YouTube's video-title
             // parser can mistake a bilingual title's first half for an artist.
             .firstNotNullOfOrNull { playing(it, song.lengthMs)?.metadata?.copy(title = song.title, artist = song.artist) }
@@ -642,6 +641,9 @@ internal class MediaSessionPlayback(
         val named = when {
             !controller.isVideo() -> MusicMetadata(title, artist, lengthMs = controller.lengthOf(metadata, asked))
             MusicService.ofPackage(controller.packageName) == MusicService.YOUTUBE_MUSIC -> MetadataParsers.youtubeVideo(title, artist) ?: return null
+            // A computer's video, as KDE Connect shows one, is only a song when it says so plainly: a
+            // talk show's "Show - Episode 12" isn't, though a video on the phone named so is taken as one.
+            controller.mirrored() -> MetadataParsers.musicVideo(title, artist, byDash = false) ?: return null
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
@@ -741,8 +743,16 @@ internal class MediaSessionPlayback(
     /** A music app's own song, cast to a TV: still the phone's, played and paused from it. */
     private fun MediaController.cast(): Boolean = remote() && MusicService.ofPackage(packageName) != null
 
-    /** Only shown here from another device, e.g. a computer's video through KDE Connect: what the phone plays is another one. */
+    /** Only shown here from another device, e.g. a computer's player through KDE Connect: what the phone itself plays comes first. */
     private fun MediaController.mirrored(): Boolean = remote() && !cast()
+
+    /**
+     * What the phone itself plays, then what it casts, then what another device plays; among each, the
+     * one that last said where it is, over one that said so long ago. A computer's player says so every
+     * second, but the phone's own music app is what the phone plays.
+     */
+    private val nearestFirst = compareBy<MediaController> { if (it.mirrored()) 2 else if (it.cast()) 1 else 0 }
+        .thenByDescending { it.playbackState?.lastPositionUpdateTime ?: 0L }
 
     /** Whether what this app has [playing] is known to be another recording than [song], whatever it's named. */
     private fun MediaController.anotherRecording(playing: MediaMetadata, song: MusicMetadata): Boolean {
