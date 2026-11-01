@@ -166,6 +166,26 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(cover))
     }
 
+    @Test
+    fun theOriginalsSingerIsTheOneMostOfTheStoresSongsOfThatNameAreBy() {
+        val cover = MusicMetadata("Song (Piano Cover)", "Pianist")
+        /** The store's songs named "Song", so many by each artist, and LRCLIB's words by Band alone. */
+        fun store(vararg byArtist: Pair<String, Int>): Boolean {
+            var id = 0
+            val songs = byArtist.flatMap { (artist, count) -> List(count) { """{"trackId":${++id},"trackName":"Song","artistName":"$artist"}""" } }
+            onlyBy("Band", "Song", answer("Song", "Band", "La la la"))
+            val lrclib = fake.handler
+            fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, """{"results":[${songs.joinToString(",")}]}""") else lrclib(request) }
+            return found(cover) is Lyrics.Found
+        }
+        // Five of them are enough, with no one else singing it.
+        assertTrue(store("Band" to 5))
+        assertFalse(store("Band" to 4))
+        // Someone else singing it too, three times as many of theirs.
+        assertTrue(store("Band" to 6, "Other" to 2))
+        assertFalse(store("Band" to 5, "Other" to 2))
+    }
+
     /** Apple Music's credits for the store's song [id], as its page lists them. */
     private fun credits(id: Long) = javaClass.getResource("/applemusic/$id.html")!!.readText()
 
