@@ -4088,8 +4088,15 @@ internal class MainViewModel(
 
     private suspend fun showKeptOffline() {
         val offline = offline ?: return
-        uiState = uiState.copy(keptOffline = offline.all(), offlineUsedBytes = offline.size())
+        showKeptOffline(offline)
         fetchKeptOffline()
+    }
+
+    /** Read first, as reading waits on storage and the state may change meanwhile, e.g. going offline. */
+    private suspend fun showKeptOffline(offline: OfflineSongs) {
+        val kept = offline.all()
+        val used = offline.size()
+        uiState = uiState.copy(keptOffline = kept, offlineUsedBytes = used)
     }
 
     private var keepingOffline: Job? = null
@@ -4108,7 +4115,7 @@ internal class MainViewModel(
                     // Unreachable for a moment, it's tried again on the next network.
                     if (!withContext(Pinning(kept.id)) { fetchForOffline(song) }) return@launch
                     offline.saved(kept.id, song)
-                    uiState = uiState.copy(keptOffline = offline.all(), offlineUsedBytes = offline.size())
+                    showKeptOffline(offline)
                 }
             }
         }

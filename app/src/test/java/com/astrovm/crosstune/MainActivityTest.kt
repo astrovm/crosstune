@@ -79,6 +79,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import okhttp3.Request
 import java.io.File
 import org.json.JSONObject
@@ -3075,6 +3076,27 @@ class MainActivityTest {
         connection.online.value = true
         waitForText("Recovered")
         assertEquals(0, composeRule.onAllNodesWithContentDescription(string(R.string.offline)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun openedOfflineItStaysOfflineOnceWhatsKeptOfflineIsRead() {
+        MainActivity.connectionFactory = { FakeConnection(online = false) }
+        // What's kept offline is read from storage, held here until Android has said it's offline.
+        val storage = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val held = java.util.concurrent.CountDownLatch(1)
+        storage.execute { held.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        MainActivity.lookupDispatcher = storage.asCoroutineDispatcher()
+        try {
+            launch()
+            waitForDescription(string(R.string.offline))
+            held.countDown()
+            storage.submit {}.get(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            composeRule.waitForIdle()
+            assertEquals(1, composeRule.onAllNodesWithContentDescription(string(R.string.offline)).fetchSemanticsNodes().size)
+        } finally {
+            held.countDown()
+            storage.shutdown()
+        }
     }
 
     @Test
