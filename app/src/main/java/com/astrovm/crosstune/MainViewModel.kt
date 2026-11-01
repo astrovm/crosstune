@@ -567,8 +567,9 @@ internal class MainViewModel(
     }
 
     fun onUrlChange(text: String) {
-        // Typed over, the link waiting for the internet is no longer wanted.
+        // Typed over, the link or song waiting for the internet is no longer wanted.
         linkWaits = false
+        forgetHeld()
         uiState = uiState.copy(linkText = text, error = null)
     }
 
@@ -823,14 +824,15 @@ internal class MainViewModel(
 
     /**
      * The phone reaching the internet, or not. Back online, what couldn't be done without it is done
-     * now: the link looked up, the words, their translation and the songs of a name. A song being
-     * named isn't listened for again, as what plays now may be another one.
+     * now: the link looked up, the song heard named, the words, their translation and the songs of a
+     * name. The song heard is named from the sound heard then, not listened for again, as what plays
+     * now may be another one.
      */
     fun connectionChanged(online: Boolean) {
         val wasOffline = uiState.offline
-        // Said to have failed a moment before Android said it's offline, a link waits all the same.
-        if (!online && uiState.error == AppError.NETWORK && !retryListens) {
-            linkWaits = true
+        // Said to have failed a moment before Android said it's offline, a link or song waits all the same.
+        if (!online && uiState.error == AppError.NETWORK) {
+            if (retryListens) uiState = uiState.copy(heardWaits = held != null) else linkWaits = true
             uiState = uiState.copy(error = null)
         }
         uiState = uiState.copy(offline = !online)
@@ -839,6 +841,7 @@ internal class MainViewModel(
             linkWaits = false
             retry()
         }
+        if (uiState.heardWaits) nameHeld()
         if (uiState.lyricsFailed) showLyrics()
         if (uiState.learning.translationFailed) retryTranslation()
         uiState.songSearchQuery.takeIf { it.isNotEmpty() && uiState.songSearch.isEmpty() && !uiState.isSearchingSongs }?.let(::searchSongs)
@@ -869,11 +872,41 @@ internal class MainViewModel(
             } finally {
                 if (isActive) uiState = uiState.copy(listening = false)
             }
-            when (heard) {
-                is Heard.Song -> showHeard(heard, lyrics)
-                Heard.Nothing -> showListenError(AppError.NO_MATCH)
-                is Heard.Failed -> showListenError(heard.error)
+            answer(heard, lyrics)
+        }
+    }
+
+    /** Shows what listening found, its words too when asked for [lyrics]. */
+    private fun answer(heard: Heard, lyrics: Boolean) {
+        when (heard) {
+            is Heard.Song -> showHeard(heard, lyrics)
+            Heard.Nothing -> showListenError(AppError.NO_MATCH)
+            is Heard.Failed -> showListenError(heard.error)
+            is Heard.Unsent -> {
+                held = heard to lyrics
+                // Offline, it waits, as a link does; online, the network failed some other way, and says so.
+                if (uiState.offline) uiState = uiState.copy(heardWaits = true) else showListenError(AppError.NETWORK)
             }
+        }
+    }
+
+    /** A song heard while Shazam couldn't be reached, and whether its words were asked for. */
+    private var held: Pair<Heard.Unsent, Boolean>? = null
+
+    private fun forgetHeld() {
+        held = null
+        uiState = uiState.copy(heardWaits = false)
+    }
+
+    /** Asks Shazam about the song heard offline, now the phone is back online. */
+    private fun nameHeld() {
+        val (heard, lyrics) = held ?: return
+        forgetHeld()
+        uiState = uiState.copy(isLoading = true, error = null)
+        job = viewModelScope.launch {
+            val named = heard.send()
+            uiState = uiState.copy(isLoading = false)
+            answer(named, lyrics)
         }
     }
 
@@ -1975,6 +2008,8 @@ internal class MainViewModel(
                     quiet++
                     withTimeoutOrNull(rest) { appPlaysAgain.first() }
                 }
+                // What played a while ago is no use to keep in time with now, so it isn't sent later.
+                is Heard.Unsent -> delay(listenAlongPauseMs * 2)
                 is Heard.Failed -> {
                     // Without the microphone there's nothing to listen with; anything else, e.g. the
                     // network or Shazam being busy, is tried again in a while.
@@ -3869,6 +3904,7 @@ internal class MainViewModel(
     private fun cancelContentWork(closesPlayer: Boolean = true) {
         job?.cancel()
         job = null
+        forgetHeld()
         lastRequest = null
         pendingOpen = false
         pendingPlay = false

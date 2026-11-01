@@ -928,7 +928,12 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
                         // Crosstune listens itself, or opens another app, which shares the song back here.
                         actions.recognizer?.let { recognizer ->
                             IconButton(onClick = { actions.onRecognize(recognizer) }, enabled = !busy) {
-                                AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
+                                // A song heard offline lights it up until it's named, once back online.
+                                if (state.heardWaits) {
+                                    AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.heard_waits), tint = MaterialTheme.colorScheme.primary)
+                                } else {
+                                    AppIcon(R.drawable.ic_recognize, contentDescription = stringResource(R.string.recognize_button))
+                                }
                             }
                         }
                         IconButton(onClick = actions.onPaste, enabled = !busy) {

@@ -736,6 +736,66 @@ class ListeningTest {
     }
 
     @Test
+    fun offlineASongHeardIsNamedOnceBackFromWhatWasHeard() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        // It waits, lit up where songs are named, with no error saying why: the offline icon does.
+        waitForDescription(string(R.string.heard_waits))
+        assertFalse(shown(string(R.string.error_network)))
+        shazamAnswers(MATCH)
+        fake.requestedUrls.clear()
+        connection.online.value = true
+        // Named from the sound heard then, without listening again.
+        waitForText("Iris")
+        assertEquals(1, shazamRequests())
+        assertEquals(1, microphone.opened)
+        assertFalse(described(string(R.string.heard_waits)))
+    }
+
+    @Test
+    fun aSongHeardJustBeforeGoingOfflineWaitsToo() {
+        val connection = FakeConnection()
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForText(string(R.string.error_network))
+        connection.online.value = false
+        waitForDescription(string(R.string.heard_waits))
+        assertFalse(shown(string(R.string.error_network)))
+        shazamAnswers(MATCH)
+        connection.online.value = true
+        waitForText("Iris")
+        assertEquals(1, microphone.opened)
+    }
+
+    @Test
+    fun aSongHeardOfflineIsForgottenOnceSomethingElseIsTyped() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForDescription(string(R.string.heard_waits))
+        composeRule.onNode(hasSetTextAction()).performTextInput("Some name")
+        composeRule.waitForIdle()
+        shazamAnswers(MATCH)
+        fake.requestedUrls.clear()
+        connection.online.value = true
+        composeRule.waitForIdle()
+        assertEquals(0, shazamRequests())
+    }
+
+    @Test
     fun cancelStopsListening() {
         allowMicrophone()
         launch()

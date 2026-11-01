@@ -90,6 +90,7 @@
     <string name="cancel_button">Abbrechen</string>
     <string name="retry_button">Erneut versuchen</string>
     <string name="offline">Offline</string>
+    <string name="heard_waits">Song gehört, wird erkannt, sobald du wieder online bist</string>
     <string name="more_button">Mehr</string>
     <string name="history_title">Zuletzt</string>
     <string name="search_recent">In Zuletzt suchen</string>

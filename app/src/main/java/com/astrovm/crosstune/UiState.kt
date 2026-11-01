@@ -183,6 +183,8 @@ internal data class UiState(
     val systemStateKnown: Boolean = true,
     /** Whether the phone can't reach the internet: one icon says so, rather than each part failing in its own words. */
     val offline: Boolean = false,
+    /** Whether a song heard offline waits to be named once the phone is back online. */
+    val heardWaits: Boolean = false,
     /** Whether setup can be done in one tap, through Shizuku or root, which the user runs. */
     val canSetUpInOneTap: Boolean = false,
     /** Whether that one tap goes through root rather than Shizuku. */

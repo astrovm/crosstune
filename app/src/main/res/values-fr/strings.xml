@@ -90,6 +90,7 @@
     <string name="cancel_button">Annuler</string>
     <string name="retry_button">Réessayer</string>
     <string name="offline">Hors ligne</string>
+    <string name="heard_waits">Titre entendu, reconnu dès le retour en ligne</string>
     <string name="more_button">Plus</string>
     <string name="history_title">Récents</string>
     <string name="search_recent">Rechercher dans Récents</string>

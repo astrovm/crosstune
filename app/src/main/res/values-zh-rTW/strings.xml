@@ -90,6 +90,7 @@
     <string name="cancel_button">取消</string>
     <string name="retry_button">重試</string>
     <string name="offline">離線</string>
+    <string name="heard_waits">已聽到歌曲，連線後辨識</string>
     <string name="more_button">更多</string>
     <string name="history_title">最近</string>
     <string name="search_recent">搜尋最近</string>
