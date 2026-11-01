@@ -94,6 +94,13 @@
     <string name="retry_button">Réessayer</string>
     <string name="offline">Hors ligne</string>
     <string name="heard_waits">Titre entendu, reconnu dès le retour en ligne</string>
+    <string name="keep_offline_label">Télécharger</string>
+    <string name="keep_offline">Garder hors ligne</string>
+    <string name="kept_offline">Gardé hors ligne. Touchez pour retirer</string>
+    <string name="keeping_offline">Enregistrement hors ligne en Wi-Fi</string>
+    <string name="offline_out_of_space">Plus de place hors ligne. Augmentez la limite dans les Réglages</string>
+    <string name="setting_offline_space">Espace pour les titres hors ligne</string>
+    <string name="setting_offline_space_used">%1$s utilisés</string>
     <string name="more_button">Plus</string>
     <string name="history_title">Récents</string>
     <string name="search_recent">Rechercher dans Récents</string>

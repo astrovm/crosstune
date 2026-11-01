@@ -94,6 +94,13 @@
     <string name="retry_button">Spróbuj ponownie</string>
     <string name="offline">Offline</string>
     <string name="heard_waits">Utwór usłyszany, rozpoznamy go po powrocie do sieci</string>
+    <string name="keep_offline_label">Pobierz</string>
+    <string name="keep_offline">Zachowaj offline</string>
+    <string name="kept_offline">Zachowane offline. Dotknij, aby usunąć</string>
+    <string name="keeping_offline">Zapisywanie offline przez Wi-Fi</string>
+    <string name="offline_out_of_space">Brak miejsca na offline. Zwiększ limit w Ustawieniach</string>
+    <string name="setting_offline_space">Miejsce na utwory offline</string>
+    <string name="setting_offline_space_used">Zajęte: %1$s</string>
     <string name="more_button">Więcej</string>
     <string name="history_title">Ostatnie</string>
     <string name="search_recent">Szukaj w ostatnich</string>

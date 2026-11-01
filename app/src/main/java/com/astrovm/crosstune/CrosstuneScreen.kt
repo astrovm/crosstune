@@ -223,6 +223,8 @@ internal data class ScreenActions(
     val onShowInCrosstuneFirstChange: (Boolean) -> Unit = {},
     val onPlayRightAwayChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
+    val onKeepOffline: () -> Unit = {},
+    val onOfflineSpaceChange: (Int) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
     val onWakesForNextSongChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
@@ -1469,8 +1471,34 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
                 enabled = songs || destinationReady,
                 description = stringResource(if (songs) R.string.share_songs_button else R.string.share_link_button)
             )
+            if (result.type == ItemType.TRACK && result.artist.isNotBlank() || songs) KeepOffline(result, state, actions)
         }
     }
+}
+
+/**
+ * Keeps the song, album or playlist for offline, or lets it go. Its look says how that's going: kept,
+ * still saving, with how many of its songs are, or out of the room it may take.
+ */
+@Composable
+private fun KeepOffline(result: MusicMetadata, state: UiState, actions: ScreenActions) {
+    val kept = state.keptOffline.firstOrNull { it.id == OfflineSongs.idOf(result) }
+    val saved = kept?.songs?.count { OfflineSongs.keyOf(it) in kept.saved } ?: 0
+    val full = kept != null && !kept.done && state.offlineUsedBytes >= state.offlineSpaceMb * MainViewModel.BYTES_PER_MB
+    ToolAction(
+        if (kept?.done == true) R.drawable.ic_offline_pin else R.drawable.ic_download_for_offline,
+        if (kept != null && !kept.done && kept.songs.size > 1) "$saved/${kept.songs.size}" else stringResource(R.string.keep_offline_label),
+        actions.onKeepOffline,
+        description = stringResource(
+            when {
+                kept == null -> R.string.keep_offline
+                kept.done -> R.string.kept_offline
+                full -> R.string.offline_out_of_space
+                else -> R.string.keeping_offline
+            }
+        ),
+        alert = full
+    )
 }
 
 /** What a result's main button says and does. [description] adds the app's name, which its icon shows. */
@@ -1597,7 +1625,9 @@ private fun ToolAction(
     onClick: () -> Unit,
     enabled: Boolean = true,
     /** What screen readers hear instead of a short [label]. */
-    description: String? = null
+    description: String? = null,
+    /** In the error color, for something wrong with what it does. */
+    alert: Boolean = false
 ) {
     val content = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f)
     Surface(
@@ -1618,7 +1648,7 @@ private fun ToolAction(
             Icon(
                 painterResource(icon),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.38f),
+                tint = (if (alert) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = if (enabled) 1f else 0.38f),
                 modifier = Modifier.size(22.dp)
             )
             // Long translations wrap to a second line instead of being cut off.

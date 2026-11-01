@@ -4171,7 +4171,8 @@ internal class MainViewModel(
 
         /** What's kept for offline may take this much by default, a few hundred songs' worth. */
         const val OFFLINE_SPACE_MB = 200
-        const val BYTES_PER_MB = 1024L * 1024
+        /** As Android counts them when it shows a size. */
+        const val BYTES_PER_MB = 1000L * 1000
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         /** Read by the play queue too, which plays on with no screen open. */
         const val KEY_WAKES_FOR_NEXT_SONG = "wakes_for_next_song"

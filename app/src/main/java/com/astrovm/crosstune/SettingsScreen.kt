@@ -731,8 +731,33 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
                 )
             }
         }
+        SectionHeader(stringResource(R.string.offline))
+        Group { OfflineSpaceRow(state, actions.onOfflineSpaceChange) }
     }
 }
+
+/** How much room songs kept offline may take, on a slider, and how much they take now. */
+@Composable
+private fun OfflineSpaceRow(state: UiState, onChange: (Int) -> Unit) {
+    val context = LocalContext.current
+    fun size(bytes: Long) = android.text.format.Formatter.formatShortFileSize(context, bytes)
+    StepsRow(
+        stringResource(R.string.setting_offline_space),
+        size(state.offlineSpaceMb * MainViewModel.BYTES_PER_MB),
+        OFFLINE_SPACE_STEPS,
+        state.offlineSpaceMb.toLong(),
+        { onChange(it.toInt()) }
+    )
+    Text(
+        stringResource(R.string.setting_offline_space_used, size(state.offlineUsedBytes)),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
+    )
+}
+
+/** From a few dozen songs' worth to a couple of thousand, in megabytes. */
+private val OFFLINE_SPACE_STEPS = listOf(50L, 100L, 200L, 500L, 1000L, 2000L)
 
 /** Apps and sites added by hand, each opened by a search link, with a way to add another. */
 @Composable

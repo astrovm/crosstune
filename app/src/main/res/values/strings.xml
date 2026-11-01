@@ -110,6 +110,13 @@
     <string name="retry_button">Try again</string>
     <string name="offline">Offline</string>
     <string name="heard_waits">Song heard, named once online</string>
+    <string name="keep_offline_label">Download</string>
+    <string name="keep_offline">Keep for offline</string>
+    <string name="kept_offline">Kept for offline. Tap to remove</string>
+    <string name="keeping_offline">Saving for offline on Wi-Fi</string>
+    <string name="offline_out_of_space">Out of space for offline. Raise the limit in Settings</string>
+    <string name="setting_offline_space">Space for offline songs</string>
+    <string name="setting_offline_space_used">%1$s used</string>
     <string name="more_button">More</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Search Recent</string>

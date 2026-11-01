@@ -710,6 +710,8 @@ class MainActivity : ComponentActivity() {
         onShowInCrosstuneFirstChange = viewModel::setShowInCrosstuneFirst,
         onPlayRightAwayChange = viewModel::setPlayRightAway,
         onCleanLinksChange = viewModel::setCleanLinks,
+        onKeepOffline = viewModel::keepOffline,
+        onOfflineSpaceChange = viewModel::setOfflineSpace,
         onShareSheetAppsChange = viewModel::setShareSheetApps,
         onWakesForNextSongChange = viewModel::setWakesForNextSong,
         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,

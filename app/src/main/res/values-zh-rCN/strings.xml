@@ -94,6 +94,13 @@
     <string name="retry_button">重试</string>
     <string name="offline">离线</string>
     <string name="heard_waits">已听到歌曲，联网后识别</string>
+    <string name="keep_offline_label">下载</string>
+    <string name="keep_offline">保存以便离线使用</string>
+    <string name="kept_offline">已保存，可离线使用。点按即可移除</string>
+    <string name="keeping_offline">正在通过 Wi-Fi 保存以便离线使用</string>
+    <string name="offline_out_of_space">离线空间已满。请在设置中提高上限</string>
+    <string name="setting_offline_space">离线歌曲可用空间</string>
+    <string name="setting_offline_space_used">已用 %1$s</string>
     <string name="more_button">更多</string>
     <string name="history_title">最近</string>
     <string name="search_recent">搜索最近</string>
