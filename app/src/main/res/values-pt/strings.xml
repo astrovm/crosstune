@@ -255,6 +255,7 @@
     <string name="setting_playing_bar">Mostrar o que está tocando</string>
     <string name="setting_lines_early">Mostrar as linhas antes</string>
     <string name="setting_next_line_first">Destacar antes a próxima linha</string>
+    <string name="setting_off">Desativado</string>
     <string name="follow_help_title">Deixe a letra acompanhar sua música</string>
     <string name="follow_turn_on">Ativar</string>
     <string name="setting_lyrics_follow">A letra acompanha seu app de música</string>

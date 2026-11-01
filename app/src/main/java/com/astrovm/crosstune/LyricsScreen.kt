@@ -1546,9 +1546,6 @@ private fun PlainLyrics(words: String, scale: Float, centered: Boolean) {
     )
 }
 
-/** How long before it's lit the line coming next brightens, when set to. */
-internal const val NEXT_LINE_FIRST_MS = 1000L
-
 /** The song as the words show it, [ms] ahead, so each line, its words and chords light that much before they're sung. */
 internal fun Following.ahead(ms: Long) = copy(clock = clock.copy(positionMs = clock.positionMs + ms))
 
@@ -1584,7 +1581,7 @@ private fun TimedLyrics(
     val following = state.following?.ahead(state.linesEarlyMs)
     val active = rememberSungLine(lines, following)
     // Set to, the line coming next brightens a moment before it's lit, so the eye is there first.
-    val coming = rememberSungLine(lines, following?.takeIf { state.nextLineFirst }?.ahead(NEXT_LINE_FIRST_MS))
+    val coming = rememberSungLine(lines, following?.takeIf { state.nextLineAheadMs > 0 }?.ahead(state.nextLineAheadMs))
     val chords = rememberChords(state.chords, lines.map { it.text })
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     val look = WordsLook.on(state.phone)
@@ -1803,7 +1800,7 @@ private fun LyricLineText(
             .lineTaps(text, onSeek, onStudy, seekLabel)
             .padding(vertical = 6.dp)
     ) {
-        LineWords(text, instead, words, timeMs, nextMs, chords, following.takeIf { lit }, help, style)
+        LineWords(text, instead, words, timeMs, nextMs, chords, following.takeIf { lit }, coming, help, style)
         LineHelps(help, instead, style, look)
     }
 }
@@ -1816,10 +1813,16 @@ private fun LyricLineText(
 internal fun lineAlpha(place: Int?, waiting: Boolean, coming: Boolean): Float = when {
     place == null || waiting -> 0.9f
     place == 0 -> 1f
-    coming -> 0.85f
+    coming -> COMING_ALPHA
     place < 0 -> 0.4f
-    else -> 0.6f
+    else -> TO_COME_ALPHA
 }
+
+/** How bright the line coming next is a moment before it's sung, when set to. */
+private const val COMING_ALPHA = 0.85f
+
+/** How bright the lines still to come are. */
+private const val TO_COME_ALPHA = 0.6f
 
 /**
  * Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
@@ -1838,7 +1841,11 @@ private fun Modifier.lineTaps(text: String, onSeek: (() -> Unit)?, onStudy: () -
         onSeek?.let { clickable(onClickLabel = stringResource(seekLabel), onClick = it) } ?: this
     }
 
-/** A line's words: as set, in kana or Latin letters [instead], under chords, with readings, lit word by word while [sung], or plain. */
+/**
+ * A line's words: as set, in kana or Latin letters [instead], under chords, with readings, lit word by
+ * word while [sung], or plain. Timed word by word and [coming] next, only its first word brightens ahead,
+ * as the rest light one by one as they're sung.
+ */
 @Composable
 private fun LineWords(
     text: String,
@@ -1848,6 +1855,7 @@ private fun LineWords(
     nextMs: Long?,
     chords: LineChords?,
     sung: Following?,
+    coming: Boolean,
     help: LineHelp?,
     style: TextStyle
 ) {
@@ -1857,11 +1865,13 @@ private fun LineWords(
     } else if (chords != null && !chords.isEmpty) {
         // Chords sit over the letters they're played on, above the readings when those show too.
         val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }
-        ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, sung, style, ruby, help?.readingScale ?: READING_SCALE)
+        ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, sung, coming, style, ruby, help?.readingScale ?: READING_SCALE)
     } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
         RubyLine(reading.parts, style, help.readingScale)
     } else if (sung != null && words.isNotEmpty()) {
         SungWords(words, sung, style)
+    } else if (coming && words.isNotEmpty()) {
+        Text(sungText(words, 1, AHEAD_REST_ALPHA), style = style)
     } else {
         // A gap with no words, e.g. a solo, is a note rather than an empty line.
         Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
@@ -1907,12 +1917,12 @@ internal fun rememberPosition(following: Following?): Long? = rememberWhilePlayi
 /** How often a song's place moves on screen: more often would only draw the screen again for nothing. */
 internal const val POSITION_STEP_MS = 100L
 
-/** [words], the first [sung] lit and the rest dim. */
+/** [words], the first [sung] lit and the rest as bright as [rest]. */
 @Composable
-private fun sungText(words: List<TimedWord>, sung: Int): AnnotatedString {
+private fun sungText(words: List<TimedWord>, sung: Int, rest: Float = UNSUNG_ALPHA): AnnotatedString {
     val color = MaterialTheme.colorScheme.onSurface
     return buildAnnotatedString {
-        words.forEachIndexed { index, word -> withStyle(SpanStyle(color = if (index < sung) color else color.copy(alpha = UNSUNG_ALPHA))) { append(word.text) } }
+        words.forEachIndexed { index, word -> withStyle(SpanStyle(color = if (index < sung) color else color.copy(alpha = rest))) { append(word.text) } }
     }
 }
 
@@ -1924,6 +1934,9 @@ private fun SungWords(words: List<TimedWord>, following: Following, style: TextS
 
 /** How bright the words of the line being sung are before they're sung. */
 private const val UNSUNG_ALPHA = 0.45f
+
+/** How bright the rest of the line coming next is, past its first word, as it brightens ahead: drawn within it, as bright as the lines after it. */
+private const val AHEAD_REST_ALPHA = TO_COME_ALPHA / COMING_ALPHA
 
 /** The chords shown over a line, by name, for tests to see what's drawn. */
 internal val ChordsShown = SemanticsPropertyKey<List<String>>("ChordsShown")
@@ -1937,7 +1950,7 @@ internal val ChordLit = SemanticsPropertyKey<Int>("ChordLit")
  * words as they're sung, and the chord being played.
  */
 @Composable
-private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, style: TextStyle, ruby: List<Ruby>?, readingScale: Float) {
+private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, coming: Boolean, style: TextStyle, ruby: List<Ruby>?, readingScale: Float) {
     val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = MaterialTheme.colorScheme.primary)
     if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
     val text = line.text.ifBlank { "♪" }
@@ -1954,20 +1967,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     playing.intValue = now?.first ?: -1
     val over = readingStyle(style, readingScale).copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val written = remember(ruby, readingScale, text) { ruby?.let { rubyText(it, readingScale) } ?: AnnotatedString(text) }
-    val shown = when {
-        now == null -> written
-        // Words lit as sung, with the readings' spacing kept when the words are the same letters.
-        ruby != null && line.words.joinToString("") { it.text } == text -> {
-            val litTo = line.words.take(now.second).sumOf { it.text.length }
-            buildAnnotatedString {
-                append(written)
-                addStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = UNSUNG_ALPHA)), litTo, written.length)
-            }
-        }
-        // Words that don't spell the line's own letters would put the chords and readings over the wrong ones.
-        ruby != null -> written
-        else -> sungText(line.words, now.second)
-    }
+    val shown = chordedWords(line, text, written, ruby, now?.second, coming)
     val measurer = rememberTextMeasurer()
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -2003,6 +2003,29 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
                 }
             }
     )
+}
+
+/**
+ * A chorded line's words as [written], with readings [ruby] or not: the first [sung] lit while it's sung,
+ * or, [coming] next, its first word lit ahead of the rest.
+ */
+@Composable
+private fun chordedWords(line: LyricLine, text: String, written: AnnotatedString, ruby: List<Ruby>?, sung: Int?, coming: Boolean): AnnotatedString {
+    val lit = sung ?: 1.takeIf { coming && line.words.isNotEmpty() } ?: return written
+    val rest = if (sung == null) AHEAD_REST_ALPHA else UNSUNG_ALPHA
+    return when {
+        // Words lit as sung, with the readings' spacing kept when the words are the same letters.
+        ruby != null && line.words.joinToString("") { it.text } == text -> {
+            val litTo = line.words.take(lit).sumOf { it.text.length }
+            buildAnnotatedString {
+                append(written)
+                addStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = rest)), litTo, written.length)
+            }
+        }
+        // Words that don't spell the line's own letters would put the chords and readings over the wrong ones.
+        ruby != null -> written
+        else -> sungText(line.words, lit, rest)
+    }
 }
 
 /**

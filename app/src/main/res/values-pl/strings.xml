@@ -255,6 +255,7 @@
     <string name="setting_playing_bar">Pokazuj, co gra</string>
     <string name="setting_lines_early">Pokazuj wiersze wcześniej</string>
     <string name="setting_next_line_first">Rozjaśniaj wcześniej następny wiersz</string>
+    <string name="setting_off">Wyłączone</string>
     <string name="follow_help_title">Niech tekst podąża za Twoją muzyką</string>
     <string name="follow_turn_on">Włącz</string>
     <string name="setting_lyrics_follow">Tekst podąża za aplikacją muzyczną</string>

@@ -4174,6 +4174,7 @@ class MainActivityTest {
 
     @Test
     fun setToLightOnTheVoiceALineWaitsForItWhileTheNextBrightensAhead() {
+        // Switched on as it was before it could be set: a second ahead.
         prefs().edit().putLong("lines_early_ms", 0).putBoolean("next_line_first", true).commit()
         val playback = timedSong()
         playback.access = true
@@ -4196,12 +4197,13 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(1_000L, prefs().getLong("lines_early_ms", 0))
         assertTextShown("1 sec")
-        val nextFirst = composeRule.onNode(isToggleable() and hasText(string(R.string.setting_next_line_first)))
-        nextFirst.performScrollTo().assertIsOff().performClick()
+        // The next line doesn't brighten ahead unless set to, and then as far ahead as set.
+        val ahead = composeRule.onNode(hasContentDescription(string(R.string.setting_next_line_first)))
+        ahead.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.setting_off)))
+        ahead.performSemanticsAction(SemanticsActions.SetProgress) { it(NEXT_LINE_AHEAD_STEPS.indexOf(2_000L).toFloat()) }
         composeRule.waitForIdle()
-        assertTrue(prefs().getBoolean("next_line_first", false))
-        // The switch follows, not only the saved setting.
-        nextFirst.assertIsOn()
+        assertEquals(2_000L, prefs().getLong("next_line_ahead_ms", 0))
+        assertTextShown("2 sec")
     }
 
     @Test

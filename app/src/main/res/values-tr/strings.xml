@@ -255,6 +255,7 @@
     <string name="setting_playing_bar">Çalanı göster</string>
     <string name="setting_lines_early">Satırları erken göster</string>
     <string name="setting_next_line_first">Sonraki satırı önceden aydınlat</string>
+    <string name="setting_off">Kapalı</string>
     <string name="follow_help_title">Sözler müziğini takip etsin</string>
     <string name="follow_turn_on">Aç</string>
     <string name="setting_lyrics_follow">Sözler müzik uygulamanı takip eder</string>
