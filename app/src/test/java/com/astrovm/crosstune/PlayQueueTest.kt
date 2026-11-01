@@ -631,6 +631,8 @@ class PlayQueueTest {
         spotifyPlays("Album", 6)
         assertEquals("https://open.spotify.com/track/Song 3", phone.opened.last().second)
         assertEquals(listOf(false), phone.plays)
+        assertEquals(0, phone.cameBack)
+        spotifyPlays("Song 3", 7)
         assertEquals(1, phone.cameBack)
     }
 
