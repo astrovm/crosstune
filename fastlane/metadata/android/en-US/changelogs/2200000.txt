@@ -1,0 +1,2 @@
+A cover that says so in its title, and has no lyrics of its own, shows the original song's lyrics, in time when it's as long.
+Some MilkDrop visuals that could glitch on an odd number in their math now draw right.
