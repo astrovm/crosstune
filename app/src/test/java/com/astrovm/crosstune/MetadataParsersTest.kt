@@ -170,6 +170,8 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Song - Remastered 2011", "Band"), MetadataParsers.musicVideo("Song - Remastered 2011", "Band"))
         assertEquals(MusicMetadata("Song (feat. A)", "Band"), MetadataParsers.musicVideo("Song (feat. A)", "Band"))
         assertNull(MetadataParsers.musicVideo("(Official Video)", "Band"))
+        // An app writing "Artist - Song" with no artist leaves no one before the dash.
+        assertNull(MetadataParsers.musicVideo(" - Day 3 in Tokyo", "Someone"))
     }
 
     @Test
