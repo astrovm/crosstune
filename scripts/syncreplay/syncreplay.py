@@ -84,7 +84,8 @@ def model_file(model):
 
 
 def heard_file(song, length, model):
-    """What `model` heard in each `length` ms of `song`: the app's model's is the plain one."""
+    """What `model` heard in each `length` ms of `song`: the app's model's is the plain one. A model
+    named with ".clean" heard the recording itself rather than through the visualizer."""
     return OUT / f"{song}.heard{length // 1000}{'' if model == APP_MODEL else '.' + model}.json"  # SyncReplayTest reads the same names
 
 
@@ -103,11 +104,12 @@ def as_the_phone_hears(path):
     return (byte * 256 / 32768).astype(np.float32)
 
 
-def windows(song, wav, length, model=APP_MODEL):
-    """What whisper.cpp hears with `model` in each `length` ms from every STEP_MS, as the app hears it."""
-    out = heard_file(song, length, model)
+def windows(song, wav, length, model=APP_MODEL, clean=False):
+    """What whisper.cpp hears with `model` in each `length` ms from every STEP_MS, as the app hears it,
+    or, `clean`, as it would from the sound played itself (AudioPlaybackCapture), 16 bits as it is."""
+    out = heard_file(song, length, f"{model}.clean" if clean else model)
     done = json.loads(out.read_text()) if out.exists() else {}
-    a = as_the_phone_hears(wav)
+    a = audio(wav) if clean else as_the_phone_hears(wav)
     binary = heard_binary()
     weights = model_file(model)
     starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
@@ -404,7 +406,7 @@ def score_phone(song_id, kept):
 
 def hear(args):
     for length in LENGTHS:
-        windows(args.id, OUT / f"{args.id}.wav", length, args.model)
+        windows(args.id, OUT / f"{args.id}.wav", length, args.model, args.clean)
 
 
 def main():
@@ -431,6 +433,7 @@ def main():
     p = steps.add_parser("hear")
     p.add_argument("id")
     p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")
+    p.add_argument("--clean", action="store_true", help="hear the recording itself, not through the visualizer; then run --model MODEL.clean")
     p.set_defaults(go=hear)
     p = steps.add_parser("phone")
     p.add_argument("id")
