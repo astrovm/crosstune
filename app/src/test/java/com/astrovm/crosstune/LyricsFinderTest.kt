@@ -146,8 +146,9 @@ class LyricsFinderTest {
         val evanescence = lasting(answer("Bring Me to Life", "Evanescence", "Wake me up inside", synced = "[00:20.00]Wake me up inside"), 235.0)
         onlyBy("Evanescence", "Bring Me to Life", evanescence)
         val cover = MusicMetadata("Bring Me to Life (Cyberpunk Shamisen Cover)", "TOKYO SAMURAI SYNDICATE", lengthMs = 201_000)
-        // The words, untimed, as they're timed for the original, which isn't as long.
+        // The words, untimed, as they're timed for the original, which isn't as long, asked for by the original's name.
         assertEquals(Lyrics.Found("Wake me up inside", lengthMs = 235_000, source = "lrclib, the original's"), found(cover))
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://lrclib.net/api/search?track_name=Bring%20Me%20to%20Life&artist_name=Evanescence") })
         // Timed too, when it's as long.
         assertEquals(listOf(LyricLine(20_000, "Wake me up inside")), (found(cover.copy(lengthMs = 235_500)) as Lyrics.Found).lines)
         // A karaoke track names whose song it is.
@@ -162,6 +163,60 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(cover))
         // Nor with the store down.
         fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, "", code = 503) else store(request) }
+        assertEquals(Lyrics.None, found(cover))
+    }
+
+    @Test
+    fun theOriginalsSingerIsTheOneMostOfTheStoresSongsOfThatNameAreBy() {
+        val cover = MusicMetadata("Song (Piano Cover)", "Pianist")
+        /** The store's songs named "Song", so many by each artist, and LRCLIB's words by Band alone. */
+        fun store(vararg byArtist: Pair<String, Int>): Boolean {
+            var id = 0
+            val songs = byArtist.flatMap { (artist, count) -> List(count) { """{"trackId":${++id},"trackName":"Song","artistName":"$artist"}""" } }
+            onlyBy("Band", "Song", answer("Song", "Band", "La la la"))
+            val lrclib = fake.handler
+            fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, """{"results":[${songs.joinToString(",")}]}""") else lrclib(request) }
+            return found(cover) is Lyrics.Found
+        }
+        // Five of them are enough, with no one else singing it.
+        assertTrue(store("Band" to 5))
+        assertFalse(store("Band" to 4))
+        // Someone else singing it too, three times as many of theirs.
+        assertTrue(store("Band" to 6, "Other" to 2))
+        assertFalse(store("Band" to 5, "Other" to 2))
+    }
+
+    /** Apple Music's credits for the store's song [id], as its page lists them. */
+    private fun credits(id: Long) = javaClass.getResource("/applemusic/$id.html")!!.readText()
+
+    @Test
+    fun aCoverItsTitleDoesntSayIsOneHasTheOriginalsWordsWhenWrittenBySame() {
+        // Auto report #11: Marc Strain's "Smalltown Boy" is Bronski Beat's song, which most of the store's songs of that name are by.
+        onlyBy("Bronski Beat", "Smalltown Boy", lasting(answer("Smalltown Boy", "Bronski Beat", "Run away, turn away", synced = "[00:30.00]Run away, turn away"), 302.0))
+        val store = fake.handler
+        var ownCredits = credits(MARC_STRAIN)
+        fake.handler = { request ->
+            when {
+                request.url.queryParameter("term") == "Smalltown Boy Marc Strain" ->
+                    FakeSpotify.html(request, """{"results":[{"trackId":$MARC_STRAIN,"trackName":"Smalltown Boy","artistName":"Marc Strain","trackTimeMillis":205054}]}""")
+                request.url.toString() == "${LyricsFinder.APPLE_MUSIC_SONG_URL}$MARC_STRAIN" -> FakeSpotify.html(request, ownCredits)
+                request.url.toString() == "${LyricsFinder.APPLE_MUSIC_SONG_URL}$BRONSKI_BEAT" -> FakeSpotify.html(request, credits(BRONSKI_BEAT))
+                else -> store(request)
+            }
+        }
+        val cover = MusicMetadata("Smalltown Boy", "Marc Strain", lengthMs = 205_054)
+        // Apple credits both to Jimmy Somerville and the rest, so it's a cover: the words, untimed, as the original is longer.
+        assertEquals(Lyrics.Found("Run away, turn away", lengthMs = 302_000, source = "lrclib, the original's"), found(cover))
+        // Written by someone else, it's their own song of that name, as Haley Reinhart's "Creep" isn't Stone Temple Pilots'.
+        ownCredits = """{"name":"Marc Strain","roleNames":["Songwriter"]}"""
+        assertEquals(Lyrics.None, found(cover))
+        // Apple saying nothing of who wrote it, there's no telling: a singer of the original, credited for singing, isn't a writer.
+        ownCredits = """{"name":"Jimmy Somerville","roleNames":["Vocals"]}"""
+        assertEquals(Lyrics.None, found(cover))
+        // Nor with Apple's page down.
+        val pages = fake.handler
+        fake.handler = { request -> if (request.url.host == "music.apple.com") FakeSpotify.html(request, "", code = 503) else pages(request) }
+        ownCredits = credits(MARC_STRAIN)
         assertEquals(Lyrics.None, found(cover))
     }
 
@@ -1679,5 +1734,11 @@ class LyricsFinderTest {
             else others(request)
         }
         assertEquals(308_500L, (found(MusicMetadata("Song", "Band", lengthMs = 308_600)) as Lyrics.Found).lengthMs)
+    }
+
+    private companion object {
+        /** Marc Strain's "Smalltown Boy" in the iTunes Store, and Bronski Beat's. */
+        const val MARC_STRAIN = 1741946001L
+        const val BRONSKI_BEAT = 1320069110L
     }
 }

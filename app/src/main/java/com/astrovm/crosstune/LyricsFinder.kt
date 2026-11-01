@@ -374,7 +374,7 @@ internal class LyricsFinder(
         Best(better(word, found))
     }
 
-    /** With no words of its own for a cover, as its title says it is, the words of the song it covers. */
+    /** With no words of its own for a cover, the words of the song it covers. */
     private suspend fun Best.orOriginal(metadata: MusicMetadata, timeoutMs: Long): Best =
         if (lyrics is Lyrics.None || lyrics is Lyrics.Instrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
 
@@ -383,11 +383,38 @@ internal class LyricsFinder(
      * long as this one, as a cover is sung in its own time.
      */
     private suspend fun original(cover: MusicMetadata, timeoutMs: Long): Lyrics.Found? {
-        val covered = SongNames.coverOf(cover.title) ?: return null
-        val artist = covered.artist ?: firstSinger(covered.title, cover.artist) ?: return null
-        val found = anywhere(cover.copy(title = covered.title, artist = artist, url = null, recordingId = null), timeoutMs) as? Lyrics.Found ?: return null
+        val artist = coveredArtist(cover) ?: return null
+        val title = SongNames.coverOf(cover.title)?.title ?: cover.title
+        val found = anywhere(cover.copy(title = title, artist = artist, url = null, recordingId = null), timeoutMs) as? Lyrics.Found ?: return null
         val asLong = found.lengthMs != null && cover.lengthMs != null && fits(found, cover)
         return (if (asLong) found else found.copy(lines = emptyList())).let { it.copy(source = "${it.source}$OF_THE_ORIGINAL") }
+    }
+
+    /**
+     * Who first sang the song [cover] covers: named in its title, or the first singer of a song of
+     * its name. A title that doesn't say it's a cover, as Marc Strain's "Smalltown Boy", may be the
+     * singer's own song of a famous name, as Haley Reinhart's "Creep" is next to Stone Temple
+     * Pilots': it's a cover only when Apple credits the first singer's song to a writer of this one.
+     */
+    private suspend fun coveredArtist(cover: MusicMetadata): String? {
+        val covered = SongNames.coverOf(cover.title)
+        covered?.artist?.let { return it }
+        val first = firstSinger(covered?.title ?: cover.title, cover.artist) ?: return null
+        return first.artist.takeIf { covered != null || writtenBySame(cover, first.id) }
+    }
+
+    /** Whether Apple credits [cover], as the iTunes Store has it, and the store's song [id] to a writer in common. */
+    private suspend fun writtenBySame(cover: MusicMetadata, id: Long): Boolean {
+        val own = inStore(cover)?.id ?: return false
+        val theirs = writersOf(id).takeIf { it.isNotEmpty() } ?: return false
+        return writersOf(own).any { it in theirs }
+    }
+
+    /** Who Apple Music's page for the store's song [id] says wrote it; none when it says none, or won't answer. */
+    private suspend fun writersOf(id: Long): Set<String> = try {
+        credit.findAll(browserPage("$APPLE_MUSIC_SONG_URL$id")).filter { writerRole.containsMatchIn(it.groupValues[2]) }.map { it.groupValues[1].lowercase() }.toSet()
+    } catch (_: IOException) {
+        emptySet()
     }
 
     /**
@@ -395,7 +422,7 @@ internal class LyricsFinder(
      * more than anyone else's: a famous song's covers are many, but by as many singers. A name many
      * songs share, as "Hello", has no one far ahead, so it's not known whose a cover of it is.
      */
-    private suspend fun firstSinger(song: String, cover: String): String? = try {
+    private suspend fun firstSinger(song: String, cover: String): FirstSinger? = try {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", song)
             .addQueryParameter("country", "us")
@@ -403,16 +430,18 @@ internal class LyricsFinder(
             .addQueryParameter("limit", "$SONGS_OF_A_NAME")
             .build()
         val songs = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
-        val singers = songs.filter { SongNames.same(SongNames.bareTitle(it.optString("trackName")), song) }.map { it.optString("artistName") }
-            .filter { it.isNotBlank() && !SongNames.sameArtist(it, cover) }
-            .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
-        val next = singers.getOrNull(1)?.value ?: 0
-        singers.firstOrNull()?.takeIf { it.value >= MIN_FIRST_SINGER_SONGS && it.value >= FIRST_SINGER_LEAD * next }?.key
+            .filter { SongNames.same(SongNames.bareTitle(it.optString("trackName")), song) && it.optString("artistName").let { artist -> artist.isNotBlank() && !SongNames.sameArtist(artist, cover) } }
+        val singers = songs.groupBy { it.optString("artistName") }.entries.sortedByDescending { it.value.size }
+        val next = singers.getOrNull(1)?.value?.size ?: 0
+        singers.firstOrNull()?.takeIf { it.value.size >= MIN_FIRST_SINGER_SONGS && it.value.size >= FIRST_SINGER_LEAD * next }?.let { FirstSinger(it.key, it.value.first().optLong("trackId")) }
     } catch (_: IOException) {
         null
     } catch (_: JSONException) {
         null
     }
+
+    /** Who first sang a song, and one of their recordings of it in the iTunes Store, by its [id]. */
+    private data class FirstSinger(val artist: String, val id: Long)
 
     /** What [best] found, and whether it's the recording's own words, timed for it. */
     private data class Best(val lyrics: Lyrics, val own: Boolean = false)
@@ -764,14 +793,14 @@ internal class LyricsFinder(
                 // Answered as a call to this function, which is taken off.
                 .addQueryParameter("callback", "letras")
                 .build()
-            val docs = JSONObject(letrasPage(search.toString()).substringAfter('(').substringBeforeLast(')')).optJSONObject("response")?.optJSONArray("docs")
+            val docs = JSONObject(browserPage(search.toString()).substringAfter('(').substringBeforeLast(')')).optJSONObject("response")?.optJSONArray("docs")
                 ?: return@withTimeoutOrNull Lyrics.Unavailable
             val song = (0 until docs.length()).mapNotNull { docs.optJSONObject(it) }.firstOrNull { doc ->
                 doc.optString("t") == LETRAS_SONG && SongNames.sameVersion(metadata.title, doc.optString("txt")) &&
                     doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, SongNames.withGuests(metadata.artist, metadata.title)) }
             } ?: return@withTimeoutOrNull Lyrics.None
             val page = LETRAS_URL.toHttpUrl().newBuilder().addPathSegment(song.optString("dns")).addPathSegment(song.optString("url")).build()
-            val shown = withoutAds(letrasPage(page.toString()))
+            val shown = withoutAds(browserPage(page.toString()))
             // A song in another language has Letras's own translation beside it: its words are the ones on the left.
             val content = (letrasOriginal.find(shown) ?: letrasWords.find(shown))?.groupValues?.get(1)
             // An instrumental's page says so where the words would be, in the page's language.
@@ -801,10 +830,11 @@ internal class LyricsFinder(
         }
     }
 
-    private suspend fun letrasPage(url: String): String {
+    /** A page that only answers a request that looks like a browser's. */
+    private suspend fun browserPage(url: String): String {
         val request = Request.Builder().url(url).asPhoneBrowser().get().build()
         return client.newCall(request).answer(ioDispatcher) { response ->
-            if (!response.isSuccessful) throw IOException("Lyrics service returned ${response.code}")
+            if (!response.isSuccessful) throw IOException("Page returned ${response.code}")
             response.body.stringAtMost()
         }
     }
@@ -952,6 +982,7 @@ internal class LyricsFinder(
         const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
         const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
         const val LETRAS_URL = "https://www.letras.com/"
+        const val APPLE_MUSIC_SONG_URL = "https://music.apple.com/us/song/"
         const val LETRAS_SEARCH_URL = "https://solr.sscdn.co/letras/m1/"
         const val LETRAS_INSTRUMENTAL = "instrumental-lyric"
         const val LETRAS_SONG = "2"
@@ -981,6 +1012,10 @@ internal class LyricsFinder(
         /** On a page with Letras's own translation beside the song, the song's words, after its name. */
         val letrasOriginal = Regex("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
         private val letrasBox = Regex("""<div\b|</div>""")
+
+        /** Someone credited on an Apple Music song page, and their roles. */
+        private val credit = Regex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
+        private val writerRole = Regex("Songwriter|Composer|Lyricist")
         val letrasStanza = Regex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
         val letrasBreak = Regex("""<br\s*/?>""")
         val letrasTag = Regex("""<[^>]+>""")
