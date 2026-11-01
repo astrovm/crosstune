@@ -194,6 +194,27 @@ internal object SongNames {
         return version.isNotEmpty() && (words(candidate) + words(album)).containsAll(version)
     }
 
+    /**
+     * The song a cover covers, when its title says it's one: "Song (Cyberpunk Shamisen Cover)", "Song -
+     * Acoustic Cover", "曲 (歌ってみた)". A karaoke track's may name whose it is, "Song (In the Style of
+     * Artist)". Null for a title that doesn't say so, which is the artist's own song.
+     */
+    fun coverOf(title: String): Covered? {
+        val tag = coverTags.firstNotNullOfOrNull { it.find(title) } ?: return null
+        val song = bareTitle(title.substring(0, tag.range.first)).ifEmpty { return null }
+        return Covered(song, coverBy.find(tag.value)?.groupValues?.get(1)?.trim()?.ifEmpty { null })
+    }
+
+    /** A cover's song: its [title], and its [artist] when the cover's title names them. */
+    data class Covered(val title: String, val artist: String?)
+
+    private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
+    private val coverTags = listOf(
+        Regex("""[(\[【][^)\]】]*(?:$COVER_WORDS)[^)\]】]*[)\]】]""", RegexOption.IGNORE_CASE),
+        Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
+    )
+    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
         var bare = title.trim()

@@ -2,10 +2,22 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SongNamesVersionTest {
+
+    @Test
+    fun aTitleThatSaysItsACoverNamesItsSong() {
+        assertEquals(SongNames.Covered("Bring Me to Life", null), SongNames.coverOf("Bring Me to Life (Cyberpunk Shamisen Cover)"))
+        assertEquals(SongNames.Covered("Creep", null), SongNames.coverOf("Creep - Acoustic Cover"))
+        assertEquals(SongNames.Covered("アイドル", null), SongNames.coverOf("アイドル【歌ってみた】"))
+        assertEquals(SongNames.Covered("Zombie", "The Cranberries"), SongNames.coverOf("Zombie (Originally Performed by The Cranberries) [Karaoke]"))
+        assertEquals(SongNames.Covered("Halo", "Beyoncé"), SongNames.coverOf("Halo (Made Famous by Beyoncé)"))
+        // A song named with the word is the artist's own, as is a tag that's all there is.
+        for (own in listOf("Cover Me", "Undercover (Remix)", "Cover Girl - Live", "(Cover)")) assertNull(own, SongNames.coverOf(own))
+    }
 
     @Test
     fun aVersionSaidOtherwiseIsTheSameVersion() {
