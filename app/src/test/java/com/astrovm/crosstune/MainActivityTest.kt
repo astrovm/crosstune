@@ -2010,8 +2010,17 @@ class MainActivityTest {
         launch()
         click(string(R.string.settings_button))
         openAdvanced()
-        composeRule.onNodeWithText(string(R.string.setting_wakes_for_next_song)).performScrollTo().performClick()
+        composeRule.onNodeWithText(string(R.string.settings_playing_section)).performScrollTo().assertIsDisplayed()
+        val wakes = composeRule.onNode(isToggleable() and hasText(string(R.string.setting_wakes_for_next_song)))
+        wakes.performScrollTo().assertIsOff().performClick()
+        wakes.assertIsOn()
         assertTrue(prefs().getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false))
+        // Set, it stays so the next time Crosstune opens.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(string(R.string.settings_button))
+        openAdvanced()
+        wakes.performScrollTo().assertIsOn()
         // A PIN set meanwhile, it can't work, so it's no longer offered.
         shadowOf(app.getSystemService(android.app.KeyguardManager::class.java)).setIsDeviceSecure(true)
         controller!!.pause().resume()
