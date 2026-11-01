@@ -1321,6 +1321,38 @@ class ListeningTest {
     }
 
     @Test
+    fun listeningAlongASongHeardOfflineOrShazamBusyIsListenedForAgainAfterALongerPause() {
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        MainActivity.listenAlongPauseMs = 1_000
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+
+        // Heard offline, it isn't sent later, as it'd be no use then: twice the pause after a song heard.
+        hearing.next.trySend(Heard.Unsent { error("Never sent") })
+        composeRule.waitForIdle()
+        main.idleFor(java.time.Duration.ofMillis(1_900))
+        assertEquals(2, hearing.listens)
+        main.idleFor(java.time.Duration.ofMillis(200))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        // Shazam busy, the same.
+        hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
+        composeRule.waitForIdle()
+        main.idleFor(java.time.Duration.ofMillis(1_900))
+        assertEquals(3, hearing.listens)
+        main.idleFor(java.time.Duration.ofMillis(200))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
+    }
+
+    @Test
     fun theMicrophoneTakenAwayWhileListeningAlongIsSaidOnTheWords() {
         val hearing = FakeHearing()
         demoWords(hearing)
