@@ -167,7 +167,7 @@ internal class LookupCache(
         }
     }
 
-    private companion object {
+    companion object {
         /** About twenty long playlists' worth of songs, each found in an app or two. */
         const val MAX_ENTRIES = 4000
 

@@ -11,6 +11,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
+/** Where what's kept for offline goes, in the app's files Android doesn't clear to make room. */
+internal const val KEPT_OFFLINE_DIR = "kept"
+
 /**
  * A song, album or playlist kept for offline, as [item], by [id]; its [songs], those of them
  * whose words and the rest are [saved] already, by [OfflineSongs.keyOf].
