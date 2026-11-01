@@ -203,6 +203,8 @@ internal class MainViewModel(
             playRightAway = preferences.getBoolean(KEY_PLAY_RIGHT_AWAY, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
+            wakesForNextSong = preferences.getBoolean(KEY_WAKES_FOR_NEXT_SONG, false),
+            lockless = playback?.lockless() == true,
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
@@ -527,7 +529,7 @@ internal class MainViewModel(
      */
     fun refreshSystemState() {
         val previousDestination = uiState.resultDestination
-        uiState = uiState.withDestinations().withOneTap().copy(microphone = microphoneAccess())
+        uiState = uiState.withDestinations().withOneTap().copy(microphone = microphoneAccess(), lockless = playback?.lockless() == true)
         if (previousDestination != uiState.resultDestination) prepareResultDestination()
         loadSystemState()
     }
@@ -4004,6 +4006,11 @@ internal class MainViewModel(
         }
     }
 
+    fun setWakesForNextSong(enabled: Boolean) {
+        uiState = uiState.copy(wakesForNextSong = enabled)
+        preferences.edit { putBoolean(KEY_WAKES_FOR_NEXT_SONG, enabled) }
+    }
+
     fun setShareSheetApps(enabled: Boolean) {
         uiState = uiState.copy(shareSheetApps = enabled)
         preferences.edit { putBoolean(KEY_SHARE_SHEET_APPS, enabled) }
@@ -4051,6 +4058,8 @@ internal class MainViewModel(
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
+        /** Read by the play queue too, which plays on with no screen open. */
+        const val KEY_WAKES_FOR_NEXT_SONG = "wakes_for_next_song"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_LINKS_IN_CROSSTUNE = "links_in_crosstune"
         private const val KEY_PLAY_RIGHT_AWAY = "play_right_away"

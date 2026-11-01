@@ -2000,6 +2000,21 @@ class MainActivityTest {
     }
 
     @Test
+    fun onAPhoneWithNothingToUnlockTheScreenWakesForSpotifysNextSongOnceSetInAdvanced() {
+        launch()
+        click(string(R.string.settings_button))
+        openAdvanced()
+        composeRule.onNodeWithText(string(R.string.setting_wakes_for_next_song)).performScrollTo().performClick()
+        assertTrue(prefs().getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false))
+        // A PIN set meanwhile, it can't work, so it's no longer offered.
+        shadowOf(app.getSystemService(android.app.KeyguardManager::class.java)).setIsDeviceSecure(true)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.setting_wakes_for_next_song))
+        assertTextAbsent(string(R.string.settings_playing_section))
+    }
+
+    @Test
     fun visualsCanBeTurnedOffOneByOneAndPickedInSettings() {
         val names = milkdropPresets(app.assets)
         val first = names.first()

@@ -222,6 +222,12 @@ internal interface PlaybackSource {
     /** Whether the phone is in use, its screen on and unlocked, so an app [openSong] opens comes to the front now. */
     fun unlocked(): Boolean
 
+    /** Whether the phone has no PIN, pattern or password, so its screen turned on is all it takes to use it. */
+    fun lockless(): Boolean
+
+    /** Turns the screen on for a moment, as a song opened with it off waits for it in Spotify. */
+    fun wakeScreen()
+
     /** Whether [app] was seen to play only in front, as YouTube Music without Premium, so [comesBack] leaves it there. */
     fun playsOnlyInFront(app: String): Boolean
 
@@ -502,6 +508,16 @@ internal class MediaSessionPlayback(
 
     override fun unlocked(): Boolean = context.getSystemService(PowerManager::class.java).isInteractive &&
         !context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+
+    override fun lockless(): Boolean = !context.getSystemService(KeyguardManager::class.java).isDeviceSecure
+
+    override fun wakeScreen() {
+        // Android's replacement, an activity that turns the screen on, is blocked from the background unless
+        // Crosstune may show over other apps (seen on Android 16); this wake lock works for every app.
+        @Suppress("DEPRECATION")
+        val wakes = PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP
+        context.getSystemService(PowerManager::class.java).newWakeLock(wakes, "crosstune:next song").acquire(WAKE_MS)
+    }
 
     // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
     // Behind it too when the app opened wouldn't play in the background, as it would stop as soon as it's left.
@@ -833,6 +849,9 @@ private val STILL = setOf(PlaybackState.STATE_PAUSED, PlaybackState.STATE_STOPPE
 
 /** How short of its song's length an app may stop, and still have played it to its end. YouTube stops a little past it. */
 private const val ENDED_WITHIN_MS = 2_000L
+
+/** How long the screen is turned on for Spotify to play a song opened with it off: 0.5 to 3 s worked on the Samsung. */
+private const val WAKE_MS = 1_000L
 
 /**
  * Only here so Android shows Crosstune what music apps are playing, which it does for an app the

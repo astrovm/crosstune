@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Entfernt ?si=, utm_ und Ähnliches.</string>
     <string name="setting_share_sheet_apps">Apps beim Teilen</string>
     <string name="setting_share_sheet_apps_description">Musik-Apps beim Teilen anzeigen.</string>
+    <string name="settings_playing_section">Wiedergabe</string>
+    <string name="setting_wakes_for_next_song">Für Spotifys nächsten Song aufwecken</string>
+    <string name="setting_wakes_for_next_song_description">Bei ausgeschaltetem Bildschirm spielt Spotify den nächsten Song einer Liste erst, wenn er an ist. Das schaltet ihn kurz ein.</string>
     <string name="setting_language">Sprache</string>
     <string name="language_system_default">Systemstandard</string>
     <string name="matching_text">Genauer Treffer wird gesucht…</string>

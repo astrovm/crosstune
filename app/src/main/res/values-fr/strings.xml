@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Retire ?si=, utm_ et autres.</string>
     <string name="setting_share_sheet_apps">Applis dans le menu de partage</string>
     <string name="setting_share_sheet_apps_description">Afficher les applis de musique dans le menu de partage.</string>
+    <string name="settings_playing_section">Lecture</string>
+    <string name="setting_wakes_for_next_song">Réveiller pour le titre suivant de Spotify</string>
+    <string name="setting_wakes_for_next_song_description">Écran éteint, Spotify attend qu\'il s\'allume pour lire le titre suivant d\'une liste. Ceci l\'allume une seconde.</string>
     <string name="setting_language">Langue</string>
     <string name="language_system_default">Langue du système</string>
     <string name="matching_text">Recherche du résultat exact…</string>

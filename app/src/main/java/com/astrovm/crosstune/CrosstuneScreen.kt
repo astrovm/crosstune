@@ -224,6 +224,7 @@ internal data class ScreenActions(
     val onPlayRightAwayChange: (Boolean) -> Unit = {},
     val onCleanLinksChange: (Boolean) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
+    val onWakesForNextSongChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
     val onLanguageChange: (String?) -> Unit = {},
     val onCopySearch: () -> Unit = {},

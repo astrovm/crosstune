@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Удаляет ?si=, utm_ и подобное.</string>
     <string name="setting_share_sheet_apps">Приложения в меню «Поделиться»</string>
     <string name="setting_share_sheet_apps_description">Показывать музыкальные приложения в меню «Поделиться».</string>
+    <string name="settings_playing_section">Воспроизведение</string>
+    <string name="setting_wakes_for_next_song">Будить экран для следующей песни Spotify</string>
+    <string name="setting_wakes_for_next_song_description">При выключенном экране Spotify не включает следующую песню из списка, пока экран не загорится. Эта настройка включает его на секунду.</string>
     <string name="setting_language">Язык</string>
     <string name="language_system_default">Как в системе</string>
     <string name="matching_text">Ищем точное совпадение…</string>

@@ -347,7 +347,8 @@ class MainActivity : ComponentActivity() {
                 CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
                 lookupDispatcher,
                 app::hasApp
-            ).also { playQueue = app to it }
+            ) { app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false) }
+                .also { playQueue = app to it }
         }
 
         private var queueOrder: Pair<Context, QueueOrder>? = null
@@ -701,6 +702,7 @@ class MainActivity : ComponentActivity() {
         onPlayRightAwayChange = viewModel::setPlayRightAway,
         onCleanLinksChange = viewModel::setCleanLinks,
         onShareSheetAppsChange = viewModel::setShareSheetApps,
+        onWakesForNextSongChange = viewModel::setWakesForNextSong,
         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
         onLanguageChange = { AppLanguage.set(this, it) },
         onCopySearch = ::copySearch,
