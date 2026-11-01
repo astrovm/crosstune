@@ -13,7 +13,8 @@ test('script extraction accepts mixed-case HTML tags and selects the last script
   assert.equal(lastInlineScript('<script>first</script><ScRiPt>last</SCRIPT>'), 'last');
 });
 
-function page({ dark = false, override, reduced = false, blockedStorage = false, language = 'en' } = {}, script = source) {
+const releasePage = 'https://github.com/astrovm/crosstune/releases/latest';
+function page({ dark = false, override, reduced = false, blockedStorage = false, language = 'en', github = () => Promise.reject(Error('offline')) } = {}, script = source) {
   const preference = matches => ({ matches, listeners: [], addEventListener(_, fn) { this.listeners.push(fn); }, change(value) { this.matches = value; this.listeners.forEach(fn => fn()); } });
   const os = preference(dark), motion = preference(reduced);
   const element = () => ({ listeners: {}, attributes: {}, style: {}, classList: { add() {}, remove() {} },
@@ -23,6 +24,8 @@ function page({ dark = false, override, reduced = false, blockedStorage = false,
     removeAttribute(name) { delete this.attributes[name]; },
     getBoundingClientRect() { return { top: 0 }; }, click() { this.listeners.click(); } });
   const button = element(), play = element(), steps = element(), container = element(), hero = element();
+  const apk = Object.assign(element(), { href: releasePage });
+  const asked = [];
   steps.hidden = true; hero.querySelector = () => container;
   const videos = ['home', 'lyrics'].map(name => Object.assign(element(), {
     dataset: { clip: `/img/${language}/${name}` }, loads: 0, plays: 0, paused: true,
@@ -33,13 +36,14 @@ function page({ dark = false, override, reduced = false, blockedStorage = false,
   const storage = {};
   vm.runInNewContext(script, {
     document: { documentElement: { dataset }, fonts: { ready: Promise.resolve() }, getElementById: () => steps,
-      querySelector: selector => ({ '.theme': button, '.play-toggle': play, '#google-play': steps, '.hero': hero })[selector],
+      querySelector: selector => ({ '.theme': button, '.play-toggle': play, '#google-play': steps, '.hero': hero, '.apk': apk })[selector],
       querySelectorAll: () => videos },
     matchMedia: query => query.includes('reduced-motion') ? motion : os,
     localStorage: { setItem(key, value) { if (blockedStorage) throw Error('blocked'); storage[key] = value; } },
-    addEventListener() {}, location: { hash: '' }
+    addEventListener() {}, location: { hash: '' },
+    fetch: url => { asked.push(url); return github(); }
   });
-  return { videos, button, dataset, os, motion, storage };
+  return { videos, button, dataset, os, motion, storage, apk, asked };
 }
 function expectMedia(p, theme, reduced = p.motion.matches) {
   for (const video of p.videos) {
@@ -88,5 +92,27 @@ test('generated event sequences always keep posters, sources and motion consiste
       else p.motion.change(!p.motion.matches);
       expectMedia(p, p.dataset.theme || (p.os.matches ? 'dark' : 'light'));
     }
+  }
+});
+
+const answers = () => new Promise(setImmediate);
+const release = assets => () => Promise.resolve({ ok: true, json: () => Promise.resolve({ assets }) });
+test('the APK button downloads the newest release\'s APK, version in its name', async () => {
+  const file = 'https://github.com/astrovm/crosstune/releases/download/v2.20.0/Crosstune-v2.20.0.apk';
+  const p = page({ github: release([{ name: 'checksums.txt', browser_download_url: 'x' }, { name: 'Crosstune-v2.20.0.apk', browser_download_url: file }]) });
+  assert.equal(p.apk.href, releasePage);
+  await answers();
+  assert.deepEqual(p.asked, ['https://api.github.com/repos/astrovm/crosstune/releases/latest']);
+  assert.equal(p.apk.href, file);
+});
+test('the APK button keeps the release page when GitHub has no APK to give', async () => {
+  for (const github of [
+    () => Promise.reject(Error('offline')),
+    () => Promise.resolve({ ok: false, json: () => Promise.reject(Error('rate limited')) }),
+    release([{ name: 'checksums.txt', browser_download_url: 'x' }])
+  ]) {
+    const p = page({ github });
+    await answers();
+    assert.equal(p.apk.href, releasePage);
   }
 });
