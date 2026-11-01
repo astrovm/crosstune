@@ -105,6 +105,11 @@ internal class FakePlayback : PlaybackSource {
     // As the phone's: an app seen not to play in the background is left in front, where it plays.
     override fun playsOnlyInFront(app: String) = onlyInFront
 
+    /** Whether the phone's screen is on and unlocked. */
+    var unlocked = true
+
+    override fun unlocked() = unlocked
+
     override fun comesBack() {
         if (!onlyInFront) cameBack++
     }
