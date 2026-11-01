@@ -636,6 +636,22 @@ class PlayQueueTest {
         assertEquals(1, phone.cameBack)
     }
 
+    @Test
+    fun aSongSpotifyNamesBeforeItNumbersItIsKnownByItsOwnNumber() {
+        spotifyPlays("Before", 2)
+        val queue = queue()
+        runBlocking { queue.play(tracks.take(3), MusicService.SPOTIFY, spotify, 1, tracks.take(1)) }
+        spotifyPlays("Song 1", 3)
+        spotifyPlays("Album", 4)
+        // As it loads the song opened, Spotify names it a moment before it numbers it, by the number
+        // of the one before; then the album's next, by the song's number, before its own.
+        spotifyPlays("Song 2", 4)
+        spotifyPlays("Song 2", 5)
+        spotifyPlays("Album", 5)
+        spotifyPlays("Album", 6)
+        assertEquals("https://open.spotify.com/track/Song 3", phone.opened.last().second)
+    }
+
     /** Whether the app playing [number] can skip on from it, as Crosstune shows. */
     private fun PlaybackSource.canSkipOn(number: Int) = runBlocking { follow(MusicMetadata("Song $number", "Band")).first() }?.canSkipNext
 
