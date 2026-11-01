@@ -341,6 +341,15 @@ tasks.withType<Test>().configureEach {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }
+    // A thread that dies on an exception fails no test: a fake server's handler that throws on a request it
+    // didn't expect looks to the app like the network failing, and the test passes on without checking what it means to.
+    val threadsDied = mutableSetOf<String>()
+    addTestOutputListener { test, output ->
+        if (output.message.contains("Exception in thread \"")) threadsDied += "${test.className}.${test.name}"
+    }
+    doLast {
+        if (threadsDied.isNotEmpty()) throw GradleException("A thread died on an exception during ${threadsDied.sorted().joinToString()}")
+    }
 }
 
 pitest {

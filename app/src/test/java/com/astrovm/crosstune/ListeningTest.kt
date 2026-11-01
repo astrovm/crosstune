@@ -498,7 +498,7 @@ class ListeningTest {
                 request.url.encodedPath == "/watch_videos" -> FakeSpotify.html(request, "").newBuilder().code(303)
                     .header("Location", "https://www.youtube.com/watch?v=x&list=TLGGnext").build()
                 // Each song is found as itself, its video named after its number.
-                request.url.host == "music.youtube.com" -> {
+                request.url.encodedPath == "/youtubei/v1/search" -> {
                     val number = Regex("Song (\\d+)").find(body)!!.groupValues[1]
                     FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
                         "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song $number"}]}}},
