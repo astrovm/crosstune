@@ -69,6 +69,11 @@ class OfflineSongsTest {
     fun aBrokenOrUnwritableFileKeepsNothingForLater() = runBlocking {
         file.writeText("not json")
         assertEquals(emptyList<KeptOffline>(), songs().all())
+        // A file can disappear after isFile. Unlike permission bits, this fails even in a root container.
+        val vanished = object : File(dir, "gone.json") {
+            override fun isFile() = true
+        }
+        assertEquals(emptyList<KeptOffline>(), OfflineSongs(vanished, emptyList(), null, Dispatchers.Unconfined).all())
         // A list with no link is known by its name; one kept by a version that left out its id, too.
         file.writeText("""[{"item":{"title":"Mix","artist":"","type":"ALBUM"}},{"item":{}}]""")
         assertEquals(listOf("album:Mix\u0000"), songs().all().map { it.id })
