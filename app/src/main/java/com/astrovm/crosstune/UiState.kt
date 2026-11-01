@@ -181,6 +181,8 @@ internal data class UiState(
      * Until then the fields above don't flag anything, so nothing is shown as a problem before it's known.
      */
     val systemStateKnown: Boolean = true,
+    /** Whether the phone can't reach the internet: one icon says so, rather than each part failing in its own words. */
+    val offline: Boolean = false,
     /** Whether setup can be done in one tap, through Shizuku or root, which the user runs. */
     val canSetUpInOneTap: Boolean = false,
     /** Whether that one tap goes through root rather than Shizuku. */

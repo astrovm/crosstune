@@ -345,7 +345,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 song.copy(artworkUrl = cover), actions, state.canSkipNext, state.canSkipPrevious, toolsShown,
                 onAbout = { openTab(SongTab.MEANING) }, onPlayer = actions.onLyricsToPlayer, onAboutFocus = { infoFocused = it }, info = info
             )
-            TranslationStatus(state.learning, actions)
+            TranslationStatus(state.learning, state.offline, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
             // Timed words with nothing saying where the song is: on top, how they can follow a music app.
@@ -389,8 +389,13 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                         LyricsMessage(Modifier.semantics { contentDescription = loading }) { LoadingLines() }
                     } else if (shown == LyricsShown.FAILED) {
                         LyricsMessage {
-                            FilledTonalIconButton(onClick = actions.onShowLyrics, modifier = Modifier.size(72.dp)) {
-                                Icon(painterResource(R.drawable.ic_refresh), contentDescription = stringResource(R.string.retry_button), modifier = Modifier.size(36.dp))
+                            // Offline, they're looked up again as soon as the internet is back, so there's nothing to tap.
+                            if (state.offline) {
+                                Offline(Modifier.size(72.dp), iconSize = 36.dp)
+                            } else {
+                                FilledTonalIconButton(onClick = actions.onShowLyrics, modifier = Modifier.size(72.dp)) {
+                                    Icon(painterResource(R.drawable.ic_refresh), contentDescription = stringResource(R.string.retry_button), modifier = Modifier.size(36.dp))
+                                }
                             }
                         }
                     } else if (shown == LyricsShown.NONE) {
@@ -721,6 +726,8 @@ private fun LyricsActions(
             shadowElevation = 6.dp
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
+                // Offline, what needs the internet waits for it: said once, here, rather than by each part failing.
+                if (state.offline) Offline(Modifier.size(48.dp))
                 if (state.lyrics.isNotEmpty()) {
                     BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, selected = menu == BarMenu.LEARN, onClick = { onMenuChange(if (menu == BarMenu.LEARN) null else BarMenu.LEARN) })
                 }
@@ -1217,9 +1224,9 @@ internal fun WordsAsPicker(script: Script?, selected: WordsAs, onChange: (WordsA
 
 /** While the words are being translated, or why they couldn't be. */
 @Composable
-private fun TranslationStatus(learning: Learning, actions: ScreenActions) {
-    // While it's on its way the translate button shows it; only failing needs saying.
-    AnimatedVisibility(visible = learning.translation && learning.translationFailed, enter = Motion.appear, exit = Motion.disappear) {
+private fun TranslationStatus(learning: Learning, offline: Boolean, actions: ScreenActions) {
+    // While it's on its way the translate button shows it; only failing needs saying, and offline the bar says why.
+    AnimatedVisibility(visible = learning.translation && learning.translationFailed && !offline, enter = Motion.appear, exit = Motion.disappear) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
             IconButton(onClick = actions.onRetryTranslation) {
                 Icon(painterResource(R.drawable.ic_refresh), contentDescription = stringResource(R.string.lyrics_translation_failed), tint = MaterialTheme.colorScheme.primary)

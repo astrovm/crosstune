@@ -438,6 +438,10 @@ class MainActivity : ComponentActivity() {
             UniDic(client, File(context.noBackupFilesDir, "unidic"), mayFetch = { context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false })
         }
 
+        /** Whether the phone reaches the internet, as Android says, unless a test says. */
+        @VisibleForTesting
+        internal var connectionFactory: (Context) -> Connection = ::AndroidConnection
+
         /** What tells which language a song's words are in, when a test stands in for Android. */
         @VisibleForTesting
         internal var lyricsLanguageFactory: (() -> LyricsLanguage)? = null
@@ -469,6 +473,9 @@ class MainActivity : ComponentActivity() {
         val shortcuts = AppShortcuts(applicationContext, viewModel.artwork::load)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) { viewModel.watchPlayingNow() }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { connectionFactory(applicationContext).online().collect(viewModel::connectionChanged) }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {

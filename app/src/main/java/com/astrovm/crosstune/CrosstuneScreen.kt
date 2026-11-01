@@ -917,7 +917,8 @@ private fun LinkField(state: UiState, actions: ScreenActions) {
         onValueChange = actions.onUrlChange,
         singleLine = true,
         placeholder = { Text(stringResource(R.string.spotify_link_placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingIcon = { AppIcon(R.drawable.ic_link, contentDescription = null) },
+        // Offline, a link waits for the internet: the icon says so where links go in.
+        leadingIcon = { if (state.offline) Offline() else AppIcon(R.drawable.ic_link, contentDescription = null) },
         trailingIcon = {
             // Paste turns into clear as soon as there's text or a song open, and back.
             val bare = state.linkText.isEmpty() && state.result == null
@@ -1129,7 +1130,8 @@ private fun SongSearchSheet(
                             }
                         }
                     }
-                    if (state.songSearch.isEmpty() && !state.isAskingForSongs) {
+                    // Offline, nothing found means nothing asked: the field's icon says so, and it's asked again once back.
+                    if (state.songSearch.isEmpty() && !state.isAskingForSongs && !state.offline) {
                         Text(
                             stringResource(R.string.song_search_none, state.songSearchQuery),
                             style = MaterialTheme.typography.bodyMedium,

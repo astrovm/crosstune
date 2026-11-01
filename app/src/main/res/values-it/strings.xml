@@ -90,6 +90,7 @@
     <string name="picker_title">Apri con</string>
     <string name="cancel_button">Annulla</string>
     <string name="retry_button">Riprova</string>
+    <string name="offline">Offline</string>
     <string name="more_button">Altro</string>
     <string name="history_title">Recenti</string>
     <string name="search_recent">Cerca nei recenti</string>

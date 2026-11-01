@@ -89,6 +89,7 @@
     <string name="picker_title">Открыть в</string>
     <string name="cancel_button">Отмена</string>
     <string name="retry_button">Повторить</string>
+    <string name="offline">Нет сети</string>
     <string name="more_button">Ещё</string>
     <string name="history_title">Недавние</string>
     <string name="search_recent">Поиск в недавних</string>
