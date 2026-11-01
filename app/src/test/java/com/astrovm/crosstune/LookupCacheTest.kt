@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -71,6 +72,15 @@ class LookupCacheTest {
         restarted.put("c", "c")
         // "often", used on fewer days than the other two, went to make room.
         assertEquals(listOf("most", "more", "b", "c"), restarted.entries().map { it.first })
+    }
+
+    @Test
+    fun theDayItWasLastUsedIsToday() = runBlocking {
+        val cache = cache()
+        cache.put("song", "found")
+        cache.save()
+        val today = System.currentTimeMillis() / (24 * 60 * 60 * 1000L)
+        assertEquals(today, JSONArray(file.readText()).getJSONArray(0).getLong(3))
     }
 
     @Test
