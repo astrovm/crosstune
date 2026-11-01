@@ -1338,10 +1338,16 @@ class MainActivityTest {
         waitUntil { phone.cameBack == 1 }
         assertNull(shadowOf(app).peekNextStartedActivity())
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("First Song", "Band"), 3) }
+        // The screen off on a phone with nothing to unlock, and set to, it's woken for Spotify to play the next one.
+        prefs().edit().putBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, true).commit()
+        phone.unlocked = false
+        phone.lockless = true
         // On to its album's next song, the list's next opens.
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 4) }
         waitUntil { phone.opened.size == 2 }
         assertEquals(spotify to "https://open.spotify.com/track/${ids["Second Song"]}", phone.opened.last())
+        assertEquals(1, phone.woken)
+        phone.unlocked = true
 
         // Spotify not opening it there, the first song opens as it would on its own.
         phone.opens = false
