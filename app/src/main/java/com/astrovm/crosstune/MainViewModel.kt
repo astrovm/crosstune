@@ -204,7 +204,6 @@ internal class MainViewModel(
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
             wakesForNextSong = preferences.getBoolean(KEY_WAKES_FOR_NEXT_SONG, false),
-            lockless = playback?.lockless() == true,
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),

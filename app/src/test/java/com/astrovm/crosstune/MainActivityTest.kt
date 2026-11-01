@@ -1300,12 +1300,12 @@ class MainActivityTest {
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         prefs().edit().putString("default_target", "SPOTIFY").commit()
-        val ids = mapOf("First Song" to "1firstAAAAAAAAAAAAAAAA", "Second Song" to "2secondBBBBBBBBBBBBBBB")
+        val ids = mapOf("First Song" to "1firstAAAAAAAAAAAAAAAA", "Second Song" to "2secondBBBBBBBBBBBBBBB", "Third Song" to "3thirdCCCCCCCCCCCCCCCC")
         fake.handler = { request ->
             when (request.url.host) {
                 "api.deezer.com" -> FakeSpotify.html(
                     request,
-                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}}]}}"""
+                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}},{"title":"Third Song","artist":{"name":"Band"}}]}}"""
                 )
                 // ListenBrainz knows each by its name, and Spotify's page says it's the band's.
                 "labs.api.listenbrainz.org" -> FakeSpotify.html(
@@ -1338,14 +1338,20 @@ class MainActivityTest {
         waitUntil { phone.cameBack == 1 }
         assertNull(shadowOf(app).peekNextStartedActivity())
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("First Song", "Band"), 3) }
-        // The screen off on a phone with nothing to unlock, and set to, it's woken for Spotify to play the next one.
-        prefs().edit().putBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, true).commit()
+        // The screen off on a phone with nothing to unlock, it isn't woken unless set to.
         phone.unlocked = false
         phone.lockless = true
         // On to its album's next song, the list's next opens.
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 4) }
         waitUntil { phone.opened.size == 2 }
         assertEquals(spotify to "https://open.spotify.com/track/${ids["Second Song"]}", phone.opened.last())
+        assertEquals(0, phone.woken)
+        // Set to, it's woken for Spotify to play the next one.
+        prefs().edit().putBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, true).commit()
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Second Song", "Band"), 5) }
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 6) }
+        waitUntil { phone.opened.size == 3 }
+        assertEquals(spotify to "https://open.spotify.com/track/${ids["Third Song"]}", phone.opened.last())
         assertEquals(1, phone.woken)
         phone.unlocked = true
 
