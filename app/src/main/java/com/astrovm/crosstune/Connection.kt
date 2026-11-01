@@ -33,7 +33,9 @@ internal class AndroidConnection(context: Context) : Connection {
                 trySend(false)
             }
         }
-        trySend(reaches(connectivity.getNetworkCapabilities(connectivity.activeNetwork)))
+        // With a network, Android tells the callback about it as soon as it's registered; with none,
+        // it says nothing at all, so that's said here.
+        if (connectivity.activeNetwork == null) trySend(false)
         connectivity.registerDefaultNetworkCallback(callback)
         awaitClose { connectivity.unregisterNetworkCallback(callback) }
     }.distinctUntilChanged()
