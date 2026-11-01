@@ -185,13 +185,14 @@ internal object MetadataParsers {
     /**
      * A video that says it's music, read as its song: "Artist - Song", "Artist「Song」", a tag like
      * "(Official Video)", or a "- Topic" or VEVO channel. Any other video, e.g. "A New Approach To
-     * An Ancient Linux Terminal Problem" by "Brodie Robertson", is no song.
+     * An Ancient Linux Terminal Problem" by "Brodie Robertson", is no song. Not [byDash], "Artist - Song"
+     * alone doesn't say it.
      */
-    fun musicVideo(title: String, channel: String): MusicMetadata? {
+    fun musicVideo(title: String, channel: String, byDash: Boolean = true): MusicMetadata? {
         spotifyPage(title)?.let { return it }
         val song = youtubeVideo(title, channel) ?: return null
         val says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.containsMatchIn(title) ||
-            bracketedSongRegex.matches(title) || artistSeparator(title) > 0 ||
+            bracketedSongRegex.matches(title) || (byDash && artistSeparator(title) > 0) ||
             musicTagRegex.containsMatchIn(title) || trailingVideoNoiseRegex.containsMatchIn(title)
         return song.takeIf { says }
     }

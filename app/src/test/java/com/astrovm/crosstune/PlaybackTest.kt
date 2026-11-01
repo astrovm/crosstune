@@ -778,6 +778,42 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongAComputerPlaysIsFollowedWhenThePhonePlaysNothing() {
+        allow()
+        fun computer(title: String, artist: String, album: String? = null) = player("org.kde.kdeconnect_tp", "KDE Connect", title, artist, album = album, at = NOW).also {
+            shadowOf(it).setPlaybackInfo(PlaybackInfoBuilder.newBuilder().setVolumeType(MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE).build())
+        }
+        // A music player on the computer, shown through KDE Connect (#609): the phone itself is quiet.
+        val strawberry = computer("Blinding Lights", "The Weeknd", album = "After Hours")
+        shadowOf(sessions).addController(strawberry)
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertEquals(42_000L, playback.nowPlaying()?.clock?.positionMs)
+        assertEquals(song.title, playback.recording(song)?.title)
+        // Followed, so its controls reach it.
+        assertEquals(strawberry.sessionToken, playback.appFor(song)?.sessionToken)
+        assertEquals(false, followed().last()?.video)
+
+        // What the phone itself plays comes first, though the computer said where it is later.
+        sounding()
+        shadowOf(sessions).addController(player("com.music", "Music", "Save Your Tears", "The Weeknd", album = "After Hours", at = NOW - 60_000))
+        assertEquals("Save Your Tears", playback.nowPlaying()?.metadata?.title)
+
+        // A browser's music video on the computer, saying it's one, is its song, followed as a video.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(computer("The Weeknd - Blinding Lights (Official Video)", "TheWeekndVEVO"))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        assertNull(playback.nowPlaying()?.clock)
+        // Spotify's page in a browser names it by the page's title.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(computer("Blinding Lights - song and lyrics by The Weeknd | Spotify", "Spotify"))
+        assertEquals(song, playback.nowPlaying()?.metadata)
+        // A computer's video that only puts a dash in its name isn't taken for a song.
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(computer("Fake Talk Show - Episode 12", "Fake Channel"))
+        assertNull(playback.nowPlaying())
+    }
+
+    @Test
     fun aSongAMusicAppCastsToATvIsWhatThePhonePlays() {
         allow()
         fun remote(controller: MediaController) = controller.also {
