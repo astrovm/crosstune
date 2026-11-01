@@ -24,6 +24,7 @@ it plays the recording in YouTube Music (--app for another build of it) from the
 words in Crosstune for S seconds, and times each line lit from the app's own log. Where the song
 really is comes from lining up what the app heard with the recording, as a music app's clock runs
 behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
+A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
 Wants ffmpeg, yt-dlp, cmake, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
@@ -289,7 +290,26 @@ def playing(app):
     return (title.group(1), int(state.group(2)) - int(state.group(1))) if state and title else None
 
 
+def media_volume(level=None):
+    """The phone's media volume, set to [level] first when given."""
+    if level is not None:
+        shell("cmd", "media_session", "volume", "--stream", "3", "--set", str(level))
+    return int(re.search(r"volume is (\d+)", shell("cmd", "media_session", "volume", "--stream", "3", "--get")).group(1))
+
+
 def phone(args):
+    # At volume 0 what the app hears of the music is silence, so there'd be no singing to place lines by.
+    # 1 is enough: the app hears the music at full level from there on. The volume is put back after.
+    volume = media_volume()
+    if volume == 0:
+        media_volume(1)
+    try:
+        watch(args)
+    finally:
+        media_volume(volume)
+
+
+def watch(args):
     shell("setprop", f"log.tag.{TIMING_LOG}", "DEBUG")
     # Started again, Crosstune reads the log level, and nothing's left from before.
     shell("am", "force-stop", DEV_APP)
@@ -350,6 +370,8 @@ def behind(song, kept, lit):
         clock = min(lit, key=lambda e: abs(e[1] - started))
         app = clock[2] + started - clock[1]
         heard = np.frombuffer(f.read_bytes(), np.int16).astype(np.float32)[:16000 * 8]
+        if not heard.any():
+            sys.exit(f"{f.name} is silent: the app heard nothing of the music. Was the media volume 0?")
         n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
         match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
         loud = np.sqrt(np.convolve(song ** 2, np.ones(len(heard)), "valid")[:len(match)]) + 1e-9
