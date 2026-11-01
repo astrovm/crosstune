@@ -178,27 +178,33 @@ class FloatingLyricsTest {
 
     @Test
     fun setToTheLineAfterBrightensAMomentBeforeItIsSung() {
-        show(UiState(lyricsFor = song, lyricLines = lines, following = at(900), linesEarlyMs = 0, nextLineFirst = true))
+        show(UiState(lyricsFor = song, lyricLines = lines, following = at(900), linesEarlyMs = 0, nextLineAheadMs = 1_000))
         assertEquals(1f, brightness("First"), 0.01f)
         assertEquals(0.9f, brightness("Second"), 0.01f)
     }
 
     @Test
     fun theLineAfterStaysDimWhenNotSetToBrighten() {
-        show(UiState(lyricsFor = song, lyricLines = lines, following = at(900), linesEarlyMs = 0, nextLineFirst = false))
+        show(UiState(lyricsFor = song, lyricLines = lines, following = at(900), linesEarlyMs = 0, nextLineAheadMs = 0))
         assertEquals(0.7f, brightness("Second"), 0.01f)
     }
 
     @Test
     fun theLineAfterStaysDimTillItIsNear() {
-        show(UiState(lyricsFor = song, lyricLines = apart, following = at(3_000), linesEarlyMs = 0, nextLineFirst = true))
+        show(UiState(lyricsFor = song, lyricLines = apart, following = at(3_000), linesEarlyMs = 0, nextLineAheadMs = 1_000))
         assertEquals(0.7f, brightness("Second"), 0.01f)
+    }
+
+    @Test
+    fun setFurtherAheadTheLineAfterBrightensSooner() {
+        show(UiState(lyricsFor = song, lyricLines = apart, following = at(3_000), linesEarlyMs = 0, nextLineAheadMs = 3_000))
+        assertEquals(0.9f, brightness("Second"), 0.01f)
     }
 
     @Test
     fun theLineAfterStaysDimWhileNoLineIsSungYet() {
         // The artist floats before the first line, and it isn't a line coming.
-        show(UiState(lyricsFor = song, lyricLines = listOf(LyricLine(1_500, "Late"), LyricLine(5_000, "Later")), following = at(1_000), linesEarlyMs = 0, nextLineFirst = true))
+        show(UiState(lyricsFor = song, lyricLines = listOf(LyricLine(1_500, "Late"), LyricLine(5_000, "Later")), following = at(1_000), linesEarlyMs = 0, nextLineAheadMs = 1_000))
         assertEquals(0.7f, brightness("Band"), 0.01f)
     }
 

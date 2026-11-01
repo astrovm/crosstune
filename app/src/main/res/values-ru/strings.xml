@@ -255,6 +255,7 @@
     <string name="setting_playing_bar">Показывать, что играет</string>
     <string name="setting_lines_early">Показывать строки раньше</string>
     <string name="setting_next_line_first">Заранее подсвечивать следующую строку</string>
+    <string name="setting_off">Выкл.</string>
     <string name="follow_help_title">Текст в такт вашей музыке</string>
     <string name="follow_turn_on">Включить</string>
     <string name="setting_lyrics_follow">Текст следует за музыкальным приложением</string>

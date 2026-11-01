@@ -255,6 +255,7 @@
     <string name="setting_playing_bar">显示正在播放的内容</string>
     <string name="setting_lines_early">提前显示歌词行</string>
     <string name="setting_next_line_first">提前点亮下一行</string>
+    <string name="setting_off">关闭</string>
     <string name="follow_help_title">让歌词跟随你的音乐</string>
     <string name="follow_turn_on">开启</string>
     <string name="setting_lyrics_follow">歌词跟随音乐应用</string>

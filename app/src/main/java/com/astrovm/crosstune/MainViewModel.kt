@@ -209,7 +209,8 @@ internal class MainViewModel(
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             playingBar = preferences.getBoolean(KEY_PLAYING_BAR, true),
             linesEarlyMs = preferences.getLong(KEY_LINES_EARLY, LINES_EARLY_MS),
-            nextLineFirst = preferences.getBoolean(KEY_NEXT_LINE_FIRST, false),
+            // Before it could be set, it was only on or off; on is the second it was then.
+            nextLineAheadMs = preferences.getLong(KEY_NEXT_LINE_AHEAD, if (preferences.getBoolean(KEY_NEXT_LINE_FIRST, false)) NEXT_LINE_AHEAD_MS else 0),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             visualsSettings = VisualsStore(preferences).load(),
@@ -2583,9 +2584,9 @@ internal class MainViewModel(
         uiState = uiState.copy(linesEarlyMs = ms)
     }
 
-    fun setNextLineFirst(on: Boolean) {
-        preferences.edit { putBoolean(KEY_NEXT_LINE_FIRST, on) }
-        uiState = uiState.copy(nextLineFirst = on)
+    fun setNextLineAhead(ms: Long) {
+        preferences.edit { putLong(KEY_NEXT_LINE_AHEAD, ms) }
+        uiState = uiState.copy(nextLineAheadMs = ms)
     }
 
     /** Kept only once let go, [save], rather than at every step of the slider. */
@@ -4028,6 +4029,7 @@ internal class MainViewModel(
         private const val KEY_PLAYING_BAR = "playing_bar"
         private const val KEY_LINES_EARLY = "lines_early_ms"
         private const val KEY_NEXT_LINE_FIRST = "next_line_first"
+        private const val KEY_NEXT_LINE_AHEAD = "next_line_ahead_ms"
         private const val KEY_VISUALS = "visuals"
         private const val KEY_VISUALS_SHADE = "visuals_shade"
         private const val KEY_READINGS = "lyrics_readings"
