@@ -165,6 +165,40 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(cover))
     }
 
+    /** Apple Music's credits for the store's song [id], as its page lists them. */
+    private fun credits(id: Long) = javaClass.getResource("/applemusic/$id.html")!!.readText()
+
+    @Test
+    fun aCoverItsTitleDoesntSayIsOneHasTheOriginalsWordsWhenWrittenBySame() {
+        // Auto report #11: Marc Strain's "Smalltown Boy" is Bronski Beat's song, which most of the store's songs of that name are by.
+        onlyBy("Bronski Beat", "Smalltown Boy", lasting(answer("Smalltown Boy", "Bronski Beat", "Run away, turn away", synced = "[00:30.00]Run away, turn away"), 302.0))
+        val store = fake.handler
+        var ownCredits = credits(MARC_STRAIN)
+        fake.handler = { request ->
+            when {
+                request.url.queryParameter("term") == "Smalltown Boy Marc Strain" ->
+                    FakeSpotify.html(request, """{"results":[{"trackId":$MARC_STRAIN,"trackName":"Smalltown Boy","artistName":"Marc Strain","trackTimeMillis":205054}]}""")
+                request.url.toString() == "${LyricsFinder.APPLE_MUSIC_SONG_URL}$MARC_STRAIN" -> FakeSpotify.html(request, ownCredits)
+                request.url.toString() == "${LyricsFinder.APPLE_MUSIC_SONG_URL}$BRONSKI_BEAT" -> FakeSpotify.html(request, credits(BRONSKI_BEAT))
+                else -> store(request)
+            }
+        }
+        val cover = MusicMetadata("Smalltown Boy", "Marc Strain", lengthMs = 205_054)
+        // Apple credits both to Jimmy Somerville and the rest, so it's a cover: the words, untimed, as the original is longer.
+        assertEquals(Lyrics.Found("Run away, turn away", lengthMs = 302_000, source = "lrclib, the original's"), found(cover))
+        // Written by someone else, it's their own song of that name, as Haley Reinhart's "Creep" isn't Stone Temple Pilots'.
+        ownCredits = """{"name":"Marc Strain","roleNames":["Songwriter"]}"""
+        assertEquals(Lyrics.None, found(cover))
+        // Apple saying nothing of who wrote it, there's no telling.
+        ownCredits = """{"name":"Marc Strain","roleNames":["Vocals"]}"""
+        assertEquals(Lyrics.None, found(cover))
+        // Nor with Apple's page down.
+        val pages = fake.handler
+        fake.handler = { request -> if (request.url.host == "music.apple.com") FakeSpotify.html(request, "", code = 503) else pages(request) }
+        ownCredits = credits(MARC_STRAIN)
+        assertEquals(Lyrics.None, found(cover))
+    }
+
     @Test
     fun aCoverOfANameManySongsShareHasNoOnesWords() {
         // The store's songs named "Hello" are by many, none far ahead, Lionel Richie's 4 to Aqyila's 3: it's not known whose this covers.
@@ -1679,5 +1713,11 @@ class LyricsFinderTest {
             else others(request)
         }
         assertEquals(308_500L, (found(MusicMetadata("Song", "Band", lengthMs = 308_600)) as Lyrics.Found).lengthMs)
+    }
+
+    private companion object {
+        /** Marc Strain's "Smalltown Boy" in the iTunes Store, and Bronski Beat's. */
+        const val MARC_STRAIN = 1741946001L
+        const val BRONSKI_BEAT = 1320069110L
     }
 }
