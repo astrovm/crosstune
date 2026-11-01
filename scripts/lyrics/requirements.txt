@@ -20,7 +20,7 @@ fsspec==2026.9.0
     # via huggingface-hub
 h11==0.16.0
     # via httpcore2
-hf-xet==1.7.0
+hf-xet==1.7.1
     # via huggingface-hub
 httpcore2==2.16.0
     # via httpx2
