@@ -39,12 +39,21 @@ internal sealed interface Heard {
      * [appleMusicId] is the song on Apple Music, when Shazam knows it. [offsetMs] is how far into the
      * song the sound heard starts, and [startedAtMs] when that sound started, on the clock that counts
      * since the phone started, so the words can follow on from there. [matchId] is the recording Shazam
-     * matched it to, whose place [offsetMs] is: often another release than the one playing. [app] is
+     * matched it to, whose place [offsetMs] is: often another release than the one playing. [speed] is
+     * how fast that recording goes by as the sound heard plays, faster for an upload sped up. [app] is
      * the music app playing it on the phone, by package.
      */
-    data class Song(val metadata: MusicMetadata, val appleMusicId: String?, val offsetMs: Long? = null, val startedAtMs: Long? = null, val matchId: String? = null, val app: String? = null) : Heard {
+    data class Song(
+        val metadata: MusicMetadata,
+        val appleMusicId: String?,
+        val offsetMs: Long? = null,
+        val startedAtMs: Long? = null,
+        val matchId: String? = null,
+        val app: String? = null,
+        val speed: Float = 1f
+    ) : Heard {
         /** Where the song is, as heard, when both halves are known. */
-        val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs) else null
+        val clock: PlaybackClock? get() = if (offsetMs != null && startedAtMs != null) PlaybackClock(offsetMs, startedAtMs, speed) else null
     }
     data object Nothing : Heard
     data class Failed(val error: AppError) : Heard
@@ -139,7 +148,10 @@ internal class Shazam(
         val match = JSONObject(body).optJSONArray("matches")?.optJSONObject(0)
         // How far into the song the sound sent starts, in seconds.
         val offset = match?.optDouble("offset")?.takeIf { it.isFinite() && it >= 0 }
-        return Heard.Song(metadata, appleMusicId, offset?.let { (it * 1000).toLong() }, matchId = match.text("id"))
+        // How much faster the sound plays than the recording matched, e.g. 0.035 for an upload sped up
+        // that much: its place moves on that much faster.
+        val skew = match?.optDouble("timeskew")?.takeIf { it.isFinite() } ?: 0.0
+        return Heard.Song(metadata, appleMusicId, offset?.let { (it * 1000).toLong() }, matchId = match.text("id"), speed = (1 + skew).toFloat())
     }
 
     /** What Shazam says under [key], when it says anything. */

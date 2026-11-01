@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Whether the internet is reachable, so being offline is one icon rather than each part failing. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Only while listening for a song playing nearby, see SongListener. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Android's Visualizer needs it to share what the phone plays, which MilkDrop visuals move to. -->

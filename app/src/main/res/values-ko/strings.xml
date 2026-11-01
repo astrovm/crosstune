@@ -89,6 +89,7 @@
     <string name="picker_title">열기 앱 선택</string>
     <string name="cancel_button">취소</string>
     <string name="retry_button">다시 시도</string>
+    <string name="offline">오프라인</string>
     <string name="more_button">더보기</string>
     <string name="history_title">최근</string>
     <string name="search_recent">최근 항목 검색</string>
@@ -255,6 +256,7 @@
     <string name="setting_playing_bar">재생 중인 곡 표시</string>
     <string name="setting_lines_early">가사 줄 미리 표시</string>
     <string name="setting_next_line_first">다음 줄 미리 밝게 표시</string>
+    <string name="setting_off">끔</string>
     <string name="follow_help_title">가사가 음악을 따라가게 하기</string>
     <string name="follow_turn_on">켜기</string>
     <string name="setting_lyrics_follow">가사가 음악 앱을 따라감</string>

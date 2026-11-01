@@ -89,6 +89,7 @@
     <string name="picker_title">Otwórz w</string>
     <string name="cancel_button">Anuluj</string>
     <string name="retry_button">Spróbuj ponownie</string>
+    <string name="offline">Offline</string>
     <string name="more_button">Więcej</string>
     <string name="history_title">Ostatnie</string>
     <string name="search_recent">Szukaj w ostatnich</string>
@@ -255,6 +256,7 @@
     <string name="setting_playing_bar">Pokazuj, co gra</string>
     <string name="setting_lines_early">Pokazuj wiersze wcześniej</string>
     <string name="setting_next_line_first">Rozjaśniaj wcześniej następny wiersz</string>
+    <string name="setting_off">Wyłączone</string>
     <string name="follow_help_title">Niech tekst podąża za Twoją muzyką</string>
     <string name="follow_turn_on">Włącz</string>
     <string name="setting_lyrics_follow">Tekst podąża za aplikacją muzyczną</string>
