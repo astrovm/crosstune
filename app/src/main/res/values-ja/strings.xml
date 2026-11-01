@@ -90,6 +90,7 @@
     <string name="picker_title">アプリで開く</string>
     <string name="cancel_button">キャンセル</string>
     <string name="retry_button">再試行</string>
+    <string name="offline">オフライン</string>
     <string name="more_button">もっと見る</string>
     <string name="history_title">最近</string>
     <string name="search_recent">最近の項目を検索</string>

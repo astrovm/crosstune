@@ -89,6 +89,7 @@
     <string name="picker_title">Abrir com</string>
     <string name="cancel_button">Cancelar</string>
     <string name="retry_button">Tentar de novo</string>
+    <string name="offline">Sem conexão</string>
     <string name="more_button">Mais</string>
     <string name="history_title">Recentes</string>
     <string name="search_recent">Pesquisar em Recentes</string>

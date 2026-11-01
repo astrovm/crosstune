@@ -105,6 +105,7 @@
     <string name="picker_title">Open with</string>
     <string name="cancel_button">Cancel</string>
     <string name="retry_button">Try again</string>
+    <string name="offline">Offline</string>
     <string name="more_button">More</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Search Recent</string>

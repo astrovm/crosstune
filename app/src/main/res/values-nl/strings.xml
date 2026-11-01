@@ -89,6 +89,7 @@
     <string name="picker_title">Openen met</string>
     <string name="cancel_button">Annuleren</string>
     <string name="retry_button">Opnieuw proberen</string>
+    <string name="offline">Offline</string>
     <string name="more_button">Meer</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Zoeken in Recent</string>
