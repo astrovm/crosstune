@@ -108,7 +108,7 @@ internal object ChordSheets {
                 from = match.range.last + 1
             }
             val words = lines.getOrNull(index)
-            if (words != null && words.isNotBlank() && !ugChord.containsMatchIn(words) && !section.matches(words)) {
+            if (!words.isNullOrBlank() && !ugChord.containsMatchIn(words) && !section.matches(words)) {
                 index++
                 sheet += SheetLine(words.trimEnd(), chords.map { it.copy(at = it.at.coerceAtMost(words.trimEnd().length)) })
             } else {

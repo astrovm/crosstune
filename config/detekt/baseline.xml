@@ -2,14 +2,10 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ComplexCondition:Chords.kt$ChordSheets$words != null &amp;&amp; words.isNotBlank() &amp;&amp; !ugChord.containsMatchIn(words) &amp;&amp; !section.matches(words)</ID>
     <ID>ComplexCondition:LayerSwipe.kt$downFromTop &amp;&amp; amount &gt; 0f &amp;&amp; !swipe.swiping &amp;&amp; !atTop[0]</ID>
     <ID>ComplexCondition:LinkResolver.kt$LinkResolver$(response.code == 401 || response.code == 403) &amp;&amp; link.service == MusicService.SOUNDCLOUD &amp;&amp; link.type == ItemType.TRACK</ID>
     <ID>ComplexCondition:LyricsFinder.kt$LyricsFinder$first is Lyrics.Found &amp;&amp; romanized == null &amp;&amp; !untimed &amp;&amp; !otherTake</ID>
     <ID>ComplexCondition:LyricsFinder.kt$line.isNotEmpty() &amp;&amp; (label == null || label.none(Char::isLetter) || sungPart.matches(label) || label.split(' ').size &gt; 3)</ID>
-    <ID>ComplexCondition:LyricsScreen.kt$about == null || about.writing || about.done || about.limitReached</ID>
-    <ID>ComplexCondition:LyricsScreen.kt$explanation == null || explanation.writing || explanation.done || explanation.limitReached</ID>
-    <ID>ComplexCondition:LyricsScreen.kt$signedIn &amp;&amp; (explanation == null || explanation.failed || explanation.limitReached)</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$!chords.on || uiState.lyrics.isEmpty() || chords.loading || chords.tried</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$(learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) &amp;&amp; script != null &amp;&amp; learning.lines.isEmpty() &amp;&amp; readingsJob?.isActive != true</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$asked &amp;&amp; (!sees || withTimeoutOrNull(LOAD_SONG_MS) { source.follow(song).first { it != null &amp;&amp; sameApp(app, it.appPackage, interception::isInstalled) } } != null)</ID>
@@ -24,11 +20,9 @@
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$prepared != null &amp;&amp; prepared.url.forSharing() == url &amp;&amp; !prepared.exact &amp;&amp; prepared.matchingEnabled &amp;&amp; service != null &amp;&amp; canBeMissing(service, entry.metadata)</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$syncPoints.isEmpty() &amp;&amp; (hand == null || hand.lineMs == line.timeMs) &amp;&amp; moveGap(song, point.songMs - point.lineMs, line.timeMs)</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$timedByHand &amp;&amp; (syncPoints.isNotEmpty() || handGap != null) &amp;&amp; autoReports.allowed == true</ID>
-    <ID>ComplexCondition:MainViewModel.kt$MainViewModel$uiState.lyricsFor != song || foundLines != lines || playing == null || !playing.playing || abs(playing.positionAt(now()) - clock.positionAt(now())) &gt; STEADY_CLOCK_MS</ID>
     <ID>ComplexCondition:MainViewModel.kt$MainViewModel$worked &amp;&amp; follow &amp;&amp; playback?.hasAccess() != true &amp;&amp; waits++ &lt; FOLLOW_WAITS</ID>
     <ID>ComplexCondition:MetadataParsers.kt$MetadataParsers$!first.substring(artist).all { japanese(it) || it.isWhitespace() || it == '・' } || title.substring(dash).none(::japanese)</ID>
     <ID>ComplexCondition:PlayQueue.kt$PlayQueue$numbered &amp;&amp; !queue.bySong &amp;&amp; named &gt;= 0 &amp;&amp; index in part.indices &amp;&amp; !sameEntry(part[index], now.song)</ID>
-    <ID>ComplexCondition:Playback.kt$MediaSessionPlayback$title.isBlank() || artist.isBlank() || ('.' in artist &amp;&amp; title.startsWith("$artist/"))</ID>
     <ID>ComplexCondition:SettingsScreen.kt$(item.on || item.onToggle == null) &amp;&amp; item.rule != null &amp;&amp; !item.notAllowed &amp;&amp; !item.locked</ID>
     <ID>ComplexCondition:UniDic.kt$UniDic$files.isDirectory || (fetch &amp;&amp; mayFetch() &amp;&amp; fetched())</ID>
     <ID>CyclomaticComplexMethod:BorrowedTimings.kt$BorrowedTimings$fun lineUp(a: String, b: String): IntArray?</ID>

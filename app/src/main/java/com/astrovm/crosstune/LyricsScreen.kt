@@ -2215,7 +2215,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             // What can be done with the line, side by side, wrapping as they need: signed in, explained
             // by ChatGPT, until it is; played again; and kept.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                if (signedIn && (explanation == null || explanation.failed || explanation.limitReached)) {
+                if (signedIn && (explanation == null || explanation.mayAskAgain)) {
                     LineAction(R.string.lyrics_explain_line, R.drawable.ic_info) { actions.onExplainLine(index) }
                 }
                 // Only a music app the words follow, and that can be moved, can play a line again.
@@ -2445,13 +2445,13 @@ private fun SongName(name: String, reading: LineReading?, learning: Learning, st
 private fun SongMeaning(state: UiState, actions: ScreenActions) {
     val explanation = state.learning.songExplanation
     val facts = state.learning.songFacts
-    if (explanation == null || explanation.writing || explanation.done || explanation.limitReached) {
+    if (explanation?.failed != true) {
         ExplanationCard(explanation ?: LineExplanation(MainViewModel.SONG)) { SheetView(sheet(it)) }
     }
     if (explanation?.failed == true) {
         Text(stringResource(R.string.lyrics_song_meaning_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
-    if (explanation?.failed == true || explanation?.limitReached == true) {
+    if (explanation?.mayAskAgain == true) {
         OutlinedButton(onClick = actions.onExplainSong, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.retry_button)) }
     }
     // The song it covers and those it samples, each a tap from opening.
@@ -2504,13 +2504,13 @@ private fun WordsToKnow(state: UiState, actions: ScreenActions) {
 private fun AboutArtist(state: UiState, actions: ScreenActions) {
     val about = state.learning.artist
     Text(state.lyricsFor?.artist.orEmpty(), style = MaterialTheme.typography.titleMedium)
-    if (about == null || about.writing || about.done || about.limitReached) {
+    if (about?.failed != true) {
         ExplanationCard(about ?: LineExplanation(MainViewModel.SONG)) { SheetView(sheet(it)) }
     }
     if (about?.failed == true) {
         Text(stringResource(R.string.lyrics_about_artist_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
-    if (about?.failed == true || about?.limitReached == true) {
+    if (about?.mayAskAgain == true) {
         OutlinedButton(onClick = actions.onAboutArtist, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.retry_button)) }
     }
 }
