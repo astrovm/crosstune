@@ -41,7 +41,7 @@
     ],
     [
       "Paroles synchronisées",
-      "Paroles et accords suivent votre appli de musique, ou écoutent avec vous, chanson après chanson."
+      "Paroles et accords suivent votre appli de musique, ou écoutent avec vous, chanson après chanson. Gardez-en hors ligne."
     ],
     [
       "Visuels MilkDrop",
@@ -99,7 +99,7 @@
     ],
     [
       "p",
-      "L'application enregistre vos paramètres et les liens récemment résolus sur votre appareil. Les entrées récentes peuvent inclure le lien source, le titre, l'artiste, l'URL de la pochette et les liens de destination préparés. Ces préférences et cet historique sont exclus des règles de l'application pour la sauvegarde dans le cloud et le transfert entre appareils d'Android."
+      "L'application enregistre vos paramètres et les liens récemment résolus sur votre appareil. Les entrées récentes peuvent inclure le lien source, le titre, l'artiste, l'URL de la pochette et les liens de destination préparés. Ces préférences et cet historique sont exclus des règles de l'application pour la sauvegarde dans le cloud et le transfert entre appareils d'Android. Les titres, albums et playlists que vous gardez hors ligne conservent leurs paroles, traductions, accords et pochettes dans le stockage de l'app jusqu'à ce que vous les retiriez ; ils ne sont téléchargés qu'en Wi-Fi."
     ],
     [
       "p",

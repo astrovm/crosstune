@@ -4288,6 +4288,18 @@ class MainActivityTest {
     }
 
     @Test
+    fun theRoomSongsKeptOfflineMayTakeIsSetInAdvancedSettings() {
+        launch()
+        inAdvancedSettings {
+            assertTextShown("200 MB")
+            composeRule.onNode(hasContentDescription(string(R.string.setting_offline_space))).performScrollTo()
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+            composeRule.waitForIdle()
+            assertEquals(1000, prefs().getInt("offline_space_mb", 0))
+        }
+    }
+
+    @Test
     fun howEarlyLinesLightAndWhetherTheNextBrightensAheadAreSetInSettings() {
         launch()
         click(string(R.string.settings_button))

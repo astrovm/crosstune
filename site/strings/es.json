@@ -41,7 +41,7 @@
     ],
     [
       "Letras a tiempo",
-      "La letra y los acordes siguen a tu app de música, o escuchan con vos, canción tras canción."
+      "La letra y los acordes siguen a tu app de música, o escuchan con vos, canción tras canción. Guardá las que quieras para usarlas sin conexión."
     ],
     [
       "Visuales MilkDrop",
@@ -99,7 +99,7 @@
     ],
     [
       "p",
-      "La app guarda tu configuración y los links resueltos recientes en tu dispositivo. Las entradas recientes pueden incluir el link de origen, el título, el artista, la URL de la portada y los links de destino preparados. Estas preferencias y el historial quedan excluidos de las reglas de la app para la copia de seguridad en la nube y la transferencia entre dispositivos de Android."
+      "La app guarda tu configuración y los links resueltos recientes en tu dispositivo. Las entradas recientes pueden incluir el link de origen, el título, el artista, la URL de la portada y los links de destino preparados. Estas preferencias y el historial quedan excluidos de las reglas de la app para la copia de seguridad en la nube y la transferencia entre dispositivos de Android. Las canciones, álbumes y playlists que guardás para usar sin conexión guardan su letra, traducciones, acordes y portadas en el almacenamiento de la app hasta que los quites; se descargan solo con Wi-Fi."
     ],
     [
       "p",

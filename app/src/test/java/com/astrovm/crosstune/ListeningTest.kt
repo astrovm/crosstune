@@ -735,6 +735,46 @@ class ListeningTest {
         assertEquals(2, microphone.opened)
     }
 
+    /** A song named by ear, Demo by Band, whose card shows; LRCLIB has its words. */
+    private fun demoCard() {
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky\nStars","syncedLyrics":"[00:00.00] Night sky\n[00:30.00] Stars"}]""")
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+    }
+
+    @Test
+    fun aSongKeptOfflineIsFetchedOnWiFiAndKeptWhereAndroidDoesntClearIt() {
+        val connection = FakeConnection(unmetered = false)
+        MainActivity.connectionFactory = { connection }
+        demoCard()
+        fake.requestedUrls.clear()
+        click(string(R.string.keep_offline))
+        // On mobile data, it waits for Wi-Fi.
+        waitForDescription(string(R.string.keeping_offline))
+        assertEquals(0, fake.requestedUrls.count { "lrclib.net" in it })
+        connection.unmetered.value = true
+        waitForDescription(string(R.string.kept_offline))
+        // Away from the app's cache, which Android may clear to make room.
+        waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/lyrics.json").let { it.isFile && "Night sky" in it.readText() } }
+        // Tapped again, it's let go.
+        click(string(R.string.kept_offline))
+        waitForDescription(string(R.string.keep_offline))
+    }
+
+    @Test
+    fun withNoRoomLeftASongKeptOfflineSaysSo() {
+        prefs().edit().putInt("offline_space_mb", 0).commit()
+        MainActivity.connectionFactory = { FakeConnection() }
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.offline_out_of_space))
+    }
+
     @Test
     fun offlineASongHeardIsNamedOnceBackFromWhatWasHeard() {
         val connection = FakeConnection(online = false)
