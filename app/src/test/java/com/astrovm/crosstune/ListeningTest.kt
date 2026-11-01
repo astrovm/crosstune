@@ -788,11 +788,58 @@ class ListeningTest {
         waitForDescription(string(R.string.heard_waits))
         composeRule.onNode(hasSetTextAction()).performTextInput("Some name")
         composeRule.waitForIdle()
+        assertFalse(described(string(R.string.heard_waits)))
         shazamAnswers(MATCH)
         fake.requestedUrls.clear()
         connection.online.value = true
         composeRule.waitForIdle()
+        assertFalse(controllerModel().uiState.isLoading)
         assertEquals(0, shazamRequests())
+    }
+
+    @Test
+    fun aSongHeardOfflineIsForgottenOnceListeningAgainIsCancelled() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForDescription(string(R.string.heard_waits))
+        // The mic, lit while it waits, listens again.
+        click(string(R.string.heard_waits))
+        waitForText(string(R.string.listening_text))
+        click(string(R.string.cancel_button))
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
+        assertFalse(described(string(R.string.heard_waits)))
+        shazamAnswers(MATCH)
+        fake.requestedUrls.clear()
+        connection.online.value = true
+        composeRule.waitForIdle()
+        assertFalse(controllerModel().uiState.isLoading)
+        assertEquals(0, shazamRequests())
+    }
+
+    @Test
+    fun aSongHeardOfflineShazamDoesntKnowSaysSoOnceBack() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForDescription(string(R.string.heard_waits))
+        // Shazam's answer is held, to see it's being asked.
+        val answer = java.util.concurrent.CountDownLatch(1)
+        fake.handler = { request -> answer.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); FakeSpotify.html(request, NO_MATCH) }
+        connection.online.value = true
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.isLoading }
+        answer.countDown()
+        waitForText(string(R.string.error_no_match))
+        assertFalse(controllerModel().uiState.isLoading)
+        assertFalse(described(string(R.string.heard_waits)))
     }
 
     @Test
