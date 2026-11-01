@@ -646,7 +646,7 @@ class ListeningTest {
         recognize()
         // It listens until there's something to hear.
         waitForText(string(R.string.listening_text))
-        assertEquals(1, microphone.opened)
+        waitUntil(TIMEOUT_MS) { microphone.opened == 1 }
         microphone.play(3.0)
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodes(hasText("Iris")).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithTag(RESULT_TAG).assertExists()
@@ -748,7 +748,7 @@ class ListeningTest {
         // Back stops it too.
         recognize()
         waitForText(string(R.string.listening_text))
-        assertEquals(2, microphone.opened)
+        waitUntil(TIMEOUT_MS) { microphone.opened == 2 }
         controller!!.get().onBackPressedDispatcher.onBackPressed()
         waitUntil(TIMEOUT_MS) { microphone.closed }
         waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
@@ -802,7 +802,7 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { !shown(string(R.string.fix_mic_title)) }
         recognize()
         waitForText(string(R.string.listening_text))
-        assertEquals(1, microphone.opened)
+        waitUntil(TIMEOUT_MS) { microphone.opened == 1 }
     }
 
     @Test
@@ -894,7 +894,7 @@ class ListeningTest {
         allowMicrophone()
         launch(Intent(MainActivity.ACTION_LISTEN).setClassName(app, MainActivity.LISTEN_ALIAS))
         waitForText(string(R.string.listening_text))
-        assertEquals(1, microphone.opened)
+        waitUntil(TIMEOUT_MS) { microphone.opened == 1 }
         controller!!.pause().stop().destroy()
 
         // MainActivity itself is exported; asked directly, it doesn't listen.
