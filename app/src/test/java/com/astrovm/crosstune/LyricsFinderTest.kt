@@ -189,8 +189,8 @@ class LyricsFinderTest {
         // Written by someone else, it's their own song of that name, as Haley Reinhart's "Creep" isn't Stone Temple Pilots'.
         ownCredits = """{"name":"Marc Strain","roleNames":["Songwriter"]}"""
         assertEquals(Lyrics.None, found(cover))
-        // Apple saying nothing of who wrote it, there's no telling.
-        ownCredits = """{"name":"Marc Strain","roleNames":["Vocals"]}"""
+        // Apple saying nothing of who wrote it, there's no telling: a singer of the original, credited for singing, isn't a writer.
+        ownCredits = """{"name":"Jimmy Somerville","roleNames":["Vocals"]}"""
         assertEquals(Lyrics.None, found(cover))
         // Nor with Apple's page down.
         val pages = fake.handler
