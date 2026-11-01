@@ -481,7 +481,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
  */
 @Composable
 private fun WithVisuals(state: UiState, only: Boolean, wordsBack: Animatable<Float, AnimationVector1D>, menuOpen: Boolean, onShowWords: () -> Unit, content: @Composable (ground: Color) -> Unit) {
-    if (!state.visuals) return content(MaterialTheme.colorScheme.surface)
+    if (!state.visuals && state.videoBehind == null) return content(MaterialTheme.colorScheme.surface)
     CrosstuneTheme(darkTheme = true, palette = state.palette, pureBlack = true) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Keep a reading scrim even at the lightest setting. Menus soften the moving background further.
@@ -490,7 +490,9 @@ private fun WithVisuals(state: UiState, only: Boolean, wordsBack: Animatable<Flo
             val reading = readingShade + (1f - readingShade) * state.visualsShade
             // Swiped back to, the words and their shade come as far as the swipe has.
             val coming = if (only) wordsBack.value else 1f
-            LocalVisuals.current(state.visualsPlay.copy(shade = reading * coming, behind = true), Modifier.fillMaxSize())
+            val video = state.videoBehind
+            if (video != null) VideoBehind(video, state.following, reading * coming, Modifier.fillMaxSize())
+            else LocalVisuals.current(state.visualsPlay.copy(shade = reading * coming, behind = true), Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 if (coming > 0f) Box(Modifier.graphicsLayer { alpha = coming }) { content(Color.Transparent) }

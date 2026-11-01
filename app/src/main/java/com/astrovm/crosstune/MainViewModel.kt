@@ -1750,6 +1750,20 @@ internal class MainViewModel(
         lookingAhead[key] = viewModelScope.async { finder.firstLook(song) }.also { it.invokeOnCompletion { lookingAhead.remove(key) } }
     }
 
+    private var videoJob: Job? = null
+
+    /** Prototype (#463): looks up the song's YouTube video to show behind its words, when turned on by hand. */
+    private fun findVideoBehind(song: MusicMetadata) {
+        if (!preferences.getBoolean(KEY_VIDEO_BEHIND, false)) return
+        videoJob?.cancel()
+        uiState = uiState.copy(videoBehind = null)
+        videoJob = viewModelScope.launch {
+            val id = runCatching { matcher.findVideo(song) }.onFailure { android.util.Log.w("VideoBehind", "search failed", it) }.getOrNull()
+            android.util.Log.i("VideoBehind", "song=${song.title} / ${song.artist} lengthMs=${song.lengthMs} id=$id")
+            uiState = uiState.copy(videoBehind = id)
+        }
+    }
+
     private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false) {
         val song = asPlayed(requested)
         // Only a song has words, and one whose artist is unknown can't be looked up safely.
@@ -1758,6 +1772,7 @@ internal class MainViewModel(
         // Already showing these words, or on the way, so a second tap doesn't fetch them again. A lookup
         // that failed is worth asking again, so Retry is the one case that does fetch.
         if (uiState.lyricsFor == song && (uiState.lyrics.isNotEmpty() || uiState.isLoadingLyrics)) return
+        findVideoBehind(song)
         // A song just heard, or playing as it's shown, is followed on to the next one; one picked to read stays.
         shownPlayed = playing || heardSong?.let { sameSong(it, song) } == true
         leaveWords()
@@ -4051,6 +4066,7 @@ internal class MainViewModel(
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
+        private const val KEY_VIDEO_BEHIND = "video_behind_words"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_LINKS_IN_CROSSTUNE = "links_in_crosstune"
         private const val KEY_PLAY_RIGHT_AWAY = "play_right_away"

@@ -604,6 +604,24 @@ internal class ExactMatcher(
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthMs))
     }
 
+    /**
+     * The song's own video on YouTube, for showing behind its words (prototype, #463): the videos
+     * search first, since the songs search finds the art track, a still cover.
+     */
+    suspend fun findVideo(metadata: MusicMetadata): String? {
+        val client = JSONObject().put("clientName", "WEB_REMIX").put("clientVersion", YOUTUBE_MUSIC_CLIENT_VERSION).put("hl", "en")
+        val (videos, names) = coroutineScope {
+            val videos = async { searchVideosOnYouTubeMusic(metadata, client) }
+            val names = async { namesOf(metadata) }
+            videos.await() to names.await()
+        }
+        val rows = videos.map(::row)
+        rows.firstOrNull { isTheSongsVideo(it, names) }?.let { return it.id }
+        return rows.firstOrNull { it.id != null && names.artists.any { artist -> artistIn(artist, it.name) } && titleInAny(it, names) }?.id
+    }
+
+    private fun titleInAny(row: Row, names: Names) = names.titles.any { titleIn(it, row.name) }
+
     /** The songs or videos among [items] that play. */
     private fun playable(items: List<JSONObject>): List<Row> = items.map(::row).filter { it.id != null }
 

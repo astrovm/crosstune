@@ -72,6 +72,8 @@ internal data class UiState(
     val lyricsOffTake: Boolean = false,
     /** Where the song is as it plays, while something says so: a music app, or what Crosstune heard. */
     val following: Following? = null,
+    /** Prototype (#463): the YouTube video shown behind the words, by its ID. */
+    val videoBehind: String? = null,
     /** Whether the music app playing the song shown can go on to its next song, or back to the one before. */
     val canSkipNext: Boolean = false,
     val canSkipPrevious: Boolean = false,
