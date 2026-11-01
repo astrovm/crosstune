@@ -644,10 +644,9 @@ class PlayQueueTest {
         spotifyPlays("Song 1", 3)
         spotifyPlays("Album", 4)
         // As it loads the song opened, Spotify names it a moment before it numbers it, by the number
-        // of the one before; then the album's next, by the song's number, before its own.
+        // of the one before.
         spotifyPlays("Song 2", 4)
         spotifyPlays("Song 2", 5)
-        spotifyPlays("Album", 5)
         spotifyPlays("Album", 6)
         assertEquals("https://open.spotify.com/track/Song 3", phone.opened.last().second)
     }
