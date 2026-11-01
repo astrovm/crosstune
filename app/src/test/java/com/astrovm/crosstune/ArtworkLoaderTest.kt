@@ -5,6 +5,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -105,6 +106,37 @@ class ArtworkLoaderTest {
         assertNull(withDir.load("file:playing-1.jpg"))
         assertEquals(emptyList<String>(), fake.requestedUrls)
         dir.deleteRecursively()
+        Unit
+    }
+
+    @Test
+    fun aSongKeptOfflineKeepsItsCoverApartUntilLetGo() = runBlocking {
+        fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png()) }
+        val cached = createTempDirectory("artwork").toFile()
+        val kept = createTempDirectory("kept").toFile()
+        val loader = ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = cached, keptDir = kept)
+        // Already seen, it's copied, not downloaded again.
+        loader.load(COVER)
+        assertTrue(loader.keep(COVER))
+        assertEquals(listOf(COVER), fake.requestedUrls)
+        // Not seen yet, it's downloaded, and never pruned with the rest.
+        assertTrue(loader.keep("https://img.example/other.jpg"))
+        assertTrue(loader.keep("https://img.example/other.jpg"))
+        assertEquals(2, fake.requestedUrls.size)
+        assertEquals(kept.listFiles()!!.sumOf { it.length() }, loader.keptSize())
+        // Android clearing the app's cache leaves it showing.
+        cached.deleteRecursively()
+        assertNotNull(ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = cached, keptDir = kept).load(COVER))
+        assertEquals(2, fake.requestedUrls.size)
+        loader.letGo(COVER)
+        loader.letGo("https://img.example/other.jpg")
+        assertEquals(0L, loader.keptSize())
+        // With nowhere to keep it, it isn't, and one that can't be had isn't either.
+        assertFalse(this@ArtworkLoaderTest.loader.keep(COVER))
+        fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png(), code = 404) }
+        assertFalse(loader.keep("https://img.example/gone.jpg"))
+        assertEquals(0L, ArtworkLoader(fake.client(), Dispatchers.Unconfined).keptSize())
+        kept.deleteRecursively()
         Unit
     }
 
