@@ -196,6 +196,9 @@ internal class LyricsFinder(
                 val timedFor = lengthMs ?: return true
                 return playingMs == null || abs(timedFor - playingMs) <= SAME_LENGTH_MS
             }
+
+            /** Whether they're the words of the song a cover covers, it having none of its own. */
+            val ofTheOriginal get() = source?.endsWith(OF_THE_ORIGINAL) == true
         }
 
         /** The service answered, and holds none for this song. */
@@ -384,7 +387,7 @@ internal class LyricsFinder(
         val artist = covered.artist ?: firstSinger(covered.title, cover.artist) ?: return null
         val found = anywhere(cover.copy(title = covered.title, artist = artist, url = null, recordingId = null), timeoutMs) as? Lyrics.Found ?: return null
         val asLong = found.lengthMs != null && cover.lengthMs != null && fits(found, cover)
-        return if (asLong) found else found.copy(lines = emptyList())
+        return (if (asLong) found else found.copy(lines = emptyList())).let { it.copy(source = "${it.source}$OF_THE_ORIGINAL") }
     }
 
     /**
@@ -955,6 +958,9 @@ internal class LyricsFinder(
 
         // Where words came from, as reports name them.
         const val LRCLIB = "lrclib"
+
+        /** Said after the source of a cover's words that are the original's. */
+        const val OF_THE_ORIGINAL = ", the original's"
 
         /** How many of the iTunes Store's songs of a name are asked for, to tell whose it first was. */
         private const val SONGS_OF_A_NAME = 50

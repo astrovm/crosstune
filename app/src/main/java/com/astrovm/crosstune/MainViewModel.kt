@@ -1779,8 +1779,9 @@ internal class MainViewModel(
                 }
                 follow(song)
                 first.takeIf { !it.final }?.let { retime(song, it.lyrics) }
-                // Not timed even after looking further.
-                if (found?.lines?.isEmpty() == true) problemFound(SongProblem.NO_TIMING)
+                // Not timed even after looking further. A cover's words taken from the original are untimed as
+                // they should be, as it's sung in its own time.
+                if (found?.lines?.isEmpty() == true && found?.ofTheOriginal != true) problemFound(SongProblem.NO_TIMING)
             }
         }
         watchNext(song)
