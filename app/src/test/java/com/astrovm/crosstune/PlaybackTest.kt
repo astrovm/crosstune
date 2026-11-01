@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.ActivityNotFoundException
 import android.content.ContextWrapper
 import android.content.ComponentName
@@ -21,6 +22,7 @@ import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
@@ -115,6 +117,16 @@ class PlaybackTest {
         collecting += CoroutineScope(Dispatchers.Unconfined).launch { playback.nowPlayingUpdates().collect { seen += it } }
         shadowOf(Looper.getMainLooper()).idle()
         return seen
+    }
+
+    @Test
+    fun thePhoneIsUnlockedWithItsScreenOnAndNoLockShowing() {
+        assertTrue(playback.unlocked())
+        shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(true)
+        assertFalse(playback.unlocked())
+        shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(false)
+        shadowOf(app.getSystemService(PowerManager::class.java)).setIsInteractive(false)
+        assertFalse(playback.unlocked())
     }
 
     @Test
