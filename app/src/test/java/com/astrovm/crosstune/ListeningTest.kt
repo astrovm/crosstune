@@ -767,6 +767,29 @@ class ListeningTest {
     }
 
     @Test
+    fun aJapaneseSongKeptOfflineKeepsHowItsKanjiAreSungToo() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        fake.handler = { request ->
+            when {
+                request.url.host != "utaten.com" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""")
+                request.url.encodedPath == "/search" ->
+                    FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+                else -> FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        // The dictionary reads 都会 as とかい; it's sung まち, and that's kept too.
+        waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/sung_readings.json").let { it.isFile && "まち" in it.readText() } }
+    }
+
+    @Test
     fun withNoRoomLeftASongKeptOfflineSaysSo() {
         prefs().edit().putInt("offline_space_mb", 0).commit()
         MainActivity.connectionFactory = { FakeConnection() }
