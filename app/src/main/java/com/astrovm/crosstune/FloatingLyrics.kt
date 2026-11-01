@@ -99,7 +99,7 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
     val lines = state.lyricLines
     val following = state.following?.ahead(state.linesEarlyMs)
     val sung = rememberSungLine(lines, following)
-    val coming = rememberSungLine(lines, following?.takeIf { state.nextLineAheadMs > 0 }?.ahead(state.nextLineAheadMs))
+    val coming = rememberSungLine(lines, following?.ahead(state.nextLineAheadMs))
     // As tall as the tallest lines so far, so a shorter line doesn't pull up what's under them; until
     // the song, the size or which lines show changes.
     var tallest by remember(song, options.scale, options.previousLine, options.nextLine) { mutableIntStateOf(0) }

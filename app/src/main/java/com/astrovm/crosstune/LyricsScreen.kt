@@ -1580,8 +1580,9 @@ private fun TimedLyrics(
     val lines = state.lyricLines
     val following = state.following?.ahead(state.linesEarlyMs)
     val active = rememberSungLine(lines, following)
-    // Set to, the line coming next brightens a moment before it's lit, so the eye is there first.
-    val coming = rememberSungLine(lines, following?.takeIf { state.nextLineAheadMs > 0 }?.ahead(state.nextLineAheadMs))
+    // Set to, the line coming next brightens a moment before it's lit, so the eye is there first. Set
+    // off, a moment of 0, that's the line lit, so none brightens ahead.
+    val coming = rememberSungLine(lines, following?.ahead(state.nextLineAheadMs))
     val chords = rememberChords(state.chords, lines.map { it.text })
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     val look = WordsLook.on(state.phone)
