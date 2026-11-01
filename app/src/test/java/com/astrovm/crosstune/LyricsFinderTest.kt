@@ -147,7 +147,7 @@ class LyricsFinderTest {
         onlyBy("Evanescence", "Bring Me to Life", evanescence)
         val cover = MusicMetadata("Bring Me to Life (Cyberpunk Shamisen Cover)", "TOKYO SAMURAI SYNDICATE", lengthMs = 201_000)
         // The words, untimed, as they're timed for the original, which isn't as long.
-        assertEquals(Lyrics.Found("Wake me up inside", lengthMs = 235_000, source = "lrclib"), found(cover))
+        assertEquals(Lyrics.Found("Wake me up inside", lengthMs = 235_000, source = "lrclib, the original's"), found(cover))
         // Timed too, when it's as long.
         assertEquals(listOf(LyricLine(20_000, "Wake me up inside")), (found(cover.copy(lengthMs = 235_500)) as Lyrics.Found).lines)
         // A karaoke track names whose song it is.

@@ -287,6 +287,24 @@ class LyricsReportTest {
     }
 
     @Test
+    fun aCoversUntimedWordsTakenFromTheOriginalArentReportedAsUntimed() {
+        // Auto report #23: a karaoke track with no words of its own shows its original's, untimed, as a cover's are sung in its own time.
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        val original = """[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]"""
+        val others = fake.handler
+        fake.handler = { request ->
+            when {
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, if ("Karaoke" in request.url.toString()) "[]" else original)
+                request.url.host == "report.crosstune.4st.li" -> others(request)
+                else -> FakeSpotify.html(request, """{"title":"Demo (In the Style of Band) [Karaoke Version]","author_name":"Karaoke Hits"}""")
+            }
+        }
+        openLyrics { shown("Demo one") }
+        settled()
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
     fun wordsPutInTimeByHandAreOfferedThenSentAsTheyreLeft() {
         openLyrics()
         composeRule.runOnIdle { model().nudgeSync(500) }
