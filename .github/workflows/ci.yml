@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A pull request that only changes the site, docs, store listing, the reports' Worker or their scripts skips the app's jobs.
+  # A pull request that only changes the site, docs, store listing, the reports' Worker, the browser extension or their scripts skips the app's jobs.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -24,6 +24,7 @@ jobs:
       pull-requests: read
     outputs:
       app: ${{ steps.filter.outputs.app }}
+      extension: ${{ steps.filter.outputs.extension }}
     steps:
       - id: filter
         env:
@@ -32,15 +33,21 @@ jobs:
         run: |
           if [ -z "$PR" ]; then
             echo "app=true" >> "$GITHUB_OUTPUT"
+            echo "extension=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
           printf '%s\n' "$files"
           # Any file outside these makes it the app's change.
-          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/))' <<< "$files" > /dev/null; then
+          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/))' <<< "$files" > /dev/null; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^extension/' <<< "$files"; then
+            echo "extension=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "extension=false" >> "$GITHUB_OUTPUT"
           fi
 
   site:
@@ -87,6 +94,31 @@ jobs:
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
+
+  # The browser extension in extension/, built and tested only when its files change. Its browser test needs the network and a downloaded Chromium, so it runs by hand (see CONTRIBUTING.md).
+  extension:
+    needs: changes
+    if: needs.changes.outputs.extension == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - run: npm ci --ignore-scripts
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
 
   # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.
   test:
@@ -200,6 +232,7 @@ jobs:
     needs:
       - changes
       - site
+      - extension
       - test
       - lint
       - build

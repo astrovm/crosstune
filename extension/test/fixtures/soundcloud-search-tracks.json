@@ -1,0 +1,40 @@
+{
+  "collection": [
+    {
+      "title": "Never Be Like You feat. Kai",
+      "permalink_url": "https://soundcloud.com/flume/never-be-like-you-feat-kai",
+      "publisher_metadata": {
+        "artist": null
+      },
+      "user": {
+        "username": "Flume",
+        "verified": true
+      },
+      "kind": "track"
+    },
+    {
+      "title": "Flume - Never Be Like You (it's murph Remix)",
+      "permalink_url": "https://soundcloud.com/its-murph-987074444/flume-never-be-like-you-its-murph-remix",
+      "publisher_metadata": {
+        "artist": "it's murph"
+      },
+      "user": {
+        "username": "it's murph",
+        "verified": true
+      },
+      "kind": "track"
+    },
+    {
+      "title": "flume - never be like you (feat. kai) (slowed  reverb)",
+      "permalink_url": "https://soundcloud.com/generalm-130742067/flume-never-be-like-you-feat-kai-slowed-reverb",
+      "publisher_metadata": {
+        "artist": "GeneralM"
+      },
+      "user": {
+        "username": "GeneralM",
+        "verified": false
+      },
+      "kind": "track"
+    }
+  ]
+}

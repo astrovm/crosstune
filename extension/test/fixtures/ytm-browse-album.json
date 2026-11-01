@@ -1,0 +1,28 @@
+{
+  "musicResponsiveHeaderRenderer": {
+    "title": {
+      "runs": [
+        {
+          "text": "Discovery"
+        }
+      ]
+    },
+    "straplineTextOne": {
+      "runs": [
+        {
+          "text": "Daft Punk",
+          "navigationEndpoint": {
+            "browseEndpoint": {
+              "browseId": "UCRr1xG_2WIDs18a6cIiCxeA",
+              "browseEndpointContextSupportedConfigs": {
+                "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

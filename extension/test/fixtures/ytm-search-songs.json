@@ -1,0 +1,299 @@
+{
+  "contents": {
+    "sectionListRenderer": {
+      "contents": [
+        {
+          "musicShelfRenderer": {
+            "contents": [
+              {
+                "musicResponsiveListItemRenderer": {
+                  "flexColumns": [
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Never Gonna Give You Up",
+                              "navigationEndpoint": {
+                                "watchEndpoint": {
+                                  "videoId": "lYBUbBu4W08",
+                                  "watchEndpointMusicSupportedConfigs": {
+                                    "watchEndpointMusicConfig": {
+                                      "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Rick Astley",
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "UCwZEU0wAwIyZb4x5G_KJp2w",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "Whenever You Need Somebody",
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "MPREb_dcYZhAh5urI",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "3:34"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Rick Astley • Whenever You Need Somebody • 3 minutes, 34 seconds"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "2B plays"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "2 billion plays"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "playlistItemData": {
+                    "videoId": "lYBUbBu4W08"
+                  },
+                  "navigationEndpoint": null
+                }
+              },
+              {
+                "musicResponsiveListItemRenderer": {
+                  "flexColumns": [
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Never Give You Up",
+                              "navigationEndpoint": {
+                                "watchEndpoint": {
+                                  "videoId": "DPpWrwz3Iao",
+                                  "watchEndpointMusicSupportedConfigs": {
+                                    "watchEndpointMusicConfig": {
+                                      "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Jerry Butler",
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "UCAbK3ceQj-rsfPv7qvYCpqg",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "The Very Best Of Jerry Butler",
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "MPREb_Um0rFSEiBXr",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "2:56"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Jerry Butler • The Very Best Of Jerry Butler • 2 minutes, 56 seconds"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "9.6M plays"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "9.6 million plays"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "playlistItemData": {
+                    "videoId": "DPpWrwz3Iao"
+                  },
+                  "navigationEndpoint": null
+                }
+              },
+              {
+                "musicResponsiveListItemRenderer": {
+                  "flexColumns": [
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Never Gonna Give You Up (Rick Astley)",
+                              "navigationEndpoint": {
+                                "watchEndpoint": {
+                                  "videoId": "4ywFyK8cCg4",
+                                  "watchEndpointMusicSupportedConfigs": {
+                                    "watchEndpointMusicConfig": {
+                                      "musicVideoType": "MUSIC_VIDEO_TYPE_ATV"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Stegosaurus Rex",
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "UCqvY_uIEMtIvF2qLOupYGYg",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "The Dino Soars",
+                              "navigationEndpoint": {
+                                "browseEndpoint": {
+                                  "browseId": "MPREb_tMhvbjTTEz5",
+                                  "browseEndpointContextSupportedConfigs": {
+                                    "browseEndpointContextMusicConfig": {
+                                      "pageType": "MUSIC_PAGE_TYPE_ALBUM"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "4:28"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Stegosaurus Rex • The Dino Soars • 4 minutes, 28 seconds"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "24K plays"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "24 thousand plays"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "playlistItemData": {
+                    "videoId": "4ywFyK8cCg4"
+                  },
+                  "navigationEndpoint": null
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

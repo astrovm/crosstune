@@ -16,7 +16,8 @@ const base = {
   description: "__MSG_extDescription__",
   version: pkg.version,
   default_locale: "en",
-  permissions: ["webNavigation", "storage"],
+  permissions: ["webNavigation", "storage", "declarativeNetRequestWithHostAccess"],
+  declarative_net_request: { rule_resources: [{ id: "youtube", enabled: true, path: "rules.json" }] },
   host_permissions: HOST_PERMISSIONS,
   action: { default_title: "__MSG_actionTitle__" },
   options_ui: { page: "options.html", open_in_tab: true },
@@ -46,6 +47,7 @@ for (const [target, manifest] of Object.entries(manifests)) {
     legalComments: "none",
   });
   await cp(join(root, "src/options.html"), join(out, "options.html"));
+  await cp(join(root, "src/rules.json"), join(out, "rules.json"));
   await cp(join(root, "_locales"), join(out, "_locales"), { recursive: true });
   await writeFile(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`built dist/${target}`);
