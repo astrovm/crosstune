@@ -225,7 +225,7 @@ internal interface PlaybackSource {
     /** Whether the phone has no PIN, pattern or password, so its screen turned on is all it takes to use it. */
     fun lockless(): Boolean
 
-    /** Turns the screen on for a moment, as a song opened with it off waits for it in Spotify. */
+    /** Turns the screen on, as a song opened with it off waits for it in Spotify; it goes off as it times out. */
     fun wakeScreen()
 
     /** Whether [app] was seen to play only in front, as YouTube Music without Premium, so [comesBack] leaves it there. */
@@ -850,7 +850,10 @@ private val STILL = setOf(PlaybackState.STATE_PAUSED, PlaybackState.STATE_STOPPE
 /** How short of its song's length an app may stop, and still have played it to its end. YouTube stops a little past it. */
 private const val ENDED_WITHIN_MS = 2_000L
 
-/** How long the screen is turned on for Spotify to play a song opened with it off: 0.5 to 3 s worked on the Samsung. */
+/**
+ * How long the screen is held on for Spotify to play a song opened with it off: 0.5 to 3 s worked on the Samsung.
+ * Android counts the wake as using the phone, so the screen then stays on until it times out.
+ */
 private const val WAKE_MS = 1_000L
 
 /**

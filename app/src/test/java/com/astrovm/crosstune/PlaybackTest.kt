@@ -130,7 +130,7 @@ class PlaybackTest {
     }
 
     @Test
-    fun thePhoneIsLocklessWithNoPinPatternOrPasswordAndItsScreenTurnsOnForAMoment() {
+    fun thePhoneIsLocklessWithNoPinPatternOrPasswordAndItsScreenIsWokenAndHeldASecond() {
         assertTrue(playback.lockless())
         shadowOf(app.getSystemService(KeyguardManager::class.java)).setIsDeviceSecure(true)
         assertFalse(playback.lockless())
@@ -138,7 +138,7 @@ class PlaybackTest {
         val lock = checkNotNull(org.robolectric.shadows.ShadowPowerManager.getLatestWakeLock())
         assertEquals("crosstune:next song", shadowOf(lock).tag)
         assertTrue(lock.isHeld)
-        // Let go a second later, so the screen goes off as it would.
+        // Let go a second later, after which the screen times out as usual.
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(999))
         assertTrue(lock.isHeld)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(2))

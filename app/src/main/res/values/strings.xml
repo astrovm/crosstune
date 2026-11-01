@@ -101,7 +101,7 @@
     <string name="setting_share_sheet_apps_description">Show music apps as options when sharing.</string>
     <string name="settings_playing_section">Playing</string>
     <string name="setting_wakes_for_next_song">Wake for Spotify\'s next song</string>
-    <string name="setting_wakes_for_next_song_description">With the screen off, Spotify waits to play a list\'s next song until the screen is on. This turns it on for a second.</string>
+    <string name="setting_wakes_for_next_song_description">With the screen off, Spotify only plays a list\'s next song once the screen is on. This turns it on at each song\'s end, until it times out.</string>
     <string name="setting_language">Language</string>
     <string name="language_system_default">System default</string>
     <string name="matching_text">Finding the exact match…</string>

@@ -85,7 +85,7 @@
     <string name="setting_share_sheet_apps_description">Mostrá apps de música al compartir.</string>
     <string name="settings_playing_section">Reproducción</string>
     <string name="setting_wakes_for_next_song">Despertar para la siguiente canción de Spotify</string>
-    <string name="setting_wakes_for_next_song_description">Con la pantalla apagada, Spotify espera a que se prenda para poner la siguiente canción de una lista. Esto la prende un segundo.</string>
+    <string name="setting_wakes_for_next_song_description">Con la pantalla apagada, Spotify pone la siguiente canción de una lista recién cuando se prende. Esto la prende al final de cada canción, hasta que se vuelve a apagar sola.</string>
     <string name="setting_language">Idioma</string>
     <string name="language_system_default">Predeterminado del sistema</string>
     <string name="matching_text">Buscando la coincidencia exacta…</string>

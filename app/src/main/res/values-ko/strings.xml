@@ -85,7 +85,7 @@
     <string name="setting_share_sheet_apps_description">공유할 때 음악 앱을 표시해요.</string>
     <string name="settings_playing_section">재생</string>
     <string name="setting_wakes_for_next_song">Spotify 다음 곡을 위해 화면 켜기</string>
-    <string name="setting_wakes_for_next_song_description">화면이 꺼져 있으면 Spotify는 화면이 켜질 때까지 목록의 다음 곡을 재생하지 않아요. 이 설정은 화면을 1초 동안 켜요.</string>
+    <string name="setting_wakes_for_next_song_description">화면이 꺼져 있으면 Spotify는 화면이 켜질 때까지 목록의 다음 곡을 재생하지 않아요. 곡이 끝날 때마다 화면을 켜고, 시간이 지나면 다시 꺼져요.</string>
     <string name="setting_language">언어</string>
     <string name="language_system_default">시스템 기본값</string>
     <string name="matching_text">정확한 항목을 찾는 중…</string>

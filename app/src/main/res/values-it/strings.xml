@@ -86,7 +86,7 @@
     <string name="setting_share_sheet_apps_description">Mostra le app musicali nel menu di condivisione.</string>
     <string name="settings_playing_section">Riproduzione</string>
     <string name="setting_wakes_for_next_song">Riattiva per il prossimo brano di Spotify</string>
-    <string name="setting_wakes_for_next_song_description">A schermo spento, Spotify aspetta che si accenda per riprodurre il brano successivo di una lista. Questo lo accende per un secondo.</string>
+    <string name="setting_wakes_for_next_song_description">A schermo spento, Spotify riproduce il brano successivo di una lista solo quando lo schermo si accende. Questo lo accende alla fine di ogni brano, finché non si spegne da solo.</string>
     <string name="setting_language">Lingua</string>
     <string name="language_system_default">Predefinita di sistema</string>
     <string name="matching_text">Ricerca del risultato esatto…</string>

@@ -36,7 +36,7 @@ internal class PlayQueue(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Whether an app is installed; see [sameApp]. */
     private val installed: (String) -> Boolean = { false },
-    /** Whether the screen's turned on for a moment for Spotify to play the next song, as set in Advanced. */
+    /** Whether the screen's turned on for Spotify to play the next song, as set in Advanced. */
     private val wakes: () -> Boolean = { false }
 ) {
     private var playing: Playing? = null
@@ -255,7 +255,7 @@ internal class PlayQueue(
     /**
      * Opens [song] of [queue] by its [link]. Spotify plays one opened with the screen off or locked only
      * once it's in front, as the phone's unlocked, and plays its album on meanwhile. With nothing to
-     * unlock, the screen turned on for a moment does, when set to; otherwise what it went on to is
+     * unlock, the screen turned on does, when set to; otherwise what it went on to is
      * paused, so the list waits.
      */
     private suspend fun openSong(queue: Playing, song: MusicMetadata, link: String) {

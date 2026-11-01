@@ -645,7 +645,7 @@ class PlayQueueTest {
         spotifyPlays("Song 1", 3)
         phone.unlocked = false
         phone.lockless = true
-        // The screen's on a moment as the link opens, so Spotify plays it: nothing paused, nothing waits.
+        // The screen's woken as the link opens, so Spotify plays it: nothing paused, nothing waits.
         spotifyPlays("Album", 4)
         assertEquals(1, phone.woken)
         assertEquals(listOf(spotify to "https://open.spotify.com/track/Song 2"), phone.opened)

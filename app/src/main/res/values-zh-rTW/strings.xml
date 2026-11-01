@@ -85,7 +85,7 @@
     <string name="setting_share_sheet_apps_description">在分享選單中顯示音樂應用程式。</string>
     <string name="settings_playing_section">播放</string>
     <string name="setting_wakes_for_next_song">為 Spotify 的下一首歌喚醒螢幕</string>
-    <string name="setting_wakes_for_next_song_description">螢幕關閉時，Spotify 要等螢幕亮起才會播放清單的下一首歌。這會讓螢幕亮一秒鐘。</string>
+    <string name="setting_wakes_for_next_song_description">螢幕關閉時，Spotify 要等螢幕亮起才會播放清單的下一首歌。這會在每首歌結束時喚醒螢幕，直到它自動關閉。</string>
     <string name="setting_language">語言</string>
     <string name="language_system_default">跟隨系統</string>
     <string name="matching_text">正在查詢完全相符的結果…</string>
