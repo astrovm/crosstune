@@ -90,6 +90,7 @@
     <string name="picker_title">アプリで開く</string>
     <string name="cancel_button">キャンセル</string>
     <string name="retry_button">再試行</string>
+    <string name="offline">オフライン</string>
     <string name="more_button">もっと見る</string>
     <string name="history_title">最近</string>
     <string name="search_recent">最近の項目を検索</string>
@@ -256,6 +257,7 @@
     <string name="setting_playing_bar">再生中の曲を表示</string>
     <string name="setting_lines_early">行を早めに表示</string>
     <string name="setting_next_line_first">次の行を先に明るくする</string>
+    <string name="setting_off">オフ</string>
     <string name="follow_help_title">歌詞を音楽に合わせる</string>
     <string name="follow_turn_on">オンにする</string>
     <string name="setting_lyrics_follow">歌詞を音楽アプリに合わせる</string>

@@ -146,6 +146,24 @@ class SongListenerTest {
     }
 
     @Test
+    fun anUploadSpedUpIsFollowedAtItsOwnSpeed() {
+        // Shazam's answers for every 10 s of a YouTube upload of "Bizarre Love Triangle" (#611): it plays
+        // 3.5% faster than every release Shazam knows, so its place in the one matched gains 347 ms each time.
+        val answers = javaClass.getResource("/shazam/faster.jsonl")!!.readText().lines().filter { it.isNotBlank() }
+        val clocks = answers.mapIndexed { index, matches ->
+            answer("""{"matches":$matches,"track":{"title":"Demo"}}""")
+            (heard() as Heard.Song).copy(startedAtMs = index * 10_000L).clock!!
+        }
+        // Where the words are guessed to be by one hearing is where the next hears them.
+        clocks.zipWithNext { one, next -> assertEquals(next.positionMs.toDouble(), one.positionAt(next.atMs).toDouble(), 100.0) }
+        // Saying nothing of it, or not as a number, it plays as fast as the recording matched.
+        answer("""{"matches":[{"id":"1","offset":12.5,"timeskew":"fast"}],"track":{"title":"Demo"}}""")
+        assertEquals(1f, (heard() as Heard.Song).speed)
+        answer("""{"matches":[{"id":"1","offset":12.5}],"track":{"title":"Demo"}}""")
+        assertEquals(1f, (heard() as Heard.Song).speed)
+    }
+
+    @Test
     fun whereInTheSongItWasHeardIsKeptOnlyWhenItMakesSense() {
         fun heardAt(matches: String): Long? {
             answer("""{"matches":$matches,"track":{"title":"Demo"}}""")
@@ -340,6 +358,7 @@ class SongListenerTest {
     fun whereTheSongIsIsKnownOnlyWhenBothWhereAndWhenHeardAre() {
         val metadata = MusicMetadata("Iris", "The Goo Goo Dolls")
         assertEquals(PlaybackClock(42_000, 400_000), Heard.Song(metadata, null, 42_000, 400_000).clock)
+        assertEquals(PlaybackClock(42_000, 400_000, 1.2f), Heard.Song(metadata, null, 42_000, 400_000, speed = 1.2f).clock)
         assertNull(Heard.Song(metadata, null, offsetMs = 42_000).clock)
         assertNull(Heard.Song(metadata, null, startedAtMs = 400_000).clock)
         assertNull(Heard.Song(metadata, null).clock)

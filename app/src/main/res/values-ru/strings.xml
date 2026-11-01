@@ -89,6 +89,7 @@
     <string name="picker_title">Открыть в</string>
     <string name="cancel_button">Отмена</string>
     <string name="retry_button">Повторить</string>
+    <string name="offline">Нет сети</string>
     <string name="more_button">Ещё</string>
     <string name="history_title">Недавние</string>
     <string name="search_recent">Поиск в недавних</string>
@@ -255,6 +256,7 @@
     <string name="setting_playing_bar">Показывать, что играет</string>
     <string name="setting_lines_early">Показывать строки раньше</string>
     <string name="setting_next_line_first">Заранее подсвечивать следующую строку</string>
+    <string name="setting_off">Выкл.</string>
     <string name="follow_help_title">Текст в такт вашей музыке</string>
     <string name="follow_turn_on">Включить</string>
     <string name="setting_lyrics_follow">Текст следует за музыкальным приложением</string>

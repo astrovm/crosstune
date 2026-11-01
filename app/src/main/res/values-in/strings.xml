@@ -89,6 +89,7 @@
     <string name="picker_title">Buka dengan</string>
     <string name="cancel_button">Batal</string>
     <string name="retry_button">Coba lagi</string>
+    <string name="offline">Offline</string>
     <string name="more_button">Lainnya</string>
     <string name="history_title">Terbaru</string>
     <string name="search_recent">Cari di Terbaru</string>
@@ -255,6 +256,7 @@
     <string name="setting_playing_bar">Tampilkan yang sedang diputar</string>
     <string name="setting_lines_early">Tampilkan baris lebih awal</string>
     <string name="setting_next_line_first">Terangkan baris berikutnya lebih dulu</string>
+    <string name="setting_off">Mati</string>
     <string name="follow_help_title">Biarkan lirik mengikuti musikmu</string>
     <string name="follow_turn_on">Aktifkan</string>
     <string name="setting_lyrics_follow">Lirik mengikuti aplikasi musikmu</string>

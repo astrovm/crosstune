@@ -614,6 +614,43 @@ class PlayQueueTest {
         assertFalse(file.exists())
     }
 
+    @Test
+    fun withThePhoneLockedSpotifyIsPausedAtAListSongsEndAndPlaysTheNextOnceUnlocked() {
+        spotifyPlays("Before", 2)
+        val queue = queue()
+        runBlocking { queue.play(tracks.take(3), MusicService.SPOTIFY, spotify, 1, tracks.take(1)) }
+        spotifyPlays("Song 1", 3)
+        phone.unlocked = false
+        // Locked, Spotify keeps the next song's link until it's unlocked, so the album it goes on to is paused.
+        spotifyPlays("Album", 4)
+        assertEquals(listOf(spotify to "https://open.spotify.com/track/Song 2"), phone.opened)
+        assertEquals(listOf(false), phone.plays)
+        // Unlocked, it plays the link, and the list goes on as with the phone in use, nothing paused.
+        phone.unlocked = true
+        spotifyPlays("Song 2", 5)
+        spotifyPlays("Album", 6)
+        assertEquals("https://open.spotify.com/track/Song 3", phone.opened.last().second)
+        assertEquals(listOf(false), phone.plays)
+        assertEquals(0, phone.cameBack)
+        spotifyPlays("Song 3", 7)
+        assertEquals(1, phone.cameBack)
+    }
+
+    @Test
+    fun aSongSpotifyNamesBeforeItNumbersItIsKnownByItsOwnNumber() {
+        spotifyPlays("Before", 2)
+        val queue = queue()
+        runBlocking { queue.play(tracks.take(3), MusicService.SPOTIFY, spotify, 1, tracks.take(1)) }
+        spotifyPlays("Song 1", 3)
+        spotifyPlays("Album", 4)
+        // As it loads the song opened, Spotify names it a moment before it numbers it, by the number
+        // of the one before.
+        spotifyPlays("Song 2", 4)
+        spotifyPlays("Song 2", 5)
+        spotifyPlays("Album", 6)
+        assertEquals("https://open.spotify.com/track/Song 3", phone.opened.last().second)
+    }
+
     /** Whether the app playing [number] can skip on from it, as Crosstune shows. */
     private fun PlaybackSource.canSkipOn(number: Int) = runBlocking { follow(MusicMetadata("Song $number", "Band")).first() }?.canSkipNext
 

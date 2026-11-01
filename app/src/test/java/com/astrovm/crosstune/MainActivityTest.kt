@@ -149,6 +149,7 @@ class MainActivityTest {
         MainActivity.lookAheadLyrics = true
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
         MainActivity.checksForUpdates = ::looksForUpdates
+        MainActivity.connectionFactory = ::AndroidConnection
     }
 
     // region helpers
@@ -3021,6 +3022,70 @@ class MainActivityTest {
     }
 
     @Test
+    fun offlineALinkWaitsForTheInternetAndOpensOnceItsBack() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        launch()
+        // Said once, where links go in, rather than as each part fails.
+        waitForDescription(string(R.string.offline))
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.isNotEmpty() && composeRule.onAllNodesWithTextCount(string(R.string.loading_text)) == 0 }
+        assertTextAbsent(string(R.string.error_network))
+
+        // Back online, it's looked up by itself.
+        respondWithTrack("Recovered", "Artist · Song")
+        connection.online.value = true
+        waitForText("Recovered")
+        assertEquals(0, composeRule.onAllNodesWithContentDescription(string(R.string.offline)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun aLinkThatFailedJustBeforeGoingOfflineWaitsToo() {
+        val connection = FakeConnection()
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        launch()
+        typeUrl(TRACK_ID)
+        click(string(R.string.resolve_button))
+        waitForText(string(R.string.error_network))
+        // Android says it's offline a moment after the link failed: it waits instead.
+        connection.online.value = false
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTextCount(string(R.string.error_network)) == 0 }
+        waitForDescription(string(R.string.offline))
+        // Typed over, it's no longer wanted, so coming back online looks nothing up.
+        composeRule.onNode(hasSetTextAction()).performTextClearance()
+        typeUrl("https://open.spotify.com/track/other")
+        val asked = fake.requestedUrls.size
+        connection.online.value = true
+        composeRule.waitForIdle()
+        assertEquals(asked, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun offlineANameFindsNothingSaidAndIsLookedUpOnceBack() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        launch()
+        typeUrl("Kingo Hamada")
+        click(string(R.string.search_button))
+        waitForText(string(R.string.song_search_title))
+        // Nothing asked isn't nothing found.
+        assertTextAbsent(string(R.string.song_search_none, "Kingo Hamada"))
+        fake.handler = { request ->
+            when {
+                request.url.host == "api.deezer.com" && request.url.encodedPath == "/search/track" ->
+                    FakeSpotify.html(request, """{"data":[{"id":7,"title":"Machi No Dorufin","artist":{"name":"Kingo Hamada"}}]}""")
+                else -> FakeSpotify.html(request, """{"data":[]}""")
+            }
+        }
+        connection.online.value = true
+        waitForText("Machi No Dorufin")
+    }
+
+    @Test
     fun successfulResolveAfterErrorClearsError() {
         fake.handler = { throw IOException("offline") }
         launch()
@@ -4174,6 +4239,7 @@ class MainActivityTest {
 
     @Test
     fun setToLightOnTheVoiceALineWaitsForItWhileTheNextBrightensAhead() {
+        // Switched on as it was before it could be set: a second ahead.
         prefs().edit().putLong("lines_early_ms", 0).putBoolean("next_line_first", true).commit()
         val playback = timedSong()
         playback.access = true
@@ -4196,12 +4262,13 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(1_000L, prefs().getLong("lines_early_ms", 0))
         assertTextShown("1 sec")
-        val nextFirst = composeRule.onNode(isToggleable() and hasText(string(R.string.setting_next_line_first)))
-        nextFirst.performScrollTo().assertIsOff().performClick()
+        // The next line doesn't brighten ahead unless set to, and then as far ahead as set.
+        val ahead = composeRule.onNode(hasContentDescription(string(R.string.setting_next_line_first)))
+        ahead.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.setting_off)))
+        ahead.performSemanticsAction(SemanticsActions.SetProgress) { it(NEXT_LINE_AHEAD_STEPS.indexOf(2_000L).toFloat()) }
         composeRule.waitForIdle()
-        assertTrue(prefs().getBoolean("next_line_first", false))
-        // The switch follows, not only the saved setting.
-        nextFirst.assertIsOn()
+        assertEquals(2_000L, prefs().getLong("next_line_ahead_ms", 0))
+        assertTextShown("2 sec")
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -18,6 +19,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.service.notification.NotificationListenerService
@@ -216,6 +218,9 @@ internal interface PlaybackSource {
 
     /** Brings Crosstune back to the front, over the app [openSong] opened, unless it only plays in front. */
     fun comesBack()
+
+    /** Whether the phone is in use, its screen on and unlocked, so an app [openSong] opens comes to the front now. */
+    fun unlocked(): Boolean
 
     /** Whether [app] was seen to play only in front, as YouTube Music without Premium, so [comesBack] leaves it there. */
     fun playsOnlyInFront(app: String): Boolean
@@ -494,6 +499,9 @@ internal class MediaSessionPlayback(
     }
 
     override fun playsOnlyInFront(app: String) = onlyInFront.any { sameApp(app, it, context::hasApp) }
+
+    override fun unlocked(): Boolean = context.getSystemService(PowerManager::class.java).isInteractive &&
+        !context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
     // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
     // Behind it too when the app opened wouldn't play in the background, as it would stop as soon as it's left.
