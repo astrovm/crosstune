@@ -768,6 +768,79 @@ class ListeningTest {
         waitForDescription(string(R.string.keep_offline))
     }
 
+    /** Demo, as Spotify follows it, with its like showing whether it's [liked] there, or not saying. */
+    private fun demoFollowed(liked: Boolean?) = Following(
+        PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Spotify", canSeek = true,
+        appPackage = MusicService.SPOTIFY.packageName, like = AppAction("ADD_TO", "Add to collection", 1, liked)
+    )
+
+    /** An app the test can see, playing Demo when [liked] says how its like shows, or nothing yet. */
+    private fun appPlayingDemo(playing: Boolean = true, liked: Boolean? = false): FakePlayback {
+        val music = FakePlayback().apply {
+            access = true
+            if (playing) {
+                onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 1_000, SystemClock.elapsedRealtime())
+                this.playing.value = demoFollowed(liked)
+            }
+        }
+        MainActivity.playbackFactory = { music }
+        MainActivity.connectionFactory = { FakeConnection() }
+        return music
+    }
+
+    @Test
+    fun aSongKeptOfflineWhileItPlaysIsLikedInItsAppOnceSoItDownloadsThereToo() {
+        val music = appPlayingDemo()
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitUntil(TIMEOUT_MS) { music.liked == 1 }
+        // The app then shows it liked; unliked there later, it stays so.
+        music.playing.value = demoFollowed(liked = true)
+        music.playing.value = demoFollowed(liked = false)
+        composeRule.waitForIdle()
+        assertEquals(1, music.liked)
+    }
+
+    @Test
+    fun aSongKeptOfflineIsLikedInItsAppTheNextTimeItPlays() {
+        val music = appPlayingDemo(playing = false)
+        demoCard()
+        click(string(R.string.keep_offline))
+        composeRule.waitForIdle()
+        assertEquals(0, music.liked)
+        music.playing.value = demoFollowed(liked = false)
+        music.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 1_000, SystemClock.elapsedRealtime())
+        waitUntil(TIMEOUT_MS) { music.liked == 1 }
+    }
+
+    /** Keeps Demo for offline while it plays where its like shows [liked], and checks it isn't pressed. */
+    private fun keptWithoutALike(liked: Boolean?) {
+        val music = appPlayingDemo(liked = liked)
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        composeRule.waitForIdle()
+        assertEquals(0, music.liked)
+    }
+
+    // Pressed, its like would unlike it.
+    @Test
+    fun aSongKeptOfflineIsntPressedWhereItsLikedAlready() = keptWithoutALike(liked = true)
+
+    @Test
+    fun aSongKeptOfflineIsntPressedWhereItsAppDoesntShowWhetherItsLiked() = keptWithoutALike(liked = null)
+
+    @Test
+    fun switchedOffASongKeptOfflineIsntLikedInItsApp() {
+        prefs().edit().putBoolean("offline_likes", false).commit()
+        val music = appPlayingDemo()
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        composeRule.waitForIdle()
+        assertEquals(0, music.liked)
+    }
+
     @Test
     fun aJapaneseSongKeptOfflineKeepsHowItsKanjiAreSungToo() {
         MainActivity.connectionFactory = { FakeConnection() }

@@ -16,9 +16,16 @@ internal const val KEPT_OFFLINE_DIR = "kept"
 
 /**
  * A song, album or playlist kept for offline, as [item], by [id]; its [songs], those of them
- * whose words and the rest are [saved] already, by [OfflineSongs.keyOf].
+ * whose words and the rest are [saved] already, and those [liked] in the music app that played them,
+ * so it downloads them too, by [OfflineSongs.keyOf].
  */
-internal data class KeptOffline(val id: String, val item: MusicMetadata, val songs: List<MusicMetadata>, val saved: Set<String> = emptySet()) {
+internal data class KeptOffline(
+    val id: String,
+    val item: MusicMetadata,
+    val songs: List<MusicMetadata>,
+    val saved: Set<String> = emptySet(),
+    val liked: Set<String> = emptySet()
+) {
     val done: Boolean get() = songs.all { OfflineSongs.keyOf(it) in saved }
 }
 
@@ -51,6 +58,24 @@ internal class OfflineSongs(
     /** [song] of the one kept as [id] has all it needs. */
     suspend fun saved(id: String, song: MusicMetadata) = lock.withLock {
         save(loaded().map { if (it.id == id) it.copy(saved = it.saved + keyOf(song)) else it })
+    }
+
+    /** The songs kept that are still to be liked in the app that plays them, each once. */
+    suspend fun toLike(): List<MusicMetadata> = lock.withLock {
+        loaded().flatMap { kept -> kept.songs.filter { keyOf(it) !in kept.liked } }.distinctBy(::keyOf)
+    }
+
+    /**
+     * Takes the first song still to be liked that [matches], and remembers it as liked, so it's liked
+     * once, even when its app says it plays twice before the like lands, and never again once unliked
+     * there; false when none matches. Taken and remembered at once, so it's never pressed twice.
+     */
+    suspend fun likeOnce(matches: (MusicMetadata) -> Boolean): Boolean = lock.withLock {
+        val all = loaded()
+        val song = all.flatMap { kept -> kept.songs.filter { keyOf(it) !in kept.liked } }.firstOrNull(matches) ?: return@withLock false
+        val key = keyOf(song)
+        save(all.map { kept -> if (kept.songs.any { keyOf(it) == key }) kept.copy(liked = kept.liked + key) else kept })
+        true
     }
 
     /** Lets go of the one kept as [id]: what only it needed is then dropped as anything else would be. */
@@ -102,13 +127,16 @@ internal class OfflineSongs(
         .put("item", song(kept.item))
         .put("songs", JSONArray().apply { kept.songs.forEach { put(song(it)) } })
         .put("saved", JSONArray(kept.saved.toList()))
+        .put("liked", JSONArray(kept.liked.toList()))
 
     private fun kept(json: JSONObject?): KeptOffline? {
         val item = json?.optJSONObject("item")?.let(::song) ?: return null
         val songs = json.optJSONArray("songs")?.let { list -> (0 until list.length()).mapNotNull { song(list.optJSONObject(it)) } }.orEmpty()
-        val saved = json.optJSONArray("saved")?.let { list -> (0 until list.length()).map(list::optString).toSet() }.orEmpty()
-        return KeptOffline(json.optString("id").ifEmpty { idOf(item) }, item, songs, saved)
+        val saved = strings(json.optJSONArray("saved"))
+        return KeptOffline(json.optString("id").ifEmpty { idOf(item) }, item, songs, saved, strings(json.optJSONArray("liked")))
     }
+
+    private fun strings(list: JSONArray?): Set<String> = list?.let { (0 until it.length()).map(it::optString).toSet() }.orEmpty()
 
     private fun song(song: MusicMetadata) = JSONObject()
         .put("title", song.title)

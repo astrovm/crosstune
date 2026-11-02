@@ -101,6 +101,8 @@
     <string name="keeping_offline">Salvataggio offline con il Wi-Fi</string>
     <string name="offline_out_of_space">Spazio offline esaurito. Alza il limite nelle Impostazioni</string>
     <string name="setting_offline_space">Spazio per i brani offline</string>
+    <string name="setting_offline_likes">Scarica anche nella tua app di musica</string>
+    <string name="setting_offline_likes_description">Mette mi piace a un brano offline nella tua app di musica quando suona. Attiva lì il download dei brani che ti piacciono.</string>
     <string name="setting_offline_space_used">%1$s usati</string>
     <string name="more_button">Altro</string>
     <string name="history_title">Recenti</string>

@@ -42,6 +42,8 @@ internal data class UiState(
     val offlineUsedBytes: Long = 0,
     /** How many megabytes they may take. */
     val offlineSpaceMb: Int = MainViewModel.OFFLINE_SPACE_MB,
+    /** Whether a song kept for offline is liked in the music app that plays it, so the app downloads it too. */
+    val offlineLikes: Boolean = true,
     /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
     val shareSheetApps: Boolean = true,
     /** Whether the screen's turned on at a list song's end, so Spotify plays the next. */

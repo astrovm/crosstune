@@ -1361,6 +1361,40 @@ class PlaybackTest {
     }
 
     @Test
+    fun whetherASongIsLikedIsToldByHowItsAppDrawsTheLikeInAnyLanguage() {
+        allow()
+        // As YouTube Music and TIDAL name their drawings.
+        val drawings = mapOf(1 to "yt_fill_experimental_thumb_up_vd_theme_24", 2 to "yt_outline_experimental_thumb_up_vd_theme_24", 3 to "ic_favorite_filled", 4 to "ic_favorite", 5 to "thumb_up_selected")
+        val drawn = MediaSessionPlayback(app, now = { NOW }, modes = modes, drawingName = { _, id -> drawings[id] })
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours")
+        fun liked(action: String, icon: Int): Boolean? {
+            shadowOf(music).setPlaybackState(
+                PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT)
+                    .addCustomAction(PlaybackState.CustomAction.Builder(action, "Gefällt mir", icon).build()).build()
+            )
+            var seen: Following? = null
+            val watching = CoroutineScope(Dispatchers.Unconfined).launch { drawn.follow(song).collect { seen = it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            watching.cancel()
+            return seen?.like?.liked
+        }
+        shadowOf(sessions).addController(music)
+        assertEquals(true, liked("thumbs_up_action", 1))
+        assertEquals(false, liked("thumbs_up_action", 2))
+        assertEquals(true, liked("com.aspiro.tidal.player.action.TOGGLE_FAVORITE", 3))
+        assertEquals(false, liked("com.aspiro.tidal.player.action.TOGGLE_FAVORITE", 4))
+        // A drawing it can't read, or none it can find, says nothing, so the like is never pressed blind.
+        assertNull(liked("waze.thumbUp", 5))
+        assertNull(liked("waze.thumbUp", 6))
+        // Without a drawing of its own to go by, an app that isn't on the phone says nothing either.
+        shadowOf(music).setPlaybackState(
+            PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT)
+                .addCustomAction(PlaybackState.CustomAction.Builder("thumbs_up_action", "Like", 1).build()).build()
+        )
+        assertEquals(AppAction("thumbs_up_action", "Like", 1), followed().last()?.like)
+    }
+
+    @Test
     fun theAppsOwnLikeIsFollowedAsItShowsIt() {
         allow()
         val like = { name: String, icon: Int -> PlaybackState.CustomAction.Builder("thumbs_up_action", name, icon).build() }
@@ -1386,6 +1420,14 @@ class PlaybackTest {
         shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("waze.thumbUp", "Thumbs up on", 5).build()))
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("Thumbs up on", seen.last()!!.like?.name)
+
+        // Spotify's is one of two, the second once the song's in the user's collection.
+        shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("ADD_TO", "Add to collection", 6).build()))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(AppAction("ADD_TO", "Add to collection", 6, liked = false), seen.last()?.like)
+        shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("CHECK_FILL", "Remove from collection", 7).build()))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(AppAction("CHECK_FILL", "Remove from collection", 7, liked = true), seen.last()?.like)
 
         // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe; the phone shows the rest.
         playback.like(song)

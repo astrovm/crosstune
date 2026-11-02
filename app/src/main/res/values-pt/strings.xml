@@ -100,6 +100,8 @@
     <string name="keeping_offline">Salvando para usar off-line no Wi-Fi</string>
     <string name="offline_out_of_space">Sem espaço para off-line. Aumente o limite nas Configurações</string>
     <string name="setting_offline_space">Espaço para músicas off-line</string>
+    <string name="setting_offline_likes">Baixar também no seu app de música</string>
+    <string name="setting_offline_likes_description">Curte uma música guardada off-line no seu app de música quando ela toca. Ative lá o download das músicas curtidas.</string>
     <string name="setting_offline_space_used">%1$s em uso</string>
     <string name="more_button">Mais</string>
     <string name="history_title">Recentes</string>

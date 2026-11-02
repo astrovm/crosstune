@@ -205,6 +205,7 @@ internal class MainViewModel(
             playRightAway = preferences.getBoolean(KEY_PLAY_RIGHT_AWAY, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
             offlineSpaceMb = preferences.getInt(KEY_OFFLINE_SPACE, OFFLINE_SPACE_MB),
+            offlineLikes = preferences.getBoolean(KEY_OFFLINE_LIKES, true),
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
             wakesForNextSong = preferences.getBoolean(KEY_WAKES_FOR_NEXT_SONG, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
@@ -962,6 +963,7 @@ internal class MainViewModel(
                         source.follow(song).collect { following ->
                             followedNow = following?.let { song to it }
                             showPlayingNow()
+                            likeKeptOffline(song, following)
                         }
                     }
             }
@@ -4118,7 +4120,27 @@ internal class MainViewModel(
         viewModelScope.launch {
             offline.has(item)?.let { offline.letGo(it.id) } ?: offline.keep(item)
             showKeptOffline()
+            // Kept while it plays, it's liked there now, not the next time it plays.
+            followedNow?.let { (song, following) -> likeKeptOffline(song, following) }
         }
+    }
+
+    /** Whether songs kept for offline are liked in the music app that plays them, so it downloads them too. */
+    fun setOfflineLikes(on: Boolean) {
+        uiState = uiState.copy(offlineLikes = on)
+        preferences.edit { putBoolean(KEY_OFFLINE_LIKES, on) }
+    }
+
+    /**
+     * Likes [song] in the app [following] it, when it's kept for offline and not liked there yet, so the
+     * app downloads it too, as it does what's liked once that's switched on there. Only where the app shows
+     * whether it's liked: its like goes on and off, so pressed blind it could unlike it. Once per song.
+     */
+    private suspend fun likeKeptOffline(song: MusicMetadata, following: Following?) {
+        if (!uiState.offlineLikes) return
+        val offline = offline ?: return
+        val liked = following?.like?.liked ?: return
+        if (offline.likeOnce { sameSong(it, song) } && !liked) playback?.like(song)
     }
 
     /** How many megabytes what's kept for offline may take: none more is fetched past it. */
@@ -4231,6 +4253,7 @@ internal class MainViewModel(
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
         private const val KEY_OFFLINE_SPACE = "offline_space_mb"
+        private const val KEY_OFFLINE_LIKES = "offline_likes"
 
         /** What's kept for offline may take this much by default, a few hundred songs' worth. */
         const val OFFLINE_SPACE_MB = 200

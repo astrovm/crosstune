@@ -4319,6 +4319,18 @@ class MainActivityTest {
     }
 
     @Test
+    fun songsKeptOfflineAreLikedInTheirAppUnlessSwitchedOffInAdvancedSettings() {
+        launch()
+        inAdvancedSettings {
+            val likes = composeRule.onNodeWithText(string(R.string.setting_offline_likes)).performScrollTo()
+            likes.assertIsOn()
+            likes.performClick()
+            likes.assertIsOff()
+            assertFalse(prefs().getBoolean("offline_likes", true))
+        }
+    }
+
+    @Test
     fun theRoomSongsKeptOfflineMayTakeIsSetInAdvancedSettings() {
         launch()
         inAdvancedSettings {

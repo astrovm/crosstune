@@ -100,6 +100,8 @@
     <string name="keeping_offline">Guardando para usar sin conexión con Wi-Fi</string>
     <string name="offline_out_of_space">Sin espacio para usar sin conexión. Subí el límite en Ajustes</string>
     <string name="setting_offline_space">Espacio para canciones sin conexión</string>
+    <string name="setting_offline_likes">Descargar también en tu app de música</string>
+    <string name="setting_offline_likes_description">Le da me gusta en tu app de música a una canción sin conexión cuando suena. Activá ahí la descarga de las canciones que te gustan.</string>
     <string name="setting_offline_space_used">%1$s en uso</string>
     <string name="more_button">Más</string>
     <string name="history_title">Recientes</string>

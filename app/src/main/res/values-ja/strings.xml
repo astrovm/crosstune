@@ -101,6 +101,8 @@
     <string name="keeping_offline">Wi-Fi でオフライン用に保存中</string>
     <string name="offline_out_of_space">オフライン用の空きがありません。設定で上限を上げてください</string>
     <string name="setting_offline_space">オフラインの曲に使う容量</string>
+    <string name="setting_offline_likes">音楽アプリにもダウンロード</string>
+    <string name="setting_offline_likes_description">オフライン用に保存した曲を、再生されたときに音楽アプリで「いいね」します。アプリ側で「いいね」した曲のダウンロードをオンにしてください。</string>
     <string name="setting_offline_space_used">%1$s 使用中</string>
     <string name="more_button">もっと見る</string>
     <string name="history_title">最近</string>

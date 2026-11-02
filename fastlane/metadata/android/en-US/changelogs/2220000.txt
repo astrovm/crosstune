@@ -1,0 +1,3 @@
+Download also likes the song in your music app, so the app downloads it too.
+The player's like works with Spotify.
+The next line brightens a moment ahead unless set otherwise.
