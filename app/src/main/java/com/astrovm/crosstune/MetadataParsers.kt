@@ -83,7 +83,8 @@ internal object MetadataParsers {
         }
         val byArtist = " by $artist"
         val title = if (type == ItemType.ALBUM && rawTitle.endsWith(byArtist) && " - " in rawTitle) {
-            rawTitle.removeSuffix(byArtist).substringBeforeLast(" - ")
+            // "Listen to Discovery - Album by Daft Punk", as Spotify's album pages put it now.
+            rawTitle.removeSuffix(byArtist).substringBeforeLast(" - ").removePrefix(SPOTIFY_LISTEN_TO)
         } else {
             rawTitle
         }
@@ -92,6 +93,8 @@ internal object MetadataParsers {
         val length = songLengthRegex.find(html)?.groupValues?.get(1)?.toLongOrNull()?.takeIf { type == ItemType.TRACK }?.times(1000)
         return MusicMetadata(title, artist, type, tags.image(), trackCount = count, lengthMs = length)
     }
+
+    private const val SPOTIFY_LISTEN_TO = "Listen to "
 
     private val songCountRegex = Regex("""<meta name="music:song_count" content="(\d+)"""")
     private val songLengthRegex = Regex("""<meta name="music:duration" content="(\d+)"""")
