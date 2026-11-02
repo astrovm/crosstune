@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -8,7 +9,7 @@ import org.junit.Test
 /** Which sound a song's heard through: the clean one music apps play, or the visuals' tap. */
 class CleanFirstTest {
     /** Plays [sound] over and over, or gives nothing more once [ends]; how often it's opened and closed. */
-    private class Sound(private val sound: Short, private val ends: Boolean = false) : Microphone {
+    private class Sound(private val sound: Short, private val ends: Boolean = false, private val atMost: Int = Int.MAX_VALUE) : Microphone {
         var opened = 0
         var closed = 0
         var read = 0
@@ -16,10 +17,13 @@ class CleanFirstTest {
         override fun open() = object : Recording {
             override fun read(buffer: ShortArray, offset: Int, count: Int): Int {
                 if (ends) return 0
-                // All that's asked for, as Android gives it, waiting until it's played.
-                buffer.fill(sound, offset, offset + count)
-                read += count
-                return count
+                // Never more than there's room for, as Android's AudioRecord throws then.
+                check(offset + count <= buffer.size) { "Asked for $count at $offset of ${buffer.size}" }
+                // All that's asked for, as Android gives it, waiting until it's played, unless it gives less.
+                val given = minOf(count, atMost)
+                buffer.fill(sound, offset, offset + given)
+                read += given
+                return given
             }
 
             override fun close() {
@@ -33,7 +37,7 @@ class CleanFirstTest {
     @Test
     fun soundHeardCleanlyIsHeardFromNowOnTheVisualsTapLeftAlone() {
         val clean = Sound(3)
-        val recording = CleanFirst(clean, tap).open()!!
+        val recording = checkNotNull(CleanFirst(clean, tap).open())
         // Its first tenth of a second said there's sound, without waiting out the rest; what's heard starts after it, in a recording of its own.
         assertEquals(ShazamSignature.SAMPLE_RATE / 10, clean.read)
         assertEquals(2, clean.opened)
@@ -47,10 +51,19 @@ class CleanFirstTest {
     fun silenceHeardCleanlyForHalfASecondIsHeardThroughTheVisualsTap() {
         // As Spotify plays, and any app at volume 0, but for a little noise.
         val clean = Sound(-2)
-        CleanFirst(clean, tap).open()!!
+        assertNotNull(CleanFirst(clean, tap).open())
         assertEquals(CleanFirst.PROBE_SAMPLES, clean.read)
         assertEquals(1, clean.opened)
         assertEquals(1, clean.closed)
+        assertEquals(1, tap.opened)
+    }
+
+    @Test
+    fun silenceThatComesInOddSizesIsStillHalfASecondNoMore() {
+        // Less than a tenth at a time, so the last read has less room left than a tenth.
+        val clean = Sound(0, atMost = 1000)
+        assertNotNull(CleanFirst(clean, tap).open())
+        assertEquals(CleanFirst.PROBE_SAMPLES, clean.read)
         assertEquals(1, tap.opened)
     }
 
