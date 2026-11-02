@@ -317,12 +317,10 @@ class CastViewModelTest {
     }
 
     @Test
-    fun aSongLoadedByNameReplacesTheOldLyricsAndPlayer() {
+    fun aSongLoadedByNameReplacesTheOldPlayer() {
         val playback = FakePlayback()
         val model = playingModel(playback, FakeCast())
-        model.playerLyrics()
-        idle()
-        assertEquals(song, model.uiState.lyricsFor)
+        assertEquals(song, model.uiState.player?.song)
         val incoming = CastSong("Another", "Artist", artworkUrl = "https://example.com/cover.jpg", durationMs = 123_000)
         model.castLoad(incoming)
         idle()
@@ -330,6 +328,25 @@ class CastViewModelTest {
         assertNull(model.uiState.lyricsFor)
         assertFalse(model.uiState.player?.song == song)
         assertFalse(model.uiState.handingOff)
+    }
+
+    @Test
+    fun choosingANewTvForTheSameSongPausesThePhoneBeforeHandingItOver() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val model = playingModel(playback, cast)
+        model.cast()
+        idle()
+        cast.target.value = null
+        idle()
+        model.cast()
+        idle()
+        cast.target.value = CastTarget("Bedroom", tv)
+        idle()
+        assertEquals(2, cast.loaded.size)
+        assertEquals(listOf(false, false), playback.plays.toList())
+        assertTrue(cast.sent.isEmpty())
+        assertEquals("Bedroom", model.uiState.castingTo)
     }
 
     // --- The TV ---
