@@ -273,7 +273,9 @@ def build(web, top, per_continent):
     return listed, tried
 
 
-ODD = re.compile(r"podcast|audiobook|episode|chapter \d|interview|karaoke|sped up|slowed|nightcore|8d audio|lullab|white noise|rain sounds", re.I)
+# Only in what a title says of its version, "(Karaoke Version)" or "- Sped Up", as each word is also a song's
+# whole name: Gustavo Cerati's "Karaoke", A Perfect Circle's "Lullaby", Disclosure's "White Noise".
+ODD = re.compile(r"(?:[(\[]| - )[^)\]]*\b(?:podcast|audiobook|episode|chapter \d|interview|karaoke|sped up|slowed|nightcore|8d audio|lullab|white noise|rain sounds)", re.I)
 
 
 def describe(songs, tried):

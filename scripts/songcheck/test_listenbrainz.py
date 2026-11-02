@@ -223,6 +223,12 @@ class BuildTest(unittest.TestCase):
         songs = [{**self.songs[0], "genre": "Podcasts"}, {**self.songs[0], "title": "Big Hit (Sped Up)"}, self.songs[0]]
         self.assertIn("Odd (not music, or a sped-up or slowed copy): 2", listenbrainz.describe(songs, {}))
 
+    def test_a_song_whose_name_is_one_of_those_words_is_still_a_song(self):
+        # Gustavo Cerati's "Karaoke" and A Perfect Circle's "Lullaby" are songs; only a version says it's a copy.
+        titles = ["Karaoke", "Death Whispered a Lullaby", "White Noise", "Interview", "Big Hit (Karaoke Version)", "Big Hit - Lullaby Renditions", "Big Hit [Slowed]"]
+        songs = [{**self.songs[0], "title": title} for title in titles]
+        self.assertIn("Odd (not music, or a sped-up or slowed copy): 3; Naija Star - Big Hit (Karaoke Version)", listenbrainz.describe(songs, {}))
+
 
 class SummaryTest(unittest.TestCase):
     def test_a_continents_list_is_one_group_whatever_its_artists_countries(self):
