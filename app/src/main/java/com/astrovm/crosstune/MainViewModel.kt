@@ -745,10 +745,16 @@ internal class MainViewModel(
      * Resolves a link from another app and opens it (or offers destinations) as soon as it is
      * ready; in [destination] when the user already chose one, e.g. with a share sheet target.
      * With [show], it only shows the result, for the user to pick what to do. Otherwise it goes
-     * where links go: straight to the app, or to the song's card here.
+     * where links go: straight to the app, or to the song's card here. With [keepWords], the words
+     * floating as it came stay, and the player under them, for a link only handed on.
      */
-    fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN) {
-        cancelContentWork()
+    /** A link only handed on, the words floating again: done with it, so the words show when Crosstune's opened, not the hand-off. */
+    fun handedOn() {
+        uiState = uiState.copy(handlingIncomingLink = false, handingOff = false)
+    }
+
+    fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN, keepWords: Boolean = false) {
+        cancelContentWork(keepsWords = keepWords)
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
         // Without an app songs play in yet, it shows here, where one's picked.
         val here = !show && destination == null && after == AfterLookup.OPEN && (uiState.linksInCrosstune || !uiState.hasDefault)
@@ -3909,7 +3915,7 @@ internal class MainViewModel(
     }
 
     /** A new song or an empty screen replaces every operation owned by the previous content. */
-    private fun cancelContentWork(closesPlayer: Boolean = true) {
+    private fun cancelContentWork(closesPlayer: Boolean = true, keepsWords: Boolean = false) {
         job?.cancel()
         job = null
         forgetHeld()
@@ -3918,8 +3924,8 @@ internal class MainViewModel(
         pendingPlay = false
         retryListens = false
         dismissSongSearch()
-        dismissLyrics()
-        if (closesPlayer) closePlayer()
+        if (!keepsWords) dismissLyrics()
+        if (closesPlayer && !keepsWords) closePlayer()
         cancelTrackWork()
         coverJob?.cancel()
         coverJob = null
