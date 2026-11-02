@@ -758,7 +758,8 @@ internal class MainViewModel(
         // Without an app songs play in yet, it shows here, where one's picked.
         val here = !show && destination == null && after == AfterLookup.OPEN && (uiState.linksInCrosstune || !uiState.hasDefault)
         // The words stay only for a link handed on: one shown here is what's shown.
-        cancelContentWork(keepsWords = keepWords && !show && !here)
+        val keepsWords = keepWords && !show && !here
+        cancelContentWork(keepsWords = keepsWords)
         uiState = uiState.copy(
             linkText = incoming,
             handlingIncomingLink = true,
@@ -776,7 +777,7 @@ internal class MainViewModel(
         }
         if (input is LinkInput.Link) uiState = uiState.copy(linkText = input.link.url)
         if (input is LinkInput.RecognizedSong) uiState = uiState.copy(linkText = input.text)
-        resolve(input, openWhenReady = !show && !here, destination, here = here)
+        resolve(input, openWhenReady = !show && !here, destination, here = here, keepsWords = keepsWords)
     }
 
     /**
@@ -1034,8 +1035,8 @@ internal class MainViewModel(
      * nothing until YouTube Music says it's music, and then only if nothing else has been shown since.
      * A link that came [here], as links do, plays as soon as it's found when set to.
      */
-    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false) {
-        cancelContentWork(closesPlayer = !underPlayer)
+    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false, keepsWords: Boolean = false) {
+        cancelContentWork(closesPlayer = !underPlayer, keepsWords = keepsWords)
         lastRequest = Request(input, openWhenReady, destination, here)
         pendingOpen = openWhenReady
         pendingPlay = here && uiState.playsRightAway

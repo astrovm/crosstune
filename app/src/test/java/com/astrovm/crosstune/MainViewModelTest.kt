@@ -1096,10 +1096,14 @@ class MainViewModelTest {
         val model = lyricsModel(FakePlayback())
         val song = model.uiState.lyricsFor
         assertNotNull(song)
+        // A page Crosstune hands on as it is, and a song it looks up first.
         model.resolveIncoming("see https://soundcloud.com/discover.", keepWords = true)
         idle()
         assertEquals(song, model.uiState.lyricsFor)
         assertTrue(model.uiState.handingOff)
+        model.resolveIncoming("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC", keepWords = true)
+        idle()
+        assertEquals(song, model.uiState.lyricsFor)
         // Handed on, it's done with, so Crosstune opened shows the words.
         model.handedOn()
         assertFalse(model.uiState.handingOff)

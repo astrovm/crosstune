@@ -3407,9 +3407,11 @@ class ListeningTest {
 
     @Test
     fun aLinkOnlyHandedOnWhileTheWordsFloatLeavesThemFloating() {
-        // Links go straight to Spotify; this one is a page Crosstune hands on as it is.
-        prefs().edit().putString("default_target", "SPOTIFY").putBoolean("links_in_crosstune", false).commit()
-        val link = "https://open.spotify.com/user/someone"
+        // Links go straight to another player; this one is a song, already in Recent.
+        prefs().edit().putBoolean("links_in_crosstune", false).commit()
+        DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
+        val link = "https://music.apple.com/us/song/1109658204"
+        HistoryStore(prefs()).add(HistoryEntry((MusicLinks.parse(link) as LinkInput.Link).link, MusicMetadata("Iris", "Band")))
         floatOverApps(FakeHearing())
         val first = controller!!.get()
         // Reaching the screen that floats them, as Android does: in sight first, then the link.
@@ -3417,9 +3419,9 @@ class ListeningTest {
         assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
         controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
         controller!!.resume()
-        composeRule.waitForIdle()
+        waitUntil(TIMEOUT_MS) { shadowOf(app).peekNextStartedActivity() != null }
         val opened = shadowOf(app).nextStartedActivity
-        assertEquals(link, opened.dataString)
+        assertEquals("player://search/Iris%20Band", opened.dataString)
         // In a task of its own, so Crosstune stepping back doesn't take it along.
         assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
@@ -3434,8 +3436,8 @@ class ListeningTest {
         composeRule.waitForIdle()
         val host = FloatingLyricsService.host
         val second = Robolectric.buildActivity(MainActivity::class.java, Intent(Intent.ACTION_VIEW, Uri.parse(link))).setup()
-        composeRule.waitForIdle()
-        assertEquals(link, shadowOf(app).nextStartedActivity.dataString)
+        waitUntil(TIMEOUT_MS) { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("player://search/Iris%20Band", shadowOf(app).nextStartedActivity.dataString)
         assertTrue(second.get().isFinishing)
         assertNull(shadowOf(app).nextStoppedService)
         assertSame(host, FloatingLyricsService.host)
