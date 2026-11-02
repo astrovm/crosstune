@@ -213,8 +213,7 @@ internal class MainViewModel(
             pureBlack = preferences.getBoolean(KEY_PURE_BLACK, false),
             playingBar = preferences.getBoolean(KEY_PLAYING_BAR, true),
             linesEarlyMs = preferences.getLong(KEY_LINES_EARLY, LINES_EARLY_MS),
-            // Before it could be set, it was only on or off; on is the second it was then.
-            nextLineAheadMs = preferences.getLong(KEY_NEXT_LINE_AHEAD, if (preferences.getBoolean(KEY_NEXT_LINE_FIRST, false)) NEXT_LINE_AHEAD_MS else 0),
+            nextLineAheadMs = preferences.getLong(KEY_NEXT_LINE_AHEAD, nextLineAheadBefore()),
             visuals = preferences.getBoolean(KEY_VISUALS, true),
             visualsShade = preferences.getFloat(KEY_VISUALS_SHADE, DEFAULT_VISUALS_SHADE),
             visualsSettings = VisualsStore(preferences).load(),
@@ -2688,6 +2687,16 @@ internal class MainViewModel(
     fun setLinesEarly(ms: Long) {
         preferences.edit { putLong(KEY_LINES_EARLY, ms) }
         uiState = uiState.copy(linesEarlyMs = ms)
+    }
+
+    /**
+     * How far ahead the next line brightens for one who hasn't set it since it could be set. Before, it
+     * was only on or off: on is the second it was then, off stays off, and never touched gets the default.
+     */
+    private fun nextLineAheadBefore(): Long = when {
+        !preferences.contains(KEY_NEXT_LINE_FIRST) -> NEXT_LINE_AHEAD_DEFAULT_MS
+        preferences.getBoolean(KEY_NEXT_LINE_FIRST, false) -> NEXT_LINE_AHEAD_MS
+        else -> 0
     }
 
     fun setNextLineAhead(ms: Long) {

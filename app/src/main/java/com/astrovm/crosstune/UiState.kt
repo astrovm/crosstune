@@ -104,7 +104,7 @@ internal data class UiState(
     /** How far ahead of the voice a line lights, so it's read as it's sung. */
     val linesEarlyMs: Long = LINES_EARLY_MS,
     /** How long before it's lit the line coming next brightens, or 0 when it doesn't. */
-    val nextLineAheadMs: Long = 0,
+    val nextLineAheadMs: Long = NEXT_LINE_AHEAD_DEFAULT_MS,
     /** Whether MilkDrop visuals move behind the words, to what the phone plays. */
     val visuals: Boolean = false,
     /** How dark the ground over the visuals is, from 0, none, to 1, black. */
@@ -339,6 +339,9 @@ internal val LINES_EARLY_STEPS = (0L..1500L step 100L).toList()
 
 /** How long before it's lit the line coming next brightens once switched on, as it did before it could be set. */
 internal const val NEXT_LINE_AHEAD_MS = 1000L
+
+/** How long before it's lit the line coming next brightens unless set otherwise: enough to see where the eyes go next. */
+internal const val NEXT_LINE_AHEAD_DEFAULT_MS = 600L
 
 /** How long before it's lit the line coming next can be set to brighten: not at all, or half a second to three. */
 internal val NEXT_LINE_AHEAD_STEPS = listOf(0L) + (500L..3000L step 100L)
