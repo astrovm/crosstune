@@ -43,6 +43,16 @@ class CastViewModelTest {
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
+    /** The lookup's requests run on real threads, so the main thread waits for them. */
+    private fun until(what: String, done: () -> Boolean) {
+        val end = System.currentTimeMillis() + 10_000
+        while (!done()) {
+            check(System.currentTimeMillis() < end) { "Never $what" }
+            idle()
+            Thread.sleep(10)
+        }
+    }
+
     private fun model(playback: PlaybackSource?, cast: CastSender, phone: Phone = Phone.OTHER): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -91,6 +101,7 @@ class CastViewModelTest {
         assertTrue(model.uiState.canCast)
         cast.around.value = false
         idle()
+        assertFalse(model.uiState.castAround)
         assertFalse(model.uiState.canCast)
     }
 
@@ -349,6 +360,72 @@ class CastViewModelTest {
         assertEquals("Bedroom", model.uiState.castingTo)
     }
 
+    @Test
+    fun aSongCastWithALinkShowsTheLinkAndOneByNameShowsItsName() {
+        val model = model(null, FakeCast(), Phone.TV)
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        model.castLoad(CastSong("Hush", "Band", link))
+        idle()
+        assertEquals(link, model.uiState.linkText)
+        assertTrue(model.uiState.leaveSettings)
+        assertEquals(AfterLookup.OPEN, model.uiState.afterLookup)
+
+        model.castLoad(CastSong("Hush", "Band"))
+        idle()
+        assertEquals("Hush by Band", model.uiState.linkText)
+    }
+
+    @Test
+    fun openingTheOriginalOfACastSongLeavesCrosstuneOpen() {
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"Hush","author_name":"Band"}""") }
+        val model = model(null, FakeCast(), Phone.TV)
+        val effects = effects(model)
+        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+        model.castLoad(CastSong("Hush", "Band", link))
+        until("looked the cast song up") { model.uiState.link != null && !model.uiState.isLoading }
+        model.openOriginal()
+        idle()
+        val open = effects.filterIsInstance<Effect.Open>().last()
+        assertEquals(link, open.url)
+        // The TV is where the song plays; opening it elsewhere doesn't close Crosstune behind it.
+        assertFalse(open.finishAfterOpen)
+    }
+
+    @Test
+    fun theTvTellsPhonesWhereItIsInTheSongAndHowLongItIs() {
+        val playback = FakePlayback()
+        playback.access = true
+        playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
+        playback.playing.value = following(playing = false).copy(durationMs = 200_000)
+        val model = model(playback, FakeCast(), Phone.TV)
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        model.peekPlayingNow()
+        idle()
+        val state = requireNotNull(model.castTv)
+        assertEquals(1_000L, state.positionMs)
+        assertEquals(200_000L, state.durationMs)
+    }
+
+    @Test
+    fun beforeItsAppSaysAnythingTheTvTellsTheSongsOwnLengthFromTheStart() {
+        val long = song.copy(lengthMs = 123_000)
+        val playback = FakePlayback().apply { access = true; onThePhone = Heard.Song(long, null, app = "com.spotify"); playing.value = following() }
+        val cast = FakeCast().apply { target.value = CastTarget("Living room") }
+        val model = model(playback, cast)
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        model.peekPlayingNow()
+        idle()
+        model.cast()
+        idle()
+        // Handed to a TV that hasn't said what it plays, the player follows nothing yet.
+        assertNull(model.uiState.player?.following)
+        val state = requireNotNull(model.castTv)
+        assertEquals(0L, state.positionMs)
+        assertEquals(123_000L, state.durationMs)
+    }
+
     // --- The TV ---
 
     @Test
@@ -388,7 +465,7 @@ class CastViewModelTest {
         assertTrue(cast.sent.isEmpty())
 
         // What plays is what the phones see.
-        val state = model.castTv!!
+        val state = requireNotNull(model.castTv)
         assertEquals("Hush" to "Band", state.title to state.artist)
         assertTrue(state.playing && state.canSeek && state.canSkipNext && state.canSkipPrevious)
 

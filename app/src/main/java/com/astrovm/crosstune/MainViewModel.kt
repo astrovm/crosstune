@@ -1477,7 +1477,7 @@ internal class MainViewModel(
     fun castLoad(song: CastSong) {
         val input = song.link?.let { MusicLinks.parse(it) } ?: MusicLinks.recognizedSong(song.toMetadata())
         val text = (input as? LinkInput.Link)?.link?.url ?: (input as? LinkInput.RecognizedSong)?.text.orEmpty()
-        cancelContentWork()
+        // resolve() drops whatever was on the screen before, as it does for any other song.
         uiState = uiState.copy(linkText = text, handlingIncomingLink = true, handingOff = false, afterLookup = AfterLookup.OPEN, leaveSettings = true)
         playOnArrival = true
         resolve(input, openWhenReady = false, here = true)

@@ -2,16 +2,20 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
 /** What a song and a command look like on their way to the TV, and the phone's player becoming the TV's remote. */
 @RunWith(RobolectricTestRunner::class)
@@ -36,8 +40,8 @@ class CastTest {
 
     @Test
     fun onlyTheCommandsCastHasNoWordForGoOverTheChannel() {
-        assertEquals(CastCommand.Translation(true), CastCommand.fromMessage(CastCommand.Translation(true).message()!!))
-        assertEquals(CastCommand.Readings(false), CastCommand.fromMessage(CastCommand.Readings(false).message()!!))
+        assertEquals(CastCommand.Translation(true), CastCommand.fromMessage(requireNotNull(CastCommand.Translation(true).message())))
+        assertEquals(CastCommand.Readings(false), CastCommand.fromMessage(requireNotNull(CastCommand.Readings(false).message())))
         listOf(CastCommand.Play, CastCommand.Pause, CastCommand.Stop, CastCommand.Seek(1), CastCommand.Next, CastCommand.Previous).forEach { assertNull(it.message()) }
         assertNull(CastCommand.fromMessage("not json"))
         assertNull(CastCommand.fromMessage("""{"type":"explode","on":true}"""))
@@ -67,7 +71,7 @@ class CastTest {
 
     @Test
     fun noCastAtAllDoesNothingAndIsNeverAround() {
-        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
+        val context = ApplicationProvider.getApplicationContext<Context>()
         NoCast.chooseTv(context)
         NoCast.showTv(context)
         NoCast.load(CastSong("Hush", "Band"))
@@ -109,7 +113,7 @@ class CastTest {
         assertTrue(playback.hasAccess())
         assertNull(runBlocking { playback.follow(song).first() })
         cast.target.value = CastTarget("Living room", tv)
-        val following = runBlocking { playback.follow(song).first() }!!
+        val following = requireNotNull(runBlocking { playback.follow(song).first() })
         assertEquals(5_000, following.clock.positionAt(1_000))
         assertTrue(following.clock.playing && following.canSeek && following.canSkipNext && !following.canSkipPrevious)
         assertEquals("Living room", following.app)
@@ -184,5 +188,29 @@ class CastTest {
         assertFalse(playback.hasAccess())
         playback.playPause(song, true)
         assertEquals(listOf(true), source.plays.toList())
+    }
+
+    @Test
+    fun theAppKeepsOneSenderAndOneReceiverHoweverOftenTheScreenIsMadeAgain() {
+        val app = ApplicationProvider.getApplicationContext<Context>()
+        var made = 0
+        val fake = FakeCast()
+        MainActivity.castSenderFactory = { made++; fake }
+        MainActivity.castReceiverFactory = { made++; fake }
+        try {
+            assertSame(MainActivity.castSender(app), MainActivity.castSender(app))
+            assertSame(MainActivity.castReceiver(app), MainActivity.castReceiver(app))
+            assertEquals(2, made)
+        } finally {
+            MainActivity.castSenderFactory = ::platformCastSender
+            MainActivity.castReceiverFactory = ::platformCastReceiver
+        }
+    }
+
+    @Test
+    fun aTvNeverCastsToAnother() {
+        val app = ApplicationProvider.getApplicationContext<Context>()
+        shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
+        assertSame(NoCast, platformCastSender(app))
     }
 }

@@ -186,7 +186,7 @@ class CastActivityTest {
         assertEquals(1, cast.started)
 
         // A song cast to it plays, as the one opened there does, and the phones see it.
-        app.mainExecutor.execute { cast.onLoad!!(CastSong("Demo", "Band", link)) }
+        app.mainExecutor.execute { requireNotNull(cast.onLoad)(CastSong("Demo", "Band", link)) }
         waitUntil { playback.opened.isNotEmpty() }
         assertEquals(MusicService.YOUTUBE_MUSIC.packageName to link, playback.opened.single())
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube", canSeek = true, appPackage = MusicService.YOUTUBE_TV)
@@ -194,7 +194,7 @@ class CastActivityTest {
         assertEquals("Demo", cast.published.last()?.title)
 
         // What the phones ask is what the remote would.
-        app.mainExecutor.execute { cast.onCommand!!(CastCommand.Pause) }
+        app.mainExecutor.execute { requireNotNull(cast.onCommand)(CastCommand.Pause) }
         waitUntil { playback.plays.isNotEmpty() }
         assertEquals(listOf(false), playback.plays.toList())
     }
