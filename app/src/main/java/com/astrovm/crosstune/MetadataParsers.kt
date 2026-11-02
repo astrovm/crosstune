@@ -369,7 +369,8 @@ internal object MetadataParsers {
 
     /** iTunes Lookup API result for a song, album or artist. */
     fun appleMusic(json: JSONObject, type: ItemType): MusicMetadata? {
-        val result = json.optJSONArray("results")?.optJSONObject(0) ?: return null
+        val results = json.optJSONArray("results") ?: return null
+        val result = results.optJSONObject(0) ?: return null
         val artist = result.optString("artistName")
         // The lookup only offers small sizes, but the image server renders any size in the path.
         val artwork = result.optString("artworkUrl100").replace("/100x100bb.", "/600x600bb.").ifBlank { null }
@@ -378,7 +379,7 @@ internal object MetadataParsers {
             // Albums are looked up with their songs, which follow the album in the results.
             ItemType.ALBUM -> MusicMetadata(
                 result.optString("collectionName").removeSuffix(" - Single").removeSuffix(" - EP"), artist, type, artwork,
-                appleAlbumSongs(json.optJSONArray("results")!!)
+                appleAlbumSongs(results)
             )
             else -> MusicMetadata(artist, "", type)
         }.takeIf { it.title.isNotBlank() }

@@ -423,9 +423,7 @@ internal object Readings {
 
     /** [parts] with [fix] made, where its kanji are read as the first of them is. */
     private fun sungParts(parts: List<Ruby>, fix: ReadingFix): List<Ruby> {
-        val at = parts.indexOfFirst { it.text == fix.kanji && it.reading != null }
-        if (at < 0) return parts
-        val old = parts[at].reading!!
+        val (at, old) = parts.withIndex().firstNotNullOfOrNull { (index, part) -> part.reading?.takeIf { part.text == fix.kanji }?.let { index to it } } ?: return parts
         val after = hiragana(parts.drop(at + 1).joinToString("") { it.text })
         // A fix may give the kana written after the kanji too, ごし for 越 in 越し, or end in kana that
         // only happen to come next, いま for 今 in 今まで: it's whichever is nearer the length the dictionary read.

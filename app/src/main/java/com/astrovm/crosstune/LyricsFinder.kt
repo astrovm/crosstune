@@ -978,9 +978,9 @@ internal class LyricsFinder(
         val all = (0 until data.length()).mapNotNull { data.optJSONObject(it) }
         val texts = all.map { line -> line.optString("lyricLine").trim().takeUnless { it == "♪" }.orEmpty() }
         val words = texts.filter { it.isNotEmpty() }.joinToString("\n").ifEmpty { return null }
-        val starts = all.map { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds").orEmpty().toLongOrNull() }
-        if (starts.any { it == null }) return Lyrics.Found(words, source = YOUTUBE_MUSIC)
-        return Lyrics.Found(words, SyncedLyrics.withPauses(texts.mapIndexed { index, text -> LyricLine(starts[index]!!, text) }.sortedBy { it.timeMs }), source = YOUTUBE_MUSIC)
+        val starts = all.mapNotNull { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds").orEmpty().toLongOrNull() }
+        if (starts.size < all.size) return Lyrics.Found(words, source = YOUTUBE_MUSIC)
+        return Lyrics.Found(words, SyncedLyrics.withPauses(texts.zip(starts) { text, start -> LyricLine(start, text) }.sortedBy { it.timeMs }), source = YOUTUBE_MUSIC)
     }
 
     /** NetEase's words timed word by word, without credits; null when it hasn't them so. */

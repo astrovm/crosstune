@@ -152,8 +152,8 @@ internal class SungReadings(
                 val sound = letters(read.getOrNull(index)?.reading ?: lines[index])
                 val likeness = theirs.indices.map { maxOf(alike(text, written[it]), alike(sound, said[it])) }
                 val best = likeness.indices.maxByOrNull { likeness[it] }?.takeIf { likeness[it] >= ALIKE } ?: return@flatMap emptyList()
-                theirs[best].filter { part -> part.reading != null && part.text.any(Readings::isHan) && part.text in lines[index] }
-                    .map { ReadingFix(index, it.text, it.reading!!) }
+                theirs[best].filter { part -> part.text.any(Readings::isHan) && part.text in lines[index] }
+                    .mapNotNull { part -> part.reading?.let { ReadingFix(index, part.text, it) } }
             }
         }
 
