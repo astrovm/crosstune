@@ -42,7 +42,7 @@ class FakeServices(listenbrainz.Web):
         if "sitewide/artists" in url:
             return {"payload": {"artists": [{"artist_mbid": "a-us", "artist_name": "Fake Band", "listen_count": 9}, {"artist_mbid": "a-zz", "artist_name": "Nobody", "listen_count": 1}]}}
         if "musicbrainz.org/ws/2/artist" in url:
-            ng = "country%3ANG" in url
+            ng = "country%3ANG" in url and "sortname" not in url
             return {"count": 2 if ng else 0, "artists": [{"id": "a-ng", "name": "Naija Star"}, {"id": "a-un", "name": "[unknown]"}][:2 if ng else 0]}
         if "artist-country-code" in url:
             return [{"artist_mbid": item["artist_mbid"], "country_code": {"a-us": "US"}.get(item["artist_mbid"])} for item in body]
@@ -67,6 +67,36 @@ class FakeServices(listenbrainz.Web):
             }
             return {"results": [store[id] for id in ids if id in store]}
         raise AssertionError(url)
+
+
+class SearchTest(unittest.TestCase):
+    def test_a_country_with_more_artists_than_a_search_shows_is_asked_by_first_letter(self):
+        asked = []
+
+        class Web(FakeServices):
+            def json(self, url, body=None):
+                if "musicbrainz.org/ws/2/artist" in url:
+                    asked.append(url)
+                    letter = url.split("sortname%3A")[1][0] if "sortname" in url else None
+                    return {"count": 9_000 if letter is None else 1, "artists": [{"id": f"a-{letter}", "name": f"Artist {letter}"}]}
+                return super().json(url, body)
+
+        found = listenbrainz.tagged_artists(Web(), "XX")
+        self.assertEqual(1 + len(listenbrainz.LETTERS), len(found))
+        self.assertEqual({"name": "Artist k", "country": "XX"}, found["a-k"])
+        self.assertEqual(listenbrainz.SEARCH_MAX // 100 + len(listenbrainz.LETTERS), len(asked))
+
+    def test_the_search_stops_at_what_it_has_and_at_the_most_it_shows(self):
+        pages = []
+
+        class Web(FakeServices):
+            def json(self, url, body=None):
+                pages.append(url)
+                return {"count": 9_000, "artists": []}
+
+        listenbrainz.search(Web(), "country:XX", 10_000)
+        self.assertEqual(listenbrainz.SEARCH_MAX // 100, len(pages))
+        self.assertEqual(1, len(pages[:1]))
 
 
 class ContinentsTest(unittest.TestCase):

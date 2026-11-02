@@ -36,8 +36,11 @@ APPLE = "https://itunes.apple.com/lookup"
 GAPS = {"musicbrainz.org": 1.1, "api.listenbrainz.org": 0.3, "labs.api.listenbrainz.org": 0.3, "itunes.apple.com": 3.1}
 RETRY_CODES = {403, 429, 500, 502, 503, 504}
 TRIES = 8
-# The most artists taken from a country's MusicBrainz list, which isn't in any order of fame.
-PER_COUNTRY = 3000
+# MusicBrainz's search shows no more than this many results of one query.
+SEARCH_MAX = 500
+# Longer lists are cut by the first letter of the name, and no more than this many are taken from each, in no order of fame.
+PER_LETTER = 200
+LETTERS = "abcdefghijklmnopqrstuvwxyz0123456789"
 # Recordings MusicBrainz lists for an artist, 100 a page; the most-played ones are among the first pages of a busy artist's.
 RECORDING_PAGES = 5
 UNNAMED = {"various artists", "unknown", "anonymous", "traditional", "no artist", "special purpose artist"}
@@ -131,25 +134,35 @@ def top_artists(web):
     return seeds
 
 
-def tagged_artists(web, country, cap):
-    """A country's MusicBrainz artists with a tag, which leaves out most of the unknown ones."""
-    found, offset = {}, 0
-    while offset < cap:
-        query = urllib.parse.urlencode({"query": f"country:{country} AND tag:*", "limit": 100, "offset": offset, "fmt": "json"})
-        page = web.json(f"{MUSICBRAINZ}/artist?{query}")
+def search(web, query, cap):
+    """Up to `cap` of a MusicBrainz artist search's results, and how many it has."""
+    found, offset, count = {}, 0, 0
+    while offset < min(cap, SEARCH_MAX):
+        page = web.json(f"{MUSICBRAINZ}/artist?" + urllib.parse.urlencode({"query": query, "limit": 100, "offset": offset, "fmt": "json"}))
+        count = page.get("count", 0)
         for artist in page.get("artists", []):
-            found[artist["id"]] = {"name": artist["name"], "country": country}
+            found[artist["id"]] = artist["name"]
         offset += 100
-        if offset >= page.get("count", 0):
+        if offset >= count:
             break
-    return found
+    return found, count
 
 
-def candidates(web, cap=PER_COUNTRY):
+def tagged_artists(web, country):
+    """A country's MusicBrainz artists with a tag, which leaves out most of the unknown ones."""
+    query = f"country:{country} AND tag:*"
+    found, count = search(web, query, SEARCH_MAX)
+    if count > SEARCH_MAX:
+        for letter in LETTERS:
+            found.update(search(web, f"{query} AND sortname:{letter}*", PER_LETTER)[0])
+    return {mbid: {"name": name, "country": country} for mbid, name in found.items()}
+
+
+def candidates(web):
     """Every artist worth ranking: MBID to name and country."""
     artists = {}
     for country in CONTINENT_OF:
-        artists.update(tagged_artists(web, country, cap))
+        artists.update(tagged_artists(web, country))
         print(f"{country}: {len(artists)} artists so far")
     seeds = {mbid: name for mbid, name in top_artists(web).items() if mbid not in artists}
     for mbid, country in countries(web, seeds).items():
@@ -226,9 +239,9 @@ def previews(web, songs):
     return {song["mbid"]: next((store[id] for id in ids.get(song["mbid"], []) if id in store), None) for song in songs}
 
 
-def build(web, top, per_continent, cap=PER_COUNTRY):
+def build(web, top, per_continent):
     """songs.json's list, and how many of each continent's best were tried to get `top` with a preview."""
-    artists = candidates(web, cap)
+    artists = candidates(web)
     found = ranked(web, artists, per_continent)
     listed, tried = [], {}
     taken = set()
