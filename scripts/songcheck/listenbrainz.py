@@ -95,6 +95,8 @@ class Web:
             except urllib.error.HTTPError as e:
                 if e.code not in RETRY_CODES or attempt == TRIES - 1:
                     raise
+                # Asked again, the busy answer is let go of, or its connection stays open.
+                e.close()
             except OSError:
                 if attempt == TRIES - 1:
                     raise

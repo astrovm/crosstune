@@ -5,6 +5,7 @@ import tempfile
 import types
 import unittest
 import urllib.error
+import urllib.parse
 from pathlib import Path
 
 sys.modules.setdefault("anyascii", types.SimpleNamespace(anyascii=lambda text: text))
@@ -12,6 +13,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import listenbrainz  # noqa: E402
 import songcheck  # noqa: E402
+
+
+def host(url):
+    """The host a fake request went to, told by the URL's own parts, not by what it contains."""
+    return urllib.parse.urlsplit(url).hostname
 
 
 class FakeServices(listenbrainz.Web):
@@ -41,7 +47,7 @@ class FakeServices(listenbrainz.Web):
             return {"payload": {"artist_map": [{"country": "USA", "artists": [{"artist_mbid": "a-us", "artist_name": "Fake Band", "listen_count": 5}]}]}}
         if "sitewide/artists" in url:
             return {"payload": {"artists": [{"artist_mbid": "a-us", "artist_name": "Fake Band", "listen_count": 9}, {"artist_mbid": "a-zz", "artist_name": "Nobody", "listen_count": 1}]}}
-        if "musicbrainz.org/ws/2/artist" in url:
+        if host(url) == "musicbrainz.org" and "/ws/2/artist" in url:
             ng = "country%3ANG" in url and "sortname" not in url
             return {"count": 2 if ng else 0, "artists": [{"id": "a-ng", "name": "Naija Star"}, {"id": "a-un", "name": "[unknown]"}][:2 if ng else 0]}
         if "artist-country-code" in url:
@@ -55,7 +61,7 @@ class FakeServices(listenbrainz.Web):
             return [{"recording_mbid": mbid, "total_user_count": self.USERS.get(mbid, (None, None))[0], "total_listen_count": self.USERS.get(mbid, (None, None))[1]} for mbid in body["recording_mbids"]]
         if "apple-music-id-from-mbid" in url:
             return [{"recording_mbid": item["recording_mbid"], "apple_music_track_ids": self.APPLE_IDS.get(item["recording_mbid"], [])} for item in body]
-        if "itunes.apple.com" in url:
+        if host(url) == "itunes.apple.com":
             ids = url.split("id=")[1].split("&")[0].split(",")
             store = {
                 "102": {"trackId": 102, "kind": "song", "trackName": "Big Hit", "artistName": "Fake Band & Guest", "trackTimeMillis": 200_000, "primaryGenreName": "Pop", "previewUrl": "https://example.com/102.m4a"},
@@ -75,7 +81,7 @@ class SearchTest(unittest.TestCase):
 
         class Web(FakeServices):
             def json(self, url, body=None):
-                if "musicbrainz.org/ws/2/artist" in url:
+                if host(url) == "musicbrainz.org" and "/ws/2/artist" in url:
                     asked.append(url)
                     letter = url.split("sortname%3A")[1][0] if "sortname" in url else None
                     return {"count": 9_000 if letter is None else 1, "artists": [{"id": f"a-{letter}", "name": f"Artist {letter}"}]}
@@ -154,15 +160,17 @@ class WebTest(unittest.TestCase):
     def test_a_bad_question_is_not_asked_again(self):
         bad = urllib.error.HTTPError("https://api.listenbrainz.org", 400, "bad", {}, None)
         web, _, asked = self.web(bad)
-        with self.assertRaises(urllib.error.HTTPError):
+        with self.assertRaises(urllib.error.HTTPError) as raised:
             web.json("https://api.listenbrainz.org/1/popularity/artist", {})
+        raised.exception.close()
         self.assertEqual(1, len(asked))
 
     def test_it_gives_up_when_the_service_stays_busy(self):
         busy = urllib.error.HTTPError("https://musicbrainz.org", 503, "busy", {}, None)
         web, _, asked = self.web(*[busy] * listenbrainz.TRIES)
-        with self.assertRaises(urllib.error.HTTPError):
+        with self.assertRaises(urllib.error.HTTPError) as raised:
             web.json("https://musicbrainz.org/ws/2/artist?x=1")
+        raised.exception.close()
         self.assertEqual(listenbrainz.TRIES, len(asked))
 
 
