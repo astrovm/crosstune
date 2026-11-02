@@ -236,6 +236,8 @@ dependencies {
     // Casting, in the play flavor only: the phone's side, and a TV's, Crosstune being a Cast Connect receiver.
     "playImplementation"("com.google.android.gms:play-services-cast-framework:23.0.0")
     "playImplementation"("com.google.android.gms:play-services-cast-tv:21.1.1")
+    // Cast's media route dialogs bring Fragment 1.1.0, which lint rejects for the activity result calls MainActivity makes.
+    "playImplementation"("androidx.fragment:fragment:1.9.1")
 
     pitest(project(":pitest-changed-lines"))
 
