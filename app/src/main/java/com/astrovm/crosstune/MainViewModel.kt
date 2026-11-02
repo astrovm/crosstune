@@ -755,8 +755,7 @@ internal class MainViewModel(
 
     fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN, keepWords: Boolean = false) {
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
-        // Without an app songs play in yet, it shows here, where one's picked.
-        val here = !show && destination == null && after == AfterLookup.OPEN && (uiState.linksInCrosstune || !uiState.hasDefault)
+        val here = showsHere(destination, show, after)
         // The words stay only for a link handed on: one shown here is what's shown.
         val keepsWords = keepWords && !show && !here
         cancelContentWork(keepsWords = keepsWords)
@@ -779,6 +778,10 @@ internal class MainViewModel(
         if (input is LinkInput.RecognizedSong) uiState = uiState.copy(linkText = input.text)
         resolve(input, openWhenReady = !show && !here, destination, here = here, keepsWords = keepsWords)
     }
+
+    /** Whether a link that came in shows here: set to, or without an app songs play in yet, where one's picked. */
+    private fun showsHere(destination: Destination?, show: Boolean, after: AfterLookup) =
+        !show && destination == null && after == AfterLookup.OPEN && (uiState.linksInCrosstune || !uiState.hasDefault)
 
     /**
      * Text that isn't a music link replaces the previous result. Otherwise the error would sit above an
@@ -1057,41 +1060,61 @@ internal class MainViewModel(
         // A link already in Recent is shown from there rather than looked up again. A short link's
         // target isn't known until it's followed, so it's always looked up.
         val link = (input as? LinkInput.Link)?.link
-        // The link as parsed is kept, since Recent doesn't save which frontend's site it came from.
-        val saved = link?.let { wanted -> uiState.history.firstOrNull { it.link.url == wanted.url }?.copy(link = wanted) }
-            // An album or playlist kept without its songs, e.g. by a version that couldn't read them, is looked up again for them.
-            ?.takeUnless { (it.link.type == ItemType.ALBUM || it.link.type == ItemType.PLAYLIST) && it.metadata.tracks.isEmpty() }
+        val saved = link?.let(::savedAs)
         job = viewModelScope.launch {
             // A video from another app that isn't music, like a tutorial, opens as it would without
             // Crosstune; one copied, or that YouTube Music can't tell about, e.g. offline, is let be.
             val video = link?.takeIf { (copied || here || openWhenReady && destination == null) && it.mayNotBeMusic }
             // Looked up while asking whether it's music, so a music video costs one wait, not two.
             val lookup = async { saved?.let { Resolution.Resolved(it.link, it.metadata) } ?: withCover(resolver.resolve(input)) }
-            val music = video?.let { matcher.isMusicVideo(it.id) }
-            if (copied) {
-                if (video == null || music != true || !readyForCopy) return@launch lookup.cancel()
-                uiState = uiState.copy(linkText = video.frontendUrl ?: video.url, handlingIncomingLink = false, handingOff = false)
-                showLoading()
-            } else if (video != null && music == false) {
+            if (!lookupGoesOn(video, copied, lookup, ::showLoading)) return@launch
+            lookedUp(lookup.await(), saved)
+        }
+    }
+
+    /**
+     * Whether [lookup] goes on once YouTube Music says if [video] is music: one [copied] is only filled
+     * in if it is, and one that isn't opens as it is. Otherwise [lookup] is cancelled.
+     */
+    private suspend fun lookupGoesOn(video: MusicLink?, copied: Boolean, lookup: Job, showLoading: () -> Unit): Boolean {
+        val music = video?.let { matcher.isMusicVideo(it.id) }
+        if (copied) {
+            if (video == null || music != true || !readyForCopy) {
                 lookup.cancel()
-                return@launch openAsIs(video)
+                return false
             }
-            when (val resolution = lookup.await()) {
-                is Resolution.Failed -> {
-                    // Offline, the link waits for the internet, as the field's icon says, and is looked up once it's back.
-                    linkWaits = resolution.error == AppError.NETWORK && uiState.offline
-                    uiState = uiState.copy(
-                        isLoading = false,
-                        error = resolution.error.takeUnless { linkWaits },
-                        canRetry = resolution.error.canRetry,
-                        link = resolution.link,
-                        handingOff = false
-                    )
-                }
-                // A search page saved while exact matching was on means matching failed that time,
-                // e.g. on a flaky network, so a new request for the link tries it again.
-                is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled })
+            uiState = uiState.copy(linkText = video.frontendUrl ?: video.url, handlingIncomingLink = false, handingOff = false)
+            showLoading()
+        } else if (video != null && music == false) {
+            lookup.cancel()
+            openAsIs(video)
+            return false
+        }
+        return true
+    }
+
+    /** [wanted] as Recent has it, as parsed, since Recent doesn't save which frontend's site it came from. */
+    private fun savedAs(wanted: MusicLink): HistoryEntry? = uiState.history.firstOrNull { it.link.url == wanted.url }?.copy(link = wanted)
+        // An album or playlist kept without its songs, e.g. by a version that couldn't read them, is looked up again for them.
+        ?.takeUnless { (it.link.type == ItemType.ALBUM || it.link.type == ItemType.PLAYLIST) && it.metadata.tracks.isEmpty() }
+
+    /** What a link's lookup found, or why it failed; [saved] is how Recent had it. */
+    private fun lookedUp(resolution: Resolution, saved: HistoryEntry?) {
+        when (resolution) {
+            is Resolution.Failed -> {
+                // Offline, the link waits for the internet, as the field's icon says, and is looked up once it's back.
+                linkWaits = resolution.error == AppError.NETWORK && uiState.offline
+                uiState = uiState.copy(
+                    isLoading = false,
+                    error = resolution.error.takeUnless { linkWaits },
+                    canRetry = resolution.error.canRetry,
+                    link = resolution.link,
+                    handingOff = false
+                )
             }
+            // A search page saved while exact matching was on means matching failed that time,
+            // e.g. on a flaky network, so a new request for the link tries it again.
+            is Resolution.Resolved -> onResolved(resolution, saved?.destinationLinks.orEmpty().filterValues { it.exact || !it.matchingEnabled })
         }
     }
 
