@@ -1645,11 +1645,13 @@ internal class MainViewModel(
      */
     private suspend fun openMissing(song: MusicMetadata, original: MusicLink?, destination: Destination, searchUrl: String, finishAfterOpen: Boolean) {
         val opensWhere = original?.takeIf { it.service != null }
+        val action = uiState.notFoundAction
         when {
-            uiState.notFoundAction == NotFoundAction.SEARCH || (uiState.notFoundAction == NotFoundAction.ORIGINAL && opensWhere == null) ->
+            action == NotFoundAction.ORIGINAL && opensWhere != null ->
+                effectChannel.send(Effect.Open(opensWhere.url, opensWhere.service?.packageName, finishAfterOpen))
+            // Searched, also when it's set to open where it's from and that's unknown.
+            action == NotFoundAction.SEARCH || action == NotFoundAction.ORIGINAL ->
                 effectChannel.send(Effect.Open(searchUrl.forSharing(), destination.packageName, finishAfterOpen))
-            uiState.notFoundAction == NotFoundAction.ORIGINAL ->
-                effectChannel.send(Effect.Open(opensWhere!!.url, opensWhere.service?.packageName, finishAfterOpen))
             else -> uiState = uiState.copy(
                 notFoundOffer = NotFoundOffer(song, destination, opensWhere, searchUrl), handingOff = false
             )

@@ -124,9 +124,10 @@ internal fun FloatingLyrics(state: UiState, modifier: Modifier) {
                 val current = lines.getOrNull(line)
                 // As the words are set to show: as written, or in kana or Latin letters.
                 val learning = state.learning
-                fun shown(index: Int) = lines.getOrNull(index)?.let { (learning.insteadOf(index) ?: it.text).ifBlank { "♪" } }
+                fun shown(lyric: LyricLine, index: Int) = (learning.insteadOf(index) ?: lyric.text).ifBlank { "♪" }
+                fun shown(index: Int) = lines.getOrNull(index)?.let { shown(it, index) }
                 val (first, second) = if (current != null) {
-                    shown(line)!! to shown(line + 1)
+                    shown(current, line) to shown(line + 1)
                 } else {
                     song?.title.orEmpty() to song?.artist
                 }

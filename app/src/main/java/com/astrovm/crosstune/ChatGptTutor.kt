@@ -31,7 +31,7 @@ internal class ChatGptTutor(
         val key = { line: String -> "translation$TRANSLATION_VERSION|$model|$language|${song?.title}|${song?.artist}|$line" }
         val known = words.associateWith { this.lines.get(key(it)) }
         val missing = words.filter { known[it] == null }
-        val kept = known.filterValues { it != null }.mapValues { it.value!! }
+        val kept = buildMap { known.forEach { (line, translation) -> if (translation != null) put(line, translation) } }
         // A line already in [language] comes back empty, or as it was, and is no use under itself.
         fun shown(all: Map<String, String>) = lines.map { line -> all[line]?.takeUnless { it.isBlank() || it.equals(line.trim(), ignoreCase = true) } }
         val found = if (missing.isEmpty()) {
