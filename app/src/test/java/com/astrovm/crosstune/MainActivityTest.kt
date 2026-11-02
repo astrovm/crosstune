@@ -4310,6 +4310,15 @@ class MainActivityTest {
     }
 
     @Test
+    fun theNextLineSwitchedOffBeforeItCouldBeSetStaysOff() {
+        prefs().edit().putBoolean("next_line_first", false).commit()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNode(hasContentDescription(string(R.string.setting_next_line_first))).performScrollTo()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.setting_off)))
+    }
+
+    @Test
     fun theRoomSongsKeptOfflineMayTakeIsSetInAdvancedSettings() {
         launch()
         inAdvancedSettings {
@@ -4332,9 +4341,9 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(1_000L, prefs().getLong("lines_early_ms", 0))
         assertTextShown("1 sec")
-        // The next line doesn't brighten ahead unless set to, and then as far ahead as set.
+        // The next line brightens a little ahead unless set otherwise, and then as far ahead as set.
         val ahead = composeRule.onNode(hasContentDescription(string(R.string.setting_next_line_first)))
-        ahead.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.setting_off)))
+        ahead.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "0.6 sec"))
         ahead.performSemanticsAction(SemanticsActions.SetProgress) { it(NEXT_LINE_AHEAD_STEPS.indexOf(2_000L).toFloat()) }
         composeRule.waitForIdle()
         assertEquals(2_000L, prefs().getLong("next_line_ahead_ms", 0))
