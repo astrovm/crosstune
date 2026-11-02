@@ -1,6 +1,10 @@
 package com.astrovm.crosstune
 
 import android.content.Context
+import android.text.format.Formatter
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -82,6 +86,19 @@ class SettingsScreenTest {
     fun theAdvancedPageOpensFromTheList() {
         show(UiState(), openSource = "advanced")
         composeRule.onNodeWithText(string(R.string.settings_advanced_title)).assertExists()
+    }
+
+    @Test
+    fun theAdvancedPageSaysHowMuchRoomWhatsKeptOfflineTakesAsItGrows() {
+        var state by mutableStateOf(UiState(offlineUsedBytes = 0))
+        composeRule.setContent { CrosstuneTheme { SettingsScreen(state, ScreenActions(), onBack = {}, openSource = "advanced") } }
+        val used = { bytes: Long -> string(R.string.setting_offline_space_used, Formatter.formatShortFileSize(context, bytes)) }
+        composeRule.onNodeWithText(string(R.string.offline)).performScrollTo().assertExists()
+        composeRule.onNodeWithText(used(0)).performScrollTo().assertExists()
+        // Kept songs fetched while it's open show at once.
+        state = state.copy(offlineUsedBytes = 3_500_000)
+        composeRule.onNodeWithText(used(3_500_000)).assertExists()
+        composeRule.onNodeWithText(used(0)).assertDoesNotExist()
     }
 
     @Test

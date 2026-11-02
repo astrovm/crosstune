@@ -796,6 +796,95 @@ class ListeningTest {
         demoCard()
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.offline_out_of_space))
+        // Given room, it's fetched at once.
+        controllerModel().setOfflineSpace(200)
+        waitForDescription(string(R.string.kept_offline))
+    }
+
+    @Test
+    fun whatsKeptOfflineStillShowsKeptWhenTheAppIsOpenedAgain() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        controller?.pause()?.stop()?.destroy()
+        launch()
+        recognize()
+        waitForText("Demo")
+        waitForDescription(string(R.string.kept_offline))
+    }
+
+    @Test
+    fun aSongWhoseWordsCantBeReachedIsNotKeptUntilTheyCanBe() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        val down = java.util.concurrent.atomic.AtomicBoolean(true)
+        val refused = java.util.concurrent.atomic.AtomicInteger()
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            if (down.get()) {
+                refused.incrementAndGet()
+                throw IOException("offline")
+            }
+            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitUntil(TIMEOUT_MS) { refused.get() > 0 }
+        composeRule.waitForIdle()
+        assertTrue(described(string(R.string.keeping_offline)))
+        assertFalse(described(string(R.string.kept_offline)))
+        // The next network it tries again.
+        down.set(false)
+        // Another network each time round, as it may still be giving up on the last one.
+        waitUntil(TIMEOUT_MS) {
+            controllerModel().unmeteredChanged(true)
+            described(string(R.string.kept_offline))
+        }
+    }
+
+    @Test
+    fun aSongWithNoWordsAnywhereIsKeptAllTheSame() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request -> FakeSpotify.html(request, "[]") }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+    }
+
+    /** Kept offline with [switchedOn] set in advance, the hosts asked once it's kept. */
+    private fun hostsAskedKeepingWith(switchedOn: String?): List<String> {
+        switchedOn?.let { prefs().edit().putBoolean(it, true).commit() }
+        MainActivity.connectionFactory = { FakeConnection() }
+        demoCard()
+        fake.requestedUrls.clear()
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        return fake.requestedUrls.toList()
+    }
+
+    @Test
+    fun aSongKeptOfflineKeepsNeitherTranslationNorChordsUnlessSwitchedOn() {
+        val plain = hostsAskedKeepingWith(null)
+        assertTrue(plain.any { "lrclib.net" in it })
+        assertFalse(plain.any { "translate" in it || "mymemory" in it })
+        assertFalse(plain.any { "ultimate-guitar" in it })
+    }
+
+    @Test
+    fun aSongKeptOfflineKeepsItsTranslationWhenSwitchedOn() {
+        assertTrue(hostsAskedKeepingWith("lyrics_translation").any { "translate" in it || "mymemory" in it })
+    }
+
+    @Test
+    fun aSongKeptOfflineKeepsItsChordsWhenSwitchedOn() {
+        assertTrue(hostsAskedKeepingWith("lyrics_chords").any { "ultimate-guitar" in it })
     }
 
     @Test

@@ -66,6 +66,25 @@ class OfflineSongsTest {
     }
 
     @Test
+    fun whatALetGoSongNeededIsDroppedOnDiskToo() = runBlocking {
+        val songs = songs()
+        val kept = songs.keep(song)
+        withContext(Pinning(kept.id)) { words.put("song", "words") }
+        words.save()
+        assertEquals("songwords".length.toLong(), LookupCache(File(dir, "lyrics.json"), Dispatchers.Unconfined).pinnedSize())
+        songs.letGo(kept.id)
+        // Written when let go, not left for later: the app may close first.
+        assertEquals(0L, LookupCache(File(dir, "lyrics.json"), Dispatchers.Unconfined).pinnedSize())
+    }
+
+    @Test
+    fun whatsKeptIsWrittenWhereNothingMadeTheFoldersYet() = runBlocking {
+        val later = File(File(dir, "not/yet"), "songs.json")
+        OfflineSongs(later, emptyList(), null, Dispatchers.Unconfined).keep(song)
+        assertEquals(listOf(song), OfflineSongs(later, emptyList(), null, Dispatchers.Unconfined).all().flatMap { it.songs })
+    }
+
+    @Test
     fun aBrokenOrUnwritableFileKeepsNothingForLater() = runBlocking {
         file.writeText("not json")
         assertEquals(emptyList<KeptOffline>(), songs().all())

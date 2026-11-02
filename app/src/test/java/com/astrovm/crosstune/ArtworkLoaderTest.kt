@@ -140,6 +140,23 @@ class ArtworkLoaderTest {
         Unit
     }
 
+    @Test
+    fun aSeenCoverThatCantBeCopiedIsDownloadedForKeeping() = runBlocking {
+        fake.handler = { request -> FakeSpotify.image(request, FakeSpotify.png()) }
+        val cached = createTempDirectory("artwork").toFile()
+        val kept = createTempDirectory("kept").toFile()
+        val loader = ArtworkLoader(fake.client(), Dispatchers.Unconfined, cacheDir = cached, keptDir = kept)
+        loader.load(COVER)
+        // Where the copy would go there's a folder with something in it, which can't be written over.
+        val name = java.security.MessageDigest.getInstance("SHA-256").digest(COVER.toByteArray()).joinToString("") { "%02x".format(it) }
+        File(kept, name).apply { mkdirs() }.resolve("in-the-way").writeText("x")
+        loader.keep(COVER)
+        assertEquals(listOf(COVER, COVER), fake.requestedUrls)
+        cached.deleteRecursively()
+        kept.deleteRecursively()
+        Unit
+    }
+
     private companion object {
         const val COVER = "https://img.example/cover.jpg"
     }

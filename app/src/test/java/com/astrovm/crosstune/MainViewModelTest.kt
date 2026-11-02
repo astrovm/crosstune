@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,7 +70,8 @@ class MainViewModelTest {
         songSearcher: SongSearcher? = null,
         reports: ReportSender? = null,
         listener: SongHearing = SongHearing { Heard.Nothing },
-        queueOrder: QueueOrder? = null
+        queueOrder: QueueOrder? = null,
+        offline: OfflineSongs? = null
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -91,7 +93,8 @@ class MainViewModelTest {
             phone = phone,
             songSearcher = songSearcher,
             reports = reports,
-            queueOrder = queueOrder
+            queueOrder = queueOrder,
+            offline = offline
         ).also { made += it }
     }
 
@@ -112,6 +115,19 @@ class MainViewModelTest {
         assertEquals(0, done)
         assertEquals(ChatGptState(), model.uiState.chatGpt)
         assertNull(prefs().getString("chatgpt_model", null))
+    }
+
+    @Test
+    fun withNoLyricsServiceASongKeptOfflineHasNothingToFetchAndIsKept() = runBlocking {
+        val kept = OfflineSongs(File(app.cacheDir, "kept-no-lyrics/songs.json"), emptyList(), null, Dispatchers.Unconfined)
+        val song = MusicMetadata("Song", "Band")
+        kept.keep(song)
+        val model = model(offline = kept)
+        model.unmeteredChanged(true)
+        idle()
+        assertEquals(listOf(true), model.uiState.keptOffline.map { it.done })
+        File(app.cacheDir, "kept-no-lyrics").deleteRecursively()
+        Unit
     }
 
     @Test
