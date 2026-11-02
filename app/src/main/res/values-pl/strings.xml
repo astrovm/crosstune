@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Usuwa ?si=, utm_ i podobne.</string>
     <string name="setting_share_sheet_apps">Aplikacje w menu udostępniania</string>
     <string name="setting_share_sheet_apps_description">Pokazuj aplikacje muzyczne w menu udostępniania.</string>
+    <string name="settings_playing_section">Odtwarzanie</string>
+    <string name="setting_wakes_for_next_song">Wybudzaj dla następnego utworu w Spotify</string>
+    <string name="setting_wakes_for_next_song_description">Przy wyłączonym ekranie Spotify odtwarza następny utwór z listy dopiero, gdy ekran się włączy. To włącza go na końcu każdego utworu, aż sam zgaśnie.</string>
     <string name="setting_language">Język</string>
     <string name="language_system_default">Domyślny systemu</string>
     <string name="matching_text">Szukanie dokładnego dopasowania…</string>

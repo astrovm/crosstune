@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Membuang ?si=, utm_, dan sejenisnya.</string>
     <string name="setting_share_sheet_apps">Aplikasi di menu bagikan</string>
     <string name="setting_share_sheet_apps_description">Tampilkan aplikasi musik saat berbagi.</string>
+    <string name="settings_playing_section">Pemutaran</string>
+    <string name="setting_wakes_for_next_song">Bangunkan untuk lagu Spotify berikutnya</string>
+    <string name="setting_wakes_for_next_song_description">Saat layar mati, Spotify baru memutar lagu berikutnya dari daftar setelah layar menyala. Ini menyalakan layar di akhir setiap lagu, sampai mati sendiri.</string>
     <string name="setting_language">Bahasa</string>
     <string name="language_system_default">Default sistem</string>
     <string name="matching_text">Mencari yang persis sama…</string>

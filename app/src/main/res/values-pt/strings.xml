@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Tira ?si=, utm_ e afins.</string>
     <string name="setting_share_sheet_apps">Apps ao compartilhar</string>
     <string name="setting_share_sheet_apps_description">Mostrar apps de música ao compartilhar.</string>
+    <string name="settings_playing_section">Reprodução</string>
+    <string name="setting_wakes_for_next_song">Acordar para a próxima música do Spotify</string>
+    <string name="setting_wakes_for_next_song_description">Com a tela desligada, o Spotify só toca a próxima música de uma lista quando a tela liga. Isto a liga no fim de cada música, até ela apagar sozinha.</string>
     <string name="setting_language">Idioma</string>
     <string name="language_system_default">Padrão do sistema</string>
     <string name="matching_text">Procurando o resultado exato…</string>

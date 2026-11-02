@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Haalt ?si=, utm_ en dergelijke weg.</string>
     <string name="setting_share_sheet_apps">Apps in het deelmenu</string>
     <string name="setting_share_sheet_apps_description">Muziekapps tonen bij het delen.</string>
+    <string name="settings_playing_section">Afspelen</string>
+    <string name="setting_wakes_for_next_song">Wekken voor het volgende nummer in Spotify</string>
+    <string name="setting_wakes_for_next_song_description">Met het scherm uit speelt Spotify het volgende nummer van een lijst pas als het scherm aangaat. Dit zet het aan het eind van elk nummer aan, tot het vanzelf weer uitgaat.</string>
     <string name="setting_language">Taal</string>
     <string name="language_system_default">Systeemstandaard</string>
     <string name="matching_text">Exacte match zoeken…</string>

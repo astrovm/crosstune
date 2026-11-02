@@ -685,7 +685,8 @@ private const val ADVANCED_PAGE = "advanced"
 
 /**
  * What few change: whether a link opens the exact match, and what's done when there's none; tracking
- * dropped from links; the music apps in the share sheet; and other apps and sites to open songs in.
+ * dropped from links; the music apps in the share sheet; other apps and sites to open songs in; and,
+ * on a phone with nothing to unlock, the screen turned on for Spotify's next song.
  */
 @Composable
 private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> Unit) {
@@ -718,6 +719,18 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
         }
         SectionHeader(stringResource(R.string.settings_custom_title))
         CustomDestinations(state.destinations, state.installed, actions)
+        // With a PIN, pattern or password, the screen turned on shows the lock, and Spotify still waits.
+        if (state.lockless) {
+            SectionHeader(stringResource(R.string.settings_playing_section))
+            Group {
+                SettingSwitch(
+                    label = stringResource(R.string.setting_wakes_for_next_song),
+                    description = stringResource(R.string.setting_wakes_for_next_song_description),
+                    checked = state.wakesForNextSong,
+                    onCheckedChange = actions.onWakesForNextSongChange
+                )
+            }
+        }
     }
 }
 

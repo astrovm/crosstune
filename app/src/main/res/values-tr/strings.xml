@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">\?si=, utm_ gibi kısımları kaldırır.</string>
     <string name="setting_share_sheet_apps">Paylaşım menüsünde uygulamalar</string>
     <string name="setting_share_sheet_apps_description">Paylaşım menüsünde müzik uygulamalarını göster.</string>
+    <string name="settings_playing_section">Oynatma</string>
+    <string name="setting_wakes_for_next_song">Spotify\'ın sonraki şarkısı için uyandır</string>
+    <string name="setting_wakes_for_next_song_description">Ekran kapalıyken Spotify, bir listenin sonraki şarkısını ancak ekran açılınca çalar. Bu, her şarkının sonunda ekranı açar; ekran süresi dolunca yine kapanır.</string>
     <string name="setting_language">Dil</string>
     <string name="language_system_default">Sistem varsayılanı</string>
     <string name="matching_text">Tam eşleşme bulunuyor…</string>

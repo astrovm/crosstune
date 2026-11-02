@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">\?si=, utm_ जैसे हिस्से हटाता है।</string>
     <string name="setting_share_sheet_apps">शेयर शीट में ऐप</string>
     <string name="setting_share_sheet_apps_description">शेयर करते समय संगीत ऐप दिखाएँ।</string>
+    <string name="settings_playing_section">चलाना</string>
+    <string name="setting_wakes_for_next_song">Spotify के अगले गाने के लिए स्क्रीन जगाएं</string>
+    <string name="setting_wakes_for_next_song_description">स्क्रीन बंद होने पर Spotify सूची का अगला गाना तभी चलाता है जब स्क्रीन चालू हो। यह हर गाने के अंत में स्क्रीन चालू करता है, जब तक वह अपने आप बंद न हो जाए।</string>
     <string name="setting_language">भाषा</string>
     <string name="language_system_default">सिस्टम डिफ़ॉल्ट</string>
     <string name="matching_text">सटीक मैच खोजा जा रहा है…</string>

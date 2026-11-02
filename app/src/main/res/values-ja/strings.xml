@@ -84,6 +84,9 @@
     <string name="setting_clean_links_description">\?si= や utm_ などを取り除きます。</string>
     <string name="setting_share_sheet_apps">共有メニューのアプリ</string>
     <string name="setting_share_sheet_apps_description">共有メニューに音楽アプリを表示します。</string>
+    <string name="settings_playing_section">再生</string>
+    <string name="setting_wakes_for_next_song">Spotify の次の曲のために画面をつける</string>
+    <string name="setting_wakes_for_next_song_description">画面がオフのとき、Spotify は画面がつくまでリストの次の曲を再生しません。曲が終わるたびに画面をつけ、時間がたつとまた消えます。</string>
     <string name="setting_language">言語</string>
     <string name="language_system_default">システムのデフォルト</string>
     <string name="matching_text">一致する項目を探しています…</string>
