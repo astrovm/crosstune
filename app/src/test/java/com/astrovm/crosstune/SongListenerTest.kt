@@ -265,16 +265,23 @@ class SongListenerTest {
         answers({ microphone.play(3.0); throw java.io.IOException("timed out") }, { MATCH }, { NO_MATCH })
         assertTrue(runBlocking { listener.listen() } is Heard.Song)
         assertEquals(2, askedShazam())
-        // Failing twice in a row, it says so, without listening on.
+        // Failing twice in a row, it stops listening, and keeps what it heard to ask about later.
         microphone.play(3.0)
         fake.handler = { microphone.play(3.0); throw java.io.IOException("offline") }
         fake.requestedUrls.clear()
-        assertEquals(Heard.Failed(AppError.NETWORK), runBlocking { listener.listen() })
+        var clock = 400_000L
+        val unsent = runBlocking { SongListener(microphone, shazam, clock = { clock }).listen() } as Heard.Unsent
         assertEquals(2, fake.requestedUrls.size)
+        // Asked a minute later, it's the sound heard then, from when it was.
+        clock += 60_000
+        answer(MATCH)
+        val later = runBlocking { unsent.send() } as Heard.Song
+        assertEquals(400_000L, later.startedAtMs)
+        assertEquals(3, askedShazam())
         // Or once, with no more sound to ask again with.
         microphone.play(3.0)
         fake.handler = { microphone.end(); throw java.io.IOException("offline") }
-        assertEquals(Heard.Failed(AppError.NETWORK), runBlocking { listener.listen() })
+        assertTrue(runBlocking { listener.listen() } is Heard.Unsent)
     }
 
     @Test

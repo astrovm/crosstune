@@ -736,6 +736,113 @@ class ListeningTest {
     }
 
     @Test
+    fun offlineASongHeardIsNamedOnceBackFromWhatWasHeard() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        // It waits, lit up where songs are named, with no error saying why: the offline icon does.
+        waitForDescription(string(R.string.heard_waits))
+        assertFalse(shown(string(R.string.error_network)))
+        shazamAnswers(MATCH)
+        fake.requestedUrls.clear()
+        connection.online.value = true
+        // Named from the sound heard then, without listening again.
+        waitForText("Iris")
+        assertEquals(1, shazamRequests())
+        assertEquals(1, microphone.opened)
+        assertFalse(described(string(R.string.heard_waits)))
+    }
+
+    @Test
+    fun aSongHeardJustBeforeGoingOfflineWaitsToo() {
+        val connection = FakeConnection()
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForText(string(R.string.error_network))
+        connection.online.value = false
+        waitForDescription(string(R.string.heard_waits))
+        assertFalse(shown(string(R.string.error_network)))
+        shazamAnswers(MATCH)
+        connection.online.value = true
+        waitForText("Iris")
+        assertEquals(1, microphone.opened)
+    }
+
+    @Test
+    fun aSongHeardOfflineIsForgottenOnceSomethingElseIsTyped() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForDescription(string(R.string.heard_waits))
+        composeRule.onNode(hasSetTextAction()).performTextInput("Some name")
+        composeRule.waitForIdle()
+        assertFalse(described(string(R.string.heard_waits)))
+        shazamAnswers(MATCH)
+        fake.requestedUrls.clear()
+        connection.online.value = true
+        composeRule.waitForIdle()
+        assertFalse(controllerModel().uiState.isLoading)
+        assertEquals(0, shazamRequests())
+    }
+
+    @Test
+    fun aSongHeardOfflineIsForgottenOnceListeningAgainIsCancelled() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForDescription(string(R.string.heard_waits))
+        // The mic, lit while it waits, listens again.
+        click(string(R.string.heard_waits))
+        waitForText(string(R.string.listening_text))
+        click(string(R.string.cancel_button))
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.listening_text)) }
+        assertFalse(described(string(R.string.heard_waits)))
+        shazamAnswers(MATCH)
+        fake.requestedUrls.clear()
+        connection.online.value = true
+        composeRule.waitForIdle()
+        assertFalse(controllerModel().uiState.isLoading)
+        assertEquals(0, shazamRequests())
+    }
+
+    @Test
+    fun aSongHeardOfflineShazamDoesntKnowSaysSoOnceBack() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        fake.handler = { throw IOException("offline") }
+        allowMicrophone()
+        launch()
+        microphone.play(12.0)
+        recognize()
+        waitForDescription(string(R.string.heard_waits))
+        // Shazam's answer is held, to see it's being asked.
+        val answer = java.util.concurrent.CountDownLatch(1)
+        fake.handler = { request -> answer.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS); FakeSpotify.html(request, NO_MATCH) }
+        connection.online.value = true
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.isLoading }
+        answer.countDown()
+        waitForText(string(R.string.error_no_match))
+        assertFalse(controllerModel().uiState.isLoading)
+        assertFalse(described(string(R.string.heard_waits)))
+    }
+
+    @Test
     fun cancelStopsListening() {
         allowMicrophone()
         launch()
@@ -1211,6 +1318,38 @@ class ListeningTest {
         assertEquals(2, hearing.listens)
         phone.playing.value = Following(PlaybackClock(5_000, SystemClock.elapsedRealtime()), "Music", canSeek = true)
         waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+    }
+
+    @Test
+    fun listeningAlongASongHeardOfflineOrShazamBusyIsListenedForAgainAfterALongerPause() {
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        MainActivity.listenAlongPauseMs = 1_000
+        allowMicrophone()
+        launch()
+        hearing.song("Demo", 2.0)
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { lit("Demo one") }
+        val main = shadowOf(android.os.Looper.getMainLooper())
+        main.idleFor(java.time.Duration.ofSeconds(1))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+
+        // Heard offline, it isn't sent later, as it'd be no use then: twice the pause after a song heard.
+        hearing.next.trySend(Heard.Unsent { error("Never sent") })
+        composeRule.waitForIdle()
+        main.idleFor(java.time.Duration.ofMillis(1_900))
+        assertEquals(2, hearing.listens)
+        main.idleFor(java.time.Duration.ofMillis(200))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        // Shazam busy, the same.
+        hearing.next.trySend(Heard.Failed(AppError.RECOGNITION_UNAVAILABLE))
+        composeRule.waitForIdle()
+        main.idleFor(java.time.Duration.ofMillis(1_900))
+        assertEquals(3, hearing.listens)
+        main.idleFor(java.time.Duration.ofMillis(200))
+        waitUntil(TIMEOUT_MS) { hearing.listens == 4 }
     }
 
     @Test

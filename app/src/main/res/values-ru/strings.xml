@@ -90,6 +90,7 @@
     <string name="cancel_button">Отмена</string>
     <string name="retry_button">Повторить</string>
     <string name="offline">Нет сети</string>
+    <string name="heard_waits">Песня услышана, узнаем, когда появится сеть</string>
     <string name="more_button">Ещё</string>
     <string name="history_title">Недавние</string>
     <string name="search_recent">Поиск в недавних</string>

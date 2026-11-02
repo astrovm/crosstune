@@ -90,6 +90,7 @@
     <string name="cancel_button">रद्द करें</string>
     <string name="retry_button">फिर कोशिश करें</string>
     <string name="offline">ऑफ़लाइन</string>
+    <string name="heard_waits">गाना सुना गया, ऑनलाइन होते ही पहचाना जाएगा</string>
     <string name="more_button">और</string>
     <string name="history_title">हाल के</string>
     <string name="search_recent">हाल ही में खोजें</string>

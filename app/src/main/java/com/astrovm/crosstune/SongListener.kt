@@ -57,6 +57,12 @@ internal sealed interface Heard {
     }
     data object Nothing : Heard
     data class Failed(val error: AppError) : Heard
+
+    /**
+     * Heard, but Shazam couldn't be reached, e.g. offline. [send] asks it again about the same sound,
+     * which is kept until then, as the song may be over by the time the phone is back online.
+     */
+    class Unsent(val send: suspend () -> Heard) : Heard
 }
 
 /** Names a song from its fingerprint with Shazam. Only the fingerprint is sent, never the audio. */
@@ -411,7 +417,13 @@ internal class SongListener(
         }
         recorder.cancelAndJoin()
         // What's sent starts where the recording did.
-        if (heard is Heard.Song) heard.copy(startedAtMs = startedAt) else heard
+        fun started(heard: Heard) = if (heard is Heard.Song) heard.copy(startedAtMs = startedAt) else heard
+        if (heard == Heard.Failed(AppError.NETWORK)) {
+            val sound = audio.copyOf(tried)
+            Heard.Unsent { started(shazam.recognize(sound, sound.size)) }
+        } else {
+            started(heard)
+        }
     }
 
     companion object {

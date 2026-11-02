@@ -90,6 +90,7 @@
     <string name="cancel_button">Anuluj</string>
     <string name="retry_button">Spróbuj ponownie</string>
     <string name="offline">Offline</string>
+    <string name="heard_waits">Utwór usłyszany, rozpoznamy go po powrocie do sieci</string>
     <string name="more_button">Więcej</string>
     <string name="history_title">Ostatnie</string>
     <string name="search_recent">Szukaj w ostatnich</string>

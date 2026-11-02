@@ -90,6 +90,7 @@
     <string name="cancel_button">İptal</string>
     <string name="retry_button">Tekrar dene</string>
     <string name="offline">Çevrimdışı</string>
+    <string name="heard_waits">Şarkı duyuldu, tekrar çevrimiçi olunca tanınacak</string>
     <string name="more_button">Daha fazla</string>
     <string name="history_title">Son kullanılanlar</string>
     <string name="search_recent">Son kullanılanlarda ara</string>
