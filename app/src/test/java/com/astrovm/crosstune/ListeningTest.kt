@@ -3406,6 +3406,47 @@ class ListeningTest {
     }
 
     @Test
+    fun aLinkOnlyHandedOnWhileTheWordsFloatLeavesThemFloating() {
+        // Links go straight to another player; this one is a song, already in Recent.
+        prefs().edit().putBoolean("links_in_crosstune", false).commit()
+        DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
+        val link = "https://music.apple.com/us/song/1109658204"
+        HistoryStore(prefs()).add(HistoryEntry((MusicLinks.parse(link) as LinkInput.Link).link, MusicMetadata("Iris", "Band")))
+        floatOverApps(FakeHearing())
+        val first = controller!!.get()
+        // Reaching the screen that floats them, as Android does: in sight first, then the link.
+        controller!!.start()
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
+        controller!!.resume()
+        waitUntil(TIMEOUT_MS) { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals("player://search/Iris%20Band", opened.dataString)
+        // In a task of its own, so Crosstune stepping back doesn't take it along.
+        assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        assertFalse(first.isFinishing)
+        // The words they float are still there, and opening Crosstune shows them, not the hand-off.
+        val model = ViewModelProvider(first)[MainViewModel::class.java]
+        assertEquals("Demo", model.uiState.lyricsFor?.title)
+        assertFalse(model.uiState.handingOff)
+
+        // A link reaching a new screen, over another app, leaves the words floating from the first.
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, Intent(app, FloatingLyricsService::class.java)).create().startCommand(0, 1)
+        composeRule.waitForIdle()
+        val host = FloatingLyricsService.host
+        val second = Robolectric.buildActivity(MainActivity::class.java, Intent(Intent.ACTION_VIEW, Uri.parse(link))).setup()
+        waitUntil(TIMEOUT_MS) { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("player://search/Iris%20Band", shadowOf(app).nextStartedActivity.dataString)
+        assertTrue(second.get().isFinishing)
+        assertNull(shadowOf(app).nextStoppedService)
+        assertSame(host, FloatingLyricsService.host)
+        second.destroy()
+        assertSame(host, FloatingLyricsService.host)
+        floating.destroy()
+    }
+
+    @Test
     fun floatingWordsCloseFromThemselvesTheNotificationOrCrosstuneClosing() {
         prefs().edit().putString("theme", "LIGHT").commit()
         val floating = floatOverApps(FakeHearing(), background = 0.6f)

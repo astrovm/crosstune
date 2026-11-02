@@ -57,7 +57,6 @@
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun hearSinging()</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun heardAlong(hearing: Heard.Song)</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun learn()</ID>
-    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false)</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false)</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private suspend fun prepareResult()</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String?</ID>
