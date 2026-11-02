@@ -1099,7 +1099,7 @@ internal class MainViewModel(
         ?.takeUnless { (it.link.type == ItemType.ALBUM || it.link.type == ItemType.PLAYLIST) && it.metadata.tracks.isEmpty() }
 
     /** What a link's lookup found, or why it failed; [saved] is how Recent had it. */
-    private fun lookedUp(resolution: Resolution, saved: HistoryEntry?) {
+    private suspend fun lookedUp(resolution: Resolution, saved: HistoryEntry?) {
         when (resolution) {
             is Resolution.Failed -> {
                 // Offline, the link waits for the internet, as the field's icon says, and is looked up once it's back.
