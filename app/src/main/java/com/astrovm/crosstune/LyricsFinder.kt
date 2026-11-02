@@ -203,6 +203,20 @@ private fun withoutNamesHeader(words: String): String {
     return if (header >= 2) lines.drop(header).joinToString("\n") else words
 }
 
+/** An apostrophe ending a word, before a space or the line's end, not one escaped: "friend' and". */
+private val apostropheForComma = Regex("""(?<=\p{L})'(?=\s|$)""")
+
+/**
+ * The lines without those NetEase opens a song with that pass in a moment, quicker than anything is
+ * sung: credits, headings and a contributor's notes, like "Lucky guy" in 105 ms a word. Once the song
+ * has begun, a quick line is sung.
+ */
+private fun List<LyricLine>.withoutOpeningMoments(): List<LyricLine> =
+    dropWhile { line -> (line.endMs ?: line.timeMs) - line.timeMs < MOMENT_MS_A_WORD * line.words.size.coerceAtLeast(1) }
+
+/** How quick a word NetEase times is, at most, to be no singing; all of a song's opening credits and headings are, in its word-by-word words. */
+private const val MOMENT_MS_A_WORD = 150L
+
 /** A character NetEase lost, as it writes it: "Don't锟斤拷锟斤拷look". */
 private val lostCharacters = Regex("""\s*(?:锟斤拷)+\s*""")
 
@@ -985,7 +999,7 @@ internal class LyricsFinder(
 
     /** NetEase's words timed word by word, without credits; null when it hasn't them so. */
     private fun netEaseWordByWord(yrc: String, song: MusicMetadata): Lyrics.Found? {
-        val lines = SyncedLyrics.parseWordByWord(yrc).withoutNetEaseExtras(song) { it.text }
+        val lines = SyncedLyrics.parseWordByWord(yrc).withoutNetEaseExtras(song) { it.text }.withoutOpeningMoments()
         if (lines.isEmpty()) return null
         return Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = NETEASE)
     }
@@ -1160,9 +1174,9 @@ internal class LyricsFinder(
         /**
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
-         * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled.
+         * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment.
          */
-        const val CACHE_VERSION = 12
+        const val CACHE_VERSION = 13
 
         /**
          * [found] without what's since learned to be left out: a site's ad, from any site, and what
@@ -1174,9 +1188,12 @@ internal class LyricsFinder(
             val ads = found.words.lines().any(webAddress::containsMatchIn) || found.lines.any { webAddress.containsMatchIn(it.text) }
             val broken = found.words.lines().any { mended(it) != it }
             if (!netEase && !ads && !broken) return found
+            // Where NetEase's contributors wrote apostrophes escaped, their commas are apostrophes: "friend' and he\'s back".
+            val commas = netEase && "\\'" in found.words
+            fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
             fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
-            val words = found.words.lines().map(::mended).clean { it }.joinToString("\n").trim()
-            val lines = found.lines.map { line -> line.copy(text = mended(line.text), words = line.words.map { it.copy(text = mended(it.text)) }) }
+            val words = found.words.lines().map(::mend).clean { it }.joinToString("\n").trim()
+            val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
             return found.copy(words = words, lines = SyncedLyrics.withPauses(lines.clean { it.text }))
         }
 

@@ -29,6 +29,11 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun withNoLinePutInTimeATimeIsWhereTheWordsSay() {
+        assertEquals(12_345L, LyricsSync.timeOf(12_345L, emptyList()))
+    }
+
+    @Test
     fun oneLinePutInTimeMovesThemAll() {
         // "Two" was heard 3 seconds later than the words had it.
         val later = LyricsSync.adjust(lines, listOf(SyncPoint(20_000, 23_000)))
