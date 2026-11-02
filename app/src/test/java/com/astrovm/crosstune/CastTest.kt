@@ -155,6 +155,24 @@ class CastTest {
     }
 
     @Test
+    fun resumingTheCastSongPlaysOnTheTvAndOtherResumesStayWithThePhone() {
+        val source = FakePlayback().apply { startsInBackground = false }
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv.copy(playing = false)) }
+        val playback = castPlayback(cast, source)
+        playback.casting(song)
+        assertTrue(runBlocking { playback.resume(song) })
+        assertEquals(listOf(CastCommand.Play), cast.sent.toList())
+        assertTrue(source.plays.isEmpty())
+        assertFalse(runBlocking { playback.resume(other) })
+        assertEquals(listOf(true), source.plays.toList())
+        cast.target.value = null
+        source.startsInBackground = true
+        assertTrue(runBlocking { playback.resume(song) })
+        assertEquals(listOf(true, true), source.plays.toList())
+        assertEquals(listOf(CastCommand.Play), cast.sent.toList())
+    }
+
+    @Test
     fun aTvCastToAndLaterGoneLeavesTheSongToTheApp() {
         val source = FakePlayback().apply { access = false }
         val cast = FakeCast()

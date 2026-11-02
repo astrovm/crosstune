@@ -145,7 +145,7 @@ class CastActivityTest {
         cast.around.value = true
         cast.target.value = CastTarget("Living room")
         launch()
-        click(string(R.string.cast_to_tv))
+        click(string(R.string.casting_to_tv, "Living room"))
         waitUntil { cast.loaded.isNotEmpty() }
         cast.target.value = CastTarget("Living room", tvState.copy(playing = false, canSeek = false, canSkipNext = false, canSkipPrevious = false))
         waitUntil { nodes(string(R.string.lyrics_play)).isNotEmpty() }
