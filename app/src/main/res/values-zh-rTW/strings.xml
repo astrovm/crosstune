@@ -100,6 +100,8 @@
     <string name="keeping_offline">正在透過 Wi-Fi 儲存以便離線使用</string>
     <string name="offline_out_of_space">離線空間已滿。請在設定中提高上限</string>
     <string name="setting_offline_space">離線歌曲可用空間</string>
+    <string name="setting_offline_likes">也在音樂 App 中下載</string>
+    <string name="setting_offline_likes_description">離線保存的歌曲播放時，會在你的音樂 App 中按讚。請在那裡開啟下載已按讚的歌曲。</string>
     <string name="setting_offline_space_used">已用 %1$s</string>
     <string name="more_button">更多</string>
     <string name="history_title">最近</string>

@@ -143,8 +143,12 @@ internal data class Following(
     val from: String? = null
 )
 
-/** One of a music app's own buttons, as its session shows it: what it does, and what it's called and drawn with, an [icon] of the app's, there. */
-internal data class AppAction(val action: String, val name: String, val icon: Int)
+/**
+ * One of a music app's own buttons, as its session shows it: what it does, and what it's called and drawn
+ * with, an [icon] of the app's, there. For a like, [liked] says whether the song's liked there already;
+ * null when that can't be told, so it's never pressed blind.
+ */
+internal data class AppAction(val action: String, val name: String, val icon: Int, val liked: Boolean? = null)
 
 /**
  * A song waiting to play: [id] is the app's number for it in its queue, to play it now; none for one
@@ -269,7 +273,9 @@ internal class MediaSessionPlayback(
     private val modes: AppModes = SessionModes(context),
     /** An app's queue; Robolectric shows a test none. */
     private val queueOf: (MediaController) -> List<MediaSession.QueueItem>? = MediaController::getQueue,
-    private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
+    private val lengths: SteadyLengths = SteadyLengths(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)),
+    /** What an app calls one of its drawings, by its number there; Robolectric has no other app's. */
+    private val drawingName: (String, Int) -> String? = { app, id -> runCatching { context.packageManager.getResourcesForApplication(app).getResourceEntryName(id) }.getOrNull() }
 ) : PlaybackSource {
     private val listener = ComponentName(context, NowPlayingListener::class.java)
     private val sessions: MediaSessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -720,8 +726,25 @@ internal class MediaSessionPlayback(
             durationMs = controller.metadata?.let { controller.lengthOf(it, asked) },
             shuffle = modes.shuffles(controller),
             repeat = modes.repeats(controller),
-            like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon) }
+            like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) }
         )
+    }
+
+    /**
+     * Whether the song [app] plays is liked there, as its [like] shows: Spotify says so by which button it
+     * shows, the others by how they draw the one button, whatever the language. Null when it can't be told.
+     */
+    private fun liked(app: String, like: PlaybackState.CustomAction): Boolean? = when (like.action) {
+        SPOTIFY_LIKED -> true
+        SPOTIFY_LIKE -> false
+        // YouTube Music's is filled once liked and outlined before; TIDAL's, filled or plain.
+        else -> drawingName(app, like.icon)?.let { drawing ->
+            when {
+                "fill" in drawing -> true
+                "outline" in drawing || drawing.endsWith("favorite") -> false
+                else -> null
+            }
+        }
     }
 
     /** The songs after the one [controller] plays, in its queue; none when it doesn't say where in it it is. */
@@ -829,14 +852,21 @@ private val COVERS = listOf(MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADA
 private const val COVER_QUALITY = 90
 
 /**
- * A music app's own button to like a song, or keep it, by what the app's session calls it, the same
- * whether it's liked or not; what it's called and drawn with there says which.
+ * A music app's own button to like a song, or keep it, by what the app's session calls it. Most call it
+ * the same whether it's liked or not, and what it's called and drawn with there says which; Spotify
+ * shows one of two.
  */
 private val LIKES = setOf(
+    SPOTIFY_LIKE,
+    SPOTIFY_LIKED,
     "thumbs_up_action", // YouTube Music
     "com.aspiro.tidal.player.action.TOGGLE_FAVORITE", // TIDAL
     "waze.thumbUp" // Amazon Music
 )
+
+/** Spotify's like, which it shows while the song isn't in the user's collection, and the one it shows once it is. */
+private const val SPOTIFY_LIKE = "ADD_TO"
+private const val SPOTIFY_LIKED = "CHECK_FILL"
 
 /** A music app's own button to repeat, which goes round its ways as it does there, by what the app's session calls it. */
 private val REPEATS = setOf("loop_mode_action") // YouTube Music

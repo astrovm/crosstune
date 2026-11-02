@@ -100,6 +100,8 @@
     <string name="keeping_offline">Wi-Fi로 오프라인용 저장 중</string>
     <string name="offline_out_of_space">오프라인용 공간이 없어요. 설정에서 한도를 늘리세요</string>
     <string name="setting_offline_space">오프라인 노래용 공간</string>
+    <string name="setting_offline_likes">음악 앱에도 다운로드</string>
+    <string name="setting_offline_likes_description">오프라인용으로 저장한 노래가 재생되면 음악 앱에서 좋아요를 눌러요. 그 앱에서 좋아요한 노래 다운로드를 켜 주세요.</string>
     <string name="setting_offline_space_used">%1$s 사용 중</string>
     <string name="more_button">더보기</string>
     <string name="history_title">최근</string>

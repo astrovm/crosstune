@@ -225,6 +225,7 @@ internal data class ScreenActions(
     val onCleanLinksChange: (Boolean) -> Unit = {},
     val onKeepOffline: () -> Unit = {},
     val onOfflineSpaceChange: (Int) -> Unit = {},
+    val onOfflineLikesChange: (Boolean) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
     val onWakesForNextSongChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},

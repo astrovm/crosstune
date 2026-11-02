@@ -719,6 +719,7 @@ class MainActivity : ComponentActivity() {
         onCleanLinksChange = viewModel::setCleanLinks,
         onKeepOffline = viewModel::keepOffline,
         onOfflineSpaceChange = viewModel::setOfflineSpace,
+        onOfflineLikesChange = viewModel::setOfflineLikes,
         onShareSheetAppsChange = viewModel::setShareSheetApps,
         onWakesForNextSongChange = viewModel::setWakesForNextSong,
         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,

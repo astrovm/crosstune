@@ -100,6 +100,8 @@
     <string name="keeping_offline">वाई-फ़ाई पर ऑफ़लाइन के लिए सेव हो रहा है</string>
     <string name="offline_out_of_space">ऑफ़लाइन के लिए जगह नहीं बची। सेटिंग में सीमा बढ़ाएँ</string>
     <string name="setting_offline_space">ऑफ़लाइन गानों के लिए जगह</string>
+    <string name="setting_offline_likes">अपने म्यूज़िक ऐप में भी डाउनलोड करें</string>
+    <string name="setting_offline_likes_description">ऑफ़लाइन रखा गाना चलने पर उसे आपके म्यूज़िक ऐप में लाइक करता है। वहाँ लाइक किए गानों की डाउनलोडिंग चालू करें।</string>
     <string name="setting_offline_space_used">%1$s इस्तेमाल हुई</string>
     <string name="more_button">और</string>
     <string name="history_title">हाल के</string>

@@ -100,6 +100,8 @@
     <string name="keeping_offline">Wi-Fi ile çevrimdışı için kaydediliyor</string>
     <string name="offline_out_of_space">Çevrimdışı için yer kalmadı. Sınırı Ayarlar\'dan yükselt</string>
     <string name="setting_offline_space">Çevrimdışı şarkılar için alan</string>
+    <string name="setting_offline_likes">Müzik uygulamanda da indir</string>
+    <string name="setting_offline_likes_description">Çevrimdışı saklanan bir şarkıyı çalarken müzik uygulamanda beğenir. Orada beğenilen şarkıların indirilmesini aç.</string>
     <string name="setting_offline_space_used">%1$s kullanılıyor</string>
     <string name="more_button">Daha fazla</string>
     <string name="history_title">Son kullanılanlar</string>

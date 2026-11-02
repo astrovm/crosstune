@@ -733,6 +733,14 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
         }
         SectionHeader(stringResource(R.string.offline))
         Group { OfflineSpaceRow(state, actions.onOfflineSpaceChange) }
+        Group {
+            SettingSwitch(
+                label = stringResource(R.string.setting_offline_likes),
+                description = stringResource(R.string.setting_offline_likes_description),
+                checked = state.offlineLikes,
+                onCheckedChange = actions.onOfflineLikesChange
+            )
+        }
     }
 }
 
