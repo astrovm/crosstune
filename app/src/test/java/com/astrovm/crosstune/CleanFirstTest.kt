@@ -16,11 +16,10 @@ class CleanFirstTest {
         override fun open() = object : Recording {
             override fun read(buffer: ShortArray, offset: Int, count: Int): Int {
                 if (ends) return 0
-                // A tenth of a second at a time, as Android gives it.
-                val many = minOf(count, ShazamSignature.SAMPLE_RATE / 10)
-                buffer.fill(sound, offset, offset + many)
-                read += many
-                return many
+                // All that's asked for, as Android gives it, waiting until it's played.
+                buffer.fill(sound, offset, offset + count)
+                read += count
+                return count
             }
 
             override fun close() {
@@ -35,7 +34,7 @@ class CleanFirstTest {
     fun soundHeardCleanlyIsHeardFromNowOnTheVisualsTapLeftAlone() {
         val clean = Sound(3)
         val recording = CleanFirst(clean, tap).open()!!
-        // Its first tenth of a second said there's sound; what's heard starts after it, in a recording of its own.
+        // Its first tenth of a second said there's sound, without waiting out the rest; what's heard starts after it, in a recording of its own.
         assertEquals(ShazamSignature.SAMPLE_RATE / 10, clean.read)
         assertEquals(2, clean.opened)
         assertEquals(1, clean.closed)
