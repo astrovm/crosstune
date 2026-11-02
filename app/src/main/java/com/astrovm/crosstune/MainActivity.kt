@@ -973,11 +973,15 @@ class MainActivity : ComponentActivity() {
         if (state.handlingIncomingLink) outState.putString(STATE_INCOMING_LINK, state.linkText)
     }
 
+    /**
+     * Reopening from Recents replays the original link; the app is shown instead of opening it again. And a
+     * phone's cast that opened Crosstune brings its song through Google Cast, not in the intent.
+     */
+    private fun isNotALink(intent: Intent) =
+        intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0 || castReceiver(applicationContext).handle(intent)
+
     private fun handleIntent(intent: Intent) {
-        // Reopening from Recents replays the original link; show the app instead of opening it again.
-        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
-        // A phone's cast opened Crosstune: what it casts arrives through Google Cast, not in the intent.
-        if (castReceiver(applicationContext).handle(intent)) return
+        if (isNotALink(intent)) return
 
         when (intent.action) {
             // The widget's songs ask to be shown here rather than opened. Back from signing in with

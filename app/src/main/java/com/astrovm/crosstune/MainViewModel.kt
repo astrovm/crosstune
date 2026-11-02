@@ -494,6 +494,9 @@ internal class MainViewModel(
     private var pendingPlay = false
 
     /** What was last looked up, and how, for Try again. */
+    /** Set for the next [resolve] alone: the song it finds plays whether or not that is set to be right away, as one cast to this TV does. */
+    private var playOnArrival = false
+
     private data class Request(val input: LinkInput, val openWhenReady: Boolean, val destination: Destination?, val here: Boolean, val play: Boolean = false)
 
     /**
@@ -828,7 +831,8 @@ internal class MainViewModel(
 
     fun retry() {
         val (input, openWhenReady, destination, here, play) = lastRequest ?: return
-        resolve(input, openWhenReady, destination, here = here, play = play)
+        playOnArrival = play
+        resolve(input, openWhenReady, destination, here = here)
     }
 
     /** Whether the link last looked up couldn't be for being offline, so it's looked up once back online. */
@@ -1001,7 +1005,9 @@ internal class MainViewModel(
      * nothing until YouTube Music says it's music, and then only if nothing else has been shown since.
      * A link that came [here], as links do, plays as soon as it's found when set to.
      */
-    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false, play: Boolean = false) {
+    private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false) {
+        val play = playOnArrival
+        playOnArrival = false
         cancelContentWork(closesPlayer = !underPlayer)
         lastRequest = Request(input, openWhenReady, destination, here, play)
         pendingOpen = openWhenReady
@@ -1434,7 +1440,8 @@ internal class MainViewModel(
         val text = (input as? LinkInput.Link)?.link?.url ?: (input as? LinkInput.RecognizedSong)?.text.orEmpty()
         cancelContentWork()
         uiState = uiState.copy(linkText = text, handlingIncomingLink = true, handingOff = false, afterLookup = AfterLookup.OPEN, leaveSettings = true)
-        resolve(input, openWhenReady = false, here = true, play = true)
+        playOnArrival = true
+        resolve(input, openWhenReady = false, here = true)
     }
 
     /** Something a phone casting to this TV asks of it. */
