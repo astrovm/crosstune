@@ -18,7 +18,9 @@ class PlaybackCaptureTest {
         val app = ApplicationProvider.getApplicationContext<Application>()
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
         assertFalse(PlaybackCapture.allowed(app))
-        assertNull(PlaybackCapture(app).open())
+        // What lyrics hear through by default.
+        val clean = MainActivity.cleanSoundFactory(app) as PlaybackCapture
+        assertNull(clean.open())
         assertNull(shadowOf(app).nextStartedActivity)
     }
 }
