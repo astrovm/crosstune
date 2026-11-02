@@ -133,10 +133,10 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                     val line = shown.line
                     // Caught up, a side being set shows on the line kept, in place of the check.
                     if (shown.total == 0) {
-                        if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, actions, editing, onSide) else CaughtUp()
+                        if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, state.learning, actions, editing, onSide) else CaughtUp()
                     }
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.cardTypes, actions, editing, onSide)
+                    else Card(line, shown, state.cardTypes, state.learning, actions, editing, onSide)
                 }
             }
         }
@@ -182,7 +182,10 @@ private fun CaughtUp() {
  * A card: the song it's from and its front; once turned, its back comes in below. A side with its sound plays the line. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions, preview: CardPreview? = null, onSide: (CardSide) -> Unit = {}) {
+private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, learning: Learning, actions: ScreenActions, preview: CardPreview? = null, onSide: (CardSide) -> Unit = {}) {
+    // The cards write and spell the words as the lyrics do, so a line reads the same in both.
+    val lyrics = learning.wordsAs
+    val typed = learning.romajiTyped
     val type = preview?.type ?: types.firstOrNull { it.id == line.cardType } ?: READ_IT
     val cards = type.options
     val haptics = LocalHapticFeedback.current
@@ -210,18 +213,18 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
                 // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
                 if (preview != null) {
                     val side = if (preview.back) cards.back else cards.front
-                    CardSideEditor(line, side, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, onChange = onSide)
+                    CardSideEditor(line, side, lyrics, typed, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, onChange = onSide)
                 } else {
                 val front = cards.front
                 val plays = front.sound && practice.sound != LineSound.NONE
                 if (plays) LineSound(line, practice.sound, actions.onReplayLine)
-                if (!front.bare) CardSideContent(line, front, back = false)
-                else if (!plays) CardSideContent(line, CardSide(), back = false)
+                if (!front.bare) CardSideContent(line, front, lyrics, typed, back = false)
+                else if (!plays) CardSideContent(line, CardSide(), lyrics, typed, back = false)
                 // Turned, the other side comes in below the front, which stays.
                 if (practice.turned) {
                     HorizontalDivider()
                     if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
-                    CardSideContent(line, cards.back, back = true)
+                    CardSideContent(line, cards.back, lyrics, typed, back = true)
                 }
                 }
             }
@@ -247,21 +250,22 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
     }
 }
 
-/** Only the text layers picked for this side, previewed while its settings are open. */
+/** Only the text layers picked for this side, written as the lyrics write them, in [lyrics] and spelled as typed when [typed], unless picked for the side. */
 @Composable
-private fun CardSideContent(line: SavedLine, side: CardSide, back: Boolean) {
+private fun CardSideContent(line: SavedLine, side: CardSide, lyrics: WordsAs, typed: Boolean, back: Boolean) {
     val base = if (line.line != null) MaterialTheme.typography.displaySmall else if (back) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium
     val style = base.copy(fontSize = base.fontSize * side.wordsScale, lineHeight = base.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold).writing(line.text)
-    val shown = line.shownAs(side.wordsAs, side.romajiTyped)
+    val shows = side.writes(line, lyrics)
+    val shown = line.shownAs(shows, typed)
     val ruby = line.ruby ?: line.reading?.let { listOf(Ruby(line.text, it)) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (side.words) {
-            if (side.wordsAs == WordsAs.WRITTEN && side.readings && ruby != null) RubyLine(ruby, style, scale = side.readingScale)
+            if (shows == WordsAs.WRITTEN && side.readings && ruby != null) RubyLine(ruby, style, scale = side.readingScale)
             else Text(shown, style = style)
             line.line?.let { Text(it, style = MaterialTheme.typography.bodyLarge.writing(it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        if (side.latin && (!side.words || side.wordsAs != WordsAs.LATIN)) {
-            line.latin(side.romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (side.latin && (!side.words || shows != WordsAs.LATIN)) {
+            line.latin(typed)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         if (side.translation) line.translation?.let {
             Text(it, style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * side.translationScale, lineHeight = lineHeight * side.translationScale) }, color = MaterialTheme.colorScheme.primary)

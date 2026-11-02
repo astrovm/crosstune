@@ -231,22 +231,23 @@ private fun CardTypeEditor(type: CardType, onPreview: (CardPreview?) -> Unit, ch
  * One side of the card as the menu: every layer it could show, in the place it takes on the card, and a tap
  * shows or hides it, the hidden ones dashed. The line's sound is an eye and its play button; the words, their
  * reading, the same in Latin letters, and what they mean are the lines themselves. Pinching a line makes it
- * bigger or smaller; holding the words picks how they're written, and holding the Latin letters, how they're spelled.
+ * bigger or smaller; holding the words picks how they're written, or back to as the lyrics write them, in [lyrics].
+ * The Latin letters are spelled as the lyrics spell them, as typed when [typed].
  */
 @Composable
-internal fun CardSideEditor(line: SavedLine, side: CardSide, onPlay: () -> Unit, canPlay: Boolean, onChange: (CardSide) -> Unit) {
+internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, typed: Boolean, onPlay: () -> Unit, canPlay: Boolean, onChange: (CardSide) -> Unit) {
     val script = cardScript(line)
-    val japanese = script == Script.JAPANESE
     val wordsAs = buildList {
         add(WordsAs.WRITTEN)
-        if (japanese) add(WordsAs.KANA)
+        if (script == Script.JAPANESE) add(WordsAs.KANA)
         if (script != null) add(WordsAs.LATIN)
     }
+    val shows = side.writes(line, lyrics)
     val words = MaterialTheme.typography.headlineMedium.let { it.copy(fontSize = it.fontSize * side.wordsScale, lineHeight = it.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold) }
     val small = MaterialTheme.typography.bodyLarge
     SoundRow(side.sound, onPlay, canPlay) { onChange(side.copy(sound = it)) }
     // Readings go over the words as written, in Japanese or Chinese.
-    if ((script == Script.JAPANESE || script == Script.CHINESE) && side.wordsAs == WordsAs.WRITTEN) {
+    if ((script == Script.JAPANESE || script == Script.CHINESE) && shows == WordsAs.WRITTEN) {
         CardLayer(R.string.lyrics_readings, side.readings, { onChange(side.copy(readings = it)) }, side.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, { onChange(side.copy(readingScale = it)) }) {
             Text(line.reading ?: stringResource(R.string.lyrics_readings), style = small.copy(fontSize = small.fontSize * side.readingScale, lineHeight = small.lineHeight * side.readingScale).writing(line.reading.orEmpty()))
         }
@@ -255,31 +256,28 @@ internal fun CardSideEditor(line: SavedLine, side: CardSide, onPlay: () -> Unit,
     val original = stringResource(R.string.lyrics_display_original)
     val kana = stringResource(R.string.lyrics_display_kana)
     val latin = stringResource(R.string.lyrics_display_latin)
-    val nameOf = { shown: WordsAs -> when (shown) { WordsAs.WRITTEN -> original; WordsAs.KANA -> kana; WordsAs.LATIN -> latin } }
+    val asLyrics = stringResource(R.string.card_words_as_lyrics)
+    // Null is as the lyrics write them, first, so a side picked once can go back to following them.
+    val choices = listOf(null) + wordsAs
+    val nameOf = { shown: WordsAs? -> when (shown) { null -> asLyrics; WordsAs.WRITTEN -> original; WordsAs.KANA -> kana; WordsAs.LATIN -> latin } }
     CardLayer(
         R.string.visuals_show_words, side.words, { onChange(side.copy(words = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) },
-        more = if (wordsAs.size > 1) wordsAs.map { shown -> CustomAccessibilityAction(nameOf(shown)) { onChange(side.copy(wordsAs = shown)); true } } else emptyList(),
+        more = if (wordsAs.size > 1) choices.map { shown -> CustomAccessibilityAction(nameOf(shown)) { onChange(side.copy(wordsAs = shown)); true } } else emptyList(),
         onHold = { if (wordsAs.size > 1) formats = true },
         menu = {
             DropdownMenu(expanded = formats, onDismissRequest = { formats = false }) {
-                wordsAs.forEach { shown ->
+                choices.forEach { shown ->
                     DropdownMenuItem(text = { Text(nameOf(shown)) }, onClick = { onChange(side.copy(wordsAs = shown)); formats = false },
                         trailingIcon = { if (side.wordsAs == shown) AppIcon(R.drawable.ic_check, contentDescription = null) })
                 }
             }
         }
     ) {
-        Text(line.shownAs(side.wordsAs, side.romajiTyped).ifBlank { line.text }, style = words.writing(line.text))
+        Text(line.shownAs(shows, typed).ifBlank { line.text }, style = words.writing(line.text))
     }
-    if (script != null && side.wordsAs != WordsAs.LATIN) {
-        val typed = stringResource(R.string.lyrics_romaji_typed)
-        // How the Latin letters are spelled only changes for Japanese: as it sounds, or as it's typed.
-        CardLayer(
-            R.string.lyrics_romanized, side.latin, { onChange(side.copy(latin = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) },
-            more = if (japanese) listOf(CustomAccessibilityAction(typed) { onChange(side.copy(romajiTyped = !side.romajiTyped)); true }) else emptyList(),
-            onHold = { if (japanese) onChange(side.copy(romajiTyped = !side.romajiTyped)) }
-        ) {
-            Text(line.latin(side.romajiTyped) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
+    if (script != null && shows != WordsAs.LATIN) {
+        CardLayer(R.string.lyrics_romanized, side.latin, { onChange(side.copy(latin = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) }) {
+            Text(line.latin(typed) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
         }
     }
     CardLayer(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) }) {

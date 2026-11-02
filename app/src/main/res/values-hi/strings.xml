@@ -403,6 +403,7 @@
     <string name="lyrics_display_original">मूल</string>
     <string name="lyrics_display_kana">काना</string>
     <string name="lyrics_display_latin">लैटिन</string>
+    <string name="card_words_as_lyrics">बोल जैसा</string>
     <string name="practice_front">सामने</string>
     <string name="practice_back">पीछे</string>
     <string name="floating_shared">गीत के बोल के साथ साझा</string>

@@ -404,6 +404,7 @@
     <string name="lyrics_display_original">Originale</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latino</string>
+    <string name="card_words_as_lyrics">Come il testo</string>
     <string name="practice_front">Fronte</string>
     <string name="practice_back">Retro</string>
     <string name="floating_shared">Condiviso con il testo</string>
