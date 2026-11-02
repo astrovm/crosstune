@@ -44,6 +44,28 @@ class CastTest {
     }
 
     @Test
+    fun translationCanBeTurnedOffOverTheChannel() {
+        val message = requireNotNull(CastCommand.Translation(false).message())
+        assertFalse(JSONObject(message).getBoolean("on"))
+        val command = CastCommand.fromMessage(message)
+        require(command is CastCommand.Translation)
+        assertFalse(command.on)
+    }
+
+    @Test
+    fun aPausedTvDoesNotAdvanceAndDoesNotInventControls() {
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv.copy(playing = false, canSeek = false, canSkipNext = false)) }
+        val playback = castPlayback(cast, FakePlayback())
+        playback.casting(song)
+        val following = requireNotNull(runBlocking { playback.follow(song).first() })
+        assertFalse(following.clock.playing)
+        assertEquals(5_000, following.clock.positionAt(11_000))
+        assertFalse(following.canSeek)
+        assertFalse(following.canSkipNext)
+        assertFalse(following.canSkipPrevious)
+    }
+
+    @Test
     fun noCastAtAllDoesNothingAndIsNeverAround() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
         NoCast.chooseTv(context)

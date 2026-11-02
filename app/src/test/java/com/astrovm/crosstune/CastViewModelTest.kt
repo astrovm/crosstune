@@ -192,6 +192,128 @@ class CastViewModelTest {
         assertTrue(cast.sent.none { it is CastCommand.Translation })
     }
 
+    @Test
+    fun aConnectedTvWithoutASongDoesNotOpenAPickerOrLoadAnything() {
+        val cast = FakeCast().apply { target.value = CastTarget("Living room") }
+        val model = model(null, cast)
+        val effects = effects(model)
+        model.cast()
+        idle()
+        assertTrue(effects.isEmpty())
+        assertTrue(cast.loaded.isEmpty())
+    }
+
+    @Test
+    fun reconnectingTheRouteKeepsTheSameSongAndDoesNotLoadItTwice() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val model = playingModel(playback, cast)
+        model.cast()
+        idle()
+        cast.target.value = null
+        idle()
+        cast.target.value = CastTarget("Bedroom", tv)
+        idle()
+        model.cast()
+        idle()
+        // A reconnect on the same song shows its route; it does not reload or pause it twice.
+        assertEquals(1, cast.loaded.size)
+        assertEquals(listOf(false), playback.plays.toList())
+        model.playerPlayPause()
+        assertEquals(listOf(CastCommand.Pause), cast.sent.toList())
+    }
+
+    @Test
+    fun aPausedTvCanPlayButCannotSeekOrSkipWithoutThoseControls() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room") }
+        val model = playingModel(playback, cast)
+        model.cast()
+        idle()
+        playback.plays.clear()
+        cast.target.value = CastTarget("Living room", tv.copy(playing = false, canSeek = false, canSkipNext = false, canSkipPrevious = false))
+        idle()
+        model.playerSeek(9_000)
+        model.playerSkip(true)
+        model.playerSkip(false)
+        assertTrue(cast.sent.isEmpty())
+        model.playerPlayPause()
+        assertEquals(listOf(CastCommand.Play), cast.sent.toList())
+        assertTrue(playback.plays.isEmpty())
+    }
+
+    @Test
+    fun thePhoneCanTurnBothLearningOptionsOffOnTheTv() {
+        val cast = FakeCast().apply { target.value = CastTarget("Living room") }
+        val model = model(null, cast)
+        model.setTranslation(true)
+        model.setReadings(true)
+        cast.sent.clear()
+        model.setTranslation(false)
+        model.setReadings(false)
+        assertEquals(listOf(CastCommand.Translation(false), CastCommand.Readings(false)), cast.sent.toList())
+        assertFalse(model.uiState.learning.translation)
+        assertFalse(model.uiState.learning.readings)
+    }
+
+    @Test
+    fun theSongHandedToTheRouteCarriesItsDisplayMetadata() {
+        val metadata = song.copy(url = "https://music.youtube.com/watch?v=demo", artworkUrl = "https://example.com/cover.jpg", lengthMs = 123_000)
+        val playback = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(metadata, null, app = "com.spotify")
+            playing.value = following()
+        }
+        val cast = FakeCast().apply { target.value = CastTarget("Living room") }
+        val model = model(playback, cast)
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        model.peekPlayingNow()
+        idle()
+        model.cast()
+        idle()
+        val loaded = cast.loaded.single()
+        assertEquals("Hush", loaded.title)
+        assertEquals("Band", loaded.artist)
+        assertEquals(metadata.url, loaded.link)
+        assertEquals(metadata.artworkUrl, loaded.artworkUrl)
+        assertEquals(metadata.lengthMs, loaded.durationMs)
+    }
+
+    @Test
+    fun anotherSongWhileConnectedHandsOffWithoutConfusingItWithTheOldRemote() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room", tv) }
+        val model = playingModel(playback, cast)
+        model.cast()
+        idle()
+        val another = MusicMetadata("Another", "Band")
+        playback.onThePhone = Heard.Song(another, null, app = "com.spotify")
+        idle()
+        model.peekPlayingNow()
+        idle()
+        model.cast()
+        idle()
+        assertEquals(listOf(CastSong("Hush", "Band"), CastSong("Another", "Band")), cast.loaded.toList())
+        assertEquals(listOf(false, false), playback.plays.toList())
+        assertTrue(cast.sent.isEmpty())
+        assertEquals(another, model.uiState.player?.song)
+    }
+
+    @Test
+    fun withoutNotificationAccessCastingNeverControlsThePhonesApp() {
+        val playback = FakePlayback()
+        val cast = FakeCast().apply { target.value = CastTarget("Living room") }
+        val model = playingModel(playback, cast)
+        playback.access = false
+        playback.followed.clear()
+        model.cast()
+        idle()
+        assertEquals(1, cast.loaded.size)
+        assertTrue(playback.plays.isEmpty())
+        assertTrue(playback.followed.isEmpty())
+    }
+
     // --- The TV ---
 
     @Test
@@ -240,6 +362,22 @@ class CastViewModelTest {
         assertEquals(false, playback.plays.last())
         assertNull(model.uiState.player)
         assertNull(model.castTv)
+    }
+
+    @Test
+    fun theTvCanTurnLearningOptionsOffAndStopWhenAlreadyPaused() {
+        val playback = FakePlayback()
+        val model = playingModel(playback, FakeCast(), playing = false)
+        model.castCommand(CastCommand.Translation(true))
+        model.castCommand(CastCommand.Readings(true))
+        model.castCommand(CastCommand.Translation(false))
+        model.castCommand(CastCommand.Readings(false))
+        assertFalse(model.uiState.learning.translation)
+        assertFalse(model.uiState.learning.readings)
+        model.castCommand(CastCommand.Stop)
+        idle()
+        assertEquals(listOf(false), playback.plays.toList())
+        assertNull(model.uiState.player)
     }
 
     @Test

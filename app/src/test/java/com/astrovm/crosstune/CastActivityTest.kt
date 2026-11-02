@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.performSemanticsAction
@@ -137,6 +138,34 @@ class CastActivityTest {
         click(casting)
         assertEquals(1, cast.shown)
         assertEquals(1, cast.loaded.size)
+    }
+
+    @Test
+    fun aPausedTvShowsPlayAndDisablesTheControlsItDoesNotOffer() {
+        cast.around.value = true
+        cast.target.value = CastTarget("Living room")
+        launch()
+        click(string(R.string.cast_to_tv))
+        waitUntil { cast.loaded.isNotEmpty() }
+        cast.target.value = CastTarget("Living room", tvState.copy(playing = false, canSeek = false, canSkipNext = false, canSkipPrevious = false))
+        waitUntil { nodes(string(R.string.lyrics_play)).isNotEmpty() }
+        composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_next_song)))[0].assertIsNotEnabled()
+        composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_previous_song)))[0].assertIsNotEnabled()
+        click(string(R.string.lyrics_play))
+        assertEquals(listOf(CastCommand.Play), cast.sent.toList())
+        assertTrue(playback.plays.isEmpty())
+    }
+
+    @Test
+    fun stoppingACastOnTheTvClosesItsLyricsAsWellAsItsPlayer() {
+        phone = Phone.TV
+        launch()
+        click(string(R.string.lyrics_button))
+        waitUntil { nodes("Demo one").isNotEmpty() }
+        app.mainExecutor.execute { requireNotNull(cast.onCommand)(CastCommand.Stop) }
+        waitUntil { nodes("Demo one").isEmpty() }
+        assertTrue(nodes(string(R.string.lyrics_pause)).isEmpty())
+        assertTrue(cast.published.lastOrNull() == null)
     }
 
     @Test
