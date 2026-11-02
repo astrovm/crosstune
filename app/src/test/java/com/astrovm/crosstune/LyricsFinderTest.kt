@@ -585,6 +585,64 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aNameNetEaseHeadsASongWithAloneIsLeftOutWhenCreditsFollowIt() {
+        val sung = listOf("Rain on the window", "Nobody calls")
+        fun cleaned(song: MusicMetadata, vararg around: String, after: List<String> = emptyList()) =
+            LyricsFinder.cleaned(Lyrics.Found((around.toList() + sung + after).joinToString("\n"), source = LyricsFinder.NETEASE), song).words
+        val words = sung.joinToString("\n")
+        // The name alone, then who wrote it, in any of the ways NetEase's contributors put it.
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "CALM NIGHT", "words:Someone music:The Band"))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "CALM NIGHT", "（Some Writer / Another Writer）", "The Band（1972）"))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "\"Calm Night\"", "（Who is this, the night asks?）", "BY THEBANDOFFICIAL"))
+        // A credit in Chinese with no colon, and the artist alone, as the first line.
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "编曲 Someone"))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "The Band"))
+        // The heading at both ends, the artist written with "And" for "+".
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "Florence + the Band"), "Florence And The Band - Calm Night", after = listOf("Florence And The Band - Calm Night")))
+        // What a contributor ends it with.
+        for (end in listOf("END", "End", "THE END", "music...")) assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), after = listOf(end)))
+        // The name alone, then the song, is sung.
+        assertEquals((listOf("Calm Night") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", "The Band"), "Calm Night"))
+    }
+
+    @Test
+    fun brokenTextIsMendedWhereItCanBe() {
+        fun cleaned(words: String, source: String = LyricsFinder.NETEASE) = LyricsFinder.cleaned(Lyrics.Found(words, source = source), hatsukoi).words
+        // An apostrophe stored escaped, and a lost character NetEase writes as 锟斤拷.
+        assertEquals("Trouble is he's back again", cleaned("Trouble is he\\'s back again"))
+        assertEquals("Don't look, I'm alright", cleaned("Don't锟斤拷锟斤拷look, I'm alright"))
+        // UTF-8 read once as Latin-1 or Windows-1252, from any site, is read again right.
+        assertEquals("El baraka daret aâlat\nIt’s mañana", cleaned("El baraka daret aÃ¢lat\nItâ€™s maÃ±ana", LyricsFinder.LRCLIB))
+        // Words that only look so are left be.
+        assertEquals("Ã la carte, Âme", cleaned("Ã la carte, Âme", LyricsFinder.LRCLIB))
+    }
+
+    @Test
+    fun koreanWordsNetEaseKeepsGarbledAreNoWords() {
+        val korean = "누군가 나를 좀 말려줘요\n어떻게 이렇게 당할수가 있나요"
+        // As NetEase has some: the words' UTF-8 read as GBK.
+        val garbled = String(korean.toByteArray(Charsets.UTF_8), charset("GBK"))
+        val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
+        japaneseSong(netEase = netEase, lyric = garbled)
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // Chinese and Japanese words are words.
+        for (words in listOf("五月雨は緑色\n悲しくさせたよ", "我们一起走过的路\n你还记得吗")) {
+            japaneseSong(netEase = netEase, lyric = words)
+            assertEquals(words, words(hatsukoi))
+        }
+    }
+
+    @Test
+    fun anLrclibAnswerWithOnlyTheSongsNamesIsNoWords() {
+        val header = "Artist: Hiroko Mita\nAlbum: First Album\nTitle: Hatsukoi"
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", header)}]""" else "[]" })
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // Words under it are its words.
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "$header\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("五月雨は緑色", words(hatsukoi))
+    }
+
+    @Test
     fun aLyricsSitesAdIsLeftOut() {
         val ad = "{more Hiroko Mita lyrics at lyricsify.com/u/Someone}"
         // Found now.
