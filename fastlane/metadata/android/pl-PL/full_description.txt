@@ -18,6 +18,7 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Ucz się słów dzięki kanie, pinyinowi, romaji i każdemu innemu pismu łacinką oraz tłumaczeniom na języki, których jeszcze nie czytasz. Wybierz, co ma być widoczne na każdej stronie fiszki. Z jednego wiersza zrobisz kilka rodzajów fiszek, każdy z własnym harmonogramem.</li>
 <li>Zaloguj się płatnym planem ChatGPT, by tłumaczyć całe utwory, wyjaśniać wiersze, znajdować słowa warte nauki i szukać utworów po opisie.</li>
 <li>Też na Android TV.</li>
+<li>Prześlij utwór do Crosstune na telewizorze i używaj telefonu jako pilota (wersja z Usługami Google Play).</li>
 <li>Kolory Material You (Android 12+).</li>
 </ul>
 

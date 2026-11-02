@@ -18,6 +18,7 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 <li>Kana, pinyin, romaji ve diğer yazılar için Latin harfleriyle, henüz okuyamadığın diller için çevirilerle kelimeleri öğren. Alıştırma kartlarının her yüzünde ne gösterileceğini seçin. Tek bir satırdan birden çok kart türü oluşturun, her birinin kendi takvimi olsun.</li>
 <li>Şarkıları baştan sona çevirmek, satırları açıklamak, öğrenmeye değer kelimeleri bulmak ve şarkıları tarif ederek aramak için ücretli ChatGPT planınla giriş yap.</li>
 <li>Android TV'de de kumandayla çalışır.</li>
+<li>Bir şarkıyı TV'ndeki Crosstune'a yayınla, telefonun kumanda olsun (Google Play Hizmetleri'li sürüm).</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
 </ul>
 

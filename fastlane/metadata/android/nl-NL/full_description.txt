@@ -18,6 +18,7 @@ Krijg je een link van een muziekdienst, dan opent hetzelfde nummer in je favorie
 <li>Leer de woorden met kana, pinyin, romaji en elk ander schrift in Latijnse letters, en vertalingen voor de talen die je nog niet leest. Kies wat er op elke kant van je oefenkaarten staat. Maak van één regel meerdere soorten kaarten, elk met een eigen schema.</li>
 <li>Log in met je betaalde ChatGPT-abonnement om hele nummers te vertalen, regels uit te leggen, woorden te vinden die het leren waard zijn en nummers te zoeken door ze te beschrijven.</li>
 <li>Ook op Android TV.</li>
+<li>Cast een nummer naar Crosstune op je tv en gebruik je telefoon als afstandsbediening (de build met Google Play-services).</li>
 <li>Material You-kleuren op Android 12 en hoger.</li>
 </ul>
 

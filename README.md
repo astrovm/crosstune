@@ -48,6 +48,7 @@ Once you've opened something, anything left or broken later shows as **Things to
 - **Practice with the music.** Save lines and they come back as cards that play the line in your music app. Choose the text layers and sizes for each side, and make more than one kind of card from a line, each on its own schedule. Rate each one: **Again**, **Hard**, **Good** or **Easy**.
 - **ChatGPT, if you have it.** Sign in to translate whole songs, explain a line or a song, find the words worth learning, and find songs by describing them.
 - **On your TV.** Runs on Android TV and Google TV too: what's playing, its lyrics and visuals on the big screen, all with the remote. **Play** opens a song in YouTube with its lyrics over it.
+- **Cast to your TV.** With the Google Play or GitHub build, a Cast button on a song sends it to Crosstune on your TV, which plays it in YouTube with the lyrics over it. Your phone becomes the remote: pause, skip, translation and readings. It shows only when a TV with Crosstune is on your network.
 - **Your colors.** Light or dark, your wallpaper's colors, and pure black for OLED screens.
 - **Shortcuts.** One-tap paste, home screen widgets, Quick Settings tiles and a long-press shortcut on the app icon.
 - **No tracking.** Drops tracking bits like `?si=` from links.
@@ -88,6 +89,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 - A song's meaning also asks [MusicBrainz](https://musicbrainz.org), by MetaBrainz, for the year it came out and its album, by title and artist, so ChatGPT is told them instead of searching for them. What it answers is kept on your phone.
 - Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. Apple is then asked how long the recording Shazam named is, so its lyrics are timed for it. The visuals use it to move to your music, and record and send nothing. Lining the words up to the singing hears it on your phone and sends nothing. Its speech model is downloaded once from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp).
 - **Report a problem** in the lyrics sends the song, its timing and what you write to Crosstune's only server, on Cloudflare, when you tap **Send**. It keeps no IP address, only the developer reads reports, and each is deleted after 180 days. With **Report song problems automatically** on, problems Crosstune finds go too, once per song.
+- Casting to a TV sends the song's title, artist, link and cover, and your controls, to Crosstune on the TV you pick, over your local network through Google Cast (Google Play Services). It never goes to the developer. The build without Google Play Services has no casting.
 - Shizuku or root is used only to change Android's link, microphone, lyrics and floating settings for Crosstune.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).

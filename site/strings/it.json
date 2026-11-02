@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "Trasmettere su una TV"
+    ],
+    [
+      "p",
+      "Nelle versioni di Google Play e di GitHub puoi trasmettere un brano a Crosstune sulla tua Android TV o Google TV. Google Cast, parte dei Google Play Services, cerca le TV nella tua rete locale e porta la trasmissione. Quando trasmetti, Crosstune manda alla TV titolo, artista, link e copertina del brano, poi quello che chiedi: pausa, riproduzione, salta, sposta, traduzione e letture. La TV dice al telefono cosa sta riproducendo. Tutto resta tra il tuo telefono e la tua TV, mai allo sviluppatore, e Google lo tratta secondo la sua informativa sulla privacy. La versione senza Google Play Services non trasmette e non invia nulla del genere."
+    ],
+    [
+      "h2",
       "Autorizzazioni e sicurezza"
     ],
     [

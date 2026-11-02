@@ -18,6 +18,7 @@ Te llega un link de un servicio de música y abrís la misma canción en tu app 
 <li>Aprendé las palabras con kana, pinyin, romaji y cualquier otra escritura en letras latinas, y traducciones para los idiomas que todavía no leés. Elegí qué mostrar en cada lado de las tarjetas de práctica. Hacé varios tipos de tarjeta de una misma línea, cada uno con su propio calendario.</li>
 <li>Iniciá sesión con tu plan pago de ChatGPT para traducir canciones enteras, explicar líneas, encontrar palabras que vale la pena aprender y buscar canciones describiéndolas.</li>
 <li>También en Android TV.</li>
+<li>Enviá una canción a Crosstune en tu TV y usá el teléfono como control remoto (la versión con los Servicios de Google Play).</li>
 <li>Colores Material You (Android 12+).</li>
 </ul>
 
