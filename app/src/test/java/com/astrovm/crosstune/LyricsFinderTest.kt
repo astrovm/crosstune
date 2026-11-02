@@ -603,6 +603,15 @@ class LyricsFinderTest {
         for (end in listOf("END", "End", "THE END", "music...")) assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), after = listOf(end)))
         // The name alone, then the song, is sung.
         assertEquals((listOf("Calm Night") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", "The Band"), "Calm Night"))
+        // A credit in English, the name and the artist with blank lines between them.
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "Mixed by: Someone", "", "Calm Night", "", "The Band", ""))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "Mixed by: Someone", "", "Mastered by: Another"))
+        // The name alone, a blank line, then the song, is sung too.
+        assertEquals((listOf("Calm Night", "") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", "The Band"), "Calm Night", ""))
+        // A year under the name is a note only beside the artist's name: with no artist known, it's sung.
+        assertEquals((listOf("Calm Night", "Summer of 1985") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", ""), "Calm Night", "Summer of 1985"))
+        // A song whose words are only its name keeps them.
+        assertEquals("Calm Night", LyricsFinder.cleaned(Lyrics.Found("Calm Night", source = LyricsFinder.NETEASE), MusicMetadata("Calm Night", "The Band")).words)
     }
 
     @Test
@@ -633,6 +642,20 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun wordsAreGarbledKoreanOnlyWithEnoughChineseCharactersMostlyReadingBackAsKorean() {
+        fun garbled(korean: String) = String(korean.toByteArray(Charsets.UTF_8), charset("GBK"))
+        // Each pair of these syllables reads as 3 Chinese characters, and back as the 2 Korean ones.
+        // 9 Chinese characters are too few to tell; 10 are enough, 6 of them reading back as Korean.
+        assertFalse(readAsGbk(garbled("나나나다나라")))
+        assertTrue(readAsGbk(garbled("나나나다나라") + "中"))
+        // 4 of 10 reading back as Korean, the first and last syllables there are, is garbled; 4 of 11 isn't.
+        assertTrue(readAsGbk(garbled("나가나힣") + "中文中文"))
+        assertFalse(readAsGbk(garbled("나가나힣") + "中文中文中"))
+        // The characters just past Korean's first and last syllables aren't Korean: 4 of 12 isn't garbled, where 5 would be.
+        assertFalse(readAsGbk(garbled("나\uD7A4") + garbled("\uABFF나") + garbled("나나") + "中文中"))
+    }
+
+    @Test
     fun anLrclibAnswerWithOnlyTheSongsNamesIsNoWords() {
         val header = "Artist: Hiroko Mita\nAlbum: First Album\nTitle: Hatsukoi"
         japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", header)}]""" else "[]" })
@@ -640,6 +663,11 @@ class LyricsFinderTest {
         // Words under it are its words.
         japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "$header\n五月雨は緑色")}]""" else "[]" })
         assertEquals("五月雨は緑色", words(hatsukoi))
+        // Two of the names are a header too; one alone is a line like any.
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "Artist: Hiroko Mita\nTitle: Hatsukoi\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("五月雨は緑色", words(hatsukoi))
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "Title: Hatsukoi\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("Title: Hatsukoi\n五月雨は緑色", words(hatsukoi))
     }
 
     @Test
