@@ -603,6 +603,15 @@ class LyricsFinderTest {
         for (end in listOf("END", "End", "THE END", "music...")) assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), after = listOf(end)))
         // The name alone, then the song, is sung.
         assertEquals((listOf("Calm Night") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", "The Band"), "Calm Night"))
+        // A credit in English, the name and the artist with blank lines between them.
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "Mixed by: Someone", "", "Calm Night", "", "The Band", ""))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "Mixed by: Someone", "", "Mastered by: Another"))
+        // The name alone, a blank line, then the song, is sung too.
+        assertEquals((listOf("Calm Night", "") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", "The Band"), "Calm Night", ""))
+        // A year under the name is a note only beside the artist's name: with no artist known, it's sung.
+        assertEquals((listOf("Calm Night", "Summer of 1985") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", ""), "Calm Night", "Summer of 1985"))
+        // A song whose words are only its name keeps them.
+        assertEquals("Calm Night", LyricsFinder.cleaned(Lyrics.Found("Calm Night", source = LyricsFinder.NETEASE), MusicMetadata("Calm Night", "The Band")).words)
     }
 
     @Test
@@ -611,6 +620,14 @@ class LyricsFinderTest {
         // An apostrophe stored escaped, and a lost character NetEase writes as 锟斤拷.
         assertEquals("Trouble is he's back again", cleaned("Trouble is he\\'s back again"))
         assertEquals("Don't look, I'm alright", cleaned("Don't锟斤拷锟斤拷look, I'm alright"))
+        // Words NetEase has with apostrophes escaped have their commas as apostrophes, timed or not; one in a word stays.
+        val commas = "Trouble is her only friend' and he\\'s back again\nDown' down' down'\nI'm watching you"
+        val mended = "Trouble is her only friend, and he's back again\nDown, down, down,\nI'm watching you"
+        assertEquals(mended, cleaned(commas))
+        val timed = LyricsFinder.cleaned(Lyrics.Found(commas, commas.lines().mapIndexed { index, line -> LyricLine(index * 1_000L, line) }, source = LyricsFinder.NETEASE), hatsukoi)
+        assertEquals(mended.lines(), timed.lines.map { it.text }.filter { it.isNotEmpty() })
+        // With none escaped, an apostrophe ending a word is one.
+        assertEquals("Goin' home", cleaned("Goin' home"))
         // UTF-8 read once as Latin-1 or Windows-1252, from any site, is read again right.
         assertEquals("El baraka daret aâlat\nIt’s mañana", cleaned("El baraka daret aÃ¢lat\nItâ€™s maÃ±ana", LyricsFinder.LRCLIB))
         // Words that only look so are left be.
@@ -633,6 +650,20 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun wordsAreGarbledKoreanOnlyWithEnoughChineseCharactersMostlyReadingBackAsKorean() {
+        fun garbled(korean: String) = String(korean.toByteArray(Charsets.UTF_8), charset("GBK"))
+        // Each pair of these syllables reads as 3 Chinese characters, and back as the 2 Korean ones.
+        // 9 Chinese characters are too few to tell; 10 are enough, 6 of them reading back as Korean.
+        assertFalse(readAsGbk(garbled("나나나다나라")))
+        assertTrue(readAsGbk(garbled("나나나다나라") + "中"))
+        // 4 of 10 reading back as Korean, the first and last syllables there are, is garbled; 4 of 11 isn't.
+        assertTrue(readAsGbk(garbled("나가나힣") + "中文中文"))
+        assertFalse(readAsGbk(garbled("나가나힣") + "中文中文中"))
+        // The characters just past Korean's first and last syllables aren't Korean: 4 of 12 isn't garbled, where 5 would be.
+        assertFalse(readAsGbk(garbled("나\uD7A4") + garbled("\uABFF나") + garbled("나나") + "中文中"))
+    }
+
+    @Test
     fun anLrclibAnswerWithOnlyTheSongsNamesIsNoWords() {
         val header = "Artist: Hiroko Mita\nAlbum: First Album\nTitle: Hatsukoi"
         japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", header)}]""" else "[]" })
@@ -640,6 +671,11 @@ class LyricsFinderTest {
         // Words under it are its words.
         japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "$header\n五月雨は緑色")}]""" else "[]" })
         assertEquals("五月雨は緑色", words(hatsukoi))
+        // Two of the names are a header too; one alone is a line like any.
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "Artist: Hiroko Mita\nTitle: Hatsukoi\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("五月雨は緑色", words(hatsukoi))
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "Title: Hatsukoi\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("Title: Hatsukoi\n五月雨は緑色", words(hatsukoi))
     }
 
     @Test
@@ -696,6 +732,29 @@ class LyricsFinderTest {
             }
         }
         assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
+    }
+
+    @Test
+    fun whatNetEaseOpensASongWithForAMomentIsntSung() {
+        val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
+        japaneseSong(netEase = netEase)
+        // Timed word by word, a contributor's note first passes in 105 ms a word, far quicker than singing;
+        // 150 ms a word is sung, and so is a quick line once the song has begun.
+        val byWord = listOf(
+            "[0,0](0,0,0) 作词 : Someone",
+            "[1000,210](1000,105,0)Lucky (1105,105,0)guy",
+            "[2000,300](2000,150,0)Hear (2150,150,0)me",
+            "[3000,3000](3000,1500,0)I am woman, (4500,1500,0)hear me roar",
+            "[7000,200](7000,100,0)Shayo (7100,100,0)shayo",
+        ).joinToString("\n")
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/api/search/get" -> FakeSpotify.html(request, netEase(""))
+                "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[]" else """{"results":[]}""")
+            }
+        }
+        assertEquals(listOf("Hear me", "I am woman, hear me roar", "Shayo shayo"), (found(hatsukoi) as Lyrics.Found).lines.map { it.text }.filter { it.isNotEmpty() })
     }
 
     @Test
