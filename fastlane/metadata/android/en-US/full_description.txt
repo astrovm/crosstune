@@ -17,8 +17,7 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <li>Lyrics in time: they follow your music app or listen along, float over other apps, and play with MilkDrop visuals behind them. Wrong words or timing? Report them from the lyrics in one tap: the song and its timing go privately to the developer.</li>
 <li>Learn the words with kana, pinyin, romaji and any other script in Latin letters, and translations for the languages you don't already read. Choose what appears on each side of your practice cards. Make more than one kind of card from a line, each on its own schedule.</li>
 <li>Sign in with your paid ChatGPT plan to translate whole songs, explain lines, find words worth learning, and find songs by describing them.</li>
-<li>Runs on Android TV too, with the remote.</li>
-<li>Cast a song to Crosstune on your TV and use your phone as its remote (the build with Google Play Services).</li>
+<li>Runs on Android TV too, with the remote, and takes songs cast from your phone.</li>
 <li>Material You colors on Android 12 and later.</li>
 </ul>
 
