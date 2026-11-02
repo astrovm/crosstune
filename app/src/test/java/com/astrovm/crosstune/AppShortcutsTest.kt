@@ -14,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
 
 /** The launcher's shortcuts: the latest songs, and where a shortcut that was used leads. */
 @RunWith(RobolectricTestRunner::class)
@@ -57,5 +58,12 @@ class AppShortcutsTest {
         assertNull(chosen("action:LOSE"))
         assertNull(chosen("open_in:DEEZER"))
         assertNull(chosen(null))
+    }
+
+    @Test
+    fun theDevBuildHasTheSameShortcutsPointingAtItself() {
+        // Comments aside, the dev build's copy is the app's, opening the dev build instead.
+        fun shortcuts(build: String) = File("src/$build/res/xml/shortcuts.xml").readText().replace(Regex("""\s*<!--.*?-->""", RegexOption.DOT_MATCHES_ALL), "")
+        assertEquals(shortcuts("main"), shortcuts("debug").replace("""android:targetPackage="com.astrovm.crosstune.dev"""", """android:targetPackage="com.astrovm.crosstune""""))
     }
 }
