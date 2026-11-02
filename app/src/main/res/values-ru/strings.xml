@@ -94,6 +94,13 @@
     <string name="retry_button">Повторить</string>
     <string name="offline">Нет сети</string>
     <string name="heard_waits">Песня услышана, узнаем, когда появится сеть</string>
+    <string name="keep_offline_label">Скачать</string>
+    <string name="keep_offline">Сохранить офлайн</string>
+    <string name="kept_offline">Сохранено офлайн. Нажмите, чтобы удалить</string>
+    <string name="keeping_offline">Сохраняется офлайн по Wi-Fi</string>
+    <string name="offline_out_of_space">Нет места для офлайна. Увеличьте лимит в настройках</string>
+    <string name="setting_offline_space">Место для песен офлайн</string>
+    <string name="setting_offline_space_used">Занято %1$s</string>
     <string name="more_button">Ещё</string>
     <string name="history_title">Недавние</string>
     <string name="search_recent">Поиск в недавних</string>

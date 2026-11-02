@@ -94,6 +94,13 @@
     <string name="retry_button">Opnieuw proberen</string>
     <string name="offline">Offline</string>
     <string name="heard_waits">Nummer gehoord, wordt herkend zodra je weer online bent</string>
+    <string name="keep_offline_label">Downloaden</string>
+    <string name="keep_offline">Offline bewaren</string>
+    <string name="kept_offline">Offline bewaard. Tik om te verwijderen</string>
+    <string name="keeping_offline">Wordt via wifi offline opgeslagen</string>
+    <string name="offline_out_of_space">Geen ruimte meer voor offline. Verhoog de limiet in Instellingen</string>
+    <string name="setting_offline_space">Ruimte voor offline nummers</string>
+    <string name="setting_offline_space_used">%1$s gebruikt</string>
     <string name="more_button">Meer</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Zoeken in Recent</string>

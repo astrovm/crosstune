@@ -425,6 +425,22 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun offlineAnotherRecordingsKeptWordsShow() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val kept = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
+        respond("""[${answer("Song", "Band", "First\nSecond", "[00:01.00] First\n[00:03.00] Second")}]""")
+        val first = runBlocking { kept.lyricsOf(MusicMetadata("Song", "Band", lengthMs = 200_000)) }
+        // Played from another app, as another recording, with nothing reachable.
+        fake.handler = { throw IOException("offline") }
+        assertEquals(first, runBlocking { kept.lyricsOf(MusicMetadata("song", "BAND", lengthMs = 201_000, recordingId = "app:7")) })
+        // Not another song whose name starts the same.
+        assertEquals(Lyrics.Unavailable, runBlocking { kept.lyricsOf(MusicMetadata("Song", "Ban")) })
+        // Reachable, the recording's own are looked up.
+        respond("""[${answer("Song", "Band", "Own words")}]""")
+        assertEquals("Own words", (runBlocking { kept.lyricsOf(MusicMetadata("Song", "Band", lengthMs = 205_000)) } as Lyrics.Found).words)
+    }
+
+    @Test
     fun whatsLeftOutOfNetEasesWordsNowIsLeftOutOfOnesKeptBefore() {
         val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
         val cache = LookupCache(file, Dispatchers.Unconfined)

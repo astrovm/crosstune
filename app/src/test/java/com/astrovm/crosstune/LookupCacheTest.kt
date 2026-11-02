@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -81,6 +82,40 @@ class LookupCacheTest {
         cache.save()
         val today = System.currentTimeMillis() / (24 * 60 * 60 * 1000L)
         assertEquals(today, JSONArray(file.readText()).getJSONArray(0).getLong(3))
+    }
+
+    @Test
+    fun whatASongKeptOfflineNeedsIsNeverDroppedUntilItsLetGo() = runBlocking {
+        val pinned = File(dir, "kept/lookups.json")
+        fun cache() = LookupCache(file, Dispatchers.Unconfined, maxEntries = 1, pinnedFile = pinned)
+        val cache = cache()
+        cache.put("words", "already found")
+        // Looked up for a song kept offline: found now, or found before.
+        withContext(Pinning("song")) {
+            cache.put("chords", "C G")
+            cache.get("words")
+        }
+        cache.put("other", "1")
+        cache.put("another", "2")
+        assertEquals(listOf("chords", "words", "another"), cache.entries().map { it.first })
+        assertEquals(("words" + "already found" + "chords" + "C G").length.toLong(), cache.pinnedSize())
+
+        // Kept apart from the app's cache, which Android may clear, and across restarts.
+        cache.save()
+        assertEquals(listOf("another"), JSONArray(file.readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).getString(0) } })
+        val restarted = cache()
+        restarted.put("newest", "3")
+        assertEquals(listOf("chords", "words", "newest"), restarted.entries().map { it.first })
+
+        // Kept for two songs, it stays until both are let go.
+        withContext(Pinning("other song")) { restarted.get("chords") }
+        restarted.unpin("song")
+        assertEquals(listOf("newest", "chords"), restarted.entries().map { it.first })
+        assertEquals(("chords" + "C G").length.toLong(), restarted.pinnedSize())
+        // Let go, it's dropped as anything else would be: the longest unused first.
+        restarted.unpin("other song")
+        assertEquals(listOf("chords"), restarted.entries().map { it.first })
+        assertEquals(0L, restarted.pinnedSize())
     }
 
     @Test

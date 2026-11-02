@@ -95,6 +95,13 @@
     <string name="retry_button">Riprova</string>
     <string name="offline">Offline</string>
     <string name="heard_waits">Brano ascoltato, riconosciuto appena torni online</string>
+    <string name="keep_offline_label">Scarica</string>
+    <string name="keep_offline">Tieni offline</string>
+    <string name="kept_offline">Tenuto offline. Tocca per rimuovere</string>
+    <string name="keeping_offline">Salvataggio offline con il Wi-Fi</string>
+    <string name="offline_out_of_space">Spazio offline esaurito. Alza il limite nelle Impostazioni</string>
+    <string name="setting_offline_space">Spazio per i brani offline</string>
+    <string name="setting_offline_space_used">%1$s usati</string>
     <string name="more_button">Altro</string>
     <string name="history_title">Recenti</string>
     <string name="search_recent">Cerca nei recenti</string>

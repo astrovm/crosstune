@@ -69,19 +69,24 @@ class MainActivity : ComponentActivity() {
         viewModelFactory {
             initializer {
                 val client = httpClientFactory()
+                // What songs kept offline need goes apart, where Android doesn't clear it to make room.
+                val caches = mutableListOf<LookupCache>()
+                fun cache(name: String, maxEntries: Int = LookupCache.MAX_ENTRIES) =
+                    LookupCache(File(cacheDir, name), lookupDispatcher, maxEntries, pinnedFile = File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/$name")).also(caches::add)
+                val artwork = ArtworkLoader(client, cacheDir = File(cacheDir, ARTWORK_DIR), keptDir = File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/$ARTWORK_DIR"))
                 // Left out of backups, so the tokens never leave the phone.
                 val chatGpt = ChatGpt(client, File(noBackupFilesDir, "chatgpt.json"), packageName)
                 val musicBrainz = MusicBrainz(
                     client,
                     packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
-                    LookupCache(File(cacheDir, "musicbrainz.json"), lookupDispatcher, maxEntries = 1000),
+                    cache("musicbrainz.json", maxEntries = 1000),
                     gapMs = musicBrainzGapMs
                 )
                 // What ChatGPT said is kept, so a song read again asks nothing.
                 val tutor = ChatGptTutor(
                     chatGpt,
-                    LookupCache(File(cacheDir, "chatgpt_answers.json"), lookupDispatcher, maxEntries = 1000),
-                    lines = LookupCache(File(cacheDir, "chatgpt_lines.json"), lookupDispatcher, maxEntries = 6000),
+                    cache("chatgpt_answers.json", maxEntries = 1000),
+                    lines = cache("chatgpt_lines.json", maxEntries = 6000),
                     // The year and album come from MusicBrainz, which gives a song the same ones every time.
                     releaseOf = musicBrainz::release
                 )
@@ -95,7 +100,7 @@ class MainActivity : ComponentActivity() {
                 // What was found for songs is kept, so a playlist played again needs no lookups.
                 // Signed in, ChatGPT picks a song named otherwise among the results when nothing matches by name.
                 val matcher = ExactMatcher(
-                    client, cache = LookupCache(File(cacheDir, "lookups.json"), lookupDispatcher), apis = apis, pick = tutor::pickSong,
+                    client, cache = cache("lookups.json"), apis = apis, pick = tutor::pickSong,
                     missingForMs = MISSING_FOR_MS, spotifyArtist = musicBrainz::spotifyArtist
                 )
                 MainViewModel(
@@ -105,14 +110,14 @@ class MainActivity : ComponentActivity() {
                         client,
                         packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(),
                         busyPauseMs = lyricsBusyPauseMs,
-                        cache = LookupCache(File(cacheDir, "lyrics.json"), lookupDispatcher, maxEntries = 300),
+                        cache = cache("lyrics.json", maxEntries = 300),
                         youTubeMusicSong = { song -> matcher.find(MusicService.YOUTUBE_MUSIC, song)?.substringAfter("watch?v=", "")?.ifEmpty { null } }
                     ),
                     SongSearcher(client),
                     playback,
                     getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE),
                     LinkInterception(applicationContext),
-                    ArtworkLoader(client, cacheDir = File(cacheDir, ARTWORK_DIR)),
+                    artwork,
                     hearingFactory?.invoke().let { hearing ->
                         PlayingFirst(playback, hearing ?: SongListener(microphoneFactory(), Shazam(client)), hearing ?: SongListener(PlayedSound(soundTapFactory, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)), Shazam(client)))
                     },
@@ -120,7 +125,7 @@ class MainActivity : ComponentActivity() {
                     listenAlongPauseMs,
                     quietPauseMs = quietPauseMs,
                     // Each line translated is kept, so a song read again needs no translating.
-                    translator = Translator(client, LookupCache(File(cacheDir, "translations.json"), lookupDispatcher)),
+                    translator = Translator(client, cache("translations.json")),
                     // Read each time, from the app rather than this screen, which a language change replaces.
                     translationLanguage = {
                         Translator.languageOf(AppLanguage.current(applicationContext)?.let(Locale::forLanguageTag) ?: Locale.getDefault())
@@ -128,11 +133,11 @@ class MainActivity : ComponentActivity() {
                     chatGpt = chatGpt,
                     tutor = tutor,
                     // Each song's chords are kept, so a song played again needs no lookup.
-                    chordFinder = ChordFinder(client, cache = LookupCache(File(cacheDir, "chords.json"), lookupDispatcher, maxEntries = 300)),
+                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300)),
                     lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
                     oneTap = OneTapSetup(applicationContext, shellFactory()),
                     // Each song's sung readings are kept, so a song read again needs no lookup.
-                    sungReadings = SungReadings(client, LookupCache(File(cacheDir, "sung_readings.json"), lookupDispatcher, maxEntries = 300)),
+                    sungReadings = SungReadings(client, cache("sung_readings.json", maxEntries = 300)),
                     uniDic = uniDicFactory(applicationContext, client),
                     updates = UpdateChecker(
                         client, getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE), packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
@@ -147,7 +152,8 @@ class MainActivity : ComponentActivity() {
                     lookAhead = lookAheadLyrics,
                     playQueue = queue,
                     queueOrder = order,
-                    sleepTimer = sleepTimer(applicationContext)
+                    sleepTimer = sleepTimer(applicationContext),
+                    offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher)
                 )
             }
         }
@@ -479,6 +485,9 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) { connectionFactory(applicationContext).online().collect(viewModel::connectionChanged) }
         }
         lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { connectionFactory(applicationContext).unmetered().collect(viewModel::unmeteredChanged) }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // Android limits how often a background app may change shortcuts, so only while shown.
                 // Converted links saved on an entry don't change its shortcut, so they don't restart it.
@@ -701,6 +710,8 @@ class MainActivity : ComponentActivity() {
         onShowInCrosstuneFirstChange = viewModel::setShowInCrosstuneFirst,
         onPlayRightAwayChange = viewModel::setPlayRightAway,
         onCleanLinksChange = viewModel::setCleanLinks,
+        onKeepOffline = viewModel::keepOffline,
+        onOfflineSpaceChange = viewModel::setOfflineSpace,
         onShareSheetAppsChange = viewModel::setShareSheetApps,
         onWakesForNextSongChange = viewModel::setWakesForNextSong,
         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,

@@ -94,6 +94,13 @@
     <string name="retry_button">Coba lagi</string>
     <string name="offline">Offline</string>
     <string name="heard_waits">Lagu terdengar, dikenali saat kembali online</string>
+    <string name="keep_offline_label">Unduh</string>
+    <string name="keep_offline">Simpan untuk offline</string>
+    <string name="kept_offline">Disimpan untuk offline. Ketuk untuk menghapus</string>
+    <string name="keeping_offline">Menyimpan untuk offline lewat Wi-Fi</string>
+    <string name="offline_out_of_space">Ruang untuk offline habis. Naikkan batasnya di Setelan</string>
+    <string name="setting_offline_space">Ruang untuk lagu offline</string>
+    <string name="setting_offline_space_used">%1$s terpakai</string>
     <string name="more_button">Lainnya</string>
     <string name="history_title">Terbaru</string>
     <string name="search_recent">Cari di Terbaru</string>

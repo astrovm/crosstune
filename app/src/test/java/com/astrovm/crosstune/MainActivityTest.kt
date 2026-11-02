@@ -79,6 +79,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import okhttp3.Request
 import java.io.File
 import org.json.JSONObject
@@ -3078,6 +3079,27 @@ class MainActivityTest {
     }
 
     @Test
+    fun openedOfflineItStaysOfflineOnceWhatsKeptOfflineIsRead() {
+        MainActivity.connectionFactory = { FakeConnection(online = false) }
+        // What's kept offline is read from storage, held here until Android has said it's offline.
+        val storage = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val held = java.util.concurrent.CountDownLatch(1)
+        storage.execute { held.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        MainActivity.lookupDispatcher = storage.asCoroutineDispatcher()
+        try {
+            launch()
+            waitForDescription(string(R.string.offline))
+            held.countDown()
+            storage.submit {}.get(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            composeRule.waitForIdle()
+            assertEquals(1, composeRule.onAllNodesWithContentDescription(string(R.string.offline)).fetchSemanticsNodes().size)
+        } finally {
+            held.countDown()
+            storage.shutdown()
+        }
+    }
+
+    @Test
     fun aLinkThatFailedJustBeforeGoingOfflineWaitsToo() {
         val connection = FakeConnection()
         MainActivity.connectionFactory = { connection }
@@ -4285,6 +4307,18 @@ class MainActivityTest {
         assertFalse(lit("Two"))
         playback.playing.value = Following(PlaybackClock(20_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
         waitUntil(TIMEOUT_MS) { lit("Two") }
+    }
+
+    @Test
+    fun theRoomSongsKeptOfflineMayTakeIsSetInAdvancedSettings() {
+        launch()
+        inAdvancedSettings {
+            assertTextShown("200 MB")
+            composeRule.onNode(hasContentDescription(string(R.string.setting_offline_space))).performScrollTo()
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+            composeRule.waitForIdle()
+            assertEquals(1000, prefs().getInt("offline_space_mb", 0))
+        }
     }
 
     @Test

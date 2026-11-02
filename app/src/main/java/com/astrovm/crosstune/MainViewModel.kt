@@ -124,7 +124,9 @@ internal class MainViewModel(
     private val playQueue: PlayQueue? = null,
     private val queueOrder: QueueOrder? = null,
     /** Pauses the music after a while, see [playerSleep]. */
-    private val sleepTimer: SleepTimer? = null
+    private val sleepTimer: SleepTimer? = null,
+    /** The songs, albums and playlists kept for offline; nullable so tests need none. */
+    private val offline: OfflineSongs? = null
 ) : ViewModel() {
     /**
      * An app opened on a song is covered rather than left, once Android lets Crosstune show over other
@@ -202,6 +204,7 @@ internal class MainViewModel(
             linksInCrosstune = preferences.getBoolean(KEY_LINKS_IN_CROSSTUNE, false),
             playRightAway = preferences.getBoolean(KEY_PLAY_RIGHT_AWAY, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
+            offlineSpaceMb = preferences.getInt(KEY_OFFLINE_SPACE, OFFLINE_SPACE_MB),
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
             wakesForNextSong = preferences.getBoolean(KEY_WAKES_FOR_NEXT_SONG, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
@@ -390,6 +393,8 @@ internal class MainViewModel(
             preferences.edit { putBoolean(KEY_SETUP_COMPLETE, true) }
             preselectSources()
         }
+        // What's kept for offline, and what's still to fetch for it.
+        if (offline != null) viewModelScope.launch { showKeptOffline() }
         // Read as the app starts, before anyone can open them, so they show at once as they were left.
         keptOnDisk?.let { disk ->
             viewModelScope.launch {
@@ -4056,6 +4061,97 @@ internal class MainViewModel(
         preferences.edit { putBoolean(KEY_CLEAN_LINKS, enabled) }
     }
 
+    /** Whether the phone's on a network that costs no data, the only one songs kept offline are fetched on. */
+    private var unmetered = false
+
+    fun unmeteredChanged(unmetered: Boolean) {
+        this.unmetered = unmetered
+        if (unmetered) fetchKeptOffline()
+    }
+
+    /** Keeps the song, album or playlist shown for offline, or lets it go when it's kept already. */
+    fun keepOffline() {
+        val offline = offline ?: return
+        val item = uiState.result ?: return
+        viewModelScope.launch {
+            offline.has(item)?.let { offline.letGo(it.id) } ?: offline.keep(item)
+            showKeptOffline()
+        }
+    }
+
+    /** How many megabytes what's kept for offline may take: none more is fetched past it. */
+    fun setOfflineSpace(megabytes: Int) {
+        uiState = uiState.copy(offlineSpaceMb = megabytes)
+        preferences.edit { putInt(KEY_OFFLINE_SPACE, megabytes) }
+        fetchKeptOffline()
+    }
+
+    private suspend fun showKeptOffline() {
+        val offline = offline ?: return
+        showKeptOffline(offline)
+        fetchKeptOffline()
+    }
+
+    /** Read first, as reading waits on storage and the state may change meanwhile, e.g. going offline. */
+    private suspend fun showKeptOffline(offline: OfflineSongs) {
+        val kept = offline.all()
+        val used = offline.size()
+        uiState = uiState.copy(keptOffline = kept, offlineUsedBytes = used)
+    }
+
+    private var keepingOffline: Job? = null
+
+    /** Asked to fetch while fetching, as when a network comes back while the last one fails, it goes round again. */
+    private var fetchAgain = false
+
+    /**
+     * Fetches what each song kept for offline needs and isn't saved yet, one at a time, on a network
+     * that costs no data, while there's room.
+     */
+    private fun fetchKeptOffline() {
+        val offline = offline ?: return
+        if (!unmetered) return
+        if (keepingOffline?.isActive == true) {
+            fetchAgain = true
+            return
+        }
+        keepingOffline = viewModelScope.launch {
+            do {
+                fetchAgain = false
+                fetchEachKept(offline)
+            } while (fetchAgain)
+        }
+    }
+
+    private suspend fun fetchEachKept(offline: OfflineSongs) {
+        for (kept in offline.all()) {
+            for (song in kept.songs.filterNot { OfflineSongs.keyOf(it) in kept.saved }) {
+                if (!unmetered || uiState.offlineUsedBytes >= uiState.offlineSpaceMb * BYTES_PER_MB) return
+                // Unreachable for a moment, it's tried again on the next network.
+                if (!withContext(Pinning(kept.id)) { fetchForOffline(song) }) return
+                offline.saved(kept.id, song)
+                showKeptOffline(offline)
+            }
+        }
+    }
+
+    /**
+     * Looks up all the song's words screen may need, as it's set to show them: the words and their
+     * timing, their translation, chords, how Japanese ones are sung, and its cover. Whether it could.
+     */
+    private suspend fun fetchForOffline(song: MusicMetadata): Boolean {
+        val lyrics = lyricsFinder?.lyricsOf(song) ?: return true
+        song.artworkUrl?.let { artwork.keep(it) }
+        if (lyrics == LyricsFinder.Lyrics.Unavailable) return false
+        val found = lyrics as? LyricsFinder.Lyrics.Found ?: return true
+        val lines = found.lines.map { it.text }.ifEmpty { found.words.lines() }
+        if (uiState.learning.translation) translator?.translate(lines, translateInto())
+        if (uiState.chords.on) chordFinder?.chordsOf(song, lines)
+        val script = Readings.scriptOf(lines)
+        if (uiState.learning.readings && script == Script.JAPANESE) sungReadings?.of(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) })
+        return true
+    }
+
     /** Saved links keep what the service returned, so turning the setting off brings it back. */
     private fun String.forSharing(): String = if (uiState.cleanLinks) TrackingLinks.clean(this) else this
 
@@ -4092,6 +4188,12 @@ internal class MainViewModel(
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
+        private const val KEY_OFFLINE_SPACE = "offline_space_mb"
+
+        /** What's kept for offline may take this much by default, a few hundred songs' worth. */
+        const val OFFLINE_SPACE_MB = 200
+        /** As Android counts them when it shows a size. */
+        const val BYTES_PER_MB = 1000L * 1000
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
         /** Read by the play queue too, which plays on with no screen open. */
         const val KEY_WAKES_FOR_NEXT_SONG = "wakes_for_next_song"

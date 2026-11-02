@@ -94,6 +94,13 @@
     <string name="retry_button">Erneut versuchen</string>
     <string name="offline">Offline</string>
     <string name="heard_waits">Song gehört, wird erkannt, sobald du wieder online bist</string>
+    <string name="keep_offline_label">Laden</string>
+    <string name="keep_offline">Für offline behalten</string>
+    <string name="kept_offline">Offline behalten. Tippen zum Entfernen</string>
+    <string name="keeping_offline">Wird über WLAN für offline gespeichert</string>
+    <string name="offline_out_of_space">Kein Platz mehr für offline. Erhöhe das Limit in den Einstellungen</string>
+    <string name="setting_offline_space">Platz für Offline-Songs</string>
+    <string name="setting_offline_space_used">%1$s belegt</string>
     <string name="more_button">Mehr</string>
     <string name="history_title">Zuletzt</string>
     <string name="search_recent">In Zuletzt suchen</string>

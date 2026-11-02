@@ -94,6 +94,13 @@
     <string name="retry_button">Tekrar dene</string>
     <string name="offline">Çevrimdışı</string>
     <string name="heard_waits">Şarkı duyuldu, tekrar çevrimiçi olunca tanınacak</string>
+    <string name="keep_offline_label">İndir</string>
+    <string name="keep_offline">Çevrimdışı için sakla</string>
+    <string name="kept_offline">Çevrimdışı için saklandı. Kaldırmak için dokun</string>
+    <string name="keeping_offline">Wi-Fi ile çevrimdışı için kaydediliyor</string>
+    <string name="offline_out_of_space">Çevrimdışı için yer kalmadı. Sınırı Ayarlar\'dan yükselt</string>
+    <string name="setting_offline_space">Çevrimdışı şarkılar için alan</string>
+    <string name="setting_offline_space_used">%1$s kullanılıyor</string>
     <string name="more_button">Daha fazla</string>
     <string name="history_title">Son kullanılanlar</string>
     <string name="search_recent">Son kullanılanlarda ara</string>

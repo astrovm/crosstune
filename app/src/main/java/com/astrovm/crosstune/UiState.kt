@@ -37,6 +37,11 @@ internal data class UiState(
     val playRightAway: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
+    /** The songs, albums and playlists kept for offline, and how much they take, about. */
+    val keptOffline: List<KeptOffline> = emptyList(),
+    val offlineUsedBytes: Long = 0,
+    /** How many megabytes they may take. */
+    val offlineSpaceMb: Int = MainViewModel.OFFLINE_SPACE_MB,
     /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
     val shareSheetApps: Boolean = true,
     /** Whether the screen's turned on at a list song's end, so Spotify plays the next. */

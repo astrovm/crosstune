@@ -235,6 +235,7 @@ internal class LyricsFinder(
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(cleaned(words, metadata)), final = !provisional) } }
         val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs) } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata) } ?: best
+        if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asJapanWrites(cleaned(it, metadata)), final = true) }
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
         // they're the recording's own, which no copy found elsewhere times better.
         cache?.let { cache ->
@@ -242,6 +243,15 @@ internal class LyricsFinder(
             cache.save()
         }
         return FirstLook(asJapanWrites(found), final = own)
+    }
+
+    /**
+     * With nothing reachable, e.g. offline, the newest words kept for another recording of the song: a
+     * song kept offline, played from an app that names its recording otherwise, still has its words.
+     */
+    private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
+        val name = "$CACHE_VERSION\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
+        return cache?.entries()?.lastOrNull { (key) -> key == name || key.startsWith("$name\u0000") }?.let { (_, kept) -> fromCache(kept)?.first }
     }
 
     /**

@@ -41,7 +41,7 @@
     ],
     [
       "Tekst w rytm",
-      "Tekst i akordy podążają za twoją aplikacją muzyczną albo słuchają razem z tobą, utwór po utworze."
+      "Tekst i akordy podążają za twoją aplikacją muzyczną albo słuchają razem z tobą, utwór po utworze. Zachowaj dowolne offline."
     ],
     [
       "Wizualizacje MilkDrop",
@@ -99,7 +99,7 @@
     ],
     [
       "p",
-      "Aplikacja przechowuje Twoje ustawienia i ostatnio przetworzone linki na Twoim urządzeniu. Ostatnie wpisy mogą zawierać link źródłowy, tytuł, wykonawcę, adres URL okładki i przygotowane linki docelowe. Te ustawienia i historia są wyłączone z reguł aplikacji dotyczących kopii zapasowej Androida w chmurze i przenoszenia danych między urządzeniami."
+      "Aplikacja przechowuje Twoje ustawienia i ostatnio przetworzone linki na Twoim urządzeniu. Ostatnie wpisy mogą zawierać link źródłowy, tytuł, wykonawcę, adres URL okładki i przygotowane linki docelowe. Te ustawienia i historia są wyłączone z reguł aplikacji dotyczących kopii zapasowej Androida w chmurze i przenoszenia danych między urządzeniami. Utwory, albumy i playlisty zachowane offline trzymają swoje teksty, tłumaczenia, akordy i okładki w pamięci aplikacji, dopóki ich nie usuniesz; pobierane są tylko przez Wi-Fi."
     ],
     [
       "p",

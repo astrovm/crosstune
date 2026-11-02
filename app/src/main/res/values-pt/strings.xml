@@ -94,6 +94,13 @@
     <string name="retry_button">Tentar de novo</string>
     <string name="offline">Sem conexão</string>
     <string name="heard_waits">Música ouvida, reconhecida quando a conexão voltar</string>
+    <string name="keep_offline_label">Baixar</string>
+    <string name="keep_offline">Guardar para usar off-line</string>
+    <string name="kept_offline">Guardado para usar off-line. Toque para remover</string>
+    <string name="keeping_offline">Salvando para usar off-line no Wi-Fi</string>
+    <string name="offline_out_of_space">Sem espaço para off-line. Aumente o limite nas Configurações</string>
+    <string name="setting_offline_space">Espaço para músicas off-line</string>
+    <string name="setting_offline_space_used">%1$s em uso</string>
     <string name="more_button">Mais</string>
     <string name="history_title">Recentes</string>
     <string name="search_recent">Pesquisar em Recentes</string>
