@@ -310,6 +310,7 @@
     <string name="floating_close">Close</string>
     <string name="floating_done">Done</string>
     <string name="floating_channel">Floating lyrics</string>
+    <string name="hearing_channel">Hearing the music</string>
     <string name="floating_notification">Lyrics floating over your apps</string>
     <string name="lyrics_learn">Readings and translation</string>
     <string name="lyrics_readings">Readings over the words</string>

@@ -289,6 +289,7 @@
     <string name="floating_close">Fermer</string>
     <string name="floating_done">OK</string>
     <string name="floating_channel">Paroles flottantes</string>
+    <string name="hearing_channel">Écoute de la musique</string>
     <string name="floating_notification">Paroles flottant sur vos applis</string>
     <string name="lyrics_learn">Lectures et traduction</string>
     <string name="lyrics_readings">Lecture au-dessus des mots</string>

@@ -141,6 +141,9 @@ kover {
                 // Hearing words runs whisper.cpp's native library, which unit tests don't load; it's
                 // checked on a phone. What it hears is parsed, and lined up, in tested code.
                 classes("com.astrovm.crosstune.NativeWhisper*")
+                // Capturing what music apps play needs Android's projection, given only on a phone,
+                // where it's checked. Which sound is heard, and when it's silent, is tested.
+                classes("com.astrovm.crosstune.PlaybackCapture*", "com.astrovm.crosstune.Projections*", "com.astrovm.crosstune.CaptureAsk*", "com.astrovm.crosstune.CaptureService*")
             }
         }
         variant("debug") {
