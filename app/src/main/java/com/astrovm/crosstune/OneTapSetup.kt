@@ -58,6 +58,8 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
     private fun commands(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean): List<List<String>> = buildList {
         val user = (android.os.Process.myUid() / PER_USER_RANGE).toString()
         val own = context.packageName
+        // Lyrics then hear music apps' own sound, cleanly, without Android asking to share the screen each time.
+        add(listOf("appops", "set", "--user", user, own, PROJECT_MEDIA_OP, "allow"))
         // Android won't let Crosstune take links another app verified, so those apps go first.
         apps.forEach { add(listOf("pm", "set-app-links-allowed", "--user", user, "--package", it, "false")) }
         if (links) {
@@ -81,5 +83,8 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
         private const val PER_USER_RANGE = 100_000
 
         const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+
+        /** What lets an app capture what others play without Android asking each time. */
+        const val PROJECT_MEDIA_OP = "android:project_media"
     }
 }

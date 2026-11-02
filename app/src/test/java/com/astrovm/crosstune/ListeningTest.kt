@@ -3393,6 +3393,8 @@ class ListeningTest {
         val user = (android.os.Process.myUid() / 100_000).toString()
         assertEquals(
             listOf(
+                // Lyrics hear music apps' own sound cleanly, without Android asking each time.
+                listOf("appops", "set", "--user", user, app.packageName, "android:project_media", "allow"),
                 listOf("appops", "set", "--user", user, app.packageName, "SYSTEM_ALERT_WINDOW", "allow"),
                 // Locked, the words unlock from their notification, which Android 13 asks about.
                 listOf("pm", "grant", "--user", user, app.packageName, Manifest.permission.POST_NOTIFICATIONS)

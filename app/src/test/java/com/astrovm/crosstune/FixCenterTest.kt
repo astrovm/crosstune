@@ -319,6 +319,8 @@ class FixCenterTest {
         click(string(R.string.fix_all))
         assertEquals(
             listOf(
+                // Lyrics hear music apps' own sound cleanly, without Android asking each time.
+                listOf("appops", "set", "--user", user, app.packageName, "android:project_media", "allow"),
                 // The app in the way first, since Android won't let Crosstune take links it verified.
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", spotify, "false"),
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", app.packageName, "true"),
@@ -409,7 +411,8 @@ class FixCenterTest {
         composeRule.onNode(hasText(string(R.string.service_spotify))).performScrollTo().performClick()
         composeRule.waitForIdle()
         click(string(R.string.allow_button))
-        assertEquals(2, shell.ran.size)
+        // Its links, and clean hearing, which every one tap allows.
+        assertEquals(3, shell.ran.size)
         assertAbsent(string(R.string.fix_open_settings), string(R.string.setup_not_allowed))
     }
 
