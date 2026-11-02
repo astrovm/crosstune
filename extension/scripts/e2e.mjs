@@ -1,6 +1,7 @@
 // Loads the built Chrome extension into headless Chromium and clicks a Spotify song link on a
 // local page; it should end up on that song on YouTube Music. Needs the internet, like the extension.
 //   npm run build && node scripts/e2e.mjs
+// CHROME points at another Chromium, Brave or Edge, to try it there.
 
 import { chromium } from "playwright";
 import { createServer } from "node:http";
@@ -11,6 +12,9 @@ import { fileURLToPath } from "node:url";
 
 const extension = join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "chrome");
 const SPOTIFY_SONG = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT";
+// As a person's Chrome says it is: headless Chrome's own says "HeadlessChrome", which Spotify takes
+// for a bot and shows what it hides from people's browsers, so the test passed where people's didn't.
+const PEOPLES_CHROME = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36";
 
 const server = createServer((_, response) => {
   response.setHeader("content-type", "text/html");
@@ -21,8 +25,8 @@ const page_url = `http://127.0.0.1:${server.address().port}/`;
 
 const profile = await mkdtemp(join(tmpdir(), "crosstune-e2e-"));
 const context = await chromium.launchPersistentContext(profile, {
-  channel: "chromium",
-  args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
+  ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: "chromium" }),
+  args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, `--user-agent=${PEOPLES_CHROME}`],
 });
 let failed = false;
 try {

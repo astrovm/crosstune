@@ -35,7 +35,9 @@ export function internet(routes: Route[]): Internet {
 }
 
 /** A page whose only content is what a service tells a link preview. */
-export function spotifyPage(title: string, description: string, seconds?: number): string {
-  const duration = seconds === undefined ? "" : `<meta name="music:duration" content="${seconds}"/>`;
-  return `<!doctype html><html><head><meta property="og:title" content="${title}"/><meta property="og:description" content="${description}"/>${duration}</head></html>`;
+/** A Spotify embed page, which is where the extension reads what a Spotify link is. */
+export function spotifyEmbed(name: string, artist: string, durationMs?: number): string {
+  const entity = { type: "track", name, artists: [{ name: artist }], ...(durationMs === undefined ? {} : { duration: durationMs }) };
+  const data = JSON.stringify({ props: { pageProps: { state: { data: { entity } } } } });
+  return `<!doctype html><html><body><script id="__NEXT_DATA__" type="application/json">${data}</script></body></html>`;
 }

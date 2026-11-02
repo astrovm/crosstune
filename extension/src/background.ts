@@ -19,6 +19,13 @@ let counter = 0;
 /** The link each tab was last sent away from. Going Back lands on it again, and must stay there. */
 const sentFrom = new Map<number, string>();
 
+/**
+ * Each tab's last navigation, and when. Firefox tells of a navigation to another site twice, once
+ * more as it moves it to that site's own process; the second is the same one, and is let be.
+ */
+const lastSeen = new Map<number, { url: string; at: number }>();
+const SAME_NAVIGATION_MS = 1_000;
+
 function country(): string {
   const region = navigator.language.split("-")[1] ?? "";
   return region.length === 2 ? region.toUpperCase() : "";
@@ -27,6 +34,9 @@ function country(): string {
 async function onNavigation(details: chrome.webNavigation.WebNavigationBaseCallbackDetails): Promise<void> {
   if (details.frameId !== 0) return;
   const { tabId, url } = details;
+  const seen = lastSeen.get(tabId);
+  lastSeen.set(tabId, { url, at: details.timeStamp });
+  if (seen !== undefined && seen.url === url && details.timeStamp - seen.at < SAME_NAVIGATION_MS) return;
   if (sentFrom.get(tabId) === url) {
     sentFrom.delete(tabId);
     return;
@@ -65,6 +75,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => void onNavigation
 chrome.tabs.onRemoved.addListener((tabId) => {
   latest.delete(tabId);
   sentFrom.delete(tabId);
+  lastSeen.delete(tabId);
 });
 
 chrome.action.onClicked.addListener(() => void chrome.runtime.openOptionsPage());

@@ -185,14 +185,19 @@ export class Apis {
     return list(obj(answer[0])?.["spotify_track_ids"]).map(str).filter((id) => id.trim() !== "");
   }
 
-  /** A Spotify song's name, artist and length, from its own page, which anyone can read; null when it's gone. */
+  /** A Spotify song's name, artist and length, from its embed page, which anyone can read; null when it's gone. */
   async spotifySong(id: string): Promise<{ metadata: Metadata; url: string } | null> {
     const url = `https://open.spotify.com/track/${id}`;
-    const reply = await this.fetcher(url);
+    const reply = await this.fetcher(spotifyEmbedUrl("track", id));
     if (!reply.ok) return null;
     const metadata = spotify(reply.text, "track");
     return metadata === null ? null : { metadata, url };
   }
+}
+
+/** Where Spotify tells anyone what [id] is: its own page tells only link previews and bots, see [spotify]. */
+export function spotifyEmbedUrl(type: string, id: string): string {
+  return `https://open.spotify.com/embed/${type}/${id}`;
 }
 
 /** A SoundCloud upload, by the artist it credits, or else by whoever uploaded it. */

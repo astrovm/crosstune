@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decide, type Decision } from "../src/destination.ts";
 import type { Service } from "../src/services.ts";
-import { fixture, internet, spotifyPage, type Internet } from "./support.ts";
+import { fixture, internet, spotifyEmbed, type Internet } from "./support.ts";
 
 const TRACK = "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT";
 const ALBUM = "https://open.spotify.com/album/2noRn2Aes5aoNVsU6iWThc";
 const ARTIST = "https://open.spotify.com/artist/0gxyHStUsqpMadRV0Di1Qt";
+/** Where each is read: Spotify's own page names it only to link previews and bots. */
+const TRACK_EMBED = "https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT";
+const ALBUM_EMBED = "https://open.spotify.com/embed/album/2noRn2Aes5aoNVsU6iWThc";
+const ARTIST_EMBED = "https://open.spotify.com/embed/artist/0gxyHStUsqpMadRV0Di1Qt";
 
 function run(url: string, preferred: Service, net: Internet): Promise<Decision> {
   return decide(url, preferred, { fetch: net.fetch, country: "US" });
@@ -15,7 +19,7 @@ function run(url: string, preferred: Service, net: Internet): Promise<Decision> 
 /** What YouTube Music says of someone's own upload, which isn't a song or an official video. */
 const ugcVideo = JSON.stringify({ videoType: { musicVideoType: "MUSIC_VIDEO_TYPE_UGC" } });
 
-const spotifyTrackPage: [string, string] = [TRACK, fixture("spotify-track.html")];
+const spotifyTrackPage: [string, string] = [TRACK_EMBED, fixture("spotify-embed-track.html")];
 
 test("a song found exactly opens on the same song", async () => {
   const net = internet([spotifyTrackPage, ["https://itunes.apple.com/search", fixture("itunes-search-song.json")]]);
@@ -38,7 +42,7 @@ test("an Apple Music album link with a song in it finds the song, from the Apple
 
 test("an album is found on the services that can look one up", async () => {
   const net = internet([
-    [ALBUM, fixture("spotify-album.html")],
+    [ALBUM_EMBED, fixture("spotify-embed-album.html")],
     ["https://music.youtube.com/youtubei/v1/search", fixture("ytm-search-albums.json")],
   ]);
   const decision = await run(ALBUM, "youtubemusic", net);
@@ -47,7 +51,7 @@ test("an album is found on the services that can look one up", async () => {
 
 test("an artist is found by name", async () => {
   const net = internet([
-    [ARTIST, fixture("spotify-artist.html")],
+    [ARTIST_EMBED, fixture("spotify-embed-artist.html")],
     ["https://music.youtube.com/youtubei/v1/search", fixture("ytm-search-artists.json")],
   ]);
   const decision = await run(ARTIST, "youtubemusic", net);
@@ -56,7 +60,7 @@ test("an artist is found by name", async () => {
 
 test("a song only the search has: Spotify has no match, so the service's own search opens", async () => {
   const net = internet([
-    [TRACK, spotifyPage("Quiet Unreleased Thing", "Nobody Known · Some Album · Song · 2020", 200)],
+    [TRACK_EMBED, spotifyEmbed("Quiet Unreleased Thing", "Nobody Known", 200_000)],
     ["https://itunes.apple.com/search", JSON.stringify({ resultCount: 0, results: [] })],
   ]);
   assert.deepEqual(await run(TRACK, "applemusic", net), {
@@ -67,7 +71,7 @@ test("a song only the search has: Spotify has no match, so the service's own sea
 });
 
 test("an edition tag the other service doesn't use is left out of the search", async () => {
-  const net = internet([[TRACK, spotifyPage("Song Name - Remastered 2011", "Some Artist · Album · Song · 1990", 200)]]);
+  const net = internet([[TRACK_EMBED, spotifyEmbed("Song Name - Remastered 2011", "Some Artist", 200_000)]]);
   assert.deepEqual(await run(TRACK, "amazonmusic", net), {
     kind: "go",
     how: "search",
@@ -90,9 +94,9 @@ test("a page that isn't a music link is left alone", async () => {
 });
 
 test("when the service can't be read, the original link opens", async () => {
-  assert.deepEqual(await run(TRACK, "applemusic", internet([[TRACK, "unreachable"]])), { kind: "leave" });
-  assert.deepEqual(await run(TRACK, "applemusic", internet([[TRACK, { status: 500 }]])), { kind: "leave" });
-  assert.deepEqual(await run(TRACK, "applemusic", internet([[TRACK, "<html>nothing here</html>"]])), { kind: "leave" });
+  assert.deepEqual(await run(TRACK, "applemusic", internet([[TRACK_EMBED, "unreachable"]])), { kind: "leave" });
+  assert.deepEqual(await run(TRACK, "applemusic", internet([[TRACK_EMBED, { status: 500 }]])), { kind: "leave" });
+  assert.deepEqual(await run(TRACK, "applemusic", internet([[TRACK_EMBED, "<html>nothing here</html>"]])), { kind: "leave" });
 });
 
 test("when the lookup can't answer, the original link opens rather than a guess", async () => {
@@ -119,7 +123,7 @@ test("Spotify is found through ListenBrainz and the song's own page", async () =
   const net = internet([
     ["https://api.deezer.com/track/3135556", fixture("deezer-track.json")],
     ["https://labs.api.listenbrainz.org/", JSON.stringify([{ spotify_track_ids: [id] }])],
-    [`https://open.spotify.com/track/${id}`, spotifyPage("Harder, Better, Faster, Stronger", "Daft Punk · Discovery · Song · 2001", 224)],
+    [`https://open.spotify.com/embed/track/${id}`, spotifyEmbed("Harder, Better, Faster, Stronger", "Daft Punk", 224_000)],
   ]);
   assert.deepEqual(await run("https://www.deezer.com/en/track/3135556", "spotify", net), {
     kind: "go",
@@ -222,7 +226,7 @@ test("a SoundCloud song that isn't found elsewhere stays on SoundCloud", async (
 test("SoundCloud as the destination reads the key from its site and picks the artist's own upload", async () => {
   const key = "a".repeat(32);
   const net = internet([
-    [TRACK, spotifyPage("Never Be Like You feat. Kai", "Flume · Skin · Song · 2016", 233)],
+    [TRACK_EMBED, spotifyEmbed("Never Be Like You feat. Kai", "Flume", 233_000)],
     ["https://soundcloud.com/", '<html><script crossorigin src="https://a-v2.sndcdn.com/assets/app.js"></script></html>'],
     ["https://a-v2.sndcdn.com/assets/app.js", `x={client_id:"${key}"}`],
     [/^https:\/\/api-v2\.soundcloud\.com\/search\/tracks.*client_id=a{32}/, fixture("soundcloud-search-tracks.json")],
@@ -235,7 +239,7 @@ test("SoundCloud's key is read again when SoundCloud turns the old one away", as
   const second = "b".repeat(32);
   let page = 0;
   const net = internet([
-    [TRACK, spotifyPage("Never Be Like You feat. Kai", "Flume · Skin · Song · 2016", 233)],
+    [TRACK_EMBED, spotifyEmbed("Never Be Like You feat. Kai", "Flume", 233_000)],
     ["https://soundcloud.com/", () => `<script crossorigin src="https://a-v2.sndcdn.com/assets/app${page++}.js"></script>`],
     ["https://a-v2.sndcdn.com/assets/app0.js", `client_id:"${first}"`],
     ["https://a-v2.sndcdn.com/assets/app1.js", `client_id:"${second}"`],
@@ -249,7 +253,7 @@ test("SoundCloud's key is read again when SoundCloud turns the old one away", as
 test("a short link is followed to the item it leads to", async () => {
   const net = internet([
     ["https://spotify.link/abc", { url: `${TRACK}?si=x` }],
-    [TRACK, fixture("spotify-track.html")],
+    [TRACK_EMBED, fixture("spotify-embed-track.html")],
     ["https://itunes.apple.com/search", fixture("itunes-search-song.json")],
   ]);
   const decision = await run("https://spotify.link/abc", "applemusic", net);
@@ -259,7 +263,7 @@ test("a short link is followed to the item it leads to", async () => {
 test("a short link whose page redirects with script is read from the page", async () => {
   const net = internet([
     ["https://spotify.link/abc", { url: "https://spotify.link/abc", text: `<script>location="${TRACK}"</script>` }],
-    [TRACK, fixture("spotify-track.html")],
+    [TRACK_EMBED, fixture("spotify-embed-track.html")],
     ["https://itunes.apple.com/search", fixture("itunes-search-song.json")],
   ]);
   assert.equal((await run("https://spotify.link/abc", "applemusic", net)).kind, "go");

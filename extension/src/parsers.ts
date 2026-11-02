@@ -3,33 +3,14 @@
 // what only the app shows (covers, track lists, playlists) and loanword sounds, which need a
 // romaji table.
 
-import { findObject, num, obj, objects, runsText, str, musicVideoTypeIn, type Obj } from "./json.ts";
+import { findObject, list, num, obj, objects, runsText, str, musicVideoTypeIn, type Obj } from "./json.ts";
 import { same, withoutEditionTag } from "./names.ts";
 import type { ItemType, Metadata } from "./services.ts";
 
-const metaTagRegex = /<meta\s[^>]*>/gi;
 const titleTagRegex = /<title[^>]*>([^<]*)<\/title>/i;
-const attributeRegex = /([A-Za-z:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 const tidalSuffixRegex = /(^|\s)on TIDAL$/;
 const entityRegex = /&(#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z]+);/g;
 const namedEntities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-
-/** Collects og:* meta tags regardless of attribute order or quote style. */
-function openGraphTags(html: string): Map<string, string> {
-  const tags = new Map<string, string>();
-  for (const tag of html.matchAll(metaTagRegex)) {
-    const attributes = new Map<string, string>();
-    for (const match of tag[0].matchAll(attributeRegex)) {
-      const value = match[2] ?? "";
-      attributes.set((match[1] ?? "").toLowerCase(), value === "" ? (match[3] ?? "") : value);
-    }
-    const property = attributes.get("property");
-    const content = attributes.get("content");
-    if (property === undefined || content === undefined || tags.has(property)) continue;
-    tags.set(property, decodeEntities(content).trim());
-  }
-  return tags;
-}
 
 export function decodeEntities(text: string): string {
   return text.replace(entityRegex, (whole, entity: string) => {
@@ -55,23 +36,33 @@ function removeSurrounding(text: string, mark: string): string {
 }
 
 /**
- * Spotify tracks describe themselves as "Artist · Album · Song · Year" and albums as
- * "Artist · album · Year · N songs", with a title like "Name - Album by Artist | Spotify".
- * Artist descriptions are free text, so only their title is used.
+ * A Spotify item as its embed page has it. Spotify's own page names the item only to link previews
+ * and bots, and shows a browser, the extension's included, an empty player; the embed page tells
+ * anyone. A song says its artists and length, an album its artist under its name, and an artist or
+ * a playlist only its name.
  */
 export function spotify(html: string, type: ItemType): Metadata | null {
-  const tags = openGraphTags(html);
-  const rawTitle = removeSuffix(tags.get("og:title") ?? "", " | Spotify").trim();
-  if (rawTitle === "") return null;
-  const artist = type === "track" || type === "album" ? (tags.get("og:description")?.split(" · ")[0]?.trim() ?? "") : "";
-  const byArtist = ` by ${artist}`;
-  const unsigned = removeSuffix(rawTitle, byArtist);
-  // An album's page is titled "Listen to Name - Album by Artist" now, and was "Name - Album by Artist".
-  const title = type === "album" && rawTitle.endsWith(byArtist) && rawTitle.includes(" - ") ? unsigned.slice(0, unsigned.lastIndexOf(" - ")).replace(/^Listen to /, "") : rawTitle;
-  // A song's page says how long it is, in seconds, which tells its versions apart.
-  const seconds = Number(/<meta name="music:duration" content="(\d+)"/.exec(html)?.[1]);
-  const lengthMs = type === "track" && seconds > 0 ? seconds * 1000 : undefined;
-  return lengthMs === undefined ? { title, artist, type } : { title, artist, type, lengthMs };
+  const data = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/.exec(html)?.[1];
+  if (data === undefined) return null;
+  let entity: Obj | undefined;
+  try {
+    entity = obj(obj(obj(obj(obj(obj(JSON.parse(data))?.["props"])?.["pageProps"])?.["state"])?.["data"])?.["entity"]);
+  } catch {
+    return null;
+  }
+  const title = str(entity?.["name"]).trim();
+  if (entity === undefined || title === "") return null;
+  const artist =
+    type === "track"
+      ? list(entity["artists"])
+          .map((artist) => str(obj(artist)?.["name"]).trim())
+          .filter((name) => name !== "")
+          .join(", ")
+      : type === "album"
+        ? str(entity["subtitle"]).trim()
+        : "";
+  const lengthMs = num(entity["duration"]);
+  return type === "track" && lengthMs > 0 ? { title, artist, type, lengthMs } : { title, artist, type };
 }
 
 // Video titles often carry release noise such as "(Official Video)" or "[Lyrics]".

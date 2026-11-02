@@ -2,7 +2,7 @@
 // uses: YouTube and SoundCloud oEmbed, iTunes Lookup, Deezer's API and public page metadata.
 // Ported from LinkResolver.kt. Null when it can't be read; the link then opens untouched.
 
-import { Apis, YOUTUBE_MUSIC_BROWSE_URL, YOUTUBE_MUSIC_NEXT_URL, soundCloudTrack } from "./apis.ts";
+import { Apis, YOUTUBE_MUSIC_BROWSE_URL, YOUTUBE_MUSIC_NEXT_URL, soundCloudTrack, spotifyEmbedUrl } from "./apis.ts";
 import type { Fetcher } from "./http.ts";
 import { Unreachable, parseJson } from "./http.ts";
 import { str } from "./json.ts";
@@ -25,6 +25,8 @@ function metadataUrl(link: MusicLink): string {
       return `https://itunes.apple.com/lookup?${new URLSearchParams({ id: link.id, country: link.region ?? "us" })}`;
     case "deezer":
       return `https://api.deezer.com/${link.type}/${link.id}`;
+    case "spotify":
+      return spotifyEmbedUrl(link.type, link.id);
     default:
       return link.url;
   }
