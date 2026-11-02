@@ -1,0 +1,34 @@
+{
+  "data": [
+    {
+      "title": "Never Gonna Give You Up",
+      "title_short": "Never Gonna Give You Up",
+      "title_version": "",
+      "link": "https://www.deezer.com/track/14408104",
+      "duration": 211,
+      "artist": {
+        "name": "Rick Astley"
+      }
+    },
+    {
+      "title": "Never Gonna Give You Up (Cake Mix)",
+      "title_short": "Never Gonna Give You Up",
+      "title_version": "(Cake Mix)",
+      "link": "https://www.deezer.com/track/3816551372",
+      "duration": 347,
+      "artist": {
+        "name": "Rick Astley"
+      }
+    },
+    {
+      "title": "Never Gonna Give You Up (Pianoforte)",
+      "title_short": "Never Gonna Give You Up",
+      "title_version": "(Pianoforte)",
+      "link": "https://www.deezer.com/track/3786363752",
+      "duration": 213,
+      "artist": {
+        "name": "Rick Astley"
+      }
+    }
+  ]
+}

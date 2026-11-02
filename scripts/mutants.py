@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCES = "app/src/main/java/"
+SOURCES = ("app/src/main/java/", "app/src/play/java/")
 LINES = ROOT / "app/build/mutants/changed-lines.txt"
 REPORT = ROOT / "app/build/reports/pitest/playDebug/mutations.xml"
 
@@ -26,12 +26,13 @@ REPORT = ROOT / "app/build/reports/pitest/playDebug/mutations.xml"
 def changed_lines(base):
     """Each changed Kotlin line, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
     since = subprocess.run(["git", "merge-base", base, "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
-    diff = subprocess.run(["git", "diff", "-U0", "--no-color", since, "--", SOURCES], cwd=ROOT, check=True, capture_output=True, text=True).stdout
+    diff = subprocess.run(["git", "diff", "-U0", "--no-color", since, "--", *SOURCES], cwd=ROOT, check=True, capture_output=True, text=True).stdout
     lines, file = [], None
     for line in diff.splitlines():
         if line.startswith("+++ "):
             path = line[4:].removeprefix("b/")
-            file = path.removeprefix(SOURCES) if path.endswith(".kt") else None
+            source = next((source for source in SOURCES if path.startswith(source)), None)
+            file = path.removeprefix(source) if source and path.endswith(".kt") else None
         elif line.startswith("@@") and file:
             start, _, count = re.match(r"@@ -\S+ \+(\d+)(,(\d+))? @@", line).groups()
             lines += [f"{file}:{n}" for n in range(int(start), int(start) + int(count or 1))]
@@ -52,7 +53,9 @@ def main():
     LINES.write_text("\n".join(lines) + "\n")
     print(f"{len(lines)} changed lines in {len({line.split(':')[0] for line in lines})} files.")
     REPORT.unlink(missing_ok=True)
-    subprocess.run([*shlex.split(args.gradle), ":app:pitestPlayDebug", f"-PmutateLines={LINES}"], cwd=ROOT, check=True)
+    # Verbose, as only then does PIT say why a test failed before any change: quiet, it names the
+    # test and nothing else, and a test that fails once in a while can't be looked into.
+    subprocess.run([*shlex.split(args.gradle), ":app:pitestPlayDebug", f"-PmutateLines={LINES}", "-PmutateVerbose=true"], cwd=ROOT, check=True)
 
     mutations = ET.parse(REPORT).getroot()
     lived = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE")]

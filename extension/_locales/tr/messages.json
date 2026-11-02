@@ -1,0 +1,23 @@
+{
+  "extName": {
+    "message": "Crosstune"
+  },
+  "extDescription": {
+    "message": "Müzik bağlantılarını tercih ettiğin serviste açar."
+  },
+  "actionTitle": {
+    "message": "Crosstune ayarları"
+  },
+  "optionsEnabled": {
+    "message": "Müzik bağlantılarını aşağıdaki serviste aç"
+  },
+  "optionsService": {
+    "message": "Şurada aç"
+  },
+  "optionsAccess": {
+    "message": "Crosstune'un bağlantıları senin için açabilmesi için müzik sitelerine erişmesi gerekiyor."
+  },
+  "optionsAllow": {
+    "message": "İzin ver"
+  }
+}

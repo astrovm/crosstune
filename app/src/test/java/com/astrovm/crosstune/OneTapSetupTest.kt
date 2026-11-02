@@ -28,7 +28,7 @@ class OneTapSetupTest {
     fun floatingLyricsAskAboutNotificationsOnlyWhereAndroidDoes() = runBlocking {
         val shell = FakeShell()
         assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = true))
-        assertEquals(listOf("appops", "pm"), shell.ran.map { it.first() })
+        assertEquals(listOf("appops", "appops", "pm"), shell.ran.map { it.first() })
         assertTrue(shell.ran.last().contains(android.Manifest.permission.POST_NOTIFICATIONS))
     }
 
@@ -37,6 +37,14 @@ class OneTapSetupTest {
     fun beforeAndroid13FloatingLyricsNeedNoNotificationPermission() = runBlocking {
         val shell = FakeShell()
         assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = true))
-        assertEquals(listOf("appops"), shell.ran.map { it.first() })
+        assertEquals(listOf("appops", "appops"), shell.ran.map { it.first() })
+    }
+
+    @Test
+    fun anySetupLetsLyricsHearMusicAppsCleanlyWithoutAndroidAsking() = runBlocking {
+        val shell = FakeShell()
+        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = false))
+        val user = (android.os.Process.myUid() / 100_000).toString()
+        assertEquals(listOf(listOf("appops", "set", "--user", user, app.packageName, "android:project_media", "allow")), shell.ran)
     }
 }

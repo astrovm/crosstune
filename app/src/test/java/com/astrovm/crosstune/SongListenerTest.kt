@@ -241,6 +241,17 @@ class SongListenerTest {
     }
 
     @Test
+    fun theSoundHeardStartsOnceTheMicrophoneOpensWhichCanTakeAMoment() {
+        var now = 1_000L
+        microphone.play(3.0)
+        answer(MATCH)
+        // As when the sound music apps play is asked of Android.
+        val slow = Microphone { now = 2_500L; microphone.open() }
+        val heard = runBlocking { SongListener(slow, shazam, clock = { now }).listen() }
+        assertEquals(2_500L, (heard as Heard.Song).startedAtMs)
+    }
+
+    @Test
     fun itCanListenAgainAfterASong() {
         answer(MATCH)
         microphone.play(3.0)

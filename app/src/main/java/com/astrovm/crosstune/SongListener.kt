@@ -371,12 +371,14 @@ internal class SongListener(
     override suspend fun listen(): Heard = coroutineScope {
         val audio = ShortArray(ShazamSignature.SAMPLES)
         val progress = MutableStateFlow(Progress(0, done = false))
-        val startedAt = clock()
+        // When the sound starts, once open: opening can take a moment, as when the sound's asked for.
+        var startedAt = clock()
         // It opens the microphone itself, so whatever it opens it closes, even when stopped meanwhile.
         val recorder = launch(recordDispatcher) {
             var recorded = 0
             try {
                 microphone.open()?.use { recording ->
+                    startedAt = clock()
                     while (isActive && recorded < audio.size) {
                         // Stopping interrupts a read that's waiting for sound.
                         val read = runInterruptible { recording.read(audio, recorded, min(CHUNK, audio.size - recorded)) }

@@ -6774,9 +6774,9 @@ class MainActivityTest {
         // Lyrics are still there to let hear and follow, which is all Shizuku is asked.
         assertTextShown(string(R.string.follow_help_title))
         click(string(R.string.fix_all))
-        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.first().take(3))
+        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran[1].take(3))
         assertEquals(listOf("pm", "grant"), shell.ran.last().take(2))
-        assertEquals(2, shell.ran.size)
+        assertEquals(3, shell.ran.size)
     }
 
     @Test
@@ -6894,6 +6894,8 @@ class MainActivityTest {
         val user = (android.os.Process.myUid() / 100_000).toString()
         assertEquals(
             listOf(
+                // Lyrics hear music apps' own sound cleanly, without Android asking each time.
+                listOf("appops", "set", "--user", user, app.packageName, "android:project_media", "allow"),
                 // The app in the way first, since Android won't let Crosstune take links it verified.
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", MusicService.SPOTIFY.packageName, "false"),
                 listOf("pm", "set-app-links-allowed", "--user", user, "--package", app.packageName, "true"),
@@ -6915,7 +6917,7 @@ class MainActivityTest {
         shadowOf(app).grantPermissions(android.Manifest.permission.RECORD_AUDIO)
         launch()
         click(string(R.string.fix_all))
-        assertEquals(3, shell.ran.size)
+        assertEquals(4, shell.ran.size)
         assertTrue(shell.ran.none { "allow_listener" in it || "grant" in it })
         assertTextShown(string(R.string.empty_hint))
     }
@@ -6934,7 +6936,7 @@ class MainActivityTest {
         }
         launch()
         click(string(R.string.fix_all))
-        assertEquals(5, shell.ran.size)
+        assertEquals(6, shell.ran.size)
         assertTextShown(string(R.string.fix_failed))
         assertTextAbsent(string(R.string.fix_with_shizuku))
         // The links are done; following music apps is left, by hand.
@@ -6961,7 +6963,7 @@ class MainActivityTest {
 
         shell.answer.complete(Unit)
         composeRule.waitForIdle()
-        assertEquals(5, shell.ran.size)
+        assertEquals(6, shell.ran.size)
         assertTextShown(string(R.string.empty_hint))
     }
 
@@ -7003,7 +7005,7 @@ class MainActivityTest {
         assertTrue(ViewModelProvider(activity)[MainViewModel::class.java].fixInOneTap(OneTapFix.LINKS))
         shell.answer.complete(Unit)
         composeRule.waitForIdle()
-        assertEquals(2, shell.ran.size)
+        assertEquals(3, shell.ran.size)
         assertTextAbsent(string(R.string.fix_open_settings))
     }
 
@@ -7015,7 +7017,8 @@ class MainActivityTest {
         val follow = composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo()
         follow.performClick()
         composeRule.waitForIdle()
-        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.single().take(3))
+        assertEquals(listOf("cmd", "notification", "allow_listener"), shell.ran.last().take(3))
+        assertEquals(2, shell.ran.size)
         assertEquals(null, nextStartedActivity())
         follow.assertIsOn()
     }
@@ -7027,7 +7030,7 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.setting_lyrics_follow)).performScrollTo().performClick()
         composeRule.waitForIdle()
-        assertEquals(1, shell.ran.size)
+        assertEquals(2, shell.ran.size)
         // What it couldn't do is left to the steps, which say so.
         assertTextShown(string(R.string.fix_failed))
         click(string(R.string.fix_open_settings))

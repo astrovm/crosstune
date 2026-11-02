@@ -289,6 +289,7 @@
     <string name="floating_close">닫기</string>
     <string name="floating_done">완료</string>
     <string name="floating_channel">떠 있는 가사</string>
+    <string name="hearing_channel">음악 듣기</string>
     <string name="floating_notification">앱 위에 가사가 떠 있음</string>
     <string name="lyrics_learn">읽기와 번역</string>
     <string name="lyrics_readings">단어 위에 읽기</string>

@@ -165,6 +165,9 @@ kover {
                 classes("com.astrovm.crosstune.GoogleCast*")
                 // Gradle writes this one, and only Google Cast's app id reads it, so no test of ours loads it.
                 classes("com.astrovm.crosstune.BuildConfig")
+                // Capturing what music apps play needs Android's projection, given only on a phone,
+                // where it's checked. Which sound is heard, and when it's silent, is tested.
+                classes("com.astrovm.crosstune.PlaybackCapture*", "com.astrovm.crosstune.Projections*", "com.astrovm.crosstune.CaptureAsk*", "com.astrovm.crosstune.CaptureService*")
             }
         }
         // The play build is the one with every line of the app; the foss one only leaves the casting out.

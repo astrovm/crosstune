@@ -1,0 +1,23 @@
+{
+  "extName": {
+    "message": "Crosstune"
+  },
+  "extDescription": {
+    "message": "Membuka link musik di layanan pilihanmu."
+  },
+  "actionTitle": {
+    "message": "Setelan Crosstune"
+  },
+  "optionsEnabled": {
+    "message": "Buka link musik di layanan di bawah"
+  },
+  "optionsService": {
+    "message": "Buka di"
+  },
+  "optionsAccess": {
+    "message": "Crosstune perlu akses ke situs musik untuk membuka link untukmu."
+  },
+  "optionsAllow": {
+    "message": "Izinkan"
+  }
+}

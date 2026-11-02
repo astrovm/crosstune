@@ -1,0 +1,26 @@
+{
+  "resultCount": 3,
+  "results": [
+    {
+      "trackName": "Never Gonna Give You Up",
+      "artistName": "Rick Astley",
+      "collectionName": "The Best Of Me: Never Edition",
+      "trackViewUrl": "https://music.apple.com/us/album/never-gonna-give-you-up/1773292758?i=1773293184&uo=4",
+      "trackTimeMillis": 213960
+    },
+    {
+      "trackName": "Never Gonna Give You Up (Cake Mix)",
+      "artistName": "Rick Astley",
+      "collectionName": "Whenever You Need Somebody (Deluxe Edition - 2022 Remaster)",
+      "trackViewUrl": "https://music.apple.com/us/album/never-gonna-give-you-up-cake-mix/1612648318?i=1612648434&uo=4",
+      "trackTimeMillis": 347427
+    },
+    {
+      "trackName": "Never Gonna Give You Up",
+      "artistName": "Rick Astley",
+      "collectionName": "Whenever You Need Somebody",
+      "trackViewUrl": "https://music.apple.com/us/album/never-gonna-give-you-up/1559885420?i=1559885421&uo=4",
+      "trackTimeMillis": 213573
+    }
+  ]
+}

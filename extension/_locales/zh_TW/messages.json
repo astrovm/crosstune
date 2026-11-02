@@ -1,0 +1,23 @@
+{
+  "extName": {
+    "message": "Crosstune"
+  },
+  "extDescription": {
+    "message": "在你偏好的服務中開啟音樂連結。"
+  },
+  "actionTitle": {
+    "message": "Crosstune 設定"
+  },
+  "optionsEnabled": {
+    "message": "在下方的服務中開啟音樂連結"
+  },
+  "optionsService": {
+    "message": "開啟方式"
+  },
+  "optionsAccess": {
+    "message": "Crosstune 需要存取音樂網站，才能為你開啟連結。"
+  },
+  "optionsAllow": {
+    "message": "允許"
+  }
+}

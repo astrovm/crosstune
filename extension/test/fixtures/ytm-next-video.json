@@ -1,0 +1,65 @@
+{
+  "playlistPanelVideoRenderer": {
+    "videoId": "dQw4w9WgXcQ",
+    "title": {
+      "runs": [
+        {
+          "text": "Never Gonna Give You Up"
+        }
+      ]
+    },
+    "longBylineText": {
+      "runs": [
+        {
+          "text": "Rick Astley",
+          "navigationEndpoint": {
+            "browseEndpoint": {
+              "browseId": "UCwZEU0wAwIyZb4x5G_KJp2w",
+              "browseEndpointContextSupportedConfigs": {
+                "browseEndpointContextMusicConfig": {
+                  "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                }
+              }
+            }
+          }
+        },
+        {
+          "text": " • "
+        },
+        {
+          "text": "1.8B views"
+        },
+        {
+          "text": " • "
+        },
+        {
+          "text": "19M likes"
+        }
+      ]
+    },
+    "lengthText": {
+      "runs": [
+        {
+          "text": "3:34"
+        }
+      ],
+      "accessibility": {
+        "accessibilityData": {
+          "label": "3 minutes, 34 seconds"
+        }
+      }
+    },
+    "navigationEndpoint": {
+      "watchEndpoint": {
+        "videoId": "dQw4w9WgXcQ",
+        "params": "OAHyAQIIAeoEC2RRdzR3OVdnWGNR",
+        "watchEndpointMusicSupportedConfigs": {
+          "watchEndpointMusicConfig": {
+            "hasPersistentPlaylistPanel": true,
+            "musicVideoType": "MUSIC_VIDEO_TYPE_OMV"
+          }
+        }
+      }
+    }
+  }
+}

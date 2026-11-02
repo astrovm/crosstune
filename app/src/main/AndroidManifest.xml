@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- The screen turned on for a moment at a list song's end, so Spotify plays the next, when set to. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -517,6 +518,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Shows the lyrics of the song playing over other apps, in time with it, until the user closes them." />
         </service>
+
+        <!-- Hears music apps' own sound, once Shizuku or root allowed it: asks Android, showing nothing, then holds what it gives. -->
+        <activity
+            android:name=".CaptureAsk"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <service
+            android:name=".CaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <!-- Keeps Crosstune from being frozen while the browser signs in with ChatGPT and comes back. -->
         <service

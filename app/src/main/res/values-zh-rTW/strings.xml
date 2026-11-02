@@ -289,6 +289,7 @@
     <string name="floating_close">關閉</string>
     <string name="floating_done">完成</string>
     <string name="floating_channel">懸浮歌詞</string>
+    <string name="hearing_channel">聆聽音樂</string>
     <string name="floating_notification">歌詞正懸浮在應用程式上方</string>
     <string name="lyrics_learn">讀音和翻譯</string>
     <string name="lyrics_readings">在文字上方顯示讀音</string>

@@ -1,0 +1,164 @@
+{
+  "contents": {
+    "sectionListRenderer": {
+      "contents": [
+        {
+          "musicShelfRenderer": {
+            "contents": [
+              {
+                "musicResponsiveListItemRenderer": {
+                  "flexColumns": [
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Daft Punk"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Artist"
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "68.3M monthly audience"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Artist • 68.3M monthly audience"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "playlistItemData": null,
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCRr1xG_2WIDs18a6cIiCxeA",
+                      "browseEndpointContextSupportedConfigs": {
+                        "browseEndpointContextMusicConfig": {
+                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "musicResponsiveListItemRenderer": {
+                  "flexColumns": [
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "The Weeknd"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Artist"
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "234M monthly audience"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Artist • 234M monthly audience"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "playlistItemData": null,
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UClYV6hHlupm_S_ObS1W-DYw",
+                      "browseEndpointContextSupportedConfigs": {
+                        "browseEndpointContextMusicConfig": {
+                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "musicResponsiveListItemRenderer": {
+                  "flexColumns": [
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Daft Punk Experience"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "musicResponsiveListItemFlexColumnRenderer": {
+                        "text": {
+                          "runs": [
+                            {
+                              "text": "Artist"
+                            },
+                            {
+                              "text": " • "
+                            },
+                            {
+                              "text": "22 subscribers"
+                            }
+                          ],
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Artist • 22 subscribers"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "playlistItemData": null,
+                  "navigationEndpoint": {
+                    "browseEndpoint": {
+                      "browseId": "UCZ2J4f4052BX-NcUh55AFgg",
+                      "browseEndpointContextSupportedConfigs": {
+                        "browseEndpointContextMusicConfig": {
+                          "pageType": "MUSIC_PAGE_TYPE_ARTIST"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
