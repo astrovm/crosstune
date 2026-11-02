@@ -207,6 +207,12 @@ internal class CastPlayback(
     override fun playPause(song: MusicMetadata, play: Boolean) =
         if (tv(song) != null) cast.send(if (play) CastCommand.Play else CastCommand.Pause) else source.playPause(song, play)
 
+    override suspend fun resume(song: MusicMetadata): Boolean {
+        if (tv(song) == null) return source.resume(song)
+        cast.send(CastCommand.Play)
+        return true
+    }
+
     override fun skip(song: MusicMetadata, next: Boolean) =
         if (tv(song) != null) cast.send(if (next) CastCommand.Next else CastCommand.Previous) else source.skip(song, next)
 
