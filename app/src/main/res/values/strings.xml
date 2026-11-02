@@ -99,6 +99,9 @@
     <string name="setting_clean_links_description">Drops ?si=, utm_ and the like.</string>
     <string name="setting_share_sheet_apps">Apps in the share sheet</string>
     <string name="setting_share_sheet_apps_description">Show music apps as options when sharing.</string>
+    <string name="settings_playing_section">Playing</string>
+    <string name="setting_wakes_for_next_song">Wake for Spotify\'s next song</string>
+    <string name="setting_wakes_for_next_song_description">With the screen off, Spotify only plays a list\'s next song once the screen is on. This turns it on at each song\'s end, until it times out.</string>
     <string name="setting_language">Language</string>
     <string name="language_system_default">System default</string>
     <string name="matching_text">Finding the exact match…</string>
@@ -106,6 +109,14 @@
     <string name="cancel_button">Cancel</string>
     <string name="retry_button">Try again</string>
     <string name="offline">Offline</string>
+    <string name="heard_waits">Song heard, named once online</string>
+    <string name="keep_offline_label">Download</string>
+    <string name="keep_offline">Keep for offline</string>
+    <string name="kept_offline">Kept for offline. Tap to remove</string>
+    <string name="keeping_offline">Saving for offline on Wi-Fi</string>
+    <string name="offline_out_of_space">Out of space for offline. Raise the limit in Settings</string>
+    <string name="setting_offline_space">Space for offline songs</string>
+    <string name="setting_offline_space_used">%1$s used</string>
     <string name="more_button">More</string>
     <string name="history_title">Recent</string>
     <string name="search_recent">Search Recent</string>

@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 /** Whether the phone can reach the internet, as it changes. */
 internal interface Connection {
     fun online(): Flow<Boolean>
+
+    /** Whether it can on a network that doesn't cost the user data, e.g. Wi-Fi, for big downloads. */
+    fun unmetered(): Flow<Boolean>
 }
 
 /**
@@ -22,11 +25,15 @@ internal interface Connection {
 internal class AndroidConnection(context: Context) : Connection {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
-    override fun online(): Flow<Boolean> = callbackFlow {
-        fun reaches(capabilities: NetworkCapabilities?) = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    override fun online(): Flow<Boolean> = watch(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+
+    override fun unmetered(): Flow<Boolean> = watch(NetworkCapabilities.NET_CAPABILITY_INTERNET, NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+
+    /** Whether the network the phone uses has all of [capabilities], as it changes. */
+    private fun watch(vararg capabilities: Int): Flow<Boolean> = callbackFlow {
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                trySend(reaches(capabilities))
+            override fun onCapabilitiesChanged(network: Network, has: NetworkCapabilities) {
+                trySend(capabilities.all(has::hasCapability))
             }
 
             override fun onLost(network: Network) {

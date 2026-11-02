@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">\?si=, utm_ 같은 부분을 지워요.</string>
     <string name="setting_share_sheet_apps">공유 메뉴의 앱</string>
     <string name="setting_share_sheet_apps_description">공유할 때 음악 앱을 표시해요.</string>
+    <string name="settings_playing_section">재생</string>
+    <string name="setting_wakes_for_next_song">Spotify 다음 곡을 위해 화면 켜기</string>
+    <string name="setting_wakes_for_next_song_description">화면이 꺼져 있으면 Spotify는 화면이 켜질 때까지 목록의 다음 곡을 재생하지 않아요. 곡이 끝날 때마다 화면을 켜고, 시간이 지나면 다시 꺼져요.</string>
     <string name="setting_language">언어</string>
     <string name="language_system_default">시스템 기본값</string>
     <string name="matching_text">정확한 항목을 찾는 중…</string>
@@ -90,6 +93,14 @@
     <string name="cancel_button">취소</string>
     <string name="retry_button">다시 시도</string>
     <string name="offline">오프라인</string>
+    <string name="heard_waits">노래를 들었어요. 온라인이 되면 찾아요</string>
+    <string name="keep_offline_label">다운로드</string>
+    <string name="keep_offline">오프라인용으로 저장</string>
+    <string name="kept_offline">오프라인용으로 저장됨. 탭하면 삭제</string>
+    <string name="keeping_offline">Wi-Fi로 오프라인용 저장 중</string>
+    <string name="offline_out_of_space">오프라인용 공간이 없어요. 설정에서 한도를 늘리세요</string>
+    <string name="setting_offline_space">오프라인 노래용 공간</string>
+    <string name="setting_offline_space_used">%1$s 사용 중</string>
     <string name="more_button">더보기</string>
     <string name="history_title">최근</string>
     <string name="search_recent">최근 항목 검색</string>

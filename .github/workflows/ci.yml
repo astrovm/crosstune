@@ -49,10 +49,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Check Play Store changelog
+      - name: Check Play Store changelog and texts
         run: |
           python3 -m unittest discover -s scripts/release -p "test_*.py"
           python3 scripts/release/check_changelog.py
+          python3 scripts/release/check_store_text.py
 
       # Ubuntu's mirror sometimes crawls at a few KB/s and the job runs out of time, so the
       # packages are kept between runs: on a new runner image, only what changed is fetched.

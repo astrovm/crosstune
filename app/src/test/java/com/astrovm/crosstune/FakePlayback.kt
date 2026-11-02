@@ -110,6 +110,18 @@ internal class FakePlayback : PlaybackSource {
 
     override fun unlocked() = unlocked
 
+    /** Whether the phone has no PIN, pattern or password. */
+    var lockless = false
+
+    override fun lockless() = lockless
+
+    /** How many times the screen was turned on for a moment. */
+    var woken = 0
+
+    override fun wakeScreen() {
+        woken++
+    }
+
     override fun comesBack() {
         if (!onlyInFront) cameBack++
     }

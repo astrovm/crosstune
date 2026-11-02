@@ -79,6 +79,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import okhttp3.Request
 import java.io.File
 import org.json.JSONObject
@@ -1300,12 +1301,12 @@ class MainActivityTest {
         val phone = FakePlayback().apply { access = true }
         MainActivity.playbackFactory = { phone }
         prefs().edit().putString("default_target", "SPOTIFY").commit()
-        val ids = mapOf("First Song" to "1firstAAAAAAAAAAAAAAAA", "Second Song" to "2secondBBBBBBBBBBBBBBB")
+        val ids = mapOf("First Song" to "1firstAAAAAAAAAAAAAAAA", "Second Song" to "2secondBBBBBBBBBBBBBBB", "Third Song" to "3thirdCCCCCCCCCCCCCCCC")
         fake.handler = { request ->
             when (request.url.host) {
                 "api.deezer.com" -> FakeSpotify.html(
                     request,
-                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}}]}}"""
+                    """{"title":"Mix","picture_big":"","tracks":{"data":[{"title":"First Song","artist":{"name":"Band"}},{"title":"Second Song","artist":{"name":"Band"}},{"title":"Third Song","artist":{"name":"Band"}}]}}"""
                 )
                 // ListenBrainz knows each by its name, and Spotify's page says it's the band's.
                 "labs.api.listenbrainz.org" -> FakeSpotify.html(
@@ -1338,10 +1339,22 @@ class MainActivityTest {
         waitUntil { phone.cameBack == 1 }
         assertNull(shadowOf(app).peekNextStartedActivity())
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("First Song", "Band"), 3) }
+        // The screen off on a phone with nothing to unlock, it isn't woken unless set to.
+        phone.unlocked = false
+        phone.lockless = true
         // On to its album's next song, the list's next opens.
         composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 4) }
         waitUntil { phone.opened.size == 2 }
         assertEquals(spotify to "https://open.spotify.com/track/${ids["Second Song"]}", phone.opened.last())
+        assertEquals(0, phone.woken)
+        // Set to, it's woken for Spotify to play the next one.
+        prefs().edit().putBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, true).commit()
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Second Song", "Band"), 5) }
+        composeRule.runOnIdle { phone.inApp(spotify).value = AppPlays(MusicMetadata("Album Song", "Band"), 6) }
+        waitUntil { phone.opened.size == 3 }
+        assertEquals(spotify to "https://open.spotify.com/track/${ids["Third Song"]}", phone.opened.last())
+        assertEquals(1, phone.woken)
+        phone.unlocked = true
 
         // Spotify not opening it there, the first song opens as it would on its own.
         phone.opens = false
@@ -1997,6 +2010,30 @@ class MainActivityTest {
         waitUntil(TIMEOUT_MS) { dynamicShortcuts().size == 1 }
         assertEquals("No Cover", dynamicShortcuts().single().shortLabel)
         assertFalse(prefs().getBoolean("share_sheet_apps", true))
+    }
+
+    @Test
+    fun onAPhoneWithNothingToUnlockTheScreenWakesForSpotifysNextSongOnceSetInAdvanced() {
+        launch()
+        click(string(R.string.settings_button))
+        openAdvanced()
+        composeRule.onNodeWithText(string(R.string.settings_playing_section)).performScrollTo().assertIsDisplayed()
+        val wakes = composeRule.onNode(isToggleable() and hasText(string(R.string.setting_wakes_for_next_song)))
+        wakes.performScrollTo().assertIsOff().performClick()
+        wakes.assertIsOn()
+        assertTrue(prefs().getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false))
+        // Set, it stays so the next time Crosstune opens.
+        controller!!.pause().stop().destroy()
+        launch()
+        click(string(R.string.settings_button))
+        openAdvanced()
+        wakes.performScrollTo().assertIsOn()
+        // A PIN set meanwhile, it can't work, so it's no longer offered.
+        shadowOf(app.getSystemService(android.app.KeyguardManager::class.java)).setIsDeviceSecure(true)
+        controller!!.pause().resume()
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.setting_wakes_for_next_song))
+        assertTextAbsent(string(R.string.settings_playing_section))
     }
 
     @Test
@@ -3039,6 +3076,27 @@ class MainActivityTest {
         connection.online.value = true
         waitForText("Recovered")
         assertEquals(0, composeRule.onAllNodesWithContentDescription(string(R.string.offline)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun openedOfflineItStaysOfflineOnceWhatsKeptOfflineIsRead() {
+        MainActivity.connectionFactory = { FakeConnection(online = false) }
+        // What's kept offline is read from storage, held here until Android has said it's offline.
+        val storage = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val held = java.util.concurrent.CountDownLatch(1)
+        storage.execute { held.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        MainActivity.lookupDispatcher = storage.asCoroutineDispatcher()
+        try {
+            launch()
+            waitForDescription(string(R.string.offline))
+            held.countDown()
+            storage.submit {}.get(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            composeRule.waitForIdle()
+            assertEquals(1, composeRule.onAllNodesWithContentDescription(string(R.string.offline)).fetchSemanticsNodes().size)
+        } finally {
+            held.countDown()
+            storage.shutdown()
+        }
     }
 
     @Test
@@ -4249,6 +4307,18 @@ class MainActivityTest {
         assertFalse(lit("Two"))
         playback.playing.value = Following(PlaybackClock(20_000, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
         waitUntil(TIMEOUT_MS) { lit("Two") }
+    }
+
+    @Test
+    fun theRoomSongsKeptOfflineMayTakeIsSetInAdvancedSettings() {
+        launch()
+        inAdvancedSettings {
+            assertTextShown("200 MB")
+            composeRule.onNode(hasContentDescription(string(R.string.setting_offline_space))).performScrollTo()
+                .performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+            composeRule.waitForIdle()
+            assertEquals(1000, prefs().getInt("offline_space_mb", 0))
+        }
     }
 
     @Test

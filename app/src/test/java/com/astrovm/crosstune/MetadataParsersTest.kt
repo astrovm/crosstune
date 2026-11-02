@@ -79,6 +79,15 @@ class MetadataParsersTest {
             "After Hours - Deluxe - Album by The Weeknd",
             MetadataParsers.spotify(html, ItemType.TRACK)?.title
         )
+        // Spotify's album pages now say "Listen to" first.
+        val listen = """
+            <meta property="og:title" content="Listen to Discovery - Album by Daft Punk | Spotify">
+            <meta property="og:description" content="Daft Punk · album · 2001 · 14 songs">
+        """
+        assertEquals(MusicMetadata("Discovery", "Daft Punk", ItemType.ALBUM, trackCount = null), MetadataParsers.spotify(listen, ItemType.ALBUM))
+        // One called that is still called that.
+        val called = """<meta property="og:title" content="Listen to Listen to the Music - Single by The Doobie Brothers | Spotify"><meta property="og:description" content="The Doobie Brothers · single">"""
+        assertEquals("Listen to the Music", MetadataParsers.spotify(called, ItemType.ALBUM)?.title)
         val plain = """<meta property="og:title" content="Starboy"><meta property="og:description" content="The Weeknd · album">"""
         assertEquals("Starboy", MetadataParsers.spotify(plain, ItemType.ALBUM)?.title)
     }

@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">\?si=, utm_ gibi kısımları kaldırır.</string>
     <string name="setting_share_sheet_apps">Paylaşım menüsünde uygulamalar</string>
     <string name="setting_share_sheet_apps_description">Paylaşım menüsünde müzik uygulamalarını göster.</string>
+    <string name="settings_playing_section">Oynatma</string>
+    <string name="setting_wakes_for_next_song">Spotify\'ın sonraki şarkısı için uyandır</string>
+    <string name="setting_wakes_for_next_song_description">Ekran kapalıyken Spotify, bir listenin sonraki şarkısını ancak ekran açılınca çalar. Bu, her şarkının sonunda ekranı açar; ekran süresi dolunca yine kapanır.</string>
     <string name="setting_language">Dil</string>
     <string name="language_system_default">Sistem varsayılanı</string>
     <string name="matching_text">Tam eşleşme bulunuyor…</string>
@@ -90,6 +93,14 @@
     <string name="cancel_button">İptal</string>
     <string name="retry_button">Tekrar dene</string>
     <string name="offline">Çevrimdışı</string>
+    <string name="heard_waits">Şarkı duyuldu, tekrar çevrimiçi olunca tanınacak</string>
+    <string name="keep_offline_label">İndir</string>
+    <string name="keep_offline">Çevrimdışı için sakla</string>
+    <string name="kept_offline">Çevrimdışı için saklandı. Kaldırmak için dokun</string>
+    <string name="keeping_offline">Wi-Fi ile çevrimdışı için kaydediliyor</string>
+    <string name="offline_out_of_space">Çevrimdışı için yer kalmadı. Sınırı Ayarlar\'dan yükselt</string>
+    <string name="setting_offline_space">Çevrimdışı şarkılar için alan</string>
+    <string name="setting_offline_space_used">%1$s kullanılıyor</string>
     <string name="more_button">Daha fazla</string>
     <string name="history_title">Son kullanılanlar</string>
     <string name="search_recent">Son kullanılanlarda ara</string>

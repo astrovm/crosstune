@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">\?si=, utm_ जैसे हिस्से हटाता है।</string>
     <string name="setting_share_sheet_apps">शेयर शीट में ऐप</string>
     <string name="setting_share_sheet_apps_description">शेयर करते समय संगीत ऐप दिखाएँ।</string>
+    <string name="settings_playing_section">चलाना</string>
+    <string name="setting_wakes_for_next_song">Spotify के अगले गाने के लिए स्क्रीन जगाएं</string>
+    <string name="setting_wakes_for_next_song_description">स्क्रीन बंद होने पर Spotify सूची का अगला गाना तभी चलाता है जब स्क्रीन चालू हो। यह हर गाने के अंत में स्क्रीन चालू करता है, जब तक वह अपने आप बंद न हो जाए।</string>
     <string name="setting_language">भाषा</string>
     <string name="language_system_default">सिस्टम डिफ़ॉल्ट</string>
     <string name="matching_text">सटीक मैच खोजा जा रहा है…</string>
@@ -90,6 +93,14 @@
     <string name="cancel_button">रद्द करें</string>
     <string name="retry_button">फिर कोशिश करें</string>
     <string name="offline">ऑफ़लाइन</string>
+    <string name="heard_waits">गाना सुना गया, ऑनलाइन होते ही पहचाना जाएगा</string>
+    <string name="keep_offline_label">डाउनलोड</string>
+    <string name="keep_offline">ऑफ़लाइन के लिए रखें</string>
+    <string name="kept_offline">ऑफ़लाइन के लिए रखा गया। हटाने के लिए टैप करें</string>
+    <string name="keeping_offline">वाई-फ़ाई पर ऑफ़लाइन के लिए सेव हो रहा है</string>
+    <string name="offline_out_of_space">ऑफ़लाइन के लिए जगह नहीं बची। सेटिंग में सीमा बढ़ाएँ</string>
+    <string name="setting_offline_space">ऑफ़लाइन गानों के लिए जगह</string>
+    <string name="setting_offline_space_used">%1$s इस्तेमाल हुई</string>
     <string name="more_button">और</string>
     <string name="history_title">हाल के</string>
     <string name="search_recent">हाल ही में खोजें</string>

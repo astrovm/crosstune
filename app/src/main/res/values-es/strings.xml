@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Saca ?si=, utm_ y similares.</string>
     <string name="setting_share_sheet_apps">Apps al compartir</string>
     <string name="setting_share_sheet_apps_description">Mostrá apps de música al compartir.</string>
+    <string name="settings_playing_section">Reproducción</string>
+    <string name="setting_wakes_for_next_song">Despertar para la siguiente canción de Spotify</string>
+    <string name="setting_wakes_for_next_song_description">Con la pantalla apagada, Spotify pone la siguiente canción de una lista recién cuando se prende. Esto la prende al final de cada canción, hasta que se vuelve a apagar sola.</string>
     <string name="setting_language">Idioma</string>
     <string name="language_system_default">Predeterminado del sistema</string>
     <string name="matching_text">Buscando la coincidencia exacta…</string>
@@ -90,6 +93,14 @@
     <string name="cancel_button">Cancelar</string>
     <string name="retry_button">Reintentar</string>
     <string name="offline">Sin conexión</string>
+    <string name="heard_waits">Canción escuchada, se reconoce al volver la conexión</string>
+    <string name="keep_offline_label">Descargar</string>
+    <string name="keep_offline">Guardar para usar sin conexión</string>
+    <string name="kept_offline">Guardado para usar sin conexión. Tocá para quitarlo</string>
+    <string name="keeping_offline">Guardando para usar sin conexión con Wi-Fi</string>
+    <string name="offline_out_of_space">Sin espacio para usar sin conexión. Subí el límite en Ajustes</string>
+    <string name="setting_offline_space">Espacio para canciones sin conexión</string>
+    <string name="setting_offline_space_used">%1$s en uso</string>
     <string name="more_button">Más</string>
     <string name="history_title">Recientes</string>
     <string name="search_recent">Buscar en Recientes</string>

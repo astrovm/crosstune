@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">去掉 ?si=、utm_ 等参数。</string>
     <string name="setting_share_sheet_apps">分享菜单中的应用</string>
     <string name="setting_share_sheet_apps_description">在分享菜单中显示音乐应用。</string>
+    <string name="settings_playing_section">播放</string>
+    <string name="setting_wakes_for_next_song">为 Spotify 的下一首歌点亮屏幕</string>
+    <string name="setting_wakes_for_next_song_description">屏幕关闭时，Spotify 要等屏幕亮起才会播放列表的下一首歌。此选项会在每首歌结束时点亮屏幕，直到它自动熄灭。</string>
     <string name="setting_language">语言</string>
     <string name="language_system_default">跟随系统</string>
     <string name="matching_text">正在查找精确匹配…</string>
@@ -90,6 +93,14 @@
     <string name="cancel_button">取消</string>
     <string name="retry_button">重试</string>
     <string name="offline">离线</string>
+    <string name="heard_waits">已听到歌曲，联网后识别</string>
+    <string name="keep_offline_label">下载</string>
+    <string name="keep_offline">保存以便离线使用</string>
+    <string name="kept_offline">已保存，可离线使用。点按即可移除</string>
+    <string name="keeping_offline">正在通过 Wi-Fi 保存以便离线使用</string>
+    <string name="offline_out_of_space">离线空间已满。请在设置中提高上限</string>
+    <string name="setting_offline_space">离线歌曲可用空间</string>
+    <string name="setting_offline_space_used">已用 %1$s</string>
     <string name="more_button">更多</string>
     <string name="history_title">最近</string>
     <string name="search_recent">搜索最近</string>

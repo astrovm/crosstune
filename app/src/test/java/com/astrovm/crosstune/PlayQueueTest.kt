@@ -41,13 +41,14 @@ class PlayQueueTest {
 
     private val missing = mutableSetOf<MusicMetadata>()
 
-    private fun queue(file: File = this.file, scope: CoroutineScope = this.scope) = PlayQueue(
+    private fun queue(file: File = this.file, scope: CoroutineScope = this.scope, wakes: Boolean = false) = PlayQueue(
         phone,
         { _, songs -> looked += songs; if (finds) YouTubeQueue("https://music.youtube.com/watch?v=${songs.first().title}&list=TL", songs) else null },
         { _, song -> linkOf(song) },
         file,
         scope,
-        Dispatchers.Unconfined
+        Dispatchers.Unconfined,
+        wakes = { wakes }
     )
 
     @After
@@ -634,6 +635,29 @@ class PlayQueueTest {
         assertEquals(0, phone.cameBack)
         spotifyPlays("Song 3", 7)
         assertEquals(1, phone.cameBack)
+    }
+
+    @Test
+    fun setToWithNothingToUnlockTheScreenWakesForSpotifyToPlayTheNextSongAtOnce() {
+        spotifyPlays("Before", 2)
+        val queue = queue(wakes = true)
+        runBlocking { queue.play(tracks.take(3), MusicService.SPOTIFY, spotify, 1, tracks.take(1)) }
+        spotifyPlays("Song 1", 3)
+        phone.unlocked = false
+        phone.lockless = true
+        // The screen's woken as the link opens, so Spotify plays it: nothing paused, nothing waits.
+        spotifyPlays("Album", 4)
+        assertEquals(1, phone.woken)
+        assertEquals(listOf(spotify to "https://open.spotify.com/track/Song 2"), phone.opened)
+        assertEquals(emptyList<Boolean>(), phone.plays)
+        // Nobody's using the phone, so Crosstune doesn't come back over Spotify.
+        spotifyPlays("Song 2", 5)
+        assertEquals(0, phone.cameBack)
+        // With a PIN, the screen on would only show the lock, so the list waits paused as without the setting.
+        phone.lockless = false
+        spotifyPlays("Album", 6)
+        assertEquals(1, phone.woken)
+        assertEquals(listOf(false), phone.plays)
     }
 
     @Test

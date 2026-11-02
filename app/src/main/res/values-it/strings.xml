@@ -84,6 +84,9 @@
     <string name="setting_clean_links_description">Toglie ?si=, utm_ e simili.</string>
     <string name="setting_share_sheet_apps">App nel menu di condivisione</string>
     <string name="setting_share_sheet_apps_description">Mostra le app musicali nel menu di condivisione.</string>
+    <string name="settings_playing_section">Riproduzione</string>
+    <string name="setting_wakes_for_next_song">Riattiva per il prossimo brano di Spotify</string>
+    <string name="setting_wakes_for_next_song_description">A schermo spento, Spotify riproduce il brano successivo di una lista solo quando lo schermo si accende. Questo lo accende alla fine di ogni brano, finché non si spegne da solo.</string>
     <string name="setting_language">Lingua</string>
     <string name="language_system_default">Predefinita di sistema</string>
     <string name="matching_text">Ricerca del risultato esatto…</string>
@@ -91,6 +94,14 @@
     <string name="cancel_button">Annulla</string>
     <string name="retry_button">Riprova</string>
     <string name="offline">Offline</string>
+    <string name="heard_waits">Brano ascoltato, riconosciuto appena torni online</string>
+    <string name="keep_offline_label">Scarica</string>
+    <string name="keep_offline">Tieni offline</string>
+    <string name="kept_offline">Tenuto offline. Tocca per rimuovere</string>
+    <string name="keeping_offline">Salvataggio offline con il Wi-Fi</string>
+    <string name="offline_out_of_space">Spazio offline esaurito. Alza il limite nelle Impostazioni</string>
+    <string name="setting_offline_space">Spazio per i brani offline</string>
+    <string name="setting_offline_space_used">%1$s usati</string>
     <string name="more_button">Altro</string>
     <string name="history_title">Recenti</string>
     <string name="search_recent">Cerca nei recenti</string>

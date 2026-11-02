@@ -130,6 +130,22 @@ class PlaybackTest {
     }
 
     @Test
+    fun thePhoneIsLocklessWithNoPinPatternOrPasswordAndItsScreenIsWokenAndHeldASecond() {
+        assertTrue(playback.lockless())
+        shadowOf(app.getSystemService(KeyguardManager::class.java)).setIsDeviceSecure(true)
+        assertFalse(playback.lockless())
+        playback.wakeScreen()
+        val lock = checkNotNull(org.robolectric.shadows.ShadowPowerManager.getLatestWakeLock())
+        assertEquals("crosstune:next song", shadowOf(lock).tag)
+        assertTrue(lock.isHeld)
+        // Let go a second later, after which the screen times out as usual.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(999))
+        assertTrue(lock.isHeld)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(2))
+        assertFalse(lock.isHeld)
+    }
+
+    @Test
     fun anAdYouTubeMusicPlaysUnderTheNextSongsNameIsntTakenForTheSong() {
         allow()
         sounding()

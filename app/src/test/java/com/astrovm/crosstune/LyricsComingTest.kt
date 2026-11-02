@@ -28,7 +28,7 @@ class LyricsComingTest {
 
     private val lines = listOf(LyricLine(0, "First"), LyricLine(5_000, "Second"), LyricLine(9_000, "Third"))
 
-    private fun show(positionMs: Long, aheadMs: Long, lines: List<LyricLine> = this.lines) {
+    private fun show(positionMs: Long, aheadMs: Long, lines: List<LyricLine> = this.lines, chords: ChordsState = ChordsState()) {
         val state = UiState(
             lyricsFor = MusicMetadata("River Road", "The Walkers"),
             lyrics = lines.joinToString("\n") { it.text },
@@ -36,7 +36,8 @@ class LyricsComingTest {
             following = Following(PlaybackClock(positionMs, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true),
             canFollowApps = true,
             linesEarlyMs = 0,
-            nextLineAheadMs = aheadMs
+            nextLineAheadMs = aheadMs,
+            chords = chords
         )
         composeRule.setContent { CrosstuneTheme { LyricsScreen(state, ScreenActions()) } }
         composeRule.waitForIdle()
@@ -99,5 +100,16 @@ class LyricsComingTest {
         // Its first word, where it starts, as bright as a line brightening ahead; its last, where it ends, as dim as those after it.
         assertTrue("${ink(1, to = 0.25f)} ${ink(2)}", ink(1, to = 0.25f) > ink(2) + 20)
         assertEquals(ink(2).toFloat(), ink(1, from = 0.75f).toFloat(), 15f)
+    }
+
+    @Test
+    fun withChordsTimedWordByWordOnlyItsFirstWordBrightensAheadToo() {
+        val words = listOf(TimedWord(5_000, "Wide "), TimedWord(5_400, "open "), TimedWord(5_800, "roads"))
+        val timed = listOf(LyricLine(0, "First"), LyricLine(5_000, "Wide open roads", words), LyricLine(9_000, "Third"))
+        // Its chord over "open", the middle, away from where its first and last words are measured.
+        val sheet = ChordSheet(listOf(SheetLine("Wide open roads", listOf(Chord(5, "C")))), site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/x-1")
+        show(4_500, aheadMs = 1_000, lines = timed, chords = ChordsState(on = true, sheet = sheet))
+        assertTrue("${ink(1, to = 0.2f)} ${ink(2)}", ink(1, to = 0.2f) > ink(2) + 20)
+        assertEquals(ink(2).toFloat(), ink(1, from = 0.8f).toFloat(), 15f)
     }
 }

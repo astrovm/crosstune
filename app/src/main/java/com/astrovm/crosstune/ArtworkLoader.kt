@@ -28,7 +28,9 @@ internal const val ARTWORK_DIR = "artwork"
 internal class ArtworkLoader(
     private val client: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val cacheDir: File? = null
+    private val cacheDir: File? = null,
+    /** Where the covers of songs kept offline go, never dropped, away from the app's cache Android may clear. */
+    private val keptDir: File? = null
 ) : Covers {
     /** Sized by memory rather than count, since a playlist's covers come by the hundred. */
     private val cache = object : LruCache<String, ImageBitmap>(MAX_CACHED_BYTES) {
@@ -51,9 +53,36 @@ internal class ArtworkLoader(
         // A cover a music app showed, kept here as a file; none other is read.
         if (url.startsWith("file:")) return withContext(ioDispatcher) { kept(url)?.let(::readCached) }?.let { bitmap -> bitmap.asImageBitmap().also { cache.put(url, it) } }
         val file = cacheDir?.let { File(it, fileName(url)) }
-        val bitmap = file?.let { withContext(ioDispatcher) { readCached(it) } } ?: download(url, file) ?: return null
+        val bitmap = withContext(ioDispatcher) { keptFile(url)?.let(::readCached) ?: file?.let(::readCached) } ?: download(url, file) ?: return null
         return bitmap.asImageBitmap().also { cache.put(url, it) }
     }
+
+    private fun keptFile(url: String): File? = keptDir?.let { File(it, fileName(url)) }
+
+    /** Keeps [url]'s cover for a song kept offline, downloading it unless it's already here; whether it's kept. */
+    suspend fun keep(url: String): Boolean {
+        val kept = keptFile(url) ?: return false
+        if (withContext(ioDispatcher) { kept.isFile }) return true
+        val cached = cacheDir?.let { File(it, fileName(url)) }
+        val copied = cached != null && withContext(ioDispatcher) { cached.isFile && copy(cached, kept) }
+        return copied || download(url, kept, prune = false) != null
+    }
+
+    private fun copy(from: File, to: File): Boolean = try {
+        from.copyTo(to, overwrite = true)
+        true
+    } catch (_: IOException) {
+        // Not copied, it's downloaded instead.
+        false
+    }
+
+    /** Lets go of [url]'s cover, no song kept offline needing it anymore. */
+    suspend fun letGo(url: String) {
+        withContext(ioDispatcher) { keptFile(url)?.delete() }
+    }
+
+    /** How many bytes the covers of songs kept offline take. */
+    suspend fun keptSize(): Long = withContext(ioDispatcher) { keptDir?.listFiles()?.sumOf(File::length) ?: 0L }
 
     /** The file [url] names, when it's one kept with the covers. */
     private fun kept(url: String): File? {
@@ -62,14 +91,14 @@ internal class ArtworkLoader(
         return file.takeIf { it.parentFile == dir }
     }
 
-    private suspend fun download(url: String, file: File?): Bitmap? {
+    private suspend fun download(url: String, file: File?, prune: Boolean = true): Bitmap? {
         val httpUrl = url.toHttpUrlOrNull() ?: return null
         val request = Request.Builder().url(httpUrl).get().build()
         return try {
             client.newCall(request).answer(ioDispatcher) { response ->
                 if (!response.isSuccessful) return@answer null
                 val bytes = response.body.bytesAtMost()
-                decode(bytes)?.also { if (file != null) save(file, bytes) }
+                decode(bytes)?.also { if (file != null) save(file, bytes, prune) }
             }
         } catch (_: IOException) {
             null
@@ -79,13 +108,13 @@ internal class ArtworkLoader(
     private fun readCached(file: File): Bitmap? =
         if (file.isFile) file.readBytes().let(::decode) else null
 
-    /** Keeps the newest covers: a few long playlists' worth, besides Recent. */
-    private fun save(file: File, bytes: ByteArray) {
+    /** Keeps the newest covers: a few long playlists' worth, besides Recent; all of those kept offline, not [prune]d. */
+    private fun save(file: File, bytes: ByteArray, prune: Boolean) {
         try {
             val dir = file.parentFile
             dir?.mkdirs()
             file.writeBytes(bytes)
-            dir?.listFiles()?.let { kept -> kept.sortedByDescending(File::lastModified).drop(MAX_ON_DISK).forEach(File::delete) }
+            if (prune) dir?.listFiles()?.let { kept -> kept.sortedByDescending(File::lastModified).drop(MAX_ON_DISK).forEach(File::delete) }
         } catch (_: IOException) {
             // A cover that isn't kept is just downloaded again next time.
         }

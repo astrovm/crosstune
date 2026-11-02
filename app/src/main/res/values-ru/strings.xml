@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Удаляет ?si=, utm_ и подобное.</string>
     <string name="setting_share_sheet_apps">Приложения в меню «Поделиться»</string>
     <string name="setting_share_sheet_apps_description">Показывать музыкальные приложения в меню «Поделиться».</string>
+    <string name="settings_playing_section">Воспроизведение</string>
+    <string name="setting_wakes_for_next_song">Будить экран для следующей песни Spotify</string>
+    <string name="setting_wakes_for_next_song_description">При выключенном экране Spotify включает следующую песню из списка, только когда экран загорится. Эта настройка включает его в конце каждой песни, пока он сам не погаснет.</string>
     <string name="setting_language">Язык</string>
     <string name="language_system_default">Как в системе</string>
     <string name="matching_text">Ищем точное совпадение…</string>
@@ -90,6 +93,14 @@
     <string name="cancel_button">Отмена</string>
     <string name="retry_button">Повторить</string>
     <string name="offline">Нет сети</string>
+    <string name="heard_waits">Песня услышана, узнаем, когда появится сеть</string>
+    <string name="keep_offline_label">Скачать</string>
+    <string name="keep_offline">Сохранить офлайн</string>
+    <string name="kept_offline">Сохранено офлайн. Нажмите, чтобы удалить</string>
+    <string name="keeping_offline">Сохраняется офлайн по Wi-Fi</string>
+    <string name="offline_out_of_space">Нет места для офлайна. Увеличьте лимит в настройках</string>
+    <string name="setting_offline_space">Место для песен офлайн</string>
+    <string name="setting_offline_space_used">Занято %1$s</string>
     <string name="more_button">Ещё</string>
     <string name="history_title">Недавние</string>
     <string name="search_recent">Поиск в недавних</string>

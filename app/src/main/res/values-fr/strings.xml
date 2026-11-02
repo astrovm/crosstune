@@ -83,6 +83,9 @@
     <string name="setting_clean_links_description">Retire ?si=, utm_ et autres.</string>
     <string name="setting_share_sheet_apps">Applis dans le menu de partage</string>
     <string name="setting_share_sheet_apps_description">Afficher les applis de musique dans le menu de partage.</string>
+    <string name="settings_playing_section">Lecture</string>
+    <string name="setting_wakes_for_next_song">Réveiller pour le titre suivant de Spotify</string>
+    <string name="setting_wakes_for_next_song_description">Écran éteint, Spotify ne lit le titre suivant d\'une liste qu\'une fois l\'écran allumé. Ceci l\'allume à la fin de chaque titre, jusqu\'à ce qu\'il se rééteigne.</string>
     <string name="setting_language">Langue</string>
     <string name="language_system_default">Langue du système</string>
     <string name="matching_text">Recherche du résultat exact…</string>
@@ -90,6 +93,14 @@
     <string name="cancel_button">Annuler</string>
     <string name="retry_button">Réessayer</string>
     <string name="offline">Hors ligne</string>
+    <string name="heard_waits">Titre entendu, reconnu dès le retour en ligne</string>
+    <string name="keep_offline_label">Télécharger</string>
+    <string name="keep_offline">Garder hors ligne</string>
+    <string name="kept_offline">Gardé hors ligne. Touchez pour retirer</string>
+    <string name="keeping_offline">Enregistrement hors ligne en Wi-Fi</string>
+    <string name="offline_out_of_space">Plus de place hors ligne. Augmentez la limite dans les Réglages</string>
+    <string name="setting_offline_space">Espace pour les titres hors ligne</string>
+    <string name="setting_offline_space_used">%1$s utilisés</string>
     <string name="more_button">Plus</string>
     <string name="history_title">Récents</string>
     <string name="search_recent">Rechercher dans Récents</string>

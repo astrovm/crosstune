@@ -41,7 +41,7 @@
     ],
     [
       "Lyrics in time",
-      "Lyrics and chords follow your music app, or listen along, song after song."
+      "Lyrics and chords follow your music app, or listen along, song after song. Keep any for offline."
     ],
     [
       "MilkDrop visuals",
@@ -99,7 +99,7 @@
     ],
     [
       "p",
-      "The app stores your settings and recent resolved links on your device. Recent entries can include the source link, title, artist, artwork URL, and prepared destination links. These preferences and history are excluded from the app's Android cloud-backup and device-transfer rules."
+      "The app stores your settings and recent resolved links on your device. Recent entries can include the source link, title, artist, artwork URL, and prepared destination links. These preferences and history are excluded from the app's Android cloud-backup and device-transfer rules. Songs, albums and playlists you keep for offline keep their lyrics, translations, chords and covers in the app's storage until you remove them; they're fetched only on Wi-Fi."
     ],
     [
       "p",
@@ -135,7 +135,7 @@
     ],
     [
       "p",
-      "When you ask Crosstune to recognize a song, it records sound from the microphone only while it listens, for up to 12 seconds, and stops as soon as it finds the song. On your phone, it turns the sound into a fingerprint of its loudest points. Only that fingerprint goes to Shazam, never the audio, and the recording isn't saved. Crosstune doesn't send your location. Shazam answers with the song's title, artist, cover and Apple Music ID, and Crosstune then looks the song up like a pasted link. It also asks Apple, by that ID, how long the recording is, so the lyrics it finds are timed for that recording, and does the same for each song it names while listening along. Like other requests, this one exposes your IP address to Shazam, which processes it under its own privacy policy. If Crosstune can't reach Shazam, it opens the Shazam app or the Google app instead, when you have one; they listen under their own privacy policies."
+      "When you ask Crosstune to recognize a song, it records sound from the microphone only while it listens, for up to 12 seconds, and stops as soon as it finds the song. On your phone, it turns the sound into a fingerprint of its loudest points. Only that fingerprint goes to Shazam, never the audio, and the recording isn't saved. Crosstune doesn't send your location. Shazam answers with the song's title, artist, cover and Apple Music ID, and Crosstune then looks the song up like a pasted link. It also asks Apple, by that ID, how long the recording is, so the lyrics it finds are timed for that recording, and does the same for each song it names while listening along. Like other requests, this one exposes your IP address to Shazam, which processes it under its own privacy policy. If Crosstune can't reach Shazam, it opens the Shazam app or the Google app instead, when you have one; they listen under their own privacy policies. Offline, the sound heard stays in the app's memory, never saved, and only its fingerprint goes to Shazam once the phone is back online."
     ],
     [
       "p",

@@ -41,7 +41,7 @@
     ],
     [
       "Zamanında sözler",
-      "Sözler ve akorlar müzik uygulamanı takip eder ya da seninle dinler, şarkı şarkı."
+      "Sözler ve akorlar müzik uygulamanı takip eder ya da seninle dinler, şarkı şarkı. İstediğini çevrimdışı için sakla."
     ],
     [
       "MilkDrop görselleri",
@@ -99,7 +99,7 @@
     ],
     [
       "p",
-      "Uygulama, ayarlarınızı ve son çözümlenen bağlantıları cihazınızda saklar. Son kayıtlar kaynak bağlantıyı, başlığı, sanatçıyı, kapak görselinin URL'sini ve hazırlanan hedef bağlantıları içerebilir. Bu tercihler ve geçmiş, uygulamanın Android bulut yedekleme ve cihaz aktarma kurallarının dışında tutulur."
+      "Uygulama, ayarlarınızı ve son çözümlenen bağlantıları cihazınızda saklar. Son kayıtlar kaynak bağlantıyı, başlığı, sanatçıyı, kapak görselinin URL'sini ve hazırlanan hedef bağlantıları içerebilir. Bu tercihler ve geçmiş, uygulamanın Android bulut yedekleme ve cihaz aktarma kurallarının dışında tutulur. Çevrimdışı için sakladığın şarkılar, albümler ve çalma listeleri sözlerini, çevirilerini, akorlarını ve kapaklarını sen kaldırana kadar uygulamanın depolamasında tutar; yalnızca Wi-Fi ile indirilir."
     ],
     [
       "p",
@@ -135,7 +135,7 @@
     ],
     [
       "p",
-      "Crosstune'dan bir şarkıyı tanımasını istediğinizde, mikrofondan yalnızca dinlerken, en fazla 12 saniye ses kaydeder ve şarkıyı bulur bulmaz durur. Telefonunuzda sesi en güçlü noktalarından oluşan bir parmak izine dönüştürür. Shazam'a yalnızca bu parmak izi gider, ses kaydı asla gitmez ve kayıt saklanmaz. Crosstune konumunuzu göndermez. Shazam şarkının adı, sanatçısı, kapağı ve Apple Music kimliğiyle yanıt verir; Crosstune de şarkıyı yapıştırılmış bir bağlantı gibi arar. Ayrıca bu kimlikle Apple'a kaydın ne kadar sürdüğünü sorar; böylece bulunan sözler o kayda göre zamanlanır. Birlikte dinlerken tanıdığı her şarkı için de aynısını yapar. Diğer istekler gibi bu istek de IP adresinizi Shazam'a gösterir; Shazam bunu kendi gizlilik politikasına göre işler. Crosstune Shazam'a ulaşamazsa bunun yerine, yüklüyse Shazam uygulamasını veya Google uygulamasını açar; bunlar kendi gizlilik politikalarına göre dinler."
+      "Crosstune'dan bir şarkıyı tanımasını istediğinizde, mikrofondan yalnızca dinlerken, en fazla 12 saniye ses kaydeder ve şarkıyı bulur bulmaz durur. Telefonunuzda sesi en güçlü noktalarından oluşan bir parmak izine dönüştürür. Shazam'a yalnızca bu parmak izi gider, ses kaydı asla gitmez ve kayıt saklanmaz. Crosstune konumunuzu göndermez. Shazam şarkının adı, sanatçısı, kapağı ve Apple Music kimliğiyle yanıt verir; Crosstune de şarkıyı yapıştırılmış bir bağlantı gibi arar. Ayrıca bu kimlikle Apple'a kaydın ne kadar sürdüğünü sorar; böylece bulunan sözler o kayda göre zamanlanır. Birlikte dinlerken tanıdığı her şarkı için de aynısını yapar. Diğer istekler gibi bu istek de IP adresinizi Shazam'a gösterir; Shazam bunu kendi gizlilik politikasına göre işler. Crosstune Shazam'a ulaşamazsa bunun yerine, yüklüyse Shazam uygulamasını veya Google uygulamasını açar; bunlar kendi gizlilik politikalarına göre dinler. Çevrimdışıyken duyulan ses kaydedilmeden uygulamanın belleğinde kalır ve telefon yeniden çevrimiçi olunca Shazam'a yalnızca parmak izi gider."
     ],
     [
       "p",

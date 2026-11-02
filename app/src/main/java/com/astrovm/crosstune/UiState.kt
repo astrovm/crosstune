@@ -37,8 +37,17 @@ internal data class UiState(
     val playRightAway: Boolean = true,
     /** Drops tracking parameters from links Crosstune opens, copies or shares. */
     val cleanLinks: Boolean = true,
+    /** The songs, albums and playlists kept for offline, and how much they take, about. */
+    val keptOffline: List<KeptOffline> = emptyList(),
+    val offlineUsedBytes: Long = 0,
+    /** How many megabytes they may take. */
+    val offlineSpaceMb: Int = MainViewModel.OFFLINE_SPACE_MB,
     /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
     val shareSheetApps: Boolean = true,
+    /** Whether the screen's turned on at a list song's end, so Spotify plays the next. */
+    val wakesForNextSong: Boolean = false,
+    /** Whether the phone has no PIN, pattern or password, the only phones where [wakesForNextSong] works. */
+    val lockless: Boolean = false,
     /** While Play all matches a collection's songs: how many have been looked up, out of how many. */
     val queueProgress: Pair<Int, Int>? = null,
     /** What happens once a shared link is looked up, when a share sheet action asked for something other than opening. */
@@ -187,6 +196,8 @@ internal data class UiState(
     val systemStateKnown: Boolean = true,
     /** Whether the phone can't reach the internet: one icon says so, rather than each part failing in its own words. */
     val offline: Boolean = false,
+    /** Whether a song heard offline waits to be named once the phone is back online. */
+    val heardWaits: Boolean = false,
     /** Whether setup can be done in one tap, through Shizuku or root, which the user runs. */
     val canSetUpInOneTap: Boolean = false,
     /** Whether that one tap goes through root rather than Shizuku. */

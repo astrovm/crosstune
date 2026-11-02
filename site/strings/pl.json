@@ -41,7 +41,7 @@
     ],
     [
       "Tekst w rytm",
-      "Tekst i akordy podążają za twoją aplikacją muzyczną albo słuchają razem z tobą, utwór po utworze."
+      "Tekst i akordy podążają za twoją aplikacją muzyczną albo słuchają razem z tobą, utwór po utworze. Zachowaj dowolne offline."
     ],
     [
       "Wizualizacje MilkDrop",
@@ -99,7 +99,7 @@
     ],
     [
       "p",
-      "Aplikacja przechowuje Twoje ustawienia i ostatnio przetworzone linki na Twoim urządzeniu. Ostatnie wpisy mogą zawierać link źródłowy, tytuł, wykonawcę, adres URL okładki i przygotowane linki docelowe. Te ustawienia i historia są wyłączone z reguł aplikacji dotyczących kopii zapasowej Androida w chmurze i przenoszenia danych między urządzeniami."
+      "Aplikacja przechowuje Twoje ustawienia i ostatnio przetworzone linki na Twoim urządzeniu. Ostatnie wpisy mogą zawierać link źródłowy, tytuł, wykonawcę, adres URL okładki i przygotowane linki docelowe. Te ustawienia i historia są wyłączone z reguł aplikacji dotyczących kopii zapasowej Androida w chmurze i przenoszenia danych między urządzeniami. Utwory, albumy i playlisty zachowane offline trzymają swoje teksty, tłumaczenia, akordy i okładki w pamięci aplikacji, dopóki ich nie usuniesz; pobierane są tylko przez Wi-Fi."
     ],
     [
       "p",
@@ -135,7 +135,7 @@
     ],
     [
       "p",
-      "Gdy prosisz Crosstune o rozpoznanie utworu, nagrywa dźwięk z mikrofonu tylko podczas słuchania, maksymalnie przez 12 sekund, i przestaje, gdy tylko znajdzie utwór. Na telefonie zamienia dźwięk w odcisk jego najgłośniejszych punktów. Do Shazama trafia tylko ten odcisk, nigdy nagranie, a nagranie nie jest zapisywane. Crosstune nie wysyła Twojej lokalizacji. Shazam odpowiada tytułem, wykonawcą, okładką i identyfikatorem Apple Music utworu, a Crosstune wyszukuje go potem jak wklejony link. Pyta też Apple, po tym identyfikatorze, jak długie jest nagranie, żeby znaleziony tekst był zsynchronizowany właśnie z nim, i robi to samo dla każdego utworu rozpoznanego podczas słuchania. Jak inne żądania, to ujawnia Twój adres IP Shazamowi, który przetwarza je zgodnie z własnymi zasadami prywatności. Gdy Crosstune nie może połączyć się z Shazamem, otwiera zamiast tego aplikację Shazam lub Google, jeśli ją masz; słuchają one zgodnie z własnymi zasadami prywatności."
+      "Gdy prosisz Crosstune o rozpoznanie utworu, nagrywa dźwięk z mikrofonu tylko podczas słuchania, maksymalnie przez 12 sekund, i przestaje, gdy tylko znajdzie utwór. Na telefonie zamienia dźwięk w odcisk jego najgłośniejszych punktów. Do Shazama trafia tylko ten odcisk, nigdy nagranie, a nagranie nie jest zapisywane. Crosstune nie wysyła Twojej lokalizacji. Shazam odpowiada tytułem, wykonawcą, okładką i identyfikatorem Apple Music utworu, a Crosstune wyszukuje go potem jak wklejony link. Pyta też Apple, po tym identyfikatorze, jak długie jest nagranie, żeby znaleziony tekst był zsynchronizowany właśnie z nim, i robi to samo dla każdego utworu rozpoznanego podczas słuchania. Jak inne żądania, to ujawnia Twój adres IP Shazamowi, który przetwarza je zgodnie z własnymi zasadami prywatności. Gdy Crosstune nie może połączyć się z Shazamem, otwiera zamiast tego aplikację Shazam lub Google, jeśli ją masz; słuchają one zgodnie z własnymi zasadami prywatności. Offline usłyszany dźwięk zostaje w pamięci aplikacji, bez zapisywania, a do Shazam trafia tylko jego odcisk, gdy telefon wróci do sieci."
     ],
     [
       "p",

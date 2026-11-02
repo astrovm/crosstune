@@ -132,7 +132,9 @@ internal class MainViewModel(
     /** Pauses the music after a while, see [playerSleep]. */
     private val sleepTimer: SleepTimer? = null,
     /** The TVs this phone casts songs to; none in a build without Google Play Services. */
-    private val cast: CastSender = NoCast
+    private val cast: CastSender = NoCast,
+    /** The songs, albums and playlists kept for offline; nullable so tests need none. */
+    private val offline: OfflineSongs? = null
 ) : ViewModel() {
     /** [playback] with the TV in the place of the app, for a song cast to it; see [castSong]. */
     private val casting: CastPlayback? = playback?.let { CastPlayback(it, cast, now) }
@@ -213,7 +215,9 @@ internal class MainViewModel(
             linksInCrosstune = preferences.getBoolean(KEY_LINKS_IN_CROSSTUNE, false),
             playRightAway = preferences.getBoolean(KEY_PLAY_RIGHT_AWAY, true),
             cleanLinks = preferences.getBoolean(KEY_CLEAN_LINKS, true),
+            offlineSpaceMb = preferences.getInt(KEY_OFFLINE_SPACE, OFFLINE_SPACE_MB),
             shareSheetApps = preferences.getBoolean(KEY_SHARE_SHEET_APPS, true),
+            wakesForNextSong = preferences.getBoolean(KEY_WAKES_FOR_NEXT_SONG, false),
             onlyMusicVideos = preferences.getBoolean(KEY_ONLY_MUSIC_VIDEOS, true),
             theme = ThemeMode.entries.firstOrNull { it.name == preferences.getString(KEY_THEME, null) } ?: ThemeMode.SYSTEM,
             palette = savedPalette(preferences.getString(KEY_PALETTE, null)),
@@ -402,6 +406,8 @@ internal class MainViewModel(
             preferences.edit { putBoolean(KEY_SETUP_COMPLETE, true) }
             preselectSources()
         }
+        // What's kept for offline, and what's still to fetch for it.
+        if (offline != null) viewModelScope.launch { showKeptOffline() }
         // Read as the app starts, before anyone can open them, so they show at once as they were left.
         keptOnDisk?.let { disk ->
             viewModelScope.launch {
@@ -543,7 +549,7 @@ internal class MainViewModel(
      */
     fun refreshSystemState() {
         val previousDestination = uiState.resultDestination
-        uiState = uiState.withDestinations().withOneTap().copy(microphone = microphoneAccess())
+        uiState = uiState.withDestinations().withOneTap().copy(microphone = microphoneAccess(), lockless = playback?.lockless() == true)
         if (previousDestination != uiState.resultDestination) prepareResultDestination()
         loadSystemState()
     }
@@ -583,8 +589,9 @@ internal class MainViewModel(
     }
 
     fun onUrlChange(text: String) {
-        // Typed over, the link waiting for the internet is no longer wanted.
+        // Typed over, the link or song waiting for the internet is no longer wanted.
         linkWaits = false
+        forgetHeld()
         uiState = uiState.copy(linkText = text, error = null)
     }
 
@@ -840,14 +847,15 @@ internal class MainViewModel(
 
     /**
      * The phone reaching the internet, or not. Back online, what couldn't be done without it is done
-     * now: the link looked up, the words, their translation and the songs of a name. A song being
-     * named isn't listened for again, as what plays now may be another one.
+     * now: the link looked up, the song heard named, the words, their translation and the songs of a
+     * name. The song heard is named from the sound heard then, not listened for again, as what plays
+     * now may be another one.
      */
     fun connectionChanged(online: Boolean) {
         val wasOffline = uiState.offline
-        // Said to have failed a moment before Android said it's offline, a link waits all the same.
-        if (!online && uiState.error == AppError.NETWORK && !retryListens) {
-            linkWaits = true
+        // Said to have failed a moment before Android said it's offline, a link or song waits all the same.
+        if (!online && uiState.error == AppError.NETWORK) {
+            if (retryListens) uiState = uiState.copy(heardWaits = held != null) else linkWaits = true
             uiState = uiState.copy(error = null)
         }
         uiState = uiState.copy(offline = !online)
@@ -856,6 +864,7 @@ internal class MainViewModel(
             linkWaits = false
             retry()
         }
+        if (uiState.heardWaits) nameHeld()
         if (uiState.lyricsFailed) showLyrics()
         if (uiState.learning.translationFailed) retryTranslation()
         uiState.songSearchQuery.takeIf { it.isNotEmpty() && uiState.songSearch.isEmpty() && !uiState.isSearchingSongs }?.let(::searchSongs)
@@ -886,11 +895,41 @@ internal class MainViewModel(
             } finally {
                 if (isActive) uiState = uiState.copy(listening = false)
             }
-            when (heard) {
-                is Heard.Song -> showHeard(heard, lyrics)
-                Heard.Nothing -> showListenError(AppError.NO_MATCH)
-                is Heard.Failed -> showListenError(heard.error)
+            answer(heard, lyrics)
+        }
+    }
+
+    /** Shows what listening found, its words too when asked for [lyrics]. */
+    private fun answer(heard: Heard, lyrics: Boolean) {
+        when (heard) {
+            is Heard.Song -> showHeard(heard, lyrics)
+            Heard.Nothing -> showListenError(AppError.NO_MATCH)
+            is Heard.Failed -> showListenError(heard.error)
+            is Heard.Unsent -> {
+                held = heard to lyrics
+                // Offline, it waits, as a link does; online, the network failed some other way, and says so.
+                if (uiState.offline) uiState = uiState.copy(heardWaits = true) else showListenError(AppError.NETWORK)
             }
+        }
+    }
+
+    /** A song heard while Shazam couldn't be reached, and whether its words were asked for. */
+    private var held: Pair<Heard.Unsent, Boolean>? = null
+
+    private fun forgetHeld() {
+        held = null
+        uiState = uiState.copy(heardWaits = false)
+    }
+
+    /** Asks Shazam about the song heard offline, now the phone is back online. */
+    private fun nameHeld() {
+        val (heard, lyrics) = held ?: return
+        forgetHeld()
+        uiState = uiState.copy(isLoading = true, error = null)
+        job = viewModelScope.launch {
+            val named = heard.send()
+            uiState = uiState.copy(isLoading = false)
+            answer(named, lyrics)
         }
     }
 
@@ -2080,6 +2119,8 @@ internal class MainViewModel(
                     quiet++
                     withTimeoutOrNull(rest) { appPlaysAgain.first() }
                 }
+                // What played a while ago is no use to keep in time with now, so it isn't sent later.
+                is Heard.Unsent -> delay(listenAlongPauseMs * 2)
                 is Heard.Failed -> {
                     // Without the microphone there's nothing to listen with; anything else, e.g. the
                     // network or Shazam being busy, is tried again in a while.
@@ -3976,6 +4017,7 @@ internal class MainViewModel(
     private fun cancelContentWork(closesPlayer: Boolean = true) {
         job?.cancel()
         job = null
+        forgetHeld()
         lastRequest = null
         pendingOpen = false
         pendingPlay = false
@@ -4111,6 +4153,11 @@ internal class MainViewModel(
         }
     }
 
+    fun setWakesForNextSong(enabled: Boolean) {
+        uiState = uiState.copy(wakesForNextSong = enabled)
+        preferences.edit { putBoolean(KEY_WAKES_FOR_NEXT_SONG, enabled) }
+    }
+
     fun setShareSheetApps(enabled: Boolean) {
         uiState = uiState.copy(shareSheetApps = enabled)
         preferences.edit { putBoolean(KEY_SHARE_SHEET_APPS, enabled) }
@@ -4119,6 +4166,97 @@ internal class MainViewModel(
     fun setCleanLinks(enabled: Boolean) {
         uiState = uiState.copy(cleanLinks = enabled)
         preferences.edit { putBoolean(KEY_CLEAN_LINKS, enabled) }
+    }
+
+    /** Whether the phone's on a network that costs no data, the only one songs kept offline are fetched on. */
+    private var unmetered = false
+
+    fun unmeteredChanged(unmetered: Boolean) {
+        this.unmetered = unmetered
+        if (unmetered) fetchKeptOffline()
+    }
+
+    /** Keeps the song, album or playlist shown for offline, or lets it go when it's kept already. */
+    fun keepOffline() {
+        val offline = offline ?: return
+        val item = uiState.result ?: return
+        viewModelScope.launch {
+            offline.has(item)?.let { offline.letGo(it.id) } ?: offline.keep(item)
+            showKeptOffline()
+        }
+    }
+
+    /** How many megabytes what's kept for offline may take: none more is fetched past it. */
+    fun setOfflineSpace(megabytes: Int) {
+        uiState = uiState.copy(offlineSpaceMb = megabytes)
+        preferences.edit { putInt(KEY_OFFLINE_SPACE, megabytes) }
+        fetchKeptOffline()
+    }
+
+    private suspend fun showKeptOffline() {
+        val offline = offline ?: return
+        showKeptOffline(offline)
+        fetchKeptOffline()
+    }
+
+    /** Read first, as reading waits on storage and the state may change meanwhile, e.g. going offline. */
+    private suspend fun showKeptOffline(offline: OfflineSongs) {
+        val kept = offline.all()
+        val used = offline.size()
+        uiState = uiState.copy(keptOffline = kept, offlineUsedBytes = used)
+    }
+
+    private var keepingOffline: Job? = null
+
+    /** Asked to fetch while fetching, as when a network comes back while the last one fails, it goes round again. */
+    private var fetchAgain = false
+
+    /**
+     * Fetches what each song kept for offline needs and isn't saved yet, one at a time, on a network
+     * that costs no data, while there's room.
+     */
+    private fun fetchKeptOffline() {
+        val offline = offline ?: return
+        if (!unmetered) return
+        if (keepingOffline?.isActive == true) {
+            fetchAgain = true
+            return
+        }
+        keepingOffline = viewModelScope.launch {
+            do {
+                fetchAgain = false
+                fetchEachKept(offline)
+            } while (fetchAgain)
+        }
+    }
+
+    private suspend fun fetchEachKept(offline: OfflineSongs) {
+        for (kept in offline.all()) {
+            for (song in kept.songs.filterNot { OfflineSongs.keyOf(it) in kept.saved }) {
+                if (!unmetered || uiState.offlineUsedBytes >= uiState.offlineSpaceMb * BYTES_PER_MB) return
+                // Unreachable for a moment, it's tried again on the next network.
+                if (!withContext(Pinning(kept.id)) { fetchForOffline(song) }) return
+                offline.saved(kept.id, song)
+                showKeptOffline(offline)
+            }
+        }
+    }
+
+    /**
+     * Looks up all the song's words screen may need, as it's set to show them: the words and their
+     * timing, their translation, chords, how Japanese ones are sung, and its cover. Whether it could.
+     */
+    private suspend fun fetchForOffline(song: MusicMetadata): Boolean {
+        val lyrics = lyricsFinder?.lyricsOf(song) ?: return true
+        song.artworkUrl?.let { artwork.keep(it) }
+        if (lyrics == LyricsFinder.Lyrics.Unavailable) return false
+        val found = lyrics as? LyricsFinder.Lyrics.Found ?: return true
+        val lines = found.lines.map { it.text }.ifEmpty { found.words.lines() }
+        if (uiState.learning.translation) translator?.translate(lines, translateInto())
+        if (uiState.chords.on) chordFinder?.chordsOf(song, lines)
+        val script = Readings.scriptOf(lines)
+        if (uiState.learning.readings && script == Script.JAPANESE) sungReadings?.of(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) })
+        return true
     }
 
     /** Saved links keep what the service returned, so turning the setting off brings it back. */
@@ -4157,7 +4295,15 @@ internal class MainViewModel(
         private const val KEY_ASK_EACH_TIME = "ask_each_time"
         private const val KEY_EXACT_MATCH = "exact_match"
         private const val KEY_CLEAN_LINKS = "clean_links"
+        private const val KEY_OFFLINE_SPACE = "offline_space_mb"
+
+        /** What's kept for offline may take this much by default, a few hundred songs' worth. */
+        const val OFFLINE_SPACE_MB = 200
+        /** As Android counts them when it shows a size. */
+        const val BYTES_PER_MB = 1000L * 1000
         private const val KEY_SHARE_SHEET_APPS = "share_sheet_apps"
+        /** Read by the play queue too, which plays on with no screen open. */
+        const val KEY_WAKES_FOR_NEXT_SONG = "wakes_for_next_song"
         private const val KEY_SHOW_SONG_FIRST = "show_song_first"
         private const val KEY_LINKS_IN_CROSSTUNE = "links_in_crosstune"
         private const val KEY_PLAY_RIGHT_AWAY = "play_right_away"
