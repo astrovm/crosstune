@@ -7,7 +7,7 @@ change at a time, and runs the tests that cover each. A change no test notices i
   python3 scripts/mutants.py --gradle "sh run.sh"   # Gradle run some other way, like in a container
 
 Uncommitted changes count too. Lists the changes that lived, by file and line, and exits 1 if any
-did; PIT's full report is in app/build/reports/pitest/debug/.
+did; PIT's full report is in app/build/reports/pitest/playDebug/.
 """
 import argparse
 import re
@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = "app/src/main/java/"
 LINES = ROOT / "app/build/mutants/changed-lines.txt"
-REPORT = ROOT / "app/build/reports/pitest/debug/mutations.xml"
+REPORT = ROOT / "app/build/reports/pitest/playDebug/mutations.xml"
 
 
 def changed_lines(base):
@@ -52,7 +52,7 @@ def main():
     LINES.write_text("\n".join(lines) + "\n")
     print(f"{len(lines)} changed lines in {len({line.split(':')[0] for line in lines})} files.")
     REPORT.unlink(missing_ok=True)
-    subprocess.run([*shlex.split(args.gradle), ":app:pitestDebug", f"-PmutateLines={LINES}"], cwd=ROOT, check=True)
+    subprocess.run([*shlex.split(args.gradle), ":app:pitestPlayDebug", f"-PmutateLines={LINES}"], cwd=ROOT, check=True)
 
     mutations = ET.parse(REPORT).getroot()
     lived = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE")]

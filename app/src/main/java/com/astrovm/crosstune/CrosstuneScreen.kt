@@ -172,6 +172,8 @@ internal data class ScreenActions(
     val onPlayerOpenApp: () -> Unit = {},
     val onPlayerOpenWith: () -> Unit = {},
     val onPlayerMenu: () -> Unit = {},
+    /** Hands the song to a TV with Crosstune, or shows the one it's cast to. */
+    val onCast: () -> Unit = {},
     val onPlayerPlayPause: () -> Unit = {},
     val onPlayerSkip: (next: Boolean) -> Unit = {},
     val onPlayerShuffle: () -> Unit = {},

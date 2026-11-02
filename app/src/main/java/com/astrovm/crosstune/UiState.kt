@@ -116,6 +116,10 @@ internal data class UiState(
     val practice: Practice? = null,
     /** The song the player shows, playing in its music app; null while it's closed. */
     val player: PlayerState? = null,
+    /** Whether a TV with Crosstune is on the network to cast to. */
+    val castAround: Boolean = false,
+    /** The name of the TV a song is cast to, while one is. */
+    val castingTo: String? = null,
     /** When the sleep timer pauses the music, while it's set. */
     val sleep: Sleep? = null,
     /** The kinds of practice card, each with what it shows on either side. */
@@ -247,6 +251,14 @@ internal data class UiState(
     /** Whether a tapped or shared link plays as soon as it's found: once there's an app picked to play it in. */
     val playsRightAway: Boolean
         get() = linksInCrosstune && playRightAway && hasDefault
+
+    /** The song the screen is about, that casting would hand to a TV: the words shown, the player's, or the card's. */
+    val songToCast: MusicMetadata?
+        get() = (lyricsFor ?: player?.song ?: result)?.takeIf { it.type == ItemType.TRACK }
+
+    /** Whether the Cast button shows: a TV with Crosstune is around, or one is cast to, and there's a song to hand it. */
+    val canCast: Boolean
+        get() = (castAround || castingTo != null) && songToCast != null
 
     /** Whether the song's app, installed and with the song, or maybe with it, can be asked to play it while Crosstune stays open. */
     val canPlayResult: Boolean

@@ -67,22 +67,23 @@ jobs:
         with:
           cache-read-only: true
 
-      # The same checks as CI, which also build the minified release APK, plus the App Bundle
-      # that Google Play needs.
+      # The same checks as CI, which also build the minified release APKs, plus the App Bundle that
+      # Google Play needs. "play" is the build Google Play and GitHub ship; "foss" is the same app with
+      # no Google code, for F-Droid, and is signed and published beside it.
       - name: Test, lint and build
-        run: ./gradlew :app:ci :app:bundleRelease --build-cache
+        run: ./gradlew :app:ci :app:bundlePlayRelease --build-cache
 
       - name: Verify version metadata
         run: |
           expected="${TAG#v}"
-          actual="$(jq -r '.elements[0].versionName' app/build/outputs/apk/release/output-metadata.json)"
+          actual="$(jq -r '.elements[0].versionName' app/build/outputs/apk/play/release/output-metadata.json)"
           if [[ "$actual" != "$expected" ]]; then
             echo "::error::APK versionName is '$actual', expected '$expected'"
             exit 1
           fi
           [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+) ]]
           expected_code=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 10000 + 10#${BASH_REMATCH[3]} * 100))
-          actual_code="$(jq -r '.elements[0].versionCode' app/build/outputs/apk/release/output-metadata.json)"
+          actual_code="$(jq -r '.elements[0].versionCode' app/build/outputs/apk/play/release/output-metadata.json)"
           if [[ "$actual_code" != "$expected_code" ]]; then
             echo "::error::APK versionCode is '$actual_code', expected '$expected_code'"
             exit 1
@@ -93,8 +94,9 @@ jobs:
         with:
           name: unsigned
           path: |
-            app/build/outputs/apk/release/app-release-unsigned.apk
-            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/apk/play/release/app-play-release-unsigned.apk
+            app/build/outputs/apk/foss/release/app-foss-release-unsigned.apk
+            app/build/outputs/bundle/playRelease/app-play-release.aab
           if-no-files-found: error
 
   # Runs on a fresh runner with only the APK and App Bundle. The environment can require approval before the
@@ -134,14 +136,18 @@ jobs:
           out="Crosstune-$TAG.apk"
           # Keeps Gradle's zip layout, so F-Droid can copy this signature onto its own build of the
           # tag and ship this APK. Without it apksigner re-pads entries and the builds don't match.
-          "$apksigner" sign \
-            --alignment-preserved \
-            --ks "$keystore" \
-            --ks-key-alias "$RELEASE_KEY_ALIAS" \
-            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
-            --key-pass env:RELEASE_KEY_PASSWORD \
-            --out "$out" \
-            apk/release/app-release-unsigned.apk
+          for flavor in play foss; do
+            file="Crosstune-$TAG.apk"
+            [[ "$flavor" == "foss" ]] && file="Crosstune-$TAG-foss.apk"
+            "$apksigner" sign \
+              --alignment-preserved \
+              --ks "$keystore" \
+              --ks-key-alias "$RELEASE_KEY_ALIAS" \
+              --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+              --key-pass env:RELEASE_KEY_PASSWORD \
+              --out "$file" \
+              "apk/$flavor/release/app-$flavor-release-unsigned.apk"
+          done
           # Google Play takes the App Bundle signed with the upload key, which is this same key.
           jarsigner \
             -keystore "$keystore" \
@@ -149,7 +155,7 @@ jobs:
             -keypass:env RELEASE_KEY_PASSWORD \
             -sigalg SHA256withRSA -digestalg SHA-256 \
             -signedjar "Crosstune-$TAG.aab" \
-            bundle/release/app-release.aab \
+            bundle/playRelease/app-play-release.aab \
             "$RELEASE_KEY_ALIAS"
           jarsigner -verify "Crosstune-$TAG.aab"
           certs="$("$apksigner" verify --print-certs "$out")"
@@ -162,11 +168,13 @@ jobs:
           fi
           echo "cert_sha256=$cert_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Upload signed APK
+      - name: Upload signed APKs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Crosstune-${{ env.TAG }}
-          path: Crosstune-${{ env.TAG }}.apk
+          path: |
+            Crosstune-${{ env.TAG }}.apk
+            Crosstune-${{ env.TAG }}-foss.apk
           if-no-files-found: error
 
       # Kept as a workflow artifact for uploading to Google Play, not attached to the release.
@@ -199,8 +207,8 @@ jobs:
         with:
           cache-disabled: true
 
-      - name: Build unsigned APK
-        run: ./gradlew :app:assembleRelease --no-build-cache
+      - name: Build unsigned APKs
+        run: ./gradlew :app:assemblePlayRelease :app:assembleFossRelease --no-build-cache
 
       - name: Download signed APK
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -213,10 +221,14 @@ jobs:
           sudo apt-get install -y -q apksigcopier
           # apksigcopier calls apksigner to check the copied signature.
           PATH="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1):$PATH"
-          if ! apksigcopier compare "Crosstune-$TAG.apk" --unsigned app/build/outputs/apk/release/app-release-unsigned.apk; then
-            echo "::error::The signed APK doesn't match a fresh build, so F-Droid can't ship it"
-            exit 1
-          fi
+          for flavor in play foss; do
+            file="Crosstune-$TAG.apk"
+            [[ "$flavor" == "foss" ]] && file="Crosstune-$TAG-foss.apk"
+            if ! apksigcopier compare "$file" --unsigned "app/build/outputs/apk/$flavor/release/app-$flavor-release-unsigned.apk"; then
+              echo "::error::The signed $flavor APK doesn't match a fresh build, so F-Droid can't ship it"
+              exit 1
+            fi
+          done
 
   publish:
     needs: [sign, verify]
@@ -244,7 +256,7 @@ jobs:
             # Create the tag on the built commit.
             args+=(--target "$GITHUB_SHA")
           fi
-          gh release create "$TAG" "Crosstune-$TAG.apk" "${args[@]}"
+          gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG-foss.apk" "${args[@]}"
 
   # Sends the signed App Bundle and its release notes to Google Play. Skipped until the
   # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md.
