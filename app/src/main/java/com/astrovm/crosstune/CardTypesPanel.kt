@@ -243,7 +243,6 @@ internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, ty
         if (script != null) add(WordsAs.LATIN)
     }
     val shows = side.writes(line, lyrics)
-    val words = MaterialTheme.typography.headlineMedium.let { it.copy(fontSize = it.fontSize * side.wordsScale, lineHeight = it.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold) }
     val small = MaterialTheme.typography.bodyLarge
     SoundRow(side.sound, onPlay, canPlay) { onChange(side.copy(sound = it)) }
     // Readings go over the words as written, in Japanese or Chinese.
@@ -252,6 +251,22 @@ internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, ty
             Text(line.reading ?: stringResource(R.string.lyrics_readings), style = small.copy(fontSize = small.fontSize * side.readingScale, lineHeight = small.lineHeight * side.readingScale).writing(line.reading.orEmpty()))
         }
     }
+    WordsLayer(line, side, wordsAs, shows, typed, onChange)
+    if (script != null && shows != WordsAs.LATIN) {
+        CardLayer(R.string.lyrics_romanized, side.latin, { onChange(side.copy(latin = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) }) {
+            Text(line.latin(typed) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
+        }
+    }
+    CardLayer(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) }) {
+        val title = MaterialTheme.typography.titleLarge
+        Text(line.translation ?: stringResource(R.string.lyrics_translation), style = title.copy(fontSize = title.fontSize * side.translationScale, lineHeight = title.lineHeight * side.translationScale))
+    }
+}
+
+/** The words as a layer of the side, written as it [shows] them; held, it picks one of [wordsAs] for the side, or back to as the lyrics write them. */
+@Composable
+private fun WordsLayer(line: SavedLine, side: CardSide, wordsAs: List<WordsAs>, shows: WordsAs, typed: Boolean, onChange: (CardSide) -> Unit) {
+    val words = MaterialTheme.typography.headlineMedium.let { it.copy(fontSize = it.fontSize * side.wordsScale, lineHeight = it.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold) }
     var formats by remember { mutableStateOf(false) }
     val original = stringResource(R.string.lyrics_display_original)
     val kana = stringResource(R.string.lyrics_display_kana)
@@ -274,15 +289,6 @@ internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, ty
         }
     ) {
         Text(line.shownAs(shows, typed).ifBlank { line.text }, style = words.writing(line.text))
-    }
-    if (script != null && shows != WordsAs.LATIN) {
-        CardLayer(R.string.lyrics_romanized, side.latin, { onChange(side.copy(latin = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) }) {
-            Text(line.latin(typed) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
-        }
-    }
-    CardLayer(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) }) {
-        val title = MaterialTheme.typography.titleLarge
-        Text(line.translation ?: stringResource(R.string.lyrics_translation), style = title.copy(fontSize = title.fontSize * side.translationScale, lineHeight = title.lineHeight * side.translationScale))
     }
 }
 
