@@ -754,10 +754,11 @@ internal class MainViewModel(
     }
 
     fun resolveIncoming(text: String?, destination: Destination? = null, show: Boolean = false, after: AfterLookup = AfterLookup.OPEN, keepWords: Boolean = false) {
-        cancelContentWork(keepsWords = keepWords)
         val incoming = text?.let { MusicLinks.extractFirstUrl(it) ?: it }?.trim().orEmpty()
         // Without an app songs play in yet, it shows here, where one's picked.
         val here = !show && destination == null && after == AfterLookup.OPEN && (uiState.linksInCrosstune || !uiState.hasDefault)
+        // The words stay only for a link handed on: one shown here is what's shown.
+        cancelContentWork(keepsWords = keepWords && !show && !here)
         uiState = uiState.copy(
             linkText = incoming,
             handlingIncomingLink = true,
