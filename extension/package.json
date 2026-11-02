@@ -1,0 +1,26 @@
+{
+  "name": "crosstune-extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Opens music links in the service you prefer.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\"",
+    "try": "node scripts/try.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:firefox": "node scripts/e2e-firefox.mjs",
+    "icons": "sh scripts/icons.sh",
+    "package": "node scripts/build.mjs && node scripts/package.mjs",
+    "screenshots": "node scripts/build.mjs && node scripts/screenshot.mjs",
+    "stores": "node scripts/publish.ts"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.7",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "playwright": "1.64.1",
+    "typescript": "7.0.2"
+  }
+}

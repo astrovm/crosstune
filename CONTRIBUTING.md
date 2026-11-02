@@ -13,7 +13,7 @@ You need the Android SDK and JDK 17 or newer; CI builds with JDK 25. When buildi
 ./gradlew :app:ci              # the same checks CI runs
 ```
 
-`:app:ci` runs the Robolectric tests with a 100% line and 85% branch coverage gate, lint, [detekt](https://detekt.dev)'s checks for tangled logic, and the debug and minified release builds. Reports go to `app/build/reports/`. CI runs the tests, lint and builds as parallel jobs, and skips them for pull requests that only change text and tools around the app: README, this file, `AGENTS.md`, `LICENSE`, `docs/`, `fastlane/`, `screenshots/`, `site/`, `report/`, and the site, shots, recording and visuals scripts. The tests of the release, shots and visuals scripts (`test_*.py` next to them) and of the report Worker run either way.
+`:app:ci` runs the Robolectric tests with a 100% line and 85% branch coverage gate, lint, [detekt](https://detekt.dev)'s checks for tangled logic, and the debug and minified release builds. Reports go to `app/build/reports/`. CI runs the tests, lint and builds as parallel jobs, and skips them for pull requests that only change text and tools around the app: README, this file, `AGENTS.md`, `LICENSE`, `docs/`, `fastlane/`, `screenshots/`, `site/`, `report/`, `extension/`, and the site, shots, recording and visuals scripts. The tests of the release, shots and visuals scripts (`test_*.py` next to them) and of the report Worker run either way.
 
 `python3 scripts/mutants.py` runs [PIT](https://pitest.org) mutation testing on the Kotlin lines a branch changed from `origin/main`, uncommitted ones too: it changes each a little, one change at a time, runs the tests that cover it, and lists every change no test caught. Kotlin's own null checks and the code Compose adds to composables are left out, by the PIT plugin in `tools/pitest-changed-lines/`. It takes minutes to an hour, depending on the change; the full report goes to `app/build/reports/pitest/debug/`. It never blocks a merge: the **Mutants** workflow runs it on each pull request that changes the app's code, outside the required checks, and comments what lived.
 
@@ -55,6 +55,28 @@ The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site
 ## Reports
 
 **Report a problem** and **Report song problems automatically** send to a Cloudflare Worker in [`report/`](report), at `report.crosstune.4st.li`. It keeps reports in the D1 database `crosstune-reports` (table in `schema.sql`), at most 5 a minute from one address, and a daily cron deletes those older than 180 days. Test it with `node --test report/*.test.mjs`, and deploy with `cf deploy` from that folder.
+
+## Browser extension
+
+[`extension/`](extension) opens a music link in the service picked in its options, in Chrome, Edge, Brave and Firefox. TypeScript, esbuild and no framework; it needs Node 24 or newer.
+
+```bash
+cd extension
+npm ci
+npm run build       # dist/chrome and dist/firefox
+npm run typecheck
+npm test            # unit tests on recorded answers in test/fixtures/, no network
+node scripts/try.mjs 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT' youtubemusic   # the real logic on live services
+npm run e2e         # headless Chromium with the built extension: a click on a Spotify link ends on YouTube Music
+npm run e2e:firefox # the same in headless Firefox, through geckodriver
+npm run package     # the stores' zips in dist/: Chrome and Edge, Firefox, and the source Firefox's reviewers build from
+npm run screenshots # the stores' 1280×800 screenshot in each language, in dist/screenshots/
+npm run icons       # the icons again from the app's store icon, when it changes
+```
+
+Load it unpacked: in Chrome, Edge or Brave open `chrome://extensions` (`edge://extensions`, `brave://extensions`), turn on **Developer mode**, **Load unpacked**, and pick `extension/dist/chrome`. In Firefox open `about:debugging#/runtime/this-firefox`, **Load Temporary Add-on**, and pick `extension/dist/firefox/manifest.json`. Firefox keeps the sites an extension may read off until you allow them, so open the extension's options and press **Allow**; they're the music sites' pages and the public endpoints the app already asks. It follows the app's logic (`LinkResolver`, `ExactMatcher`, `Destinations`) but not the parts that need the app, such as the ChatGPT pick or Shazam. CI builds and tests it when `extension/` changes; `npm run e2e` needs the network and a Chromium download (`npx playwright install chromium`), so it runs by hand. So does `npm run e2e:firefox`, with Firefox and geckodriver on the PATH; a snap's geckodriver can't be stopped when it's done, so point `GECKODRIVER` and `FIREFOX` at [geckodriver's release](https://github.com/mozilla/geckodriver/releases) and [Firefox's own build](https://www.mozilla.org/firefox/linux/) instead. Both browser tests show the browser as people's does, since Spotify tells headless browsers what it hides from people's.
+
+Its strings are in `_locales/`, in the app's 16 languages; `test/locales.test.ts` fails when one is missing a message. A new version goes out when `version` in `package.json` changes on main: the **Extension release** workflow sends it to each store whose keys are set and tags it `extension-<version>`. Each store's first version is uploaded by hand; [`extension/store/README.md`](extension/store/README.md) has the listing text, the answers the dashboards ask for, and where each key comes from.
 
 ## Other tools
 

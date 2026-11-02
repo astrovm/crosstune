@@ -167,6 +167,14 @@
     ],
     [
       "h2",
+      "Tarayıcı uzantısı"
+    ],
+    [
+      "p",
+      "Crosstune'un Chrome, Edge, Brave ve Firefox için tarayıcı uzantısı, tıkladığın müzik bağlantılarını seçeneklerinde seçtiğin serviste açar. Yalnızca desteklediği müzik sitelerinin sayfalarına bakar. Bir bağlantının şarkısını, albümünü veya sanatçısını bulmak için kaynak servisin herkese açık sayfasını veya API'sini ister. Öğenin kendisini açmak için, uygulamanın yaptığı gibi, adı ve sanatçıyı hedef servisin aramasına, Spotify için ListenBrainz'e gönderir. Ayarları bilgisayarındaki tarayıcıda kalır. Hesabı, reklamı veya analizi yoktur ve geliştiriciye hiçbir şey göndermez."
+    ],
+    [
+      "h2",
       "Saklama ve silme"
     ],
     [

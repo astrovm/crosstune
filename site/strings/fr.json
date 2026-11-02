@@ -167,6 +167,14 @@
     ],
     [
       "h2",
+      "Extension de navigateur"
+    ],
+    [
+      "p",
+      "L'extension de navigateur de Crosstune, pour Chrome, Edge, Brave et Firefox, ouvre les liens de musique sur lesquels tu cliques dans le service choisi dans ses options. Elle ne regarde que les pages des sites de musique qu'elle prend en charge. Pour savoir quel morceau, album ou artiste est derrière un lien, elle demande la page publique ou l'API publique du service d'origine. Pour ouvrir l'élément lui-même, elle envoie le titre et l'artiste à la recherche du service de destination, ou à ListenBrainz pour Spotify, comme l'app. Ses réglages restent dans le navigateur de ton ordinateur. Elle n'a ni compte, ni publicité, ni statistiques, et n'envoie rien au développeur."
+    ],
+    [
+      "h2",
       "Conservation et suppression"
     ],
     [

@@ -1,0 +1,23 @@
+{
+  "extName": {
+    "message": "Crosstune"
+  },
+  "extDescription": {
+    "message": "在你喜欢的服务中打开音乐链接。"
+  },
+  "actionTitle": {
+    "message": "Crosstune 设置"
+  },
+  "optionsEnabled": {
+    "message": "在下面的服务中打开音乐链接"
+  },
+  "optionsService": {
+    "message": "打开方式"
+  },
+  "optionsAccess": {
+    "message": "Crosstune 需要访问音乐网站，才能为你打开链接。"
+  },
+  "optionsAllow": {
+    "message": "允许"
+  }
+}

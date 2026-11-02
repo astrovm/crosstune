@@ -1,0 +1,23 @@
+{
+  "extName": {
+    "message": "Crosstune"
+  },
+  "extDescription": {
+    "message": "음악 링크를 원하는 서비스에서 엽니다."
+  },
+  "actionTitle": {
+    "message": "Crosstune 설정"
+  },
+  "optionsEnabled": {
+    "message": "음악 링크를 아래 서비스에서 열기"
+  },
+  "optionsService": {
+    "message": "열 서비스"
+  },
+  "optionsAccess": {
+    "message": "링크를 열려면 Crosstune이 음악 사이트에 접근해야 합니다."
+  },
+  "optionsAllow": {
+    "message": "허용"
+  }
+}

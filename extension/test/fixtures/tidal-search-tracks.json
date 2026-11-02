@@ -1,0 +1,37 @@
+{
+  "items": [
+    {
+      "id": 491206012,
+      "title": "Never Gonna Give You Up",
+      "version": null,
+      "duration": 214,
+      "artists": [
+        {
+          "name": "Rick Astley"
+        }
+      ]
+    },
+    {
+      "id": 495032277,
+      "title": "Never Gonna Give You Up",
+      "version": "Cake Mix",
+      "duration": 347,
+      "artists": [
+        {
+          "name": "Rick Astley"
+        }
+      ]
+    },
+    {
+      "id": 492379038,
+      "title": "Never Gonna Give You Up",
+      "version": "Pianoforte",
+      "duration": 209,
+      "artists": [
+        {
+          "name": "Rick Astley"
+        }
+      ]
+    }
+  ]
+}
