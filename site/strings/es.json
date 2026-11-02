@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "Enviar a un TV"
+    ],
+    [
+      "p",
+      "En las versiones de Google Play y de GitHub podés enviar una canción a Crosstune en tu Android TV o Google TV. Google Cast, parte de los Servicios de Google Play, busca TVs en tu red local y lleva la transmisión. Cuando enviás, Crosstune le manda al TV el título, el artista, el enlace y la portada de la canción, y después lo que le pedís: pausa, reproducir, saltar, mover, traducción y lecturas. El TV le cuenta a tu teléfono qué reproduce. Esto va entre tu teléfono y tu TV, nunca al desarrollador, y Google lo trata según su propia política de privacidad. La versión sin los Servicios de Google Play no puede enviar y no manda nada de eso."
+    ],
+    [
+      "h2",
       "Permisos y seguridad"
     ],
     [

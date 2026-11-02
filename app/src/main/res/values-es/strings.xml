@@ -452,4 +452,7 @@
     <string name="android_ask_every_time">Preguntar siempre</string>
     <string name="android_dont_allow">No permitir</string>
     <string name="android_display_over_apps">Permitir mostrar sobre otras apps</string>
+    <string name="cast_button">Transmitir</string>
+    <string name="cast_to_tv">Reproducir en un televisor</string>
+    <string name="casting_to_tv">Reproduciendo en %1$s</string>
 </resources>

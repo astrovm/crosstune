@@ -17,7 +17,7 @@ Receba um link de um serviço de música e abra a mesma música no seu app favor
 <li>Letras sincronizadas: seguem o seu app de música ou ouvem junto, flutuam sobre outros apps e aparecem com visuais do MilkDrop por trás. Letra errada ou fora do tempo? Relate direto da letra com um toque: a música e o tempo vão em particular para o desenvolvedor.</li>
 <li>Aprenda as palavras com kana, pinyin, romaji e qualquer outra escrita em letras latinas, e traduções para os idiomas que você ainda não lê. Escolha o que mostrar em cada lado dos cartões de prática. Faça mais de um tipo de cartão de uma mesma linha, cada um com seu próprio calendário.</li>
 <li>Entre com o seu plano pago do ChatGPT para traduzir músicas inteiras, explicar linhas, encontrar palavras que valem a pena aprender e achar músicas descrevendo-as.</li>
-<li>Também funciona no Android TV, pelo controle remoto.</li>
+<li>Também no Android TV: controle remoto e Cast.</li>
 <li>Cores do Material You no Android 12 e versões mais recentes.</li>
 </ul>
 

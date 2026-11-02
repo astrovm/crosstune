@@ -30,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -81,6 +82,25 @@ internal val ContentMaxWidth = 600.dp
 internal fun AppIcon(@DrawableRes id: Int, contentDescription: String?, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current) {
     Icon(painterResource(id), contentDescription = contentDescription, modifier = modifier, tint = tint)
 }
+
+/**
+ * Casting the song to a TV: plain while it can be, lit with the TV's name for a description while it is. Either way a tap
+ * is the same one, as there is one TV to choose or one to look after.
+ */
+@Composable
+internal fun CastButton(state: UiState, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val to = state.castingTo
+    IconButton(onClick = onClick, modifier = modifier) {
+        AppIcon(
+            if (to != null) R.drawable.ic_cast_connected else R.drawable.ic_cast,
+            contentDescription = castDescription(to),
+            tint = if (to != null) MaterialTheme.colorScheme.primary else LocalContentColor.current
+        )
+    }
+}
+
+@Composable
+internal fun castDescription(to: String?) = if (to != null) stringResource(R.string.casting_to_tv, to) else stringResource(R.string.cast_to_tv)
 
 /** That the phone can't reach the internet, in the error color: a state, not a button. */
 @Composable

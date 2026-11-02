@@ -55,6 +55,12 @@ internal sealed interface Effect {
 
     /** Shazam can't be reached, so another app that names songs, when there's one, listens instead. */
     data object RecognizeElsewhere : Effect
+
+    /** Asks which TV to cast to. */
+    data object ChooseTv : Effect
+
+    /** Shows the TV cast to, with the way to stop. */
+    data object ShowTv : Effect
 }
 
 /** Holds screen state across configuration changes and owns in-flight network work. */
@@ -125,15 +131,20 @@ internal class MainViewModel(
     private val queueOrder: QueueOrder? = null,
     /** Pauses the music after a while, see [playerSleep]. */
     private val sleepTimer: SleepTimer? = null,
+    /** The TVs this phone casts songs to; none in a build without Google Play Services. */
+    private val cast: CastSender = NoCast,
     /** The songs, albums and playlists kept for offline; nullable so tests need none. */
     private val offline: OfflineSongs? = null
 ) : ViewModel() {
+    /** [playback] with the TV in the place of the app, for a song cast to it; see [castSong]. */
+    private val casting: CastPlayback? = playback?.let { CastPlayback(it, cast, now) }
+
     /**
      * An app opened on a song is covered rather than left, once Android lets Crosstune show over other
      * apps: on a TV, where brought in front of it, YouTube stops playing, and on a phone, when the app
      * only plays in front, as YouTube Music without Premium, which stops as soon as it's left.
      */
-    private val playback: PlaybackSource? = playback?.let { source ->
+    private val playback: PlaybackSource? = casting?.let { source ->
         object : PlaybackSource by source {
             // Covered as it's opened, while Crosstune's still in sight, which Android wants for the cover to listen along.
             override fun openSong(app: String, link: String): Boolean {
@@ -262,6 +273,8 @@ internal class MainViewModel(
     init {
         // The timer is the app's, so one set from another screen, or before Crosstune was closed, shows too.
         sleepTimer?.let { timer -> viewModelScope.launch { timer.set.collect { uiState = uiState.copy(sleep = it) } } }
+        viewModelScope.launch { cast.around.collect { uiState = uiState.copy(castAround = it) } }
+        viewModelScope.launch { cast.target.collect(::castTargetChanged) }
     }
 
     var uiState by screen
@@ -487,7 +500,10 @@ internal class MainViewModel(
     private var pendingPlay = false
 
     /** What was last looked up, and how, for Try again. */
-    private data class Request(val input: LinkInput, val openWhenReady: Boolean, val destination: Destination?, val here: Boolean)
+    /** Set for the next [resolve] alone: the song it finds plays whether or not that is set to be right away, as one cast to this TV does. */
+    private var playOnArrival = false
+
+    private data class Request(val input: LinkInput, val openWhenReady: Boolean, val destination: Destination?, val here: Boolean, val play: Boolean = false)
 
     /**
      * The user's choices and which sources Crosstune opens, which are quick to read, so anything
@@ -821,7 +837,8 @@ internal class MainViewModel(
     }
 
     fun retry() {
-        val (input, openWhenReady, destination, here) = lastRequest ?: return
+        val (input, openWhenReady, destination, here, play) = lastRequest ?: return
+        playOnArrival = play
         resolve(input, openWhenReady, destination, here = here)
     }
 
@@ -1028,10 +1045,12 @@ internal class MainViewModel(
      * A link that came [here], as links do, plays as soon as it's found when set to.
      */
     private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false) {
+        val play = playOnArrival
+        playOnArrival = false
         cancelContentWork(closesPlayer = !underPlayer)
-        lastRequest = Request(input, openWhenReady, destination, here)
+        lastRequest = Request(input, openWhenReady, destination, here, play)
         pendingOpen = openWhenReady
-        pendingPlay = here && uiState.playsRightAway
+        pendingPlay = here && (play || uiState.playsRightAway)
         // A newer request always wins; the older call is cancelled rather than left to overwrite it.
         fun showLoading() {
             uiState = uiState.copy(
@@ -1408,6 +1427,96 @@ internal class MainViewModel(
             if (withTimeoutOrNull(START_MS) { source.follow(song).first { it != null && !it.clock.playing } } != null) source.playPause(song, true)
         }
     }
+
+    // --- Casting ---
+
+    /** The song the user asked to cast before a TV was picked, handed over once one is. */
+    private var castWhenConnected: MusicMetadata? = null
+
+    /** The song cast to the TV last. */
+    private var castSong: MusicMetadata? = null
+
+    /**
+     * The Cast button: the song the screen is about goes to the TV, which asks first which one when none is cast
+     * to. Pressed on the song already there, it shows the TV, with the way to stop.
+     */
+    fun cast() {
+        val song = uiState.songToCast ?: return
+        if (cast.target.value == null) {
+            castWhenConnected = song
+            effectChannel.trySend(Effect.ChooseTv)
+        } else if (castSong?.let { sameSong(it, song) } == true) {
+            effectChannel.trySend(Effect.ShowTv)
+        } else {
+            castTo(song)
+        }
+    }
+
+    private fun castTargetChanged(target: CastTarget?) {
+        uiState = uiState.copy(castingTo = target?.name)
+        val song = castWhenConnected ?: return
+        if (target != null) castTo(song).also { castWhenConnected = null }
+    }
+
+    /** Hands [song] to the TV, and stops it in the phone's app: from now on the phone's player is the TV's remote. */
+    private fun castTo(song: MusicMetadata) {
+        val link = uiState.player?.takeIf { it.song == song }?.link ?: uiState.link?.takeIf { uiState.result == song }?.url ?: song.url
+        // Not the TV's yet: the phone's app is asked first.
+        casting?.casting(null)
+        viewModelScope.launch {
+            val source = playback?.takeIf { it.hasAccess() }
+            if (source?.follow(song)?.first()?.clock?.playing == true) source.playPause(song, false)
+            castSong = song
+            casting?.casting(song)
+            cast.load(CastSong(song.title, song.artist, link, song.artworkUrl, song.lengthMs))
+            openPlayer(song, app = null, link = link, played = true)
+        }
+    }
+
+    /** A phone cast [song] to this TV: it opens as a link opened here does, and plays. */
+    fun castLoad(song: CastSong) {
+        val input = song.link?.let { MusicLinks.parse(it) } ?: MusicLinks.recognizedSong(song.toMetadata())
+        val text = (input as? LinkInput.Link)?.link?.url ?: (input as? LinkInput.RecognizedSong)?.text.orEmpty()
+        cancelContentWork()
+        uiState = uiState.copy(linkText = text, handlingIncomingLink = true, handingOff = false, afterLookup = AfterLookup.OPEN, leaveSettings = true)
+        playOnArrival = true
+        resolve(input, openWhenReady = false, here = true)
+    }
+
+    /** Something a phone casting to this TV asks of it. */
+    fun castCommand(command: CastCommand) {
+        val playing = uiState.player?.following?.clock?.playing
+        when (command) {
+            CastCommand.Play -> if (playing == false) playerPlayPause()
+            CastCommand.Pause -> if (playing == true) playerPlayPause()
+            CastCommand.Stop -> {
+                uiState.player?.song?.let { playback?.playPause(it, false) }
+                dismissLyrics()
+                closePlayer()
+            }
+            is CastCommand.Seek -> playerSeek(command.positionMs)
+            CastCommand.Next -> playerSkip(true)
+            CastCommand.Previous -> playerSkip(false)
+            is CastCommand.Translation -> setTranslation(command.on)
+            is CastCommand.Readings -> setReadings(command.on)
+        }
+    }
+
+    /** What this TV plays, for the phones casting to it; null while it plays nothing. */
+    val castTv: CastTvState?
+        get() = uiState.player?.let { player ->
+            val following = player.following
+            CastTvState(
+                player.song.title,
+                player.song.artist,
+                following?.clock?.playing == true,
+                following?.clock?.positionAt(now()) ?: 0,
+                following?.durationMs ?: player.song.lengthMs,
+                following?.canSeek == true,
+                following?.canSkipNext == true,
+                following?.canSkipPrevious == true
+            )
+        }
 
     private var playerJob: Job? = null
 
@@ -1944,10 +2053,6 @@ internal class MainViewModel(
         uiState = uiState.copy(lyricLines = better.lines, lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
     }
-
-    private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
-        SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&
-            (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
 
     /** Where [song] is, as Crosstune last heard it, when that's the song it heard. */
     private fun heardFollowing(song: MusicMetadata): Following? =
@@ -3582,6 +3687,7 @@ internal class MainViewModel(
     }
 
     fun setReadings(on: Boolean) {
+        if (cast.target.value != null) cast.send(CastCommand.Readings(on))
         preferences.edit { putBoolean(KEY_READINGS, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(readings = on))
         learn()
@@ -3617,6 +3723,7 @@ internal class MainViewModel(
     }
 
     fun setTranslation(on: Boolean) {
+        if (cast.target.value != null) cast.send(CastCommand.Translation(on))
         preferences.edit { putBoolean(KEY_TRANSLATION, on) }
         uiState = uiState.copy(learning = uiState.learning.copy(translation = on))
         learn()

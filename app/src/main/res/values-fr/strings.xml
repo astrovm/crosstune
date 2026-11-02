@@ -452,4 +452,7 @@
     <string name="android_ask_every_time">Toujours demander</string>
     <string name="android_dont_allow">Ne pas autoriser</string>
     <string name="android_display_over_apps">Autoriser la superposition sur d\'autres applis</string>
+    <string name="cast_button">Caster</string>
+    <string name="cast_to_tv">Lire sur un téléviseur</string>
+    <string name="casting_to_tv">Lecture sur %1$s</string>
 </resources>

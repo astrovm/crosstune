@@ -453,4 +453,7 @@
     <string name="android_ask_every_time">毎回確認する</string>
     <string name="android_dont_allow">許可しない</string>
     <string name="android_display_over_apps">他のアプリの上に重ねて表示できるようにする</string>
+    <string name="cast_button">キャスト</string>
+    <string name="cast_to_tv">テレビで再生</string>
+    <string name="casting_to_tv">%1$sで再生中</string>
 </resources>

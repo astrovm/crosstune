@@ -172,6 +172,8 @@ internal data class ScreenActions(
     val onPlayerOpenApp: () -> Unit = {},
     val onPlayerOpenWith: () -> Unit = {},
     val onPlayerMenu: () -> Unit = {},
+    /** Hands the song to a TV with Crosstune, or shows the one it's cast to. */
+    val onCast: () -> Unit = {},
     val onPlayerPlayPause: () -> Unit = {},
     val onPlayerSkip: (next: Boolean) -> Unit = {},
     val onPlayerShuffle: () -> Unit = {},
@@ -1447,6 +1449,14 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             // Only a song has words, and one whose artist is unknown can't be looked up safely.
             if (result.type == ItemType.TRACK && result.artist.isNotBlank()) {
                 ToolAction(R.drawable.ic_lyrics, stringResource(R.string.lyrics_button), actions.onShowLyrics)
+            }
+            if (state.canCast) {
+                ToolAction(
+                    if (state.castingTo != null) R.drawable.ic_cast_connected else R.drawable.ic_cast,
+                    stringResource(R.string.cast_button),
+                    actions.onCast,
+                    description = castDescription(state.castingTo)
+                )
             }
             if (state.canPlayAll) {
                 ToolAction(

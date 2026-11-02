@@ -6,6 +6,11 @@ import androidx.annotation.RequiresApi
 import java.text.Normalizer
 import java.util.Locale
 
+/** Whether [one] and [other] are the same recording of the same song, whichever way each service names it. */
+internal fun sameSong(one: MusicMetadata, other: MusicMetadata) =
+    SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&
+        (one.recordingId == null || other.recordingId == null || one.recordingId == other.recordingId)
+
 /**
  * How two services' names for one song are compared. Every service writes a name its own way,
  * so "Song 2" is "Song 2 (Remastered 2012)", "Zion & Lennox" is "Zion Y Lennox" and

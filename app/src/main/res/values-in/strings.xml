@@ -452,4 +452,7 @@
     <string name="android_ask_every_time">Selalu tanya</string>
     <string name="android_dont_allow">Jangan izinkan</string>
     <string name="android_display_over_apps">Izinkan ditampilkan di atas aplikasi lain</string>
+    <string name="cast_button">Cast</string>
+    <string name="cast_to_tv">Putar di TV</string>
+    <string name="casting_to_tv">Diputar di %1$s</string>
 </resources>

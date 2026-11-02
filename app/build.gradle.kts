@@ -56,6 +56,24 @@ android {
         }
     }
 
+    // Casting a song to Crosstune on a TV is Google Cast, which is Google Play Services, a proprietary
+    // library. "play" has it, for Google Play and the APK on GitHub; "foss" has no Google code at all,
+    // and builds the same app without casting, for F-Droid and anyone who wants none. Everything that
+    // names a Google class lives in src/play, behind the interface in src/main (see Cast.kt).
+    flavorDimensions += "store"
+    productFlavors {
+        create("play") {
+            dimension = "store"
+            // What Android Studio opens, and what a build without a flavor named means.
+            isDefault = true
+            // The Cast app ID Google gave Crosstune's TV receiver; see "Casting" in CONTRIBUTING.md.
+            buildConfigField("String", "CAST_APP_ID", "\"${providers.gradleProperty("castAppId").get()}\"")
+        }
+        create("foss") {
+            dimension = "store"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -80,6 +98,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -141,9 +160,15 @@ kover {
                 // Hearing words runs whisper.cpp's native library, which unit tests don't load; it's
                 // checked on a phone. What it hears is parsed, and lined up, in tested code.
                 classes("com.astrovm.crosstune.NativeWhisper*")
+                // Google Cast needs Google Play Services and a TV or Chromecast on the network, which unit
+                // tests have neither of; it's checked on a phone and a TV. What it's told, and what it says, is tested.
+                classes("com.astrovm.crosstune.GoogleCast*")
+                // Gradle writes this one, and only Google Cast's app id reads it, so no test of ours loads it.
+                classes("com.astrovm.crosstune.BuildConfig")
             }
         }
-        variant("debug") {
+        // The play build is the one with every line of the app; the foss one only leaves the casting out.
+        variant("playDebug") {
             verify {
                 rule {
                     minBound(100)
@@ -208,6 +233,12 @@ dependencies {
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.glance:glance-appwidget-testing:1.2.0")
 
+    // Casting, in the play flavor only: the phone's side, and a TV's, Crosstune being a Cast Connect receiver.
+    "playImplementation"("com.google.android.gms:play-services-cast-framework:23.0.0")
+    "playImplementation"("com.google.android.gms:play-services-cast-tv:21.1.1")
+    // Cast's media route dialogs bring Fragment 1.1.0, which lint rejects for the activity result calls MainActivity makes.
+    "playImplementation"("androidx.fragment:fragment:1.9.1")
+
     pitest(project(":pitest-changed-lines"))
 
     debugImplementation("androidx.compose.ui:ui-tooling")
@@ -217,23 +248,26 @@ dependencies {
 // Everything CI verifies, so `./gradlew :app:ci` locally runs exactly what the CI job does.
 tasks.register("ci") {
     group = "verification"
-    description = "Unit tests with the 100% line and 88% branch coverage gates, lint, detekt, and the debug and minified release APKs."
+    description = "Unit tests with the 100% line and 88% branch coverage gates, lint, detekt, the debug and minified release APKs, and the foss build's checks."
     dependsOn(
-        "testDebugUnitTest",
+        "testPlayDebugUnitTest",
+        "testFossDebugUnitTest",
         ":pitest-changed-lines:test",
-        "koverLogDebug",
-        "koverXmlReportDebug",
-        "koverVerifyDebug",
-        "lintDebug",
+        "koverLogPlayDebug",
+        "koverXmlReportPlayDebug",
+        "koverVerifyPlayDebug",
+        "lintPlayDebug",
+        "lintFossDebug",
         "detekt",
-        "assembleDebug",
-        "assembleRelease"
+        "assemblePlayDebug",
+        "assemblePlayRelease",
+        "assembleFossRelease"
     )
 }
 
 // Kover doesn't hook its gate into `check`, so without this a local check passes below 100%.
 tasks.named("check") {
-    dependsOn("koverVerifyDebug", "detekt")
+    dependsOn("koverVerifyPlayDebug", "detekt")
 }
 
 // detekt keeps new logic from tangling: a function with too many paths, a condition with too many
@@ -269,7 +303,7 @@ tasks.register<JavaExec>("detekt") {
 val shots = tasks.register<Test>("shots") {
     group = "documentation"
     description = "Draws the store screenshots and the site's clips in every language. Run scripts/shots/shots.py instead."
-    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    val unitTests = tasks.named<Test>("testPlayDebugUnitTest").get()
     testClassesDirs = unitTests.testClassesDirs
     classpath = unitTests.classpath
     filter.includeTestsMatching("com.astrovm.crosstune.shots.*")
@@ -283,7 +317,7 @@ val shots = tasks.register<Test>("shots") {
 val songCheck = tasks.register<Test>("songCheck") {
     group = "verification"
     description = "Checks lyrics, timing, chords, readings and translations on the top songs. Run scripts/songcheck/songcheck.py instead."
-    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    val unitTests = tasks.named<Test>("testPlayDebugUnitTest").get()
     testClassesDirs = unitTests.testClassesDirs
     classpath = unitTests.classpath
     filter.includeTestsMatching(providers.gradleProperty("songcheckTest").getOrElse("com.astrovm.crosstune.songcheck.SongCheck"))
@@ -324,6 +358,12 @@ val robolectricJvmArgs = listOf(
     "--enable-native-access=ALL-UNNAMED",
     "--sun-misc-unsafe-memory-access=allow",
 )
+
+// The foss build is the play one without casting: what it needs is that it has no Google code, which its own
+// tests check, and everything else is what the play build's tests already run.
+tasks.matching { it.name == "testFossDebugUnitTest" }.configureEach {
+    (this as Test).filter.includeTestsMatching("com.astrovm.crosstune.Foss*")
+}
 
 tasks.withType<Test>().configureEach {
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
@@ -380,7 +420,7 @@ afterEvaluate {
         // classes come from the folders PIT mutates, not the jar the tests get, or PIT finds nothing to mutate.
         additionalClasspath.setFrom(
             mutableCodePaths,
-            tasks.named<Test>("testDebugUnitTest").map { test -> test.classpath.filter { "runtime_app_classes_jar" !in it.path } },
+            tasks.named<Test>("testPlayDebugUnitTest").map { test -> test.classpath.filter { "runtime_app_classes_jar" !in it.path } },
         )
     }
 }

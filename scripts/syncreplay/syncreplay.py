@@ -202,7 +202,7 @@ def run(args):
         replay["behindAgain"] = args.behind_again
     asked.write_text(json.dumps(replay))
     try:
-        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testPlayDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
     finally:
         asked.unlink()
     if done.returncode:

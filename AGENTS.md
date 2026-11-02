@@ -6,8 +6,8 @@ Crosstune is an Android app that opens a music link in the service you prefer, t
 
 ```bash
 git submodule update --init --recursive   # projectM is built from source for the visuals
-./gradlew :app:assembleDebug              # "Crosstune Dev" (com.astrovm.crosstune.dev), installs next to the real app; what Android Studio runs for Live Edit
-./gradlew :app:testDebugUnitTest --tests '*MainActivityTest.aSongPlays*'   # one test
+./gradlew :app:assembleDebug              # "Crosstune Dev" (com.astrovm.crosstune.dev), installs next to the real app; what Android Studio runs for Live Edit. The `play` build (the default); `foss` has no Google code, see Casting below
+./gradlew :app:testPlayDebugUnitTest --tests '*MainActivityTest.aSongPlays*'   # one test
 ./gradlew :app:ci                         # all tests + coverage gates + lint + detekt + APKs
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
 python3 scripts/mutants.py                # mutation testing on the lines this branch changed; slow, so only when asked, in the background
@@ -17,7 +17,7 @@ python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on th
 node --test report/*.test.mjs             # the report Worker's tests
 ```
 
-Results land in `app/build/test-results/testDebugUnitTest/*.xml`, coverage in `app/build/reports/kover/reportDebug.xml`.
+Results land in `app/build/test-results/testPlayDebugUnitTest/*.xml`, coverage in `app/build/reports/kover/reportPlayDebug.xml`.
 
 Live Edit (Android Studio) is for tweaks inside composable bodies: edit the file while it's open in Studio and it reaches the dev app on a phone in seconds. Strings, `UiState`, new functions and signature changes need a real build: run the app from Studio's Run button, which keeps Live Edit connected. It doesn't replace the order under Verifying.
 
@@ -63,6 +63,7 @@ Where each feature starts:
 - Lyrics: `LyricsFinder.kt` finds them, `LyricsScreen.kt` shows them, `TimingEvidence.kt` and `LyricsSync.kt` put them in time, `SungWords.kt` lines them up to the singing.
 - Chords: `ChordFinder.kt`, `Chords.kt`. Translations and readings: `Translator.kt`, `Readings.kt`. ChatGPT: `ChatGpt*.kt`.
 - Practice cards: `Practice*.kt`, `SavedLines.kt`.
+- Casting to a TV: `Cast.kt` is the protocol, `CastSender`, `CastReceiver` and `CastPlayback`; Google's part is `GoogleCast*.kt` in `app/src/play/` only, and the `foss` flavor has none of it. See Casting in `CONTRIBUTING.md`.
 - Access and setup: `FixCenter.kt`, `OneTapSetup.kt` (Shizuku and root).
 - Reports: `Feedback.kt` and `AutoReports.kt` in the app, `report/` on Cloudflare.
 - TV: `UiState.phone` is `Phone.TV` (`FixCenter.kt`), and the screens check it. Tests in `TvTest` and `TvPlayTest`.

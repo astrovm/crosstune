@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "Casting to a TV"
+    ],
+    [
+      "p",
+      "In the Google Play and GitHub builds you can cast a song to Crosstune on your Android TV or Google TV. Google Cast, part of Google Play Services, looks for TVs on your local network and carries the cast. When you cast, Crosstune sends the TV the song's title, artist, link and cover, and then what you ask of it: pause, play, skip, move, translation and readings. The TV tells your phone what it plays. This goes between your phone and your TV, never to the developer, and Google handles it under its own privacy policy. The build without Google Play Services has no casting and sends nothing of the kind."
+    ],
+    [
+      "h2",
       "Permissions and security"
     ],
     [

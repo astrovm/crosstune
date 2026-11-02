@@ -452,4 +452,7 @@
     <string name="android_ask_every_time">Her zaman sor</string>
     <string name="android_dont_allow">İzin verme</string>
     <string name="android_display_over_apps">Diğer uygulamalar üzerinde gösterime izin ver</string>
+    <string name="cast_button">Yayınla</string>
+    <string name="cast_to_tv">Televizyonda oynat</string>
+    <string name="casting_to_tv">%1$s üzerinde oynatılıyor</string>
 </resources>
