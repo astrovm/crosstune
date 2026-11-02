@@ -855,6 +855,10 @@ Singing to the morning light</div>"""
         val old = """{"site":"LA_CUERDA","url":"https://acordes.lacuerda.net/walkers/river_road.shtml","capo":0,"lines":[["Walking down the river road",[[0,"LAm"]]]]}"""
         runBlocking { cache.put("${SongNames.normalize(river.title)}\u0000${SongNames.normalize(river.artist)}", old) }
         assertEquals(ChordFinder.Chords.Unavailable, chords(river, english, finder(cache)))
+        // A page of the words alone, kept before those stopped counting as chords.
+        val words = english.joinToString(",") { """["$it",[]]""" }
+        runBlocking { cache.put(key, """{"site":"CIFRA_CLUB","url":"https://www.cifraclub.com.br/the-walkers/river-road/","capo":0,"lines":[$words]}""") }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(river, english, finder(cache)))
     }
 
     @Test
