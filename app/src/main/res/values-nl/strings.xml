@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">Altijd vragen</string>
     <string name="android_dont_allow">Niet toestaan</string>
     <string name="android_display_over_apps">Weergeven vóór andere apps toestaan</string>
+    <string name="cast_button">Casten</string>
+    <string name="cast_to_tv">Afspelen op een tv</string>
+    <string name="casting_to_tv">Speelt af op %1$s</string>
 </resources>

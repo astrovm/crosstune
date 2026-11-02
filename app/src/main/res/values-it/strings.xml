@@ -442,4 +442,7 @@
     <string name="android_ask_every_time">Chiedi ogni volta</string>
     <string name="android_dont_allow">Non consentire</string>
     <string name="android_display_over_apps">Consenti la visualizzazione sopra altre app</string>
+    <string name="cast_button">Trasmetti</string>
+    <string name="cast_to_tv">Riproduci su una TV</string>
+    <string name="casting_to_tv">In riproduzione su %1$s</string>
 </resources>

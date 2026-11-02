@@ -14,6 +14,8 @@ import com.google.android.gms.cast.tv.media.MediaCommandCallback
 import com.google.android.gms.cast.tv.media.MediaLoadCommandCallback
 import com.google.android.gms.cast.tv.media.QueueUpdateRequestData
 import com.google.android.gms.cast.tv.media.SeekRequestData
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 
@@ -26,6 +28,8 @@ internal class GoogleCastReceiver(private val context: Context) : CastReceiver {
     private var session: MediaSessionCompat? = null
 
     override fun start(onLoad: (CastSong) -> Unit, onCommand: (CastCommand) -> Unit) {
+        // A TV without Google Play Services has no Cast to answer.
+        if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) != ConnectionResult.SUCCESS) return
         CastReceiverContext.initInstance(context)
         val receiver = CastReceiverContext.getInstance()
         val mediaSession = MediaSessionCompat(context, "CrosstuneCast").apply { isActive = true }
@@ -99,8 +103,9 @@ internal class GoogleCastReceiver(private val context: Context) : CastReceiver {
     override fun handle(intent: Intent): Boolean = session != null && CastReceiverContext.getInstance().mediaManager.onNewIntent(intent)
 
     override fun stop() {
+        val mediaSession = session ?: return
         CastReceiverContext.getInstance().stop()
-        session?.release()
+        mediaSession.release()
         session = null
     }
 }

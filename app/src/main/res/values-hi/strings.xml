@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">हर बार पूछें</string>
     <string name="android_dont_allow">अनुमति न दें</string>
     <string name="android_display_over_apps">दूसरे ऐप्लिकेशन के ऊपर दिखने की अनुमति दें</string>
+    <string name="cast_button">कास्ट करें</string>
+    <string name="cast_to_tv">टीवी पर चलाएँ</string>
+    <string name="casting_to_tv">%1$s पर चल रहा है</string>
 </resources>

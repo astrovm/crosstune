@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">每次都詢問</string>
     <string name="android_dont_allow">不允許</string>
     <string name="android_display_over_apps">允許重疊顯示於其他應用程式上方</string>
+    <string name="cast_button">投放</string>
+    <string name="cast_to_tv">在電視上播放</string>
+    <string name="casting_to_tv">正在 %1$s 上播放</string>
 </resources>

@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">Zawsze pytaj</string>
     <string name="android_dont_allow">Nie zezwalaj</string>
     <string name="android_display_over_apps">Zezwalaj na wyświetlanie nad innymi aplikacjami</string>
+    <string name="cast_button">Prześlij</string>
+    <string name="cast_to_tv">Odtwórz na telewizorze</string>
+    <string name="casting_to_tv">Odtwarzanie na %1$s</string>
 </resources>

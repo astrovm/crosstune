@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">Jedes Mal fragen</string>
     <string name="android_dont_allow">Nicht zulassen</string>
     <string name="android_display_over_apps">Einblendung über anderen Apps zulassen</string>
+    <string name="cast_button">Streamen</string>
+    <string name="cast_to_tv">Auf einem Fernseher abspielen</string>
+    <string name="casting_to_tv">Wiedergabe auf %1$s</string>
 </resources>

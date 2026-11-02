@@ -462,4 +462,7 @@
     <string name="android_ask_every_time">Ask every time</string>
     <string name="android_dont_allow">Don\'t allow</string>
     <string name="android_display_over_apps">Allow display over other apps</string>
+    <string name="cast_button">Cast</string>
+    <string name="cast_to_tv">Cast to a TV</string>
+    <string name="casting_to_tv">Casting to %1$s</string>
 </resources>

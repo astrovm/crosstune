@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">每次都询问</string>
     <string name="android_dont_allow">不允许</string>
     <string name="android_display_over_apps">允许显示在其他应用的上层</string>
+    <string name="cast_button">投放</string>
+    <string name="cast_to_tv">在电视上播放</string>
+    <string name="casting_to_tv">正在 %1$s 上播放</string>
 </resources>

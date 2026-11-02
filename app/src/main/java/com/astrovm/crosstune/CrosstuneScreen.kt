@@ -1442,6 +1442,14 @@ private fun ResultCard(result: MusicMetadata, state: UiState, actions: ScreenAct
             if (result.type == ItemType.TRACK && result.artist.isNotBlank()) {
                 ToolAction(R.drawable.ic_lyrics, stringResource(R.string.lyrics_button), actions.onShowLyrics)
             }
+            if (state.canCast) {
+                ToolAction(
+                    if (state.castingTo != null) R.drawable.ic_cast_connected else R.drawable.ic_cast,
+                    stringResource(R.string.cast_button),
+                    actions.onCast,
+                    description = castDescription(state.castingTo)
+                )
+            }
             if (state.canPlayAll) {
                 ToolAction(
                     R.drawable.ic_shuffle,

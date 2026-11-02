@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">Спрашивать каждый раз</string>
     <string name="android_dont_allow">Запретить</string>
     <string name="android_display_over_apps">Показывать поверх других приложений</string>
+    <string name="cast_button">Трансляция</string>
+    <string name="cast_to_tv">Воспроизвести на телевизоре</string>
+    <string name="casting_to_tv">Воспроизводится на %1$s</string>
 </resources>

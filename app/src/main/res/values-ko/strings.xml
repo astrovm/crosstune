@@ -441,4 +441,7 @@
     <string name="android_ask_every_time">항상 확인</string>
     <string name="android_dont_allow">허용 안함</string>
     <string name="android_display_over_apps">다른 앱 위에 표시 허용</string>
+    <string name="cast_button">캐스트</string>
+    <string name="cast_to_tv">TV에서 재생</string>
+    <string name="casting_to_tv">%1$s에서 재생 중</string>
 </resources>
