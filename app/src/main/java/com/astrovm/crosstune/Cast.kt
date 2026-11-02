@@ -70,19 +70,7 @@ internal sealed interface CastCommand {
     data class Translation(val on: Boolean) : CastCommand
     data class Readings(val on: Boolean) : CastCommand
 
-    /** What goes over [CAST_NAMESPACE] for the ones Cast has no command for; null for the rest. */
-    fun message(): String? = when (this) {
-        is Translation -> JSONObject().put(TYPE, TRANSLATION).put(ON, on).toString()
-        is Readings -> JSONObject().put(TYPE, READINGS).put(ON, on).toString()
-        else -> null
-    }
-
     companion object {
-        private const val TYPE = "type"
-        private const val ON = "on"
-        private const val TRANSLATION = "translation"
-        private const val READINGS = "readings"
-
         /** The command a [message] over [CAST_NAMESPACE] is; null for anything else a sender might say. */
         fun fromMessage(message: String): CastCommand? {
             val json = runCatching { JSONObject(message) }.getOrNull() ?: return null
@@ -94,6 +82,18 @@ internal sealed interface CastCommand {
             }
         }
     }
+}
+
+private const val TYPE = "type"
+private const val ON = "on"
+private const val TRANSLATION = "translation"
+private const val READINGS = "readings"
+
+/** What goes over [CAST_NAMESPACE] for the ones Cast has no command for; null for the rest. */
+internal fun CastCommand.message(): String? = when (this) {
+    is CastCommand.Translation -> JSONObject().put(TYPE, TRANSLATION).put(ON, on).toString()
+    is CastCommand.Readings -> JSONObject().put(TYPE, READINGS).put(ON, on).toString()
+    else -> null
 }
 
 /** What the TV plays and how, as it tells the phone. */
