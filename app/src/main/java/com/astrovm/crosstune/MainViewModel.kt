@@ -4101,22 +4101,36 @@ internal class MainViewModel(
 
     private var keepingOffline: Job? = null
 
+    /** Asked to fetch while fetching, as when a network comes back while the last one fails, it goes round again. */
+    private var fetchAgain = false
+
     /**
      * Fetches what each song kept for offline needs and isn't saved yet, one at a time, on a network
      * that costs no data, while there's room.
      */
     private fun fetchKeptOffline() {
         val offline = offline ?: return
-        if (keepingOffline?.isActive == true || !unmetered) return
+        if (!unmetered) return
+        if (keepingOffline?.isActive == true) {
+            fetchAgain = true
+            return
+        }
         keepingOffline = viewModelScope.launch {
-            for (kept in offline.all()) {
-                for (song in kept.songs.filterNot { OfflineSongs.keyOf(it) in kept.saved }) {
-                    if (!unmetered || uiState.offlineUsedBytes >= uiState.offlineSpaceMb * BYTES_PER_MB) return@launch
-                    // Unreachable for a moment, it's tried again on the next network.
-                    if (!withContext(Pinning(kept.id)) { fetchForOffline(song) }) return@launch
-                    offline.saved(kept.id, song)
-                    showKeptOffline(offline)
-                }
+            do {
+                fetchAgain = false
+                fetchEachKept(offline)
+            } while (fetchAgain)
+        }
+    }
+
+    private suspend fun fetchEachKept(offline: OfflineSongs) {
+        for (kept in offline.all()) {
+            for (song in kept.songs.filterNot { OfflineSongs.keyOf(it) in kept.saved }) {
+                if (!unmetered || uiState.offlineUsedBytes >= uiState.offlineSpaceMb * BYTES_PER_MB) return
+                // Unreachable for a moment, it's tried again on the next network.
+                if (!withContext(Pinning(kept.id)) { fetchForOffline(song) }) return
+                offline.saved(kept.id, song)
+                showKeptOffline(offline)
             }
         }
     }

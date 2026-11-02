@@ -104,6 +104,8 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Crosstune naming a song playing nearby itself: asking for the microphone, listening, and what it finds. */
 @RunWith(RobolectricTestRunner::class)
@@ -838,11 +840,34 @@ class ListeningTest {
         assertFalse(described(string(R.string.kept_offline)))
         // The next network it tries again.
         down.set(false)
-        // Another network each time round, as it may still be giving up on the last one.
-        waitUntil(TIMEOUT_MS) {
-            controllerModel().unmeteredChanged(true)
-            described(string(R.string.kept_offline))
+        controllerModel().unmeteredChanged(true)
+        waitForDescription(string(R.string.kept_offline))
+    }
+
+    @Test
+    fun aNetworkBackWhileTheLastOneStillFailsIsTriedAgainToo() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        val keeping = java.util.concurrent.atomic.AtomicBoolean(false)
+        val first = java.util.concurrent.atomic.AtomicReference<String>()
+        val back = java.util.concurrent.atomic.AtomicBoolean(false)
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            val url = request.url.toString()
+            // Kept, the next network comes while it's still giving up on the one that went away; what
+            // it asks first, asked again, is it trying on the new one.
+            if (keeping.get() && !first.compareAndSet(null, url) && url == first.get()) back.set(true)
+            if (keeping.get() && first.get() == url && !back.get()) android.os.Handler(android.os.Looper.getMainLooper()).post { controllerModel().unmeteredChanged(true) }
+            if (!back.get()) throw IOException("offline")
+            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
         }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        composeRule.waitForIdle()
+        keeping.set(true)
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
     }
 
     @Test
