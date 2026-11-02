@@ -1,0 +1,23 @@
+{
+  "extName": {
+    "message": "Crosstune"
+  },
+  "extDescription": {
+    "message": "म्यूज़िक लिंक आपकी पसंद की सेवा में खोलता है।"
+  },
+  "actionTitle": {
+    "message": "Crosstune सेटिंग"
+  },
+  "optionsEnabled": {
+    "message": "म्यूज़िक लिंक नीचे दी गई सेवा में खोलें"
+  },
+  "optionsService": {
+    "message": "इसमें खोलें"
+  },
+  "optionsAccess": {
+    "message": "आपके लिए लिंक खोलने के लिए Crosstune को म्यूज़िक साइटों का ऐक्सेस चाहिए।"
+  },
+  "optionsAllow": {
+    "message": "अनुमति दें"
+  }
+}

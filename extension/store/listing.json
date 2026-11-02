@@ -1,0 +1,66 @@
+{
+  "en": {
+    "summary": "Opens music links in the service you prefer.",
+    "description": "Someone sends you a Spotify link, but you listen on YouTube Music? Click it and the same song opens where you listen.\n\n• Reads links from Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Opens songs, albums and artists in any of those, or in Amazon Music.\n• Opens the song itself when it can find it there, and a search when it can't.\n• Back takes you to the link, and it stays there.\n• Turn it off, or pick another service, in its options.\n\nNo account, analytics or ads. To name a link's song, it asks the service the link comes from. To find it elsewhere, the song's title and artist go to the search of the service you open it in, or to ListenBrainz's for Spotify."
+  },
+  "de": {
+    "summary": "Öffnet Musik-Links im Dienst deiner Wahl.",
+    "description": "Jemand schickt dir einen Spotify-Link, aber du hörst auf YouTube Music? Klick ihn an, und derselbe Song öffnet sich dort, wo du hörst.\n\n• Liest Links von Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Öffnet Songs, Alben und Künstler in jedem dieser Dienste oder in Amazon Music.\n• Öffnet den Song selbst, wenn er ihn dort findet, sonst eine Suche.\n• Zurück bringt dich zum Link, und dort bleibst du.\n• In den Optionen ausschalten oder einen anderen Dienst wählen.\n\nKein Konto, keine Analyse, keine Werbung. Um den Song eines Links zu erkennen, fragt es den Dienst, von dem der Link kommt. Um ihn anderswo zu finden, gehen Titel und Künstler an die Suche des Dienstes, in dem du ihn öffnest, bei Spotify an die von ListenBrainz."
+  },
+  "es": {
+    "summary": "Abre los links de música en el servicio que preferís.",
+    "description": "¿Te mandan un link de Spotify, pero vos escuchás en YouTube Music? Hacé clic y la misma canción se abre donde escuchás.\n\n• Lee links de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Abre canciones, álbumes y artistas en cualquiera de esos, o en Amazon Music.\n• Abre la canción misma cuando la encuentra ahí, y una búsqueda cuando no.\n• Atrás te lleva al link, y te quedás ahí.\n• Apagalo, o elegí otro servicio, en sus opciones.\n\nSin cuenta, analíticas ni anuncios. Para saber qué canción es un link, le pregunta al servicio del que viene. Para encontrarla en otro lado, el título y el artista van a la búsqueda del servicio donde la abrís, o a la de ListenBrainz para Spotify."
+  },
+  "fr": {
+    "summary": "Ouvre les liens de musique dans le service de ton choix.",
+    "description": "On t'envoie un lien Spotify, mais tu écoutes sur YouTube Music ? Clique dessus et le même morceau s'ouvre là où tu écoutes.\n\n• Lit les liens de Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Ouvre les morceaux, albums et artistes dans n'importe lequel de ces services, ou dans Amazon Music.\n• Ouvre le morceau lui-même quand il le trouve, sinon une recherche.\n• Retour te ramène au lien, et tu y restes.\n• Désactive-le, ou choisis un autre service, dans ses options.\n\nPas de compte, de statistiques ni de publicité. Pour savoir quel morceau est derrière un lien, il demande au service d'où vient le lien. Pour le trouver ailleurs, le titre et l'artiste vont à la recherche du service où tu l'ouvres, ou à celle de ListenBrainz pour Spotify."
+  },
+  "hi": {
+    "summary": "म्यूज़िक लिंक आपकी पसंद की सेवा में खोलता है।",
+    "description": "कोई आपको Spotify लिंक भेजता है, पर आप YouTube Music पर सुनते हैं? उस पर क्लिक करें और वही गाना वहीं खुलेगा जहाँ आप सुनते हैं।\n\n• Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud के लिंक पढ़ता है।\n• गाने, एल्बम और कलाकार इनमें से किसी में भी, या Amazon Music में खोलता है।\n• गाना वहाँ मिले तो सीधे गाना खोलता है, नहीं तो खोज।\n• पीछे जाने पर आप लिंक पर लौटते हैं, और वहीं रहते हैं।\n• विकल्पों में इसे बंद करें या कोई दूसरी सेवा चुनें।\n\nन खाता, न एनालिटिक्स, न विज्ञापन। लिंक का गाना जानने के लिए यह उस सेवा से पूछता है जहाँ से लिंक आया है। उसे कहीं और ढूँढने के लिए गाने का नाम और कलाकार उस सेवा की खोज में जाते हैं जिसमें आप उसे खोलते हैं, और Spotify के लिए ListenBrainz की खोज में।"
+  },
+  "id": {
+    "summary": "Membuka link musik di layanan pilihanmu.",
+    "description": "Ada yang mengirimimu link Spotify, tapi kamu mendengarkan di YouTube Music? Klik saja, dan lagu yang sama terbuka di tempatmu mendengarkan.\n\n• Membaca link dari Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Membuka lagu, album, dan artis di salah satu layanan itu, atau di Amazon Music.\n• Membuka lagunya langsung kalau ketemu di sana, dan pencarian kalau tidak.\n• Kembali membawamu ke link itu, dan tetap di sana.\n• Matikan, atau pilih layanan lain, di opsinya.\n\nTanpa akun, analitik, atau iklan. Untuk mengenali lagu dari link, ia bertanya ke layanan asal link. Untuk menemukannya di tempat lain, judul dan artisnya dikirim ke pencarian layanan tempat kamu membukanya, atau ke pencarian ListenBrainz untuk Spotify."
+  },
+  "it": {
+    "summary": "Apre i link musicali nel servizio che preferisci.",
+    "description": "Ti mandano un link di Spotify, ma tu ascolti su YouTube Music? Cliccalo e lo stesso brano si apre dove ascolti.\n\n• Legge i link di Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Apre brani, album e artisti in uno qualsiasi di questi, o in Amazon Music.\n• Apre il brano stesso quando lo trova, altrimenti una ricerca.\n• Indietro ti riporta al link, e resti lì.\n• Disattivalo, o scegli un altro servizio, nelle opzioni.\n\nNiente account, statistiche o pubblicità. Per capire che brano c'è dietro un link, chiede al servizio da cui arriva il link. Per trovarlo altrove, titolo e artista vanno alla ricerca del servizio in cui lo apri, o a quella di ListenBrainz per Spotify."
+  },
+  "ja": {
+    "summary": "音楽リンクを好きなサービスで開きます。",
+    "description": "Spotify のリンクが届いたけど、YouTube Music で聴いている？クリックすれば、同じ曲がいつものサービスで開きます。\n\n• Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud のリンクを読み取ります。\n• 曲、アルバム、アーティストをそのどれか、または Amazon Music で開きます。\n• 曲が見つかればその曲を、見つからなければ検索を開きます。\n• 戻るとリンクに戻り、そこにとどまります。\n• オプションでオフにしたり、別のサービスを選んだりできます。\n\nアカウント、分析、広告はありません。リンクの曲は、リンク元のサービスに問い合わせて調べます。ほかで探すときは、曲名とアーティスト名を開く先のサービスの検索に送ります。Spotify の場合は ListenBrainz の検索です。"
+  },
+  "ko": {
+    "summary": "음악 링크를 원하는 서비스에서 엽니다.",
+    "description": "Spotify 링크를 받았는데 YouTube Music으로 듣나요? 클릭하면 같은 노래가 듣는 곳에서 열립니다.\n\n• Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud 링크를 읽습니다.\n• 노래, 앨범, 아티스트를 그중 어디서든, 또는 Amazon Music에서 엽니다.\n• 노래를 찾으면 그 노래를, 못 찾으면 검색을 엽니다.\n• 뒤로 가면 링크로 돌아가고, 거기 머뭅니다.\n• 옵션에서 끄거나 다른 서비스를 고를 수 있습니다.\n\n계정, 분석, 광고가 없습니다. 링크의 노래는 링크가 온 서비스에 물어 알아냅니다. 다른 곳에서 찾을 때는 노래 제목과 아티스트를 여는 서비스의 검색으로, Spotify라면 ListenBrainz의 검색으로 보냅니다."
+  },
+  "nl": {
+    "summary": "Opent muzieklinks in de dienst die jij kiest.",
+    "description": "Krijg je een Spotify-link, maar luister je op YouTube Music? Klik erop en hetzelfde nummer opent waar jij luistert.\n\n• Leest links van Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Opent nummers, albums en artiesten in elk daarvan, of in Amazon Music.\n• Opent het nummer zelf als het daar te vinden is, anders een zoekopdracht.\n• Terug brengt je naar de link, en daar blijf je.\n• Zet het uit, of kies een andere dienst, in de opties.\n\nGeen account, analyse of advertenties. Om te weten welk nummer een link is, vraagt het de dienst waar de link vandaan komt. Om het elders te vinden, gaan titel en artiest naar de zoekfunctie van de dienst waarin je het opent, of naar die van ListenBrainz voor Spotify."
+  },
+  "pl": {
+    "summary": "Otwiera linki do muzyki w wybranym serwisie.",
+    "description": "Ktoś wysyła Ci link do Spotify, a Ty słuchasz w YouTube Music? Kliknij, a ten sam utwór otworzy się tam, gdzie słuchasz.\n\n• Czyta linki z Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Otwiera utwory, albumy i wykonawców w każdym z nich albo w Amazon Music.\n• Otwiera sam utwór, gdy go tam znajdzie, a jeśli nie, wyszukiwanie.\n• Wstecz wraca do linku i tam zostaje.\n• Wyłącz go albo wybierz inny serwis w opcjach.\n\nBez konta, analityki i reklam. Żeby rozpoznać utwór z linku, pyta serwis, z którego pochodzi link. Żeby znaleźć go gdzie indziej, tytuł i wykonawca trafiają do wyszukiwarki serwisu, w którym go otwierasz, a dla Spotify do wyszukiwarki ListenBrainz."
+  },
+  "pt_BR": {
+    "summary": "Abre links de música no serviço que você prefere.",
+    "description": "Alguém te mandou um link do Spotify, mas você ouve no YouTube Music? Clique e a mesma música abre onde você ouve.\n\n• Lê links do Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Abre músicas, álbuns e artistas em qualquer um deles, ou no Amazon Music.\n• Abre a própria música quando a encontra lá, e uma busca quando não.\n• Voltar leva você ao link, e você fica lá.\n• Desative, ou escolha outro serviço, nas opções.\n\nSem conta, análises ou anúncios. Para saber qual música é um link, ele pergunta ao serviço de onde o link vem. Para encontrá-la em outro lugar, o título e o artista vão para a busca do serviço onde você a abre, ou para a do ListenBrainz no caso do Spotify."
+  },
+  "ru": {
+    "summary": "Открывает музыкальные ссылки в сервисе, который вы выберете.",
+    "description": "Вам прислали ссылку на Spotify, а вы слушаете в YouTube Music? Нажмите, и та же песня откроется там, где вы слушаете.\n\n• Читает ссылки Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud.\n• Открывает песни, альбомы и исполнителей в любом из них или в Amazon Music.\n• Открывает саму песню, если находит её там, а если нет — поиск.\n• Назад возвращает к ссылке, и вы остаётесь там.\n• Выключите его или выберите другой сервис в настройках.\n\nБез аккаунта, аналитики и рекламы. Чтобы узнать песню по ссылке, он спрашивает сервис, откуда ссылка. Чтобы найти её в другом месте, название и исполнитель уходят в поиск сервиса, в котором вы её открываете, а для Spotify в поиск ListenBrainz."
+  },
+  "tr": {
+    "summary": "Müzik bağlantılarını tercih ettiğin serviste açar.",
+    "description": "Biri sana Spotify bağlantısı gönderdi ama sen YouTube Music'te mi dinliyorsun? Tıkla, aynı şarkı dinlediğin yerde açılsın.\n\n• Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud bağlantılarını okur.\n• Şarkıları, albümleri ve sanatçıları bunlardan herhangi birinde ya da Amazon Music'te açar.\n• Şarkıyı orada bulursa şarkının kendisini, bulamazsa aramayı açar.\n• Geri, seni bağlantıya götürür ve orada kalırsın.\n• Seçeneklerinden kapat ya da başka bir servis seç.\n\nHesap, analiz veya reklam yok. Bir bağlantının şarkısını bulmak için bağlantının geldiği servise sorar. Başka yerde bulmak için şarkının adı ve sanatçısı açtığın servisin aramasına, Spotify için ListenBrainz'in aramasına gider."
+  },
+  "zh_CN": {
+    "summary": "在你喜欢的服务中打开音乐链接。",
+    "description": "有人发来 Spotify 链接，可你在 YouTube Music 上听歌？点一下，同一首歌就会在你常用的地方打开。\n\n• 读取 Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud 的链接。\n• 在其中任一服务或 Amazon Music 中打开歌曲、专辑和艺人。\n• 能找到歌曲就直接打开，找不到就打开搜索。\n• 返回会回到原链接，并停在那里。\n• 可在选项中关闭，或换一个服务。\n\n没有账号、分析或广告。为了识别链接里的歌曲，它会询问链接来源的服务。要在别处找到这首歌，歌名和艺人会发送到你要打开的服务的搜索，Spotify 则是 ListenBrainz 的搜索。"
+  },
+  "zh_TW": {
+    "summary": "在你偏好的服務中開啟音樂連結。",
+    "description": "有人傳來 Spotify 連結，但你在 YouTube Music 上聽歌？點一下，同一首歌就會在你常用的地方開啟。\n\n• 讀取 Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL, SoundCloud 的連結。\n• 在其中任一服務或 Amazon Music 中開啟歌曲、專輯和藝人。\n• 找得到歌曲就直接開啟，找不到就開啟搜尋。\n• 返回會回到原連結，並停在那裡。\n• 可在選項中關閉，或換一個服務。\n\n沒有帳號、分析或廣告。為了辨識連結裡的歌曲，它會詢問連結來源的服務。要在別處找到這首歌，歌名和藝人會傳送到你要開啟的服務的搜尋，Spotify 則是 ListenBrainz 的搜尋。"
+  }
+}

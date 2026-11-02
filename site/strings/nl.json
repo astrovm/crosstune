@@ -167,6 +167,14 @@
     ],
     [
       "h2",
+      "Browserextensie"
+    ],
+    [
+      "p",
+      "De browserextensie van Crosstune, voor Chrome, Edge, Brave en Firefox, opent muzieklinks waarop je klikt in de dienst die je in de opties kiest. Ze kijkt alleen naar pagina's van de muzieksites die ze ondersteunt. Om het nummer, album of de artiest van een link te kennen, vraagt ze de openbare pagina of openbare API van de bron op. Om het item zelf te openen, stuurt ze titel en artiest naar de zoekfunctie van de bestemming, of naar ListenBrainz voor Spotify, net als de app. Haar instellingen blijven in de browser op je computer. Ze heeft geen account, advertenties of analyse en stuurt niets naar de ontwikkelaar."
+    ],
+    [
+      "h2",
       "Bewaren en verwijderen"
     ],
     [

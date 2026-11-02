@@ -167,6 +167,14 @@
     ],
     [
       "h2",
+      "Browser extension"
+    ],
+    [
+      "p",
+      "Crosstune's browser extension, for Chrome, Edge, Brave and Firefox, opens the music links you click in the service you pick in its options. It looks only at pages on the music sites it supports. To name a link's song, album or artist, it requests the source service's public page or public API. To open the item itself, it sends the title and artist to the destination's search, or to ListenBrainz for Spotify, as the app does. Its settings stay in the browser on your computer. It has no account, advertising or analytics, and sends nothing to the developer."
+    ],
+    [
+      "h2",
       "Retention and deletion"
     ],
     [

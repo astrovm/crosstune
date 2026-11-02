@@ -1,0 +1,23 @@
+{
+  "extName": {
+    "message": "Crosstune"
+  },
+  "extDescription": {
+    "message": "Apre i link musicali nel servizio che preferisci."
+  },
+  "actionTitle": {
+    "message": "Impostazioni di Crosstune"
+  },
+  "optionsEnabled": {
+    "message": "Apri i link musicali nel servizio qui sotto"
+  },
+  "optionsService": {
+    "message": "Apri in"
+  },
+  "optionsAccess": {
+    "message": "Crosstune ha bisogno di accedere ai siti musicali per aprire i link al posto tuo."
+  },
+  "optionsAllow": {
+    "message": "Consenti"
+  }
+}

@@ -10,6 +10,8 @@ import pkg from "../package.json" with { type: "json" };
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+const ICONS = Object.fromEntries([16, 32, 48, 128].map((size) => [size, `icons/icon-${size}.png`]));
+
 const base = {
   manifest_version: 3,
   name: "__MSG_extName__",
@@ -19,7 +21,8 @@ const base = {
   permissions: ["webNavigation", "storage", "declarativeNetRequestWithHostAccess"],
   declarative_net_request: { rule_resources: [{ id: "youtube", enabled: true, path: "rules.json" }] },
   host_permissions: HOST_PERMISSIONS,
-  action: { default_title: "__MSG_actionTitle__" },
+  icons: ICONS,
+  action: { default_title: "__MSG_actionTitle__", default_icon: ICONS },
   options_ui: { page: "options.html", open_in_tab: true },
 };
 
@@ -49,6 +52,7 @@ for (const [target, manifest] of Object.entries(manifests)) {
   await cp(join(root, "src/options.html"), join(out, "options.html"));
   await cp(join(root, "src/rules.json"), join(out, "rules.json"));
   await cp(join(root, "_locales"), join(out, "_locales"), { recursive: true });
+  await cp(join(root, "icons"), join(out, "icons"), { recursive: true });
   await writeFile(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`built dist/${target}`);
 }

@@ -117,7 +117,7 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npm run typecheck
-      - run: npm run build
+      - run: npm run package
       - run: npm test
 
   # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.

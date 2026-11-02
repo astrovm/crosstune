@@ -167,6 +167,14 @@
     ],
     [
       "h2",
+      "Ekstensi browser"
+    ],
+    [
+      "p",
+      "Ekstensi browser Crosstune, untuk Chrome, Edge, Brave, dan Firefox, membuka link musik yang kamu klik di layanan yang kamu pilih di opsinya. Ia hanya melihat halaman di situs musik yang didukungnya. Untuk mengenali lagu, album, atau artis dari link, ia meminta halaman publik atau API publik layanan asal. Untuk membuka item itu sendiri, ia mengirim judul dan artis ke pencarian layanan tujuan, atau ke ListenBrainz untuk Spotify, seperti aplikasinya. Setelannya tetap di browser di komputermu. Ia tidak punya akun, iklan, atau analitik, dan tidak mengirim apa pun ke pengembang."
+    ],
+    [
+      "h2",
       "Penyimpanan dan penghapusan"
     ],
     [

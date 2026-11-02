@@ -10,7 +10,11 @@
     "test": "node --test \"test/*.test.ts\"",
     "try": "node scripts/try.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "e2e:firefox": "node scripts/e2e-firefox.mjs"
+    "e2e:firefox": "node scripts/e2e-firefox.mjs",
+    "icons": "sh scripts/icons.sh",
+    "package": "node scripts/build.mjs && node scripts/package.mjs",
+    "screenshots": "node scripts/build.mjs && node scripts/screenshot.mjs",
+    "stores": "node scripts/publish.ts"
   },
   "devDependencies": {
     "@types/chrome": "0.3.7",
