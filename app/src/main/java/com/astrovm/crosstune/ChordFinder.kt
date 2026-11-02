@@ -65,7 +65,8 @@ internal class ChordFinder(
     /** [song]'s chords, from a sheet whose words line up with [texts], the lines shown. */
     suspend fun chordsOf(song: MusicMetadata, texts: List<String>, timeoutMs: Long = TIMEOUT_MS): Chords = withContext(ioDispatcher) {
         val key = "$CACHE_VERSION\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
-        cache?.get(key)?.let { kept -> fromCache(kept)?.let { return@withContext Chords.Found(it) } }
+        // One kept before a page of the words alone stopped counting as chords is looked up again.
+        cache?.get(key)?.let { kept -> fromCache(kept)?.takeIf { ChordSheets.place(it, texts) != null }?.let { return@withContext Chords.Found(it) } }
         // Japanese words are likelier on U-FRET; any song may be on either.
         val sites = if (texts.any(::japanese)) {
             listOf(::fromUFret, ::fromUltimateGuitar)

@@ -46,6 +46,17 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun theSongsWordsWithNoChordsAreNotItsChords() {
+        // Cifra Club gave Silverchair's Dearest Helpless as its words alone, and the song showed chords found with none.
+        val texts = listOf("Walking down the river road", "Singing to the morning light")
+        val words = sheet(SheetLine("Walking down the river road", emptyList()), SheetLine("Singing to the morning light", emptyList()))
+        assertNull(ChordSheets.place(words, texts))
+        // Chords only on a verse the song doesn't have are none of its chords either.
+        val elsewhere = sheet(*words.lines.toTypedArray(), SheetLine("Xylophones quack jazzily all night", listOf(Chord(0, "Em"))))
+        assertNull(ChordSheets.place(elsewhere, texts))
+    }
+
+    @Test
     fun koreanWordsAreLinedUpWithASheetThatWritesThemInLatinLetters() {
         val texts = listOf("오빤 강남스타일", "강남스타일", "낮에는 따사로운 인간적인 여자", "커피 한 잔의 여유를 아는 품격 있는 여자")
         val read = Readings.of(texts, Script.KOREAN).map { it.romanized }

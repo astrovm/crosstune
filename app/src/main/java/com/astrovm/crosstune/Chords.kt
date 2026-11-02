@@ -120,9 +120,11 @@ internal object ChordSheets {
 
     /**
      * The [sheet]'s chords over each of [texts], the lines shown; null when its words aren't these,
-     * as for another song of the same name.
+     * as for another song of the same name, and when none of its chords land on them, as for a page of
+     * the words alone.
      */
-    fun place(sheet: ChordSheet, texts: List<String>): List<LineChords>? = placeIn(sheet, texts) ?: placeRomanized(sheet, texts)
+    fun place(sheet: ChordSheet, texts: List<String>): List<LineChords>? =
+        (placeIn(sheet, texts) ?: placeRomanized(sheet, texts))?.takeUnless { placed -> placed.all { it.isEmpty } }
 
     /** The lines [texts] as they read in Latin letters, kept for the next sheet tried: the same words are put against several. */
     private var lastTexts: List<String>? = null
