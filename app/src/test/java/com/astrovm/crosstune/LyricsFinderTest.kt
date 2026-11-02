@@ -620,6 +620,14 @@ class LyricsFinderTest {
         // An apostrophe stored escaped, and a lost character NetEase writes as 锟斤拷.
         assertEquals("Trouble is he's back again", cleaned("Trouble is he\\'s back again"))
         assertEquals("Don't look, I'm alright", cleaned("Don't锟斤拷锟斤拷look, I'm alright"))
+        // Words NetEase has with apostrophes escaped have their commas as apostrophes, timed or not; one in a word stays.
+        val commas = "Trouble is her only friend' and he\\'s back again\nDown' down' down'\nI'm watching you"
+        val mended = "Trouble is her only friend, and he's back again\nDown, down, down,\nI'm watching you"
+        assertEquals(mended, cleaned(commas))
+        val timed = LyricsFinder.cleaned(Lyrics.Found(commas, commas.lines().mapIndexed { index, line -> LyricLine(index * 1_000L, line) }, source = LyricsFinder.NETEASE), hatsukoi)
+        assertEquals(mended.lines(), timed.lines.map { it.text }.filter { it.isNotEmpty() })
+        // With none escaped, an apostrophe ending a word is one.
+        assertEquals("Goin' home", cleaned("Goin' home"))
         // UTF-8 read once as Latin-1 or Windows-1252, from any site, is read again right.
         assertEquals("El baraka daret aâlat\nIt’s mañana", cleaned("El baraka daret aÃ¢lat\nItâ€™s maÃ±ana", LyricsFinder.LRCLIB))
         // Words that only look so are left be.
@@ -724,6 +732,29 @@ class LyricsFinderTest {
             }
         }
         assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
+    }
+
+    @Test
+    fun whatNetEaseOpensASongWithForAMomentIsntSung() {
+        val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
+        japaneseSong(netEase = netEase)
+        // Timed word by word, a contributor's note first passes in 105 ms a word, far quicker than singing;
+        // 150 ms a word is sung, and so is a quick line once the song has begun.
+        val byWord = listOf(
+            "[0,0](0,0,0) 作词 : Someone",
+            "[1000,210](1000,105,0)Lucky (1105,105,0)guy",
+            "[2000,300](2000,150,0)Hear (2150,150,0)me",
+            "[3000,3000](3000,1500,0)I am woman, (4500,1500,0)hear me roar",
+            "[7000,200](7000,100,0)Shayo (7100,100,0)shayo",
+        ).joinToString("\n")
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/api/search/get" -> FakeSpotify.html(request, netEase(""))
+                "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[]" else """{"results":[]}""")
+            }
+        }
+        assertEquals(listOf("Hear me", "I am woman, hear me roar", "Shayo shayo"), (found(hatsukoi) as Lyrics.Found).lines.map { it.text }.filter { it.isNotEmpty() })
     }
 
     @Test
