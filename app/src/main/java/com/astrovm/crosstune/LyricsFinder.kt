@@ -97,40 +97,55 @@ private fun <T> List<T>.withoutNotes(text: (T) -> String): List<T> {
  */
 private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> String): List<T> {
     val lines = map { text(it).trim() }
-    fun afterCredits(from: Int): Int {
-        var start = from
-        while (start < size) {
-            val line = lines[start]
-            val label = netEaseOpeningCredit.find(line)?.groupValues?.get(1)?.trim()
-            if (line.isNotEmpty() && (label == null || label.none(Char::isLetter) || sungPart.matches(label) || label.split(' ').size > 3)) break
-            start++
-        }
-        return start
-    }
-    var start = afterCredits(0)
-    // The name then the artist, as a heading, or the other way round: neither alone, as a song may open with its name.
-    // The name may be without what the store adds to it: "Let Down" for "Let Down (Remastered)".
+    return drop(afterCredits(lines, afterHeading(lines, afterCredits(lines, 0), song)))
+}
+
+/** Where the credits from [from] on end: blank lines and "Label: name", with a label that isn't a sung part. */
+private fun afterCredits(lines: List<String>, from: Int): Int {
+    var start = from
+    while (start < lines.size && isOpeningCredit(lines[start])) start++
+    return start
+}
+
+private fun isOpeningCredit(line: String): Boolean {
+    if (line.isEmpty()) return true
+    val label = netEaseOpeningCredit.find(line)?.groupValues?.get(1)?.trim() ?: return false
+    return label.any(Char::isLetter) && !sungPart.matches(label) && label.split(' ').size <= 3
+}
+
+/**
+ * Where the lines from [start] on go past a heading: the name then the artist, or the other way round;
+ * a whole heading line; or the artist alone. The name alone only with credits or a note under it, as
+ * a song may open with its name. The name may be without what the store adds to it: "Let Down" for
+ * "Let Down (Remastered)".
+ */
+private fun afterHeading(lines: List<String>, start: Int, song: MusicMetadata): Int {
     val titles = setOf(song.title, SongNames.bareTitle(song.title)).map(SongNames::normalize)
     val artist = SongNames.normalize(song.artist)
-    val names = lines.drop(start).filter { it.isNotEmpty() }.take(2).map(SongNames::normalize)
-    if (titles.any { names.toSet() == setOf(it, artist) }) {
-        repeat(2) { while (lines[start].isEmpty()) start++; start++ }
-    } else if (lines.getOrNull(start)?.let { isHeading(it, song) } == true) {
-        start++
-        // A guest, under it: "（feat. Dwele）".
-        while (lines.getOrNull(start)?.let(guestCredit::matches) == true) start++
-    } else if (lines.getOrNull(start)?.let { SongNames.normalize(it) == artist } == true) {
-        // The artist alone: a song may open with its own name, but not with its singer's.
-        start++
-    } else if (lines.getOrNull(start)?.let { SongNames.normalize(it) in titles } == true) {
-        // The name alone is a heading only with credits or a note under it; else it's sung.
-        val next = (start + 1 until size).firstOrNull { lines[it].isNotEmpty() }
-        if (next != null && (afterCredits(next) > next || isHeadingNote(lines[next], artist))) {
-            start++
-            while (lines.getOrNull(start)?.let { it.isEmpty() || isHeadingNote(it, artist) } == true) start++
+    val names = lines.drop(start).filter { it.isNotEmpty() }.take(2).map(SongNames::normalize).toSet()
+    val first = lines.getOrNull(start) ?: return start
+    var at = start
+    when {
+        titles.any { names == setOf(it, artist) } -> repeat(2) { while (lines[at].isEmpty()) at++; at++ }
+        isHeading(first, song) -> {
+            at++
+            // A guest, under it: "（feat. Dwele）".
+            while (lines.getOrNull(at)?.let(guestCredit::matches) == true) at++
         }
+        // The artist alone: a song may open with its own name, but not with its singer's.
+        SongNames.normalize(first) == artist -> at++
+        SongNames.normalize(first) in titles -> at = afterTitleAlone(lines, start, artist)
     }
-    return drop(afterCredits(start))
+    return at
+}
+
+/** Where the lines go past the song's name alone at [start], when credits or a note under it make it a heading. */
+private fun afterTitleAlone(lines: List<String>, start: Int, artist: String): Int {
+    val next = (start + 1 until lines.size).firstOrNull { lines[it].isNotEmpty() } ?: return start
+    if (afterCredits(lines, next) == next && !isHeadingNote(lines[next], artist)) return start
+    var at = start + 1
+    while (lines.getOrNull(at)?.let { it.isEmpty() || isHeadingNote(it, artist) } == true) at++
+    return at
 }
 
 /** Whether [line] is a note under a heading: wholly in brackets, who it's by, or the [artist] and a year. */
