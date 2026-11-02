@@ -52,7 +52,9 @@ def main():
     LINES.write_text("\n".join(lines) + "\n")
     print(f"{len(lines)} changed lines in {len({line.split(':')[0] for line in lines})} files.")
     REPORT.unlink(missing_ok=True)
-    subprocess.run([*shlex.split(args.gradle), ":app:pitestDebug", f"-PmutateLines={LINES}"], cwd=ROOT, check=True)
+    # Verbose, as only then does PIT say why a test failed before any change: quiet, it names the
+    # test and nothing else, and a test that fails once in a while can't be looked into.
+    subprocess.run([*shlex.split(args.gradle), ":app:pitestDebug", f"-PmutateLines={LINES}", "-PmutateVerbose=true"], cwd=ROOT, check=True)
 
     mutations = ET.parse(REPORT).getroot()
     lived = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE")]
