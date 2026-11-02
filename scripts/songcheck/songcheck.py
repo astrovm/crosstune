@@ -2,6 +2,7 @@
 """Checks Crosstune's lyrics, timing, chords, readings and translations on the songs people play most.
 
   python3 scripts/songcheck/songcheck.py songs      # Apple Music's top 100 in two countries per continent
+  python3 scripts/songcheck/songcheck.py songs --source listenbrainz   # the top 1,000 per continent by ListenBrainz's listeners
   python3 scripts/songcheck/songcheck.py audio      # their 30-second previews, as 16 kHz mono
   python3 scripts/songcheck/songcheck.py run        # the app's own lookups on each, through Gradle
   python3 scripts/songcheck/songcheck.py hear       # what's sung in each preview, and when (faster-whisper)
@@ -26,6 +27,9 @@ import unicodedata
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import listenbrainz  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "songcheck"
@@ -66,7 +70,9 @@ def get(url, tries=8):
             time.sleep(min(2 ** attempt, 30))
 
 
-def songs(_):
+def songs(args):
+    if args.source == "listenbrainz":
+        return listenbrainz_songs(args)
     found, seen = [], set()
     charts = OUT / "charts"
     charts.mkdir(parents=True, exist_ok=True)
@@ -93,6 +99,17 @@ def songs(_):
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "songs.json").write_text(json.dumps(found, ensure_ascii=False, indent=1))
     print(f"{len(found)} songs, the ones in two charts once")
+
+
+def listenbrainz_songs(args):
+    web = listenbrainz.Web(OUT / "cache")
+    found, tried = listenbrainz.build(web, args.top, args.artists)
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "songs.json").write_text(json.dumps(found, ensure_ascii=False, indent=1))
+    report = listenbrainz.describe(found, tried)
+    (OUT / "songs-report.md").write_text(report)
+    print(report)
+    print(f"{len(found)} songs, in {OUT / 'songs.json'}; the report is songs-report.md")
 
 
 def load_songs():
@@ -309,8 +326,11 @@ def summary(_):
         for graded in json.loads(path.read_text()):
             grades[graded["id"]] = graded
     lines = ["# Song check", ""]
-    for country, continent in CONTINENTS.items():
-        songs = [report for report in reports.values() if report["country"] == country]
+    # Apple's charts are per country; ListenBrainz's lists are per continent, whatever the artists' countries.
+    groups = {country: (continent, lambda report, country=country: report["country"] == country and report.get("source") != "listenbrainz") for country, continent in CONTINENTS.items()}
+    groups.update({continent: (continent, lambda report, continent=continent: report.get("source") == "listenbrainz" and report["continent"] == continent) for continent in listenbrainz.CONTINENTS})
+    for country, (continent, member) in groups.items():
+        songs = [report for report in reports.values() if member(report)]
         if not songs:
             continue
         lyrics = [song for song in songs if song["lyrics"]["kind"] == "found"]
@@ -319,7 +339,7 @@ def summary(_):
         unsure = sum(timings.get(song["id"], {}).get("verdict") == "unsure" for song in timed)
         chords = [song for song in lyrics if song.get("chords", {}).get("kind") == "found"]
         lines += [
-            f"## {continent} ({country})", "",
+            f"## {continent}" + ("" if country == continent else f" ({country})"), "",
             f"- Lyrics: {len(lyrics)} of {len(songs)} found, {len(timed)} timed",
             f"- Timing: {sum(t['verdict'] == 'on time' for t in judged)} of {len(judged)} checked on time, {unsure} unsure",
             f"- Chords: {len(chords)} of {len(lyrics)} found",
@@ -337,7 +357,7 @@ def summary(_):
                 problems.append((f"{part}", report, verdict.get("why", "")))
     lines += ["## Problems", ""]
     for kind, report, why in sorted(problems, key=lambda problem: problem[0]):
-        lines.append(f"- **{kind}**: {report['artist']} - {report['title']} ({report['country']} #{report['rank']}) {why}".rstrip())
+        lines.append(f"- **{kind}**: {report['artist']} - {report['title']} ({report['continent'] if report.get('source') == 'listenbrainz' else report['country']} #{report['rank']}) {why}".rstrip())
     (OUT / "summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines[:60]))
 
@@ -350,6 +370,9 @@ def main():
     parser.add_argument("--retry-model", default="medium", help="the bigger one for previews where little was heard")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--out", type=Path, help="where it all goes, if not build/songcheck/")
+    parser.add_argument("--source", choices=["apple", "listenbrainz"], default="apple", help="where `songs` takes them from")
+    parser.add_argument("--top", type=int, default=1000, help="with --source listenbrainz, songs with a preview per continent")
+    parser.add_argument("--artists", type=int, default=400, help="with --source listenbrainz, the artists per continent whose recordings are browsed")
     parser.add_argument("--countries", help="the charts to take the songs from, as in,th,eg; the first twelve if not given")
     args = parser.parse_args()
     global OUT, COUNTRIES
