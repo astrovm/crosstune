@@ -19,6 +19,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** The phone handing a song to the TV and becoming its remote, and the TV answering: the view model's half of casting. */
 @RunWith(RobolectricTestRunner::class)
@@ -362,17 +364,24 @@ class CastViewModelTest {
 
     @Test
     fun aSongCastWithALinkShowsTheLinkAndOneByNameShowsItsName() {
-        val model = model(null, FakeCast(), Phone.TV)
-        val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
-        model.castLoad(CastSong("Hush", "Band", link))
-        idle()
-        assertEquals(link, model.uiState.linkText)
-        assertTrue(model.uiState.leaveSettings)
-        assertEquals(AfterLookup.OPEN, model.uiState.afterLookup)
+        // The field is read while the song is looked up: once it's found, the field shows what was found instead.
+        val answer = CountDownLatch(1)
+        fake.handler = { request -> answer.await(10, TimeUnit.SECONDS); FakeSpotify.html(request, "") }
+        try {
+            val model = model(null, FakeCast(), Phone.TV)
+            val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
+            model.castLoad(CastSong("Hush", "Band", link))
+            idle()
+            assertEquals(link, model.uiState.linkText)
+            assertTrue(model.uiState.leaveSettings)
+            assertEquals(AfterLookup.OPEN, model.uiState.afterLookup)
 
-        model.castLoad(CastSong("Hush", "Band"))
-        idle()
-        assertEquals("Hush by Band", model.uiState.linkText)
+            model.castLoad(CastSong("Hush", "Band"))
+            idle()
+            assertEquals("Hush by Band", model.uiState.linkText)
+        } finally {
+            answer.countDown()
+        }
     }
 
     @Test
