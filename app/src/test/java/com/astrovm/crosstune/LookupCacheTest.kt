@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -37,6 +38,55 @@ class LookupCacheTest {
         restarted.put("d", "4")
         assertNull(restarted.get("a"))
         assertEquals("3", restarted.get("c"))
+    }
+
+    @Test
+    fun whatsUsedOnThreeDaysStaysPastTheNewest() = runBlocking {
+        var day = 20_000L
+        fun cache() = LookupCache(file, Dispatchers.Unconfined, maxEntries = 2, today = { day })
+        val cache = cache()
+        /** Found, then used again on each of [days] more days, [times] each day. */
+        suspend fun used(key: String, days: Int, times: Int = 1) {
+            cache.put(key, key)
+            repeat(days) { day++; repeat(times) { cache.get(key) } }
+        }
+        used("often", days = 2)
+        // Twice a day isn't twice as often.
+        used("twice", days = 1, times = 2)
+        cache.put("new", "new")
+        cache.put("newer", "newer")
+        assertEquals(listOf("often", "new", "newer"), cache.entries().map { it.first })
+        // Found again, its days still count.
+        cache.put("often", "found again")
+        cache.put("newest", "newest")
+        cache.put("newest 2", "newest 2")
+        assertEquals(listOf("often", "newest", "newest 2"), cache.entries().map { it.first })
+
+        // As many again as the newest are kept that way, the most used: and across restarts.
+        used("most", days = 4)
+        used("more", days = 3)
+        cache.put("a", "a")
+        cache.put("b", "b")
+        cache.save()
+        val restarted = cache()
+        restarted.put("c", "c")
+        // "often", used on fewer days than the other two, went to make room.
+        assertEquals(listOf("most", "more", "b", "c"), restarted.entries().map { it.first })
+    }
+
+    @Test
+    fun theDayItWasLastUsedIsToday() = runBlocking {
+        val cache = cache()
+        cache.put("song", "found")
+        cache.save()
+        val today = System.currentTimeMillis() / (24 * 60 * 60 * 1000L)
+        assertEquals(today, JSONArray(file.readText()).getJSONArray(0).getLong(3))
+    }
+
+    @Test
+    fun aFileSavedBeforeDaysWereCountedStillReads() = runBlocking {
+        file.writeText("""[["song","found"]]""")
+        assertEquals("found", cache().get("song"))
     }
 
     @Test
