@@ -586,6 +586,27 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aSongInCapitalsReadsInSentenceCaseWordsAndAllAndItsSpacesBreak() {
+        val nb = "\u00a0"
+        fun line(ms: Long, vararg words: String) = LyricLine(ms, words.joinToString(nb), words.mapIndexed { i, word -> TimedWord(ms + i * 300L, if (i < words.size - 1) word + nb else word) })
+        val lines = listOf(
+            line(12_490, "THOUGH", "I'VE", "TRIED", "BEFORE.", "I'M", "HERE"),
+            line(15_460, "OF", "THE", "FEELING", "I", "HAVE", "FOR", "HER"),
+            line(17_980, "EVERY", "LITTLE", "THING", "SHE", "DOES", "IS", "MAGIC")
+        )
+        val found = LyricsFinder.cleaned(Lyrics.Found(lines.joinToString("\n") { it.text }, lines = lines, source = LyricsFinder.NETEASE), MusicMetadata("Every Little Thing She Does Is Magic", "The Police"))
+        val said = listOf("Though I've tried before. I'm here", "Of the feeling I have for her", "Every little thing she does is magic")
+        assertEquals(said, found.lines.map { it.text })
+        assertEquals(said.joinToString("\n"), found.words)
+        assertEquals(listOf("Though ", "I've ", "tried ", "before. ", "I'm ", "here"), found.lines[0].words.map { it.text })
+        // A song that only shouts a line, any site's, keeps it as it is.
+        val shout = listOf("Walking down the road", "HEY!", "Nobody calls me now")
+        assertEquals(shout.joinToString("\n"), LyricsFinder.cleaned(Lyrics.Found(shout.joinToString("\n"), source = "lrclib"), MusicMetadata("Road", "Band")).words)
+        // Nor does a song with no capitals to speak of change.
+        assertEquals("五月雨は緑色", LyricsFinder.cleaned(Lyrics.Found("五月雨は緑色", source = "lrclib"), MusicMetadata("Satsuki", "Band")).words)
+    }
+
+    @Test
     fun aNameNetEaseHeadsASongWithAloneIsLeftOutWhenCreditsFollowIt() {
         val sung = listOf("Rain on the window", "Nobody calls")
         fun cleaned(song: MusicMetadata, vararg around: String, after: List<String> = emptyList()) =
