@@ -437,8 +437,10 @@ internal class MilkdropRenderer(
     private val onFps: (Int) -> Unit = {},
     /** Told of each preset drawn at another size, to start it there next time. */
     private val onSized: (String, Int) -> Unit = { _, _ -> },
-    /** Whether the app's working the phone hard, or it's hot: frames drawn then say more about that than about the preset. */
+    /** Whether the app's working the phone hard: frames drawn then say more about that than about the preset. */
     private val busy: () -> Boolean = { false },
+    /** Whether the phone's hot, and slowed down for it. */
+    private val hot: () -> Boolean = { false },
     /** A debug mode: every preset drawn at this size, and only this one. */
     private val fixedSize: Int? = null,
     /** The sharpest size each preset was tried at and drew too slowly, not tried again till the app starts over. */
@@ -641,7 +643,7 @@ internal class MilkdropRenderer(
      * Whether there's a sharper size [preset] wasn't too slow at. How much slower one draws can't be
      * told from its pixels: on a Galaxy S22 Ultra, full size drew only about a fifth slower than two thirds.
      */
-    private fun sharperToTry(preset: String) = size - 1 > (tooSharp[preset] ?: -1)
+    private fun sharperToTry(preset: String) = !hot() && size - 1 > (tooSharp[preset] ?: -1)
 
     /** How long a frame of [frames] takes, by the one in the middle, so a hitch or two doesn't count. */
     private fun typical(frames: Collection<Long>) = frames.sorted()[frames.size / 2]
@@ -649,11 +651,13 @@ internal class MilkdropRenderer(
     /** [preset] too slow: drawn a size smaller, or at the smallest, struck once a showing; twice, it's heavy. */
     private fun slower(preset: String) {
         trying = false
+        // Hot, it's the heat that's slow, not the preset: smaller till it cools, then tried sharper again.
+        val hot = hot()
         if (size < VISUALS_SIZES.lastIndex) {
-            tooSharp[preset] = maxOf(size, tooSharp[preset] ?: size)
+            if (!hot) tooSharp[preset] = maxOf(size, tooSharp[preset] ?: size)
             return resize(preset, size + 1)
         }
-        if (struck) return
+        if (struck || hot) return
         struck = true
         onTimed(preset, true)
         val settings = settings
@@ -1042,7 +1046,8 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
             report = { Log.i("CrosstuneVisuals", it) },
             onFps = { fps -> main.post { onFps(fps) } },
             onSized = store::sized,
-            busy = { Busy.now || heat.hot },
+            busy = { Busy.now },
+            hot = { heat.hot },
             // adb shell setprop debug.crosstune.visuals_size 0 to 3, sharpest first, to bench each size.
             fixedSize = systemProperty("debug.crosstune.visuals_size")?.toIntOrNull()?.takeIf { it in VISUALS_SIZES.indices },
             tooSharp = tooSharpThisRun

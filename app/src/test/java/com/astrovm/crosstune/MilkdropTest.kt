@@ -455,12 +455,12 @@ class MilkdropTest {
         )
 
     /** Drawn by [milkdrop], each preset at the size [sizes] start it at, told of each size it's drawn at, sharper than [tooSharp] untried. */
-    private fun sized(milkdrop: SizedMilkdrop, sizes: Map<String, Int> = emptyMap(), busy: () -> Boolean = { false }, fixedSize: Int? = null, onTooSlow: (String) -> Unit = {}, tooSharp: MutableMap<String, Int> = mutableMapOf()): Pair<MilkdropRenderer, MutableList<Pair<String, Int>>> {
+    private fun sized(milkdrop: SizedMilkdrop, sizes: Map<String, Int> = emptyMap(), busy: () -> Boolean = { false }, hot: () -> Boolean = { false }, fixedSize: Int? = null, onTooSlow: (String) -> Unit = {}, tooSharp: MutableMap<String, Int> = mutableMapOf()): Pair<MilkdropRenderer, MutableList<Pair<String, Int>>> {
         val told = mutableListOf<Pair<String, Int>>()
         val renderer = MilkdropRenderer(
             milkdrop, { listOf("a") }, { null }, Random(1), now = { clock }, sleep = { clock += it },
             settings = VisualsSettings(changeMs = VisualsSettings.NEVER, sizes = sizes),
-            onTimed = { name, slow -> if (slow) onTooSlow(name) }, onSized = { name, size -> told += name to size }, busy = busy, fixedSize = fixedSize, tooSharp = tooSharp
+            onTimed = { name, slow -> if (slow) onTooSlow(name) }, onSized = { name, size -> told += name to size }, busy = busy, hot = hot, fixedSize = fixedSize, tooSharp = tooSharp
         )
         milkdrop.renderer = renderer
         return renderer to told
@@ -562,6 +562,33 @@ class MilkdropTest {
         fresh.created()
         fresh.drawFor(60_000)
         assertEquals(listOf("a" to 0, "a" to 1), freshTold)
+    }
+
+    @Test
+    fun onAHotPhoneAPresetTooSlowIsDrawnSmallerButNeitherStruckNorRememberedAsTooSharp() {
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 40L))
+        val struck = mutableListOf<String>()
+        val tooSharp = mutableMapOf<String, Int>()
+        val (renderer, _) = sized(milkdrop, hot = { true }, onTooSlow = { struck += it }, tooSharp = tooSharp)
+        renderer.created()
+        renderer.drawFor(30_000)
+        // Smaller, so the words over it don't stutter, but it's the heat that's slow, not the preset.
+        assertEquals(3, renderer.size)
+        assertEquals(emptyList<String>(), struck)
+        assertEquals(emptyMap<String, Int>(), tooSharp)
+    }
+
+    @Test
+    fun onAHotPhoneNoSharperSizeIsTriedTillItCools() {
+        var hot = true
+        val milkdrop = SizedMilkdrop(listOf(24L, 20L, 15L, 10L))
+        val (renderer, _) = sized(milkdrop, hot = { hot })
+        renderer.created()
+        renderer.drawFor(30_000)
+        assertEquals(2, renderer.size)
+        hot = false
+        renderer.drawFor(5_200)
+        assertEquals(1, renderer.size)
     }
 
     @Test
