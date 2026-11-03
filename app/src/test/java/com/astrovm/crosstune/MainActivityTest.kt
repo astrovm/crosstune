@@ -1808,7 +1808,7 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         savePlaylist((1..51).map { MusicMetadata("Song $it", "Band") })
         // Every song was found before, so only the playlist is asked of YouTube.
-        val found = (1..51).joinToString(",") { """["find|YOUTUBE_MUSIC|TRACK|Song $it|Band|","https://music.youtube.com/watch?v=video${it.toString().padStart(6, '0')}"]""" }
+        val found = (1..51).joinToString(",") { """["find@$MATCH_VERSION|YOUTUBE_MUSIC|TRACK|Song $it|Band|","https://music.youtube.com/watch?v=video${it.toString().padStart(6, '0')}"]""" }
         java.io.File(app.cacheDir, "lookups.json").writeText("[$found]")
         var asked = ""
         fake.handler = { request ->
