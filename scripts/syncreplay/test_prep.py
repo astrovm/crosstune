@@ -15,8 +15,8 @@ class ResumeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
             (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
-            with patch.object(r, 'prep') as prep:
-                r.find_set(argparse.Namespace(cached=True, find_only=False))
+            with patch.object(r, 'prep') as prep, patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle="fake-gradle"))
             prep.assert_called_once()
 
     def test_hearing_alone_does_not_make_song_prepped(self):
