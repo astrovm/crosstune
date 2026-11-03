@@ -31,11 +31,16 @@ the song up, how far its clock was behind, how long the phone took to work out e
 whether it heard the sound played itself, with Shizuku, or through the visualizer (`hear --clean`
 first for the former). It then says how far each line is from when the phone lit it: only while
 they match does the replay stand for the phone.
+For ROCm Demucs only, set DEMUCS_PYTHON to a ROCm Python and DEMUCS_DEVICE=cuda;
+without these it uses the current Python on CPU. Truth and hearing stay on CPU.
+`set --cached` resumes the existing set without another live search. Prep keeps truth already made
+and checkpoints every heard window atomically, so an interrupted song resumes too.
 Wants ffmpeg, yt-dlp, cmake, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
 import json
 import os
+import shutil
 import re
 import shlex
 import statistics
@@ -132,13 +137,25 @@ def windows(song, wav, length, model=APP_MODEL, clean=False):
     with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
         for start, words in pool.map(hear, starts):
             done[str(start)] = words
-    out.write_text(json.dumps(done))
+            atomic_text(out, json.dumps(done))
+
+
+def atomic_text(path, text):
+    """A killed writer leaves the last complete checkpoint usable."""
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(text)
+    temporary.replace(path)
 
 
 def separated_voice(song, wav):
     vocals = OUT / "htdemucs" / song / "vocals.wav"
     if not vocals.exists():
-        subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals", "-j", "1", "-o", str(OUT), str(wav)], check=True)
+        temporary = OUT / "separating"
+        subprocess.run([os.environ.get("DEMUCS_PYTHON", sys.executable), "-m", "demucs", "--two-stems=vocals",
+                        "-d", os.environ.get("DEMUCS_DEVICE", "cpu"), "-j", "1", "-o", str(temporary), str(wav)], check=True)
+        vocals.parent.mkdir(parents=True, exist_ok=True)
+        (temporary / "htdemucs" / song / "vocals.wav").replace(vocals)
+        shutil.rmtree(temporary / "htdemucs" / song)
     return vocals
 
 
@@ -205,10 +222,15 @@ def voiced(vocals, starts):
 
 
 def write_truth(song, lines, starts):
-    with open(OUT / f"{song}.truth.jsonl", "w") as f:
-        for n, line in enumerate(lines):
-            if n in starts:
-                f.write(json.dumps({"line": n, "text": line, "start": round(starts[n], 2)}) + "\n")
+    atomic_text(OUT / f"{song}.truth.jsonl", "".join(
+        json.dumps({"line": n, "text": line, "start": round(starts[n], 2)}) + "\n"
+        for n, line in enumerate(lines) if n in starts))
+
+
+def measured(song, phase, work):
+    started = time.monotonic()
+    work()
+    print(f"{song} {phase}: {time.monotonic() - started:.2f} s", flush=True)
 
 
 def prep(args):
@@ -218,9 +240,10 @@ def prep(args):
     wav = OUT / f"{args.id}.wav"
     if not wav.exists():
         subprocess.run(["yt-dlp", "-q", "-f", "bestaudio", "-x", "--audio-format", "wav", "-o", str(OUT / f"{args.id}.%(ext)s"), f"https://music.youtube.com/watch?v={args.id}"], check=True)
-    truth(args.id, wav, [text for _, text in lyrics if text.strip()])
+    if not (OUT / f"{args.id}.truth.jsonl").exists():
+        measured(args.id, "truth", lambda: truth(args.id, wav, [text for _, text in lyrics if text.strip()]))
     for length in LENGTHS:
-        windows(args.id, wav, length)
+        measured(args.id, f"heard{length // 1000}", lambda: windows(args.id, wav, length))
 
 
 def run(args):
@@ -471,30 +494,41 @@ def score_phone(song_id, kept):
 
 def find_set(args):
     """Finds the songs of songs.tsv as the app does (SyncSetTest), then preps each not prepped yet."""
-    asked = OUT / "set.asked"
     OUT.mkdir(parents=True, exist_ok=True)
-    asked.write_text("")
-    try:
-        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
-    finally:
-        asked.unlink()
-    if done.returncode:
-        sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+    if not args.cached:
+        asked = OUT / "set.asked"
+        OUT.mkdir(parents=True, exist_ok=True)
+        asked.write_text("")
+        try:
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        finally:
+            asked.unlink()
+        if done.returncode:
+            sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
     found = json.loads((OUT / "set.json").read_text())
     for song in found:
         print(f"{song.get('id') or 'not on YouTube Music':12} {song.get('source') or 'no words':14} {'timed' if song.get('timed') else 'untimed':8} {song['title']} - {song['artist']}")
     if args.find_only:
         return
+    failures = []
     for song in found:
-        if song.get("id") and song.get("lines") and not (OUT / f"{song['id']}.truth.jsonl").exists():
+        if song.get("id") and song.get("lines"):
             print(f"Prepping {song['id']}: {song['title']} - {song['artist']}", flush=True)
-            prep(argparse.Namespace(id=song["id"], lyrics=str(OUT / f"{song['id']}.lyrics.json")))
+            try:
+                prep(argparse.Namespace(id=song["id"], lyrics=str(OUT / f"{song['id']}.lyrics.json")))
+            except (subprocess.CalledProcessError, OSError) as error:
+                failures.append(song["id"])
+                print(f"Failed {song['id']}: {error}", file=sys.stderr, flush=True)
+    if failures:
+        sys.exit(f"Prep failed for {len(failures)} songs: {', '.join(failures)}. Rerun set --cached to resume.")
 
 
 def prepped():
     """Every song prepped: its words, truth, and what the app's model heard in it."""
     return sorted(f.name.removesuffix(".truth.jsonl") for f in OUT.glob("*.truth.jsonl")
-                  if heard_file(f.name.removesuffix(".truth.jsonl"), LENGTHS[0], APP_MODEL).exists())
+                  if (OUT / f"{f.name.removesuffix('.truth.jsonl')}.wav").exists()
+                  and (OUT / f"{f.name.removesuffix('.truth.jsonl')}.language").exists()
+                  and all(heard_file(f.name.removesuffix(".truth.jsonl"), length, APP_MODEL).exists() for length in LENGTHS))
 
 
 def run_all(args):
@@ -576,6 +610,7 @@ def main():
     p = steps.add_parser("set")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--find-only", action="store_true", help="find the songs and their words, without prepping them")
+    p.add_argument("--cached", action="store_true", help="resume the songs already found in set.json without finding them again")
     p.set_defaults(go=find_set)
     p = steps.add_parser("all")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
