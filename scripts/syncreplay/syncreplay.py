@@ -2,6 +2,8 @@
 """Replays a real recording through the app's lyrics timing, in about half a minute, and says how
 far from where each line is really sung the app showed it.
 
+  python3 scripts/syncreplay/syncreplay.py set [--cached]        # find and prep the song set
+  python3 scripts/syncreplay/syncreplay.py all                   # one replay, per-song and overall table
   python3 scripts/syncreplay/syncreplay.py prep ID LYRICS.json   # once per recording: see below
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
@@ -304,7 +306,7 @@ def compare(phone_lit, shown):
 
 def score(args):
     shown = json.loads((OUT / f"{args.id}.from{args.start}.shown.json").read_text())
-    sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{args.id}.truth.jsonl")}
+    sung = {(t := json.loads(l))["line"]: t["start"] for l in (OUT / f"{args.id}.truth.jsonl").read_text().splitlines()}
     # The app's line to the n-th line with words.
     nth = {}
     for i, text in enumerate(shown["lines"]):
@@ -476,7 +478,7 @@ def score_phone(song_id, kept):
     if not lit:
         sys.exit("No lines lit in the log: was the dev app reinstalled after the log was added, and the words open?")
     lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit)
-    sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{song_id}.truth.jsonl")}
+    sung = {(t := json.loads(l))["line"]: t["start"] for l in (OUT / f"{song_id}.truth.jsonl").read_text().splitlines()}
     # The app's lines are the found words', as in LYRICS.json given to prep; truth counts only those with words.
     words = [line for _, line in json.loads((OUT / f"{song_id}.lyrics.json").read_text())]
     nth = {i: k for k, i in enumerate(i for i, line in enumerate(words) if line.strip())}
@@ -570,7 +572,7 @@ def run_all(args):
     print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
     for song in songs:
         shown = json.loads((OUT / f"{song}.from0.shown.json").read_text())
-        sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{song}.truth.jsonl")}
+        sung = {(t := json.loads(l))["line"]: t["start"] for l in (OUT / f"{song}.truth.jsonl").read_text().splitlines()}
         first = lit_first(shown)
         lags = [first[k] - sung[k] for k in sung if k in first]
         all_lags.extend(lags)

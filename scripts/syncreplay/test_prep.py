@@ -80,5 +80,26 @@ class CheckpointTest(unittest.TestCase):
                     r.heard_file('fake', length, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in range(0, 21020 - length, 1000)}))
                 self.assertTrue(r.complete('fake'))
 
+class TableTest(unittest.TestCase):
+    def test_overall_includes_worst_dark_and_reference_coverage(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), \
+                patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(
+                lines=['One', 'Two', 'Three', 'Unmatched'],
+                shown=[dict(line=0, at=10000), dict(line=1, at=11000)])))
+            (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=start)) + '\n'
+                                                       for n, start in enumerate([10.2, 20, 30])))
+            output = io.StringIO()
+            with redirect_stdout(output):
+                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0))
+            rows = output.getvalue().splitlines()
+            self.assertEqual(['all', '3', '1', '1', '1', '1', '-9.0'], rows[2].split()[:7])
+            self.assertIn('Reference coverage: 3/4', rows[3])
+            self.assertFalse((r.OUT / 'replay.json').exists())
+            self.assertFalse((r.OUT / 'replay.songs').exists())
+
 if __name__ == '__main__':
     unittest.main()
