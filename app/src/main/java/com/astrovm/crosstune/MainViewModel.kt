@@ -1440,9 +1440,8 @@ internal class MainViewModel(
         } ?: return false
         // Seen to go on to it from another song, that's what the app calls the song at that link. Not from nothing, as an
         // app may show what it played last a moment first.
-        if (following == null && app != null && playing != null && over != null && !sameSong(playing.metadata, over)) {
-            playedAs[app to link] = playing.metadata
-        }
+        val wentOn = playing?.takeIf { following == null && over != null && !sameSong(it.metadata, over) }
+        if (app != null && wentOn != null) playedAs[app to link] = wentOn.metadata
         return true
     }
 
