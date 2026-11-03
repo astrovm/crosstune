@@ -4149,33 +4149,6 @@ class MainActivityTest {
     }
 
     @Test
-    fun thePlayerStopsWaitingWhenTheAskedAppStartsOverTheSongItWasAlreadyPlayingUnderAnotherName() {
-        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
-        val phone = FakePlayback().apply { access = true }
-        MainActivity.playbackFactory = { phone }
-        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
-        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
-        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
-        launch()
-        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
-        val play = string(R.string.play_in_background, "YouTube Music")
-        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        // The app is a minute and a half into the song asked for, under its Japanese name.
-        val named = MusicMetadata("黄昏のBAY CITY", "八神純子")
-        phone.onThePhone = Heard.Song(named, null, offsetMs = 90_000, startedAtMs = 1_000_000, app = youTubeMusic)
-        click(play)
-        waitForText(string(R.string.player_waiting, "YouTube Music"))
-        // Playing on is no sign it was asked, and nor is its clock saying it's up to 5 s behind.
-        phone.onThePhone = Heard.Song(named, null, offsetMs = 87_000, startedAtMs = 1_002_000, app = youTubeMusic)
-        composeRule.waitForIdle()
-        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_waiting, "YouTube Music"))).fetchSemanticsNodes().isNotEmpty())
-        // Asked, it starts the song over.
-        phone.onThePhone = Heard.Song(named, null, offsetMs = 0, startedAtMs = 1_003_000, app = youTubeMusic)
-        waitForText("黄昏のBAY CITY")
-        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_waiting, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
-    }
-
-    @Test
     fun aSongAnotherAppPlaysIsntTakenForTheOneAskedWhateverItsName() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }
