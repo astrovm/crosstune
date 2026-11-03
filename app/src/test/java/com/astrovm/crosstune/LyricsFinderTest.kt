@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -1829,6 +1830,33 @@ class LyricsFinderTest {
         assertTrue(asked > 0)
         assertEquals(first, look())
         assertEquals(asked, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun wordsTimedForARecordingAsLongButNotAsAnyTakeIsSungGiveWayToAnotherTakesWellTimedOnes() {
+        val words = listOf("Every word I sing here", "Falls down around my feet", "Nothing left to say now", "Under the city lights", "Waiting for the morning", "Holding on to nothing", "Running from the thunder", "Calling out your name")
+        val lrclib = words.mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+        fun sheet(lines: List<Pair<Long, String>>) = lines.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
+        fun netEase(lines: List<Pair<Long, String>>): (Request) -> Response = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${lasting(answer("Song", "Band", "", synced = sheet(lrclib)), 260.0)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}],"duration":266000}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(sheet(lines))}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        val playing = MusicMetadata("Song", "Band", lengthMs = 266_100)
+        // NetEase's, for a recording as long as this one, is all over the place against LRCLIB's: a few
+        // seconds later, then hardly, then more again. No take moves its lines like that, so it's timed
+        // badly, not for this take, and LRCLIB's stay.
+        val jumbled = listOf(13_000L, 19_500L, 20_200L, 27_000L, 27_600L, 33_500L, 34_100L, 42_000L)
+        // With a line of its own to open with, as NetEase's sometimes have.
+        fake.handler = netEase(listOf(8_000L to "Count us in before we start") + words.indices.map { jumbled[it] to words[it] })
+        assertEquals(lrclib.map { (ms, text) -> LyricLine(ms, text) }, (found(playing) as Lyrics.Found).lines)
+        // Six seconds later all through, as for a take with a longer intro, NetEase's are this take's.
+        fake.handler = netEase(lrclib.map { (ms, text) -> ms + 6_000 to text })
+        assertEquals(lrclib.map { (ms, text) -> LyricLine(ms + 6_000, text) }, (found(playing) as Lyrics.Found).lines)
     }
 
     @Test

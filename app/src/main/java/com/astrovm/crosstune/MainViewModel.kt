@@ -2322,13 +2322,15 @@ internal class MainViewModel(
      * The first few seconds of a while, told as soon as they're heard: lines sung in them are put where
      * they're heard at once, not once the whole while is, as words timed far off are wrong all the while.
      * On the song's [first] while, no voice where the [shown] lines are timed doubts them instead: lines
-     * timed into an intro aren't shown sung all the while it's heard.
+     * timed into an intro aren't shown sung all the while it's heard. On any while, a voice there lifts
+     * that doubt, as soon as it's heard.
      */
     private fun heardFirst(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>, first: Boolean): suspend (Sung) -> Unit = { heard ->
         if (stillPlays(song, lines, clock)) {
             val shift = SungAlignment.shiftMs(heard, clock::positionAt, shown)
             if (shift != null) placeHeard(song, heard, clock, shown, shift)
-            else if (first && noVoice(heard, clock, shown)) doubtTiming(true)
+            else if (!noVoice(heard, clock, shown)) doubtTiming(false)
+            else if (first) doubtTiming(true)
         }
     }
 
@@ -2355,11 +2357,13 @@ internal class MainViewModel(
 
     /**
      * Whether singing's been found where the words are, [found] before or now, [shift] off. Till it is,
-     * no voice heard where they're timed doubts them, so no line's shown sung.
+     * no voice heard where they're timed doubts them, so no line's shown sung; a voice heard there, even
+     * with too few of its words made out to place them, says they're not timed into an intro after all,
+     * as the speech model sometimes hears a while of singing as music alone.
      */
     private fun foundSinging(found: Boolean, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long?): Boolean {
         if (found) return true
-        if (shift != null || noVoice(sung, clock, shown)) doubtTiming(shift == null)
+        doubtTiming(shift == null && noVoice(sung, clock, shown))
         return shift != null
     }
 

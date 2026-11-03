@@ -669,14 +669,15 @@ internal class LyricsFinder(
         val untimed = first is Lyrics.Found && timing(first) < WELL_TIMED
         // Words timed for a recording that isn't as long as the one playing are another take's, so
         // they give way to words from somewhere else that are timed for one that is.
-        val otherTake = first is Lyrics.Found && !fits(first, metadata)
-        if (first is Lyrics.Found && romanized == null && !untimed && !otherTake) return first
+        val otherTake = (first as? Lyrics.Found)?.takeUnless { fits(it, metadata) }
+        val bettered = romanized != null || untimed || otherTake != null
+        if (first is Lyrics.Found && !bettered) return first
         val answers = mutableListOf(first)
         // Words in Latin letters are only bettered by words in the song's script, untimed words by timed
         // ones, and another take's by this one's.
         suspend fun tried(answer: Lyrics) = answer.also { answers += it }.let {
             it is Lyrics.Found && (romanized == null || it.words.isIn(romanized)) && (!untimed || timing(it) >= WELL_TIMED) &&
-                (!otherTake || (it.lengthMs != null && fits(it, metadata)))
+                (otherTake == null || (it.lengthMs != null && fits(it, metadata) && !timedApart(otherTake, it)))
         }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         // A song given in its own script is often kept under the store's names in Latin letters, ILLIT's
@@ -698,6 +699,42 @@ internal class LyricsFinder(
         // more, as they took a while. Still busy, it isn't known that the song has none.
         if (first !is Lyrics.Unavailable || best !is Lyrics.None) return best
         return fromLrclib(metadata, timeoutMs)
+    }
+
+    /**
+     * Whether [other]'s lines are timed so unlike [one]'s, the same words lined up line by line, that no
+     * take of the song is sung both ways: the gap between them jumps more often than not. Another take
+     * moves them all alike, or in a step or two where it's cut. NetEase has "Every Little Thing She Does
+     * Is Magic" timed for a recording as long as The Police's video, a few seconds off here, hardly
+     * there, while LRCLIB's, for the album, are on time.
+     */
+    private fun timedApart(one: Lyrics.Found, other: Lyrics.Found): Boolean {
+        val gaps = sameLines(one.lines, other.lines).map { (ours, theirs) -> theirs.timeMs - ours.timeMs }
+        if (gaps.size < MIN_SAME_LINES) return false
+        return gaps.zipWithNext().count { (a, b) -> abs(b - a) > JUMP_MS } * 2 > gaps.size - 1
+    }
+
+    /** The lines of [a] and [b] with the same words, in order, paired: as many as can be. */
+    private fun sameLines(a: List<LyricLine>, b: List<LyricLine>): List<Pair<LyricLine, LyricLine>> {
+        val ours = a.map { BorrowedTimings.sound(it.text) }
+        val theirs = b.map { BorrowedTimings.sound(it.text) }
+        // Words in other letters sound like nothing here, and nothing is the same as nothing.
+        fun same(i: Int, j: Int) = ours[i].isNotEmpty() && ours[i] == theirs[j]
+        val most = Array(a.size + 1) { IntArray(b.size + 1) }
+        for (i in a.indices.reversed()) for (j in b.indices.reversed()) {
+            most[i][j] = if (same(i, j)) most[i + 1][j + 1] + 1 else maxOf(most[i + 1][j], most[i][j + 1])
+        }
+        val pairs = mutableListOf<Pair<LyricLine, LyricLine>>()
+        var i = 0
+        var j = 0
+        while (i < a.size && j < b.size) {
+            when {
+                same(i, j) -> pairs += a[i++] to b[j++]
+                most[i + 1][j] >= most[i][j + 1] -> i++
+                else -> j++
+            }
+        }
+        return pairs
     }
 
     /**
@@ -1208,6 +1245,10 @@ internal class LyricsFinder(
 
         /** How close two copies' times are, on the middle line, when they're timed alike. */
         const val CLOSE_MS = 2_500L
+
+        /** Lines two copies must have alike to tell how differently they're timed, and how far a gap between them jumps to count. */
+        private const val MIN_SAME_LINES = 6
+        private const val JUMP_MS = 1_500L
 
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */
