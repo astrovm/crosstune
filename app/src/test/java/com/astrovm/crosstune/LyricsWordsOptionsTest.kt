@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
@@ -32,6 +34,7 @@ class LyricsWordsOptionsTest {
         onRomanizedChange = { calls += "latin $it" },
         onTranslationChange = { calls += "translation $it" },
         onRomajiTypedChange = { calls += "typed $it" },
+        onKatakanaAsHiraganaChange = { calls += "hiragana $it" },
         onWordsCenteredChange = { calls += "centered $it" },
         onWordsAsChange = { calls += "as $it" }
     )
@@ -113,6 +116,19 @@ class LyricsWordsOptionsTest {
         tap("Align words to the start")
         tap("Center words")
         assertEquals(listOf("centered false", "centered true"), calls)
+    }
+
+    @Test
+    fun wordsInKanaOfferTheirKatakanaInHiragana() {
+        show(Learning(script = Script.JAPANESE, wordsAs = WordsAs.KANA))
+        compose.onNodeWithText("Katakana as hiragana").performClick()
+        assertEquals(listOf("hiragana true"), calls)
+    }
+
+    @Test
+    fun wordsAsWrittenOrInLatinLettersDontOfferKatakanaInHiragana() {
+        show(Learning(script = Script.JAPANESE, wordsAs = WordsAs.WRITTEN, romanized = true))
+        compose.onAllNodesWithText("Katakana as hiragana").assertCountEquals(0)
     }
 
     @Test

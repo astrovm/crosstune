@@ -31,6 +31,13 @@ internal data class LineReading(val parts: List<Ruby>, val reading: String, val 
     fun latin(typed: Boolean) = if (typed) this.typed else romanized
 }
 
+/** It with its katakana in hiragana, when [on]: どあ for ドア. */
+internal fun String.inHiragana(on: Boolean): String =
+    if (!on) this else map { if (it in 'ァ'..'ヶ') it - KATAKANA_TO_HIRAGANA else it }.joinToString("")
+
+/** How far katakana sits from the same hiragana in Unicode, ア to あ. */
+private const val KATAKANA_TO_HIRAGANA = 0x60
+
 /** The parts' kanji in kana, and the rest as written, katakana and all. */
 internal val List<Ruby>.kana: String get() = joinToString("") { it.reading ?: it.text }
 

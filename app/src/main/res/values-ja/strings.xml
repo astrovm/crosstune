@@ -320,6 +320,7 @@
     <string name="setting_auto_report">曲の問題を自動で報告</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
+    <string name="lyrics_katakana_as_hiragana">カタカナもひらがなで</string>
     <string name="lyrics_translation">翻訳</string>
     <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>
     <string name="lyrics_chords">コード</string>

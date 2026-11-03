@@ -320,6 +320,7 @@
     <string name="setting_auto_report">Segnala automaticamente i problemi dei brani</string>
     <string name="lyrics_romanized">In lettere latine</string>
     <string name="lyrics_romaji_typed">Romaji come si digita</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana in hiragana</string>
     <string name="lyrics_translation">Traduzione</string>
     <string name="lyrics_translation_failed">Impossibile tradurre ora.</string>
     <string name="lyrics_chords">Accordi</string>

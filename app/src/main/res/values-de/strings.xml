@@ -319,6 +319,7 @@
     <string name="setting_auto_report">Song-Probleme automatisch melden</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>
     <string name="lyrics_romaji_typed">Romaji wie getippt</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana als Hiragana</string>
     <string name="lyrics_translation">Übersetzung</string>
     <string name="lyrics_translation_failed">Konnte gerade nicht übersetzen.</string>
     <string name="lyrics_chords">Akkorde</string>

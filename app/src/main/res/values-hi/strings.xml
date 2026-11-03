@@ -319,6 +319,7 @@
     <string name="setting_auto_report">गानों की समस्याओं की अपने-आप रिपोर्ट करें</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
+    <string name="lyrics_katakana_as_hiragana">काताकाना को हिरागाना में</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
     <string name="lyrics_chords">कॉर्ड्स</string>

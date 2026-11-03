@@ -319,6 +319,7 @@
     <string name="setting_auto_report">Автоматически сообщать о проблемах с песнями</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
+    <string name="lyrics_katakana_as_hiragana">Катакана хираганой</string>
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
     <string name="lyrics_chords">Аккорды</string>

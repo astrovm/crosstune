@@ -82,5 +82,9 @@ class UiStateTest {
         assertEquals("むねのドアをたたいても", Learning(script = Script.JAPANESE, lines = listOf(door), wordsAs = WordsAs.KANA).insteadOf(0))
         // Not in parts, it's the reading as it is.
         assertEquals("よる", LineReading(emptyList(), "よる", "yoru").kana)
+        // Switched on, katakana is written in hiragana too; the long vowel mark stays.
+        assertEquals("むねのどあをたたいても", Learning(script = Script.JAPANESE, lines = listOf(door), wordsAs = WordsAs.KANA, katakanaAsHiragana = true).insteadOf(0))
+        assertEquals("らーめんとゔぁいおりん", "ラーメンとヴァイオリン".inHiragana(true))
+        assertEquals("ラーメン", "ラーメン".inHiragana(false))
     }
 }

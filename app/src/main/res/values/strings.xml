@@ -340,6 +340,7 @@
     <string name="setting_auto_report">Report song problems automatically</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana as hiragana</string>
     <string name="lyrics_translation">Translation</string>
     <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
     <string name="lyrics_chords">Chords</string>

@@ -287,6 +287,7 @@ internal data class ScreenActions(
     val onReadingsChange: (Boolean) -> Unit = {},
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onRomajiTypedChange: (Boolean) -> Unit = {},
+    val onKatakanaAsHiraganaChange: (Boolean) -> Unit = {},
     val onCardTypesChange: (List<CardType>, Boolean) -> Unit = { _, _ -> },
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},

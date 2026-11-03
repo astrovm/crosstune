@@ -319,6 +319,7 @@
     <string name="setting_auto_report">Şarkı sorunlarını otomatik bildir</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana hiragana olarak</string>
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
     <string name="lyrics_chords">Akorlar</string>

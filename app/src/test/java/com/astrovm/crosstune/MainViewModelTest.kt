@@ -992,12 +992,13 @@ class MainViewModelTest {
         model.setRomanized(true)
         model.setTranslation(true)
         model.setRomajiTyped(true)
+        model.setKatakanaAsHiragana(true)
         model.setWordsCentered(true)
         model.setWordsAs(WordsAs.KANA)
         model.setChatGptTranslation(false)
         idle()
         val learning = model.uiState.learning
-        assertTrue(learning.readings && learning.romanized && learning.translation && learning.romajiTyped)
+        assertTrue(learning.readings && learning.romanized && learning.translation && learning.romajiTyped && learning.katakanaAsHiragana)
         assertEquals(true, learning.centered)
         assertEquals(WordsAs.KANA, learning.wordsAs)
         assertFalse(learning.chatGptTranslation)
@@ -1010,6 +1011,7 @@ class MainViewModelTest {
         assertFalse(model.uiState.learning.translationFailed)
         // A second model starts the way the first was left.
         assertEquals(learning.wordsAs, model().uiState.learning.wordsAs)
+        assertTrue(model().uiState.learning.katakanaAsHiragana)
     }
 
     @Test

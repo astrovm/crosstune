@@ -319,6 +319,7 @@
     <string name="setting_auto_report">自動回報歌曲問題</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
+    <string name="lyrics_katakana_as_hiragana">片假名顯示為平假名</string>
     <string name="lyrics_translation">翻譯</string>
     <string name="lyrics_translation_failed">暫時無法翻譯。</string>
     <string name="lyrics_chords">和絃</string>

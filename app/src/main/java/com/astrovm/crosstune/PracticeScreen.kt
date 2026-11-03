@@ -214,24 +214,23 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, lea
  */
 @Composable
 private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, learning: Learning, actions: ScreenActions, preview: CardPreview?, onSide: (CardSide) -> Unit) {
-    val lyrics = learning.wordsAs
-    val typed = learning.romajiTyped
+    val lyrics = learning
     // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
     if (preview != null) {
         val side = if (preview.back) cards.back else cards.front
-        CardSideEditor(line, side, lyrics, typed, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, playing = practice.sound == LineSound.PLAYING, onChange = onSide)
+        CardSideEditor(line, side, lyrics, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, playing = practice.sound == LineSound.PLAYING, onChange = onSide)
         return
     }
     val front = cards.front
     val plays = front.sound && practice.sound != LineSound.NONE
     if (plays) LineSound(line, practice.sound, actions.onReplayLine)
-    if (!front.bare) CardSideContent(line, front, lyrics, typed, back = false)
-    else if (!plays) CardSideContent(line, CardSide(), lyrics, typed, back = false)
+    if (!front.bare) CardSideContent(line, front, lyrics, back = false)
+    else if (!plays) CardSideContent(line, CardSide(), lyrics, back = false)
     // Turned, the other side comes in below the front, which stays.
     if (practice.turned) {
         HorizontalDivider()
         if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
-        CardSideContent(line, cards.back, lyrics, typed, back = true)
+        CardSideContent(line, cards.back, lyrics, back = true)
     }
 }
 
@@ -263,14 +262,14 @@ private fun Grades(line: SavedLine, practice: Practice, actions: ScreenActions) 
     }
 }
 
-/** Only the text layers picked for this side, written as the lyrics write them, in [lyrics] and spelled as typed when [typed], unless picked for the side. */
+/** Only the text layers picked for this side, written and spelled as the [lyrics] are, unless picked for the side. */
 @Composable
-private fun CardSideContent(line: SavedLine, side: CardSide, lyrics: WordsAs, typed: Boolean, back: Boolean) {
-    val shows = side.writes(line, lyrics)
+private fun CardSideContent(line: SavedLine, side: CardSide, lyrics: Learning, back: Boolean) {
+    val shows = side.writes(line, lyrics.wordsAs)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (side.words) SideWords(line, side, shows, typed, back)
+        if (side.words) SideWords(line, side, shows, lyrics, back)
         if (side.latin && (!side.words || shows != WordsAs.LATIN)) {
-            line.latin(typed)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            line.latin(lyrics.romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         if (side.translation) line.translation?.let {
             Text(it, style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * side.translationScale, lineHeight = lineHeight * side.translationScale) }, color = MaterialTheme.colorScheme.primary)
@@ -280,12 +279,12 @@ private fun CardSideContent(line: SavedLine, side: CardSide, lyrics: WordsAs, ty
 
 /** The words of a side, written as it [shows] them, with their readings over them when written as they are, and the whole line under a part of it. */
 @Composable
-private fun SideWords(line: SavedLine, side: CardSide, shows: WordsAs, typed: Boolean, back: Boolean) {
+private fun SideWords(line: SavedLine, side: CardSide, shows: WordsAs, lyrics: Learning, back: Boolean) {
     val base = if (line.line != null) MaterialTheme.typography.displaySmall else if (back) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium
     val style = base.copy(fontSize = base.fontSize * side.wordsScale, lineHeight = base.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold).writing(line.text)
     val ruby = line.ruby ?: line.reading?.let { listOf(Ruby(line.text, it)) }
     if (shows == WordsAs.WRITTEN && side.readings && ruby != null) RubyLine(ruby, style, scale = side.readingScale)
-    else Text(line.shownAs(shows, typed), style = style)
+    else Text(line.shownAs(shows, lyrics), style = style)
     line.line?.let { Text(it, style = MaterialTheme.typography.bodyLarge.writing(it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
 }
 

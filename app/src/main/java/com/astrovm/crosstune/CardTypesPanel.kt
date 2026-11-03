@@ -231,18 +231,18 @@ private fun CardTypeEditor(type: CardType, onPreview: (CardPreview?) -> Unit, ch
  * One side of the card as the menu: every layer it could show, in the place it takes on the card, and a tap
  * shows or hides it, the hidden ones dashed. The line's sound is an eye and its play button; the words, their
  * reading, the same in Latin letters, and what they mean are the lines themselves. Pinching a line makes it
- * bigger or smaller; holding the words picks how they're written, or back to as the lyrics write them, in [lyrics].
- * The Latin letters are spelled as the lyrics spell them, as typed when [typed].
+ * bigger or smaller; holding the words picks how they're written, or back to as the [lyrics] write them, which
+ * also spell them.
  */
 @Composable
-internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, typed: Boolean, onPlay: () -> Unit, canPlay: Boolean, playing: Boolean, onChange: (CardSide) -> Unit) {
+internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: Learning, onPlay: () -> Unit, canPlay: Boolean, playing: Boolean, onChange: (CardSide) -> Unit) {
     val script = cardScript(line)
     val wordsAs = buildList {
         add(WordsAs.WRITTEN)
         if (script == Script.JAPANESE) add(WordsAs.KANA)
         if (script != null) add(WordsAs.LATIN)
     }
-    val shows = side.writes(line, lyrics)
+    val shows = side.writes(line, lyrics.wordsAs)
     val small = MaterialTheme.typography.bodyLarge
     SoundRow(side.sound, onPlay, canPlay, playing) { onChange(side.copy(sound = it)) }
     // Readings go over the words as written, in Japanese or Chinese.
@@ -251,10 +251,10 @@ internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, ty
             Text(line.reading ?: stringResource(R.string.lyrics_readings), style = small.copy(fontSize = small.fontSize * side.readingScale, lineHeight = small.lineHeight * side.readingScale).writing(line.reading.orEmpty()))
         }
     }
-    WordsLayer(line, side, wordsAs, shows, typed, onChange)
+    WordsLayer(line, side, wordsAs, shows, lyrics, onChange)
     if (script != null && shows != WordsAs.LATIN) {
         CardLayer(R.string.lyrics_romanized, side.latin, { onChange(side.copy(latin = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) }) {
-            Text(line.latin(typed) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
+            Text(line.latin(lyrics.romajiTyped) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
         }
     }
     CardLayer(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) }) {
@@ -265,7 +265,7 @@ internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, ty
 
 /** The words as a layer of the side, written as it [shows] them; held, it picks one of [wordsAs] for the side, or back to as the lyrics write them. */
 @Composable
-private fun WordsLayer(line: SavedLine, side: CardSide, wordsAs: List<WordsAs>, shows: WordsAs, typed: Boolean, onChange: (CardSide) -> Unit) {
+private fun WordsLayer(line: SavedLine, side: CardSide, wordsAs: List<WordsAs>, shows: WordsAs, lyrics: Learning, onChange: (CardSide) -> Unit) {
     val words = MaterialTheme.typography.headlineMedium.let { it.copy(fontSize = it.fontSize * side.wordsScale, lineHeight = it.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold) }
     var formats by remember { mutableStateOf(false) }
     val original = stringResource(R.string.lyrics_display_original)
@@ -288,7 +288,7 @@ private fun WordsLayer(line: SavedLine, side: CardSide, wordsAs: List<WordsAs>, 
             }
         }
     ) {
-        Text(line.shownAs(shows, typed).ifBlank { line.text }, style = words.writing(line.text))
+        Text(line.shownAs(shows, lyrics).ifBlank { line.text }, style = words.writing(line.text))
     }
 }
 
