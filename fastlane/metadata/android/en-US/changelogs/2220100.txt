@@ -5,3 +5,4 @@ Play opens the song itself, not a fan's upload, even as a single or in two langu
 The player no longer waits for a song the music app already plays.
 Japanese songs named in English get their chords.
 Visuals draw as sharp as your phone keeps up with.
+Lyrics light up again sooner and are timed better.
