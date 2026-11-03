@@ -372,7 +372,7 @@ private val SOUND_SIZE = 48.dp
 
 /** Bars rising and falling, out of step, while a line plays. */
 @Composable
-private fun Bars(height: Dp, modifier: Modifier = Modifier) {
+private fun Bars(height: Dp, modifier: Modifier) {
     val beat = rememberInfiniteTransition(label = "bars")
     Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically, modifier = modifier.height(height)) {
         repeat(BARS) { index ->

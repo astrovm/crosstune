@@ -4695,6 +4695,29 @@ class ListeningTest {
     }
 
     @Test
+    fun wordsInKanaCanShowTheirKatakanaInHiraganaThereAndFloating() {
+        wordsOf("[00:00.00] ドアを叩いて\\n[00:30.00] 食べる", "ドアを叩いて\\n食べる")
+        waitUntil(TIMEOUT_MS) { readingShown("たた") }
+        learnMenu()
+        click(string(R.string.lyrics_display_kana))
+        // Only the kanji change: the katakana stays as written.
+        waitUntil(TIMEOUT_MS) { shown("ドアをたたいて") }
+        click(string(R.string.lyrics_katakana_as_hiragana))
+        waitUntil(TIMEOUT_MS) { shown("どあをたたいて") }
+        assertTrue(prefs().getBoolean("lyrics_katakana_as_hiragana", false))
+        click(string(R.string.lyrics_katakana_as_hiragana))
+        waitUntil(TIMEOUT_MS) { shown("ドアをたたいて") }
+
+        // Floating, the same switch, set from the floating words' options, is the lyrics' too.
+        val floatingWords = floatNow()
+        assertEquals(1, floating("ドアをたたいて"))
+        composeRule.runOnIdle { FloatingLyricsService.host!!.learningActions.onKatakanaAsHiraganaChange(true) }
+        waitUntil(TIMEOUT_MS) { floating("どあをたたいて") == 1 }
+        assertTrue(prefs().getBoolean("lyrics_katakana_as_hiragana", false))
+        floatingWords.destroy()
+    }
+
+    @Test
     fun floatingReadingsFollowHowTheWordsAreSetToShow() {
         wordsOf("[00:00.00] 夜空に星が\\n[00:30.00] 食べる", "夜空に星が\\n食べる")
         waitForText("食べる")

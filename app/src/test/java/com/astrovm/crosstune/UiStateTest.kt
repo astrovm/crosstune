@@ -86,5 +86,7 @@ class UiStateTest {
         assertEquals("むねのどあをたたいても", Learning(script = Script.JAPANESE, lines = listOf(door), wordsAs = WordsAs.KANA, katakanaAsHiragana = true).insteadOf(0))
         assertEquals("らーめんとゔぁいおりん", "ラーメンとヴァイオリン".inHiragana(true))
         assertEquals("ラーメン", "ラーメン".inHiragana(false))
+        // From small a to small ke, the katakana with a hiragana; ヷ and ゠ past them have none.
+        assertEquals("ぁゖヷ゠", "ァヶヷ゠".inHiragana(true))
     }
 }

@@ -212,6 +212,16 @@ class CardTypesPanelTest {
     }
 
     @Test
+    fun aLineInChineseOffersItsReadingsOverItButNoKana() {
+        show(SavedLine("我爱你", reading = "wǒ ài nǐ", romanized = "wǒ ài nǐ", translation = "I love you", title = "Night Song", artist = "The Band"))
+        openOptions()
+        edit(string(R.string.card_type_read))
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_readings)).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.visuals_show_words)).performTouchInput { longClick() }
+        composeRule.onNodeWithText(string(R.string.lyrics_display_kana)).assertDoesNotExist()
+    }
+
+    @Test
     fun aLineInLettersWithNoKanaHasNoWaysToWriteItButTheOne() {
         show(english)
         openOptions()
