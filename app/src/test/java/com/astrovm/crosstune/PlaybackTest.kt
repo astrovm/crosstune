@@ -125,7 +125,7 @@ class PlaybackTest {
         shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(true)
         assertFalse(playback.unlocked())
         shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(false)
-        shadowOf(app.getSystemService(PowerManager::class.java)).setIsInteractive(false)
+        shadowOf(app.getSystemService(PowerManager::class.java)).turnScreenOn(false)
         assertFalse(playback.unlocked())
     }
 
