@@ -173,8 +173,8 @@ internal fun Group(modifier: Modifier = Modifier, content: @Composable () -> Uni
             val thickness = DividerDefaults.Thickness.roundToPx()
             val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }.filter { it.height > 0 }
             val height = rows.sumOf { it.height } + thickness * (rows.size - 1).coerceAtLeast(0)
-            val width = rows.maxOfOrNull { it.width } ?: 0
-            layout(width.coerceIn(constraints.minWidth, constraints.maxWidth), height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+            // As wide as the group, which fills its width.
+            layout(constraints.maxWidth, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
                 between.clear()
                 var y = 0
                 rows.forEachIndexed { index, row ->
