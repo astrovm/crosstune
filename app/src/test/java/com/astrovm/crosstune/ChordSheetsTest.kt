@@ -289,4 +289,26 @@ class ChordSheetsTest {
         val placed = ChordSheets.place(sheet, listOf("Ｉ　ｌｏｖｅ　ｙｏｕ　ｓｏ　ｍｕｃｈ　ｔｏｎｉｇｈｔ"))!!
         assertEquals(listOf("Am", "G"), placed.single().over.map { it.name })
     }
+
+    @Test
+    fun chordsMoveOntoTheLineInKanaOverTheReadingOfWhatTheyWereOver() {
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を"))
+        // Over 夜, 空, の, を and past the end: the first two over よぞら's start, the rest where their letters went.
+        val over = listOf(Chord(0, "Am"), Chord(1, "F"), Chord(2, "C"), Chord(4, "G"), Chord(5, "E"))
+        assertEquals(
+            listOf(0, 0, 3, 6, 7),
+            ChordSheets.onto(LineChords(over = over), "夜空の星を", "よぞらのほしを", parts).over.map { it.at }
+        )
+    }
+
+    @Test
+    fun chordsMoveOntoTheLineInLatinLettersAsFarAlongAtTheStartOfThatWord() {
+        val over = listOf(Chord(0, "Am"), Chord(2, "F"), Chord(4, "G"))
+        // 夜空の星を, 5 letters, as "yozora no hoshi wo", 18: 2 of 5 along is 7, in "no"; 4 of 5 is 14, in "hoshi".
+        assertEquals(
+            listOf(0, 7, 10),
+            ChordSheets.onto(LineChords(over = over), "夜空の星を", "yozora no hoshi wo", listOf(Ruby("夜空の星を"))).over.map { it.at }
+        )
+        assertEquals(listOf(0), ChordSheets.onto(LineChords(over = listOf(Chord(3, "C"))), "abcd", "", null).over.map { it.at })
+    }
 }

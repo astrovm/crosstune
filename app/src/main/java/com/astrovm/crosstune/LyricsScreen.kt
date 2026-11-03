@@ -1872,7 +1872,10 @@ private fun LineWords(
 ) {
     val reading = help?.reading
     if (instead != null) {
-        Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
+        // In kana or Latin letters, the chords move with the words they're over.
+        val moved = chords?.takeUnless { it.isEmpty }?.let { ChordSheets.onto(it, text, instead, reading?.parts) }
+        if (moved != null) ChordedLine(LyricLine(timeMs, instead), nextMs, moved, null, false, style, null, help?.readingScale ?: READING_SCALE)
+        else Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
     } else if (chords != null && !chords.isEmpty) {
         // Chords sit over the letters they're played on, above the readings when those show too.
         val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }

@@ -26,6 +26,35 @@ internal data class LineChords(val before: List<String> = emptyList(), val over:
  */
 internal object ChordSheets {
     /**
+     * [chords], placed over [written], moved onto [shown], the same line in kana or Latin letters.
+     * Where [parts] spell [shown] out, a piece at a time, a chord goes over the start of the kana of the
+     * kanji it was over, or the same letter; otherwise as far along [shown], at the start of that word.
+     */
+    fun onto(chords: LineChords, written: String, shown: String, parts: List<Ruby>?): LineChords {
+        val spelled = parts?.takeIf { it.joinToString("") { part -> part.text } == written && it.sumOf { part -> (part.reading ?: part.text).length } == shown.length }
+        return chords.copy(over = chords.over.map { chord -> chord.copy(at = if (spelled != null) inParts(chord.at, spelled) else asFarAlong(chord.at, written.length, shown)) })
+    }
+
+    /** Where letter [at] of the parts as written goes in them as read. */
+    private fun inParts(at: Int, parts: List<Ruby>): Int {
+        var written = 0
+        var shown = 0
+        for (part in parts) {
+            if (at < written + part.text.length) return shown + if (part.reading == null) at - written else 0
+            written += part.text.length
+            shown += (part.reading ?: part.text).length
+        }
+        return shown
+    }
+
+    /** Letter [at] of a line [length] long, as far along [shown], at the start of the word it's in. */
+    private fun asFarAlong(at: Int, length: Int, shown: String): Int {
+        if (shown.isEmpty() || length == 0) return 0
+        val along = (at.toLong() * shown.length / length).toInt().coerceIn(0, shown.length - 1)
+        return shown.lastIndexOf(' ', along) + 1
+    }
+
+    /**
      * The sheet counts once this much of its words line up with the song's, or of the song's with
      * its, whichever are fewer: a sheet may have the song twice, in another tuning, and the words
      * shown may be only part of it.
