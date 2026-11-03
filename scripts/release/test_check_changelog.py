@@ -56,6 +56,14 @@ class ChangelogTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing Play Store changelog"):
             check_changelog.check_changelog(self.root)
 
+    def test_notes_longer_than_the_play_store_takes_fail(self):
+        # Google Play takes at most 500 characters of release notes, the line breaks too.
+        self.notes.write_text("日" * 499 + "\n", encoding="utf-8")
+        self.assertEqual(check_changelog.check_changelog(self.root), self.notes)
+        self.notes.write_text("日" * 500 + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Play Store changelog is 501 characters, over 500.*2080900.txt"):
+            check_changelog.check_changelog(self.root)
+
     def test_directory_is_not_a_changelog(self):
         self.notes.mkdir()
         with self.assertRaisesRegex(ValueError, "Missing Play Store changelog"):
