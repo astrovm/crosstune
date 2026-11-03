@@ -130,7 +130,7 @@ internal class ExactMatcher(
      */
     private class Answer(val url: String?, val toPick: ToPick? = null)
 
-    private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthMs: Long?)
+    private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
 
     /**
      * What [target] has for [metadata]. A search that failed or timed out is asked once more when
@@ -169,8 +169,8 @@ internal class ExactMatcher(
     private suspend fun picked(toPick: ToPick): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
             Answer(
-                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthMs)
-                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthMs)
+                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs)
+                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs)
             )
         } ?: return Match.Failed
         return url.url?.let(Match::Found) ?: Match.Missing
@@ -601,7 +601,7 @@ internal class ExactMatcher(
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthMs))
+        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
     }
 
     /** The songs or videos among [items] that play. */
@@ -609,14 +609,14 @@ internal class ExactMatcher(
 
     /**
      * The one among [rows] that [pick] says the song is, each shown as "title | details". Their titles
-     * are anyone's, and may say anything, so one far from the song's [lengthMs] isn't taken: a few
+     * are anyone's, and may say anything, so one far from all of the song's [lengthsMs] isn't taken: a few
      * seconds for a song, more for a video, which may open with more.
      */
-    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthMs: Long?): String? {
+    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
         if (rows.isEmpty()) return null
         val index = pick(metadata, rows.map { "${it.name} | ${it.details.joinToString(" • ")}" }, videos) ?: return null
         val row = rows.getOrNull(index) ?: return null
-        val off = lengthMs?.let { wanted -> row.lengthMs?.let { kotlin.math.abs(it - wanted) } } ?: 0L
+        val off = row.lengthMs?.let { length -> lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
         return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
     }
 
@@ -659,13 +659,16 @@ internal class ExactMatcher(
      * there, so its Japanese, Korean and Chinese stores give 終わらない歌 for Owaranai Uta, 봄날 for
      * Spring Day and 松原みき for Miki Matsubara. Deezer gives its length when Apple doesn't have it.
      */
-    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthMs: Long?)
+    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>)
 
     private suspend fun namesOf(metadata: MusicMetadata): Names {
         val titles = mutableSetOf(metadata.title)
         val artists = mutableSetOf(metadata.artist)
-        val song = appleSong(metadata)
-        var lengthMs = song?.optLong("trackTimeMillis")?.takeIf { it > 0 }
+        val found = appleSong(metadata)
+        val song = found?.song
+        // Every edition it has, as the album's take of a song is often a minute longer than the single's, and a
+        // music app may have only the single's.
+        val lengthsMs = found?.editions.orEmpty().mapNotNull { it.optLong("trackTimeMillis").takeIf { length -> length > 0 } }.toMutableList()
         song?.optLong("trackId")?.takeIf { it > 0 }?.let { id ->
             val elsewhere = coroutineScope {
                 NAMING_STORES.map { store -> async { answering { appleLookup(id, store) } } }.awaitAll()
@@ -675,13 +678,13 @@ internal class ExactMatcher(
                 artists += it.optString("artistName").ifBlank { null } ?: return@forEach
             }
         }
-        if (lengthMs == null) {
-            lengthMs = answering {
+        if (lengthsMs.isEmpty()) {
+            answering {
                 searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
                     ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
-            }
+            }?.let(lengthsMs::add)
         }
-        return Names(titles, artists, lengthMs)
+        return Names(titles, artists, lengthsMs)
     }
 
     /**
@@ -691,14 +694,17 @@ internal class ExactMatcher(
      * at once, for a song named in Chinese, Japanese or Korean, the stores that name it as its own
      * country does, as only Taiwan's credits 光年之外 to 鄧紫棋, where the rest say G.E.M.
      */
-    private suspend fun appleSong(metadata: MusicMetadata): JSONObject? {
+    private suspend fun appleSong(metadata: MusicMetadata): AppleSong? {
         val stores = listOf(country.takeIf { it.length == 2 }, "US").distinct()
         stores.firstNotNullOfOrNull { appleSong(metadata, it) }?.let { return it }
         if ((metadata.title + metadata.artist).none { Character.UnicodeScript.of(it.code) in EAST_ASIAN }) return null
         return coroutineScope { (NAMING_STORES - stores.toSet()).map { store -> async { appleSong(metadata, store) } }.awaitAll() }.firstNotNullOfOrNull { it }
     }
 
-    private suspend fun appleSong(metadata: MusicMetadata, store: String?): JSONObject? = answering {
+    /** The [song] Apple has, and all its [editions] in the same store: its album's take, its single's, its remasters. */
+    private class AppleSong(val song: JSONObject, val editions: List<JSONObject>)
+
+    private suspend fun appleSong(metadata: MusicMetadata, store: String?): AppleSong? = answering {
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", searchQuery(metadata))
             .addQueryParameter("entity", "song")
@@ -706,7 +712,7 @@ internal class ExactMatcher(
             .apply { store?.let { addQueryParameter("country", it) } }
             .build()
         val results = fetchJson(url.toString()).optJSONArray("results")?.objects().orEmpty()
-        results.firstOrNull { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
+        val song = results.firstOrNull { matches(metadata, it.optString("trackName"), it.optString("artistName")) }
             ?: results.firstOrNull {
                 looselyMatches(metadata, it.optString("trackName"), it.optString("artistName")) &&
                     !SongNames.saysAnotherVersion(it.optString("trackName"), metadata.title, metadata.artist)
@@ -714,6 +720,7 @@ internal class ExactMatcher(
             ?: results.firstOrNull { inLatinLetters(metadata, it) }
             ?: results.firstOrNull { song -> metadata.lengthMs?.let { kotlin.math.abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS } != false }
                 ?.takeIf { namedAtHome(metadata, it) }
+        song?.let { AppleSong(it, listOf(it) + results.filter { other -> other !== it && matches(metadata, other.optString("trackName"), other.optString("artistName")) }) }
     }
 
     /**
@@ -753,11 +760,10 @@ internal class ExactMatcher(
         null
     }
 
-    /** As long as the song, give or take what another release of it adds; true when either isn't known. */
+    /** As long as the song, or one of its editions, give or take what another release of it adds; true when either isn't known. */
     private fun sameLength(row: Row, names: Names): Boolean {
-        val wanted = names.lengthMs ?: return true
         val length = row.lengthMs ?: return true
-        return kotlin.math.abs(length - wanted) <= SAME_LENGTH_MS
+        return names.lengthsMs.isEmpty() || names.lengthsMs.any { kotlin.math.abs(length - it) <= SAME_LENGTH_MS }
     }
 
     /** A song result, "Name | Artist • Album • 4:46", under any of the song's names, by any of its artist's. */

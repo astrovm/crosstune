@@ -4112,6 +4112,43 @@ class MainActivityTest {
     }
 
     @Test
+    fun thePlayerStopsWaitingOnceTheAskedAppPlaysAnotherNameForTheSong() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // The app was on another song when asked, which it goes on playing a moment, and which isn't the one asked.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Old Song")).fetchSemanticsNodes().isEmpty())
+        // Recorded on a phone: YouTube Music names the song in Japanese and credits it to the singer's name there.
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitForText("黄昏のBAY CITY")
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_waiting, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
+        // From then on that song is the one followed, so its words follow it.
+        waitUntil { phone.followed.any { it.title == "黄昏のBAY CITY" } }
+
+        // An app that has to be opened there is left as soon as it plays, not after waiting out its name not matching.
+        click(string(R.string.dismiss_button))
+        phone.running = emptySet()
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitUntil { phone.opened.size == 1 }
+        assertEquals(0, phone.cameBack)
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitUntil { phone.cameBack == 1 }
+    }
+
+    @Test
     @OptIn(ExperimentalTestApi::class)
     fun thePlayersSongRepeatsIsLikedPlaysWhatsNextSleepsAndOpensItsCard() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName

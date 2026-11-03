@@ -734,6 +734,27 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun theOfficialSongBeatsAnUploadWhenAppleKnowsALongerEditionOfIt() {
+        // Recorded: Apple's US store names Full Moon's take (4:41) first, but YouTube Music has the single's (4:11),
+        // while a fan's upload with the lyrics runs 4:42.
+        val song = MusicMetadata("tasogare no bay city", "JUNKO YAGAMI")
+        val us = appleSong("tasogare no bay city", "JUNKO YAGAMI", 281_200, id = 74904069) + "," +
+            appleSong("Tasogare No Bay City", "JUNKO YAGAMI", 250_373, id = 260770646) + "," +
+            appleSong("Lady-Ready", "JUNKO YAGAMI", 254_760, id = 260770751)
+        val songs = listOf(
+            youTubeMusicRow("黄昏のBAY CITY", "八神純子 • 黄昏のBAY CITY • 4:11", videoId = "QLHMhVonF-s"),
+            youTubeMusicRow("黄昏のBay City (DISCOバージョン) (ボーナストラック)", "八神純子 • FULL MOON • 7:27", videoId = "Wey2yM_dNfc"),
+            youTubeMusicRow("Lady-Ready", "八神純子 • 黄昏のBAY CITY • 4:15", videoId = "5_YotH_2o-M")
+        )
+        val videos = listOf(youTubeMusicRow("Junko Yagami (八神純子) - 黄昏のBay City [Lyrics Eng/Rom/Kan]", "Reidhaha • 1.5M views • 4:42", videoId = "TwSWeSQAm-g"))
+        namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
+        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        // Not an edition Apple has, it's still another recording, and the upload that matches is what plays.
+        namesAndTabs(songs = songs.drop(1), videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
+        assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
     fun aSongCreditedOtherwiseEverywhereButItsOwnCountryIsFoundByThatCountrysStore() {
         val song = MusicMetadata("光年之外 (電影《Passengers》中國區主題曲)", "鄧紫棋")
         val songs = listOf(youTubeMusicRow("光年之外 (電影 《Passengers》 中文主題曲)", "G.E.M. • 光年之外 • 3:56", videoId = "lightyears0"))
