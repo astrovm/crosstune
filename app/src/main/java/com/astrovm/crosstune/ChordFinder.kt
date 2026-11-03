@@ -341,7 +341,7 @@ internal class ChordFinder(
 
     /** The other names [title] is in, when it's two put together, "プラスティック・ラブ - Plastic Love". */
     private fun titleParts(title: String): List<String> =
-        title.split(titleBreak).map { it.trim() }.filter { it.length >= 2 && it != title }.distinct()
+        title.split(titleBreak).map { it.trim() }.flatMap { listOf(it, SongNames.bareTitle(it)) }.filter { it.length >= 2 && it != title }.distinct()
 
     /** A song's names in Japanese, and its artists' names, as NetEase or Japan's Apple Music store has them. */
     private class OtherNames(val titles: List<String>, val artists: List<String>)
