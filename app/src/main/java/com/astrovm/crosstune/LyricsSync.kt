@@ -51,7 +51,7 @@ internal object LyricsSync {
         if (points.size < 2) return offset
         val lineAt = points.map { it.lineMs.toDouble() }.average()
         val songAt = points.map { it.songMs.toDouble() }.average()
-        val fitted = points.sumOf { (it.lineMs - lineAt) * (it.songMs - songAt) } / points.sumOf { (it.lineMs - lineAt) * (it.lineMs - lineAt) }
+        val fitted = points.sumOf { (it.lineMs - lineAt) * it.songMs } / points.sumOf { (it.lineMs - lineAt) * it.lineMs }
         // Further off than a take is sung, it's lines timed out of place, not a pace to go on at; drifting
         // less across them than two lines heard or tapped can be off from each other, it's no other pace.
         if (abs(fitted - pace) > MAX_PACE || abs(fitted - pace) * (points.last().lineMs - points.first().lineMs) < PACE_DRIFT_MS) return offset

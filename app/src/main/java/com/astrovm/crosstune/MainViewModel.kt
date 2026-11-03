@@ -2202,7 +2202,7 @@ internal class MainViewModel(
     private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song) {
         if (heard.clock == null || !sameSong(heard.metadata, shown)) return
         if (found?.lengthMs != null && app.durationMs != null && found?.timedFor(app.durationMs) == true) return
-        val pace = (1.0 / heard.speed).takeIf { abs(it - 1) >= MIN_PACE_OFF } ?: 1.0
+        val pace = if (abs(heard.speed - 1) >= MIN_SKEW) 1.0 / heard.speed else 1.0
         if (pace == wordsPace) return
         wordsPace = pace
         syncStore.save(shown, foundLines, syncPoints, pace)
@@ -4398,8 +4398,8 @@ internal class MainViewModel(
         /** How far Shazam's place in a song may be from where its words are timed. */
         const val MAX_GAP_MS = 60_000L
 
-        /** How far from the words' own pace a recording must play to go on at its own: less, Shazam's telling nothing. */
-        const val MIN_PACE_OFF = 0.005
+        /** How much faster or slower than the recording it matched Shazam must hear one for it to go on at its own pace: less is as near as Shazam tells. */
+        const val MIN_SKEW = 1f / 256
 
         /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
         const val SINGING_TRIES = 3

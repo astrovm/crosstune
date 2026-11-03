@@ -82,6 +82,8 @@ class LyricsSyncTest {
     fun linesDriftingExactlyAsFarAsTheyNeedToTellAPace() {
         // A second further off across them, 4% slower: past the last, it goes on at that pace.
         assertEquals(56_800L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 36_000))))
+        // Just a second, to the ms: it's a pace all the same.
+        assertEquals(53_312L, LyricsSync.timeOf(52_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(42_000, 43_000))))
         // Less, it's as far as two lines heard can be off from each other, not a pace: past the last, they keep to it.
         assertEquals(55_900L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 35_900))))
     }

@@ -950,18 +950,26 @@ class MainViewModelTest {
         idle()
         assertEquals(1, ears.asked)
         model.stopListeningAlong()
+        // Kept at once for the next time the song plays, with the words.
+        val found = listOf(LyricLine(10_000, "One"), LyricLine(20_000, "Two"), LyricLine(110_000, "Three"))
+        assertEquals(1 / 1.035, LyricsSyncStore(prefs()).pace(song, found), 0.0001)
         // Two lines put in time, too close together to tell a pace of their own: "Three", 90 s of the words on, comes 3 s sooner.
         appAt(playback, 12_000)
         model.syncLine(0)
         appAt(playback, 22_000)
         model.syncLine(1)
-        fun gap() = model.uiState.lyricLines.let { it[2].timeMs - it[1].timeMs }
+        fun gap(of: MainViewModel = model) = of.uiState.lyricLines.let { it[2].timeMs - it[1].timeMs }
         assertEquals((90_000 / 1.035).toLong().toDouble(), gap().toDouble(), 1.0)
-        // Kept for the next time the song plays, with the words.
-        val found = listOf(LyricLine(10_000, "One"), LyricLine(20_000, "Two"), LyricLine(110_000, "Three"))
-        assertEquals(1 / 1.035, LyricsSyncStore(prefs()).pace(song, found), 0.0001)
-        // Heard at its own speed after all, it goes on as timed.
-        ears.queue.add(faster.copy(speed = 1.002f))
+        // Played again, it goes on at that pace from the start.
+        val again = lyricsModel(playback, answer = words)
+        assertEquals((90_000 / 1.035).toLong().toDouble(), gap(again).toDouble(), 1.0)
+        // Heard just as much off as Shazam tells, it's off all the same; a hair less, it goes on as timed.
+        ears.queue.add(faster.copy(speed = 1f + MainViewModel.MIN_SKEW))
+        model.listenAlong()
+        idle()
+        model.stopListeningAlong()
+        assertEquals(90_000 / (1.0 + MainViewModel.MIN_SKEW), gap().toDouble(), 1.0)
+        ears.queue.add(faster.copy(speed = Math.nextDown(1f + MainViewModel.MIN_SKEW)))
         model.listenAlong()
         idle()
         model.stopListeningAlong()
