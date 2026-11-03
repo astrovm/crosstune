@@ -388,7 +388,9 @@ internal data class PlayerState(
     val link: String? = null,
     val following: Following? = null,
     val played: Boolean = false,
-    val lines: List<LyricLine> = emptyList()
+    val lines: List<LyricLine> = emptyList(),
+    /** What the app was playing when asked, so only a song it goes on to after is taken for the one asked. */
+    val over: MusicMetadata? = null
 )
 
 internal data class Practice(

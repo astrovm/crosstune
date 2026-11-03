@@ -89,7 +89,7 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
                     .put("destinations", JSONObject().apply {
                         entry.destinationLinks.forEach { (key, prepared) ->
                             put(key, JSONObject().put("url", prepared.url).put("exact", prepared.exact)
-                                .put("matchingEnabled", prepared.matchingEnabled))
+                                .put("matchingEnabled", prepared.matchingEnabled).put("matcher", MATCH_VERSION))
                         }
                     })
             )
@@ -112,6 +112,8 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         val prepared = destinations.keys().asSequence().mapNotNull { key ->
             val value = destinations.optJSONObject(key) ?: return@mapNotNull null
             val destinationUrl = value.optString("url").ifBlank { return@mapNotNull null }
+            // Found the way songs were matched before, it's found again; a search for it is the same either way.
+            if (value.optBoolean("exact") && value.optInt("matcher", 1) != MATCH_VERSION) return@mapNotNull null
             key to PreparedLink(destinationUrl, value.optBoolean("exact"), value.optBoolean("matchingEnabled"))
         }.toMap()
         val tracks = optJSONArray("tracks")?.let { list ->
@@ -128,9 +130,9 @@ internal class HistoryStore(private val preferences: SharedPreferences) {
         return HistoryEntry(link, MusicMetadata(title, optString("artist"), type, optString("artwork").ifEmpty { null }, tracks, trackCount = count, lengthMs = length), prepared)
     }
 
-    private companion object {
+    companion object {
         const val KEY_HISTORY = "history"
-        const val MAX_ENTRIES = 20
+        private const val MAX_ENTRIES = 20
     }
 }
 
