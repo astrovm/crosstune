@@ -33,6 +33,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.math.roundToInt
@@ -403,8 +404,8 @@ internal class VisualsStore(private val preferences: SharedPreferences) {
  * Draws [milkdrop] in a GL view: a preset at random, then another as often as [settings] say,
  * blending in, all moving to what [tap] hears, at no more than [FRAME_MS] a frame to spare the
  * battery. Each preset is drawn at the sharpest of [VISUALS_SIZES] this phone keeps up with: a size
- * smaller when it draws too slowly, which makes the words over it stutter too, and a size sharper
- * when it has room to spare. One too slow twice even at the smallest is passed over from then on,
+ * smaller when it draws too slowly, which makes the words over it stutter too, and tried a size
+ * sharper while it keeps up, kept there if it still does. One too slow twice even at the smallest is passed over from then on,
  * while settings say so, till it's drawn fast enough again.
  */
 internal class MilkdropRenderer(
@@ -439,7 +440,9 @@ internal class MilkdropRenderer(
     /** Whether the app's working the phone hard, or it's hot: frames drawn then say more about that than about the preset. */
     private val busy: () -> Boolean = { false },
     /** A debug mode: every preset drawn at this size, and only this one. */
-    private val fixedSize: Int? = null
+    private val fixedSize: Int? = null,
+    /** The sharpest size each preset was tried at and drew too slowly, not tried again till the app starts over. */
+    private val tooSharp: MutableMap<String, Int> = mutableMapOf()
 ) {
     /** The size drawn at, an index into [VISUALS_SIZES], read by the view drawn in to size its surface. */
     @Volatile
@@ -484,6 +487,7 @@ internal class MilkdropRenderer(
     /** Told this showing: too slow at the smallest, or fast enough. */
     private var struck = false
     private var toldFast = false
+    private var trying = false
     private var fpsFrom = 0L
     private var fpsMs = 0L
     private var fpsFrames = 0
@@ -591,8 +595,8 @@ internal class MilkdropRenderer(
 
     /**
      * The frame just drawn, timed: from the end of its wait to now. Too slow for a while, the preset's
-     * drawn a size smaller, or at the smallest it's struck, and passed over if it was before; with room
-     * to spare for longer, it's drawn a size sharper.
+     * drawn a size smaller, or at the smallest it's struck, and passed over if it was before; keeping up
+     * for longer, it's tried a size sharper, unless that was too slow before.
      */
     private fun timeLastFrame() {
         val at = now()
@@ -610,32 +614,45 @@ internal class MilkdropRenderer(
         }
         val timedFor = at - timingFrom
         // Even the shortest interval is judged before it changes the preset.
-        val slowFor = minOf(SLOW_MS, settings.changeMs - TIME_FROM_MS)
+        // A sharper size being tried is left sooner, so a stutter's short.
+        val slowFor = minOf(if (trying) TRY_MS else SLOW_MS, settings.changeMs - TIME_FROM_MS)
         val recent = timedMs.filterIndexed { index, _ -> at - timedAt[index] <= slowFor }
         if (timedFor >= slowFor && recent.size >= TIMED_FRAMES) {
             if (typical(recent) > SLOW_FRAME_MS) return slower(preset)
-            if (!toldFast) {
-                toldFast = true
-                onTimed(preset, false)
-                slowOnce -= preset
-                slow -= preset
-            }
+            keptUp(preset)
         }
-        if (timedFor >= ROOM_MS && size > 0 && keepsUpAt(size - 1, typical(timedMs))) resize(preset, size - 1)
+        if (timedFor >= ROOM_MS && sharperToTry(preset) && typical(timedMs) <= SLOW_FRAME_MS) {
+            trying = true
+            resize(preset, size - 1)
+        }
     }
 
-    /** A frame taking [ms] now would still keep up drawn at [to], as much slower as it has more pixels. */
-    private fun keepsUpAt(to: Int, ms: Long): Boolean {
-        val more = VISUALS_SIZES[to] / VISUALS_SIZES[size]
-        return ms * more * more < SLOW_FRAME_MS
+    /** [preset] keeping up: a sharper size tried is kept, and it's told it's fast enough once a showing. */
+    private fun keptUp(preset: String) {
+        trying = false
+        if (toldFast) return
+        toldFast = true
+        onTimed(preset, false)
+        slowOnce -= preset
+        slow -= preset
     }
+
+    /**
+     * Whether there's a sharper size [preset] wasn't too slow at. How much slower one draws can't be
+     * told from its pixels: on a Galaxy S22 Ultra, full size drew only about a fifth slower than two thirds.
+     */
+    private fun sharperToTry(preset: String) = size - 1 > (tooSharp[preset] ?: -1)
 
     /** How long a frame of [frames] takes, by the one in the middle, so a hitch or two doesn't count. */
     private fun typical(frames: Collection<Long>) = frames.sorted()[frames.size / 2]
 
     /** [preset] too slow: drawn a size smaller, or at the smallest, struck once a showing; twice, it's heavy. */
     private fun slower(preset: String) {
-        if (size < VISUALS_SIZES.lastIndex) return resize(preset, size + 1)
+        trying = false
+        if (size < VISUALS_SIZES.lastIndex) {
+            tooSharp[preset] = maxOf(size, tooSharp[preset] ?: size)
+            return resize(preset, size + 1)
+        }
         if (struck) return
         struck = true
         onTimed(preset, true)
@@ -651,6 +668,7 @@ internal class MilkdropRenderer(
 
     /** [preset] drawn at [to] from now, timed afresh once the new size has settled in. */
     private fun resize(preset: String, to: Int) {
+        report("$preset: size $size to $to")
         sizes[preset] = to
         onSized(preset, to)
         sizeTo(to)
@@ -679,6 +697,7 @@ internal class MilkdropRenderer(
         timeFrom(shownAt + TIME_FROM_MS)
         struck = false
         toldFast = false
+        trying = false
         val settings = settings
         val on = shown.filter { it !in settings.off && it !in dropped }
         val showing = on.filter { settings.shows(it) && (it !in slow || !settings.skipHeavy || it in settings.keep) }
@@ -745,6 +764,8 @@ internal class MilkdropRenderer(
         /** How long it's too slow for before it's drawn smaller, and has room to spare for before it's drawn sharper. */
         private const val SLOW_MS = 2_000L
         private const val ROOM_MS = 5_000L
+        /** How long a sharper size being tried is timed before it's left as too slow, after it settles in. */
+        private const val TRY_MS = 1_500L
         /** How long a new size takes to settle in, its first frames making its textures. */
         private const val SETTLE_MS = 500L
         /** Fewer frames than this timed, and it's not known how fast it draws. */
@@ -870,6 +891,12 @@ internal class MilkdropBehind(context: Context, private val renderer: MilkdropRe
  * the words, and it's far lighter.
  */
 internal val VISUALS_SIZES = listOf(1f, 2f / 3, 1f / 2, 1f / 3)
+
+/**
+ * Each preset's sharpest size it was too slow at since the app started, shared by every time the
+ * visuals open: one stutter's enough. Starting over, the phone may be cooler or busy with less.
+ */
+private val tooSharpThisRun = ConcurrentHashMap<String, Int>()
 
 /** [length] in pixels drawn at [size] of [VISUALS_SIZES]. */
 internal fun drawn(length: Int, size: Int) = (length * VISUALS_SIZES[size]).roundToInt().coerceAtLeast(1)
@@ -1017,7 +1044,8 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
             onSized = store::sized,
             busy = { Busy.now || heat.hot },
             // adb shell setprop debug.crosstune.visuals_size 0 to 3, sharpest first, to bench each size.
-            fixedSize = systemProperty("debug.crosstune.visuals_size")?.toIntOrNull()?.takeIf { it in VISUALS_SIZES.indices }
+            fixedSize = systemProperty("debug.crosstune.visuals_size")?.toIntOrNull()?.takeIf { it in VISUALS_SIZES.indices },
+            tooSharp = tooSharpThisRun
         )
     }
     AndroidView(
