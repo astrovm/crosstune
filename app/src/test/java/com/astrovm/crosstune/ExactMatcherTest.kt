@@ -721,6 +721,21 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aSongNamedInJapaneseAndEnglishApartByAWideSpaceIsFoundOverAFansUpload() {
+        // Recorded from YouTube Music's searches for I Can't Stop The Loneliness, which neither Apple nor Deezer names so.
+        namesAndTabs(
+            songs = listOf(
+                youTubeMusicRow("悲しみがとまらない　I CAN'T STOP THE LONELINESS - Kanashimi ga Tomaranai I CAN'T STOP THE LONELINESS", "Anri • The Anri • 4:27", videoId = "6q6GtPdVHL4"),
+                youTubeMusicRow("I CAN'T STOP THE LONELINESS (Spanish Version)", "Dianilis • I CAN'T STOP THE LONELINESS (Spanish Version) • 4:27", videoId = "Xv8YtduJodo")
+            ),
+            videos = listOf(youTubeMusicRow("ANRI - I Can't Stop The Loneliness || Sub español", "Sweet Honey Pie • 1.7M views • 4:25", videoId = "gLfnq0TSmdg")),
+            apple = mapOf("AR" to appleSong("I Can't Stop the Loneliness", "Jupiter", 253_837)),
+            deezer = """[{"title":"Kanashimi ga Tomaranai I CAN'T STOP THE LONELINESS","artist":{"name":"Anri"},"duration":263}]"""
+        )
+        assertEquals("https://music.youtube.com/watch?v=6q6GtPdVHL4", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("I Can't Stop The Loneliness", "ANRI")) })
+    }
+
+    @Test
     fun aSongNamedOtherwiseAtHomeIsItUpToTheSameLengthGiveOrTakeEightSeconds() {
         val song = MusicMetadata("Stay With Me", "Miki Matsubara")
         fun finds(length: String): String? {

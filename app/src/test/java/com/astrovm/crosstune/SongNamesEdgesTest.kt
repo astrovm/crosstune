@@ -13,6 +13,20 @@ import org.robolectric.annotation.Config
 class SongNamesEdgesTest {
 
     @Test
+    fun aNameWrittenBothWaysApartByAWideSpaceGoesByEachWay() {
+        // As YouTube Music names Anri's song: both ways, then its romaji and English.
+        val anri = "悲しみがとまらない　I CAN'T STOP THE LONELINESS - Kanashimi ga Tomaranai I CAN'T STOP THE LONELINESS"
+        assertTrue("I CAN'T STOP THE LONELINESS" in SongNames.titleNames(anri))
+        assertTrue("悲しみがとまらない" in SongNames.titleNames(anri))
+        assertEquals(listOf("夜に駆ける　Racing into the Night", "夜に駆ける", "Racing into the Night"), SongNames.titleNames("夜に駆ける　Racing into the Night"))
+        // Only Japanese on both sides, or the other side with no letters, or Latin letters first, it's one name.
+        assertEquals(listOf("君の　名は"), SongNames.titleNames("君の　名は"))
+        assertEquals(listOf("夜に駆ける　2020"), SongNames.titleNames("夜に駆ける　2020"))
+        assertEquals(listOf("Racing into the Night　夜に駆ける"), SongNames.titleNames("Racing into the Night　夜に駆ける"))
+        assertEquals(listOf("夜に　駆ける　Racing"), SongNames.titleNames("夜に　駆ける　Racing"))
+    }
+
+    @Test
     fun kanjiAreWrittenAsChinaDoesOnlyInNamesThatHaveSome() {
         assertEquals("终わり", SongNames.asChinaWrites("終わり"))
         assertEquals("Ending", SongNames.asChinaWrites("Ending"))
