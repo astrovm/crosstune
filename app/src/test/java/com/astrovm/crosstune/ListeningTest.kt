@@ -44,6 +44,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertNotNull
 import android.os.Looper
+import android.os.PowerManager
 import android.Manifest
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.shadows.ShadowWindowManagerImpl
@@ -2581,6 +2582,20 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { visualsShown().isEmpty() }
         assertTrue(described(string(R.string.visuals_show)))
         assertFalse(prefs().getBoolean("visuals", true))
+    }
+
+    @Test
+    fun visualsFollowHowHotThePhoneIsOnlyWhileTheyShow() {
+        val power = shadowOf(app.getSystemService(PowerManager::class.java))
+        demoWords(FakeHearing())
+        assertEquals(0, power.thermalStatusListeners.size)
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        assertEquals(1, power.thermalStatusListeners.size)
+        click(string(R.string.visuals_options))
+        click(string(R.string.visuals_hide))
+        waitUntil(TIMEOUT_MS) { visualsShown().isEmpty() }
+        assertEquals(0, power.thermalStatusListeners.size)
     }
 
     @Test

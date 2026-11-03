@@ -45,6 +45,17 @@ class BusyTest {
     }
 
     @Test
+    @Config(sdk = [29])
+    fun fromAndroid10ThePhoneCanBeHot() {
+        val power = shadowOf(context.getSystemService(PowerManager::class.java))
+        val heat = Heat()
+        val stop = heat.follow(context)
+        power.setCurrentThermalStatus(PowerManager.THERMAL_STATUS_MODERATE)
+        assertTrue(heat.hot)
+        stop()
+    }
+
+    @Test
     @Config(sdk = [28])
     fun beforeAndroid10ThePhoneIsNeverHot() {
         val heat = Heat()
