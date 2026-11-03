@@ -1,6 +1,7 @@
-Practice cards write and spell the words as the lyrics do, unless you pick a way for a card side.
-Tapping a card's sound while it plays stops it.
-In kana, only kanji change: katakana stays as written, or in hiragana if you like.
-Play opens the song itself, not a fan's upload, also as a shorter single or named in Japanese and English.
-The player stops waiting once the music app plays the song, whatever it calls it, even if it's on it already.
+Practice cards write words as the lyrics do, unless you pick a way for a side.
+Tap a playing card's sound to stop it.
+In kana, only kanji change: katakana stays, or turns hiragana if you like.
+Play opens the song itself, not a fan's upload, even as a single or in two languages.
+The player no longer waits for a song the music app already plays.
 Japanese songs named in English get their chords.
+Visuals draw as sharp as your phone keeps up with.
