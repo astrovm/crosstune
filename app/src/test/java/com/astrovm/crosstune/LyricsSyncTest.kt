@@ -95,8 +95,10 @@ class LyricsSyncTest {
         assertEquals(50_000L - (20_000 * pace).toLong(), LyricsSync.timeOf(10_000, listOf(SyncPoint(30_000, 50_000)), pace))
         // As it is with lines too close together to tell a pace of their own.
         assertEquals(41_600L + (10_000 * pace).toLong(), LyricsSync.timeOf(50_000, listOf(SyncPoint(30_000, 30_000), SyncPoint(40_000, 41_600)), pace))
-        // Lines drifting from it far enough to tell go on at their own pace: they were heard.
-        assertEquals(56_800L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 36_000)), pace))
+        // Lines drifting from it far enough to tell, at a pace near it, go on at their own: they were heard.
+        assertEquals(70_000L, LyricsSync.timeOf(70_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(60_000, 60_000)), pace))
+        // Further from it than a take is sung, they were heard a little off, and it goes on at the known pace.
+        assertEquals(36_000L + (20_000 * pace).toLong(), LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 36_000)), pace))
         // Between two lines put in time they still stretch to fit, and with none they're as timed.
         assertEquals(25_000L, LyricsSync.timeOf(20_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(30_000, 40_000)), pace))
         assertEquals(lines, LyricsSync.adjust(lines, emptyList(), pace))
