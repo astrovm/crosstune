@@ -544,8 +544,8 @@ class MilkdropTest {
         renderer.created()
         renderer.drawFor(20_000)
         assertEquals(listOf(1, 0, 1), changes.map { it.second })
-        // Back within two seconds of trying full, give or take the frame that tells.
-        assertTrue(changes[2].first - changes[1].first <= 2_000 + ms[0])
+        // Back within two seconds of trying full, the frame that tells and all.
+        assertTrue(changes[2].first - changes[1].first <= 2_000)
         // And full's not tried again, however long it keeps up.
         renderer.drawFor(120_000)
         assertEquals(listOf("a" to 1, "a" to 0, "a" to 1), told)

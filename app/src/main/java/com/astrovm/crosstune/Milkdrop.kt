@@ -768,8 +768,11 @@ internal class MilkdropRenderer(
         /** How long it's too slow for before it's drawn smaller, and has room to spare for before it's drawn sharper. */
         private const val SLOW_MS = 2_000L
         private const val ROOM_MS = 5_000L
-        /** How long a sharper size being tried is timed before it's left as too slow, after it settles in. */
-        private const val TRY_MS = 1_500L
+        /**
+         * How long a sharper size being tried is timed before it's left as too slow, after it settles in:
+         * with the frame that tells, it's left within 2 seconds of trying it.
+         */
+        private const val TRY_MS = 1_400L
         /** How long a new size takes to settle in, its first frames making its textures. */
         private const val SETTLE_MS = 500L
         /** Fewer frames than this timed, and it's not known how fast it draws. */
