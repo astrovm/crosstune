@@ -6,8 +6,10 @@ import androidx.test.core.app.ApplicationProvider
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
@@ -20,17 +22,43 @@ class CardOptionsTest {
     fun existingCardPreferencesKeepTheirMeaningOnTheTwoSides() {
         assertEquals(CardOptions(), CardOptions.load(prefs))
         prefs.edit().putString("card_front", "LATIN").putBoolean("card_readings", false)
-            .putBoolean("card_latin", false).putBoolean("card_translation", false)
-            .putBoolean("lyrics_romaji_typed", true).commit()
-        assertEquals(
-            CardOptions(CardSide(wordsAs = WordsAs.LATIN, romajiTyped = true), CardSide(romajiTyped = true, sound = true)),
-            CardOptions.load(prefs)
-        )
+            .putBoolean("card_latin", false).putBoolean("card_translation", false).commit()
+        assertEquals(CardOptions(CardSide(wordsAs = WordsAs.LATIN), CardSide(sound = true)), CardOptions.load(prefs))
+        // As written was where every side started, so kept so, it follows the lyrics now.
+        prefs.edit().putString("card_front", "WRITTEN").commit()
+        assertNull(CardOptions.load(prefs).front.wordsAs)
         prefs.edit().putString("card_front", "unknown").commit()
-        assertEquals(WordsAs.WRITTEN, CardOptions.load(prefs).front.wordsAs)
-        prefs.edit().putString("card_front_words_as", "KANA").putString("card_back_words_as", "unknown").commit()
+        assertNull(CardOptions.load(prefs).front.wordsAs)
+        prefs.edit().putString("card_front_words_as", "KANA").putString("card_back_words_as", "WRITTEN").commit()
         assertEquals(WordsAs.KANA, CardOptions.load(prefs).front.wordsAs)
-        assertEquals(WordsAs.WRITTEN, CardOptions.load(prefs).back.wordsAs)
+        assertNull(CardOptions.load(prefs).back.wordsAs)
+    }
+
+    @Test
+    fun aSideKeptAsWrittenBeforeFollowsTheLyricsAndOnlyAChangeStaysPicked() {
+        fun read(json: String, defaults: CardSide = CardSide()) = CardSide.fromJson(JSONObject(json), defaults).wordsAs
+        assertNull(read("""{"wordsAs":"WRITTEN","romajiTyped":true}"""))
+        assertEquals(WordsAs.KANA, read("""{"wordsAs":"KANA"}"""))
+        assertEquals(WordsAs.LATIN, read("""{"wordsAs":"LATIN"}"""))
+        assertNull(read("""{"wordsAs":"unknown"}""", CardSide(wordsAs = WordsAs.KANA)))
+        assertEquals(WordsAs.KANA, read("{}", CardSide(wordsAs = WordsAs.KANA)))
+        // Picked now, as written stays picked, and following stays following whatever the kind started as.
+        assertEquals(WordsAs.WRITTEN, CardSide.fromJson(CardSide(wordsAs = WordsAs.WRITTEN).toJson(), CardSide()).wordsAs)
+        assertNull(CardSide.fromJson(CardSide().toJson(), CardSide(wordsAs = WordsAs.KANA)).wordsAs)
+    }
+
+    @Test
+    fun aSideWritesTheWordsAsTheLyricsDoUnlessPickedInWaysTheLineCanBeWritten() {
+        val japanese = SavedLine("夜空", reading = "よぞら", romanized = "yozora", title = "Night", artist = "Band")
+        val chinese = SavedLine("夜空", romanized = "yè kōng", title = "Night", artist = "Band")
+        val english = SavedLine("Night sky", title = "Night", artist = "Band")
+        assertEquals(WordsAs.KANA, CardSide().writes(japanese, WordsAs.KANA))
+        assertEquals(WordsAs.LATIN, CardSide(wordsAs = WordsAs.LATIN).writes(japanese, WordsAs.KANA))
+        assertEquals(WordsAs.WRITTEN, CardSide(wordsAs = WordsAs.WRITTEN).writes(japanese, WordsAs.LATIN))
+        // Kana only where there's kana, Latin letters only where there's another script.
+        assertEquals(WordsAs.WRITTEN, CardSide().writes(chinese, WordsAs.KANA))
+        assertEquals(WordsAs.LATIN, CardSide().writes(chinese, WordsAs.LATIN))
+        assertEquals(WordsAs.WRITTEN, CardSide(wordsAs = WordsAs.LATIN).writes(english, WordsAs.KANA))
     }
 
     @Test
@@ -38,18 +66,18 @@ class CardOptionsTest {
         val random = Random(42)
         repeat(30) {
             fun side() = CardSide(
-                words = random.nextBoolean(), wordsAs = WordsAs.entries[random.nextInt(WordsAs.entries.size)],
+                words = random.nextBoolean(), wordsAs = (WordsAs.entries + null).random(random),
                 readings = random.nextBoolean(), latin = random.nextBoolean(), translation = random.nextBoolean(),
                 wordsScale = MIN_WORDS_SCALE + random.nextFloat() * (MAX_WORDS_SCALE - MIN_WORDS_SCALE),
                 translationScale = MIN_WORDS_SCALE + random.nextFloat() * (MAX_WORDS_SCALE - MIN_WORDS_SCALE),
                 readingScale = MIN_READING_SCALE + random.nextFloat() * (MAX_READING_SCALE - MIN_READING_SCALE),
-                romajiTyped = random.nextBoolean(), sound = random.nextBoolean()
+                sound = random.nextBoolean()
             )
             val options = CardOptions(side(), side())
             val type = CardType("type1", "Mine", true, options)
             saveCardTypes(prefs, listOf(type))
             assertEquals(listOf(type) + DEFAULT_CARD_TYPES.map { it.copy(on = false) }, loadCardTypes(prefs))
-            val front = options.front.copy(words = !options.front.words, romajiTyped = !options.front.romajiTyped)
+            val front = options.front.copy(words = !options.front.words, wordsAs = if (options.front.wordsAs == null) WordsAs.KANA else null)
             saveCardTypes(prefs, listOf(type.copy(options = options.copy(front = front))))
             assertEquals(options.back, loadCardTypes(prefs).first().options.back)
             assertEquals(front, loadCardTypes(prefs).first().options.front)
