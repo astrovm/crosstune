@@ -1460,7 +1460,7 @@ internal class MainViewModel(
     /** Opens the player on [song], asked of [app] at [link], and follows it there as it plays. */
     private fun openPlayer(song: MusicMetadata, app: String?, link: String? = null, played: Boolean = false) {
         // The app may be on another song as it's asked, which isn't the one it goes on to play.
-        val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }?.metadata
+        val over = playback?.takeIf { !played && it.hasAccess() }?.nowPlaying()?.takeIf { sameApp(app, it.app, interception::isInstalled) }
         uiState = uiState.copy(player = PlayerState(song, app, link, played = played, over = over), canFollowApps = playback?.hasAccess() == true)
         followPlayer()
         peekWords()
@@ -1520,8 +1520,13 @@ internal class MainViewModel(
     }
 
     /** Whether [playing] is what the [app] asked for a song has gone on to play, rather than what it played [over] before. */
-    private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?): Boolean =
-        app != null && sameApp(app, playing.app, interception::isInstalled) && (over == null || !sameSong(playing.metadata, over))
+    private fun startedAsked(playing: Heard.Song, app: String?, over: Heard.Song?): Boolean =
+        app != null && sameApp(app, playing.app, interception::isInstalled) &&
+            (over == null || !sameSong(playing.metadata, over.metadata) || startedOver(playing.clock, over.clock))
+
+    /** The song now at [now] is further back than it would be had it played on from [before]: it was started over. */
+    private fun startedOver(now: PlaybackClock?, before: PlaybackClock?): Boolean =
+        now != null && before != null && before.positionAt(now.atMs) - now.positionMs > STARTED_OVER_MS
 
     fun closePlayer() {
         playerJob?.cancel()
@@ -4388,6 +4393,8 @@ internal class MainViewModel(
         private const val SEEK_SETTLE_MS = 1_000L
         /** How long the music app has to find a song asked for by name, and start it. */
         const val LOAD_SONG_MS = 12_000L
+        /** How far back a song has to go to be taken for started over, past a clock that says it's a moment behind. */
+        const val STARTED_OVER_MS = 5_000L
         /** YouTube makes temporary playlists of up to 50 videos. */
         const val MAX_QUEUE = 50
         /** Songs whose covers are looked up when a playlist shows: Spotify lists 100, the first 30 with covers. */
