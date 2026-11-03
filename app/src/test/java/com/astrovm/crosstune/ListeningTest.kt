@@ -2844,7 +2844,7 @@ class ListeningTest {
         val inOrder = milkdropKinds(app.assets).flatMap { it.second }
         assertEquals(names, inOrder.sorted())
         val heavy = names[40]
-        prefs().edit().putStringSet("visuals_heavy", setOf(heavy)).commit()
+        prefs().edit().putStringSet("visuals_heavy", setOf(heavy)).putBoolean("visuals_sized", true).commit()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).performScrollTo().performClick()

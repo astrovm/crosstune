@@ -2040,7 +2040,7 @@ class MainActivityTest {
     fun visualsCanBeTurnedOffOneByOneAndPickedInSettings() {
         val names = milkdropPresets(app.assets)
         val first = names.first()
-        prefs().edit().putStringSet("visuals_heavy", setOf(names[1])).commit()
+        prefs().edit().putStringSet("visuals_heavy", setOf(names[1])).putBoolean("visuals_sized", true).commit()
         launch()
         click(string(R.string.settings_button))
         // The one too heavy for this phone is off already.

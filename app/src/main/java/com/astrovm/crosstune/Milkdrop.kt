@@ -598,8 +598,10 @@ internal class MilkdropRenderer(
         val at = now()
         val took = at - drawnAt
         val preset = current ?: return
+        // Held at one size for a bench, or slowed by other work, it's not the preset's speed.
+        if (fixedSize != null || busy()) return
         // A frame that took this long was paused, out of sight, rather than slow.
-        if (fixedSize != null || at < timingFrom || took >= PAUSED_MS || busy()) return
+        if (at < timingFrom || took >= PAUSED_MS) return
         timedAt.addLast(at)
         timedMs.addLast(took)
         while (at - timedAt.first() > ROOM_MS) {
