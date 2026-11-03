@@ -516,7 +516,7 @@ class MilkdropTest {
 
     @Test
     fun aPresetWithRoomToSpareIsDrawnASizeSharperTillItHasNone() {
-        // 8 ms a frame at half, 10 at two thirds, 15 at full: under 12 is room to spare.
+        // 8 ms a frame at half, 10 at two thirds, 15 at full: each next size still under 25 ms.
         val milkdrop = SizedMilkdrop(listOf(15L, 10L, 8L, 5L))
         val (renderer, told) = sized(milkdrop)
         renderer.created()
@@ -530,6 +530,19 @@ class MilkdropTest {
         assertEquals(0, renderer.size)
         renderer.drawFor(30_000)
         assertEquals(listOf("a" to 1, "a" to 0), told)
+    }
+
+    @Test
+    fun aPresetIsDrawnSharperWhenTheNextSizesPixelsStillKeepUp() {
+        // 13 ms a frame at half: two thirds has 16/9 the pixels, 23 ms, still under 25.
+        // At two thirds, full has 9/4 the pixels, 29 ms, too slow to try.
+        val milkdrop = SizedMilkdrop(listOf(29L, 13L, 13L, 6L))
+        val (renderer, told) = sized(milkdrop)
+        renderer.created()
+        renderer.drawFor(8_600)
+        assertEquals(1, renderer.size)
+        renderer.drawFor(30_000)
+        assertEquals(listOf("a" to 1), told)
     }
 
     @Test

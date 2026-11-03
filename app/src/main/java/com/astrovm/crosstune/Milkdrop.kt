@@ -619,7 +619,13 @@ internal class MilkdropRenderer(
                 slow -= preset
             }
         }
-        if (timedFor >= ROOM_MS && size > 0 && typical(timedMs) < ROOM_FRAME_MS) resize(preset, size - 1)
+        if (timedFor >= ROOM_MS && size > 0 && keepsUpAt(size - 1, typical(timedMs))) resize(preset, size - 1)
+    }
+
+    /** A frame taking [ms] now would still keep up drawn at [to], as much slower as it has more pixels. */
+    private fun keepsUpAt(to: Int, ms: Long): Boolean {
+        val more = VISUALS_SIZES[to] / VISUALS_SIZES[size]
+        return ms * more * more < SLOW_FRAME_MS
     }
 
     /** How long a frame of [frames] takes, by the one in the middle, so a hitch or two doesn't count. */
@@ -743,8 +749,6 @@ internal class MilkdropRenderer(
         private const val TIMED_FRAMES = 20
         /** The size a preset's drawn at till it's known how fast it draws: half the screen's width and height. */
         const val START_SIZE = 2
-        /** Faster than this a frame, under half [SLOW_FRAME_MS], there's room to draw it sharper and still keep up. */
-        const val ROOM_FRAME_MS = 12L
 
         /** How long each preset's timed for in the debug mode, from when it's had time to make its shaders. */
         const val BENCH_MS = 1_500L
