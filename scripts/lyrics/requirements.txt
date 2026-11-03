@@ -2,7 +2,7 @@
 #    uv pip compile /tmp/crosstune-smart/requirements.txt -o /tmp/crosstune-smart/requirements.lock --python-version 3.12
 anyascii==0.3.3
     # via scripts/songcheck/songcheck.py
-anyio==4.15.1
+anyio==4.16.0
     # via httpx2
 av==19.0.2
     # via faster-whisper
