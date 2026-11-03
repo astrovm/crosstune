@@ -74,10 +74,10 @@ class CheckpointTest(unittest.TestCase):
                 (r.OUT / f'fake.{suffix}').write_text('fake')
             for length in r.LENGTHS:
                 r.heard_file('fake', length, r.APP_MODEL).write_text('{}')
-            with patch.object(r.subprocess, 'check_output', return_value=b'21.001'):
+            with patch.object(r.subprocess, 'check_output', return_value=b'21.021'):
                 self.assertFalse(r.complete('fake'))
                 for length in r.LENGTHS:
-                    r.heard_file('fake', length, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in range(0, 21001 - length, 1000)}))
+                    r.heard_file('fake', length, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in range(0, 21020 - length, 1000)}))
                 self.assertTrue(r.complete('fake'))
 
 if __name__ == '__main__':

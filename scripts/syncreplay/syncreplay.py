@@ -530,12 +530,14 @@ def complete(song):
         return False
     duration = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                                                "-of", "default=nw=1:nk=1", str(OUT / f"{song}.wav")]))
+    # The visualizer discards the last incomplete mixer block, as windows() does.
+    milliseconds = int(round(duration * 48000)) // BLOCK * (BLOCK // 48)
     for length in LENGTHS:
         path = heard_file(song, length, APP_MODEL)
         if not path.exists():
             return False
         done = json.loads(path.read_text())
-        if any(str(start) not in done for start in range(0, int(duration * 1000) - length, STEP_MS)):
+        if any(str(start) not in done for start in range(0, milliseconds - length, STEP_MS)):
             return False
     return True
 
