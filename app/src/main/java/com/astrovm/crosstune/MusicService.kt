@@ -4,6 +4,7 @@ import android.content.Context
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -138,13 +139,10 @@ internal enum class MusicService(
      */
     private fun appOnlyLink(link: String): String? {
         val url = link.toHttpUrlOrNull() ?: return null
-        val path = url.pathSegments
-        return when {
-            this == QOBUZ && url.host == "play.qobuz.com" -> url.newBuilder().host("open.qobuz.com").query(null).apply {
-                if (path == listOf("search")) url.queryParameter("q")?.let(::addPathSegment)
-            }.build().toString()
-            this == DEEZER && url.host == "www.deezer.com" && path.size == 2 && path[0] == "search" -> "deezer-query://www.deezer.com/search?" + query("query", path[1])
-            this == TIDAL && url.host == "listen.tidal.com" && path == listOf("search") -> url.queryParameter("q")?.let { "tidal://search?" + query("q", it) }
+        return when (this) {
+            QOBUZ -> qobuzAppLink(url)
+            DEEZER -> deezerAppLink(url)
+            TIDAL -> tidalAppLink(url)
             else -> null
         }
     }
@@ -180,6 +178,16 @@ internal enum class MusicService(
  */
 internal fun sameApp(one: String?, other: String?, installed: (String) -> Boolean): Boolean =
     one == other || (one != null && !installed(one) && MusicService.ofOwnApp(one)?.appPackages?.contains(other) == true)
+
+private fun qobuzAppLink(url: HttpUrl): String? = url.takeIf { it.host == "play.qobuz.com" }?.newBuilder()?.host("open.qobuz.com")?.query(null)?.apply {
+    if (url.pathSegments == listOf("search")) url.queryParameter("q")?.let(::addPathSegment)
+}?.build()?.toString()
+
+private fun deezerAppLink(url: HttpUrl): String? = url.pathSegments.takeIf { url.host == "www.deezer.com" && it.size == 2 && it[0] == "search" }
+    ?.let { "deezer-query://www.deezer.com/search?" + query("query", it[1]) }
+
+private fun tidalAppLink(url: HttpUrl): String? = url.queryParameter("q")?.takeIf { url.host == "listen.tidal.com" && url.pathSegments == listOf("search") }
+    ?.let { "tidal://search?" + query("q", it) }
 
 /** [name]=[value], as a link's query, for links that aren't the web's. */
 private fun query(name: String, value: String): String = "https://query".toHttpUrl().newBuilder().addQueryParameter(name, value).build().encodedQuery.orEmpty()
