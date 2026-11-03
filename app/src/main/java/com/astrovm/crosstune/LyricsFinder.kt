@@ -1260,22 +1260,28 @@ internal class LyricsFinder(
          */
         fun cleaned(found: Lyrics.Found, song: MusicMetadata): Lyrics.Found {
             val netEase = found.source?.startsWith(NETEASE) == true
-            val ads = found.words.lines().any(webAddress::containsMatchIn) || found.lines.any { webAddress.containsMatchIn(it.text) }
-            val broken = found.words.lines().any { mended(it) != it } || found.lines.any { mended(it.text) != it.text }
             // A whole song in capitals, as some sites keep it, reads as it's written elsewhere: in sentences.
             val shouting = inCapitals(found.words.ifBlank { found.lines.joinToString("\n") { it.text } })
-            if (!netEase && !ads && !broken && !shouting) return found
+            if (!netEase && !shouting && !hasAdOrBreak(found)) return found
             // Where NetEase's contributors wrote apostrophes escaped, their commas are apostrophes: "friend' and he\'s back".
             val commas = netEase && "\\'" in found.words
             fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
             fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
-            fun cased(text: String) = if (shouting) inSentenceCase(text) else text
-            fun cased(words: List<TimedWord>) = if (shouting) words.zip(inSentenceCase(words.map { it.text })) { word, text -> word.copy(text = text) } else words
-            val words = found.words.lines().map(::mend).clean { it }.map(::cased).joinToString("\n").trim()
+            val words = found.words.lines().map(::mend).clean { it }.joinToString("\n").trim()
             val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
-                .clean { it.text }.map { line -> line.copy(text = cased(line.text), words = cased(line.words)) }
-            return found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
+                .clean { it.text }
+            val kept = found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
+            return if (shouting) inSentenceCase(kept) else kept
         }
+
+        private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it }
+
+        private fun inSentenceCase(found: Lyrics.Found) = found.copy(
+            words = found.words.lines().joinToString("\n", transform = ::inSentenceCase),
+            lines = found.lines.map { line ->
+                line.copy(text = inSentenceCase(line.text), words = line.words.zip(inSentenceCase(line.words.map { it.text })) { word, text -> word.copy(text = text) })
+            }
+        )
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L
