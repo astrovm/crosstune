@@ -713,6 +713,9 @@ class ExactMatcherTest {
         // The single's length, not the album's that Apple lists first, is still the song.
         assertEquals("https://music.youtube.com/watch?v=door0000000", picks("4:12", editions))
         assertNull(picks("3:30", editions))
+        // Up to eight seconds off, give or take.
+        assertEquals("https://music.youtube.com/watch?v=door0000000", picks("4:18", editions))
+        assertNull(picks("4:19", editions))
         // Another song by the same artist in the same search lends it no length.
         assertNull(picks("3:30", appleSong("Stay With Me", "Miki Matsubara", 312_000) + "," + appleSong("Mayonaka no Door", "Miki Matsubara", 210_000, id = 8)))
     }

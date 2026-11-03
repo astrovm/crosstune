@@ -4149,6 +4149,57 @@ class MainActivityTest {
     }
 
     @Test
+    fun aBuildPatchedFromYouTubeMusicPlaysForItOnlyWhenYouTubeMusicIsntThere() {
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(morphe, "YT Music Morphe"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = hasContentDescription(string(R.string.play_in_background, "YouTube Music")) and isEnabled()
+        waitUntil { composeRule.onAllNodes(play).fetchSemanticsNodes().isNotEmpty() }
+        // YouTube Music isn't there, so the build patched from it plays for it: what it played before isn't the song asked.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
+        composeRule.onNode(play).performClick()
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Old Song")).fetchSemanticsNodes().isEmpty())
+        // What it goes on to is, whatever its name.
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = morphe)
+        waitForText("黄昏のBAY CITY")
+    }
+
+    @Test
+    fun aBuildPatchedFromYouTubeMusicIsntTakenForItWhenYouTubeMusicIsThere() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morphe, "YT Music Morphe"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        val waiting = string(R.string.player_waiting, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // The patched build is an app of its own: what it plays, before or after, is nothing to YouTube Music.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
+        click(play)
+        waitForText(waiting)
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = morphe)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(waiting)).fetchSemanticsNodes().isNotEmpty())
+        // So a song YouTube Music goes on to is the one asked, even named as the one the patched build played.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitForText("Old Song")
+    }
+
+    @Test
     fun aSongAnotherAppPlaysIsntTakenForTheOneAskedWhateverItsName() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }
