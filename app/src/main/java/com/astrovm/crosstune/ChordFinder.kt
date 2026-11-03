@@ -343,14 +343,40 @@ internal class ChordFinder(
     private fun titleParts(title: String): List<String> =
         title.split(titleBreak).map { it.trim() }.filter { it.length >= 2 && it != title }.distinct()
 
-    /** A song's names in Japanese, and its artists' names, as NetEase has them. */
+    /** A song's names in Japanese, and its artists' names, as NetEase or Japan's Apple Music store has them. */
     private class OtherNames(val titles: List<String>, val artists: List<String>)
 
     /**
      * The names NetEase has [song] by: in Japanese, "君は1000%" for "Kimi ha 1000%", and of the
      * artists of a song of its name, "竹内まりや" for Mariya Takeuchi, as it knows many by both.
+     * It knows a song with a name of its own in English, "The Cruel Angel's Thesis", only by that,
+     * so then by the names Japan's Apple Music store has it by: "残酷な天使のテーゼ", by "高橋洋子".
      */
     private suspend fun otherNames(song: MusicMetadata): OtherNames {
+        val netEase = netEaseNames(song)
+        if (netEase.titles.isNotEmpty()) return netEase
+        val inJapan = namesInJapan(song)
+        return OtherNames(inJapan.map { it.first }.distinct().take(MAX_NAMES), (netEase.artists + inJapan.map { it.second }).distinct())
+    }
+
+    /**
+     * The titles and artists Japan's Apple Music store has for songs found by [song]'s names, those
+     * named in Japanese, without what a version adds: "残酷な天使のテーゼ" for "残酷な天使のテーゼ (2009VERSION)".
+     */
+    private suspend fun namesInJapan(song: MusicMetadata): List<Pair<String, String>> {
+        val search = LyricsFinder.ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
+            .addQueryParameter("term", "${song.title} ${song.artist}")
+            .addQueryParameter("entity", "song")
+            .addQueryParameter("limit", "10")
+            .addQueryParameter("country", "jp")
+            .build()
+        val list = JSONObject(fetch(search.toString())).optJSONArray("results")
+        val found = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
+        return found.map { SongNames.bareTitle(it.optString("trackName")) to it.optString("artistName").trim() }.filter { (title) -> japanese(title) }
+    }
+
+    /** The names NetEase has [song] by, in Japanese, and the artists of a song of its name. */
+    private suspend fun netEaseNames(song: MusicMetadata): OtherNames {
         val search = NETEASE_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("s", "${song.title} ${song.artist}")
             .addQueryParameter("type", "1")
