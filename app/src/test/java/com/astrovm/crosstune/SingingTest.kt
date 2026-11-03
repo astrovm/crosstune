@@ -836,6 +836,43 @@ class SingingTest {
         last.complete(null)
     }
 
+    @Test
+    fun aVoiceHeardLaterWhereTheWordsAreTimedLightsThemAgainThoughNoneOfItsWordsAreMadeOut() {
+        // The first while heard as music alone though it's sung, as the speech model sometimes hears it:
+        // the timing's doubted. Then a voice where the words are timed says they're not timed into an intro.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val last = CompletableDeferred<Sung?>()
+        singing.answer = { if (singing.hears == 1) musicAlone() else if (singing.hears == 2) Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("la", 500))) else last.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.following?.timingKnown == false }
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        last.complete(null)
+    }
+
+    @Test
+    fun aVoiceInTheFirstSecondsOfALaterWhileLightsTheLinesAgainBeforeTheRestOfItIsHeard() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { if (singing.hears == 1) musicAlone() else Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("la", 500))) }
+        singing.answer = { if (singing.hears == 1) musicAlone() else rest.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 && model().uiState.following?.timingKnown == false }
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        rest.complete(null)
+    }
+
     /** Sung the first seconds of lines timed at 0, 3, 6, ... seconds, with a voice [voiceMs] into them, told as soon as it's heard. */
     private fun voiceHeardAt(voiceMs: Long): Boolean {
         val rest = CompletableDeferred<Sung?>()
