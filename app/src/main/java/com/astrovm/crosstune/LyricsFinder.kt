@@ -225,10 +225,11 @@ private val misread = Regex("""[ÃÂâ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0
 
 /**
  * [line] as it was meant to read, where a site broke it in a way that can be undone: an apostrophe
- * stored escaped, a lost character, or UTF-8 read once as Windows-1252 or Latin-1.
+ * stored escaped, a space that never breaks, a lost character, or UTF-8 read once as Windows-1252 or Latin-1.
  */
 internal fun mended(line: String): String {
-    var mended = line.replace("\\'", "'")
+    // A space that never breaks would keep a long line from wrapping between its words.
+    var mended = line.replace("\\'", "'").replace('\u00a0', ' ')
     if (lostCharacters.containsMatchIn(mended)) mended = mended.replace(lostCharacters, " ").trim()
     if (misread.containsMatchIn(mended)) {
         val bytes = strictly(mended, charset("windows-1252")) ?: strictly(mended, Charsets.ISO_8859_1)
@@ -236,6 +237,43 @@ internal fun mended(line: String): String {
     }
     return mended
 }
+
+/** Whether [words] are in capitals, nearly every letter that has them, as some sites keep a whole song. */
+private fun inCapitals(words: String): Boolean {
+    val cased = words.filter { it.isLetter() && it.lowercaseChar() != it.uppercaseChar() }
+    return cased.length >= MIN_CASED_LETTERS && cased.count(Char::isUpperCase) >= cased.length * CAPITALS_SHARE
+}
+
+/**
+ * [line], written in capitals, as a sentence is written: a capital to start it and each sentence in
+ * it, and I. Letter for letter, so words timed one by one can be cut from it again.
+ */
+internal fun inSentenceCase(line: String): String {
+    val letters = line.map(Char::lowercaseChar).toCharArray()
+    var capital = true
+    for (i in letters.indices) {
+        val letter = letters[i]
+        val alone = letters.getOrNull(i - 1)?.isLetter() != true && letters.getOrNull(i + 1)?.isLetter() != true
+        when {
+            letter in ".!?" -> capital = true
+            !letter.isLetter() -> Unit
+            capital -> letters[i] = letter.uppercaseChar().also { capital = false }
+            letter == 'i' && alone -> letters[i] = 'I'
+        }
+    }
+    return String(letters)
+}
+
+/** Words timed one by one, [texts], in sentence case as the line they make up. */
+private fun inSentenceCase(texts: List<String>): List<String> {
+    val line = inSentenceCase(texts.joinToString(""))
+    var at = 0
+    return texts.map { text -> line.substring(at, at + text.length).also { at += text.length } }
+}
+
+/** Letters with a case a song needs, and the share of them in capitals, to count as written in capitals. */
+private const val MIN_CASED_LETTERS = 20
+private const val CAPITALS_SHARE = 0.9
 
 private fun strictly(text: String, charset: Charset): ByteArray? = try {
     charset.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).encode(CharBuffer.wrap(text)).let { buffer -> ByteArray(buffer.remaining()).also(buffer::get) }
@@ -1217,21 +1255,26 @@ internal class LyricsFinder(
 
         /**
          * [found] without what's since learned to be left out: a site's ad, from any site, and what
-         * NetEase's contributors add. Words kept from before get each fix too, with no need to look
+         * NetEase's contributors add; a song a site keeps in capitals, in sentence case. Words kept from before get each fix too, with no need to look
          * them up again.
          */
         fun cleaned(found: Lyrics.Found, song: MusicMetadata): Lyrics.Found {
             val netEase = found.source?.startsWith(NETEASE) == true
             val ads = found.words.lines().any(webAddress::containsMatchIn) || found.lines.any { webAddress.containsMatchIn(it.text) }
-            val broken = found.words.lines().any { mended(it) != it }
-            if (!netEase && !ads && !broken) return found
+            val broken = found.words.lines().any { mended(it) != it } || found.lines.any { mended(it.text) != it.text }
+            // A whole song in capitals, as some sites keep it, reads as it's written elsewhere: in sentences.
+            val shouting = inCapitals(found.words.ifBlank { found.lines.joinToString("\n") { it.text } })
+            if (!netEase && !ads && !broken && !shouting) return found
             // Where NetEase's contributors wrote apostrophes escaped, their commas are apostrophes: "friend' and he\'s back".
             val commas = netEase && "\\'" in found.words
             fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
             fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
-            val words = found.words.lines().map(::mend).clean { it }.joinToString("\n").trim()
+            fun cased(text: String) = if (shouting) inSentenceCase(text) else text
+            fun cased(words: List<TimedWord>) = if (shouting) words.zip(inSentenceCase(words.map { it.text })) { word, text -> word.copy(text = text) } else words
+            val words = found.words.lines().map(::mend).clean { it }.map(::cased).joinToString("\n").trim()
             val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
-            return found.copy(words = words, lines = SyncedLyrics.withPauses(lines.clean { it.text }))
+                .clean { it.text }.map { line -> line.copy(text = cased(line.text), words = cased(line.words)) }
+            return found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
         }
 
         /** How long looking for a well-timed copy of badly timed words can take. */
