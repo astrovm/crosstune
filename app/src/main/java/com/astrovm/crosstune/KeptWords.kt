@@ -19,7 +19,9 @@ internal data class KeptWords(
     val learning: Learning,
     /** What the words were worked out with, see [MainViewModel]'s madeWith. */
     val madeWith: String,
-    val chords: ChordsState
+    val chords: ChordsState,
+    /** How much of the song plays per ms of the words past [syncPoints], see [LyricsSync.adjust]. */
+    val pace: Double = 1.0
 ) {
     /** Only what shows them again: what's being asked of ChatGPT about the song is asked again. */
     fun json(): String = JSONObject()
@@ -37,6 +39,7 @@ internal data class KeptWords(
         .put("madeWith", madeWith)
         .put("chordsTried", chords.tried)
         .put("chords", chords.sheet?.let(::sheetJson))
+        .put("pace", pace)
         .toString()
 
     companion object {
@@ -60,7 +63,9 @@ internal data class KeptWords(
                     fromRomaji = kept.getBoolean("fromRomaji")
                 ),
                 kept.getString("madeWith"),
-                ChordsState(tried = kept.getBoolean("chordsTried"), sheet = kept.optJSONObject("chords")?.let(::sheet))
+                ChordsState(tried = kept.getBoolean("chordsTried"), sheet = kept.optJSONObject("chords")?.let(::sheet)),
+                // Kept before the pace was, they go on as timed.
+                kept.optDouble("pace", 1.0)
             )
         } catch (_: JSONException) {
             null

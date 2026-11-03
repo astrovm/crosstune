@@ -179,6 +179,12 @@ internal class MainViewModel(
         restored?.let { written -> lines.mapIndexed { index, line -> written.getOrNull(index)?.let { line.copy(text = it, words = emptyList()) } ?: line } } ?: lines
     private var syncPoints: List<SyncPoint> = emptyList()
 
+    /**
+     * How much of the song plays per ms of its words past the lines put in time: a recording sped up
+     * or slowed, as uploads can be, plays its words that much sooner or later as it goes on.
+     */
+    private var wordsPace = 1.0
+
     /** The words of the songs shown lately, by recording, the last one shown last. */
     private val kept = object : LinkedHashMap<String, KeptWords>(KEPT_SONGS, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, KeptWords>) = size > KEPT_SONGS
@@ -1880,6 +1886,7 @@ internal class MainViewModel(
         found = null
         restored = null
         syncPoints = emptyList()
+        wordsPace = 1.0
         handGap = null
         if (showKept(song)) {
             follow(song)
@@ -1899,8 +1906,9 @@ internal class MainViewModel(
                             foundLines = answer.lines
                             found = answer
                             syncPoints = syncStore.load(song, answer.lines)
+                            wordsPace = syncStore.pace(song, answer.lines)
                             uiState = uiState.copy(
-                                lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
+                                lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints, wordsPace), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
                                 lyricsOffTake = timedForAnother(song)
                             )
                             uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
@@ -1953,13 +1961,13 @@ internal class MainViewModel(
         if (uiState.lyrics.isEmpty() || working) return
         val key = RecordingKey.of(song)
         // Where lines were heard this time only isn't kept: next time the app's clock may be sure.
-        val lines = if (heardPoints.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, syncPoints))
+        val lines = if (heardPoints.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, syncPoints, wordsPace))
         val words = KeptWords(
             uiState.lyrics, lines, uiState.lyricsSynced, found, foundLines, restored, syncPoints,
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
-            madeWith(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh()
+            madeWith(), uiState.chords.takeIf { it.sheet != null } ?: uiState.chords.fresh(), wordsPace
         )
         kept[key] = words
         keptOnDisk?.let { disk ->
@@ -1981,6 +1989,7 @@ internal class MainViewModel(
         foundLines = kept.foundLines
         restored = kept.japanese
         syncPoints = kept.syncPoints
+        wordsPace = kept.pace
         uiState = uiState.copy(
             lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, titleMeaning = kept.learning.titleMeaning, fromRomaji = kept.learning.fromRomaji),
@@ -2115,6 +2124,7 @@ internal class MainViewModel(
         if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
         if (hearing.clock != null) heardAtMs = now()
         appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
+        appFollowing?.let { learnPace(it, shown, hearing) }
         val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
         val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
         appFollowing?.takeIf { needsLead(it) && syncPoints.isEmpty() }?.let { app ->
@@ -2182,6 +2192,21 @@ internal class MainViewModel(
         val gap = heard.clock?.let { gapTiming.heard(app.clock, it, -MAX_GAP_MS..MAX_GAP_MS) } ?: return
         gapStore.save(shown, words, match, gap)
         if (autoCalibrating) stopListeningAlong()
+    }
+
+    /**
+     * How fast [app] plays [shown] against how its words are timed, by how much faster or slower than
+     * the recording it matched Shazam [heard] it: words timed for a release play that much sooner or
+     * later as it goes on. Words that say they're timed for one as long as this keep its pace.
+     */
+    private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song) {
+        if (heard.clock == null || !sameSong(heard.metadata, shown)) return
+        if (found?.lengthMs != null && app.durationMs != null && found?.timedFor(app.durationMs) == true) return
+        val pace = (1.0 / heard.speed).takeIf { abs(it - 1) >= MIN_PACE_OFF } ?: 1.0
+        if (pace == wordsPace) return
+        wordsPace = pace
+        syncStore.save(shown, foundLines, syncPoints, pace)
+        showPoints()
     }
 
     /** How far the words are from Shazam's place in [heard], as learnt for the recording it matched. */
@@ -2294,7 +2319,7 @@ internal class MainViewModel(
         var found = false
         while (true) {
             // Heard against the lines as they're shown, so already where they're sung, a little off at most.
-            val shown = LyricsSync.adjust(lines, shownPoints)
+            val shown = LyricsSync.adjust(lines, shownPoints, wordsPace)
             // Heard where lines are sung, so there are words to hear.
             delay(untilSung(shown, uiState.following?.clock ?: return, heardTo, straightOn) ?: return)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return
@@ -2399,7 +2424,7 @@ internal class MainViewModel(
         if (first && abs(shift) >= SUNG_OFF_MS) problemFound(SongProblem.SUNG_OFF)
         val wholeMs = shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L
         placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, wholeMs))
-        val done = untilSung(LyricsSync.adjust(lines, shownPoints), clock, clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L) == null
+        val done = untilSung(LyricsSync.adjust(lines, shownPoints, wordsPace), clock, clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L) == null
         liningUp = !done
         if (done) sungStore.save(song, lines)
         return done
@@ -2410,7 +2435,7 @@ internal class MainViewModel(
      * hand would: the lines between stretch to fit, and those past the last go on at the pace they set.
      */
     private fun placeSung(song: MusicMetadata, placed: Map<Int, Long>) {
-        val shown = LyricsSync.adjust(foundLines, syncPoints)
+        val shown = LyricsSync.adjust(foundLines, syncPoints, wordsPace)
         if (placed.none { (line, ms) -> ms != shown[line].timeMs }) return
         setSync(song, placed.entries.fold(syncPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms)) })
     }
@@ -2419,7 +2444,7 @@ internal class MainViewModel(
     private val shownPoints get() = heardPoints.ifEmpty { syncPoints }
 
     private fun showPoints() {
-        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, shownPoints)))
+        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, shownPoints, wordsPace)))
     }
 
     /** Forgets where lines were heard this time, as the app's clock is sure now, or it stopped. */
@@ -3015,8 +3040,8 @@ internal class MainViewModel(
         // Put in time by hand or for good, what was heard this time only gives way.
         heardPoints = emptyList()
         // Kept for the words as found, which is how they're found next time.
-        syncStore.save(song, foundLines, points)
-        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
+        syncStore.save(song, foundLines, points, wordsPace)
+        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points, wordsPace)), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
         keepInTime()
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)
@@ -4372,6 +4397,9 @@ internal class MainViewModel(
         const val HEARD_LATELY_MS = 60_000L
         /** How far Shazam's place in a song may be from where its words are timed. */
         const val MAX_GAP_MS = 60_000L
+
+        /** How far from the words' own pace a recording must play to go on at its own: less, Shazam's telling nothing. */
+        const val MIN_PACE_OFF = 0.005
 
         /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
         const val SINGING_TRIES = 3

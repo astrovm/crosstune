@@ -17,7 +17,9 @@ visualizer, as the phone would.
 app's clock is sure then; later is picked up partway. `--work MS` is how long the phone takes to
 work out the words each time; try a few, as where each later stretch is heard moves with it. `--behind MS`
 has the music app's clock that far behind what it plays, and `--behind-again MS` plays it a second
-time, keeping what was learnt, to score that. `--gradle "podman exec box ./gradlew"` runs
+time, keeping what was learnt, to score that. `--skew X` has Shazam hear it X faster than the recording
+it matches, `--words-length MS` the words timed for another release, and `--video` a video playing,
+as for a sped-up upload. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
 `phone` checks the same on a real phone over adb, with the dev app installed and the phone unlocked:
 it plays the recording in YouTube Music (--app for another build of it) from the start, opens the
@@ -201,6 +203,13 @@ def run(args):
     replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
+    if args.skew is not None:
+        replay["skew"] = args.skew
+        replay["shazamAhead"] = args.shazam_ahead
+    if args.words_length is not None:
+        replay["wordsLength"] = args.words_length
+    if args.video:
+        replay["video"] = True
     asked.write_text(json.dumps(replay))
     try:
         done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
@@ -431,6 +440,12 @@ def main():
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+            # ZnrSNEah_20 as on the phone: --video --skew 0.0349 --shazam-ahead 45467 --words-length 0, as Shazam
+            # heard it (app/src/test/resources/shazam/faster.jsonl), with words that don't say how long they're timed for.
+            p.add_argument("--skew", type=float, help="Shazam hears it, this much faster than the recording it matches (its timeskew)")
+            p.add_argument("--shazam-ahead", type=int, default=0, help="ms further on Shazam's place is at the song's start")
+            p.add_argument("--words-length", type=int, help="ms long the recording the words are timed for is, if not the one playing; 0 doesn't say")
+            p.add_argument("--video", action="store_true", help="the music app plays the song's video")
     p = steps.add_parser("hear")
     p.add_argument("id")
     p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")

@@ -932,6 +932,69 @@ class MainViewModelTest {
         assertFalse(model.uiState.listeningAlong)
     }
 
+    /** The music app at [ms] into the song now. */
+    private fun appAt(playback: FakePlayback, ms: Long) {
+        playback.playing.value = following().copy(clock = PlaybackClock(ms, android.os.SystemClock.elapsedRealtime()))
+        idle()
+    }
+
+    @Test
+    fun aRecordingHeardPlayingFasterThanTheWordsAreTimedForGoesOnAtItsPace() {
+        val playback = FakePlayback()
+        val words = """[{"trackName":"Hush","artistName":"Band","duration":200,"syncedLyrics":"[00:10.00] One\n[00:20.00] Two\n[01:50.00] Three"}]"""
+        // Shazam hears it 3.5% faster than the recording it matches, as Bizarre Love Triangle's upload.
+        val faster = Heard.Song(song, null, offsetMs = 1_000, startedAtMs = android.os.SystemClock.elapsedRealtime(), matchId = "m1", speed = 1.035f)
+        val ears = ScriptedEars(faster)
+        val model = lyricsModel(playback, answer = words, listener = ears)
+        model.listenAlong()
+        idle()
+        assertEquals(1, ears.asked)
+        model.stopListeningAlong()
+        // Two lines put in time, too close together to tell a pace of their own: "Three", 90 s of the words on, comes 3 s sooner.
+        appAt(playback, 12_000)
+        model.syncLine(0)
+        appAt(playback, 22_000)
+        model.syncLine(1)
+        fun gap() = model.uiState.lyricLines.let { it[2].timeMs - it[1].timeMs }
+        assertEquals((90_000 / 1.035).toLong().toDouble(), gap().toDouble(), 1.0)
+        // Kept for the next time the song plays, with the words.
+        val found = listOf(LyricLine(10_000, "One"), LyricLine(20_000, "Two"), LyricLine(110_000, "Three"))
+        assertEquals(1 / 1.035, LyricsSyncStore(prefs()).pace(song, found), 0.0001)
+        // Heard at its own speed after all, it goes on as timed.
+        ears.queue.add(faster.copy(speed = 1.002f))
+        model.listenAlong()
+        idle()
+        model.stopListeningAlong()
+        assertEquals(90_000L, gap())
+        // Heard as another song, or with no place in it, Shazam's speed says nothing of this one.
+        ears.queue.add(faster.copy(metadata = MusicMetadata("Moon", "Luna")))
+        ears.queue.add(faster.copy(offsetMs = null))
+        model.listenAlong()
+        pass(20_000)
+        model.stopListeningAlong()
+        assertEquals(90_000L, model.uiState.lyricLines.let { it[2].timeMs - it[1].timeMs })
+    }
+
+    @Test
+    fun wordsTimedForARecordingAsLongAsTheOnePlayingKeepItsPace() {
+        val playback = FakePlayback()
+        // The app says it's as long as the recording the words are timed for: they're timed for it, sped up or not.
+        val words = """[{"trackName":"Hush","artistName":"Band","duration":200,"syncedLyrics":"[00:10.00] One\n[00:20.00] Two\n[01:50.00] Three"}]"""
+        val ears = ScriptedEars(Heard.Song(song, null, offsetMs = 1_000, startedAtMs = android.os.SystemClock.elapsedRealtime(), matchId = "m1", speed = 1.035f))
+        val model = lyricsModel(playback, answer = words, app = following().copy(durationMs = 200_000), listener = ears)
+        model.listenAlong()
+        idle()
+        assertEquals(1, ears.asked)
+        model.stopListeningAlong()
+        playback.playing.value = following().copy(clock = PlaybackClock(12_000, android.os.SystemClock.elapsedRealtime()), durationMs = 200_000)
+        idle()
+        model.syncLine(0)
+        playback.playing.value = following().copy(clock = PlaybackClock(22_000, android.os.SystemClock.elapsedRealtime()), durationMs = 200_000)
+        idle()
+        model.syncLine(1)
+        assertEquals(90_000L, model.uiState.lyricLines.let { it[2].timeMs - it[1].timeMs })
+    }
+
     @Test
     fun stepsToFixGoOneByOneAndComeBackToTheListOnlyIfTheyCameFromIt() {
         val model = model()

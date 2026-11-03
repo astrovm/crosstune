@@ -16,14 +16,18 @@ internal data class SyncPoint(val lineMs: Long, val songMs: Long)
  * stretch to fit, and past the last one they move along with it.
  */
 internal object LyricsSync {
-    /** [lines] where the user says they are, by [points]. */
-    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>): List<LyricLine> =
+    /**
+     * [lines] where the user says they are, by [points]. Past the first or last of them, they go on at
+     * [pace]: how much of the song plays per ms of the words, when the recording is known to play faster
+     * or slower than the one they're timed for, unless the points themselves tell how fast.
+     */
+    fun adjust(lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0): List<LyricLine> =
         if (points.isEmpty()) lines else lines.map { line ->
-            line.copy(timeMs = timeOf(line.timeMs, points), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points)) }, endMs = line.endMs?.let { timeOf(it, points) })
+            line.copy(timeMs = timeOf(line.timeMs, points, pace), words = line.words.map { it.copy(timeMs = timeOf(it.timeMs, points, pace)) }, endMs = line.endMs?.let { timeOf(it, points, pace) })
         }
 
-    /** Where in the song [lineMs] of the words is, by [points] in order. */
-    fun timeOf(lineMs: Long, points: List<SyncPoint>): Long {
+    /** Where in the song [lineMs] of the words is, by [points] in order, going on at [pace] past them. */
+    fun timeOf(lineMs: Long, points: List<SyncPoint>, pace: Double = 1.0): Long {
         val after = points.indexOfFirst { it.lineMs > lineMs }
         val before = (if (after < 0) points.lastIndex else after - 1).takeIf { it >= 0 }?.let(points::get)
         val next = points.getOrNull(after)
@@ -31,27 +35,27 @@ internal object LyricsSync {
             before?.lineMs == lineMs -> before.songMs
             before != null && next != null -> before.songMs + (lineMs - before.lineMs) * (next.songMs - before.songMs) / (next.lineMs - before.lineMs)
             // Past either end, along the nearest; with no points at all, where the words say.
-            else -> along(lineMs, points, before ?: next ?: return lineMs)
+            else -> along(lineMs, points, before ?: next ?: return lineMs, pace)
         }
     }
 
     /**
-     * Where [lineMs], past the first or last of [points], is: as far off as the [nearest] one, or
-     * on the line all of them lie along when they drift far enough apart to tell. Words timed for
+     * Where [lineMs], past the first or last of [points], is: on from the [nearest] one at [pace], or
+     * on the line all of them lie along when they drift far enough from it to tell. Words timed for
      * another take may be sung a little faster or slower all through, so they drift on as much,
      * and one line heard or tapped a little off shouldn't move all those past it.
      */
-    private fun along(lineMs: Long, points: List<SyncPoint>, nearest: SyncPoint): Long {
-        val offset = lineMs + nearest.songMs - nearest.lineMs
+    private fun along(lineMs: Long, points: List<SyncPoint>, nearest: SyncPoint, pace: Double): Long {
+        val offset = nearest.songMs + ((lineMs - nearest.lineMs) * pace).toLong()
         // One line alone sets no pace.
         if (points.size < 2) return offset
         val lineAt = points.map { it.lineMs.toDouble() }.average()
         val songAt = points.map { it.songMs.toDouble() }.average()
-        val pace = points.sumOf { (it.lineMs - lineAt) * (it.songMs - songAt) } / points.sumOf { (it.lineMs - lineAt) * (it.lineMs - lineAt) }
+        val fitted = points.sumOf { (it.lineMs - lineAt) * (it.songMs - songAt) } / points.sumOf { (it.lineMs - lineAt) * (it.lineMs - lineAt) }
         // Further off than a take is sung, it's lines timed out of place, not a pace to go on at; drifting
-        // less across them than two lines heard or tapped can be off from each other, it's no pace at all.
-        if (abs(pace - 1) > MAX_PACE || abs(pace - 1) * (points.last().lineMs - points.first().lineMs) < PACE_DRIFT_MS) return offset
-        val fit = (songAt + (lineMs - lineAt) * pace).toLong()
+        // less across them than two lines heard or tapped can be off from each other, it's no other pace.
+        if (abs(fitted - pace) > MAX_PACE || abs(fitted - pace) * (points.last().lineMs - points.first().lineMs) < PACE_DRIFT_MS) return offset
+        val fit = (songAt + (lineMs - lineAt) * fitted).toLong()
         // Still after the last line put in time, or before the first, so the lines keep their order.
         return if (lineMs > nearest.lineMs) maxOf(fit, nearest.songMs) else minOf(fit, nearest.songMs)
     }
@@ -92,31 +96,36 @@ internal object LyricsSync {
 }
 
 /**
- * The lines put in time by hand, per song, on the phone only. They hold for the words they were
- * set on: other words for the song, e.g. from another place, are timed their own way, so they start over.
+ * The lines put in time by hand, per song, on the phone only, and the pace the words go on at past
+ * them. They hold for the words they were set on: other words for the song, e.g. from another place,
+ * are timed their own way, so they start over.
  */
 internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
     fun load(song: MusicMetadata, lines: List<LyricLine>): List<SyncPoint> {
-        val json = all()?.optJSONObject(keyOf(song))?.takeIf { it.optString("words") == fingerprint(lines) } ?: return emptyList()
-        val array = json.optJSONArray("points") ?: return emptyList()
+        val array = saved(song, lines)?.optJSONArray("points") ?: return emptyList()
         return LyricsSync.withoutSlips((0 until array.length()).mapNotNull { index ->
             array.optJSONArray(index)?.let { SyncPoint(it.optLong(0), it.optLong(1)) }
         }.sortedBy { it.lineMs })
     }
 
-    fun save(song: MusicMetadata, lines: List<LyricLine>, points: List<SyncPoint>) {
+    /** How much of [song] plays per ms of its [lines], as learnt: the same unless it's sped up or slowed. */
+    fun pace(song: MusicMetadata, lines: List<LyricLine>): Double = saved(song, lines)?.optDouble("pace", 1.0) ?: 1.0
+
+    fun save(song: MusicMetadata, lines: List<LyricLine>, points: List<SyncPoint>, pace: Double = 1.0) {
         val all = all() ?: JSONObject()
         val key = keyOf(song)
         all.remove(key)
-        if (points.isNotEmpty()) {
+        if (points.isNotEmpty() || pace != 1.0) {
             val array = JSONArray().apply { points.forEach { put(JSONArray().put(it.lineMs).put(it.songMs)) } }
-            all.put(key, JSONObject().put("words", fingerprint(lines)).put("points", array))
+            all.put(key, JSONObject().put("words", fingerprint(lines)).put("points", array).apply { if (pace != 1.0) put("pace", pace) })
         }
         // The oldest go first once there are many; JSONObject keeps the order they were put in.
         while (all.length() > MAX_SONGS) all.remove(all.keys().next())
         preferences.edit { putString(KEY, all.toString()) }
     }
+
+    private fun saved(song: MusicMetadata, lines: List<LyricLine>) = all()?.optJSONObject(keyOf(song))?.takeIf { it.optString("words") == fingerprint(lines) }
 
     private fun all(): JSONObject? = preferences.getString(KEY, null)?.let {
         try {

@@ -87,6 +87,23 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun aRecordingKnownToPlayFasterGoesOnAtItsPacePastTheLinesPutInTime() {
+        // Bizarre Love Triangle's upload plays 3.5% faster than the release its words are timed for.
+        val pace = 1 / 1.035
+        // One line heard: those after come sooner and sooner, those before later and later.
+        assertEquals(50_000L + (100_000 * pace).toLong(), LyricsSync.timeOf(130_000, listOf(SyncPoint(30_000, 50_000)), pace))
+        assertEquals(50_000L - (20_000 * pace).toLong(), LyricsSync.timeOf(10_000, listOf(SyncPoint(30_000, 50_000)), pace))
+        // As it is with lines too close together to tell a pace of their own.
+        assertEquals(51_600L + (10_000 * pace).toLong(), LyricsSync.timeOf(50_000, listOf(SyncPoint(30_000, 30_000), SyncPoint(40_000, 41_600)), pace))
+        // Lines drifting from it far enough to tell go on at their own pace: they were heard.
+        assertEquals(56_800L, LyricsSync.timeOf(55_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(35_000, 36_000)), pace))
+        // Between two lines put in time they still stretch to fit, and with none they're as timed.
+        assertEquals(25_000L, LyricsSync.timeOf(20_000, listOf(SyncPoint(10_000, 10_000), SyncPoint(30_000, 40_000)), pace))
+        assertEquals(lines, LyricsSync.adjust(lines, emptyList(), pace))
+        assertEquals(listOf(10_000L, 10_000L + (10_000 * pace).toLong()), LyricsSync.adjust(lines.take(2), listOf(SyncPoint(10_000, 10_000)), pace).map { it.timeMs })
+    }
+
+    @Test
     fun linesHeardALittleOffDontStretchTheRestOfTheSong() {
         // Tell It to My Heart's first minute, heard: each line where it was heard, a few tenths apart.
         val points = listOf(SyncPoint(18_550, 18_530), SyncPoint(26_680, 26_450), SyncPoint(49_450, 48_940), SyncPoint(59_470, 58_870))
@@ -129,6 +146,27 @@ class LyricsSyncTest {
         store.save(song, lines, emptyList())
         assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
         assertEquals("{}", prefs.getString("lyrics_sync", null))
+    }
+
+    @Test
+    fun aRecordingsPaceIsKeptWithItsLinesForTheSameWords() {
+        val store = LyricsSyncStore(prefs)
+        assertEquals(1.0, store.pace(song, lines), 0.0)
+        // Known before any line is put in time, it's kept on its own.
+        store.save(song, lines, emptyList(), 0.97)
+        assertEquals(0.97, LyricsSyncStore(prefs).pace(song, lines), 0.0)
+        assertEquals(emptyList<SyncPoint>(), store.load(song, lines))
+        // And with them, both.
+        val points = listOf(SyncPoint(10_000, 12_000))
+        store.save(song, lines, points, 0.97)
+        assertEquals(points, store.load(song, lines))
+        assertEquals(0.97, store.pace(song, lines), 0.0)
+        // Other words for it go on as timed.
+        assertEquals(1.0, store.pace(song, lines.dropLast(1)), 0.0)
+        // Lines kept before the pace was go on as timed too.
+        store.save(song, lines, points)
+        assertEquals(1.0, store.pace(song, lines), 0.0)
+        assertEquals(points, store.load(song, lines))
     }
 
     @Test

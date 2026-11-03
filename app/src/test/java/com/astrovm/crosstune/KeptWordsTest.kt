@@ -30,7 +30,8 @@ class KeptWordsTest {
             fromRomaji = true
         ),
         madeWith = "[en, [], true]",
-        chords = ChordsState(tried = true, sheet = ChordSheet(listOf(SheetLine("Walking down", listOf(Chord(0, "G"), Chord(8, "C")))), capo = 2, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/demo-1"))
+        chords = ChordsState(tried = true, sheet = ChordSheet(listOf(SheetLine("Walking down", listOf(Chord(0, "G"), Chord(8, "C")))), capo = 2, site = ChordSite.ULTIMATE_GUITAR, url = "https://tabs.ultimate-guitar.com/tab/demo-1")),
+        pace = 0.97
     )
 
     @Test
@@ -42,6 +43,12 @@ class KeptWordsTest {
     fun wordsWithNothingWorkedOutForThemReadBackSo() {
         val bare = KeptWords("Hello", listOf(LyricLine(0, "Hello")), false, null, emptyList(), null, emptyList(), Learning(), "[]", ChordsState())
         assertEquals(bare, KeptWords.from(bare.json()))
+    }
+
+    @Test
+    fun wordsKeptBeforeTheirPaceWasGoOnAsTimed() {
+        val before = org.json.JSONObject(all.json()).apply { remove("pace") }.toString()
+        assertEquals(all.copy(pace = 1.0), KeptWords.from(before))
     }
 
     @Test
