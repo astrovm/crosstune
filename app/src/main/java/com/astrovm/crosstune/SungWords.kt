@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.content.SharedPreferences
 import android.os.SystemClock
 import androidx.core.content.edit
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -46,9 +47,11 @@ internal interface SingingHearing {
     /**
      * What's sung in the next while the phone plays, in [language] when it's known. Given [first],
      * what's sung in its first [SingingListener.FIRST_SECONDS] is told it as soon as that's heard,
-     * while the rest still is.
+     * while the rest still is. When [first] says to, as many seconds from [SingingListener.AGAIN_SECONDS]
+     * in are heard and told it too, as the speech model sometimes hears singing as music alone,
+     * depending on just where what it hears starts.
      */
-    suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung?
+    suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung?
 
     /** Whether the last try heard nothing for want of the speech model, which wasn't fetched then, e.g. on mobile data. */
     val missesModel: Boolean
@@ -88,7 +91,7 @@ internal class SingingListener(
 
     override suspend fun fetchModel(): Boolean = fetch() != null
 
-    override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? {
+    override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
         val recording = withContext(recordDispatcher) { sound.open() } ?: return null
         val (file, heard) = recording.use {
@@ -98,18 +101,28 @@ internal class SingingListener(
             if (file == null) return null
             file to (
                 coroutineScope {
-                    withContext(recordDispatcher) {
-                        record(recording) { startedAt, part ->
+                    // The seconds heard again, if the first say to, once they're in.
+                    val again = CompletableDeferred<Pair<Long, ShortArray>>()
+                    val heard = withContext(recordDispatcher) {
+                        record(recording, again) { startedAt, part ->
                             // Told back where it was asked, while the rest is still heard.
-                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.let { first(Sung(startedAt, it)) } }
+                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.let { if (first(Sung(startedAt, it))) hearAgain(file, again.await(), language, first) } }
                         }
                     }
+                    // Sound that ended before them has none to hear again.
+                    again.cancel()
+                    heard
                 } ?: return null
                 )
         }
         keepTo?.let { File(it, "heard-${heard.first}.pcm").writeBytes(ByteBuffer.allocate(heard.second.size * 2).order(ByteOrder.LITTLE_ENDIAN).apply { asShortBuffer().put(heard.second) }.array()) }
         val words = words(file, heard.second, language) ?: return null
         return Sung(heard.first, words)
+    }
+
+    /** The sound in [part], from when it started, heard with [model] and told [first]. */
+    private suspend fun hearAgain(model: File, part: Pair<Long, ShortArray>, language: String?, first: suspend (Sung) -> Boolean) {
+        words(model, part.second, language)?.let { first(Sung(part.first, it)) }
     }
 
     /** The words sung in [audio], heard with [model], in [language] when it's known; null when it can't be loaded, or hears none. */
@@ -124,9 +137,10 @@ internal class SingingListener(
 
     /**
      * When the sound started, and all of it; null when there's no sound to hear, or not all of it.
-     * Its first [FIRST_SECONDS] are given to [heardFirst] as soon as they're in.
+     * Its first [FIRST_SECONDS] are given to [heardFirst] as soon as they're in, and as many from
+     * [AGAIN_SECONDS] in, with when they started, to [again].
      */
-    private suspend fun record(recording: Recording, heardFirst: (Long, ShortArray) -> Unit): Pair<Long, ShortArray>? {
+    private suspend fun record(recording: Recording, again: CompletableDeferred<Pair<Long, ShortArray>>, heardFirst: (Long, ShortArray) -> Unit): Pair<Long, ShortArray>? {
         val audio = ShortArray(SAMPLES)
         val startedAt = clock()
         var recorded = 0
@@ -134,6 +148,7 @@ internal class SingingListener(
             val read = runInterruptible { recording.read(audio, recorded, minOf(CHUNK, audio.size - recorded)) }
             if (read <= 0) return null
             if (recorded < FIRST_SAMPLES && recorded + read >= FIRST_SAMPLES) heardFirst(startedAt, audio.copyOf(FIRST_SAMPLES))
+            if (!again.isCompleted && recorded + read >= AGAIN_END) again.complete(startedAt + AGAIN_SECONDS * 1000L to audio.copyOfRange(AGAIN_SAMPLES, AGAIN_END))
             recorded += read
         }
         return startedAt to audio
@@ -144,8 +159,16 @@ internal class SingingListener(
         const val SECONDS = 20
         /** Enough to tell whether the voice has started, so a song's words timed into its intro are known to be soon. */
         const val FIRST_SECONDS = 8
+        /**
+         * How far into a while its first seconds are heard again, when they heard no voice: on 4 songs,
+         * 8 seconds heard as music alone though sung were 28% of them, and both those and the 8 from 4
+         * seconds later, 8%.
+         */
+        const val AGAIN_SECONDS = 4
         private const val SAMPLES = ShazamSignature.SAMPLE_RATE * SECONDS
         private const val FIRST_SAMPLES = ShazamSignature.SAMPLE_RATE * FIRST_SECONDS
+        private const val AGAIN_SAMPLES = ShazamSignature.SAMPLE_RATE * AGAIN_SECONDS
+        private const val AGAIN_END = AGAIN_SAMPLES + FIRST_SAMPLES
         private const val CHUNK = ShazamSignature.SAMPLE_RATE / 10
     }
 }

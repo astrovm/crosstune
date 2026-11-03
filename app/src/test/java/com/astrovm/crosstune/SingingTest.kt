@@ -311,10 +311,33 @@ class SingingTest {
         plays()
         passes(500)
         waitUntil { singing.hears == 1 && model().uiState.following?.timingKnown == false }
+        // Heard again a little later, as music alone too, before it was believed.
+        assertEquals(1, singing.agains)
         // Only the first while is told so early.
         singing.early = null
         rest.complete(sungAt(times, times.map { 1_000L }))
         waitUntil { model().uiState.following?.timingKnown == true }
+    }
+
+    @Test
+    fun musicAloneInTheFirstSecondsIsHeardAgainALittleLaterBeforeTheLinesAreDoubted() {
+        // Sung where the words are timed, but the speech model hears the first seconds as music alone.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val rest = CompletableDeferred<Sung?>()
+        singing.early = { musicAlone() }
+        singing.again = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("la", 500))) }
+        singing.answer = { rest.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.agains == 1 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        // Nor does the whole while heard as music alone doubt them, as a voice was heard in it.
+        rest.complete(musicAlone())
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
     }
 
     @Test
@@ -330,6 +353,8 @@ class SingingTest {
         waitUntil { singing.hears == 1 }
         composeRule.waitForIdle()
         assertTrue(model().uiState.following!!.timingKnown)
+        // A voice heard, they're not heard again.
+        assertEquals(0, singing.agains)
         rest.complete(null)
     }
 
@@ -870,7 +895,28 @@ class SingingTest {
         waitUntil { singing.hears == 2 }
         composeRule.waitForIdle()
         assertTrue(model().uiState.following!!.timingKnown)
+        // Only the first while's first seconds are heard again, as only they doubt the words.
+        assertEquals(1, singing.agains)
         rest.complete(null)
+    }
+
+    @Test
+    fun laterWhilesFirstSecondsHeardAsMusicAloneArentHeardAgain() {
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val last = CompletableDeferred<Sung?>()
+        singing.early = { if (singing.hears == 1) sungAt(times, times.map { 1_000L }, SingingListener.FIRST_SECONDS) else musicAlone() }
+        singing.answer = { if (singing.hears == 1) Sung(startedAt, listOf(HeardWord("la", 1_000))) else last.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        composeRule.waitForIdle()
+        assertEquals(0, singing.agains)
+        assertTrue(model().uiState.following!!.timingKnown)
+        last.complete(null)
     }
 
     /** Sung the first seconds of lines timed at 0, 3, 6, ... seconds, with a voice [voiceMs] into them, told as soon as it's heard. */
@@ -1048,9 +1094,20 @@ class SingingTest {
         @Volatile
         var early: (suspend () -> Sung?)? = null
 
-        override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? {
+        /** What those seconds heard again a little later have, when asked for; as the first, unless a test says. */
+        @Volatile
+        var again: (suspend () -> Sung?)? = null
+
+        /** How many times the first seconds were asked to be heard again. */
+        @Volatile
+        var agains = 0
+
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
             languages += language
-            if (first != null) early?.invoke()?.let { first(it) }
+            if (first != null && early?.invoke()?.let { first(it) } == true) {
+                agains++
+                (again ?: early)?.invoke()?.let { first(it) }
+            }
             if (missing) return null
             return try {
                 answer()

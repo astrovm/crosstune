@@ -198,11 +198,14 @@ class SyncReplayTest {
 
         override suspend fun fetchModel() = true
 
-        override suspend fun hear(language: String?, first: (suspend (Sung) -> Unit)?): Sung? = coroutineScope {
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? = coroutineScope {
             val at = SystemClock.elapsedRealtime()
             // What's heard is where the song really is, ahead of the app's clock.
             val from = playback.playing.value!!.clock.positionAt(at) + behindMs
-            if (first != null) launch { first(heard(SingingListener.FIRST_SECONDS, at, from)) }
+            if (first != null) launch {
+                val again = SingingListener.AGAIN_SECONDS * 1000L
+                if (first(heard(SingingListener.FIRST_SECONDS, at, from))) first(heard(SingingListener.FIRST_SECONDS, at + again, from + again))
+            }
             heard(SingingListener.SECONDS, at, from)
         }
 
@@ -210,8 +213,8 @@ class SyncReplayTest {
         private suspend fun heard(seconds: Int, at: Long, from: Long): Sung {
             val stretches = heard.getValue(seconds)
             val start = stretches.keys.minBy { kotlin.math.abs(it - from) }
-            // Working out the words takes as long however much there is: the model always works on 30 seconds.
-            delay(seconds * 1000L + workMs)
+            // Worked out once it's all in: working out the words takes as long however much there is, as the model always works on 30 seconds.
+            delay(maxOf(0L, at + seconds * 1000L + workMs - SystemClock.elapsedRealtime()))
             heardLog.put(JSONObject().put("from", from).put("start", start).put("seconds", seconds).put("words", stretches.getValue(start).joinToString(" ") { it.second.trim() }))
             return Sung(at, stretches.getValue(start).filter { it.first >= 0 }.map { (ms, text) -> HeardWord(text.trim(), ms + start - from) }.filter { it.text.isNotEmpty() })
         }
