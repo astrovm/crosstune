@@ -4,6 +4,7 @@ far from where each line is really sung the app showed it.
 
   python3 scripts/syncreplay/syncreplay.py prep ID LYRICS.json   # once per recording: see below
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
+  python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
   python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
@@ -25,6 +26,11 @@ words in Crosstune for S seconds, and times each line lit from the app's own log
 really is comes from lining up what the app heard with the recording, as a music app's clock runs
 behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
 A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
+`run --like-phone` replays it as the last `phone` check went, from what it kept: where the app picked
+the song up, how far its clock was behind, how long the phone took to work out each while, and
+whether it heard the sound played itself, with Shizuku, or through the visualizer (`hear --clean`
+first for the former). It then says how far each line is from when the phone lit it: only while
+they match does the replay stand for the phone.
 Wants ffmpeg, yt-dlp, cmake, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
@@ -196,6 +202,7 @@ def prep(args):
 
 
 def run(args):
+    phone_lit = like_phone(args) if args.like_phone else None
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
     replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
@@ -208,7 +215,45 @@ def run(args):
         asked.unlink()
     if done.returncode:
         sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
-    score(args)
+    shown = score(args)
+    if phone_lit is not None:
+        compare(phone_lit, shown)
+
+
+def like_phone(args):
+    """Sets the replay up as the last `phone` check of the song went, from what it kept: where the app
+    picked the song up, how far its clock was behind, how long the phone took to work out each while
+    heard, and whether it heard the sound played itself (Shizuku's playback capture) or through the
+    visualizer. Gives when the phone lit each line, to hold the replay to."""
+    kept = OUT / "phone" / args.id
+    log = (kept / "log.txt").read_text()
+    said = re.search(r"said (\d+) at \d+ playing true", log)
+    args.start = int(said.group(1)) if said else 0
+    lit, args.behind = score_phone(args.id, kept)
+    args.behind = round(args.behind)
+    # Each while is heard right after the last is worked out, so the gaps between them are the working out.
+    whiles = sorted((int(re.search(r"heard-(\d+)", f.name).group(1)), f.stat().st_size // 2 * 1000 // 16000) for f in kept.glob("heard-*.pcm"))
+    gaps = [after - (start + ms) for (start, ms), (after, _) in zip(whiles, whiles[1:])]
+    args.work = round(statistics.median(gaps)) if gaps else args.work
+    # Only playback capture logs what it captured; the visualizer's sound is heard as `hear` makes it by default.
+    clean = "captured " in log
+    args.model = f"{APP_MODEL}.clean" if clean else APP_MODEL
+    if not heard_file(args.id, LENGTHS[0], args.model).exists():
+        sys.exit(f"The phone heard the sound played itself: first `hear {args.id} --clean`.")
+    print(f"As on the phone: from {args.start} ms, the clock {args.behind} ms behind, {args.work} ms to work out each while, "
+          f"hearing {'the sound played (Shizuku)' if clean else 'through the visualizer'}")
+    return lit
+
+
+def compare(phone_lit, shown):
+    """How far the replay's line times are from the phone's: the replay only stands for the phone while they match."""
+    both = sorted(k for k in phone_lit if k in shown)
+    for k in both:
+        print(f"{k:2d} phone {phone_lit[k]:6.1f}  replay {shown[k]:6.1f}  {shown[k] - phone_lit[k]:+5.1f}")
+    off = [abs(shown[k] - phone_lit[k]) for k in both]
+    only = sorted(set(phone_lit) ^ set(shown))
+    print(f"The replay against the phone: {len(both)} lines lit in both, median {statistics.median(off):.2f} s apart, worst {max(off):.1f} s"
+          + (f"; lit in only one: {only}" if only else ""))
 
 
 def score(args):
@@ -240,6 +285,7 @@ def score(args):
           f"worst {max(live, key=abs):+.1f} s; never shown {sum(k not in first for k in sung)}")
     early = [lag for lag in lags.values() if lag < -ON_TIME_S]
     print(f"shown sung early, before its voice: {len(early)}/{len(lags)} lines" + (f", by up to {-min(early):.1f} s" if early else ""))
+    return first
 
 
 def adb(*command):
@@ -403,6 +449,7 @@ def score_phone(song_id, kept):
         print(f"{k:2d} sung {sung[k]:6.1f}  " + (f"lit {first[k]:6.1f} lag {lags[k]:+5.1f}  {text}" if k in lags else f"never lit   {text}"))
     print(f"{song_id} on the phone, the app's clock {lag / 1000:.2f} s behind: {sum(abs(x) <= ON_TIME_S for x in lags.values())}/{len(lags)} within {ON_TIME_S} s, "
           f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, median {statistics.median(abs(x) for x in lags.values()):.2f} s; never lit {sum(k not in first for k in sung)}")
+    return first, lag
 
 
 def hear(args):
@@ -425,12 +472,13 @@ def main():
         p.set_defaults(go=go)
         if name == "run":
             p.add_argument("--gradle", default="./gradlew --max-workers=4")
-            # The phone takes about this long, but it varies, and where each later stretch is heard with it.
-            p.add_argument("--work", type=int, default=2500, help="ms the phone takes to work out what it heard")
+            # A Galaxy S22 Ultra took 3.9 to 4.6 s for each 20 s; it varies, and where each later stretch is heard with it.
+            p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
             # YouTube Music's was 450 to 880 ms behind, each time a little different.
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+            p.add_argument("--like-phone", action="store_true", help="as the last `phone` check of it went, held to the lines it lit; sets --from, --behind, --work and --model")
     p = steps.add_parser("hear")
     p.add_argument("id")
     p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")

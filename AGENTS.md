@@ -11,6 +11,7 @@ git submodule update --init --recursive   # projectM is built from source for th
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
 python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed on a real recording, line by line against when it's sung; prep first, see the script
 python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
+python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines
 node --test report/*.test.mjs             # the report Worker's tests
 ```
 

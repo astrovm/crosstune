@@ -170,7 +170,8 @@ class SyncReplayTest {
             val times = state.lyricLines.map { it.timeMs + off + behindMs }
             if (times != lastPlaced) placed.put(JSONObject().put("at", atMs + behindMs).put("times", JSONArray(times)))
             lastPlaced = times
-            val index = SyncedLyrics.indexAt(state.lyricLines, following.clock.positionAt(now))
+            // Lit as the screen lights it: a moment early, so the eye is there first.
+            val index = SyncedLyrics.indexAt(state.lyricLines, following.ahead(state.linesEarlyMs).clock.positionAt(now))
             if (index != last && index >= 0) shown.put(JSONObject().put("line", index).put("text", state.lyricLines[index].text).put("at", atMs + behindMs))
             last = index
         }
@@ -235,8 +236,8 @@ class SyncReplayTest {
         const val TIMEOUT_MS = 10_000L
         const val STEP_MS = 100L
 
-        /** About how long a phone takes to work out the words in what it heard, after hearing it. */
-        const val WORK_MS = 2_500L
+        /** About how long a phone takes to work out the words in what it heard, after hearing it: a Galaxy S22 Ultra took 3.9 to 4.6 s. */
+        const val WORK_MS = 4_500L
 
         /** How long the song stays stopped before it's played again. */
         const val AGAIN_MS = 5_000L
