@@ -1808,7 +1808,7 @@ class MainActivityTest {
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("play_right_away", true).commit()
         savePlaylist((1..51).map { MusicMetadata("Song $it", "Band") })
         // Every song was found before, so only the playlist is asked of YouTube.
-        val found = (1..51).joinToString(",") { """["find|YOUTUBE_MUSIC|TRACK|Song $it|Band|","https://music.youtube.com/watch?v=video${it.toString().padStart(6, '0')}"]""" }
+        val found = (1..51).joinToString(",") { """["find@$MATCH_VERSION|YOUTUBE_MUSIC|TRACK|Song $it|Band|","https://music.youtube.com/watch?v=video${it.toString().padStart(6, '0')}"]""" }
         java.io.File(app.cacheDir, "lookups.json").writeText("[$found]")
         var asked = ""
         fake.handler = { request ->
@@ -2040,7 +2040,7 @@ class MainActivityTest {
     fun visualsCanBeTurnedOffOneByOneAndPickedInSettings() {
         val names = milkdropPresets(app.assets)
         val first = names.first()
-        prefs().edit().putStringSet("visuals_heavy", setOf(names[1])).commit()
+        prefs().edit().putStringSet("visuals_heavy", setOf(names[1])).putBoolean("visuals_sized", true).commit()
         launch()
         click(string(R.string.settings_button))
         // The one too heavy for this phone is off already.
@@ -4112,6 +4112,177 @@ class MainActivityTest {
     }
 
     @Test
+    fun thePlayerStopsWaitingOnceTheAskedAppPlaysAnotherNameForTheSong() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // The app was on another song when asked, which it goes on playing a moment, and which isn't the one asked.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Old Song")).fetchSemanticsNodes().isEmpty())
+        // Recorded on a phone: YouTube Music names the song in Japanese and credits it to the singer's name there.
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitForText("黄昏のBAY CITY")
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_waiting, "YouTube Music"))).fetchSemanticsNodes().isEmpty())
+        // From then on that song is the one followed, so its words follow it.
+        waitUntil { phone.followed.any { it.title == "黄昏のBAY CITY" } }
+
+        // An app that has to be opened there is left as soon as it plays, not after waiting out its name not matching.
+        click(string(R.string.dismiss_button))
+        phone.running = emptySet()
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitUntil { phone.opened.size == 1 }
+        assertEquals(0, phone.cameBack)
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitUntil { phone.cameBack == 1 }
+    }
+
+    @Test
+    fun aBuildPatchedFromYouTubeMusicPlaysForItOnlyWhenYouTubeMusicIsntThere() {
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(morphe, "YT Music Morphe"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = hasContentDescription(string(R.string.play_in_background, "YouTube Music")) and isEnabled()
+        waitUntil { composeRule.onAllNodes(play).fetchSemanticsNodes().isNotEmpty() }
+        // YouTube Music isn't there, so the build patched from it plays for it: what it played before isn't the song asked.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
+        composeRule.onNode(play).performClick()
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Old Song")).fetchSemanticsNodes().isEmpty())
+        // What it goes on to is, whatever its name.
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = morphe)
+        waitForText("黄昏のBAY CITY")
+    }
+
+    @Test
+    fun aBuildPatchedFromYouTubeMusicIsntTakenForItWhenYouTubeMusicIsThere() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val morphe = "app.morphe.android.apps.youtube.music"
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        shadowOf(app.packageManager).installPackage(installedApp(morphe, "YT Music Morphe"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        val waiting = string(R.string.player_waiting, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // The patched build is an app of its own: what it plays, before or after, is nothing to YouTube Music.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = morphe)
+        click(play)
+        waitForText(waiting)
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = morphe)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(waiting)).fetchSemanticsNodes().isNotEmpty())
+        // So a song YouTube Music goes on to is the one asked, even named as the one the patched build played.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitForText("Old Song")
+    }
+
+    @Test
+    fun aSongAskedForAgainWhileTheAppStillPlaysItUnderItsOwnNameIsntWaitedFor() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        val waiting = string(R.string.player_waiting, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Asked while on another song, it goes on to the one asked, by its own name.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        click(play)
+        waitForText(waiting)
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitForText("黄昏のBAY CITY")
+        click(string(R.string.dismiss_button))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Recorded on a phone: asked again for the song it's on, YouTube Music does nothing, so nothing changes to see.
+        click(play)
+        waitForText("黄昏のBAY CITY")
+        assertTrue(composeRule.onAllNodes(hasText(waiting)).fetchSemanticsNodes().isEmpty())
+        // On another song by then, that isn't taken for it.
+        click(string(R.string.dismiss_button))
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitForText(waiting)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Old Song")).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun whatAnAppPlaysWhenAskedFromNothingIsntRememberedForTheSong() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Nothing playing as it's asked, the first song it shows may be what it played last, before it moves on.
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitForText("Old Song")
+        click(string(R.string.dismiss_button))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // So asked again, still on it, that isn't taken for the song.
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+    }
+
+    @Test
+    fun aSongAnotherAppPlaysIsntTakenForTheOneAskedWhateverItsName() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Another app plays as it's asked, and goes on to another song, which isn't YouTube Music's.
+        phone.onThePhone = Heard.Song(MusicMetadata("Podcast", "Host"), null, app = "com.spotify.music")
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        phone.onThePhone = Heard.Song(MusicMetadata("Next Episode", "Host"), null, app = "com.spotify.music")
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Next Episode")).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_waiting, "YouTube Music"))).fetchSemanticsNodes().isNotEmpty())
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitForText("黄昏のBAY CITY")
+    }
+
+    @Test
     @OptIn(ExperimentalTestApi::class)
     fun thePlayersSongRepeatsIsLikedPlaysWhatsNextSleepsAndOpensItsCard() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
@@ -4310,6 +4481,27 @@ class MainActivityTest {
     }
 
     @Test
+    fun theNextLineSwitchedOffBeforeItCouldBeSetStaysOff() {
+        prefs().edit().putBoolean("next_line_first", false).commit()
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNode(hasContentDescription(string(R.string.setting_next_line_first))).performScrollTo()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.setting_off)))
+    }
+
+    @Test
+    fun songsKeptOfflineAreLikedInTheirAppUnlessSwitchedOffInAdvancedSettings() {
+        launch()
+        inAdvancedSettings {
+            val likes = composeRule.onNodeWithText(string(R.string.setting_offline_likes)).performScrollTo()
+            likes.assertIsOn()
+            likes.performClick()
+            likes.assertIsOff()
+            assertFalse(prefs().getBoolean("offline_likes", true))
+        }
+    }
+
+    @Test
     fun theRoomSongsKeptOfflineMayTakeIsSetInAdvancedSettings() {
         launch()
         inAdvancedSettings {
@@ -4332,9 +4524,9 @@ class MainActivityTest {
         composeRule.waitForIdle()
         assertEquals(1_000L, prefs().getLong("lines_early_ms", 0))
         assertTextShown("1 sec")
-        // The next line doesn't brighten ahead unless set to, and then as far ahead as set.
+        // The next line brightens a little ahead unless set otherwise, and then as far ahead as set.
         val ahead = composeRule.onNode(hasContentDescription(string(R.string.setting_next_line_first)))
-        ahead.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.setting_off)))
+        ahead.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "0.6 sec"))
         ahead.performSemanticsAction(SemanticsActions.SetProgress) { it(NEXT_LINE_AHEAD_STEPS.indexOf(2_000L).toFloat()) }
         composeRule.waitForIdle()
         assertEquals(2_000L, prefs().getLong("next_line_ahead_ms", 0))

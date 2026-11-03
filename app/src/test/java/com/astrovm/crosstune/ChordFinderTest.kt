@@ -128,8 +128,12 @@ Singing to the morning light</div>"""
 
     private fun answer(request: Request, pages: Map<String, String>) =
         pages.entries.firstOrNull { request.url.toString().startsWith(it.key) }?.let { FakeSpotify.html(request, it.value) }
-            // Cifra Club's search, where a test doesn't say, finds nothing.
-            ?: if (request.url.host == "solr.sscdn.co") FakeSpotify.html(request, cifraClubSearch()) else FakeSpotify.html(request, "", code = 404)
+            // Cifra Club's search and Apple's, where a test doesn't say, find nothing.
+            ?: when (request.url.host) {
+                "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch())
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                else -> FakeSpotify.html(request, "", code = 404)
+            }
 
     @Test
     fun aSongsChordsComeFromUltimateGuitarsMostVotedSheetByTheArtistWhoseWordsAreTheSongs() {
@@ -545,6 +549,7 @@ Singing to the morning light</div>"""
                 request.url.encodedPath == "/search.php" && request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, uFretResult(2, "川の道", "歩く人"))
                 request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 900)))
                 request.url.host == "music.163.com" -> FakeSpotify.html(request, "{}")
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> FakeSpotify.html(request, "", code = 404)
             }
         }
@@ -855,6 +860,10 @@ Singing to the morning light</div>"""
         val old = """{"site":"LA_CUERDA","url":"https://acordes.lacuerda.net/walkers/river_road.shtml","capo":0,"lines":[["Walking down the river road",[[0,"LAm"]]]]}"""
         runBlocking { cache.put("${SongNames.normalize(river.title)}\u0000${SongNames.normalize(river.artist)}", old) }
         assertEquals(ChordFinder.Chords.Unavailable, chords(river, english, finder(cache)))
+        // A page of the words alone, kept before those stopped counting as chords.
+        val words = english.joinToString(",") { """["$it",[]]""" }
+        runBlocking { cache.put(key, """{"site":"CIFRA_CLUB","url":"https://www.cifraclub.com.br/the-walkers/river-road/","capo":0,"lines":[$words]}""") }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(river, english, finder(cache)))
     }
 
     @Test
@@ -899,6 +908,34 @@ Singing to the morning light</div>"""
         }
         assertTrue(chords(river, texts) is ChordFinder.Chords.Found)
         assertEquals(setOf(LOOKUPS), readFrom)
+    }
+
+    @Test
+    fun aTitleIsLookedUpWithoutWhatItAddsInBrackets() {
+        val words = listOf("川の道を歩いていく", "朝の光に歌っている")
+        val inTwo = "プラスティック・ラブ (Directors Edit Version) - Plastic Love(Directors Edit Version)"
+        // As YouTube Music names it: U-FRET only finds it by its name alone.
+        fake.handler = uFret(
+            mapOf("プラスティック・ラブ" to uFretResult(6, "プラスティック・ラブ", "竹内まりや")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("Plastic Love" to listOf("竹内まりや")),
+                "https://www.ufret.jp/song.php?data=6" to uFretSong("[Am]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        for (title in listOf(inTwo, "プラスティック・ラブ (Directors Edit Version)")) {
+            assertEquals(title, "https://www.ufret.jp/song.php?data=6", (chords(MusicMetadata(title, "Mariya Takeuchi"), words) as ChordFinder.Chords.Found).sheet.url)
+        }
+        // Ultimate Guitar only finds it by its name alone in Latin letters.
+        val sheet = "https://tabs.ultimate-guitar.com/tab/plastic-1"
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com" && request.url.queryParameter("value") == "Plastic Love Mariya Takeuchi") {
+                FakeSpotify.html(request, ugSearch(ugResult(sheet, "Plastic Love", "Mariya Takeuchi", 3)))
+            } else {
+                answer(request, mapOf(sheet to ugTab(ugWalking), "https://www.ultimate-guitar.com/search.php" to ugSearch()))
+            }
+        }
+        val english = listOf("Walking down the river road", "Singing to the morning light")
+        assertEquals(sheet, (chords(MusicMetadata(inTwo, "Mariya Takeuchi"), english) as ChordFinder.Chords.Found).sheet.url)
     }
 
     @Test
@@ -980,6 +1017,62 @@ Singing to the morning light</div>"""
         )
         assertEquals(ChordFinder.Chords.None, chords(MusicMetadata("Nowhere - 川の道", "Nobody"), japanese))
         assertEquals(listOf("Nowhere - 川の道 Nobody", "川の道", "一つ", "二つ", "Nowhere - 川の道"), uFretSearches)
+    }
+
+    @Test
+    fun aSongNamedInEnglishThatNetEaseKnowsNoJapaneseNameForIsLookedUpOnUFretByJapansAppleMusicName() {
+        // NetEase knows it only by its English name; Japan's Apple Music store has it as "川の歌", by "山田太郎".
+        val song = MusicMetadata("The River Song (Long Version)", "Taro Yamada")
+        val store = JSONObject().put(
+            "results",
+            JSONArray(
+                listOf("川の歌 (Long Version)" to "山田太郎", "The River Song" to "Taro Yamada", "川の歌" to "山田太郎", "川の歌 2009" to "山田太郎", "海の歌" to "山田太郎")
+                    .map { (title, artist) -> JSONObject().put("trackName", title).put("artistName", artist) }
+            )
+        ).toString()
+        fake.handler = uFret(
+            mapOf("川の歌 2009 山田太郎" to uFretResult(3, "川の歌 2009", "山田太郎"), "川の歌 山田太郎" to uFretResult(4, "川の歌", "山田太郎")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("The River Song" to listOf("Someone")),
+                "https://itunes.apple.com/search" to store,
+                "https://www.ufret.jp/song.php?data=4" to uFretSong("[C]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://www.ufret.jp/song.php?data=4", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
+        // Its name there without what the version adds, and only the first two names.
+        assertEquals(listOf("The River Song (Long Version) Taro Yamada", "川の歌 山田太郎"), uFretSearches)
+        val asked = fake.requestedUrls.filter { it.startsWith("https://itunes.apple.com/search") }.map { it.toHttpUrl() }
+        assertEquals(listOf("jp"), asked.map { it.queryParameter("country") })
+        assertEquals(listOf("The River Song (Long Version) Taro Yamada"), asked.map { it.queryParameter("term") })
+        assertEquals(listOf("song"), asked.map { it.queryParameter("entity") })
+        // A name in Japanese from NetEase needs no other.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(
+            mapOf("川の歌" to uFretResult(4, "川の歌", "山田太郎")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("川の歌" to listOf("山田太郎")),
+                "https://www.ufret.jp/song.php?data=4" to uFretSong("[C]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://www.ufret.jp/song.php?data=4", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com" in it })
+        // Not there, it's looked up by its first two names there, then its own by the singer's.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(
+            emptyMap(),
+            mapOf("https://music.163.com/api/search/get" to "{}", "https://itunes.apple.com/search" to store, "https://www.ultimate-guitar.com/search.php" to ugSearch())
+        )
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+        assertEquals(
+            listOf("The River Song (Long Version) Taro Yamada", "川の歌 山田太郎", "川の歌 2009 山田太郎", "The River Song (Long Version) 山田太郎", "山田太郎"),
+            uFretSearches
+        )
+        // Apple not answering may hide the sheet: that's chords unavailable, not none.
+        fake.handler = uFret(
+            emptyMap(),
+            mapOf("https://music.163.com/api/search/get" to "{}", "https://itunes.apple.com/search" to "", "https://www.ultimate-guitar.com/search.php" to ugSearch())
+        )
+        assertEquals(ChordFinder.Chords.Unavailable, chords(song, japanese))
     }
 
     @Test

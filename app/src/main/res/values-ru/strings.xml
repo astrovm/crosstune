@@ -100,6 +100,8 @@
     <string name="keeping_offline">Сохраняется офлайн по Wi-Fi</string>
     <string name="offline_out_of_space">Нет места для офлайна. Увеличьте лимит в настройках</string>
     <string name="setting_offline_space">Место для песен офлайн</string>
+    <string name="setting_offline_likes">Скачивать и в музыкальном приложении</string>
+    <string name="setting_offline_likes_description">Ставит лайк офлайн-песне в вашем музыкальном приложении, когда она играет. Включите там скачивание понравившихся песен.</string>
     <string name="setting_offline_space_used">Занято %1$s</string>
     <string name="more_button">Ещё</string>
     <string name="history_title">Недавние</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">Автоматически сообщать о проблемах с песнями</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
+    <string name="lyrics_katakana_as_hiragana">Катакана хираганой</string>
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
     <string name="lyrics_chords">Аккорды</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">Поётся %1$d раз</string>
     <string name="learn_song_new_words">Есть слова для изучения</string>
     <string name="practice_play">Включить строку</string>
+    <string name="practice_stop">Остановить строку</string>
     <string name="practice_loading">Открывается в %1$s</string>
     <string name="practice_done">Повторено: %1$d</string>
     <string name="practice_back_to">Вернуться к %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">Оригинал</string>
     <string name="lyrics_display_kana">Кана</string>
     <string name="lyrics_display_latin">Латиница</string>
+    <string name="card_words_as_lyrics">Как в тексте</string>
     <string name="practice_front">Лицевая сторона</string>
     <string name="practice_back">Обратная сторона</string>
     <string name="floating_shared">Общие настройки с текстом песни</string>

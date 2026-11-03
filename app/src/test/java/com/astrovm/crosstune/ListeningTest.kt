@@ -44,6 +44,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertNotNull
 import android.os.Looper
+import android.os.PowerManager
 import android.Manifest
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.shadows.ShadowWindowManagerImpl
@@ -768,6 +769,79 @@ class ListeningTest {
         waitForDescription(string(R.string.keep_offline))
     }
 
+    /** Demo, as Spotify follows it, with its like showing whether it's [liked] there, or not saying. */
+    private fun demoFollowed(liked: Boolean?) = Following(
+        PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Spotify", canSeek = true,
+        appPackage = MusicService.SPOTIFY.packageName, like = AppAction("ADD_TO", "Add to collection", 1, liked)
+    )
+
+    /** An app the test can see, playing Demo when [liked] says how its like shows, or nothing yet. */
+    private fun appPlayingDemo(playing: Boolean = true, liked: Boolean? = false): FakePlayback {
+        val music = FakePlayback().apply {
+            access = true
+            if (playing) {
+                onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 1_000, SystemClock.elapsedRealtime())
+                this.playing.value = demoFollowed(liked)
+            }
+        }
+        MainActivity.playbackFactory = { music }
+        MainActivity.connectionFactory = { FakeConnection() }
+        return music
+    }
+
+    @Test
+    fun aSongKeptOfflineWhileItPlaysIsLikedInItsAppOnceSoItDownloadsThereToo() {
+        val music = appPlayingDemo()
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitUntil(TIMEOUT_MS) { music.liked == 1 }
+        // The app then shows it liked; unliked there later, it stays so.
+        music.playing.value = demoFollowed(liked = true)
+        music.playing.value = demoFollowed(liked = false)
+        composeRule.waitForIdle()
+        assertEquals(1, music.liked)
+    }
+
+    @Test
+    fun aSongKeptOfflineIsLikedInItsAppTheNextTimeItPlays() {
+        val music = appPlayingDemo(playing = false)
+        demoCard()
+        click(string(R.string.keep_offline))
+        composeRule.waitForIdle()
+        assertEquals(0, music.liked)
+        music.playing.value = demoFollowed(liked = false)
+        music.onThePhone = Heard.Song(MusicMetadata("Demo", "Band"), null, 1_000, SystemClock.elapsedRealtime())
+        waitUntil(TIMEOUT_MS) { music.liked == 1 }
+    }
+
+    /** Keeps Demo for offline while it plays where its like shows [liked], and checks it isn't pressed. */
+    private fun keptWithoutALike(liked: Boolean?) {
+        val music = appPlayingDemo(liked = liked)
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        composeRule.waitForIdle()
+        assertEquals(0, music.liked)
+    }
+
+    // Pressed, its like would unlike it.
+    @Test
+    fun aSongKeptOfflineIsntPressedWhereItsLikedAlready() = keptWithoutALike(liked = true)
+
+    @Test
+    fun aSongKeptOfflineIsntPressedWhereItsAppDoesntShowWhetherItsLiked() = keptWithoutALike(liked = null)
+
+    @Test
+    fun switchedOffASongKeptOfflineIsntLikedInItsApp() {
+        prefs().edit().putBoolean("offline_likes", false).commit()
+        val music = appPlayingDemo()
+        demoCard()
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        composeRule.waitForIdle()
+        assertEquals(0, music.liked)
+    }
+
     @Test
     fun aJapaneseSongKeptOfflineKeepsHowItsKanjiAreSungToo() {
         MainActivity.connectionFactory = { FakeConnection() }
@@ -820,11 +894,12 @@ class ListeningTest {
     fun aSongWhoseWordsCantBeReachedIsNotKeptUntilTheyCanBe() {
         MainActivity.connectionFactory = { FakeConnection() }
         val down = java.util.concurrent.atomic.AtomicBoolean(true)
-        val refused = java.util.concurrent.atomic.AtomicInteger()
+        // Only the words looked up to keep it: the song is looked up, and refused, before it's kept.
+        val refusedWords = java.util.concurrent.atomic.AtomicInteger()
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
             if (down.get()) {
-                refused.incrementAndGet()
+                if (request.url.host == "lrclib.net") refusedWords.incrementAndGet()
                 throw IOException("offline")
             }
             FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
@@ -834,9 +909,7 @@ class ListeningTest {
         recognize()
         waitForText("Demo")
         click(string(R.string.keep_offline))
-        waitUntil(TIMEOUT_MS) { refused.get() > 0 }
-        composeRule.waitForIdle()
-        assertTrue(described(string(R.string.keeping_offline)))
+        waitUntil(TIMEOUT_MS) { refusedWords.get() > 0 && described(string(R.string.keeping_offline)) }
         assertFalse(described(string(R.string.kept_offline)))
         // The next network it tries again.
         down.set(false)
@@ -856,7 +929,7 @@ class ListeningTest {
             // Kept, the next network comes while it's still giving up on the one that went away; what
             // it asks first, asked again, is it trying on the new one.
             if (keeping.get() && !first.compareAndSet(null, url) && url == first.get()) back.set(true)
-            if (keeping.get() && first.get() == url && !back.get()) android.os.Handler(android.os.Looper.getMainLooper()).post { controllerModel().unmeteredChanged(true) }
+            if (keeping.get() && first.get() == url && !back.get()) networkBackNow()
             if (!back.get()) throw IOException("offline")
             FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
         }
@@ -868,6 +941,20 @@ class ListeningTest {
         keeping.set(true)
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
+    }
+
+    /**
+     * The next network, told to the app on its own thread before the request asked on the last one
+     * fails: told after, it'd only start over, and going round again wouldn't be what's tried.
+     */
+    private fun networkBackNow() {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return controllerModel().unmeteredChanged(true)
+        val told = java.util.concurrent.CountDownLatch(1)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            controllerModel().unmeteredChanged(true)
+            told.countDown()
+        }
+        assertTrue(told.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS))
     }
 
     @Test
@@ -2512,6 +2599,20 @@ class ListeningTest {
     }
 
     @Test
+    fun visualsFollowHowHotThePhoneIsOnlyWhileTheyShow() {
+        val power = shadowOf(app.getSystemService(PowerManager::class.java))
+        demoWords(FakeHearing())
+        assertEquals(0, power.thermalStatusListeners.size)
+        click(string(R.string.visuals_show))
+        waitUntil(TIMEOUT_MS) { visualsShown().isNotEmpty() }
+        assertEquals(1, power.thermalStatusListeners.size)
+        click(string(R.string.visuals_options))
+        click(string(R.string.visuals_hide))
+        waitUntil(TIMEOUT_MS) { visualsShown().isEmpty() }
+        assertEquals(0, power.thermalStatusListeners.size)
+    }
+
+    @Test
     fun visualsWithoutTheMicrophoneAskForItThenStartOverHearingTheMusic() {
         demoWords(FakeHearing())
         click(string(R.string.visuals_show))
@@ -2772,7 +2873,7 @@ class ListeningTest {
         val inOrder = milkdropKinds(app.assets).flatMap { it.second }
         assertEquals(names, inOrder.sorted())
         val heavy = names[40]
-        prefs().edit().putStringSet("visuals_heavy", setOf(heavy)).commit()
+        prefs().edit().putStringSet("visuals_heavy", setOf(heavy)).putBoolean("visuals_sized", true).commit()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.visuals_list_summary, names.size - 1, names.size)).performScrollTo().performClick()
@@ -3403,6 +3504,47 @@ class ListeningTest {
         )
         waitUntil(TIMEOUT_MS) { shadowOf(app).nextStartedService?.component?.className == FloatingLyricsService::class.java.name }
         assertFalse(shown(string(R.string.floating_permission_title)))
+    }
+
+    @Test
+    fun aLinkOnlyHandedOnWhileTheWordsFloatLeavesThemFloating() {
+        // Links go straight to another player; this one is a song, already in Recent.
+        prefs().edit().putBoolean("links_in_crosstune", false).commit()
+        DestinationStore(prefs()).apply { setDefault(addCustom("Player", "player://search/{query}")) }
+        val link = "https://music.apple.com/us/song/1109658204"
+        HistoryStore(prefs()).add(HistoryEntry((MusicLinks.parse(link) as LinkInput.Link).link, MusicMetadata("Iris", "Band")))
+        floatOverApps(FakeHearing())
+        val first = controller!!.get()
+        // Reaching the screen that floats them, as Android does: in sight first, then the link.
+        controller!!.start()
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        controller!!.newIntent(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
+        controller!!.resume()
+        waitUntil(TIMEOUT_MS) { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals("player://search/Iris%20Band", opened.dataString)
+        // In a task of its own, so Crosstune stepping back doesn't take it along.
+        assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        assertEquals(FloatingLyricsService::class.java.name, shadowOf(app).nextStartedService.component!!.className)
+        assertFalse(first.isFinishing)
+        // The words they float are still there, and opening Crosstune shows them, not the hand-off.
+        val model = ViewModelProvider(first)[MainViewModel::class.java]
+        assertEquals("Demo", model.uiState.lyricsFor?.title)
+        assertFalse(model.uiState.handingOff)
+
+        // A link reaching a new screen, over another app, leaves the words floating from the first.
+        val floating = Robolectric.buildService(FloatingLyricsService::class.java, Intent(app, FloatingLyricsService::class.java)).create().startCommand(0, 1)
+        composeRule.waitForIdle()
+        val host = FloatingLyricsService.host
+        val second = Robolectric.buildActivity(MainActivity::class.java, Intent(Intent.ACTION_VIEW, Uri.parse(link))).setup()
+        waitUntil(TIMEOUT_MS) { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("player://search/Iris%20Band", shadowOf(app).nextStartedActivity.dataString)
+        assertTrue(second.get().isFinishing)
+        assertNull(shadowOf(app).nextStoppedService)
+        assertSame(host, FloatingLyricsService.host)
+        second.destroy()
+        assertSame(host, FloatingLyricsService.host)
+        floating.destroy()
     }
 
     @Test
@@ -4578,6 +4720,29 @@ class ListeningTest {
         val floatingWords = floatNow()
         assertEquals(1, floating("ひかりが"))
         assertNull(floatingReadings())
+        floatingWords.destroy()
+    }
+
+    @Test
+    fun wordsInKanaCanShowTheirKatakanaInHiraganaThereAndFloating() {
+        wordsOf("[00:00.00] ドアを叩いて\\n[00:30.00] 食べる", "ドアを叩いて\\n食べる")
+        waitUntil(TIMEOUT_MS) { readingShown("たた") }
+        learnMenu()
+        click(string(R.string.lyrics_display_kana))
+        // Only the kanji change: the katakana stays as written.
+        waitUntil(TIMEOUT_MS) { shown("ドアをたたいて") }
+        click(string(R.string.lyrics_katakana_as_hiragana))
+        waitUntil(TIMEOUT_MS) { shown("どあをたたいて") }
+        assertTrue(prefs().getBoolean("lyrics_katakana_as_hiragana", false))
+        click(string(R.string.lyrics_katakana_as_hiragana))
+        waitUntil(TIMEOUT_MS) { shown("ドアをたたいて") }
+
+        // Floating, the same switch, set from the floating words' options, is the lyrics' too.
+        val floatingWords = floatNow()
+        assertEquals(1, floating("ドアをたたいて"))
+        composeRule.runOnIdle { FloatingLyricsService.host!!.learningActions.onKatakanaAsHiraganaChange(true) }
+        waitUntil(TIMEOUT_MS) { floating("どあをたたいて") == 1 }
+        assertTrue(prefs().getBoolean("lyrics_katakana_as_hiragana", false))
         floatingWords.destroy()
     }
 

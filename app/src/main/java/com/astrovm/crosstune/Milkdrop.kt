@@ -16,6 +16,7 @@ import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -32,8 +33,10 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -293,9 +296,10 @@ private const val TEXTURES = "milkdrop-textures"
 
 /**
  * How the visuals are picked, by preset name: those turned [off]; those this phone drew too
- * slowly twice, [heavy], passed over while [skipHeavy], but for those turned on anyway, [keep],
- * and those it drew too slowly once, [slowOnce]; and how long each shows, [changeMs], the next
- * never coming on its own at [NEVER].
+ * slowly twice even at the smallest of [VISUALS_SIZES], [heavy], passed over while [skipHeavy], but
+ * for those turned on anyway, [keep], and those it drew too slowly so once, [slowOnce]; the size
+ * each was last drawn at, [sizes], as an index into [VISUALS_SIZES]; and how long each shows,
+ * [changeMs], the next never coming on its own at [NEVER].
  */
 internal data class VisualsSettings(
     val off: Set<String> = emptySet(),
@@ -303,7 +307,8 @@ internal data class VisualsSettings(
     val slowOnce: Set<String> = emptySet(),
     val keep: Set<String> = emptySet(),
     val skipHeavy: Boolean = true,
-    val changeMs: Long = MilkdropRenderer.PRESET_MS
+    val changeMs: Long = MilkdropRenderer.PRESET_MS,
+    val sizes: Map<String, Int> = emptyMap()
 ) {
     /** Whether preset [name] is passed over as too slow. */
     fun skips(name: String) = skipHeavy && name in heavy && name !in keep
@@ -320,14 +325,27 @@ internal data class VisualsSettings(
 
 /** [VisualsSettings], kept with the app's settings. */
 internal class VisualsStore(private val preferences: SharedPreferences) {
-    fun load() = VisualsSettings(
-        off = set(KEY_OFF),
-        heavy = set(KEY_HEAVY),
-        slowOnce = set(KEY_SLOW_ONCE),
-        keep = set(KEY_KEEP),
-        skipHeavy = preferences.getBoolean(KEY_SKIP_HEAVY, true),
-        changeMs = preferences.getLong(KEY_CHANGE_MS, MilkdropRenderer.PRESET_MS).takeIf { it in VisualsSettings.CHANGE_EVERY } ?: MilkdropRenderer.PRESET_MS
-    )
+    fun load(): VisualsSettings {
+        // Found heavy before a preset could be drawn smaller, most would fit now, so each gets another go once.
+        if (!preferences.getBoolean(KEY_SIZED, false)) preferences.edit { remove(KEY_HEAVY).remove(KEY_SLOW_ONCE).putBoolean(KEY_SIZED, true) }
+        return VisualsSettings(
+            off = set(KEY_OFF),
+            heavy = set(KEY_HEAVY),
+            slowOnce = set(KEY_SLOW_ONCE),
+            keep = set(KEY_KEEP),
+            skipHeavy = preferences.getBoolean(KEY_SKIP_HEAVY, true),
+            changeMs = preferences.getLong(KEY_CHANGE_MS, MilkdropRenderer.PRESET_MS).takeIf { it in VisualsSettings.CHANGE_EVERY } ?: MilkdropRenderer.PRESET_MS,
+            sizes = set(KEY_SIZES).mapNotNull { kept ->
+                val size = kept.substringBefore(':').toIntOrNull()?.takeIf { it in VISUALS_SIZES.indices }
+                size?.let { kept.substringAfter(':') to it }
+            }.toMap()
+        )
+    }
+
+    /** Preset [name] drawn at [size] now, an index into [VISUALS_SIZES], to start at next time. */
+    fun sized(name: String, size: Int) = synchronized(this) {
+        preferences.edit { putStringSet(KEY_SIZES, set(KEY_SIZES).filterNot { it.substringAfter(':') == name }.toSet() + "$size:$name") }
+    }
 
     /** Preset [name] on or off; a heavy one turned on is kept on, rather than passed over again. */
     fun turn(name: String, on: Boolean) = synchronized(this) {
@@ -338,8 +356,9 @@ internal class VisualsStore(private val preferences: SharedPreferences) {
     }
 
     /**
-     * Preset [name] drew too [slow]ly on this phone, or fast enough. Once could be the phone busy
-     * with something else, so it's heavy the second time; drawn fast enough, it isn't any more.
+     * Preset [name] drew too [slow]ly on this phone even at its smallest, or fast enough at some size.
+     * Once could be the phone busy with something else, so it's heavy the second time; drawn fast
+     * enough, it isn't any more.
      */
     fun timed(name: String, slow: Boolean) = synchronized(this) {
         val heavy = set(KEY_HEAVY)
@@ -374,15 +393,20 @@ internal class VisualsStore(private val preferences: SharedPreferences) {
         private const val KEY_KEEP = "visuals_keep"
         private const val KEY_SKIP_HEAVY = "visuals_skip_heavy"
         private const val KEY_CHANGE_MS = "visuals_change_ms"
-        val KEYS = setOf(KEY_OFF, KEY_HEAVY, KEY_SLOW_ONCE, KEY_KEEP, KEY_SKIP_HEAVY, KEY_CHANGE_MS)
+        private const val KEY_SIZES = "visuals_sizes"
+        /** Set once heavy ones found before presets were drawn smaller have been forgotten. */
+        private const val KEY_SIZED = "visuals_sized"
+        val KEYS = setOf(KEY_OFF, KEY_HEAVY, KEY_SLOW_ONCE, KEY_KEEP, KEY_SKIP_HEAVY, KEY_CHANGE_MS, KEY_SIZES)
     }
 }
 
 /**
  * Draws [milkdrop] in a GL view: a preset at random, then another as often as [settings] say,
  * blending in, all moving to what [tap] hears, at no more than [FRAME_MS] a frame to spare the
- * battery. A preset this phone draws too slowly twice, which makes the words over it stutter too,
- * is passed over from then on, while settings say so, till it's drawn fast enough again.
+ * battery. Each preset is drawn at the sharpest of [VISUALS_SIZES] this phone keeps up with: a size
+ * smaller when it draws too slowly, which makes the words over it stutter too, and tried a size
+ * sharper while it keeps up, kept there if it still does. One too slow twice even at the smallest is passed over from then on,
+ * while settings say so, till it's drawn fast enough again.
  */
 internal class MilkdropRenderer(
     private val milkdrop: Milkdrop,
@@ -410,8 +434,26 @@ internal class MilkdropRenderer(
     bench: Boolean = false,
     private val report: (String) -> Unit = {},
     /** Told each second how many frames a second the phone could draw the one showing at, from the GL thread. */
-    private val onFps: (Int) -> Unit = {}
+    private val onFps: (Int) -> Unit = {},
+    /** Told of each preset drawn at another size, to start it there next time. */
+    private val onSized: (String, Int) -> Unit = { _, _ -> },
+    /** Whether the app's working the phone hard: frames drawn then say more about that than about the preset. */
+    private val busy: () -> Boolean = { false },
+    /** Whether the phone's hot, and slowed down for it. */
+    private val hot: () -> Boolean = { false },
+    /** A debug mode: every preset drawn at this size, and only this one. */
+    private val fixedSize: Int? = null,
+    /** The sharpest size each preset was tried at and drew too slowly, not tried again till the app starts over. */
+    private val tooSharp: MutableMap<String, Int> = mutableMapOf()
 ) {
+    /** The size drawn at, an index into [VISUALS_SIZES], read by the view drawn in to size its surface. */
+    @Volatile
+    var size = fixedSize ?: START_SIZE
+        private set
+
+    /** Told when [size] changes, from the GL thread, for the view to size its surface again. */
+    var onSize: () -> Unit = {}
+
     private var benching = bench
     private var benchFrames = 0
     private val benched = mutableListOf<Pair<String, Int>>()
@@ -434,14 +476,20 @@ internal class MilkdropRenderer(
     @Volatile
     var shade = 0f
 
-    /** Found too slow, once or twice, or dropped, till [settings] have caught up. */
+    /** Found too slow, once or twice, dropped, or sized, till [settings] have caught up. */
     private val slowOnce = mutableSetOf<String>()
     private val slow = mutableSetOf<String>()
     private val dropped = mutableSetOf<String>()
+    private val sizes = mutableMapOf<String, Int>()
     private var current: String? = null
-    private var timedMs = 0L
-    private var timedFrames = 0
-    private var timed = false
+    /** The frames timed at this size, when each was drawn and how long it took, from [timingFrom] on. */
+    private val timedAt = ArrayDeque<Long>()
+    private val timedMs = ArrayDeque<Long>()
+    private var timingFrom = 0L
+    /** Told this showing: too slow at the smallest, or fast enough. */
+    private var struck = false
+    private var toldFast = false
+    private var trying = false
     private var fpsFrom = 0L
     private var fpsMs = 0L
     private var fpsFrames = 0
@@ -547,29 +595,84 @@ internal class MilkdropRenderer(
         fpsFrames = 0
     }
 
+    /**
+     * The frame just drawn, timed: from the end of its wait to now. Too slow for a while, the preset's
+     * drawn a size smaller, or at the smallest it's struck, and passed over if it was before; keeping up
+     * for longer, it's tried a size sharper, unless that was too slow before.
+     */
     private fun timeLastFrame() {
         val at = now()
-        val since = at - shownAt
         val took = at - drawnAt
-        // Even the shortest interval is assessed before changing the preset resets its sample.
-        val timeTo = minOf(TIME_TO_MS, settings.changeMs)
-        // A frame that took this long was paused, out of sight, rather than slow.
-        if (since in TIME_FROM_MS..timeTo && took < PAUSED_MS) {
-            timedMs += took
-            timedFrames++
-        }
-        if (timed || since < timeTo) return
-        timed = true
         val preset = current ?: return
-        if (timedFrames < TIMED_FRAMES) return
-        val tooSlow = timedMs / timedFrames > SLOW_FRAME_MS
-        onTimed(preset, tooSlow)
-        val settings = settings
-        if (!tooSlow) {
-            slowOnce -= preset
-            slow -= preset
-            return
+        // Held at one size for a bench, or slowed by other work, it's not the preset's speed.
+        if (fixedSize != null) return
+        if (busy()) return leaveTry(preset)
+        // A frame that took this long was paused, out of sight, rather than slow.
+        if (at < timingFrom || took >= PAUSED_MS) return
+        timedAt.addLast(at)
+        timedMs.addLast(took)
+        while (at - timedAt.first() > ROOM_MS) {
+            timedAt.removeFirst()
+            timedMs.removeFirst()
         }
+        val timedFor = at - timingFrom
+        // Even the shortest interval is judged before it changes the preset.
+        // A sharper size being tried is left sooner, so a stutter's short.
+        val slowFor = minOf(if (trying) TRY_MS else SLOW_MS, settings.changeMs - TIME_FROM_MS)
+        val recent = timedMs.filterIndexed { index, _ -> at - timedAt[index] <= slowFor }
+        if (timedFor >= slowFor && recent.size >= TIMED_FRAMES) {
+            if (typical(recent) > SLOW_FRAME_MS) return slower(preset)
+            keptUp(preset)
+        }
+        if (timedFor >= ROOM_MS && sharperToTry(preset) && typical(timedMs) <= SLOW_FRAME_MS) {
+            trying = true
+            resize(preset, size - 1)
+        }
+    }
+
+    /**
+     * A sharper size being tried, with the phone busy, so it can't be told whether [preset] keeps up
+     * there: back to the size it kept up at, rather than maybe stuttering till the work's done, and
+     * tried again after, as it wasn't too slow.
+     */
+    private fun leaveTry(preset: String) {
+        if (!trying) return
+        trying = false
+        resize(preset, size + 1)
+    }
+
+    /** [preset] keeping up: a sharper size tried is kept, and it's told it's fast enough once a showing. */
+    private fun keptUp(preset: String) {
+        trying = false
+        if (toldFast) return
+        toldFast = true
+        onTimed(preset, false)
+        slowOnce -= preset
+        slow -= preset
+    }
+
+    /**
+     * Whether there's a sharper size [preset] wasn't too slow at. How much slower one draws can't be
+     * told from its pixels: on a Galaxy S22 Ultra, full size drew only about a fifth slower than two thirds.
+     */
+    private fun sharperToTry(preset: String) = !hot() && size - 1 > (tooSharp[preset] ?: -1)
+
+    /** How long a frame of [frames] takes, by the one in the middle, so a hitch or two doesn't count. */
+    private fun typical(frames: Collection<Long>) = frames.sorted()[frames.size / 2]
+
+    /** [preset] too slow: drawn a size smaller, or at the smallest, struck once a showing; twice, it's heavy. */
+    private fun slower(preset: String) {
+        trying = false
+        // Hot, it's the heat that's slow, not the preset: smaller till it cools, then tried sharper again.
+        val hot = hot()
+        if (size < VISUALS_SIZES.lastIndex) {
+            if (!hot) tooSharp[preset] = maxOf(size, tooSharp[preset] ?: size)
+            return resize(preset, size + 1)
+        }
+        if (struck || hot) return
+        struck = true
+        onTimed(preset, true)
+        val settings = settings
         // Slow once, it stays; twice, it's heavy, unless turned on anyway, or with heavy ones kept.
         val heavy = preset in settings.heavy || preset in settings.slowOnce || preset in slowOnce
         slowOnce += preset
@@ -579,15 +682,38 @@ internal class MilkdropRenderer(
         showNext(smooth = false)
     }
 
+    /** [preset] drawn at [to] from now, timed afresh once the new size has settled in. */
+    private fun resize(preset: String, to: Int) {
+        report("$preset: size $size to $to")
+        sizes[preset] = to
+        onSized(preset, to)
+        sizeTo(to)
+        timeFrom(now() + SETTLE_MS)
+    }
+
+    private fun sizeTo(to: Int) {
+        if (to == size) return
+        size = to
+        onSize()
+    }
+
+    private fun timeFrom(at: Long) {
+        timingFrom = at
+        timedAt.clear()
+        timedMs.clear()
+    }
+
     /**
      * The next preset that loads, trying each at most once: of those that show, or, when none does,
      * of those not turned off, or else any. In the debug mode, every one.
      */
     private fun showNext(smooth: Boolean) {
         shownAt = now()
-        timedMs = 0
-        timedFrames = 0
-        timed = false
+        // Two draw at once while one blends in.
+        timeFrom(shownAt + TIME_FROM_MS)
+        struck = false
+        toldFast = false
+        trying = false
         val settings = settings
         val on = shown.filter { it !in settings.off && it !in dropped }
         val showing = on.filter { settings.shows(it) && (it !in slow || !settings.skipHeavy || it in settings.keep) }
@@ -598,6 +724,7 @@ internal class MilkdropRenderer(
             if (preset !in picks) return@repeat
             if (milkdrop.show(text(preset), smooth)) {
                 current = preset
+                sizeTo(fixedSize ?: sizes[preset] ?: settings.sizes[preset] ?: START_SIZE)
                 return
             }
         }
@@ -648,11 +775,22 @@ internal class MilkdropRenderer(
         /** 30 frames a second. */
         const val FRAME_MS = 33L
 
-        /** When a preset's frames are timed, from when it's shown: once it's blended in, for a couple of seconds. */
+        /** When a preset's frames are timed from, from when it's shown: once it's blended in. */
         private const val TIME_FROM_MS = 3_500L
-        private const val TIME_TO_MS = 5_500L
+        /** How long it's too slow for before it's drawn smaller, and has room to spare for before it's drawn sharper. */
+        private const val SLOW_MS = 2_000L
+        private const val ROOM_MS = 5_000L
+        /**
+         * How long a sharper size being tried is timed before it's left as too slow, after it settles in:
+         * with the frame that tells, it's left within 2 seconds of trying it.
+         */
+        private const val TRY_MS = 1_400L
+        /** How long a new size takes to settle in, its first frames making its textures. */
+        private const val SETTLE_MS = 500L
         /** Fewer frames than this timed, and it's not known how fast it draws. */
         private const val TIMED_FRAMES = 20
+        /** The size a preset's drawn at till it's known how fast it draws: half the screen's width and height. */
+        const val START_SIZE = 2
 
         /** How long each preset's timed for in the debug mode, from when it's had time to make its shaders. */
         const val BENCH_MS = 1_500L
@@ -680,6 +818,7 @@ internal class MilkdropView(context: Context, private val renderer: MilkdropRend
 
     init {
         surfaceTextureListener = this
+        renderer.onSize = { post { surfaceTexture?.let { resize(it, width, height) } } }
     }
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
@@ -694,8 +833,8 @@ internal class MilkdropView(context: Context, private val renderer: MilkdropRend
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = resize(surface, width, height)
 
     private fun resize(surface: SurfaceTexture, width: Int, height: Int) {
-        val drawnWidth = (width / VISUALS_SCALE).coerceAtLeast(1)
-        val drawnHeight = (height / VISUALS_SCALE).coerceAtLeast(1)
+        val drawnWidth = drawn(width, renderer.size)
+        val drawnHeight = drawn(height, renderer.size)
         surface.setDefaultBufferSize(drawnWidth, drawnHeight)
         thread?.resize(drawnWidth, drawnHeight)
     }
@@ -730,12 +869,15 @@ internal class MilkdropBehind(context: Context, private val renderer: MilkdropRe
         holder.addCallback(this)
         // Opaque, so nothing under the window, as a TV's video, shows through, even before the first frame.
         holder.setFormat(PixelFormat.RGBX_8888)
+        renderer.onSize = { post { sizeSurface(width, height) } }
     }
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
         super.onSizeChanged(width, height, oldWidth, oldHeight)
-        holder.setFixedSize((width / VISUALS_SCALE).coerceAtLeast(1), (height / VISUALS_SCALE).coerceAtLeast(1))
+        sizeSurface(width, height)
     }
+
+    private fun sizeSurface(width: Int, height: Int) = holder.setFixedSize(drawn(width, renderer.size), drawn(height, renderer.size))
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         val drawing = GlThread(holder.surface, renderer)
@@ -762,8 +904,21 @@ internal class MilkdropBehind(context: Context, private val renderer: MilkdropRe
     }
 }
 
-/** Drawn at a fraction of the screen's pixels and stretched: behind the words, the detail isn't missed, and it's far lighter. */
-private const val VISUALS_SCALE = 2
+/**
+ * The sizes visuals are drawn at, as a fraction of the view's width and height, sharpest first:
+ * full, two thirds, half and a third. Drawn smaller and stretched, the detail is barely missed behind
+ * the words, and it's far lighter.
+ */
+internal val VISUALS_SIZES = listOf(1f, 2f / 3, 1f / 2, 1f / 3)
+
+/**
+ * Each preset's sharpest size it was too slow at since the app started, shared by every time the
+ * visuals open: one stutter's enough. Starting over, the phone may be cooler or busy with less.
+ */
+private val tooSharpThisRun = ConcurrentHashMap<String, Int>()
+
+/** [length] in pixels drawn at [size] of [VISUALS_SIZES]. */
+internal fun drawn(length: Int, size: Int) = (length * VISUALS_SIZES[size]).roundToInt().coerceAtLeast(1)
 
 /** The thread [renderer] draws on, into [target], with an OpenGL ES 3 context of its own, then [release]s it. */
 private class GlThread(private val target: Any, private val renderer: MilkdropRenderer, private val release: () -> Unit = {}) : Thread("Milkdrop") {
@@ -888,6 +1043,11 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
     // They listen from when they start, so once Android lets them hear, they start over.
     key(play.hears) {
     val context = LocalContext.current
+    val heat = remember { Heat() }
+    DisposableEffect(heat) {
+        val stop = heat.follow(context)
+        onDispose { stop() }
+    }
     val renderer = remember {
         val store = VisualsStore(context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE))
         MilkdropRenderer(
@@ -899,7 +1059,13 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
             // adb shell setprop debug.crosstune.visuals_bench 1, then open the visuals: logcat -s CrosstuneVisuals.
             bench = systemProperty("debug.crosstune.visuals_bench") == "1",
             report = { Log.i("CrosstuneVisuals", it) },
-            onFps = { fps -> main.post { onFps(fps) } }
+            onFps = { fps -> main.post { onFps(fps) } },
+            onSized = store::sized,
+            busy = { Busy.now },
+            hot = { heat.hot },
+            // adb shell setprop debug.crosstune.visuals_size 0 to 3, sharpest first, to bench each size.
+            fixedSize = systemProperty("debug.crosstune.visuals_size")?.toIntOrNull()?.takeIf { it in VISUALS_SIZES.indices },
+            tooSharp = tooSharpThisRun
         )
     }
     AndroidView(

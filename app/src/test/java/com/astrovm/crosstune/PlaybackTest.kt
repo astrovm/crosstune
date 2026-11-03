@@ -125,7 +125,7 @@ class PlaybackTest {
         shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(true)
         assertFalse(playback.unlocked())
         shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(false)
-        shadowOf(app.getSystemService(PowerManager::class.java)).setIsInteractive(false)
+        shadowOf(app.getSystemService(PowerManager::class.java)).turnScreenOn(false)
         assertFalse(playback.unlocked())
     }
 
@@ -1045,6 +1045,46 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongOpensInAnAppThatTakesOnlyItsOwnLinksThroughOneOfThose() {
+        // Qobuz's app opens open.qobuz.com, as Qobuz shares, and no web player link (#673).
+        shadowOf(app).checkActivities(true)
+        val qobuz = ComponentName(MusicService.QOBUZ.packageName, "${MusicService.QOBUZ.packageName}.DeepLinkActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(qobuz)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            qobuz, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
+        )
+        assertTrue(playback.openSong(MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/12"))
+        assertEquals("https://open.qobuz.com/track/12", shadowOf(app).nextStartedActivity.dataString)
+    }
+
+    @Test
+    fun linksAnAppDoesntOpenAreTriedAfterInTheFormItDoes() {
+        val qobuz = MusicService.QOBUZ.packageName
+        assertEquals(
+            listOf(qobuz to "https://play.qobuz.com/search?q=Song%20Band", qobuz to "https://open.qobuz.com/search/Song%20Band"),
+            MusicService.QOBUZ.appLinks("https://play.qobuz.com/search?q=Song%20Band")
+        )
+        assertEquals("https://open.qobuz.com/album/studio2", MusicService.QOBUZ.appLinks("https://play.qobuz.com/album/studio2?ref=x").last().second)
+        assertEquals("https://open.qobuz.com/search", MusicService.QOBUZ.appLinks("https://play.qobuz.com/search").last().second)
+        assertEquals(
+            "deezer-query://www.deezer.com/search?query=Song%20Band%20%26%20Co",
+            MusicService.DEEZER.appLinks(MusicService.DEEZER.searchUrl("Song Band & Co")).last().second
+        )
+        assertEquals("tidal://search?q=Song%20Band%20%26%20Co", MusicService.TIDAL.appLinks(MusicService.TIDAL.searchUrl("Song Band & Co")).last().second)
+        // What the apps open themselves goes as it is, and nothing else.
+        for (link in listOf(
+            "https://www.deezer.com/track/1", "https://www.deezer.com/search", "https://www.deezer.com/en/search/x", "https://deezer.page.link/x",
+            "https://listen.tidal.com/search/x", "https://listen.tidal.com/search", "https://tidal.com/browse/track/1", "deezer://www.deezer.com/search/x"
+        )) {
+            val service = if ("deezer" in link) MusicService.DEEZER else MusicService.TIDAL
+            assertEquals(link, listOf(service.packageName to link), service.appLinks(link))
+        }
+        assertEquals(listOf(qobuz to "https://open.qobuz.com/track/12"), MusicService.QOBUZ.appLinks("https://open.qobuz.com/track/12"))
+        assertEquals(listOf(MusicService.SPOTIFY.packageName to "https://play.qobuz.com/track/12"), MusicService.SPOTIFY.appLinks("https://play.qobuz.com/track/12"))
+        assertEquals(listOf(MusicService.DEEZER.packageName to "https://listen.tidal.com/search?q=x"), MusicService.DEEZER.appLinks("https://listen.tidal.com/search?q=x"))
+    }
+
+    @Test
     fun aSpotifyPagePlayingInABrowserIsItsSong() {
         allow()
         sounding()
@@ -1361,6 +1401,40 @@ class PlaybackTest {
     }
 
     @Test
+    fun whetherASongIsLikedIsToldByHowItsAppDrawsTheLikeInAnyLanguage() {
+        allow()
+        // As YouTube Music and TIDAL name their drawings.
+        val drawings = mapOf(1 to "yt_fill_experimental_thumb_up_vd_theme_24", 2 to "yt_outline_experimental_thumb_up_vd_theme_24", 3 to "ic_favorite_filled", 4 to "ic_favorite", 5 to "thumb_up_selected")
+        val drawn = MediaSessionPlayback(app, now = { NOW }, modes = modes, drawingName = { _, id -> drawings[id] })
+        val music = player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours")
+        fun liked(action: String, icon: Int): Boolean? {
+            shadowOf(music).setPlaybackState(
+                PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT)
+                    .addCustomAction(PlaybackState.CustomAction.Builder(action, "Gefällt mir", icon).build()).build()
+            )
+            var seen: Following? = null
+            val watching = CoroutineScope(Dispatchers.Unconfined).launch { drawn.follow(song).collect { seen = it } }
+            shadowOf(Looper.getMainLooper()).idle()
+            watching.cancel()
+            return seen?.like?.liked
+        }
+        shadowOf(sessions).addController(music)
+        assertEquals(true, liked("thumbs_up_action", 1))
+        assertEquals(false, liked("thumbs_up_action", 2))
+        assertEquals(true, liked("com.aspiro.tidal.player.action.TOGGLE_FAVORITE", 3))
+        assertEquals(false, liked("com.aspiro.tidal.player.action.TOGGLE_FAVORITE", 4))
+        // A drawing it can't read, or none it can find, says nothing, so the like is never pressed blind.
+        assertNull(liked("waze.thumbUp", 5))
+        assertNull(liked("waze.thumbUp", 6))
+        // Without a drawing of its own to go by, an app that isn't on the phone says nothing either.
+        shadowOf(music).setPlaybackState(
+            PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 1_000, 1f, PLAYED_AT)
+                .addCustomAction(PlaybackState.CustomAction.Builder("thumbs_up_action", "Like", 1).build()).build()
+        )
+        assertEquals(AppAction("thumbs_up_action", "Like", 1), followed().last()?.like)
+    }
+
+    @Test
     fun theAppsOwnLikeIsFollowedAsItShowsIt() {
         allow()
         val like = { name: String, icon: Int -> PlaybackState.CustomAction.Builder("thumbs_up_action", name, icon).build() }
@@ -1386,6 +1460,14 @@ class PlaybackTest {
         shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("waze.thumbUp", "Thumbs up on", 5).build()))
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("Thumbs up on", seen.last()!!.like?.name)
+
+        // Spotify's is one of two, the second once the song's in the user's collection.
+        shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("ADD_TO", "Add to collection", 6).build()))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(AppAction("ADD_TO", "Add to collection", 6, liked = false), seen.last()?.like)
+        shadowOf(music).executeOnPlaybackStateChanged(state(PlaybackState.CustomAction.Builder("CHECK_FILL", "Remove from collection", 7).build()))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(AppAction("CHECK_FILL", "Remove from collection", 7, liked = true), seen.last()?.like)
 
         // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe; the phone shows the rest.
         playback.like(song)

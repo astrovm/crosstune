@@ -101,6 +101,8 @@
     <string name="keeping_offline">Wi-Fi でオフライン用に保存中</string>
     <string name="offline_out_of_space">オフライン用の空きがありません。設定で上限を上げてください</string>
     <string name="setting_offline_space">オフラインの曲に使う容量</string>
+    <string name="setting_offline_likes">音楽アプリにもダウンロード</string>
+    <string name="setting_offline_likes_description">オフライン用に保存した曲を、再生されたときに音楽アプリで「いいね」します。アプリ側で「いいね」した曲のダウンロードをオンにしてください。</string>
     <string name="setting_offline_space_used">%1$s 使用中</string>
     <string name="more_button">もっと見る</string>
     <string name="history_title">最近</string>
@@ -318,6 +320,7 @@
     <string name="setting_auto_report">曲の問題を自動で報告</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
+    <string name="lyrics_katakana_as_hiragana">カタカナもひらがなで</string>
     <string name="lyrics_translation">翻訳</string>
     <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>
     <string name="lyrics_chords">コード</string>
@@ -386,6 +389,7 @@
     <string name="learn_song_times">%1$d回歌われる</string>
     <string name="learn_song_new_words">覚えたい単語あり</string>
     <string name="practice_play">この行を再生</string>
+    <string name="practice_stop">この行を止める</string>
     <string name="practice_loading">%1$sで開いています</string>
     <string name="practice_done">%1$d件練習</string>
     <string name="practice_back_to">%1$sに戻る</string>
@@ -402,6 +406,7 @@
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">かな</string>
     <string name="lyrics_display_latin">ラテン字</string>
+    <string name="card_words_as_lyrics">歌詞と同じ</string>
     <string name="practice_front">表</string>
     <string name="practice_back">裏</string>
     <string name="floating_shared">歌詞と設定を共有</string>

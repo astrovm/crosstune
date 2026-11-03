@@ -100,6 +100,8 @@
     <string name="keeping_offline">正在透過 Wi-Fi 儲存以便離線使用</string>
     <string name="offline_out_of_space">離線空間已滿。請在設定中提高上限</string>
     <string name="setting_offline_space">離線歌曲可用空間</string>
+    <string name="setting_offline_likes">也在音樂 App 中下載</string>
+    <string name="setting_offline_likes_description">離線保存的歌曲播放時，會在你的音樂 App 中按讚。請在那裡開啟下載已按讚的歌曲。</string>
     <string name="setting_offline_space_used">已用 %1$s</string>
     <string name="more_button">更多</string>
     <string name="history_title">最近</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">自動回報歌曲問題</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
+    <string name="lyrics_katakana_as_hiragana">片假名顯示為平假名</string>
     <string name="lyrics_translation">翻譯</string>
     <string name="lyrics_translation_failed">暫時無法翻譯。</string>
     <string name="lyrics_chords">和絃</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">唱了 %1$d 次</string>
     <string name="learn_song_new_words">有要學的詞</string>
     <string name="practice_play">播放這一行</string>
+    <string name="practice_stop">停止這一行</string>
     <string name="practice_loading">正在 %1$s 中開啟</string>
     <string name="practice_done">已練習 %1$d 項</string>
     <string name="practice_back_to">回到 %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">原文</string>
     <string name="lyrics_display_kana">假名</string>
     <string name="lyrics_display_latin">拉丁字母</string>
+    <string name="card_words_as_lyrics">與歌詞相同</string>
     <string name="practice_front">正面</string>
     <string name="practice_back">背面</string>
     <string name="floating_shared">與歌詞共用設定</string>

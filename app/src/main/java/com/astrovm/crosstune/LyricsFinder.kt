@@ -21,6 +21,11 @@ import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.Charset
+import java.nio.charset.CodingErrorAction
 
 /** What LRCLIB's Retry-After asks for when it's busy. */
 internal const val LYRICS_BUSY_PAUSE_MS = 1_000L
@@ -28,8 +33,23 @@ internal const val LYRICS_BUSY_PAUSE_MS = 1_000L
 /** How far apart two recordings' lengths can be and still be the same one. */
 internal const val SAME_RECORDING_LENGTH_MS = 3_000L
 
-/** A credit line: who wrote, composed, arranged, produced or published it, in Chinese, Japanese or English: "SP：…". */
-private val netEaseCredit = Regex("""^\s*(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer|OP|SP)\s*[:：]""", RegexOption.IGNORE_CASE)
+/**
+ * A credit line: who wrote, composed, arranged, produced or published it, in Chinese, Japanese or English: "SP：…".
+ * A Chinese label of two characters or more needs no colon: "编曲 Someone".
+ */
+private val netEaseCredit = Regex(
+    """^\s*(?:(?:作词|作詞|作曲|编曲|編曲|制作人|製作人)\s+\S|(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer|OP|SP)\s*[:：])""",
+    RegexOption.IGNORE_CASE
+)
+
+/** What a contributor ends a song with, not sung: "END", "THE END", "music...". */
+private val closingFiller = Regex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)""", RegexOption.IGNORE_CASE)
+
+/** A note under a heading, not sung: wholly in brackets, "（Some Writer / Another）", or who it's by, "BY SOMEONE". */
+private val headingNote = Regex("""[（(\[].*[）)\]]|by\s+\S.*""", RegexOption.IGNORE_CASE)
+
+/** A year, as after the artist under a heading: "The Band（1972）". */
+private val year = Regex("""(?:19|20)\d\d""")
 
 /** A credit NetEase opens some songs with, a short label and who: "Producers: …", "Writers：…", "母帯工程師：…". */
 private val netEaseOpeningCredit = Regex("""^([^:：]{1,40}?)\s*[:：]\s*\S""")
@@ -77,30 +97,70 @@ private fun <T> List<T>.withoutNotes(text: (T) -> String): List<T> {
  */
 private fun <T> List<T>.withoutOpeningCredits(song: MusicMetadata, text: (T) -> String): List<T> {
     val lines = map { text(it).trim() }
-    fun afterCredits(from: Int): Int {
-        var start = from
-        while (start < size) {
-            val line = lines[start]
-            val label = netEaseOpeningCredit.find(line)?.groupValues?.get(1)?.trim()
-            if (line.isNotEmpty() && (label == null || label.none(Char::isLetter) || sungPart.matches(label) || label.split(' ').size > 3)) break
-            start++
-        }
-        return start
-    }
-    var start = afterCredits(0)
-    // The name then the artist, as a heading, or the other way round: neither alone, as a song may open with its name.
-    // The name may be without what the store adds to it: "Let Down" for "Let Down (Remastered)".
+    return drop(afterCredits(lines, afterHeading(lines, afterCredits(lines, 0), song)))
+}
+
+/** Where the credits from [from] on end: blank lines and "Label: name", with a label that isn't a sung part. */
+private fun afterCredits(lines: List<String>, from: Int): Int {
+    var start = from
+    while (start < lines.size && isOpeningCredit(lines[start])) start++
+    return start
+}
+
+private fun isOpeningCredit(line: String): Boolean {
+    if (line.isEmpty()) return true
+    val label = netEaseOpeningCredit.find(line)?.groupValues?.get(1)?.trim() ?: return false
+    return label.any(Char::isLetter) && !sungPart.matches(label) && label.split(' ').size <= 3
+}
+
+/**
+ * Where the lines from [start] on go past a heading: the name then the artist, or the other way round;
+ * a whole heading line; or the artist alone. The name alone only with credits or a note under it, as
+ * a song may open with its name. The name may be without what the store adds to it: "Let Down" for
+ * "Let Down (Remastered)".
+ */
+private fun afterHeading(lines: List<String>, start: Int, song: MusicMetadata): Int {
     val titles = setOf(song.title, SongNames.bareTitle(song.title)).map(SongNames::normalize)
     val artist = SongNames.normalize(song.artist)
-    val names = lines.drop(start).filter { it.isNotEmpty() }.take(2).map(SongNames::normalize)
-    if (titles.any { names.toSet() == setOf(it, artist) }) {
-        repeat(2) { while (lines[start].isEmpty()) start++; start++ }
-    } else if (lines.getOrNull(start)?.let { isHeading(it, song) } == true) {
-        start++
-        // A guest, under it: "（feat. Dwele）".
-        while (lines.getOrNull(start)?.let(guestCredit::matches) == true) start++
+    val names = lines.drop(start).filter { it.isNotEmpty() }.take(2).map(SongNames::normalize).toSet()
+    val first = lines.getOrNull(start) ?: return start
+    var at = start
+    when {
+        titles.any { names == setOf(it, artist) } -> repeat(2) { while (lines[at].isEmpty()) at++; at++ }
+        isHeading(first, song) -> {
+            at++
+            // A guest, under it: "（feat. Dwele）".
+            while (lines.getOrNull(at)?.let(guestCredit::matches) == true) at++
+        }
+        // The artist alone: a song may open with its own name, but not with its singer's.
+        SongNames.normalize(first) == artist -> at++
+        SongNames.normalize(first) in titles -> at = afterTitleAlone(lines, start, artist)
     }
-    return drop(afterCredits(start))
+    return at
+}
+
+/** Where the lines go past the song's name alone at [start], when credits or a note under it make it a heading. */
+private fun afterTitleAlone(lines: List<String>, start: Int, artist: String): Int {
+    val next = (start + 1 until lines.size).firstOrNull { lines[it].isNotEmpty() } ?: return start
+    if (afterCredits(lines, next) == next && !isHeadingNote(lines[next], artist)) return start
+    var at = start + 1
+    while (lines.getOrNull(at)?.let { it.isEmpty() || isHeadingNote(it, artist) } == true) at++
+    return at
+}
+
+/** Whether [line] is a note under a heading: wholly in brackets, who it's by, or the [artist] and a year. */
+private fun isHeadingNote(line: String, artist: String): Boolean =
+    headingNote.matches(line) || (year.containsMatchIn(line) && artist.isNotEmpty() && artist in SongNames.normalize(line))
+
+/** The lines before a heading or a filler a contributor ends a song with: "END", or the names again. */
+private fun <T> List<T>.withoutClosingHeading(song: MusicMetadata, text: (T) -> String): List<T> {
+    var end = size
+    while (true) {
+        val last = (end - 1 downTo 0).firstOrNull { text(this[it]).isNotBlank() } ?: break
+        val line = text(this[last]).trim()
+        if (closingFiller.matches(line) || isHeading(line, song)) end = last else break
+    }
+    return take(end)
 }
 
 /**
@@ -121,7 +181,7 @@ private fun isHeading(line: String, song: MusicMetadata): Boolean {
 }
 
 /** What a heading may say besides the names. */
-private val headingWords = listOf("lyrics", "explicit", "featuring", "feat", "ft")
+private val headingWords = listOf("lyrics", "explicit", "featuring", "feat", "ft", "and", "the")
 
 /** A line that's only a guest's credit: "（feat. Dwele）", "ft. Someone". */
 private val guestCredit = Regex("""(?i)\s*[(（\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^)）\]]+[)）\]]?\s*""")
@@ -129,9 +189,118 @@ private val guestCredit = Regex("""(?i)\s*[(（\[]?\s*(?:feat\.?|ft\.?|featuring
 /** A web address, as a lyrics site's ad for itself: "{more ILLIT lyrics at lyricsify.com/u/KPopLRCFiles}". */
 private val webAddress = Regex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/""")
 
+/** A line of the header some LRCLIB answers open with: "Artist: …", "Album: …", "Title: …". */
+private val namesHeader = Regex("""(?:artist|album|title)\s*:.*""", RegexOption.IGNORE_CASE)
+
 /** The lines without all NetEase's contributors add to a song's words: credits, a heading, notes and parts' names. */
 private fun <T> List<T>.withoutNetEaseExtras(song: MusicMetadata, text: (T) -> String): List<T> =
-    filterNot { netEaseCredit.containsMatchIn(text(it)) }.withoutOpeningCredits(song, text).withoutClosingCredits(text).withoutNotes(text)
+    filterNot { netEaseCredit.containsMatchIn(text(it)) }.withoutOpeningCredits(song, text).withoutClosingCredits(text).withoutClosingHeading(song, text).withoutNotes(text)
+
+/** Words without the "Artist: … / Album: … / Title: …" some LRCLIB answers open with, all an instrumental's may have. */
+private fun withoutNamesHeader(words: String): String {
+    val lines = words.lines()
+    val header = lines.takeWhile { namesHeader.matches(it.trim()) }.size
+    return if (header >= 2) lines.drop(header).joinToString("\n") else words
+}
+
+/** An apostrophe ending a word, before a space or the line's end, not one escaped: "friend' and". */
+private val apostropheForComma = Regex("""(?<=\p{L})'(?=\s|$)""")
+
+/**
+ * The lines without those NetEase opens a song with that pass in a moment, quicker than anything is
+ * sung: credits, headings and a contributor's notes, like "Lucky guy" in 105 ms a word. Once the song
+ * has begun, a quick line is sung.
+ */
+private fun List<LyricLine>.withoutOpeningMoments(): List<LyricLine> =
+    dropWhile { line -> (line.endMs ?: line.timeMs) - line.timeMs < MOMENT_MS_A_WORD * line.words.size.coerceAtLeast(1) }
+
+/** How quick a word NetEase times is, at most, to be no singing; all of a song's opening credits and headings are, in its word-by-word words. */
+private const val MOMENT_MS_A_WORD = 150L
+
+/** A character NetEase lost, as it writes it: "Don't锟斤拷锟斤拷look". */
+private val lostCharacters = Regex("""\s*(?:锟斤拷)+\s*""")
+
+/** UTF-8 read once as Windows-1252 or Latin-1: "Ã¢" for "â", "â€™" for "’". */
+private val misread = Regex("""[ÃÂâ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]""")
+
+/**
+ * [line] as it was meant to read, where a site broke it in a way that can be undone: an apostrophe
+ * stored escaped, a space that never breaks, a lost character, or UTF-8 read once as Windows-1252 or Latin-1.
+ */
+internal fun mended(line: String): String {
+    // A space that never breaks would keep a long line from wrapping between its words.
+    var mended = line.replace("\\'", "'").replace('\u00a0', ' ')
+    if (lostCharacters.containsMatchIn(mended)) mended = mended.replace(lostCharacters, " ").trim()
+    if (misread.containsMatchIn(mended)) {
+        val bytes = strictly(mended, charset("windows-1252")) ?: strictly(mended, Charsets.ISO_8859_1)
+        mended = bytes?.let { readStrictly(it) } ?: mended
+    }
+    return mended
+}
+
+/** Whether [words] are in capitals, nearly every letter that has them, as some sites keep a whole song. */
+private fun inCapitals(words: String): Boolean {
+    val cased = words.filter { it.isLetter() && it.lowercaseChar() != it.uppercaseChar() }
+    return cased.length >= MIN_CASED_LETTERS && cased.count(Char::isUpperCase) >= cased.length * CAPITALS_SHARE
+}
+
+/**
+ * [line], written in capitals, as a sentence is written: a capital to start it and each sentence in
+ * it, and I. Letter for letter, so words timed one by one can be cut from it again.
+ */
+internal fun inSentenceCase(line: String): String {
+    val letters = line.map(Char::lowercaseChar).toCharArray()
+    var capital = true
+    for (i in letters.indices) {
+        val letter = letters[i]
+        val alone = letters.getOrNull(i - 1)?.isLetter() != true && letters.getOrNull(i + 1)?.isLetter() != true
+        when {
+            letter in ".!?" -> capital = true
+            !letter.isLetter() -> Unit
+            capital -> letters[i] = letter.uppercaseChar().also { capital = false }
+            letter == 'i' && alone -> letters[i] = 'I'
+        }
+    }
+    return String(letters)
+}
+
+/** Words timed one by one, [texts], in sentence case as the line they make up. */
+private fun inSentenceCase(texts: List<String>): List<String> {
+    val line = inSentenceCase(texts.joinToString(""))
+    var at = 0
+    return texts.map { text -> line.substring(at, at + text.length).also { at += text.length } }
+}
+
+/** Letters with a case a song needs, and the share of them in capitals, to count as written in capitals. */
+private const val MIN_CASED_LETTERS = 20
+private const val CAPITALS_SHARE = 0.9
+
+private fun strictly(text: String, charset: Charset): ByteArray? = try {
+    charset.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).encode(CharBuffer.wrap(text)).let { buffer -> ByteArray(buffer.remaining()).also(buffer::get) }
+} catch (_: CharacterCodingException) {
+    null
+}
+
+private fun readStrictly(bytes: ByteArray): String? = try {
+    Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
+} catch (_: CharacterCodingException) {
+    null
+}
+
+/**
+ * Whether [words] are UTF-8 read as GBK and kept so, as NetEase has some Korean songs: "누군가" as
+ * "雸勱蛋臧". Read back, over half of them is Korean; real Chinese or Japanese, a tenth at most, and
+ * a few characters alone can be either.
+ */
+internal fun readAsGbk(words: String): Boolean {
+    val han = words.count { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
+    if (han < GARBLED_MIN_HAN) return false
+    val korean = String(words.toByteArray(charset("GBK")), Charsets.UTF_8).count { it in '\uAC00'..'\uD7A3' }
+    return korean * 5 >= han * 2
+}
+
+/** How many Chinese characters it takes to tell garbled Korean from real Chinese or Japanese. */
+private const val GARBLED_MIN_HAN = 10
 
 /** Whether any of it is written in Latin letters. */
 internal fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
@@ -538,14 +707,15 @@ internal class LyricsFinder(
         val untimed = first is Lyrics.Found && timing(first) < WELL_TIMED
         // Words timed for a recording that isn't as long as the one playing are another take's, so
         // they give way to words from somewhere else that are timed for one that is.
-        val otherTake = first is Lyrics.Found && !fits(first, metadata)
-        if (first is Lyrics.Found && romanized == null && !untimed && !otherTake) return first
+        val otherTake = (first as? Lyrics.Found)?.takeUnless { fits(it, metadata) }
+        val bettered = romanized != null || untimed || otherTake != null
+        if (first is Lyrics.Found && !bettered) return first
         val answers = mutableListOf(first)
         // Words in Latin letters are only bettered by words in the song's script, untimed words by timed
         // ones, and another take's by this one's.
         suspend fun tried(answer: Lyrics) = answer.also { answers += it }.let {
             it is Lyrics.Found && (romanized == null || it.words.isIn(romanized)) && (!untimed || timing(it) >= WELL_TIMED) &&
-                (!otherTake || (it.lengthMs != null && fits(it, metadata)))
+                (otherTake == null || (it.lengthMs != null && fits(it, metadata) && !timedApart(otherTake, it)))
         }
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         // A song given in its own script is often kept under the store's names in Latin letters, ILLIT's
@@ -567,6 +737,42 @@ internal class LyricsFinder(
         // more, as they took a while. Still busy, it isn't known that the song has none.
         if (first !is Lyrics.Unavailable || best !is Lyrics.None) return best
         return fromLrclib(metadata, timeoutMs)
+    }
+
+    /**
+     * Whether [other]'s lines are timed so unlike [one]'s, the same words lined up line by line, that no
+     * take of the song is sung both ways: the gap between them jumps more often than not. Another take
+     * moves them all alike, or in a step or two where it's cut. NetEase has "Every Little Thing She Does
+     * Is Magic" timed for a recording as long as The Police's video, a few seconds off here, hardly
+     * there, while LRCLIB's, for the album, are on time.
+     */
+    private fun timedApart(one: Lyrics.Found, other: Lyrics.Found): Boolean {
+        val gaps = sameLines(one.lines, other.lines).map { (ours, theirs) -> theirs.timeMs - ours.timeMs }
+        if (gaps.size < MIN_SAME_LINES) return false
+        return gaps.zipWithNext().count { (a, b) -> abs(b - a) > JUMP_MS } * 2 > gaps.size - 1
+    }
+
+    /** The lines of [a] and [b] with the same words, in order, paired: as many as can be. */
+    private fun sameLines(a: List<LyricLine>, b: List<LyricLine>): List<Pair<LyricLine, LyricLine>> {
+        val ours = a.map { BorrowedTimings.sound(it.text) }
+        val theirs = b.map { BorrowedTimings.sound(it.text) }
+        // Words in other letters sound like nothing here, and nothing is the same as nothing.
+        fun same(i: Int, j: Int) = ours[i].isNotEmpty() && ours[i] == theirs[j]
+        val most = Array(a.size + 1) { IntArray(b.size + 1) }
+        for (i in a.indices.reversed()) for (j in b.indices.reversed()) {
+            most[i][j] = if (same(i, j)) most[i + 1][j + 1] + 1 else maxOf(most[i + 1][j], most[i][j + 1])
+        }
+        val pairs = mutableListOf<Pair<LyricLine, LyricLine>>()
+        var i = 0
+        var j = 0
+        while (i < a.size && j < b.size) {
+            when {
+                same(i, j) -> pairs += a[i++] to b[j++]
+                most[i + 1][j] >= most[i][j + 1] -> i++
+                else -> j++
+            }
+        }
+        return pairs
     }
 
     /**
@@ -781,7 +987,8 @@ internal class LyricsFinder(
             val lrc = answer?.optJSONObject("lrc")?.optString("lyric").orEmpty()
             // Its note for an instrumental, "Pure music, please enjoy", takes the words' place.
             if (lrc.contains(NETEASE_INSTRUMENTAL)) return@withTimeoutOrNull Lyrics.Instrumental
-            (netEaseWordByWord(byWord, metadata) ?: netEaseWords(lrc, metadata))?.copy(lengthMs = recordingMs) ?: Lyrics.None
+            // Words it keeps garbled are none, so another site's are looked for.
+            (netEaseWordByWord(byWord, metadata) ?: netEaseWords(lrc, metadata))?.takeUnless { readAsGbk(it.words) }?.copy(lengthMs = recordingMs) ?: Lyrics.None
         } catch (_: IOException) {
             Lyrics.Unavailable
         } catch (_: JSONException) {
@@ -860,14 +1067,14 @@ internal class LyricsFinder(
         val all = (0 until data.length()).mapNotNull { data.optJSONObject(it) }
         val texts = all.map { line -> line.optString("lyricLine").trim().takeUnless { it == "♪" }.orEmpty() }
         val words = texts.filter { it.isNotEmpty() }.joinToString("\n").ifEmpty { return null }
-        val starts = all.map { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds").orEmpty().toLongOrNull() }
-        if (starts.any { it == null }) return Lyrics.Found(words, source = YOUTUBE_MUSIC)
-        return Lyrics.Found(words, SyncedLyrics.withPauses(texts.mapIndexed { index, text -> LyricLine(starts[index]!!, text) }.sortedBy { it.timeMs }), source = YOUTUBE_MUSIC)
+        val starts = all.mapNotNull { it.optJSONObject("cueRange")?.optString("startTimeMilliseconds").orEmpty().toLongOrNull() }
+        if (starts.size < all.size) return Lyrics.Found(words, source = YOUTUBE_MUSIC)
+        return Lyrics.Found(words, SyncedLyrics.withPauses(texts.zip(starts) { text, start -> LyricLine(start, text) }.sortedBy { it.timeMs }), source = YOUTUBE_MUSIC)
     }
 
     /** NetEase's words timed word by word, without credits; null when it hasn't them so. */
     private fun netEaseWordByWord(yrc: String, song: MusicMetadata): Lyrics.Found? {
-        val lines = SyncedLyrics.parseWordByWord(yrc).withoutNetEaseExtras(song) { it.text }
+        val lines = SyncedLyrics.parseWordByWord(yrc).withoutNetEaseExtras(song) { it.text }.withoutOpeningMoments()
         if (lines.isEmpty()) return null
         return Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = NETEASE)
     }
@@ -942,7 +1149,7 @@ internal class LyricsFinder(
 
     /** One answer: whose song it claims to be, and its words. */
     private class Answer(private val title: String, private val artist: String, private val json: JSONObject) {
-        fun plain(): String? = (json.opt("plainLyrics") as? String)?.trim()?.takeIf { it.isNotEmpty() }
+        fun plain(): String? = (json.opt("plainLyrics") as? String)?.let(::withoutNamesHeader)?.trim()?.takeIf { it.isNotEmpty() }
 
         /** Whether it says the song has no words. */
         fun instrumental(): Boolean = json.optBoolean("instrumental")
@@ -1042,23 +1249,39 @@ internal class LyricsFinder(
         /**
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
-         * Korean songs found in Latin letters.
+         * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment.
          */
-        const val CACHE_VERSION = 11
+        const val CACHE_VERSION = 13
 
         /**
          * [found] without what's since learned to be left out: a site's ad, from any site, and what
-         * NetEase's contributors add. Words kept from before get each fix too, with no need to look
+         * NetEase's contributors add; a song a site keeps in capitals, in sentence case. Words kept from before get each fix too, with no need to look
          * them up again.
          */
         fun cleaned(found: Lyrics.Found, song: MusicMetadata): Lyrics.Found {
             val netEase = found.source?.startsWith(NETEASE) == true
-            val ads = found.words.lines().any(webAddress::containsMatchIn) || found.lines.any { webAddress.containsMatchIn(it.text) }
-            if (!netEase && !ads) return found
+            // A whole song in capitals, as some sites keep it, reads as it's written elsewhere: in sentences.
+            val shouting = inCapitals(found.words.ifBlank { found.lines.joinToString("\n") { it.text } })
+            if (!netEase && !shouting && !hasAdOrBreak(found)) return found
+            // Where NetEase's contributors wrote apostrophes escaped, their commas are apostrophes: "friend' and he\'s back".
+            val commas = netEase && "\\'" in found.words
+            fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
             fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
-            val words = found.words.lines().clean { it }.joinToString("\n").trim()
-            return found.copy(words = words, lines = SyncedLyrics.withPauses(found.lines.clean { it.text }))
+            val words = found.words.lines().map(::mend).clean { it }.joinToString("\n").trim()
+            val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
+                .clean { it.text }
+            val kept = found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
+            return if (shouting) inSentenceCase(kept) else kept
         }
+
+        private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it }
+
+        private fun inSentenceCase(found: Lyrics.Found) = found.copy(
+            words = found.words.lines().joinToString("\n", transform = ::inSentenceCase),
+            lines = found.lines.map { line ->
+                line.copy(text = inSentenceCase(line.text), words = line.words.zip(inSentenceCase(line.words.map { it.text })) { word, text -> word.copy(text = text) })
+            }
+        )
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L
@@ -1071,6 +1294,10 @@ internal class LyricsFinder(
 
         /** How close two copies' times are, on the middle line, when they're timed alike. */
         const val CLOSE_MS = 2_500L
+
+        /** Lines two copies must have alike to tell how differently they're timed, and how far a gap between them jumps to count. */
+        private const val MIN_SAME_LINES = 6
+        private const val JUMP_MS = 1_500L
 
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */

@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -585,6 +586,121 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aSongInCapitalsReadsInSentenceCaseWordsAndAllAndItsSpacesBreak() {
+        val nb = "\u00a0"
+        fun line(ms: Long, vararg words: String) = LyricLine(ms, words.joinToString(nb), words.mapIndexed { i, word -> TimedWord(ms + i * 300L, if (i < words.size - 1) word + nb else word) })
+        val lines = listOf(
+            line(12_490, "THOUGH", "I'VE", "TRIED", "BEFORE.", "I'M", "HERE"),
+            line(15_460, "OF", "THE", "FEELING", "I", "HAVE", "FOR", "HER"),
+            line(17_980, "EVERY", "LITTLE", "THING", "SHE", "DOES", "IS", "MAGIC")
+        )
+        val found = LyricsFinder.cleaned(Lyrics.Found(lines.joinToString("\n") { it.text }, lines = lines, source = LyricsFinder.NETEASE), MusicMetadata("Every Little Thing She Does Is Magic", "The Police"))
+        val said = listOf("Though I've tried before. I'm here", "Of the feeling I have for her", "Every little thing she does is magic")
+        assertEquals(said, found.lines.map { it.text })
+        assertEquals(said.joinToString("\n"), found.words)
+        assertEquals(listOf("Though ", "I've ", "tried ", "before. ", "I'm ", "here"), found.lines[0].words.map { it.text })
+        // A song that only shouts a line, any site's, keeps it as it is.
+        val shout = listOf("Walking down the road", "HEY!", "Nobody calls me now")
+        assertEquals(shout.joinToString("\n"), LyricsFinder.cleaned(Lyrics.Found(shout.joinToString("\n"), source = "lrclib"), MusicMetadata("Road", "Band")).words)
+        // Nor does a song with no capitals to speak of change.
+        assertEquals("五月雨は緑色", LyricsFinder.cleaned(Lyrics.Found("五月雨は緑色", source = "lrclib"), MusicMetadata("Satsuki", "Band")).words)
+    }
+
+    @Test
+    fun aNameNetEaseHeadsASongWithAloneIsLeftOutWhenCreditsFollowIt() {
+        val sung = listOf("Rain on the window", "Nobody calls")
+        fun cleaned(song: MusicMetadata, vararg around: String, after: List<String> = emptyList()) =
+            LyricsFinder.cleaned(Lyrics.Found((around.toList() + sung + after).joinToString("\n"), source = LyricsFinder.NETEASE), song).words
+        val words = sung.joinToString("\n")
+        // The name alone, then who wrote it, in any of the ways NetEase's contributors put it.
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "CALM NIGHT", "words:Someone music:The Band"))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "CALM NIGHT", "（Some Writer / Another Writer）", "The Band（1972）"))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "\"Calm Night\"", "（Who is this, the night asks?）", "BY THEBANDOFFICIAL"))
+        // A credit in Chinese with no colon, and the artist alone, as the first line.
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "编曲 Someone"))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "The Band"))
+        // The heading at both ends, the artist written with "And" for "+".
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "Florence + the Band"), "Florence And The Band - Calm Night", after = listOf("Florence And The Band - Calm Night")))
+        // What a contributor ends it with.
+        for (end in listOf("END", "End", "THE END", "music...")) assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), after = listOf(end)))
+        // The name alone, then the song, is sung.
+        assertEquals((listOf("Calm Night") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", "The Band"), "Calm Night"))
+        // A credit in English, the name and the artist with blank lines between them.
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "Mixed by: Someone", "", "Calm Night", "", "The Band", ""))
+        assertEquals(words, cleaned(MusicMetadata("Calm Night", "The Band"), "Mixed by: Someone", "", "Mastered by: Another"))
+        // The name alone, a blank line, then the song, is sung too.
+        assertEquals((listOf("Calm Night", "") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", "The Band"), "Calm Night", ""))
+        // A year under the name is a note only beside the artist's name: with no artist known, it's sung.
+        assertEquals((listOf("Calm Night", "Summer of 1985") + sung).joinToString("\n"), cleaned(MusicMetadata("Calm Night", ""), "Calm Night", "Summer of 1985"))
+        // A song whose words are only its name keeps them.
+        assertEquals("Calm Night", LyricsFinder.cleaned(Lyrics.Found("Calm Night", source = LyricsFinder.NETEASE), MusicMetadata("Calm Night", "The Band")).words)
+    }
+
+    @Test
+    fun brokenTextIsMendedWhereItCanBe() {
+        fun cleaned(words: String, source: String = LyricsFinder.NETEASE) = LyricsFinder.cleaned(Lyrics.Found(words, source = source), hatsukoi).words
+        // An apostrophe stored escaped, and a lost character NetEase writes as 锟斤拷.
+        assertEquals("Trouble is he's back again", cleaned("Trouble is he\\'s back again"))
+        assertEquals("Don't look, I'm alright", cleaned("Don't锟斤拷锟斤拷look, I'm alright"))
+        // Words NetEase has with apostrophes escaped have their commas as apostrophes, timed or not; one in a word stays.
+        val commas = "Trouble is her only friend' and he\\'s back again\nDown' down' down'\nI'm watching you"
+        val mended = "Trouble is her only friend, and he's back again\nDown, down, down,\nI'm watching you"
+        assertEquals(mended, cleaned(commas))
+        val timed = LyricsFinder.cleaned(Lyrics.Found(commas, commas.lines().mapIndexed { index, line -> LyricLine(index * 1_000L, line) }, source = LyricsFinder.NETEASE), hatsukoi)
+        assertEquals(mended.lines(), timed.lines.map { it.text }.filter { it.isNotEmpty() })
+        // With none escaped, an apostrophe ending a word is one.
+        assertEquals("Goin' home", cleaned("Goin' home"))
+        // UTF-8 read once as Latin-1 or Windows-1252, from any site, is read again right.
+        assertEquals("El baraka daret aâlat\nIt’s mañana", cleaned("El baraka daret aÃ¢lat\nItâ€™s maÃ±ana", LyricsFinder.LRCLIB))
+        // Words that only look so are left be.
+        assertEquals("Ã la carte, Âme", cleaned("Ã la carte, Âme", LyricsFinder.LRCLIB))
+    }
+
+    @Test
+    fun koreanWordsNetEaseKeepsGarbledAreNoWords() {
+        val korean = "누군가 나를 좀 말려줘요\n어떻게 이렇게 당할수가 있나요"
+        // As NetEase has some: the words' UTF-8 read as GBK.
+        val garbled = String(korean.toByteArray(Charsets.UTF_8), charset("GBK"))
+        val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
+        japaneseSong(netEase = netEase, lyric = garbled)
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // Chinese and Japanese words are words.
+        for (words in listOf("五月雨は緑色\n悲しくさせたよ", "我们一起走过的路\n你还记得吗")) {
+            japaneseSong(netEase = netEase, lyric = words)
+            assertEquals(words, words(hatsukoi))
+        }
+    }
+
+    @Test
+    fun wordsAreGarbledKoreanOnlyWithEnoughChineseCharactersMostlyReadingBackAsKorean() {
+        fun garbled(korean: String) = String(korean.toByteArray(Charsets.UTF_8), charset("GBK"))
+        // Each pair of these syllables reads as 3 Chinese characters, and back as the 2 Korean ones.
+        // 9 Chinese characters are too few to tell; 10 are enough, 6 of them reading back as Korean.
+        assertFalse(readAsGbk(garbled("나나나다나라")))
+        assertTrue(readAsGbk(garbled("나나나다나라") + "中"))
+        // 4 of 10 reading back as Korean, the first and last syllables there are, is garbled; 4 of 11 isn't.
+        assertTrue(readAsGbk(garbled("나가나힣") + "中文中文"))
+        assertFalse(readAsGbk(garbled("나가나힣") + "中文中文中"))
+        // The characters just past Korean's first and last syllables aren't Korean: 4 of 12 isn't garbled, where 5 would be.
+        assertFalse(readAsGbk(garbled("나\uD7A4") + garbled("\uABFF나") + garbled("나나") + "中文中"))
+    }
+
+    @Test
+    fun anLrclibAnswerWithOnlyTheSongsNamesIsNoWords() {
+        val header = "Artist: Hiroko Mita\nAlbum: First Album\nTitle: Hatsukoi"
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", header)}]""" else "[]" })
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // Words under it are its words.
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "$header\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("五月雨は緑色", words(hatsukoi))
+        // Two of the names are a header too; one alone is a line like any.
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "Artist: Hiroko Mita\nTitle: Hatsukoi\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("五月雨は緑色", words(hatsukoi))
+        japaneseSong(lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "Title: Hatsukoi\n五月雨は緑色")}]""" else "[]" })
+        assertEquals("Title: Hatsukoi\n五月雨は緑色", words(hatsukoi))
+    }
+
+    @Test
     fun aLyricsSitesAdIsLeftOut() {
         val ad = "{more Hiroko Mita lyrics at lyricsify.com/u/Someone}"
         // Found now.
@@ -638,6 +754,29 @@ class LyricsFinderTest {
             }
         }
         assertEquals(sung, (found(hatsukoi) as Lyrics.Found).lines.map { it.text })
+    }
+
+    @Test
+    fun whatNetEaseOpensASongWithForAMomentIsntSung() {
+        val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
+        japaneseSong(netEase = netEase)
+        // Timed word by word, a contributor's note first passes in 105 ms a word, far quicker than singing;
+        // 150 ms a word is sung, and so is a quick line once the song has begun.
+        val byWord = listOf(
+            "[0,0](0,0,0) 作词 : Someone",
+            "[1000,210](1000,105,0)Lucky (1105,105,0)guy",
+            "[2000,300](2000,150,0)Hear (2150,150,0)me",
+            "[3000,3000](3000,1500,0)I am woman, (4500,1500,0)hear me roar",
+            "[7000,200](7000,100,0)Shayo (7100,100,0)shayo",
+        ).joinToString("\n")
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/api/search/get" -> FakeSpotify.html(request, netEase(""))
+                "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[]" else """{"results":[]}""")
+            }
+        }
+        assertEquals(listOf("Hear me", "I am woman, hear me roar", "Shayo shayo"), (found(hatsukoi) as Lyrics.Found).lines.map { it.text }.filter { it.isNotEmpty() })
     }
 
     @Test
@@ -1712,6 +1851,90 @@ class LyricsFinderTest {
         assertTrue(asked > 0)
         assertEquals(first, look())
         assertEquals(asked, fake.requestedUrls.size)
+    }
+
+    @Test
+    fun wordsTimedForARecordingAsLongButNotAsAnyTakeIsSungGiveWayToAnotherTakesWellTimedOnes() {
+        val words = listOf("Every word I sing here", "Falls down around my feet", "Nothing left to say now", "Under the city lights", "Waiting for the morning", "Holding on to nothing", "Running from the thunder", "Calling out your name")
+        val lrclib = words.mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+        fun sheet(lines: List<Pair<Long, String>>) = lines.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
+        fun netEase(lines: List<Pair<Long, String>>): (Request) -> Response = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${lasting(answer("Song", "Band", "", synced = sheet(lrclib)), 260.0)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}],"duration":266000}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(sheet(lines))}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        val playing = MusicMetadata("Song", "Band", lengthMs = 266_100)
+        // NetEase's, for a recording as long as this one, is all over the place against LRCLIB's: a few
+        // seconds later, then hardly, then more again. No take moves its lines like that, so it's timed
+        // badly, not for this take, and LRCLIB's stay.
+        val jumbled = listOf(13_000L, 19_500L, 20_200L, 27_000L, 27_600L, 33_500L, 34_100L, 42_000L)
+        // With a line of its own to open with, as NetEase's sometimes have.
+        fake.handler = netEase(listOf(8_000L to "Count us in before we start") + words.indices.map { jumbled[it] to words[it] })
+        assertEquals(lrclib.map { (ms, text) -> LyricLine(ms, text) }, (found(playing) as Lyrics.Found).lines)
+        // Six seconds later all through, as for a take with a longer intro, NetEase's are this take's.
+        fake.handler = netEase(lrclib.map { (ms, text) -> ms + 6_000 to text })
+        assertEquals(lrclib.map { (ms, text) -> LyricLine(ms + 6_000, text) }, (found(playing) as Lyrics.Found).lines)
+    }
+
+    /** LRCLIB with [lrclib], timed for a recording 6 seconds shorter than [anotherTake]'s, and NetEase with [netEase], as long as it. */
+    private fun twoSheets(lrclib: List<Pair<Long, String>>, netEase: List<Pair<Long, String>>) {
+        fun sheet(lines: List<Pair<Long, String>>) = lines.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${lasting(answer("Song", "Band", "", synced = sheet(lrclib)), 260.0)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}],"duration":266000}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(sheet(netEase))}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private val anotherTake = MusicMetadata("Song", "Band", lengthMs = 266_100)
+
+    private val sungWords = listOf("Every word I sing here", "Falls down around my feet", "Nothing left to say now", "Under the city lights", "Waiting for the morning", "Holding on to nothing", "Running from the thunder", "Calling out your name", "Singing till the sun comes")
+
+    private fun takenLines() = (found(anotherTake) as Lyrics.Found).lines.map { it.timeMs to it.text }
+
+    @Test
+    fun wordsAreOnlyToldTimedApartWithSixLinesInCommon() {
+        // Each line a few seconds later, then hardly: no take is sung like that.
+        fun lines(count: Int) = sungWords.take(count).mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+        fun jumping(count: Int) = lines(count).mapIndexed { line, (ms, text) -> ms + (if (line % 2 == 0) 3_000 else 500) to text }
+        twoSheets(lines(6), jumping(6))
+        assertEquals(lines(6), takenLines())
+        // Five lines are too few to tell a take from words timed badly, so NetEase's, as long as the recording, stay.
+        twoSheets(lines(5), jumping(5))
+        assertEquals(jumping(5), takenLines())
+    }
+
+    @Test
+    fun wordsAreToldTimedApartWhenTheGapBetweenThemJumpsMoreOftenThanNot() {
+        val lrclib = sungWords.mapIndexed { line, text -> 10_000L + line * 4_000L to text } + (50_000L to "And that's where it ends")
+        // NetEase's have a line to open with and one in the middle LRCLIB's don't, and lack LRCLIB's last.
+        fun netEase(laterBy: List<Long>) = listOf(8_000L to "Count us in before we start") +
+            sungWords.take(5).mapIndexed { line, text -> lrclib[line].first + laterBy[line] to text } + (35_500L to "A line only they have") +
+            sungWords.drop(5).mapIndexed { line, text -> lrclib[line + 5].first + laterBy[line + 5] to text }
+        // Six seconds later, then nine from the fifth line, back and forth: 4 of 8 gaps jump, as in a take cut here and there.
+        val half = netEase(listOf(6_000L, 6_000, 6_000, 6_000, 6_000, 9_000, 6_000, 9_000, 6_000))
+        twoSheets(lrclib, half)
+        assertEquals(half, takenLines())
+        // 5 of 8: more often than not, so no take is sung like that.
+        twoSheets(lrclib, netEase(listOf(6_000L, 6_000, 6_000, 6_000, 9_000, 6_000, 9_000, 6_000, 9_000)))
+        assertEquals(lrclib, takenLines())
+    }
+
+    @Test
+    fun wordsInOtherLettersCantBeToldTimedApartSoTheOnesTimedForARecordingAsLongStay() {
+        val words = listOf("ここにいて", "あなたのてを", "ゆびのさきが", "みゃくはくを", "すこしは", "ほらみどりの", "しあわせの", "なつにきらめいて")
+        val lrclib = words.mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+        val jumbled = listOf(13_000L, 19_500L, 20_200L, 27_000L, 27_600L, 33_500L, 34_100L, 42_000L).zip(words)
+        twoSheets(lrclib, jumbled)
+        assertEquals(jumbled, takenLines())
     }
 
     @Test

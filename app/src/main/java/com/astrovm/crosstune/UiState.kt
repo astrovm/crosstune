@@ -42,6 +42,8 @@ internal data class UiState(
     val offlineUsedBytes: Long = 0,
     /** How many megabytes they may take. */
     val offlineSpaceMb: Int = MainViewModel.OFFLINE_SPACE_MB,
+    /** Whether a song kept for offline is liked in the music app that plays it, so the app downloads it too. */
+    val offlineLikes: Boolean = true,
     /** Whether the share sheet offers "Open in" an app; Android shows those for any shared text. */
     val shareSheetApps: Boolean = true,
     /** Whether the screen's turned on at a list song's end, so Spotify plays the next. */
@@ -104,7 +106,7 @@ internal data class UiState(
     /** How far ahead of the voice a line lights, so it's read as it's sung. */
     val linesEarlyMs: Long = LINES_EARLY_MS,
     /** How long before it's lit the line coming next brightens, or 0 when it doesn't. */
-    val nextLineAheadMs: Long = 0,
+    val nextLineAheadMs: Long = NEXT_LINE_AHEAD_DEFAULT_MS,
     /** Whether MilkDrop visuals move behind the words, to what the phone plays. */
     val visuals: Boolean = false,
     /** How dark the ground over the visuals is, from 0, none, to 1, black. */
@@ -352,6 +354,9 @@ internal val LINES_EARLY_STEPS = (0L..1500L step 100L).toList()
 /** How long before it's lit the line coming next brightens once switched on, as it did before it could be set. */
 internal const val NEXT_LINE_AHEAD_MS = 1000L
 
+/** How long before it's lit the line coming next brightens unless set otherwise: enough to see where the eyes go next. */
+internal const val NEXT_LINE_AHEAD_DEFAULT_MS = 600L
+
 /** How long before it's lit the line coming next can be set to brighten: not at all, or half a second to three. */
 internal val NEXT_LINE_AHEAD_STEPS = listOf(0L) + (500L..3000L step 100L)
 
@@ -395,7 +400,9 @@ internal data class PlayerState(
     val link: String? = null,
     val following: Following? = null,
     val played: Boolean = false,
-    val lines: List<LyricLine> = emptyList()
+    val lines: List<LyricLine> = emptyList(),
+    /** What the app was playing when asked, so only a song it goes on to after is taken for the one asked. */
+    val over: MusicMetadata? = null
 )
 
 internal data class Practice(
@@ -491,6 +498,8 @@ internal data class Learning(
     val wordsAs: WordsAs = WordsAs.WRITTEN,
     /** Whether Japanese in Latin letters is spelled as typed, sensei, rather than as said, sensee. */
     val romajiTyped: Boolean = false,
+    /** Whether Japanese in kana writes its katakana in hiragana too, どあ for ドア. */
+    val katakanaAsHiragana: Boolean = false,
     /** Set when the words were found in Latin letters, and ChatGPT wrote them in Japanese or Korean. */
     val fromRomaji: Boolean = false,
     /** The words most worth learning from the song, as ChatGPT finds them. */
@@ -506,7 +515,7 @@ internal data class Learning(
 ) {
     /** Only what's switched on, ready to work out for new words. */
     fun fresh(script: Script? = null) =
-        Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, wordsScale, translationScale, centered = centered, script = script, wordsAs = wordsAs, romajiTyped = romajiTyped)
+        Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, wordsScale, translationScale, centered = centered, script = script, wordsAs = wordsAs, romajiTyped = romajiTyped, katakanaAsHiragana = katakanaAsHiragana)
 }
 
 /** What the visuals are asked to do, as the screen has it. */
@@ -516,12 +525,12 @@ internal val UiState.visualsPlay get() = VisualsPlay(visualsSkips, visualsDrops,
 internal enum class WordsAs { WRITTEN, KANA, LATIN }
 
 /**
- * What shows instead of line [index] as the words are set to show: its kana, or its Latin letters,
+ * What shows instead of line [index] as the words are set to show: its kanji in kana, or its Latin letters,
  * once its reading's worked out; null as written.
  */
 internal fun Learning.insteadOf(index: Int): String? {
     val reading = lines.getOrNull(index) ?: return null
-    if (showsAs == WordsAs.KANA) return reading.reading
+    if (showsAs == WordsAs.KANA) return reading.kana.inHiragana(katakanaAsHiragana)
     if (showsAs == WordsAs.LATIN) return reading.latin(romajiTyped).takeIf { it.isNotBlank() }
     return null
 }

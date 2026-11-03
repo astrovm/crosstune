@@ -100,6 +100,8 @@
     <string name="keeping_offline">Salvando para usar off-line no Wi-Fi</string>
     <string name="offline_out_of_space">Sem espaço para off-line. Aumente o limite nas Configurações</string>
     <string name="setting_offline_space">Espaço para músicas off-line</string>
+    <string name="setting_offline_likes">Baixar também no seu app de música</string>
+    <string name="setting_offline_likes_description">Curte uma música guardada off-line no seu app de música quando ela toca. Ative lá o download das músicas curtidas.</string>
     <string name="setting_offline_space_used">%1$s em uso</string>
     <string name="more_button">Mais</string>
     <string name="history_title">Recentes</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">Relatar problemas de músicas automaticamente</string>
     <string name="lyrics_romanized">Em letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se digita</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana em hiragana</string>
     <string name="lyrics_translation">Tradução</string>
     <string name="lyrics_translation_failed">Não foi possível traduzir agora.</string>
     <string name="lyrics_chords">Acordes</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">Cantada %1$d vezes</string>
     <string name="learn_song_new_words">Tem palavras para saber</string>
     <string name="practice_play">Ouvir a linha</string>
+    <string name="practice_stop">Parar a linha</string>
     <string name="practice_loading">Abrindo no %1$s</string>
     <string name="practice_done">%1$d praticadas</string>
     <string name="practice_back_to">Voltar para %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latim</string>
+    <string name="card_words_as_lyrics">Como a letra</string>
     <string name="practice_front">Frente</string>
     <string name="practice_back">Verso</string>
     <string name="floating_shared">Compartilhado com a letra</string>

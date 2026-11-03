@@ -100,6 +100,8 @@
     <string name="keeping_offline">Wi-Fi로 오프라인용 저장 중</string>
     <string name="offline_out_of_space">오프라인용 공간이 없어요. 설정에서 한도를 늘리세요</string>
     <string name="setting_offline_space">오프라인 노래용 공간</string>
+    <string name="setting_offline_likes">음악 앱에도 다운로드</string>
+    <string name="setting_offline_likes_description">오프라인용으로 저장한 노래가 재생되면 음악 앱에서 좋아요를 눌러요. 그 앱에서 좋아요한 노래 다운로드를 켜 주세요.</string>
     <string name="setting_offline_space_used">%1$s 사용 중</string>
     <string name="more_button">더보기</string>
     <string name="history_title">최근</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">노래 문제 자동 신고</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
+    <string name="lyrics_katakana_as_hiragana">가타카나를 히라가나로</string>
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
     <string name="lyrics_chords">코드</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">%1$d번 불림</string>
     <string name="learn_song_new_words">알아둘 단어 있음</string>
     <string name="practice_play">이 줄 재생</string>
+    <string name="practice_stop">이 줄 멈추기</string>
     <string name="practice_loading">%1$s에서 여는 중</string>
     <string name="practice_done">%1$d개 연습함</string>
     <string name="practice_back_to">%1$s(으)로 돌아가기</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">원문</string>
     <string name="lyrics_display_kana">가나</string>
     <string name="lyrics_display_latin">라틴 문자</string>
+    <string name="card_words_as_lyrics">가사와 같게</string>
     <string name="practice_front">앞면</string>
     <string name="practice_back">뒷면</string>
     <string name="floating_shared">가사와 설정 공유</string>

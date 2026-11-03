@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The dev build's copy of main/res/xml/shortcuts.xml, pointing at its own package. Keep the two in sync. -->
+<!-- The dev build's copy of main/res/xml/shortcuts.xml, pointing at its own package. AppShortcutsTest checks the two match. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:enabled="true"

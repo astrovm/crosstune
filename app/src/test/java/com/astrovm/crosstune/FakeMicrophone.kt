@@ -20,6 +20,9 @@ internal class FakeMicrophone(private val works: Boolean = true) : Microphone {
     /** Something to hear for [seconds]; any sound does, nothing Shazam would know. */
     fun play(seconds: Double) = sound.put(ShortArray((ShazamSignature.SAMPLE_RATE * seconds).toInt()) { (it % 100).toShort() })
 
+    /** A second of sound, every sample of it [value], so what's heard of it tells which second it was. */
+    fun playSecond(value: Int) = sound.put(ShortArray(ShazamSignature.SAMPLE_RATE) { value.toShort() })
+
     /** The microphone stops giving sound. */
     fun end() = sound.put(ShortArray(0))
 

@@ -100,6 +100,8 @@
     <string name="keeping_offline">Wordt via wifi offline opgeslagen</string>
     <string name="offline_out_of_space">Geen ruimte meer voor offline. Verhoog de limiet in Instellingen</string>
     <string name="setting_offline_space">Ruimte voor offline nummers</string>
+    <string name="setting_offline_likes">Ook downloaden in je muziekapp</string>
+    <string name="setting_offline_likes_description">Liket een offline nummer in je muziekapp als het speelt. Zet daar het downloaden van gelikete nummers aan.</string>
     <string name="setting_offline_space_used">%1$s gebruikt</string>
     <string name="more_button">Meer</string>
     <string name="history_title">Recent</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">Problemen met nummers automatisch melden</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana als hiragana</string>
     <string name="lyrics_translation">Vertaling</string>
     <string name="lyrics_translation_failed">Kon nu niet vertalen.</string>
     <string name="lyrics_chords">Akkoorden</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">%1$d keer gezongen</string>
     <string name="learn_song_new_words">Heeft woorden om te leren</string>
     <string name="practice_play">Regel afspelen</string>
+    <string name="practice_stop">Regel stoppen</string>
     <string name="practice_loading">Openen in %1$s</string>
     <string name="practice_done">%1$d geoefend</string>
     <string name="practice_back_to">Terug naar %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">Origineel</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latijn</string>
+    <string name="card_words_as_lyrics">Zoals de tekst</string>
     <string name="practice_front">Voorkant</string>
     <string name="practice_back">Achterkant</string>
     <string name="floating_shared">Gedeeld met songtekst</string>

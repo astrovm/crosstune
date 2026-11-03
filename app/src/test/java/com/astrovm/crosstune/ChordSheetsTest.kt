@@ -46,6 +46,17 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun theSongsWordsWithNoChordsAreNotItsChords() {
+        // Cifra Club gave Silverchair's Dearest Helpless as its words alone, and the song showed chords found with none.
+        val texts = listOf("Walking down the river road", "Singing to the morning light")
+        val words = sheet(SheetLine("Walking down the river road", emptyList()), SheetLine("Singing to the morning light", emptyList()))
+        assertNull(ChordSheets.place(words, texts))
+        // Chords only on a verse the song doesn't have are none of its chords either.
+        val elsewhere = sheet(*words.lines.toTypedArray(), SheetLine("Xylophones quack jazzily all night", listOf(Chord(0, "Em"))))
+        assertNull(ChordSheets.place(elsewhere, texts))
+    }
+
+    @Test
     fun koreanWordsAreLinedUpWithASheetThatWritesThemInLatinLetters() {
         val texts = listOf("오빤 강남스타일", "강남스타일", "낮에는 따사로운 인간적인 여자", "커피 한 잔의 여유를 아는 품격 있는 여자")
         val read = Readings.of(texts, Script.KOREAN).map { it.romanized }
@@ -277,5 +288,27 @@ class ChordSheetsTest {
         val sheet = sheet(SheetLine("I love you so much tonight", listOf(Chord(0, "Am"), Chord(7, "G"))))
         val placed = ChordSheets.place(sheet, listOf("Ｉ　ｌｏｖｅ　ｙｏｕ　ｓｏ　ｍｕｃｈ　ｔｏｎｉｇｈｔ"))!!
         assertEquals(listOf("Am", "G"), placed.single().over.map { it.name })
+    }
+
+    @Test
+    fun chordsMoveOntoTheLineInKanaOverTheReadingOfWhatTheyWereOver() {
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を"))
+        // Over 夜, 空, の, を and past the end: the first two over よぞら's start, the rest where their letters went.
+        val over = listOf(Chord(0, "Am"), Chord(1, "F"), Chord(2, "C"), Chord(4, "G"), Chord(5, "E"))
+        assertEquals(
+            listOf(0, 0, 3, 6, 7),
+            ChordSheets.onto(LineChords(over = over), "夜空の星を", "よぞらのほしを", parts).over.map { it.at }
+        )
+    }
+
+    @Test
+    fun chordsMoveOntoTheLineInLatinLettersAsFarAlongAtTheStartOfThatWord() {
+        val over = listOf(Chord(0, "Am"), Chord(2, "F"), Chord(4, "G"))
+        // 夜空の星を, 5 letters, as "yozora no hoshi wo", 18: 2 of 5 along is 7, in "no"; 4 of 5 is 14, in "hoshi".
+        assertEquals(
+            listOf(0, 7, 10),
+            ChordSheets.onto(LineChords(over = over), "夜空の星を", "yozora no hoshi wo", listOf(Ruby("夜空の星を"))).over.map { it.at }
+        )
+        assertEquals(listOf(0), ChordSheets.onto(LineChords(over = listOf(Chord(3, "C"))), "abcd", "", null).over.map { it.at })
     }
 }

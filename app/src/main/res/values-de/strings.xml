@@ -100,6 +100,8 @@
     <string name="keeping_offline">Wird über WLAN für offline gespeichert</string>
     <string name="offline_out_of_space">Kein Platz mehr für offline. Erhöhe das Limit in den Einstellungen</string>
     <string name="setting_offline_space">Platz für Offline-Songs</string>
+    <string name="setting_offline_likes">Auch in deiner Musik-App herunterladen</string>
+    <string name="setting_offline_likes_description">Liked einen Offline-Song in deiner Musik-App, wenn er läuft. Schalte dort das Herunterladen gelikter Songs ein.</string>
     <string name="setting_offline_space_used">%1$s belegt</string>
     <string name="more_button">Mehr</string>
     <string name="history_title">Zuletzt</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">Song-Probleme automatisch melden</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>
     <string name="lyrics_romaji_typed">Romaji wie getippt</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana als Hiragana</string>
     <string name="lyrics_translation">Übersetzung</string>
     <string name="lyrics_translation_failed">Konnte gerade nicht übersetzen.</string>
     <string name="lyrics_chords">Akkorde</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">%1$d-mal gesungen</string>
     <string name="learn_song_new_words">Hat Wörter zum Lernen</string>
     <string name="practice_play">Zeile abspielen</string>
+    <string name="practice_stop">Zeile anhalten</string>
     <string name="practice_loading">Wird in %1$s geöffnet</string>
     <string name="practice_done">%1$d geübt</string>
     <string name="practice_back_to">Zurück zu %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Lateinisch</string>
+    <string name="card_words_as_lyrics">Wie im Songtext</string>
     <string name="practice_front">Vorderseite</string>
     <string name="practice_back">Rückseite</string>
     <string name="floating_shared">Mit dem Liedtext geteilt</string>

@@ -250,6 +250,17 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun whatWasFoundBeforeTheMatchingChangedIsLookedForAgain() = runBlocking {
+        val file = kotlin.io.path.createTempDirectory("lookups").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, kotlinx.coroutines.Dispatchers.Unconfined)
+        // Found the way songs were matched before, and kept under the key it had then.
+        cache.put("find|DEEZER|TRACK|Song|Band|", "https://www.deezer.com/track/old")
+        respond("""{"data":[{"title":"Song","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1"}]}""")
+        val matcher = ExactMatcher(fake.client(), "AR", kotlinx.coroutines.Dispatchers.Unconfined, cache)
+        assertEquals("https://www.deezer.com/track/1", matcher.find(MusicService.DEEZER, MusicMetadata("Song", "Band")))
+    }
+
+    @Test
     fun uncertainOrMissingMatchesFallBackToSearch() {
         respond("""{"results":[{"trackName":"Beyoncé Song","artistName":"Someone Else","trackViewUrl":"https://x"}]}""")
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
@@ -691,6 +702,54 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aPickNearAnyOfTheSongsEditionsIsTakenButNotNearAnotherSongApplesLists() {
+        val song = MusicMetadata("Stay With Me", "Miki Matsubara")
+        val matcher = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> 0 })
+        fun picks(length: String, store: String): String? {
+            namesAndTabs(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • $length", videoId = "door0000000")), apple = mapOf("AR" to store))
+            return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        val editions = appleSong("Stay With Me", "Miki Matsubara", 312_000) + "," + appleSong("Stay With Me", "Miki Matsubara", 250_000, id = 8)
+        // The single's length, not the album's that Apple lists first, is still the song.
+        assertEquals("https://music.youtube.com/watch?v=door0000000", picks("4:12", editions))
+        assertNull(picks("3:30", editions))
+        // Up to eight seconds off, give or take.
+        assertEquals("https://music.youtube.com/watch?v=door0000000", picks("4:18", editions))
+        assertNull(picks("4:19", editions))
+        // Another song by the same artist in the same search lends it no length.
+        assertNull(picks("3:30", appleSong("Stay With Me", "Miki Matsubara", 312_000) + "," + appleSong("Mayonaka no Door", "Miki Matsubara", 210_000, id = 8)))
+    }
+
+    @Test
+    fun aSongNamedInJapaneseAndEnglishApartByAWideSpaceIsFoundOverAFansUpload() {
+        // Recorded from YouTube Music's searches for I Can't Stop The Loneliness, which neither Apple nor Deezer names so.
+        namesAndTabs(
+            songs = listOf(
+                youTubeMusicRow("悲しみがとまらない　I CAN'T STOP THE LONELINESS - Kanashimi ga Tomaranai I CAN'T STOP THE LONELINESS", "Anri • The Anri • 4:27", videoId = "6q6GtPdVHL4"),
+                youTubeMusicRow("I CAN'T STOP THE LONELINESS (Spanish Version)", "Dianilis • I CAN'T STOP THE LONELINESS (Spanish Version) • 4:27", videoId = "Xv8YtduJodo")
+            ),
+            videos = listOf(youTubeMusicRow("ANRI - I Can't Stop The Loneliness || Sub español", "Sweet Honey Pie • 1.7M views • 4:25", videoId = "gLfnq0TSmdg")),
+            apple = mapOf("AR" to appleSong("I Can't Stop the Loneliness", "Jupiter", 253_837)),
+            deezer = """[{"title":"Kanashimi ga Tomaranai I CAN'T STOP THE LONELINESS","artist":{"name":"Anri"},"duration":263}]"""
+        )
+        assertEquals("https://music.youtube.com/watch?v=6q6GtPdVHL4", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("I Can't Stop The Loneliness", "ANRI")) })
+    }
+
+    @Test
+    fun aSongNamedOtherwiseAtHomeIsItUpToTheSameLengthGiveOrTakeEightSeconds() {
+        val song = MusicMetadata("Stay With Me", "Miki Matsubara")
+        fun finds(length: String): String? {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • $length", videoId = "stay0000000")),
+                apple = mapOf("AR" to appleSong("Stay With Me", "Miki Matsubara", 250_000)), elsewhere = mapOf("JP" to appleSong("真夜中のドア", "松原みき", 250_000))
+            )
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        assertEquals("https://music.youtube.com/watch?v=stay0000000", finds("4:18"))
+        assertNull(finds("4:19"))
+    }
+
+    @Test
     fun chatGptHasItsOwnWhileToPickAfterTheSearches() {
         val stayWithMe = MusicMetadata("Stay With Me", "Miki Matsubara")
         youTubeMusicTabs(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • 5:26", videoId = "door0000000")), videos = emptyList())
@@ -731,6 +790,27 @@ class ExactMatcherTest {
         val lookups = fake.requestedUrls.filter { "itunes.apple.com/lookup" in it }.map { it.toHttpUrl() }
         assertEquals(setOf("JP", "KR", "TW", "HK", "CN"), lookups.map { it.queryParameter("country") }.toSet())
         assertTrue(lookups.all { it.queryParameter("id") == "7" })
+    }
+
+    @Test
+    fun theOfficialSongBeatsAnUploadWhenAppleKnowsALongerEditionOfIt() {
+        // Recorded: Apple's US store names Full Moon's take (4:41) first, but YouTube Music has the single's (4:11),
+        // while a fan's upload with the lyrics runs 4:42.
+        val song = MusicMetadata("tasogare no bay city", "JUNKO YAGAMI")
+        val us = appleSong("tasogare no bay city", "JUNKO YAGAMI", 281_200, id = 74904069) + "," +
+            appleSong("Tasogare No Bay City", "JUNKO YAGAMI", 250_373, id = 260770646) + "," +
+            appleSong("Lady-Ready", "JUNKO YAGAMI", 254_760, id = 260770751)
+        val songs = listOf(
+            youTubeMusicRow("黄昏のBAY CITY", "八神純子 • 黄昏のBAY CITY • 4:11", videoId = "QLHMhVonF-s"),
+            youTubeMusicRow("黄昏のBay City (DISCOバージョン) (ボーナストラック)", "八神純子 • FULL MOON • 7:27", videoId = "Wey2yM_dNfc"),
+            youTubeMusicRow("Lady-Ready", "八神純子 • 黄昏のBAY CITY • 4:15", videoId = "5_YotH_2o-M")
+        )
+        val videos = listOf(youTubeMusicRow("Junko Yagami (八神純子) - 黄昏のBay City [Lyrics Eng/Rom/Kan]", "Reidhaha • 1.5M views • 4:42", videoId = "TwSWeSQAm-g"))
+        namesAndTabs(songs = songs, videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
+        assertEquals("https://music.youtube.com/watch?v=QLHMhVonF-s", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        // Not an edition Apple has, it's still another recording, and the upload that matches is what plays.
+        namesAndTabs(songs = songs.drop(1), videos = videos, apple = mapOf("US" to us), elsewhere = mapOf("JP" to appleSong("黄昏のBay City", "八神純子", 281_200, id = 74904069)))
+        assertEquals("https://music.youtube.com/watch?v=TwSWeSQAm-g", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
     }
 
     @Test

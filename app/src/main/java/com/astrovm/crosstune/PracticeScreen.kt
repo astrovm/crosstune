@@ -133,10 +133,10 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                     val line = shown.line
                     // Caught up, a side being set shows on the line kept, in place of the check.
                     if (shown.total == 0) {
-                        if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, actions, editing, onSide) else CaughtUp()
+                        if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, state.learning, actions, editing, onSide) else CaughtUp()
                     }
                     else if (line == null) Done(shown, actions)
-                    else Card(line, shown, state.cardTypes, actions, editing, onSide)
+                    else Card(line, shown, state.cardTypes, state.learning, actions, editing, onSide)
                 }
             }
         }
@@ -182,14 +182,8 @@ private fun CaughtUp() {
  * A card: the song it's from and its front; once turned, its back comes in below. A side with its sound plays the line. Turned, it's said whether it was known, each button saying when it's back.
  */
 @Composable
-private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, actions: ScreenActions, preview: CardPreview? = null, onSide: (CardSide) -> Unit = {}) {
+private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, learning: Learning, actions: ScreenActions, preview: CardPreview? = null, onSide: (CardSide) -> Unit = {}) {
     val type = preview?.type ?: types.firstOrNull { it.id == line.cardType } ?: READ_IT
-    val cards = type.options
-    val haptics = LocalHapticFeedback.current
-    val answer = { grade: Grade ->
-        haptics.performHapticFeedback(if (grade == Grade.AGAIN) HapticFeedbackType.Reject else HapticFeedbackType.Confirm)
-        actions.onGradePractice(grade)
-    }
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
         Surface(
             shape = MaterialTheme.shapes.extraLarge,
@@ -207,66 +201,91 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, act
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
-                // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
-                if (preview != null) {
-                    val side = if (preview.back) cards.back else cards.front
-                    CardSideEditor(line, side, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, onChange = onSide)
-                } else {
-                val front = cards.front
-                val plays = front.sound && practice.sound != LineSound.NONE
-                if (plays) LineSound(line, practice.sound, actions.onReplayLine)
-                if (!front.bare) CardSideContent(line, front, back = false)
-                else if (!plays) CardSideContent(line, CardSide(), back = false)
-                // Turned, the other side comes in below the front, which stays.
-                if (practice.turned) {
-                    HorizontalDivider()
-                    if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
-                    CardSideContent(line, cards.back, back = true)
-                }
-                }
+                CardFace(line, practice, type.options, learning, actions, preview, onSide)
             }
         }
-        if (preview == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-            if (!practice.turned) {
-                Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.practice_show)) }
-            } else {
-                val locale = LocalConfiguration.current.locales[0]
-                // Four, in Anki's colors, each saying when the line's back.
-                val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                GRADES.forEach { (grade, label) ->
-                    val (fill, text) = gradeColors(grade, dark)
-                    Button(
-                        onClick = { answer(grade) },
-                        modifier = Modifier.weight(1f).heightIn(min = 56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = text),
-                        contentPadding = GRADE_PADDING
-                    ) { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
-                }
+        if (preview == null) Grades(line, practice, actions)
+    }
+}
+
+/**
+ * What the card shows, or, while a side's settings are open, that side as its menu. The words are written and
+ * spelled as the lyrics do, so a line reads the same in both.
+ */
+@Composable
+private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, learning: Learning, actions: ScreenActions, preview: CardPreview?, onSide: (CardSide) -> Unit) {
+    val lyrics = learning
+    // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
+    if (preview != null) {
+        val side = if (preview.back) cards.back else cards.front
+        CardSideEditor(line, side, lyrics, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, playing = practice.sound == LineSound.PLAYING, onChange = onSide)
+        return
+    }
+    val front = cards.front
+    val plays = front.sound && practice.sound != LineSound.NONE
+    if (plays) LineSound(line, practice.sound, actions.onReplayLine)
+    if (!front.bare) CardSideContent(line, front, lyrics, back = false)
+    else if (!plays) CardSideContent(line, CardSide(), lyrics, back = false)
+    // Turned, the other side comes in below the front, which stays.
+    if (practice.turned) {
+        HorizontalDivider()
+        if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
+        CardSideContent(line, cards.back, lyrics, back = true)
+    }
+}
+
+/** Show answer, and once turned, the four grades. */
+@Composable
+private fun Grades(line: SavedLine, practice: Practice, actions: ScreenActions) {
+    val haptics = LocalHapticFeedback.current
+    val answer = { grade: Grade ->
+        haptics.performHapticFeedback(if (grade == Grade.AGAIN) HapticFeedbackType.Reject else HapticFeedbackType.Confirm)
+        actions.onGradePractice(grade)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        if (!practice.turned) {
+            Button(onClick = actions.onTurnPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.practice_show)) }
+        } else {
+            val locale = LocalConfiguration.current.locales[0]
+            // Four, in Anki's colors, each saying when the line's back.
+            val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+            GRADES.forEach { (grade, label) ->
+                val (fill, text) = gradeColors(grade, dark)
+                Button(
+                    onClick = { answer(grade) },
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = text),
+                    contentPadding = GRADE_PADDING
+                ) { GradeLabel(label, waitText(SavedLinesStore.waitFor(line, grade), locale)) }
             }
         }
     }
 }
 
-/** Only the text layers picked for this side, previewed while its settings are open. */
+/** Only the text layers picked for this side, written and spelled as the [lyrics] are, unless picked for the side. */
 @Composable
-private fun CardSideContent(line: SavedLine, side: CardSide, back: Boolean) {
-    val base = if (line.line != null) MaterialTheme.typography.displaySmall else if (back) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium
-    val style = base.copy(fontSize = base.fontSize * side.wordsScale, lineHeight = base.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold).writing(line.text)
-    val shown = line.shownAs(side.wordsAs, side.romajiTyped)
-    val ruby = line.ruby ?: line.reading?.let { listOf(Ruby(line.text, it)) }
+private fun CardSideContent(line: SavedLine, side: CardSide, lyrics: Learning, back: Boolean) {
+    val shows = side.writes(line, lyrics.wordsAs)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (side.words) {
-            if (side.wordsAs == WordsAs.WRITTEN && side.readings && ruby != null) RubyLine(ruby, style, scale = side.readingScale)
-            else Text(shown, style = style)
-            line.line?.let { Text(it, style = MaterialTheme.typography.bodyLarge.writing(it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        if (side.latin && (!side.words || side.wordsAs != WordsAs.LATIN)) {
-            line.latin(side.romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (side.words) SideWords(line, side, shows, lyrics, back)
+        if (side.latin && (!side.words || shows != WordsAs.LATIN)) {
+            line.latin(lyrics.romajiTyped)?.let { Text(it, style = MaterialTheme.typography.bodyLarge.run { copy(fontSize = fontSize * side.wordsScale, lineHeight = lineHeight * side.wordsScale) }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         if (side.translation) line.translation?.let {
             Text(it, style = MaterialTheme.typography.titleLarge.run { copy(fontSize = fontSize * side.translationScale, lineHeight = lineHeight * side.translationScale) }, color = MaterialTheme.colorScheme.primary)
         }
     }
+}
+
+/** The words of a side, written as it [shows] them, with their readings over them when written as they are, and the whole line under a part of it. */
+@Composable
+private fun SideWords(line: SavedLine, side: CardSide, shows: WordsAs, lyrics: Learning, back: Boolean) {
+    val base = if (line.line != null) MaterialTheme.typography.displaySmall else if (back) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium
+    val style = base.copy(fontSize = base.fontSize * side.wordsScale, lineHeight = base.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold).writing(line.text)
+    val ruby = line.ruby ?: line.reading?.let { listOf(Ruby(line.text, it)) }
+    if (shows == WordsAs.WRITTEN && side.readings && ruby != null) RubyLine(ruby, style, scale = side.readingScale)
+    else Text(line.shownAs(shows, lyrics), style = style)
+    line.line?.let { Text(it, style = MaterialTheme.typography.bodyLarge.writing(it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
 }
 
 /** Each kanji of [line] with its reading, to put right as it's sung; saved only when each is kana. */
@@ -330,18 +349,19 @@ private fun AppLoading(app: String?) {
     }
 }
 
-/** The line's sound: a ring that fills as it plays, with bars that move while it does, and a play button once it's played. */
+/** The line's sound: a ring that fills as it plays, with bars that move while it does, which stop it when tapped, and a play button once it's played. */
 @Composable
 private fun SoundButton(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
     val played = remember(line, sound) { Animatable(0f) }
     LaunchedEffect(line, sound) {
         if (sound == LineSound.PLAYING) played.animateTo(1f, tween(((line.endMs ?: 0L) - (line.startMs ?: 0L)).toInt().coerceAtLeast(0), easing = LinearEasing))
     }
+    val stop = stringResource(R.string.practice_stop)
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SOUND_SIZE + 8.dp)) {
         if (sound == LineSound.PLAYING) CircularProgressIndicator(progress = { played.value }, strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp))
-        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE)) {
+        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED || sound == LineSound.PLAYING, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE)) {
             Box(contentAlignment = Alignment.Center) {
-                if (sound == LineSound.PLAYING) Bars(SOUND_SIZE / 3)
+                if (sound == LineSound.PLAYING) Bars(SOUND_SIZE / 3, Modifier.semantics { contentDescription = stop })
                 else Icon(painterResource(R.drawable.ic_play), contentDescription = stringResource(R.string.practice_play), modifier = Modifier.size(SOUND_SIZE / 2))
             }
         }
@@ -352,9 +372,9 @@ private val SOUND_SIZE = 48.dp
 
 /** Bars rising and falling, out of step, while a line plays. */
 @Composable
-private fun Bars(height: Dp) {
+private fun Bars(height: Dp, modifier: Modifier) {
     val beat = rememberInfiniteTransition(label = "bars")
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(height)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically, modifier = modifier.height(height)) {
         repeat(BARS) { index ->
             val level by beat.animateFloat(0.25f, 1f, infiniteRepeatable(tween(450, delayMillis = index * 90), RepeatMode.Reverse), label = "bar $index")
             Box(Modifier.width(3.dp).height(height * level).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimaryContainer))

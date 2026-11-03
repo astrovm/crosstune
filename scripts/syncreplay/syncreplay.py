@@ -116,7 +116,8 @@ def windows(song, wav, length, model=APP_MODEL, clean=False):
 
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
-        text = subprocess.run([str(binary), str(weights), "en", ""], input=seg.tobytes(), capture_output=True).stdout.decode("utf-8", "replace")
+        # A model that can't run hears nothing, so it fails here rather than passing for silence.
+        text = subprocess.run([str(binary), str(weights), "en", ""], input=seg.tobytes(), capture_output=True, check=True).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
     with ThreadPoolExecutor(1) as pool:

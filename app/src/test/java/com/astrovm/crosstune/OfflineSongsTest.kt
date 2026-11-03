@@ -66,6 +66,23 @@ class OfflineSongsTest {
     }
 
     @Test
+    fun songsKeptAreLikedInTheirAppOnceAndThatsRemembered() = runBlocking {
+        val songs = songs()
+        songs.keep(song)
+        songs.keep(list)
+        // A song kept twice, alone and in a list, is liked once.
+        assertEquals(listOf(song, other), songs.toLike())
+        assertFalse(songs.likeOnce { it.title == "Elsewhere" })
+        assertTrue(songs.likeOnce { it.title == song.title })
+        // Taken, it isn't taken again.
+        assertFalse(songs.likeOnce { it.title == song.title })
+        assertEquals(listOf(other), songs.toLike())
+        assertEquals(setOf(OfflineSongs.keyOf(song)), songs.has(list)?.liked)
+        // Remembered once the app's closed, so it isn't liked again after it's unliked there.
+        assertEquals(listOf(other), songs().toLike())
+    }
+
+    @Test
     fun whatALetGoSongNeededIsDroppedOnDiskToo() = runBlocking {
         val songs = songs()
         val kept = songs.keep(song)

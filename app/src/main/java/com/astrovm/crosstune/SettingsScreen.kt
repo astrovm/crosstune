@@ -170,14 +170,12 @@ private fun SettingsList(
                 label = stringResource(R.string.settings_default_label),
                 modifier = Modifier.padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
             )
-            GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_show_in_crosstune_first),
                 description = null,
                 checked = state.linksInCrosstune,
                 onCheckedChange = actions.onShowInCrosstuneFirstChange
             )
-            GroupDivider()
             // Opened straight in the app, the song itself plays there; switched off, a search opens, so nothing starts.
             SettingSwitch(
                 label = stringResource(R.string.setting_play_right_away),
@@ -187,7 +185,6 @@ private fun SettingsList(
             )
             // A TV has nowhere to allow links in, so they can't open here.
             if (state.phone != Phone.TV) {
-                GroupDivider()
                 SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
             }
         }
@@ -196,13 +193,10 @@ private fun SettingsList(
         SectionHeader(stringResource(R.string.lyrics_button))
         Group {
             TranslateIntoRow(state.learning.into, actions.onTranslateIntoChange)
-            GroupDivider()
             UntranslatedRow(state.learning.untranslated, actions.onUntranslatedChange)
-            GroupDivider()
             // Signed in with ChatGPT, it or Google Translate; without, Google Translate is all there is.
             if (state.chatGpt.email != null) {
                 TranslationSourceRow(state.learning.chatGptTranslation, actions.onChatGptTranslationChange)
-                GroupDivider()
             }
             // On, or off, in Android's settings: switching it opens them, with the steps where there are some.
             SettingSwitch(
@@ -211,9 +205,7 @@ private fun SettingsList(
                 checked = state.canFollowApps,
                 onCheckedChange = { on -> if (on) actions.onAllowFollowing() else actions.onOpenFollowAccess() }
             )
-            GroupDivider()
             LinesEarlyRow(state.linesEarlyMs, actions.onLinesEarlyChange)
-            GroupDivider()
             NextLineAheadRow(state.nextLineAheadMs, actions.onNextLineAheadChange)
         }
 
@@ -222,13 +214,11 @@ private fun SettingsList(
         Group {
             ChatGptRow(state.chatGpt, actions)
             if (state.chatGpt.email != null) {
-                GroupDivider()
                 ManageUsageRow(onClick = { openWebPage(ChatGpt.USAGE_URL) })
             }
             // Signed in, which of the account's models to ask.
             val model = state.chatGpt.model?.takeIf { slug -> state.chatGpt.email != null && state.chatGpt.models.any { it.slug == slug } }
             if (model != null) {
-                GroupDivider()
                 ChoiceRow(
                     label = stringResource(R.string.chatgpt_model),
                     choices = state.chatGpt.models.map { it.slug to it.name },
@@ -243,30 +233,25 @@ private fun SettingsList(
         SectionHeader(stringResource(R.string.settings_visuals_title))
         Group {
             VisualsListRow(state.visualsSettings, onOpen = { onOpenSource(VISUALS_PAGE) })
-            GroupDivider()
             VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange)
         }
 
         SectionHeader(stringResource(R.string.settings_appearance_title))
         Group {
             ThemeRow(state.theme, actions.onThemeChange)
-            GroupDivider()
             PaletteRow(state.palette, actions.onPaletteChange)
-            GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_pure_black),
                 description = null,
                 checked = state.pureBlack,
                 onCheckedChange = actions.onPureBlackChange
             )
-            GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_playing_bar),
                 description = null,
                 checked = state.playingBar,
                 onCheckedChange = actions.onPlayingBarChange
             )
-            GroupDivider()
             LanguageRow(actions.onLanguageChange)
         }
 
@@ -293,7 +278,6 @@ private fun SettingsList(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            GroupDivider()
             var reporting by rememberSaveable { mutableStateOf(false) }
             val reportRow = remember { FocusRequester() }
             Row(
@@ -314,7 +298,6 @@ private fun SettingsList(
                 checked = state.autoReports == true,
                 onCheckedChange = actions.onAllowAutoReports
             )
-            GroupDivider()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -329,7 +312,6 @@ private fun SettingsList(
                 )
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
-            GroupDivider()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -673,7 +655,6 @@ private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<So
     ) {
         Group(modifier = Modifier.padding(top = 4.dp)) {
             sources.forEachIndexed { index, item ->
-                if (index > 0) GroupDivider()
                 SourceSummaryRow(item, state.installed, onOpen = { onOpen(item.key) })
             }
         }
@@ -702,14 +683,12 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
         SectionHeader(stringResource(R.string.settings_links_section))
         Group {
             NotFoundRow(state.notFoundAction, actions.onNotFoundActionChange)
-            GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_clean_links),
                 description = stringResource(R.string.setting_clean_links_description),
                 checked = state.cleanLinks,
                 onCheckedChange = actions.onCleanLinksChange
             )
-            GroupDivider()
             SettingSwitch(
                 label = stringResource(R.string.setting_share_sheet_apps),
                 description = stringResource(R.string.setting_share_sheet_apps_description),
@@ -732,13 +711,21 @@ private fun AdvancedPage(state: UiState, actions: ScreenActions, onBack: () -> U
             }
         }
         SectionHeader(stringResource(R.string.offline))
-        Group { OfflineSpaceRow(state, actions.onOfflineSpaceChange) }
+        Group {
+            OfflineSpaceRow(state, actions.onOfflineSpaceChange)
+            SettingSwitch(
+                label = stringResource(R.string.setting_offline_likes),
+                description = stringResource(R.string.setting_offline_likes_description),
+                checked = state.offlineLikes,
+                onCheckedChange = actions.onOfflineLikesChange
+            )
+        }
     }
 }
 
 /** How much room songs kept offline may take, on a slider, and how much they take now. */
 @Composable
-private fun OfflineSpaceRow(state: UiState, onChange: (Int) -> Unit) {
+private fun OfflineSpaceRow(state: UiState, onChange: (Int) -> Unit) = Column {
     val context = LocalContext.current
     fun size(bytes: Long) = android.text.format.Formatter.formatShortFileSize(context, bytes)
     StepsRow(
@@ -785,7 +772,6 @@ private fun CustomDestinations(destinations: List<Destination>, installed: Set<M
                     AppIcon(R.drawable.ic_delete, contentDescription = stringResource(R.string.remove_button))
                 }
             }
-            GroupDivider()
         }
         AnimatedContent(targetState = addingCustom, transitionSpec = { swap() }, label = "add") { adding ->
             if (adding) {
@@ -864,7 +850,6 @@ private fun VisualsList(
             )
             Group {
                 inKind.forEachIndexed { index, name ->
-                    if (index > 0) GroupDivider()
                     VisualRow(name, settings, canTurnOff(name), actions, onSee = { onSee(names.indexOf(name)) })
                 }
             }
@@ -1483,18 +1468,20 @@ private fun SourcePage(
     ) {
         Group(modifier = Modifier.padding(top = 8.dp)) {
             val onToggle = item.onToggle
+            // What keeps it from getting its links goes with the switch, not apart from it.
             if (onToggle != null) {
-                SettingSwitch(
-                    label = stringResource(R.string.source_open_links),
-                    description = item.listeningNote,
-                    checked = item.on,
-                    onCheckedChange = onToggle,
-                    enabled = !item.locked
-                )
-                if (item.notAllowed) NotAllowedRow(fixingLinks, actions)
+                Column {
+                    SettingSwitch(
+                        label = stringResource(R.string.source_open_links),
+                        description = item.listeningNote,
+                        checked = item.on,
+                        onCheckedChange = onToggle,
+                        enabled = !item.locked
+                    )
+                    if (item.notAllowed) NotAllowedRow(fixingLinks, actions)
+                }
             }
             if (item.video) {
-                if (onToggle != null) GroupDivider()
                 // Shared by YouTube, Invidious and Piped.
                 SettingSwitch(
                     label = stringResource(R.string.setting_only_music_videos),
@@ -1503,10 +1490,8 @@ private fun SourcePage(
                     onCheckedChange = actions.onOnlyMusicVideosChange
                 )
             }
-            GroupDivider()
             RuleMenu(item.rule, item.fallback, destinations, installed, item.onRule)
             item.site?.let { site ->
-                GroupDivider()
                 FrontendSiteRow(site, item.onSite)
             }
         }
@@ -1520,7 +1505,6 @@ private fun SourcePage(
             )
             Group {
                 owners.entries.forEachIndexed { index, (app, opensThem) ->
-                    if (index > 0) GroupDivider()
                     LinkOwnerRow(app, opensThem = opensThem, onClick = { actions.onOpenAppLinkSettings(app) })
                 }
             }

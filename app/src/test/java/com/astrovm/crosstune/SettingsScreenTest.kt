@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.material3.DividerDefaults
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
@@ -99,6 +101,19 @@ class SettingsScreenTest {
         state = state.copy(offlineUsedBytes = 3_500_000)
         composeRule.onNodeWithText(used(3_500_000)).assertExists()
         composeRule.onNodeWithText(used(0)).assertDoesNotExist()
+    }
+
+    @Test
+    fun everyTwoRowsOfAboutHaveAHairlineBetweenThem() {
+        show(UiState(autoReports = true))
+        composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo()
+        val rows = listOf(
+            string(R.string.report_problem),
+            string(R.string.setting_auto_report),
+            string(R.string.privacy_policy)
+        ).map { composeRule.onNodeWithText(it).getBoundsInRoot() }
+        // Each row ends where the hairline under it starts, and the next starts where it ends.
+        assertEquals(listOf(DividerDefaults.Thickness, DividerDefaults.Thickness), rows.zipWithNext { above, below -> below.top - above.bottom })
     }
 
     @Test

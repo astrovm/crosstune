@@ -443,12 +443,233 @@ class MilkdropTest {
         assertEquals(setOf("a", "b", "c"), slow.toSet())
     }
 
-    /** Told of each preset found [onTooSlow], and of each [onFastEnough]. */
+    /**
+     * Told of each preset found [onTooSlow], and of each [onFastEnough]. Each is drawn at the smallest
+     * size already, as one found too slow at a bigger one is drawn smaller first.
+     */
     private fun timed(milkdrop: Milkdrop, settings: VisualsSettings = VisualsSettings(), onTooSlow: (String) -> Unit = {}, onDrop: (String) -> Unit = {}, onFastEnough: (String) -> Unit = {}) =
         MilkdropRenderer(
-            milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it }, settings = settings,
+            milkdrop, { listOf("a", "b", "c") }, { null }, Random(1), now = { clock }, sleep = { clock += it },
+            settings = settings.copy(sizes = listOf("a", "b", "c").associateWith { VISUALS_SIZES.lastIndex }),
             onTimed = { name, slow -> if (slow) onTooSlow(name) else onFastEnough(name) }, onDrop = onDrop
         )
+
+    /** Drawn by [milkdrop], each preset at the size [sizes] start it at, told of each size it's drawn at, sharper than [tooSharp] untried. */
+    private fun sized(milkdrop: SizedMilkdrop, sizes: Map<String, Int> = emptyMap(), busy: () -> Boolean = { false }, hot: () -> Boolean = { false }, fixedSize: Int? = null, onTooSlow: (String) -> Unit = {}, tooSharp: MutableMap<String, Int> = mutableMapOf()): Pair<MilkdropRenderer, MutableList<Pair<String, Int>>> {
+        val told = mutableListOf<Pair<String, Int>>()
+        val renderer = MilkdropRenderer(
+            milkdrop, { listOf("a") }, { null }, Random(1), now = { clock }, sleep = { clock += it },
+            settings = VisualsSettings(changeMs = VisualsSettings.NEVER, sizes = sizes),
+            onTimed = { name, slow -> if (slow) onTooSlow(name) }, onSized = { name, size -> told += name to size }, busy = busy, hot = hot, fixedSize = fixedSize, tooSharp = tooSharp
+        )
+        milkdrop.renderer = renderer
+        return renderer to told
+    }
+
+    /** projectM drawing a frame in [ms] for each size, an index into [VISUALS_SIZES]: the smaller, the faster. */
+    private inner class SizedMilkdrop(private val ms: List<Long>) : Milkdrop {
+        lateinit var renderer: MilkdropRenderer
+        val shows = mutableListOf<String>()
+        override fun open(width: Int, height: Int) = true
+        override fun size(width: Int, height: Int) = Unit
+        override fun show(preset: String, smooth: Boolean) = true.also { shows += preset }
+        override fun hear(samples: ByteArray, count: Int) = Unit
+        override fun draw() {
+            clock += ms[renderer.size]
+        }
+        override fun darken(shade: Float) = Unit
+        override fun finish() = Unit
+        override fun close() = Unit
+    }
+
+    /** Frames drawn for [ms] of the clock. */
+    private fun MilkdropRenderer.drawFor(ms: Long) {
+        val until = clock + ms
+        while (clock < until) frame()
+    }
+
+    @Test
+    fun aPresetTooSlowIsDrawnASizeSmallerTillItKeepsUpAndStartsThereNextTime() {
+        // 60 ms a frame at half the size, 20 at a third.
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 20L))
+        val (renderer, told) = sized(milkdrop)
+        var resized = 0
+        renderer.onSize = { resized++ }
+        renderer.created()
+        assertEquals(MilkdropRenderer.START_SIZE, renderer.size)
+        // Blending in, then too slow for two seconds: not yet.
+        renderer.drawFor(5_400)
+        assertEquals(2, renderer.size)
+        renderer.drawFor(200)
+        assertEquals(3, renderer.size)
+        assertEquals(listOf("a" to 3), told)
+        assertEquals(1, resized)
+        // Keeping up now, it stays; nor is there room to draw it sharper.
+        renderer.drawFor(20_000)
+        assertEquals(listOf("a" to 3), told)
+        // Next time, it starts there.
+        val again = SizedMilkdrop(listOf(200L, 100L, 60L, 20L))
+        val (next, _) = sized(again, sizes = mapOf("a" to 3))
+        next.created()
+        assertEquals(3, next.size)
+    }
+
+    @Test
+    fun aPresetKeepingUpIsTriedASizeSharperAndStaysThereWhileItStillKeepsUp() {
+        // 15 ms a frame at half, 20 at two thirds, 24 at full: all over 40 a second, if only just.
+        val milkdrop = SizedMilkdrop(listOf(24L, 20L, 15L, 10L))
+        val (renderer, told) = sized(milkdrop)
+        renderer.created()
+        // Blended in, then five seconds keeping up: two thirds is tried.
+        renderer.drawFor(8_400)
+        assertEquals(2, renderer.size)
+        renderer.drawFor(200)
+        assertEquals(1, renderer.size)
+        // Five seconds keeping up there, once the new size has settled in: full is tried.
+        renderer.drawFor(5_600)
+        assertEquals(0, renderer.size)
+        renderer.drawFor(60_000)
+        assertEquals(listOf("a" to 1, "a" to 0), told)
+    }
+
+    @Test
+    fun aPresetDrawnAtExactlyFortyFramesASecondKeepsUpAndIsTriedSharper() {
+        // 25 ms a frame at every size: 40 a second, as fast as it has to be, and no slower.
+        val milkdrop = SizedMilkdrop(listOf(25L, 25L, 25L, 10L))
+        val (renderer, told) = sized(milkdrop)
+        renderer.created()
+        renderer.drawFor(20_000)
+        assertEquals(listOf("a" to 1, "a" to 0), told)
+    }
+
+    @Test
+    fun aSharperSizeTooSlowIsLeftWithinTwoSecondsAndNotTriedAgainTillTheAppStartsOver() {
+        // 30 ms a frame at full, under 40 a second; two thirds keeps up.
+        val ms = listOf(30L, 20L, 15L, 10L)
+        val milkdrop = SizedMilkdrop(ms)
+        val tooSharp = mutableMapOf<String, Int>()
+        val (renderer, told) = sized(milkdrop, tooSharp = tooSharp)
+        val changes = mutableListOf<Pair<Long, Int>>()
+        renderer.onSize = { changes += clock to renderer.size }
+        renderer.created()
+        renderer.drawFor(20_000)
+        assertEquals(listOf(1, 0, 1), changes.map { it.second })
+        // Back within two seconds of trying full, the frame that tells and all.
+        assertTrue(changes[2].first - changes[1].first <= 2_000)
+        // And full's not tried again, however long it keeps up.
+        renderer.drawFor(120_000)
+        assertEquals(listOf("a" to 1, "a" to 0, "a" to 1), told)
+        // Opened again while the app's still running, it starts where it kept up and stays.
+        val again = SizedMilkdrop(ms)
+        val (next, nextTold) = sized(again, sizes = mapOf("a" to 1), tooSharp = tooSharp)
+        next.created()
+        next.drawFor(60_000)
+        assertEquals(1, next.size)
+        assertEquals(emptyList<Pair<String, Int>>(), nextTold)
+        // Once the app starts over, full is tried once more.
+        val restarted = SizedMilkdrop(ms)
+        val (fresh, freshTold) = sized(restarted, sizes = mapOf("a" to 1))
+        fresh.created()
+        fresh.drawFor(60_000)
+        assertEquals(listOf("a" to 0, "a" to 1), freshTold)
+    }
+
+    @Test
+    fun aSharperSizeTriedWhileThePhoneGetsBusyIsLeftAtOnceAndTriedAgainOnceItsNot() {
+        // Full is too slow, but the phone gets busy for 4 seconds, as the speech model hears the song, just as it's tried.
+        val milkdrop = SizedMilkdrop(listOf(30L, 20L, 15L, 10L))
+        val tooSharp = mutableMapOf<String, Int>()
+        var busyFrom: Long? = null
+        val (renderer, told) = sized(milkdrop, sizes = mapOf("a" to 1), busy = { busyFrom?.let { clock - it < 4_000 } ?: false }, tooSharp = tooSharp)
+        val changes = mutableListOf<Pair<Long, Int>>()
+        renderer.onSize = {
+            changes += clock to renderer.size
+            if (busyFrom == null && renderer.size == 0) busyFrom = clock
+        }
+        renderer.created()
+        renderer.drawFor(30_000)
+        // Busy, the size tried can't be told, and too slow it would stutter all that while: it's left at once.
+        assertEquals(listOf("a" to 0, "a" to 1, "a" to 0, "a" to 1), told)
+        // Starting at its own size, two thirds, is a change too.
+        assertEquals(listOf(1, 0, 1, 0, 1), changes.map { it.second })
+        // Left on the next frame or so, not two seconds later.
+        assertTrue(changes[2].first - changes[1].first <= 100)
+        // Tried again once the phone's not busy, it's left within two seconds as too slow, and that's remembered.
+        assertTrue(changes[3].first >= busyFrom!! + 4_000)
+        assertTrue(changes[4].first - changes[3].first <= 2_000)
+        assertEquals(mapOf("a" to 0), tooSharp)
+    }
+
+    @Test
+    fun onAHotPhoneAPresetTooSlowIsDrawnSmallerButNeitherStruckNorRememberedAsTooSharp() {
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 40L))
+        val struck = mutableListOf<String>()
+        val tooSharp = mutableMapOf<String, Int>()
+        val (renderer, _) = sized(milkdrop, hot = { true }, onTooSlow = { struck += it }, tooSharp = tooSharp)
+        renderer.created()
+        renderer.drawFor(30_000)
+        // Smaller, so the words over it don't stutter, but it's the heat that's slow, not the preset.
+        assertEquals(3, renderer.size)
+        assertEquals(emptyList<String>(), struck)
+        assertEquals(emptyMap<String, Int>(), tooSharp)
+    }
+
+    @Test
+    fun onAHotPhoneNoSharperSizeIsTriedTillItCools() {
+        var hot = true
+        val milkdrop = SizedMilkdrop(listOf(24L, 20L, 15L, 10L))
+        val (renderer, _) = sized(milkdrop, hot = { hot })
+        renderer.created()
+        renderer.drawFor(30_000)
+        assertEquals(2, renderer.size)
+        hot = false
+        renderer.drawFor(5_200)
+        assertEquals(1, renderer.size)
+    }
+
+    @Test
+    fun aPresetTooSlowEvenAtTheSmallestIsStruckOnceAShowing() {
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 40L))
+        val struck = mutableListOf<String>()
+        val (renderer, told) = sized(milkdrop, onTooSlow = { struck += it })
+        renderer.created()
+        renderer.drawFor(30_000)
+        assertEquals(listOf("a" to 3), told)
+        assertEquals(listOf("a"), struck)
+    }
+
+    @Test
+    fun framesDrawnWhileThePhoneIsBusyOrHotArentTimed() {
+        var busy = true
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 20L))
+        val (renderer, told) = sized(milkdrop, busy = { busy })
+        renderer.created()
+        renderer.drawFor(30_000)
+        assertEquals(2, renderer.size)
+        assertEquals(emptyList<Pair<String, Int>>(), told)
+        // Not busy any more, it's timed again.
+        busy = false
+        renderer.drawFor(2_100)
+        assertEquals(3, renderer.size)
+    }
+
+    @Test
+    fun theDebugSizeDrawsEveryPresetAtItAlone() {
+        val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 5L))
+        val struck = mutableListOf<String>()
+        val (renderer, told) = sized(milkdrop, sizes = mapOf("a" to 3), fixedSize = 0, onTooSlow = { struck += it })
+        renderer.created()
+        assertEquals(0, renderer.size)
+        renderer.drawFor(30_000)
+        assertEquals(0, renderer.size)
+        assertEquals(emptyList<Pair<String, Int>>() to emptyList<String>(), told to struck)
+    }
+
+    @Test
+    fun aSizeIsThatFractionOfTheViewsWidthOrHeightRoundedAndNeverNothing() {
+        assertEquals(listOf(1080, 720, 540, 360), VISUALS_SIZES.indices.map { drawn(1080, it) })
+        assertEquals(listOf(1, 1), listOf(drawn(1, 3), drawn(0, 0)))
+    }
 
     @Test
     fun eachSecondItTellsHowManyFramesASecondThePhoneCouldDraw() {
@@ -637,7 +858,8 @@ class MilkdropTest {
 
     @Test
     fun visualsSettingsAreKept() {
-        val store = VisualsStore(ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("visuals-test", 0))
+        val preferences = ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("visuals-test", 0)
+        val store = VisualsStore(preferences)
         assertEquals(VisualsSettings(), store.load())
         store.turn("a", on = false)
         // Slow once could be the phone busy; twice, it's heavy.
@@ -670,5 +892,25 @@ class MilkdropTest {
         assertEquals(false to 60_000L, store.load().let { it.skipHeavy to it.changeMs })
         store.changeEvery(1)
         assertEquals(MilkdropRenderer.PRESET_MS, store.load().changeMs)
+        // The size each was last drawn at, the last one kept; a size there's no such one of is no size.
+        store.sized("a", 3)
+        store.sized("b:c", 1)
+        store.sized("a", 0)
+        assertEquals(mapOf("a" to 0, "b:c" to 1), store.load().sizes)
+        preferences.edit().putStringSet("visuals_sizes", setOf("9:d", "x:e", "1:f", "0:g", "3:h", "4:i", "-1:j")).apply()
+        // The sharpest and the smallest are sizes; one past either isn't.
+        assertEquals(mapOf("f" to 1, "g" to 0, "h" to 3), store.load().sizes)
+    }
+
+    @Test
+    fun visualsFoundHeavyBeforeTheyCouldBeDrawnSmallerGetAnotherGoOnce() {
+        val preferences = ApplicationProvider.getApplicationContext<Application>().getSharedPreferences("visuals-heavy-test", 0)
+        preferences.edit().putStringSet("visuals_heavy", setOf("a")).putStringSet("visuals_slow_once", setOf("b")).putStringSet("visuals_keep", setOf("a")).apply()
+        val store = VisualsStore(preferences)
+        assertEquals(VisualsSettings(keep = setOf("a")), store.load())
+        // Found heavy since, it stays so.
+        store.timed("c", slow = true)
+        store.timed("c", slow = true)
+        assertEquals(setOf("c"), store.load().heavy)
     }
 }

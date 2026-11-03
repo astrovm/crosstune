@@ -19,7 +19,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +27,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DividerDefaults
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.Layout
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -162,27 +164,54 @@ internal fun SectionHeader(
 }
 
 /**
- * Rounded container that groups related rows, separated by hairline dividers. It grows and shrinks
- * smoothly as rows come and go, so nothing jumps.
+ * Rounded container that groups related rows, a hairline between each two of them, drawn by the
+ * group itself so none is ever missing or left at its edge, however rows come and go. A row that
+ * takes no room gets none. It grows and shrinks smoothly as rows come and go, so nothing jumps.
  */
 @Composable
-internal fun Group(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun Group(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Surface(
         modifier = modifier.fillMaxWidth().animateContentSize(Motion.size),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Column(content = content)
+        val color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        // Where each hairline goes, from the last time the rows were placed, for drawing them there.
+        val between = remember { mutableListOf<Int>() }
+        Layout(
+            content = content,
+            modifier = Modifier.drawWithContent {
+                drawContent()
+                val inset = GROUP_INSET.toPx()
+                val thickness = DividerDefaults.Thickness.toPx()
+                between.forEach { top ->
+                    val y = top + thickness / 2
+                    drawLine(color, Offset(inset, y), Offset(size.width - inset, y), thickness)
+                }
+            }
+        ) { measurables, constraints ->
+            val thickness = DividerDefaults.Thickness.roundToPx()
+            val rows = measurables.map { it.measure(constraints.copy(minHeight = 0)) }.filter { it.height > 0 }
+            val height = rows.sumOf { it.height } + thickness * (rows.size - 1).coerceAtLeast(0)
+            // As wide as the group, which fills its width.
+            layout(constraints.maxWidth, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+                between.clear()
+                var y = 0
+                rows.forEachIndexed { index, row ->
+                    if (index > 0) {
+                        between += y
+                        y += thickness
+                    }
+                    row.placeRelative(0, y)
+                    y += row.height
+                }
+            }
+        }
     }
 }
 
-@Composable
-internal fun GroupDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 20.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-    )
-}
+/** How far in from a group's sides its hairlines start and end. */
+private val GROUP_INSET = 20.dp
 
 /** Label with an optional supporting line and a switch; the whole row toggles. */
 @Composable

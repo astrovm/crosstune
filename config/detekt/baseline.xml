@@ -26,7 +26,6 @@
     <ID>ComplexCondition:SettingsScreen.kt$(item.on || item.onToggle == null) &amp;&amp; item.rule != null &amp;&amp; !item.notAllowed &amp;&amp; !item.locked</ID>
     <ID>ComplexCondition:UniDic.kt$UniDic$files.isDirectory || (fetch &amp;&amp; mayFetch() &amp;&amp; fetched())</ID>
     <ID>CyclomaticComplexMethod:BorrowedTimings.kt$BorrowedTimings$fun lineUp(a: String, b: String): IntArray?</ID>
-    <ID>CyclomaticComplexMethod:CardTypesPanel.kt$@Composable internal fun CardSideEditor(line: SavedLine, side: CardSide, onPlay: () -&gt; Unit, canPlay: Boolean, onChange: (CardSide) -&gt; Unit)</ID>
     <ID>CyclomaticComplexMethod:CardTypesPanel.kt$@Composable internal fun CardTypesPanel(line: SavedLine, types: List&lt;CardType&gt;, turned: Boolean, actions: ScreenActions, onClose: () -&gt; Unit, onPreview: (CardPreview?) -&gt; Unit = {})</ID>
     <ID>CyclomaticComplexMethod:ChatGpt.kt$ChatGpt$suspend fun ask( instructions: String, input: String, webSearch: Boolean = false, /** How hard it thinks before answering, "low" for quick ones, or the model's own when null. */ effort: String? = null, /** Set when asked again with a renewed token, after the last one was turned down. */ renewed: Boolean = false, onText: (String) -&gt; Unit = {} ): ChatGptReply</ID>
     <ID>CyclomaticComplexMethod:ChatGpt.kt$ChatGpt$suspend fun signIn(open: suspend (String) -&gt; Unit, timeoutMs: Long = SIGN_IN_TIMEOUT_MS): ChatGptSignInResult</ID>
@@ -57,7 +56,6 @@
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun hearSinging()</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun heardAlong(hearing: Heard.Song)</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun learn()</ID>
-    <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun resolve(input: LinkInput, openWhenReady: Boolean, destination: Destination? = null, copied: Boolean = false, here: Boolean = false, underPlayer: Boolean = false)</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private fun showLyricsFor(requested: MusicMetadata, playing: Boolean = false)</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private suspend fun prepareResult()</ID>
     <ID>CyclomaticComplexMethod:MainViewModel.kt$MainViewModel$private suspend fun urlForHistory(entry: HistoryEntry, destination: Destination): String?</ID>
@@ -70,8 +68,6 @@
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@Composable private fun UpNextList(player: PlayerState, cover: String?, following: Following, actions: ScreenActions, pull: UpNextPull, onClose: () -&gt; Unit, modifier: Modifier)</ID>
     <ID>CyclomaticComplexMethod:PlayerScreen.kt$@OptIn(ExperimentalSharedTransitionApi::class) @Composable internal fun PlayerScreen(state: UiState, actions: ScreenActions)</ID>
     <ID>CyclomaticComplexMethod:PracticeScreen.kt$@Composable internal fun PracticeScreen(state: UiState, actions: ScreenActions)</ID>
-    <ID>CyclomaticComplexMethod:PracticeScreen.kt$@Composable private fun Card(line: SavedLine, practice: Practice, types: List&lt;CardType&gt;, actions: ScreenActions, preview: CardPreview? = null, onSide: (CardSide) -&gt; Unit = {})</ID>
-    <ID>CyclomaticComplexMethod:PracticeScreen.kt$@Composable private fun CardSideContent(line: SavedLine, side: CardSide, back: Boolean)</ID>
     <ID>CyclomaticComplexMethod:Readings.kt$Readings$fun romaji(kana: String, typed: Boolean = false): String</ID>
     <ID>CyclomaticComplexMethod:Readings.kt$Readings$private fun grouped(pieces: List&lt;Piece&gt;): List&lt;List&lt;Piece&gt;&gt;</ID>
     <ID>CyclomaticComplexMethod:Readings.kt$Readings$private fun joined(end: String, start: Char, vowel: String): Pair&lt;String, Char&gt;</ID>

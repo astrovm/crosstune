@@ -60,10 +60,10 @@ internal data class SavedLine(
     /** It in Latin letters, as typed when [typed] and it's spelled otherwise, or as said; null when it has none. */
     fun latin(typed: Boolean): String? = (if (typed) this.typed ?: romanized else romanized)?.takeIf { it.isNotBlank() }
 
-    /** It as [shown], when it can be: its kana, for Japanese, or its Latin letters; otherwise as written. */
-    fun shownAs(shown: WordsAs, typed: Boolean): String = when (shown) {
-        WordsAs.KANA -> reading?.takeIf { it.any(Readings::isKana) }
-        WordsAs.LATIN -> latin(typed)
+    /** It as [shown], when it can be, spelled as the [lyrics] are: its kanji in kana, for Japanese, or its Latin letters; otherwise as written. */
+    fun shownAs(shown: WordsAs, lyrics: Learning): String = when (shown) {
+        WordsAs.KANA -> (ruby?.kana ?: reading)?.takeIf { it.any(Readings::isKana) }?.inHiragana(lyrics.katakanaAsHiragana)
+        WordsAs.LATIN -> latin(lyrics.romajiTyped)
         WordsAs.WRITTEN -> null
     } ?: text
 
@@ -103,39 +103,53 @@ internal data class SavedLine(
     }
 }
 
-/** The text layers and sizes picked independently for one side of a practice card. */
+/**
+ * The text layers and sizes picked independently for one side of a practice card. The words are written as
+ * the lyrics write them, unless [wordsAs] is picked for this side; their Latin letters are always spelled as the lyrics spell them.
+ */
 internal data class CardSide(
     val words: Boolean = true,
-    val wordsAs: WordsAs = WordsAs.WRITTEN,
+    val wordsAs: WordsAs? = null,
     val readings: Boolean = false,
     val latin: Boolean = false,
     val translation: Boolean = false,
     val wordsScale: Float = 1f,
     val translationScale: Float = wordsScale,
     val readingScale: Float = 0.55f,
-    val romajiTyped: Boolean = false,
     val sound: Boolean = false
 ) {
     /** Whether no text layer is shown, so the side is the line itself, played, or nothing. */
     val bare: Boolean get() = !words && !readings && !latin && !translation
 
-    fun toJson(): JSONObject = JSONObject().put("words", words).put("wordsAs", wordsAs.name).put("readings", readings).put("latin", latin)
-        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("translationScale", translationScale.toDouble()).put("readingScale", readingScale.toDouble()).put("romajiTyped", romajiTyped).put("sound", sound)
+    /** How this side writes [line]'s words when the lyrics write them as [lyrics]: in kana only where it has kana, in Latin letters only where it has another script. */
+    fun writes(line: SavedLine, lyrics: WordsAs): WordsAs {
+        val script = cardScript(line)
+        return when (val shown = wordsAs ?: lyrics) {
+            WordsAs.KANA -> if (script == Script.JAPANESE) shown else WordsAs.WRITTEN
+            WordsAs.LATIN -> if (script != null) shown else WordsAs.WRITTEN
+            WordsAs.WRITTEN -> shown
+        }
+    }
+
+    fun toJson(): JSONObject = JSONObject().put("words", words).put(PICKED_WORDS_AS, wordsAs?.name ?: JSONObject.NULL).put("readings", readings).put("latin", latin)
+        .put("translation", translation).put("wordsScale", wordsScale.toDouble()).put("translationScale", translationScale.toDouble()).put("readingScale", readingScale.toDouble()).put("sound", sound)
 
     companion object {
+        /** Null, or missing, the side writes the words as the lyrics do. */
+        private const val PICKED_WORDS_AS = "pickedWordsAs"
+
         fun fromJson(json: JSONObject, defaults: CardSide): CardSide {
             val words = json.optDouble("wordsScale", defaults.wordsScale.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE)
             return CardSide(
                 words = json.optBoolean("words", defaults.words),
-                wordsAs = WordsAs.entries.firstOrNull { it.name == json.optString("wordsAs") } ?: defaults.wordsAs,
+                wordsAs = if (json.has(PICKED_WORDS_AS)) wordsAsNamed(json.optString(PICKED_WORDS_AS)) else if (json.has("wordsAs")) changedWordsAs(json.optString("wordsAs")) else defaults.wordsAs,
                 readings = json.optBoolean("readings", defaults.readings),
                 latin = json.optBoolean("latin", defaults.latin),
                 translation = json.optBoolean("translation", defaults.translation),
                 wordsScale = words,
                 // Kept before it had a size of its own, it was as big as the words.
                 translationScale = json.optDouble("translationScale", words.toDouble()).toFloat().coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
-                readingScale = json.optDouble("readingScale", defaults.readingScale.toDouble()).toFloat().coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
-                romajiTyped = json.optBoolean("romajiTyped", defaults.romajiTyped)
+                readingScale = json.optDouble("readingScale", defaults.readingScale.toDouble()).toFloat().coerceIn(MIN_READING_SCALE, MAX_READING_SCALE)
             ).let {
                 // Kept before it had a layer of its own, a side with no text was the line, played.
                 it.copy(sound = if (json.has("sound")) json.optBoolean("sound") else defaults.sound || it.bare)
@@ -145,14 +159,13 @@ internal data class CardSide(
         /** Read from the keys it was kept under before there were kinds of card. */
         fun load(preferences: SharedPreferences, prefix: String, defaults: CardSide) = CardSide(
             words = preferences.getBoolean("${prefix}_words", defaults.words),
-            wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString("${prefix}_words_as", defaults.wordsAs.name) } ?: defaults.wordsAs,
+            wordsAs = changedWordsAs(preferences.getString("${prefix}_words_as", null)) ?: defaults.wordsAs,
             readings = preferences.getBoolean("${prefix}_readings", defaults.readings),
             latin = preferences.getBoolean("${prefix}_latin", defaults.latin),
             translation = preferences.getBoolean("${prefix}_translation", defaults.translation),
             wordsScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
             translationScale = preferences.getFloat("${prefix}_words_scale", defaults.wordsScale).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
-            readingScale = preferences.getFloat("${prefix}_reading_scale", defaults.readingScale).coerceIn(MIN_READING_SCALE, MAX_READING_SCALE),
-            romajiTyped = preferences.getBoolean("${prefix}_romaji_typed", defaults.romajiTyped)
+            readingScale = preferences.getFloat("${prefix}_reading_scale", defaults.readingScale).coerceIn(MIN_READING_SCALE, MAX_READING_SCALE)
         ).let { it.copy(sound = preferences.getBoolean("${prefix}_sound", defaults.sound || it.bare)) }
     }
 }
@@ -165,22 +178,22 @@ internal data class CardOptions(
     companion object {
         /** What was kept before there were kinds of card. */
         fun load(preferences: SharedPreferences): CardOptions {
-            val typed = preferences.getBoolean("lyrics_romaji_typed", false)
-            val front = CardSide(
-                wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString("card_front", null) } ?: WordsAs.WRITTEN,
-                romajiTyped = typed
-            )
+            val front = CardSide(wordsAs = changedWordsAs(preferences.getString("card_front", null)))
             val back = CardSide(
                 readings = preferences.getBoolean("card_readings", true),
                 latin = preferences.getBoolean("card_latin", true),
                 translation = preferences.getBoolean("card_translation", true),
-                romajiTyped = typed,
                 sound = true
             )
             return CardOptions(CardSide.load(preferences, "card_front", front), CardSide.load(preferences, "card_back", back))
         }
     }
 }
+
+private fun wordsAsNamed(name: String?): WordsAs? = WordsAs.entries.firstOrNull { it.name == name }
+
+/** Kept before sides followed the lyrics, every side said how it wrote the words, as written unless changed: only a change was picked. */
+private fun changedWordsAs(name: String?): WordsAs? = wordsAsNamed(name)?.takeIf { it != WordsAs.WRITTEN }
 
 /** The lines kept, newest first, on the phone only. */
 internal class SavedLinesStore(private val preferences: SharedPreferences) {

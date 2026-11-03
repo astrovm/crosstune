@@ -267,6 +267,18 @@ class FlashcardsTest {
         click(string(R.string.practice_play))
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(listOf(10_000L, 10_000L), phone.seeks.takeLast(2))
+        // Tapped while it plays, it stops there, paused, to be played again: not played from the line's start again,
+        // nor paused again later, where the line would have ended.
+        val seeksBefore = phone.seeks.size
+        val playsBefore = phone.plays.size
+        click(string(R.string.practice_stop))
+        waitUntil { practice().sound == LineSound.PLAYED }
+        assertEquals(false, phone.plays.last())
+        pass(10_000)
+        assertEquals(LineSound.PLAYED, practice().sound)
+        assertEquals(seeksBefore, phone.seeks.size)
+        assertEquals(playsBefore + 1, phone.plays.size)
+        assertTrue(described(string(R.string.practice_play)))
         // Known, it's done.
         click(string(R.string.practice_good))
         waitUntil { shown(string(R.string.practice_done, 1)) }
@@ -408,7 +420,7 @@ class FlashcardsTest {
         // The back first: the words as written, then in kana, then in Latin letters, where nothing else is spelled that way.
         hold(string(R.string.visuals_show_words), back = true)
         click(string(R.string.lyrics_display_latin))
-        // The front in kana, with what it means and its Latin letters as a keyboard spells them.
+        // The front in kana, with what it means and its Latin letters, spelled as the lyrics spell them.
         hold(string(R.string.visuals_show_words))
         click(string(R.string.lyrics_display_kana))
         assertTrue(onCard("とうきょうへ"))
@@ -416,12 +428,9 @@ class FlashcardsTest {
         assertTrue(onCard("To Tokyo"))
         eye(string(R.string.lyrics_romanized))
         assertTrue(onCard("tōkyō e"))
-        hold(string(R.string.lyrics_romanized))
-        assertTrue(onCard("toukyou he"))
-        assertFalse(prefs().getBoolean("lyrics_romaji_typed", false))
         assertEquals(
             CardOptions(
-                front = CardSide(wordsAs = WordsAs.KANA, latin = true, translation = true, romajiTyped = true),
+                front = CardSide(wordsAs = WordsAs.KANA, latin = true, translation = true),
                 back = CardSide(wordsAs = WordsAs.LATIN, readings = true, latin = true, translation = true, sound = true)
             ), loadCardTypes(prefs()).first { it.id == READ_TYPE }.options
         )
@@ -439,11 +448,43 @@ class FlashcardsTest {
         // A line with nothing to read or spell has only the words and its meaning to show.
         click(string(R.string.practice_card_options))
         openKind(string(R.string.card_type_read))
-        assertFalse(described(string(R.string.lyrics_readings)) || described(string(R.string.lyrics_romanized)) || described(string(R.string.lyrics_romaji_typed)))
+        assertFalse(described(string(R.string.lyrics_readings)) || described(string(R.string.lyrics_romanized)))
         pressBack()
         pressBack()
         click(string(R.string.practice_show))
         assertTrue(onCard("Moon") && onCard("Luna"))
+    }
+
+    @Test
+    fun theCardsWriteAndSpellTheWordsAsTheLyricsDoUnlessPickedForThem() {
+        saved("""{"text":"東京へ","reading":"とうきょうへ","romanized":"tōkyō e","typed":"toukyou he","translation":"To Tokyo","title":"Other","artist":"Band","box":1,"ruby":[["東京","とうきょう"],["へ",null]]}""")
+        // The lyrics are set to kana, their romaji as typed.
+        prefs().edit().putString("lyrics_words_as", "KANA").putBoolean("lyrics_romaji_typed", true).commit()
+        launch()
+        practiseAll(1)
+        assertTrue(onCard("とうきょうへ"))
+        assertFalse(onCard("東京へ"))
+        click(string(R.string.practice_show))
+        assertTrue(onCard("toukyou he"))
+        assertFalse(onCard("tōkyō e") || readingShown("とうきょう"))
+        // Picked for the front, the words stay as written there, and the back still follows the lyrics.
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        hold(string(R.string.visuals_show_words))
+        click(string(R.string.lyrics_display_original))
+        pressBack()
+        pressBack()
+        assertTrue(onCard("東京へ") && onCard("とうきょうへ"))
+        assertEquals(WordsAs.WRITTEN, loadCardTypes(prefs()).first { it.id == READ_TYPE }.options.front.wordsAs)
+        // Same as lyrics, it goes back to kana.
+        click(string(R.string.practice_card_options))
+        openKind(string(R.string.card_type_read))
+        hold(string(R.string.visuals_show_words))
+        click(string(R.string.card_words_as_lyrics))
+        pressBack()
+        pressBack()
+        assertFalse(onCard("東京へ"))
+        assertTrue(onCard("とうきょうへ"))
     }
 
     @Test

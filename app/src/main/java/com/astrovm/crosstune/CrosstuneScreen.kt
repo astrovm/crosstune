@@ -227,6 +227,7 @@ internal data class ScreenActions(
     val onCleanLinksChange: (Boolean) -> Unit = {},
     val onKeepOffline: () -> Unit = {},
     val onOfflineSpaceChange: (Int) -> Unit = {},
+    val onOfflineLikesChange: (Boolean) -> Unit = {},
     val onShareSheetAppsChange: (Boolean) -> Unit = {},
     val onWakesForNextSongChange: (Boolean) -> Unit = {},
     val onOnlyMusicVideosChange: (Boolean) -> Unit = {},
@@ -288,6 +289,7 @@ internal data class ScreenActions(
     val onReadingsChange: (Boolean) -> Unit = {},
     val onRomanizedChange: (Boolean) -> Unit = {},
     val onRomajiTypedChange: (Boolean) -> Unit = {},
+    val onKatakanaAsHiraganaChange: (Boolean) -> Unit = {},
     val onCardTypesChange: (List<CardType>, Boolean) -> Unit = { _, _ -> },
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},
@@ -1864,7 +1866,6 @@ private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: Screen
     val covers = result.type == ItemType.PLAYLIST
     Group {
         tracks.forEachIndexed { index, track ->
-            if (index > 0) GroupDivider()
             val openLabel = stringResource(R.string.history_open, track.title)
             Row(
                 modifier = Modifier

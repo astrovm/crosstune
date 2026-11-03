@@ -100,6 +100,8 @@
     <string name="keeping_offline">Zapisywanie offline przez Wi-Fi</string>
     <string name="offline_out_of_space">Brak miejsca na offline. Zwiększ limit w Ustawieniach</string>
     <string name="setting_offline_space">Miejsce na utwory offline</string>
+    <string name="setting_offline_likes">Pobieraj też w aplikacji muzycznej</string>
+    <string name="setting_offline_likes_description">Polubia utwór zachowany offline w twojej aplikacji muzycznej, gdy gra. Włącz tam pobieranie polubionych utworów.</string>
     <string name="setting_offline_space_used">Zajęte: %1$s</string>
     <string name="more_button">Więcej</string>
     <string name="history_title">Ostatnie</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">Automatycznie zgłaszaj problemy z utworami</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
     <string name="lyrics_romaji_typed">Romaji tak, jak się pisze</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana jako hiragana</string>
     <string name="lyrics_translation">Tłumaczenie</string>
     <string name="lyrics_translation_failed">Nie udało się teraz przetłumaczyć.</string>
     <string name="lyrics_chords">Akordy</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">Śpiewany %1$d razy</string>
     <string name="learn_song_new_words">Ma słowa do nauki</string>
     <string name="practice_play">Odtwórz wiersz</string>
+    <string name="practice_stop">Zatrzymaj wiersz</string>
     <string name="practice_loading">Otwieranie w %1$s</string>
     <string name="practice_done">Przećwiczono %1$d</string>
     <string name="practice_back_to">Wróć do %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">Oryginał</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Łacinka</string>
+    <string name="card_words_as_lyrics">Jak w tekście</string>
     <string name="practice_front">Przód</string>
     <string name="practice_back">Tył</string>
     <string name="floating_shared">Wspólne z tekstem piosenki</string>

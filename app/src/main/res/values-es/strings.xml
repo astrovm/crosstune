@@ -100,6 +100,8 @@
     <string name="keeping_offline">Guardando para usar sin conexión con Wi-Fi</string>
     <string name="offline_out_of_space">Sin espacio para usar sin conexión. Subí el límite en Ajustes</string>
     <string name="setting_offline_space">Espacio para canciones sin conexión</string>
+    <string name="setting_offline_likes">Descargar también en tu app de música</string>
+    <string name="setting_offline_likes_description">Le da me gusta en tu app de música a una canción sin conexión cuando suena. Activá ahí la descarga de las canciones que te gustan.</string>
     <string name="setting_offline_space_used">%1$s en uso</string>
     <string name="more_button">Más</string>
     <string name="history_title">Recientes</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">Reportar problemas de canciones automáticamente</string>
     <string name="lyrics_romanized">En letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se teclea</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana en hiragana</string>
     <string name="lyrics_translation">Traducción</string>
     <string name="lyrics_translation_failed">No se pudo traducir ahora.</string>
     <string name="lyrics_chords">Acordes</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">Se canta %1$d veces</string>
     <string name="learn_song_new_words">Tiene palabras para saber</string>
     <string name="practice_play">Escuchar la línea</string>
+    <string name="practice_stop">Parar la línea</string>
     <string name="practice_loading">Abriendo en %1$s</string>
     <string name="practice_done">%1$d practicadas</string>
     <string name="practice_back_to">Volver a %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latín</string>
+    <string name="card_words_as_lyrics">Como la letra</string>
     <string name="practice_front">Frente</string>
     <string name="practice_back">Dorso</string>
     <string name="floating_shared">Compartido con la letra</string>

@@ -100,6 +100,8 @@
     <string name="keeping_offline">Enregistrement hors ligne en Wi-Fi</string>
     <string name="offline_out_of_space">Plus de place hors ligne. Augmentez la limite dans les Réglages</string>
     <string name="setting_offline_space">Espace pour les titres hors ligne</string>
+    <string name="setting_offline_likes">Télécharger aussi dans ton appli de musique</string>
+    <string name="setting_offline_likes_description">Aime un titre gardé hors ligne dans ton appli de musique quand il passe. Active-y le téléchargement des titres aimés.</string>
     <string name="setting_offline_space_used">%1$s utilisés</string>
     <string name="more_button">Plus</string>
     <string name="history_title">Récents</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">Signaler automatiquement les problèmes de morceaux</string>
     <string name="lyrics_romanized">En lettres latines</string>
     <string name="lyrics_romaji_typed">Rōmaji tel qu’on le tape</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana en hiragana</string>
     <string name="lyrics_translation">Traduction</string>
     <string name="lyrics_translation_failed">Impossible de traduire pour le moment.</string>
     <string name="lyrics_chords">Accords</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">Chantée %1$d fois</string>
     <string name="learn_song_new_words">Contient des mots à connaître</string>
     <string name="practice_play">Écouter la ligne</string>
+    <string name="practice_stop">Arrêter la ligne</string>
     <string name="practice_loading">Ouverture dans %1$s</string>
     <string name="practice_done">%1$d révisées</string>
     <string name="practice_back_to">Revenir à %1$s</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>
+    <string name="card_words_as_lyrics">Comme les paroles</string>
     <string name="practice_front">Recto</string>
     <string name="practice_back">Verso</string>
     <string name="floating_shared">Partagé avec les paroles</string>

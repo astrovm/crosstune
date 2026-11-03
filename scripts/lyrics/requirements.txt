@@ -2,7 +2,7 @@
 #    uv pip compile /tmp/crosstune-smart/requirements.txt -o /tmp/crosstune-smart/requirements.lock --python-version 3.12
 anyascii==0.3.3
     # via scripts/songcheck/songcheck.py
-anyio==4.15.1
+anyio==4.16.0
     # via httpx2
 av==19.0.2
     # via faster-whisper
@@ -12,7 +12,7 @@ ctranslate2==4.8.4
     # via faster-whisper
 faster-whisper==1.2.1
     # via -r /tmp/crosstune-smart/requirements.txt
-filelock==4.2.4
+filelock==4.2.5
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
@@ -20,7 +20,7 @@ fsspec==2026.9.0
     # via huggingface-hub
 h11==0.16.0
     # via httpcore2
-hf-xet==1.7.1
+hf-xet==1.8.0
     # via huggingface-hub
 httpcore2==2.16.0
     # via httpx2

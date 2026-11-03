@@ -29,8 +29,9 @@ internal object LyricsSync {
         val next = points.getOrNull(after)
         return when {
             before?.lineMs == lineMs -> before.songMs
-            before == null || next == null -> along(lineMs, points, before ?: next!!)
-            else -> before.songMs + (lineMs - before.lineMs) * (next.songMs - before.songMs) / (next.lineMs - before.lineMs)
+            before != null && next != null -> before.songMs + (lineMs - before.lineMs) * (next.songMs - before.songMs) / (next.lineMs - before.lineMs)
+            // Past either end, along the nearest; with no points at all, where the words say.
+            else -> along(lineMs, points, before ?: next ?: return lineMs)
         }
     }
 

@@ -116,6 +116,8 @@
     <string name="keeping_offline">Saving for offline on Wi-Fi</string>
     <string name="offline_out_of_space">Out of space for offline. Raise the limit in Settings</string>
     <string name="setting_offline_space">Space for offline songs</string>
+    <string name="setting_offline_likes">Download in your music app too</string>
+    <string name="setting_offline_likes_description">Likes a song kept for offline in your music app when it plays. Turn on downloading liked songs there.</string>
     <string name="setting_offline_space_used">%1$s used</string>
     <string name="more_button">More</string>
     <string name="history_title">Recent</string>
@@ -338,6 +340,7 @@
     <string name="setting_auto_report">Report song problems automatically</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana as hiragana</string>
     <string name="lyrics_translation">Translation</string>
     <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
     <string name="lyrics_chords">Chords</string>
@@ -406,6 +409,7 @@
     <string name="learn_song_times">Sung %1$d times</string>
     <string name="learn_song_new_words">Has words to know</string>
     <string name="practice_play">Play the line</string>
+    <string name="practice_stop">Stop the line</string>
     <string name="practice_loading">Opening in %1$s</string>
     <string name="practice_done">%1$d practiced</string>
     <string name="practice_back_to">Back to %1$s</string>
@@ -422,6 +426,7 @@
     <string name="lyrics_display_original">Original</string>
     <string name="lyrics_display_kana">Kana</string>
     <string name="lyrics_display_latin">Latin</string>
+    <string name="card_words_as_lyrics">Same as lyrics</string>
     <string name="practice_front">Front</string>
     <string name="practice_back">Back</string>
     <string name="floating_shared">Shared with lyrics</string>

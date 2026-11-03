@@ -17,6 +17,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -991,12 +992,13 @@ class MainViewModelTest {
         model.setRomanized(true)
         model.setTranslation(true)
         model.setRomajiTyped(true)
+        model.setKatakanaAsHiragana(true)
         model.setWordsCentered(true)
         model.setWordsAs(WordsAs.KANA)
         model.setChatGptTranslation(false)
         idle()
         val learning = model.uiState.learning
-        assertTrue(learning.readings && learning.romanized && learning.translation && learning.romajiTyped)
+        assertTrue(learning.readings && learning.romanized && learning.translation && learning.romajiTyped && learning.katakanaAsHiragana)
         assertEquals(true, learning.centered)
         assertEquals(WordsAs.KANA, learning.wordsAs)
         assertFalse(learning.chatGptTranslation)
@@ -1009,6 +1011,7 @@ class MainViewModelTest {
         assertFalse(model.uiState.learning.translationFailed)
         // A second model starts the way the first was left.
         assertEquals(learning.wordsAs, model().uiState.learning.wordsAs)
+        assertTrue(model().uiState.learning.katakanaAsHiragana)
     }
 
     @Test
@@ -1086,6 +1089,31 @@ class MainViewModelTest {
         idle()
         val open = effects.single() as Effect.Open
         assertEquals(Triple("https://soundcloud.com/discover", "com.soundcloud.android", true), Triple(open.url, open.packageName, open.finishAfterOpen))
+    }
+
+    @Test
+    fun theWordsStayForALinkOnlyHandedOnWhileTheyFloatAndMakeWayForOneShown() {
+        // Links go straight to YouTube Music.
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).commit()
+        val model = lyricsModel(FakePlayback())
+        val song = model.uiState.lyricsFor
+        assertNotNull(song)
+        // A page Crosstune hands on as it is, and a song it looks up first.
+        model.resolveIncoming("see https://soundcloud.com/discover.", keepWords = true)
+        idle()
+        assertEquals(song, model.uiState.lyricsFor)
+        assertTrue(model.uiState.handingOff)
+        model.resolveIncoming("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC", keepWords = true)
+        idle()
+        assertEquals(song, model.uiState.lyricsFor)
+        // Handed on, it's done with, so Crosstune opened shows the words.
+        model.handedOn()
+        assertFalse(model.uiState.handingOff)
+        assertFalse(model.uiState.handlingIncomingLink)
+        // A link to show here is what's shown, floating or not.
+        model.resolveIncoming("see https://soundcloud.com/discover.", show = true, keepWords = true)
+        idle()
+        assertNull(model.uiState.lyricsFor)
     }
 
     @Test

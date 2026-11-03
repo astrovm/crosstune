@@ -933,6 +933,9 @@ internal fun WordsOptions(learning: Learning, actions: ScreenActions, centered: 
     if (script == Script.JAPANESE && (learning.romanized || learning.showsAs == WordsAs.LATIN)) {
         ReadingSwitch(R.string.lyrics_romaji_typed, learning.romajiTyped, actions.onRomajiTypedChange)
     }
+    if (script == Script.JAPANESE && learning.showsAs == WordsAs.KANA) {
+        ReadingSwitch(R.string.lyrics_katakana_as_hiragana, learning.katakanaAsHiragana, actions.onKatakanaAsHiraganaChange)
+    }
     SizeSlider(R.string.lyrics_words_size, learning.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, actions.onWordsScaleChange)
     if (centered != null) AlignPicker(centered, actions.onWordsCenteredChange)
     if (readings && learning.readings) {
@@ -1870,7 +1873,7 @@ private fun LineWords(
 ) {
     val reading = help?.reading
     if (instead != null) {
-        Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
+        LineInstead(LyricLine(timeMs, text), instead, nextMs, chords, help, style)
     } else if (chords != null && !chords.isEmpty) {
         // Chords sit over the letters they're played on, above the readings when those show too.
         val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }
@@ -1885,6 +1888,14 @@ private fun LineWords(
         // A gap with no words, e.g. a solo, is a note rather than an empty line.
         Text(text = text.ifBlank { "♪" }, style = style, color = MaterialTheme.colorScheme.onSurface)
     }
+}
+
+/** A [line] shown in kana or Latin letters [instead]: its chords move with the words they're over. */
+@Composable
+private fun LineInstead(line: LyricLine, instead: String, nextMs: Long?, chords: LineChords?, help: LineHelp?, style: TextStyle) {
+    val moved = chords?.takeUnless { it.isEmpty }?.let { ChordSheets.onto(it, line.text, instead, help?.reading?.parts) }
+    if (moved != null) ChordedLine(LyricLine(line.timeMs, instead), nextMs, moved, null, false, style, null, help?.readingScale ?: READING_SCALE)
+    else Text(instead, style = style, color = MaterialTheme.colorScheme.onSurface)
 }
 
 /** What helps read a line, under it: its Latin letters, and its translation, as switched on. */

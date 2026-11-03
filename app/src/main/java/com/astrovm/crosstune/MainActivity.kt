@@ -163,6 +163,9 @@ class MainActivity : ComponentActivity() {
     /** Set while the words float over other apps in a window of their own, which keeps listening along. */
     private var floatingOverApps = false
 
+    /** Set when the words floated as this screen came back in sight, till it's touched: a link it only hands on floats them again. */
+    private var floatedWhenBack = false
+
     /** What the words floating in their own window show and do, all from here. */
     private val floatingHost = object : FloatingHost {
         override val state get() = viewModel.uiState
@@ -185,6 +188,7 @@ class MainActivity : ComponentActivity() {
             onReadingsChange = viewModel::setReadings,
             onRomanizedChange = viewModel::setRomanized,
             onRomajiTypedChange = viewModel::setRomajiTyped,
+            onKatakanaAsHiraganaChange = viewModel::setKatakanaAsHiragana,
             onTranslationChange = viewModel::setTranslation,
             onWordsScaleChange = viewModel::setWordsScale,
             onReadingScaleChange = viewModel::setReadingScale,
@@ -643,6 +647,7 @@ class MainActivity : ComponentActivity() {
         onReadingsChange = viewModel::setReadings,
         onRomanizedChange = viewModel::setRomanized,
         onRomajiTypedChange = viewModel::setRomajiTyped,
+        onKatakanaAsHiraganaChange = viewModel::setKatakanaAsHiragana,
         onCardTypesChange = viewModel::setCardTypes,
         onTranslationChange = viewModel::setTranslation,
         onChordsChange = viewModel::setChords,
@@ -751,6 +756,7 @@ class MainActivity : ComponentActivity() {
         onCleanLinksChange = viewModel::setCleanLinks,
         onKeepOffline = viewModel::keepOffline,
         onOfflineSpaceChange = viewModel::setOfflineSpace,
+        onOfflineLikesChange = viewModel::setOfflineLikes,
         onShareSheetAppsChange = viewModel::setShareSheetApps,
         onWakesForNextSongChange = viewModel::setWakesForNextSong,
         onOnlyMusicVideosChange = viewModel::setOnlyMusicVideos,
@@ -878,6 +884,7 @@ class MainActivity : ComponentActivity() {
 
     private fun floatNow() {
         if (viewModel.uiState.lyricsFor == null) return
+        floatedWhenBack = false
         floatingOverApps = true
         viewModel.uncover()
         FloatingLyricsService.start(this, floatingHost)
@@ -904,8 +911,13 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Back from Android's settings, the guide floating over them is done with.
         GuideActivity.close()
-        // Even from a screen made again since, in a new look or language.
-        if (FloatingLyricsService.host != null) FloatingLyricsService.stop(this)
+        // Even from a screen made again since, in a new look or language; but a new screen only handing a
+        // link on, over another app, leaves them floating from the screen before.
+        val floating = FloatingLyricsService.host
+        if (floating != null && !(viewModel.uiState.handingOff && floating !== floatingHost)) {
+            floatedWhenBack = true
+            FloatingLyricsService.stop(this)
+        }
         floatingOverApps = false
         viewModel.uncover()
         viewModel.resumeListeningAlong()
@@ -922,6 +934,7 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
+        floatedWhenBack = false
         if (isChangingConfigurations) return
         // Left with the words open, they're kept, as Android may close the app before they're shut.
         viewModel.keep()
@@ -1006,7 +1019,8 @@ class MainActivity : ComponentActivity() {
             // A test link Crosstune sent itself says its links reach it, and is nothing to look up.
             Intent.ACTION_VIEW -> if (intent.data?.fragment == TEST_LINK) viewModel.linkTested(intent.data?.host) else if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
                 intent.dataString,
-                show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false)
+                show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false),
+                keepWords = floatedWhenBack
             )
             ACTION_OPEN_RECENT -> viewModel.openRecent(intent.dataString)
             Intent.ACTION_SEND -> {
@@ -1062,7 +1076,7 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)?.let { getSystemService(ShortcutManager::class.java)?.reportShortcutUsed(it) }
         val show = action == AppShortcuts.ShareAction.SHOW
         val after = if (action == AppShortcuts.ShareAction.SHARE) AfterLookup.SHARE else AfterLookup.OPEN
-        if (fromClipboard) viewModel.resolveClipboard(text, chosen, show, after) else viewModel.resolveIncoming(text, chosen, show, after)
+        if (fromClipboard) viewModel.resolveClipboard(text, chosen, show, after) else viewModel.resolveIncoming(text, chosen, show, after, keepWords = floatedWhenBack)
     }
 
     /** Android only lets the focused app read the clipboard, which it is here: after focus or a tap. */
@@ -1086,32 +1100,53 @@ class MainActivity : ComponentActivity() {
 
     private fun open(effect: Effect.Open) {
         val uri = effect.url.toUri()
+        val floatOn = floatsOnAfter(effect.finishAfterOpen)
+        // Floating on, Crosstune steps back rather than closing, so the app opens in a task of its own, not under it.
+        val flags = if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0
         // A service's own app stands in for the builds patched from it and its TV app, whichever is installed; a build chosen by name is only itself.
         val apps = effect.packageName?.let { MusicService.appLinksIn(it, effect.url) }.orEmpty()
-        val opened = apps.any { (app, link) -> tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app)) } ||
-            openOutsideCrosstune(uri)
+        val opened = apps.any { (app, link) -> tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags)) } ||
+            openOutsideCrosstune(uri, flags)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
+            floatOn -> floatOn()
             effect.finishAfterOpen -> finish()
         }
     }
 
     private fun show(effect: Effect.Show) {
         val launch = packageManager.getLaunchIntentForPackage(effect.packageName)
+        val floatOn = floatsOnAfter(effect.finishAfterOpen)
         when {
-            launch == null || !tryStartActivity(launch) -> if (effect.saysWhenItFails) viewModel.showError(AppError.NO_APP_TO_OPEN)
+            launch == null || !tryStartActivity(launch.addFlags(if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0)) -> if (effect.saysWhenItFails) viewModel.showError(AppError.NO_APP_TO_OPEN)
+            floatOn -> floatOn()
             effect.finishAfterOpen -> finish()
         }
+    }
+
+    /** Done handing on a link, the words float again, over the app it went to, rather than Crosstune closing. */
+    private fun floatOn() {
+        viewModel.handedOn()
+        floatNow()
+    }
+
+    /** Whether, done with what it only came back to hand on, the words float again rather than Crosstune closing. */
+    private fun floatsOnAfter(finishAfterOpen: Boolean) = finishAfterOpen && floatedWhenBack && viewModel.uiState.lyricsFor != null
+
+    /** Touched, this screen is in use: what it does next no longer floats the words again. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        floatedWhenBack = false
     }
 
     /**
      * Opens [uri] in any app but Crosstune. Crosstune may be the default handler for music links,
      * so a plain VIEW intent could loop straight back here.
      */
-    private fun openOutsideCrosstune(uri: Uri): Boolean {
+    private fun openOutsideCrosstune(uri: Uri, flags: Int): Boolean {
         // Custom destinations may use an app's own scheme, which Crosstune never handles.
-        if (uri.scheme != "https" && uri.scheme != "http") return tryStartActivity(Intent(Intent.ACTION_VIEW, uri))
-        val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+        if (uri.scheme != "https" && uri.scheme != "http") return tryStartActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(flags))
+        val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(flags)
         val others = packageManager.queryIntentActivities(intent, 0).filter { it.activityInfo.packageName != packageName }
         if (others.isEmpty()) return false
         val defaultPackage = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)

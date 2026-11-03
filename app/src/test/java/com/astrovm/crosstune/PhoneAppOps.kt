@@ -13,11 +13,15 @@ import org.robolectric.shadows.ShadowAppOpsManager
  */
 @Implements(AppOpsManager::class)
 class PhoneAppOps : ShadowAppOpsManager() {
+    // By the op's number, which every check by name comes down to, as the checks by name are deprecated.
     @Implementation
-    override fun checkOpNoThrow(op: String, uid: Int, packageName: String): Int =
-        if (op == OneTapSetup.PROJECT_MEDIA_OP) projectMedia else super.checkOpNoThrow(op, uid, packageName)
+    override fun checkOpNoThrow(op: Int, uid: Int, packageName: String?): Int =
+        if (op == PROJECT_MEDIA) projectMedia else super.checkOpNoThrow(op, uid, packageName)
 
     companion object {
+        /** The op's number, which Android keeps to itself. */
+        private val PROJECT_MEDIA = AppOpsManager::class.java.getMethod("strOpToOp", String::class.java).invoke(null, OneTapSetup.PROJECT_MEDIA_OP) as Int
+
         /** What Shizuku or root set it to; a test that sets it gets it back as a phone has it, after. */
         var projectMedia = AppOpsManager.MODE_DEFAULT
 

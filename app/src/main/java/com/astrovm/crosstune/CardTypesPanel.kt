@@ -231,60 +231,64 @@ private fun CardTypeEditor(type: CardType, onPreview: (CardPreview?) -> Unit, ch
  * One side of the card as the menu: every layer it could show, in the place it takes on the card, and a tap
  * shows or hides it, the hidden ones dashed. The line's sound is an eye and its play button; the words, their
  * reading, the same in Latin letters, and what they mean are the lines themselves. Pinching a line makes it
- * bigger or smaller; holding the words picks how they're written, and holding the Latin letters, how they're spelled.
+ * bigger or smaller; holding the words picks how they're written, or back to as the [lyrics] write them, which
+ * also spell them.
  */
 @Composable
-internal fun CardSideEditor(line: SavedLine, side: CardSide, onPlay: () -> Unit, canPlay: Boolean, onChange: (CardSide) -> Unit) {
+internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: Learning, onPlay: () -> Unit, canPlay: Boolean, playing: Boolean, onChange: (CardSide) -> Unit) {
     val script = cardScript(line)
-    val japanese = script == Script.JAPANESE
     val wordsAs = buildList {
         add(WordsAs.WRITTEN)
-        if (japanese) add(WordsAs.KANA)
+        if (script == Script.JAPANESE) add(WordsAs.KANA)
         if (script != null) add(WordsAs.LATIN)
     }
-    val words = MaterialTheme.typography.headlineMedium.let { it.copy(fontSize = it.fontSize * side.wordsScale, lineHeight = it.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold) }
+    val shows = side.writes(line, lyrics.wordsAs)
     val small = MaterialTheme.typography.bodyLarge
-    SoundRow(side.sound, onPlay, canPlay) { onChange(side.copy(sound = it)) }
+    SoundRow(side.sound, onPlay, canPlay, playing) { onChange(side.copy(sound = it)) }
     // Readings go over the words as written, in Japanese or Chinese.
-    if ((script == Script.JAPANESE || script == Script.CHINESE) && side.wordsAs == WordsAs.WRITTEN) {
+    if ((script == Script.JAPANESE || script == Script.CHINESE) && shows == WordsAs.WRITTEN) {
         CardLayer(R.string.lyrics_readings, side.readings, { onChange(side.copy(readings = it)) }, side.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, { onChange(side.copy(readingScale = it)) }) {
             Text(line.reading ?: stringResource(R.string.lyrics_readings), style = small.copy(fontSize = small.fontSize * side.readingScale, lineHeight = small.lineHeight * side.readingScale).writing(line.reading.orEmpty()))
         }
     }
+    WordsLayer(line, side, wordsAs, shows, lyrics, onChange)
+    if (script != null && shows != WordsAs.LATIN) {
+        CardLayer(R.string.lyrics_romanized, side.latin, { onChange(side.copy(latin = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) }) {
+            Text(line.latin(lyrics.romajiTyped) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
+        }
+    }
+    CardLayer(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) }) {
+        val title = MaterialTheme.typography.titleLarge
+        Text(line.translation ?: stringResource(R.string.lyrics_translation), style = title.copy(fontSize = title.fontSize * side.translationScale, lineHeight = title.lineHeight * side.translationScale))
+    }
+}
+
+/** The words as a layer of the side, written as it [shows] them; held, it picks one of [wordsAs] for the side, or back to as the lyrics write them. */
+@Composable
+private fun WordsLayer(line: SavedLine, side: CardSide, wordsAs: List<WordsAs>, shows: WordsAs, lyrics: Learning, onChange: (CardSide) -> Unit) {
+    val words = MaterialTheme.typography.headlineMedium.let { it.copy(fontSize = it.fontSize * side.wordsScale, lineHeight = it.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold) }
     var formats by remember { mutableStateOf(false) }
     val original = stringResource(R.string.lyrics_display_original)
     val kana = stringResource(R.string.lyrics_display_kana)
     val latin = stringResource(R.string.lyrics_display_latin)
-    val nameOf = { shown: WordsAs -> when (shown) { WordsAs.WRITTEN -> original; WordsAs.KANA -> kana; WordsAs.LATIN -> latin } }
+    val asLyrics = stringResource(R.string.card_words_as_lyrics)
+    // Null is as the lyrics write them, first, so a side picked once can go back to following them.
+    val choices = listOf(null) + wordsAs
+    val nameOf = { shown: WordsAs? -> when (shown) { null -> asLyrics; WordsAs.WRITTEN -> original; WordsAs.KANA -> kana; WordsAs.LATIN -> latin } }
     CardLayer(
         R.string.visuals_show_words, side.words, { onChange(side.copy(words = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) },
-        more = if (wordsAs.size > 1) wordsAs.map { shown -> CustomAccessibilityAction(nameOf(shown)) { onChange(side.copy(wordsAs = shown)); true } } else emptyList(),
+        more = if (wordsAs.size > 1) choices.map { shown -> CustomAccessibilityAction(nameOf(shown)) { onChange(side.copy(wordsAs = shown)); true } } else emptyList(),
         onHold = { if (wordsAs.size > 1) formats = true },
         menu = {
             DropdownMenu(expanded = formats, onDismissRequest = { formats = false }) {
-                wordsAs.forEach { shown ->
+                choices.forEach { shown ->
                     DropdownMenuItem(text = { Text(nameOf(shown)) }, onClick = { onChange(side.copy(wordsAs = shown)); formats = false },
                         trailingIcon = { if (side.wordsAs == shown) AppIcon(R.drawable.ic_check, contentDescription = null) })
                 }
             }
         }
     ) {
-        Text(line.shownAs(side.wordsAs, side.romajiTyped).ifBlank { line.text }, style = words.writing(line.text))
-    }
-    if (script != null && side.wordsAs != WordsAs.LATIN) {
-        val typed = stringResource(R.string.lyrics_romaji_typed)
-        // How the Latin letters are spelled only changes for Japanese: as it sounds, or as it's typed.
-        CardLayer(
-            R.string.lyrics_romanized, side.latin, { onChange(side.copy(latin = it)) }, side.wordsScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(wordsScale = it)) },
-            more = if (japanese) listOf(CustomAccessibilityAction(typed) { onChange(side.copy(romajiTyped = !side.romajiTyped)); true }) else emptyList(),
-            onHold = { if (japanese) onChange(side.copy(romajiTyped = !side.romajiTyped)) }
-        ) {
-            Text(line.latin(side.romajiTyped) ?: stringResource(R.string.lyrics_romanized), style = small.copy(fontSize = small.fontSize * side.wordsScale, lineHeight = small.lineHeight * side.wordsScale))
-        }
-    }
-    CardLayer(R.string.lyrics_translation, side.translation, { onChange(side.copy(translation = it)) }, side.translationScale, MIN_WORDS_SCALE..MAX_WORDS_SCALE, { onChange(side.copy(translationScale = it)) }) {
-        val title = MaterialTheme.typography.titleLarge
-        Text(line.translation ?: stringResource(R.string.lyrics_translation), style = title.copy(fontSize = title.fontSize * side.translationScale, lineHeight = title.lineHeight * side.translationScale))
+        Text(line.shownAs(shows, lyrics).ifBlank { line.text }, style = words.writing(line.text))
     }
 }
 
@@ -294,15 +298,17 @@ internal fun cardScript(line: SavedLine): Script? =
 
 /** The line's sound as a layer of a card's side: an eye to turn it on or off, and the button it makes. */
 @Composable
-private fun SoundRow(on: Boolean, onPlay: () -> Unit, canPlay: Boolean, onToggle: (Boolean) -> Unit) {
+private fun SoundRow(on: Boolean, onPlay: () -> Unit, canPlay: Boolean, playing: Boolean, onToggle: (Boolean) -> Unit) {
     val name = stringResource(R.string.practice_play)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(48.dp).toggleable(on, role = Role.Switch, onValueChange = onToggle).semantics { contentDescription = name }
         ) { AppIcon(if (on) R.drawable.ic_visibility else R.drawable.ic_visibility_off, contentDescription = null) }
+        // Playing, the same button stops it, as the card's does.
         IconButton(onClick = onPlay, enabled = canPlay) {
-            AppIcon(R.drawable.ic_play, contentDescription = stringResource(R.string.lyrics_play))
+            if (playing) AppIcon(R.drawable.ic_pause, contentDescription = stringResource(R.string.practice_stop))
+            else AppIcon(R.drawable.ic_play, contentDescription = stringResource(R.string.lyrics_play))
         }
     }
 }

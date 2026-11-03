@@ -1,9 +1,11 @@
-"""Require the current Android version's English release notes before publishing."""
+"""Require the current Android version's English release notes, short enough for Google Play, before publishing."""
 from pathlib import Path
 import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+# The most Google Play takes for a release's notes, line breaks included.
+PLAY_LIMIT = 500
 
 
 def check_changelog(root):
@@ -21,8 +23,11 @@ def check_changelog(root):
     notes = root / f"fastlane/metadata/android/en-US/changelogs/{int(code)}.txt"
     if not notes.is_file():
         raise ValueError(f"Missing Play Store changelog: add {notes}")
-    if not notes.read_text(encoding="utf-8").strip():
+    text = notes.read_text(encoding="utf-8")
+    if not text.strip():
         raise ValueError(f"Empty Play Store changelog: write release notes in {notes}")
+    if len(text) > PLAY_LIMIT:
+        raise ValueError(f"Play Store changelog is {len(text)} characters, over {PLAY_LIMIT}: shorten {notes}")
     return notes
 
 

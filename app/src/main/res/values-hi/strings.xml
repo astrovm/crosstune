@@ -100,6 +100,8 @@
     <string name="keeping_offline">वाई-फ़ाई पर ऑफ़लाइन के लिए सेव हो रहा है</string>
     <string name="offline_out_of_space">ऑफ़लाइन के लिए जगह नहीं बची। सेटिंग में सीमा बढ़ाएँ</string>
     <string name="setting_offline_space">ऑफ़लाइन गानों के लिए जगह</string>
+    <string name="setting_offline_likes">अपने म्यूज़िक ऐप में भी डाउनलोड करें</string>
+    <string name="setting_offline_likes_description">ऑफ़लाइन रखा गाना चलने पर उसे आपके म्यूज़िक ऐप में लाइक करता है। वहाँ लाइक किए गानों की डाउनलोडिंग चालू करें।</string>
     <string name="setting_offline_space_used">%1$s इस्तेमाल हुई</string>
     <string name="more_button">और</string>
     <string name="history_title">हाल के</string>
@@ -317,6 +319,7 @@
     <string name="setting_auto_report">गानों की समस्याओं की अपने-आप रिपोर्ट करें</string>
     <string name="lyrics_romanized">लैटिन अक्षरों में</string>
     <string name="lyrics_romaji_typed">रोमाजी जैसे टाइप होता है</string>
+    <string name="lyrics_katakana_as_hiragana">काताकाना को हिरागाना में</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
     <string name="lyrics_chords">कॉर्ड्स</string>
@@ -385,6 +388,7 @@
     <string name="learn_song_times">%1$d बार गाया गया</string>
     <string name="learn_song_new_words">सीखने लायक शब्द हैं</string>
     <string name="practice_play">लाइन चलाएं</string>
+    <string name="practice_stop">लाइन रोकें</string>
     <string name="practice_loading">%1$s में खुल रहा है</string>
     <string name="practice_done">%1$d का अभ्यास हुआ</string>
     <string name="practice_back_to">%1$s पर वापस जाएं</string>
@@ -401,6 +405,7 @@
     <string name="lyrics_display_original">मूल</string>
     <string name="lyrics_display_kana">काना</string>
     <string name="lyrics_display_latin">लैटिन</string>
+    <string name="card_words_as_lyrics">बोल जैसा</string>
     <string name="practice_front">सामने</string>
     <string name="practice_back">पीछे</string>
     <string name="floating_shared">गीत के बोल के साथ साझा</string>

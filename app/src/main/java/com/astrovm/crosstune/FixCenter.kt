@@ -327,7 +327,6 @@ internal fun FirstAsks(state: UiState, actions: ScreenActions) {
 internal fun FixList(checks: List<Check>, asks: Boolean = false, onOpen: (Need) -> Unit) {
     Group {
         checks.forEachIndexed { index, check ->
-            if (index > 0) GroupDivider()
             FixRow(check, asks, onOpen)
         }
     }

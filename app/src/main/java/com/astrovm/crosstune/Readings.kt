@@ -24,9 +24,22 @@ internal data class Ruby(val text: String, val reading: String? = null)
  * [typed] too, as a keyboard spells them: sensei, not sensee, and を as wo.
  */
 internal data class LineReading(val parts: List<Ruby>, val reading: String, val romanized: String, val typed: String = romanized) {
+    /** Its kanji in kana, and the rest as written, katakana and all; not in parts, its reading. */
+    val kana: String get() = if (parts.isEmpty()) reading else parts.kana
+
     /** Its Latin letters as it's said, or as it's [typed]. */
     fun latin(typed: Boolean) = if (typed) this.typed else romanized
 }
+
+/** It with its katakana in hiragana, when [on]: どあ for ドア. */
+internal fun String.inHiragana(on: Boolean): String =
+    if (!on) this else map { if (it in 'ァ'..'ヶ') it - KATAKANA_TO_HIRAGANA else it }.joinToString("")
+
+/** How far katakana sits from the same hiragana in Unicode, ア to あ. */
+private const val KATAKANA_TO_HIRAGANA = 0x60
+
+/** The parts' kanji in kana, and the rest as written, katakana and all. */
+internal val List<Ruby>.kana: String get() = joinToString("") { it.reading ?: it.text }
 
 /**
  * A word of a line: as written, how it reads when that isn't plain from it, and what to look up
@@ -423,9 +436,7 @@ internal object Readings {
 
     /** [parts] with [fix] made, where its kanji are read as the first of them is. */
     private fun sungParts(parts: List<Ruby>, fix: ReadingFix): List<Ruby> {
-        val at = parts.indexOfFirst { it.text == fix.kanji && it.reading != null }
-        if (at < 0) return parts
-        val old = parts[at].reading!!
+        val (at, old) = parts.withIndex().firstNotNullOfOrNull { (index, part) -> part.reading?.takeIf { part.text == fix.kanji }?.let { index to it } } ?: return parts
         val after = hiragana(parts.drop(at + 1).joinToString("") { it.text })
         // A fix may give the kana written after the kanji too, ごし for 越 in 越し, or end in kana that
         // only happen to come next, いま for 今 in 今まで: it's whichever is nearer the length the dictionary read.

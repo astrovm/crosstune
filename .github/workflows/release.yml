@@ -258,8 +258,9 @@ jobs:
           fi
           gh release create "$TAG" "Crosstune-$TAG.apk" "Crosstune-$TAG-foss.apk" "${args[@]}"
 
-  # Sends the signed App Bundle and its release notes to Google Play. Skipped until the
-  # PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing" in CONTRIBUTING.md.
+  # Sends the signed App Bundle and its release notes to Google Play's internal testing, then the same
+  # release on to PLAY_TRACK. Skipped until the PLAY_SERVICE_ACCOUNT_JSON secret is set; see "Releasing"
+  # in CONTRIBUTING.md.
   play:
     needs: [sign, publish]
     runs-on: ubuntu-26.04
@@ -282,7 +283,7 @@ jobs:
       - name: Upload to Google Play
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          # A repository variable can send releases to another track, e.g. "internal" to try it first.
+          # A repository variable can send releases to another track, e.g. "alpha" for closed testing.
           PLAY_TRACK: ${{ vars.PLAY_TRACK || 'production' }}
         run: |
           if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
@@ -299,13 +300,32 @@ jobs:
           mkdir -p "$notes/en-US/changelogs"
           cp "fastlane/metadata/android/en-US/changelogs/$code.txt" "$notes/en-US/changelogs/"
           sudo gem install fastlane -v 2.240.1 --no-document --silent
+          # Internal testing first: Google doesn't review it, so testers there get each release in
+          # minutes, and the track never sits on an old version.
           fastlane supply \
             --package_name com.astrovm.crosstune \
             --json_key "$key" \
             --aab "Crosstune-$TAG.aab" \
-            --track "$PLAY_TRACK" \
+            --track internal \
             --metadata_path "$notes" \
             --skip_upload_apk true \
             --skip_upload_metadata true \
+            --skip_upload_images true \
+            --skip_upload_screenshots true
+          if [[ "$PLAY_TRACK" == "internal" ]]; then
+            exit 0
+          fi
+          # A run of its own, as supply skips promoting in a run that uploads. The release carries
+          # its notes along.
+          fastlane supply \
+            --package_name com.astrovm.crosstune \
+            --json_key "$key" \
+            --track internal \
+            --track_promote_to "$PLAY_TRACK" \
+            --version_code "$code" \
+            --skip_upload_apk true \
+            --skip_upload_aab true \
+            --skip_upload_metadata true \
+            --skip_upload_changelogs true \
             --skip_upload_images true \
             --skip_upload_screenshots true
