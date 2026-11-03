@@ -25,5 +25,60 @@ class ResumeTest(unittest.TestCase):
             (r.OUT / 'fake.heard20.json').write_text('{}')
             self.assertEqual([], r.prepped())
 
+class CheckpointTest(unittest.TestCase):
+    def test_interrupted_hearing_keeps_and_resumes_completed_window(self):
+        class Samples:
+            def __len__(self):
+                return 22001 * 16
+
+            def __getitem__(self, key):
+                return self
+
+            def tobytes(self):
+                return b"fake audio"
+
+        class SerialPool:
+            def __init__(self, workers):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def map(self, fn, values):
+                return map(fn, values)
+
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'as_the_phone_hears', return_value=Samples()), \
+                patch.object(r, 'heard_binary', return_value=Path('heard')), \
+                patch.object(r, 'model_file', return_value=Path('model')), \
+                patch.object(r, 'sung_language', return_value='en'), \
+                patch.object(r, 'ThreadPoolExecutor', SerialPool):
+            answer = argparse.Namespace(stdout=b'0\t word\n')
+            with patch.object(r.subprocess, 'run', side_effect=[answer, subprocess.CalledProcessError(1, 'heard')]):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    r.windows('fake', Path('fake.wav'), 20000)
+            checkpoint = r.heard_file('fake', 20000, r.APP_MODEL)
+            self.assertEqual({'0': [[0, ' word']]}, json.loads(checkpoint.read_text()))
+            with patch.object(r.subprocess, 'run', return_value=answer) as heard:
+                r.windows('fake', Path('fake.wav'), 20000)
+                self.assertEqual(2, heard.call_count)
+            self.assertEqual({'0', '1000', '2000'}, set(json.loads(checkpoint.read_text())))
+
+    def test_complete_rejects_partial_windows(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            for suffix in ('wav', 'language', 'lyrics.json', 'truth.jsonl'):
+                (r.OUT / f'fake.{suffix}').write_text('fake')
+            for length in r.LENGTHS:
+                r.heard_file('fake', length, r.APP_MODEL).write_text('{}')
+            with patch.object(r.subprocess, 'check_output', return_value=b'21.001'):
+                self.assertFalse(r.complete('fake'))
+                for length in r.LENGTHS:
+                    r.heard_file('fake', length, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in range(0, 21001 - length, 1000)}))
+                self.assertTrue(r.complete('fake'))
+
 if __name__ == '__main__':
     unittest.main()

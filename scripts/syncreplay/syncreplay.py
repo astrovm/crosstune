@@ -512,7 +512,7 @@ def find_set(args):
         return
     failures = []
     for song in found:
-        if song.get("id") and song.get("lines"):
+        if song.get("id") and song.get("lines") and not complete(song["id"]):
             print(f"Prepping {song['id']}: {song['title']} - {song['artist']}", flush=True)
             try:
                 prep(argparse.Namespace(id=song["id"], lyrics=str(OUT / f"{song['id']}.lyrics.json")))
@@ -523,12 +523,26 @@ def find_set(args):
         sys.exit(f"Prep failed for {len(failures)} songs: {', '.join(failures)}. Rerun set --cached to resume.")
 
 
+def complete(song):
+    """Both hearing lengths must contain every window, including after an interrupted write."""
+    if not all((OUT / f"{song}.{suffix}").exists() for suffix in ("wav", "language", "lyrics.json", "truth.jsonl")):
+        return False
+    duration = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                               "-of", "default=nw=1:nk=1", str(OUT / f"{song}.wav")]))
+    for length in LENGTHS:
+        path = heard_file(song, length, APP_MODEL)
+        if not path.exists():
+            return False
+        done = json.loads(path.read_text())
+        if any(str(start) not in done for start in range(0, int(duration * 1000) - length, STEP_MS)):
+            return False
+    return True
+
+
 def prepped():
-    """Every song prepped: its words, truth, and what the app's model heard in it."""
+    """Every song with complete prep, including both lengths of hearing."""
     return sorted(f.name.removesuffix(".truth.jsonl") for f in OUT.glob("*.truth.jsonl")
-                  if (OUT / f"{f.name.removesuffix('.truth.jsonl')}.wav").exists()
-                  and (OUT / f"{f.name.removesuffix('.truth.jsonl')}.language").exists()
-                  and all(heard_file(f.name.removesuffix(".truth.jsonl"), length, APP_MODEL).exists() for length in LENGTHS))
+                  if complete(f.name.removesuffix(".truth.jsonl")))
 
 
 def run_all(args):
