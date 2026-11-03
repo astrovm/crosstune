@@ -4200,6 +4200,65 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongAskedForAgainWhileTheAppStillPlaysItUnderItsOwnNameIsntWaitedFor() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        val waiting = string(R.string.player_waiting, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Asked while on another song, it goes on to the one asked, by its own name.
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        click(play)
+        waitForText(waiting)
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitForText("黄昏のBAY CITY")
+        click(string(R.string.dismiss_button))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Recorded on a phone: asked again for the song it's on, YouTube Music does nothing, so nothing changes to see.
+        click(play)
+        waitForText("黄昏のBAY CITY")
+        assertTrue(composeRule.onAllNodes(hasText(waiting)).fetchSemanticsNodes().isEmpty())
+        // On another song by then, that isn't taken for it.
+        click(string(R.string.dismiss_button))
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        click(play)
+        waitForText(waiting)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Old Song")).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun whatAnAppPlaysWhenAskedFromNothingIsntRememberedForTheSong() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Nothing playing as it's asked, the first song it shows may be what it played last, before it moves on.
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        phone.onThePhone = Heard.Song(MusicMetadata("Old Song", "Old Band"), null, app = youTubeMusic)
+        waitForText("Old Song")
+        click(string(R.string.dismiss_button))
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // So asked again, still on it, that isn't taken for the song.
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+    }
+
+    @Test
     fun aSongAnotherAppPlaysIsntTakenForTheOneAskedWhateverItsName() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val phone = FakePlayback().apply { access = true }
