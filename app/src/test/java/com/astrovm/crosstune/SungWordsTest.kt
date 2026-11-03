@@ -384,6 +384,14 @@ class SungWordsTest {
     }
 
     @Test
+    fun soundEndingJustAsTheSecondsToHearAgainAreInStillHearsThem() = runBlocking {
+        val told = mutableListOf<Sung>()
+        val microphone = FakeMicrophone().apply { play((SingingListener.AGAIN_SECONDS + SingingListener.FIRST_SECONDS).toDouble()); end() }
+        assertNull(listener(microphone).hear(null) { told += it; true })
+        assertEquals(2, told.size)
+    }
+
+    @Test
     fun soundEndingBeforeTheSecondsToHearAgainAreInEndsTheHearing() = runBlocking {
         val told = mutableListOf<Sung>()
         assertNull(listener(FakeMicrophone().apply { play(SingingListener.FIRST_SECONDS + 1.0); end() }).hear(null) { told += it; true })

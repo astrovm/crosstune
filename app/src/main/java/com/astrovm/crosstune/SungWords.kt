@@ -148,7 +148,7 @@ internal class SingingListener(
             val read = runInterruptible { recording.read(audio, recorded, minOf(CHUNK, audio.size - recorded)) }
             if (read <= 0) return null
             if (recorded < FIRST_SAMPLES && recorded + read >= FIRST_SAMPLES) heardFirst(startedAt, audio.copyOf(FIRST_SAMPLES))
-            if (recorded < AGAIN_END && recorded + read >= AGAIN_END) again.complete(startedAt + AGAIN_SECONDS * 1000L to audio.copyOfRange(AGAIN_SAMPLES, AGAIN_END))
+            if (!again.isCompleted && recorded + read >= AGAIN_END) again.complete(startedAt + AGAIN_SECONDS * 1000L to audio.copyOfRange(AGAIN_SAMPLES, AGAIN_END))
             recorded += read
         }
         return startedAt to audio
