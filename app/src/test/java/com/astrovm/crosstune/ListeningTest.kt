@@ -893,11 +893,12 @@ class ListeningTest {
     fun aSongWhoseWordsCantBeReachedIsNotKeptUntilTheyCanBe() {
         MainActivity.connectionFactory = { FakeConnection() }
         val down = java.util.concurrent.atomic.AtomicBoolean(true)
-        val refused = java.util.concurrent.atomic.AtomicInteger()
+        // Only the words looked up to keep it: the song is looked up, and refused, before it's kept.
+        val refusedWords = java.util.concurrent.atomic.AtomicInteger()
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
             if (down.get()) {
-                refused.incrementAndGet()
+                if (request.url.host == "lrclib.net") refusedWords.incrementAndGet()
                 throw IOException("offline")
             }
             FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
@@ -907,9 +908,7 @@ class ListeningTest {
         recognize()
         waitForText("Demo")
         click(string(R.string.keep_offline))
-        waitUntil(TIMEOUT_MS) { refused.get() > 0 }
-        composeRule.waitForIdle()
-        assertTrue(described(string(R.string.keeping_offline)))
+        waitUntil(TIMEOUT_MS) { refusedWords.get() > 0 && described(string(R.string.keeping_offline)) }
         assertFalse(described(string(R.string.kept_offline)))
         // The next network it tries again.
         down.set(false)
