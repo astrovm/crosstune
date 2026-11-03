@@ -241,6 +241,7 @@ def prep(args):
     if not wav.exists():
         subprocess.run(["yt-dlp", "-q", "-f", "bestaudio", "-x", "--audio-format", "wav", "-o", str(OUT / f"{args.id}.%(ext)s"), f"https://music.youtube.com/watch?v={args.id}"], check=True)
     if not (OUT / f"{args.id}.truth.jsonl").exists():
+        measured(args.id, "demucs", lambda: separated_voice(args.id, wav))
         measured(args.id, "truth", lambda: truth(args.id, wav, [text for _, text in lyrics if text.strip()]))
     for length in LENGTHS:
         measured(args.id, f"heard{length // 1000}", lambda: windows(args.id, wav, length))
@@ -562,12 +563,16 @@ def run_all(args):
         sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
     titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
     totals = dict(lines=0, close=0, on=0, dark=0, early=0)
+    all_lags = []
+    lyric_lines = 0
     print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
     for song in songs:
         shown = json.loads((OUT / f"{song}.from0.shown.json").read_text())
         sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{song}.truth.jsonl")}
         first = lit_first(shown)
         lags = [first[k] - sung[k] for k in sung if k in first]
+        all_lags.extend(lags)
+        lyric_lines += sum(bool(text.strip()) for text in shown["lines"])
         row = dict(lines=len(sung), close=sum(abs(x) <= 0.3 for x in lags), on=sum(abs(x) <= ON_TIME_S for x in lags),
                    dark=sum(k not in first for k in sung), early=sum(x < -ON_TIME_S for x in lags))
         for key in totals:
@@ -575,8 +580,10 @@ def run_all(args):
         worst = f"{max(lags, key=abs):+.1f}" if lags else "-"
         print(f"{song:12} {row['lines']:5} {row['close']:6} {row['on']:6} {row['dark']:5} {row['early']:5} {worst:>6}  {titles.get(song, '')[:40]}")
     t = totals
-    print(f"{'all':12} {t['lines']:5} {t['close']:6} {t['on']:6} {t['dark']:5} {t['early']:5}         "
+    worst = f"{max(all_lags, key=abs):+.1f}" if all_lags else "-"
+    print(f"{'all':12} {t['lines']:5} {t['close']:6} {t['on']:6} {t['dark']:5} {t['early']:5} {worst:>6}  "
           f"{100 * t['close'] / max(t['lines'], 1):.0f}% within 0.3 s, {100 * t['on'] / max(t['lines'], 1):.0f}% within {ON_TIME_S} s, {t['dark']} dark")
+    print(f"Reference coverage: {t['lines']}/{lyric_lines} nonempty lyric lines. Unmatched lines have no truth and are not scored.")
 
 
 def lit_first(shown):
