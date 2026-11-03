@@ -26,9 +26,10 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
 
 /**
  * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
- * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before.
+ * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
+ * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was.
  */
-internal const val MATCH_VERSION = 2
+internal const val MATCH_VERSION = 3
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes

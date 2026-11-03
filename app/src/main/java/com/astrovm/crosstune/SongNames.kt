@@ -62,10 +62,24 @@ internal object SongNames {
      * The names a song may go by: its title, then, for one that's two names joined by a dash, as
      * YouTube Music gives "ミステリー・ガール - Mystery Girl", each of them. A video's whole title, said
      * again in Japanese, as Recent kept it before it was read better, goes by the song before that.
+     * And a name written both ways apart by a wide space, as "悲しみがとまらない　I CAN'T STOP THE
+     * LONELINESS", goes by each way.
      */
-    fun titleNames(title: String): List<String> =
-        listOf(title) + listOfNotNull(MetadataParsers.beforeItInJapanese(title)) +
-            title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
+    fun titleNames(title: String): List<String> {
+        val halves = title.split(" - ").map(String::trim).filter(String::isNotEmpty).takeIf { it.size == 2 }.orEmpty()
+        return listOf(title) + listOfNotNull(MetadataParsers.beforeItInJapanese(title)) + halves + (listOf(title) + halves).flatMap(::bothWays)
+    }
+
+    /** Its two ways, when it's written in Chinese, Japanese or Korean and then in Latin letters, apart by a wide space. */
+    private fun bothWays(name: String): List<String> {
+        val ways = name.split(WIDE_SPACE).map(String::trim).filter(String::isNotEmpty)
+        return ways.takeIf { it.size == 2 && it.first().any(::isEastAsian) && it.last().none(::isEastAsian) && it.last().any(Char::isLetter) }.orEmpty()
+    }
+
+    private fun isEastAsian(letter: Char) = Character.UnicodeScript.of(letter.code) in EAST_ASIAN
+
+    private const val WIDE_SPACE = '\u3000'
+    private val EAST_ASIAN = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
 
     /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
     fun normalize(text: String): String =
