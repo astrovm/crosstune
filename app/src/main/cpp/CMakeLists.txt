@@ -33,6 +33,16 @@ set(CMAKE_PROJECT_VERSION_MAJOR "${CMAKE_MATCH_1}")
 set(CMAKE_PROJECT_VERSION_MINOR "${CMAKE_MATCH_2}")
 set(CMAKE_PROJECT_VERSION_PATCH "${CMAKE_MATCH_3}")
 add_subdirectory("${PROJECT_ROOT}/third_party/projectm" projectm EXCLUDE_FROM_ALL)
+# Our copy of projectM's Framebuffer.cpp, which keeps the picture when the visuals change size. Built
+# from the one this copy was made from only: a new projectM's needs the change brought over again.
+set(PROJECTM_FRAMEBUFFER "${PROJECT_ROOT}/third_party/projectm/src/libprojectM/Renderer/Framebuffer.cpp")
+file(SHA256 "${PROJECTM_FRAMEBUFFER}" PROJECTM_FRAMEBUFFER_SHA)
+if(NOT PROJECTM_FRAMEBUFFER_SHA STREQUAL "ede0ace267ee4e5646c0c1afc20db18e50650679d9801093b70470d3d8c15e9f")
+    message(FATAL_ERROR "projectM's Renderer/Framebuffer.cpp changed: copy it to app/src/main/cpp/projectm/, make the change in ours again, and update this hash")
+endif()
+get_target_property(PROJECTM_RENDERER_SOURCES Renderer SOURCES)
+list(TRANSFORM PROJECTM_RENDERER_SOURCES REPLACE "^Framebuffer\\.cpp$" "${CMAKE_CURRENT_SOURCE_DIR}/projectm/Framebuffer.cpp")
+set_target_properties(Renderer PROPERTIES SOURCES "${PROJECTM_RENDERER_SOURCES}")
 # projectM's expressions are built with -ffast-math in release, which takes NaN to never happen and so drops
 # their own checks that make one 0, e.g. pow(-8, 0.5): the NaN then reached the visuals. Still fast, but a NaN is one.
 target_compile_options(projectM_eval PRIVATE -fno-finite-math-only)

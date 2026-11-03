@@ -76,7 +76,7 @@ internal class Shazam(
 ) {
     /** The first [count] of [samples], mono 16 kHz. */
     suspend fun recognize(samples: ShortArray, count: Int): Heard {
-        val uri = withContext(computeDispatcher) { ShazamSignature.uri(samples, count) }
+        val uri = withContext(computeDispatcher) { Busy.during { ShazamSignature.uri(samples, count) } }
         val request = Request.Builder()
             .url(
                 "https://amp.shazam.com/discovery/v5/en/US/android/-/tag/${newId().toString().uppercase()}/${newId()}" +
