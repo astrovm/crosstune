@@ -259,17 +259,12 @@ def compare(phone_lit, shown):
 def score(args):
     shown = json.loads((OUT / f"{args.id}.from{args.start}.shown.json").read_text())
     sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{args.id}.truth.jsonl")}
-    # The app's line to the n-th line with words, and when each was first shown sung after the one before.
+    # The app's line to the n-th line with words.
     nth = {}
     for i, text in enumerate(shown["lines"]):
         if text.strip():
             nth[i] = len(nth)
-    first, after = {}, -1
-    for e in shown["shown"]:
-        k = nth.get(e["line"])
-        if k is not None and k not in first and e["at"] > after:
-            first[k] = e["at"] / 1000
-            after = e["at"]
+    first = lit_first(shown)
     lags = {k: first[k] - sung[k] for k in sung if k in first}
     for k in sorted(sung):
         text = shown["lines"][next(i for i in nth if nth[i] == k)][:34]
@@ -452,6 +447,83 @@ def score_phone(song_id, kept):
     return first, lag
 
 
+def find_set(args):
+    """Finds the songs of songs.tsv as the app does (SyncSetTest), then preps each not prepped yet."""
+    asked = OUT / "set.asked"
+    OUT.mkdir(parents=True, exist_ok=True)
+    asked.write_text("")
+    try:
+        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+    finally:
+        asked.unlink()
+    if done.returncode:
+        sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+    found = json.loads((OUT / "set.json").read_text())
+    for song in found:
+        print(f"{song.get('id') or 'not on YouTube Music':12} {song.get('source') or 'no words':14} {'timed' if song.get('timed') else 'untimed':8} {song['title']} - {song['artist']}")
+    if args.find_only:
+        return
+    for song in found:
+        if song.get("id") and song.get("lines") and not (OUT / f"{song['id']}.truth.jsonl").exists():
+            print(f"Prepping {song['id']}: {song['title']} - {song['artist']}", flush=True)
+            prep(argparse.Namespace(id=song["id"], lyrics=str(OUT / f"{song['id']}.lyrics.json")))
+
+
+def prepped():
+    """Every song prepped: its words, truth, and what the app's model heard in it."""
+    return sorted(f.name.removesuffix(".truth.jsonl") for f in OUT.glob("*.truth.jsonl")
+                  if heard_file(f.name.removesuffix(".truth.jsonl"), LENGTHS[0], APP_MODEL).exists())
+
+
+def run_all(args):
+    """Every prepped song replayed from the start in one go, and how its lines came out against when they're sung."""
+    songs = prepped()
+    asked = OUT / "replay.json"
+    asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": ""} for song in songs]}))
+    # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
+    names = OUT / "replay.songs"
+    names.write_text("\n".join(songs) + "\n")
+    try:
+        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+    finally:
+        asked.unlink()
+        names.unlink()
+    if done.returncode:
+        sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+    titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
+    totals = dict(lines=0, close=0, on=0, dark=0, early=0)
+    print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
+    for song in songs:
+        shown = json.loads((OUT / f"{song}.from0.shown.json").read_text())
+        sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{song}.truth.jsonl")}
+        first = lit_first(shown)
+        lags = [first[k] - sung[k] for k in sung if k in first]
+        row = dict(lines=len(sung), close=sum(abs(x) <= 0.3 for x in lags), on=sum(abs(x) <= ON_TIME_S for x in lags),
+                   dark=sum(k not in first for k in sung), early=sum(x < -ON_TIME_S for x in lags))
+        for key in totals:
+            totals[key] += row[key]
+        worst = f"{max(lags, key=abs):+.1f}" if lags else "-"
+        print(f"{song:12} {row['lines']:5} {row['close']:6} {row['on']:6} {row['dark']:5} {row['early']:5} {worst:>6}  {titles.get(song, '')[:40]}")
+    t = totals
+    print(f"{'all':12} {t['lines']:5} {t['close']:6} {t['on']:6} {t['dark']:5} {t['early']:5}         "
+          f"{100 * t['close'] / max(t['lines'], 1):.0f}% within 0.3 s, {100 * t['on'] / max(t['lines'], 1):.0f}% within {ON_TIME_S} s, {t['dark']} dark")
+
+
+def lit_first(shown):
+    """When each line with words was first shown, after the one before it, by its place among them."""
+    nth = {}
+    for i, text in enumerate(shown["lines"]):
+        if text.strip():
+            nth[i] = len(nth)
+    first, after = {}, -1
+    for e in shown["shown"]:
+        k = nth.get(e["line"])
+        if k is not None and k not in first and e["at"] > after:
+            first[k] = e["at"] / 1000
+            after = e["at"]
+    return first
+
+
 def hear(args):
     for length in LENGTHS:
         windows(args.id, OUT / f"{args.id}.wav", length, args.model, args.clean)
@@ -479,6 +551,15 @@ def main():
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
             p.add_argument("--like-phone", action="store_true", help="as the last `phone` check of it went, held to the lines it lit; sets --from, --behind, --work and --model")
+    p = steps.add_parser("set")
+    p.add_argument("--gradle", default="./gradlew --max-workers=4")
+    p.add_argument("--find-only", action="store_true", help="find the songs and their words, without prepping them")
+    p.set_defaults(go=find_set)
+    p = steps.add_parser("all")
+    p.add_argument("--gradle", default="./gradlew --max-workers=4")
+    p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
+    p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
+    p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")
     p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")

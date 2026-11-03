@@ -1,0 +1,45 @@
+# The songs the lyrics timing is held to: title, artist, and why each is here. `syncreplay.py set`
+# finds each on YouTube Music, and its words, as the app does.
+# Lines that came out of time:
+Bizarre Love Triangle	New Order	YouTube Music's words timed for another take
+Every Little Thing She Does Is Magic	The Police	lines out of time
+Expresso Love	Dire Straits	lines out of time
+Otro Como Tú	Cazzu	lines out of time
+Tell It to My Heart	Taylor Dayne	lines out of time
+Time to Pretend	MGMT	lines out of time
+# Words found without timing:
+Have In Mind (Kalimba Mix)	Cetu Javu	no timing
+Francesita	Dj Ghosty	no timing
+Nada Más Que Hablar (En Vivo)	La Triple Nelson	live
+二人だけのセレモニー	岡田有希子	Japanese
+Ciclos Banais	nikmouu	Portuguese
+# Synth pop, city pop and long intros:
+Stay With Me	Miki Matsubara	Japanese city pop
+Blue Monday	New Order	long instrumental stretches
+It's My Life	Talk Talk	synth pop
+Into the Groove	Madonna	dance
+Don't Go	Yazoo	synth pop
+Radio Ga Ga	Queen	long intro
+Easy Love	国分友里恵	Japanese city pop
+カシミヤのほほえみ	国分友里恵	Japanese
+# Kinds of singing and recording:
+Lose Yourself	Eminem	fast rap
+Bad Guy	Billie Eilish	whispered
+Smells Like Teen Spirit	Nirvana	mumbled, loud guitars
+Bohemian Rhapsody	Queen	tempo and style changes, choir
+Hotel California	Eagles	long instrumental ending
+Shape of You	Ed Sheeran	fast pop
+Blinding Lights	The Weeknd	synths over the voice
+Take On Me	a-ha	falsetto
+Dancing Queen	ABBA	harmonies
+Despacito	Luis Fonsi	Spanish, reggaeton, two singers
+De Música Ligera	Soda Stereo	Spanish rock
+Flaca	Andrés Calamaro	Spanish, slow
+Águas de Março	Elis Regina	Portuguese duet, fast
+Dynamite	BTS	Korean group, mostly English
+Gee	Girls' Generation	Korean
+Plastic Love	Mariya Takeuchi	Japanese
+La Vie en rose	Édith Piaf	French, old recording
+99 Luftballons	Nena	German
+Nel blu dipinto di blu	Domenico Modugno	Italian, old recording
+Hips Don't Lie	Shakira	Spanish and English, fast
