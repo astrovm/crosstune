@@ -116,7 +116,7 @@ internal class SingingListener(
     private suspend fun words(model: File, audio: ShortArray, language: String?): List<HeardWord>? = withContext(computeDispatcher) {
         val hears = hearing(model) ?: return@withContext null
         try {
-            hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language).ifEmpty { null }
+            Busy.during { hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language) }.ifEmpty { null }
         } finally {
             (hears as? Closeable)?.close()
         }
