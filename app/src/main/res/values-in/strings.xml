@@ -319,6 +319,7 @@
     <string name="setting_auto_report">Laporkan masalah lagu secara otomatis</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
     <string name="lyrics_romaji_typed">Romaji seperti diketik</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana sebagai hiragana</string>
     <string name="lyrics_translation">Terjemahan</string>
     <string name="lyrics_translation_failed">Tidak bisa menerjemahkan sekarang.</string>
     <string name="lyrics_chords">Kord</string>
@@ -387,6 +388,7 @@
     <string name="learn_song_times">Dinyanyikan %1$d kali</string>
     <string name="learn_song_new_words">Ada kata untuk dipelajari</string>
     <string name="practice_play">Putar baris</string>
+    <string name="practice_stop">Hentikan baris</string>
     <string name="practice_loading">Membuka di %1$s</string>
     <string name="practice_done">%1$d dilatih</string>
     <string name="practice_back_to">Kembali ke %1$s</string>

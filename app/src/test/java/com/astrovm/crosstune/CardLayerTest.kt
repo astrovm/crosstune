@@ -29,7 +29,7 @@ class CardLayerTest {
         compose.setContent {
             CrosstuneTheme {
                 Box(Modifier.size(360.dp)) {
-                    CardSideEditor(SavedLine("夜の空", title = "Demo", artist = "Band"), CardSide(translation = false), WordsAs.WRITTEN, typed = false, onPlay = {}, canPlay = false, onChange = {})
+                    CardSideEditor(SavedLine("夜の空", title = "Demo", artist = "Band"), CardSide(translation = false), Learning(), onPlay = {}, canPlay = false, playing = false, onChange = {})
                 }
             }
         }

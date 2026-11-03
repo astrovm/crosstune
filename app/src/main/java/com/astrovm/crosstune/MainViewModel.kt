@@ -237,7 +237,8 @@ internal class MainViewModel(
                 translationScale = preferences.getFloat(KEY_TRANSLATION_SCALE, preferences.getFloat(KEY_WORDS_SCALE, 1f)).coerceIn(MIN_WORDS_SCALE, MAX_WORDS_SCALE),
                 centered = if (preferences.contains(KEY_WORDS_CENTERED)) preferences.getBoolean(KEY_WORDS_CENTERED, false) else null,
                 wordsAs = WordsAs.entries.firstOrNull { it.name == preferences.getString(KEY_WORDS_AS, null) } ?: WordsAs.WRITTEN,
-                romajiTyped = preferences.getBoolean(KEY_ROMAJI_TYPED, false)
+                romajiTyped = preferences.getBoolean(KEY_ROMAJI_TYPED, false),
+                katakanaAsHiragana = preferences.getBoolean(KEY_KATAKANA_AS_HIRAGANA, false)
             ),
             floating = FloatingOptions(
                 background = preferences.getFloat(KEY_FLOATING_BACKGROUND, FloatingOptions().background),
@@ -3672,6 +3673,12 @@ internal class MainViewModel(
         uiState = uiState.copy(learning = uiState.learning.copy(romajiTyped = on))
     }
 
+    /** Writes katakana in hiragana too where the words show in kana, どあ for ドア, from now on. */
+    fun setKatakanaAsHiragana(on: Boolean) {
+        preferences.edit { putBoolean(KEY_KATAKANA_AS_HIRAGANA, on) }
+        uiState = uiState.copy(learning = uiState.learning.copy(katakanaAsHiragana = on))
+    }
+
     /** The kinds of practice card, from now on; one is always on. */
     fun setCardTypes(types: List<CardType>, save: Boolean) {
         val kinds = if (types.none { it.on }) types.mapIndexed { index, type -> type.copy(on = type.on || index == 0) } else types
@@ -4279,6 +4286,7 @@ internal class MainViewModel(
         private const val KEY_CHORDS = "lyrics_chords"
         private const val KEY_ROMANIZED = "lyrics_romanized"
         private const val KEY_ROMAJI_TYPED = "lyrics_romaji_typed"
+        private const val KEY_KATAKANA_AS_HIRAGANA = "lyrics_katakana_as_hiragana"
         private const val KEY_TRANSLATION = "lyrics_translation"
         private const val KEY_TRANSLATION_CHATGPT = "translation_chatgpt"
         private const val KEY_WORDS_AS = "lyrics_words_as"

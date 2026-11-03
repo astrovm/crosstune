@@ -267,6 +267,18 @@ class FlashcardsTest {
         click(string(R.string.practice_play))
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(listOf(10_000L, 10_000L), phone.seeks.takeLast(2))
+        // Tapped while it plays, it stops there, paused, to be played again: not played from the line's start again,
+        // nor paused again later, where the line would have ended.
+        val seeksBefore = phone.seeks.size
+        val playsBefore = phone.plays.size
+        click(string(R.string.practice_stop))
+        waitUntil { practice().sound == LineSound.PLAYED }
+        assertEquals(false, phone.plays.last())
+        pass(10_000)
+        assertEquals(LineSound.PLAYED, practice().sound)
+        assertEquals(seeksBefore, phone.seeks.size)
+        assertEquals(playsBefore + 1, phone.plays.size)
+        assertTrue(described(string(R.string.practice_play)))
         // Known, it's done.
         click(string(R.string.practice_good))
         waitUntil { shown(string(R.string.practice_done, 1)) }

@@ -200,11 +200,14 @@ internal class PracticeCards(
     /** The kind of card [line]'s is. */
     private fun typeOf(line: SavedLine) = uiState.cardTypes.firstOrNull { it.id == line.cardType } ?: READ_IT
 
-    /** Plays the card's line again. */
+    /** Plays the card's line again, or, while it plays, stops it there, paused, to be played again. */
     fun replay() {
         val practice = uiState.practice ?: return
         val line = practice.line?.takeIf { practice.sound != LineSound.NONE } ?: return
-        sound(line)
+        if (practice.sound != LineSound.PLAYING) return sound(line)
+        soundJob?.cancel()
+        playback?.playPause(MusicMetadata(line.title, line.artist), false)
+        setSound(line, LineSound.PLAYED)
     }
 
     /** Turns the card, to say whether it was known, and plays its line if the back has its sound. */

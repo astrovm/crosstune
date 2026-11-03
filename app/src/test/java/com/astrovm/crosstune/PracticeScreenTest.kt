@@ -86,10 +86,13 @@ class PracticeScreenTest {
     }
 
     @Test
-    fun whileTheLineIsPlayingItCantBePlayedAgain() {
+    fun whileTheLineIsPlayingItsButtonStopsIt() {
         val heard = line.copy(cardType = HEAR_TYPE)
-        show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.PLAYING), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))))
+        val taps = mutableListOf<Unit>()
+        show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.PLAYING), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))), ScreenActions(onReplayLine = { taps += Unit }))
         composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_stop)).assertIsEnabled().performClick()
+        assertEquals(1, taps.size)
     }
 
     @Test
