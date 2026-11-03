@@ -1417,10 +1417,10 @@ internal class MainViewModel(
         val source = playback
         val sees = source?.hasAccess() == true
         // Played in that app, not another that has it too.
-        if (asked && (!sees || seenIn(source, song, app, mustPlay = false))) return true
+        if (asked && (!sees || seenIn(source, song, app, link, mustPlay = false))) return true
         val back = source?.takeIf { exact && sees && app != null && it.openSong(app, link) } ?: return false.also { closePlayer() }
         // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does.
-        seenIn(back, song, app, mustPlay = true)
+        seenIn(back, song, app, link, mustPlay = true)
         back.comesBack()
         watchLeft(song)
         return true
@@ -1430,15 +1430,26 @@ internal class MainViewModel(
      * Whether [app] is seen, within [LOAD_SONG_MS], to have [song], [mustPlay] it or not, or, whatever the app names it,
      * to have gone on to play something other than what it played when asked.
      */
-    private suspend fun seenIn(source: PlaybackSource, song: MusicMetadata, app: String?, mustPlay: Boolean): Boolean {
+    private suspend fun seenIn(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Boolean {
         val over = uiState.player?.over
-        return withTimeoutOrNull(LOAD_SONG_MS) {
+        val (following, playing) = withTimeoutOrNull(LOAD_SONG_MS) {
             combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
                 following != null && (!mustPlay || following.clock.playing) && sameApp(app, following.appPackage, interception::isInstalled) ||
-                    following == null && playing != null && startedAsked(playing, app, over)
+                    following == null && playing != null && startedAsked(playing, app, over, link)
             }
-        } != null
+        } ?: return false
+        // Seen to go on to it from another song, that's what the app calls the song at that link. Not from nothing, as an
+        // app may show what it played last a moment first.
+        val wentOn = playing?.takeIf { following == null && over != null && !sameSong(it.metadata, over) }
+        if (app != null && wentOn != null) playedAs[app to link] = wentOn.metadata
+        return true
     }
+
+    /**
+     * What each app was seen to go on to play for a link, by the name it gives it. Asked for that link again while still
+     * on it, an app may do nothing, as YouTube Music does, so there's no change to see.
+     */
+    private val playedAs = mutableMapOf<Pair<String, String>, MusicMetadata>()
 
     private var leftJob: Job? = null
 
@@ -1512,7 +1523,7 @@ internal class MainViewModel(
                 // Paused, the app still has the song, maybe by another name, e.g. in its own language; only once it's on another is it the next.
                 // Not yet played, the asked app going on to a song is the one asked for, whatever its name there, e.g.
                 // in another script or with the artist's name written otherwise, which the app's session can't be matched by.
-                val next = playing?.takeIf { (played || startedAsked(it, player.app, player.over)) && following == null && uiState.practice == null && !sameSong(it.metadata, song) }
+                val next = playing?.takeIf { (played || startedAsked(it, player.app, player.over, player.link)) && following == null && uiState.practice == null && !sameSong(it.metadata, song) }
                 // In the app that plays it, which may not be the one the song before played in.
                 if (next != null) return@collect openPlayer(next.metadata, next.app ?: player.following?.appPackage ?: player.app, played = true)
                 uiState = uiState.copy(player = player.copy(following = following, played = played))
@@ -1520,9 +1531,13 @@ internal class MainViewModel(
         }
     }
 
-    /** Whether [playing] is what the [app] asked for a song has gone on to play, rather than what it played [over] before. */
-    private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?): Boolean =
-        app != null && sameApp(app, playing.app, interception::isInstalled) && (over == null || !sameSong(playing.metadata, over))
+    /**
+     * Whether [playing] is what the [app] asked for a song has gone on to play, rather than what it played [over] before; or,
+     * still on that, what it was seen to play for the same [link] before.
+     */
+    private fun startedAsked(playing: Heard.Song, app: String?, over: MusicMetadata?, link: String?): Boolean =
+        app != null && sameApp(app, playing.app, interception::isInstalled) &&
+            (over == null || !sameSong(playing.metadata, over) || link?.let { playedAs[app to it] }?.let { sameSong(playing.metadata, it) } == true)
 
     fun closePlayer() {
         playerJob?.cancel()

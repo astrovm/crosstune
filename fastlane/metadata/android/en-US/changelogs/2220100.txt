@@ -2,4 +2,4 @@ Practice cards write and spell the words the way the lyrics do, unless you pick 
 Tapping a practice card's sound while it plays stops it.
 In kana, only the kanji change: katakana stays as written, or in hiragana if you like.
 Play opens the song itself, not a fan's upload, also when it's out as a shorter single or named in Japanese and English.
-The player stops waiting as soon as the music app plays the song, whatever it calls it.
+The player stops waiting as soon as the music app plays the song, whatever it calls it, even if it's on it already.
