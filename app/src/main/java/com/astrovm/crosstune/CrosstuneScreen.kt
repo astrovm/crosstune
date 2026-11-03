@@ -1856,7 +1856,6 @@ private fun PlaylistSongs(result: MusicMetadata, state: UiState, actions: Screen
     val covers = result.type == ItemType.PLAYLIST
     Group {
         tracks.forEachIndexed { index, track ->
-            if (index > 0) GroupDivider()
             val openLabel = stringResource(R.string.history_open, track.title)
             Row(
                 modifier = Modifier
