@@ -533,6 +533,16 @@ class MilkdropTest {
     }
 
     @Test
+    fun aPresetDrawnAtExactlyFortyFramesASecondKeepsUpAndIsTriedSharper() {
+        // 25 ms a frame at every size: 40 a second, as fast as it has to be, and no slower.
+        val milkdrop = SizedMilkdrop(listOf(25L, 25L, 25L, 10L))
+        val (renderer, told) = sized(milkdrop)
+        renderer.created()
+        renderer.drawFor(20_000)
+        assertEquals(listOf("a" to 1, "a" to 0), told)
+    }
+
+    @Test
     fun aSharperSizeTooSlowIsLeftWithinTwoSecondsAndNotTriedAgainTillTheAppStartsOver() {
         // 30 ms a frame at full, under 40 a second; two thirds keeps up.
         val ms = listOf(30L, 20L, 15L, 10L)
@@ -887,8 +897,9 @@ class MilkdropTest {
         store.sized("b:c", 1)
         store.sized("a", 0)
         assertEquals(mapOf("a" to 0, "b:c" to 1), store.load().sizes)
-        preferences.edit().putStringSet("visuals_sizes", setOf("9:d", "x:e", "1:f")).apply()
-        assertEquals(mapOf("f" to 1), store.load().sizes)
+        preferences.edit().putStringSet("visuals_sizes", setOf("9:d", "x:e", "1:f", "0:g", "3:h", "4:i", "-1:j")).apply()
+        // The sharpest and the smallest are sizes; one past either isn't.
+        assertEquals(mapOf("f" to 1, "g" to 0, "h" to 3), store.load().sizes)
     }
 
     @Test
