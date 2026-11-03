@@ -24,6 +24,9 @@ class SongNamesEdgesTest {
         assertEquals(listOf("夜に駆ける　2020"), SongNames.titleNames("夜に駆ける　2020"))
         assertEquals(listOf("Racing into the Night　夜に駆ける"), SongNames.titleNames("Racing into the Night　夜に駆ける"))
         assertEquals(listOf("夜に　駆ける　Racing"), SongNames.titleNames("夜に　駆ける　Racing"))
+        // Nothing between two marks is no way of its own.
+        assertEquals(listOf("夜に駆ける　　Racing", "夜に駆ける", "Racing"), SongNames.titleNames("夜に駆ける　　Racing"))
+        assertEquals(listOf("Racing - "), SongNames.titleNames("Racing - "))
     }
 
     @Test
