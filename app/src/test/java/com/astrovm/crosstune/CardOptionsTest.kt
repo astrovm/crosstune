@@ -48,6 +48,19 @@ class CardOptionsTest {
     }
 
     @Test
+    fun aLineInKanaHasOnlyItsKanjiChangedAndKeepsItsKatakana() {
+        val door = SavedLine(
+            "胸のドアを叩いても", reading = "むねのどあをたたいても", title = "Thesis", artist = "Band",
+            ruby = listOf(Ruby("胸", "むね"), Ruby("のドアを"), Ruby("叩", "たた"), Ruby("いても"))
+        )
+        assertEquals("むねのドアをたたいても", door.shownAs(WordsAs.KANA, Learning()))
+        // With the lyrics' katakana in hiragana, the card's is too.
+        assertEquals("むねのどあをたたいても", door.shownAs(WordsAs.KANA, Learning(katakanaAsHiragana = true)))
+        // Kept before it had its parts, it's the reading as it is.
+        assertEquals("むねのどあをたたいても", door.copy(ruby = null).shownAs(WordsAs.KANA, Learning()))
+    }
+
+    @Test
     fun aSideWritesTheWordsAsTheLyricsDoUnlessPickedInWaysTheLineCanBeWritten() {
         val japanese = SavedLine("夜空", reading = "よぞら", romanized = "yozora", title = "Night", artist = "Band")
         val chinese = SavedLine("夜空", romanized = "yè kōng", title = "Night", artist = "Band")

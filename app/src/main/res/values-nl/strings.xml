@@ -319,6 +319,7 @@
     <string name="setting_auto_report">Problemen met nummers automatisch melden</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
+    <string name="lyrics_katakana_as_hiragana">Katakana als hiragana</string>
     <string name="lyrics_translation">Vertaling</string>
     <string name="lyrics_translation_failed">Kon nu niet vertalen.</string>
     <string name="lyrics_chords">Akkoorden</string>
@@ -387,6 +388,7 @@
     <string name="learn_song_times">%1$d keer gezongen</string>
     <string name="learn_song_new_words">Heeft woorden om te leren</string>
     <string name="practice_play">Regel afspelen</string>
+    <string name="practice_stop">Regel stoppen</string>
     <string name="practice_loading">Openen in %1$s</string>
     <string name="practice_done">%1$d geoefend</string>
     <string name="practice_back_to">Terug naar %1$s</string>

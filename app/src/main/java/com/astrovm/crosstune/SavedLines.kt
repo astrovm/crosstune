@@ -60,10 +60,10 @@ internal data class SavedLine(
     /** It in Latin letters, as typed when [typed] and it's spelled otherwise, or as said; null when it has none. */
     fun latin(typed: Boolean): String? = (if (typed) this.typed ?: romanized else romanized)?.takeIf { it.isNotBlank() }
 
-    /** It as [shown], when it can be: its kana, for Japanese, or its Latin letters; otherwise as written. */
-    fun shownAs(shown: WordsAs, typed: Boolean): String = when (shown) {
-        WordsAs.KANA -> reading?.takeIf { it.any(Readings::isKana) }
-        WordsAs.LATIN -> latin(typed)
+    /** It as [shown], when it can be, spelled as the [lyrics] are: its kanji in kana, for Japanese, or its Latin letters; otherwise as written. */
+    fun shownAs(shown: WordsAs, lyrics: Learning): String = when (shown) {
+        WordsAs.KANA -> (ruby?.kana ?: reading)?.takeIf { it.any(Readings::isKana) }?.inHiragana(lyrics.katakanaAsHiragana)
+        WordsAs.LATIN -> latin(lyrics.romajiTyped)
         WordsAs.WRITTEN -> null
     } ?: text
 

@@ -75,4 +75,18 @@ class UiStateTest {
         assertNull(learning.copy(script = Script.KOREAN).insteadOf(0))
         assertEquals("yoru", learning.copy(script = Script.KOREAN, wordsAs = WordsAs.LATIN).insteadOf(0))
     }
+
+    @Test
+    fun inKanaOnlyTheKanjiChangeAndKatakanaStaysAsWritten() {
+        val door = LineReading(listOf(Ruby("胸", "むね"), Ruby("のドアを"), Ruby("叩", "たた"), Ruby("いても")), "むねのどあをたたいても", "mune no doa o tataite mo")
+        assertEquals("むねのドアをたたいても", Learning(script = Script.JAPANESE, lines = listOf(door), wordsAs = WordsAs.KANA).insteadOf(0))
+        // Not in parts, it's the reading as it is.
+        assertEquals("よる", LineReading(emptyList(), "よる", "yoru").kana)
+        // Switched on, katakana is written in hiragana too; the long vowel mark stays.
+        assertEquals("むねのどあをたたいても", Learning(script = Script.JAPANESE, lines = listOf(door), wordsAs = WordsAs.KANA, katakanaAsHiragana = true).insteadOf(0))
+        assertEquals("らーめんとゔぁいおりん", "ラーメンとヴァイオリン".inHiragana(true))
+        assertEquals("ラーメン", "ラーメン".inHiragana(false))
+        // From small a to small ke, the katakana with a hiragana; ヷ and ゠ past them have none.
+        assertEquals("ぁゖヷ゠", "ァヶヷ゠".inHiragana(true))
+    }
 }

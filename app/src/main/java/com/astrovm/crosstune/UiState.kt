@@ -486,6 +486,8 @@ internal data class Learning(
     val wordsAs: WordsAs = WordsAs.WRITTEN,
     /** Whether Japanese in Latin letters is spelled as typed, sensei, rather than as said, sensee. */
     val romajiTyped: Boolean = false,
+    /** Whether Japanese in kana writes its katakana in hiragana too, どあ for ドア. */
+    val katakanaAsHiragana: Boolean = false,
     /** Set when the words were found in Latin letters, and ChatGPT wrote them in Japanese or Korean. */
     val fromRomaji: Boolean = false,
     /** The words most worth learning from the song, as ChatGPT finds them. */
@@ -501,7 +503,7 @@ internal data class Learning(
 ) {
     /** Only what's switched on, ready to work out for new words. */
     fun fresh(script: Script? = null) =
-        Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, wordsScale, translationScale, centered = centered, script = script, wordsAs = wordsAs, romajiTyped = romajiTyped)
+        Learning(readings, romanized, translation, chatGptTranslation, into, untranslated, readingScale, wordsScale, translationScale, centered = centered, script = script, wordsAs = wordsAs, romajiTyped = romajiTyped, katakanaAsHiragana = katakanaAsHiragana)
 }
 
 /** What the visuals are asked to do, as the screen has it. */
@@ -511,12 +513,12 @@ internal val UiState.visualsPlay get() = VisualsPlay(visualsSkips, visualsDrops,
 internal enum class WordsAs { WRITTEN, KANA, LATIN }
 
 /**
- * What shows instead of line [index] as the words are set to show: its kana, or its Latin letters,
+ * What shows instead of line [index] as the words are set to show: its kanji in kana, or its Latin letters,
  * once its reading's worked out; null as written.
  */
 internal fun Learning.insteadOf(index: Int): String? {
     val reading = lines.getOrNull(index) ?: return null
-    if (showsAs == WordsAs.KANA) return reading.reading
+    if (showsAs == WordsAs.KANA) return reading.kana.inHiragana(katakanaAsHiragana)
     if (showsAs == WordsAs.LATIN) return reading.latin(romajiTyped).takeIf { it.isNotBlank() }
     return null
 }

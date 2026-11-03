@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -198,12 +199,39 @@ class CardTypesPanelTest {
     }
 
     @Test
+    fun aSideInLatinLettersShowsThemOnceWithTheWordsAndAloneWithout() {
+        show(learning = Learning(wordsAs = WordsAs.LATIN))
+        fun front(side: CardSide) {
+            state = state.copy(cardTypes = listOf(READ_IT.copy(options = CardOptions(front = side))))
+            composeRule.waitForIdle()
+        }
+        front(CardSide(latin = true))
+        assertEquals(1, composeRule.onAllNodes(hasText("yozora o miagete"), useUnmergedTree = true).fetchSemanticsNodes().size)
+        front(CardSide(words = false, latin = true))
+        assertEquals(1, composeRule.onAllNodes(hasText("yozora o miagete"), useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun aLineInChineseOffersItsReadingsOverItButNoKana() {
+        show(SavedLine("我爱你", reading = "wǒ ài nǐ", romanized = "wǒ ài nǐ", translation = "I love you", title = "Night Song", artist = "The Band"))
+        openOptions()
+        edit(string(R.string.card_type_read))
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_readings)).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.visuals_show_words)).performTouchInput { longClick() }
+        composeRule.onNodeWithText(string(R.string.lyrics_display_kana)).assertDoesNotExist()
+    }
+
+    @Test
     fun aLineInLettersWithNoKanaHasNoWaysToWriteItButTheOne() {
         show(english)
         openOptions()
         edit(string(R.string.card_type_read))
         composeRule.onNodeWithContentDescription(string(R.string.visuals_show_words)).performTouchInput { longClick() }
         composeRule.onNodeWithText(string(R.string.lyrics_display_kana)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.card_words_as_lyrics)).assertDoesNotExist()
+        // Nor does TalkBack offer any.
+        val words = composeRule.onNodeWithContentDescription(string(R.string.visuals_show_words)).fetchSemanticsNode()
+        assertTrue(words.config[SemanticsActions.CustomActions].none { it.label == string(R.string.card_words_as_lyrics) || it.label == string(R.string.lyrics_display_original) })
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_readings)).assertDoesNotExist()
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_romanized)).assertDoesNotExist()
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_translation)).assertExists()
@@ -250,6 +278,16 @@ class CardTypesPanelTest {
         openOptions()
         edit(string(R.string.card_type_read))
         composeRule.onNodeWithContentDescription(string(R.string.lyrics_play)).assertIsEnabled().performClick()
+        assertEquals(1, replays)
+    }
+
+    @Test
+    fun theLinesSoundStopsFromTheOptionsWhileItPlays() {
+        show(sound = LineSound.PLAYING)
+        openOptions()
+        edit(string(R.string.card_type_read))
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_play)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_stop)).assertIsEnabled().performClick()
         assertEquals(1, replays)
     }
 
