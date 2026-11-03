@@ -51,6 +51,8 @@ OUT = ROOT / "build" / "syncreplay"
 HEARD = OUT / "heard"
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
 APP_MODEL = "tiny-q5_1"
+HEARD_AT_ONCE = 6
+LANGUAGE_SEGMENTS = 4
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
 # What the app hears at once, and at the start of a song, in ms.
 LENGTHS = (20_000, 8_000)
@@ -119,28 +121,48 @@ def windows(song, wav, length, model=APP_MODEL, clean=False):
     binary = heard_binary()
     weights = model_file(model)
     starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
+    language = sung_language(song)
 
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
         # A model that can't run hears nothing, so it fails here rather than passing for silence.
-        text = subprocess.run([str(binary), str(weights), "en", ""], input=seg.tobytes(), capture_output=True, check=True).stdout.decode("utf-8", "replace")
+        text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
-    with ThreadPoolExecutor(1) as pool:
+    with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
         for start, words in pool.map(hear, starts):
             done[str(start)] = words
     out.write_text(json.dumps(done))
 
 
-def truth(song, wav, lines):
-    """When each line with words is really sung: faster-whisper medium's word times on the separated voice,
-    matched in order to the words. A line counts only when its first word and most of the rest match."""
+def separated_voice(song, wav):
     vocals = OUT / "htdemucs" / song / "vocals.wav"
     if not vocals.exists():
         subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals", "-j", "1", "-o", str(OUT), str(wav)], check=True)
+    return vocals
+
+
+def truth_model():
     from faster_whisper import WhisperModel
-    model = WhisperModel("medium", device="cpu", compute_type="int8", cpu_threads=4)
-    segments, _ = model.transcribe(audio(vocals), language="en", word_timestamps=True, condition_on_previous_text=False, beam_size=5)
+    return WhisperModel("medium", device="cpu", compute_type="int8", cpu_threads=4)
+
+
+def sung_language(song):
+    """What the song is sung in, kept in ID.language, standing in for what the app tells from its words:
+    the app hears in that language, and heard in English, a song in Spanish lines up with nothing."""
+    kept = OUT / f"{song}.language"
+    if not kept.exists():
+        language, _, _ = truth_model().detect_language(audio(separated_voice(song, OUT / f"{song}.wav")), vad_filter=True, language_detection_segments=LANGUAGE_SEGMENTS)
+        kept.write_text(language)
+    return kept.read_text()
+
+
+def truth(song, wav, lines):
+    """When each line with words is really sung: faster-whisper medium's word times on the separated voice,
+    matched in order to the words. A line counts only when its first word and most of the rest match."""
+    vocals = separated_voice(song, wav)
+    model = truth_model()
+    segments, _ = model.transcribe(audio(vocals), language=sung_language(song), word_timestamps=True, condition_on_previous_text=False, beam_size=5)
     heard = [(norm(w.word), w.start) for s in segments for w in s.words if norm(w.word)]
     lyric = [(norm(w), i) for i, line in enumerate(lines) for w in line.split() if norm(w)]
     most = [[0] * (len(lyric) + 1) for _ in range(len(heard) + 1)]
