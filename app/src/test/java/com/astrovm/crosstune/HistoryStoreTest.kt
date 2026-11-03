@@ -33,6 +33,19 @@ class HistoryStoreTest {
     }
 
     @Test
+    fun linksFoundBeforeTheMatchingChangedAreFoundAgain() {
+        store.add(entry(1))
+        val url = entry(1).link.url
+        store.remember(url, "YOUTUBE_MUSIC", PreparedLink("https://music.youtube.com/watch?v=upload00000", exact = true, matchingEnabled = true))
+        store.remember(url, "DEEZER", PreparedLink("https://www.deezer.com/search/Title", exact = false, matchingEnabled = true))
+        // Kept as it was before its matching was versioned: the found link goes, the search stays.
+        val old = org.json.JSONArray(preferences.getString(HistoryStore.KEY_HISTORY, null))
+        old.getJSONObject(0).getJSONObject("destinations").getJSONObject("YOUTUBE_MUSIC").remove("matcher")
+        preferences.edit().putString(HistoryStore.KEY_HISTORY, old.toString()).commit()
+        assertEquals(setOf("DEEZER"), HistoryStore(preferences).load().first().destinationLinks.keys)
+    }
+
+    @Test
     fun whatsReadIsKeptUntilAnotherWritesInstead() {
         store.add(entry(1))
         val first = store.load()

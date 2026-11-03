@@ -250,6 +250,17 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun whatWasFoundBeforeTheMatchingChangedIsLookedForAgain() = runBlocking {
+        val file = kotlin.io.path.createTempDirectory("lookups").toFile().resolve("lookups.json")
+        val cache = LookupCache(file, kotlinx.coroutines.Dispatchers.Unconfined)
+        // Found the way songs were matched before, and kept under the key it had then.
+        cache.put("find|DEEZER|TRACK|Song|Band|", "https://www.deezer.com/track/old")
+        respond("""{"data":[{"title":"Song","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1"}]}""")
+        val matcher = ExactMatcher(fake.client(), "AR", kotlinx.coroutines.Dispatchers.Unconfined, cache)
+        assertEquals("https://www.deezer.com/track/1", matcher.find(MusicService.DEEZER, MusicMetadata("Song", "Band")))
+    }
+
+    @Test
     fun uncertainOrMissingMatchesFallBackToSearch() {
         respond("""{"results":[{"trackName":"Beyoncé Song","artistName":"Someone Else","trackViewUrl":"https://x"}]}""")
         assertNull(runBlocking { matcher().find(MusicService.APPLE_MUSIC, song) })
@@ -688,6 +699,36 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=door0000000", runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) })
         answer = 3
         assertNull(runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) })
+    }
+
+    @Test
+    fun aPickNearAnyOfTheSongsEditionsIsTakenButNotNearAnotherSongApplesLists() {
+        val song = MusicMetadata("Stay With Me", "Miki Matsubara")
+        val matcher = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> 0 })
+        fun picks(length: String, store: String): String? {
+            namesAndTabs(songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • $length", videoId = "door0000000")), apple = mapOf("AR" to store))
+            return runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        val editions = appleSong("Stay With Me", "Miki Matsubara", 312_000) + "," + appleSong("Stay With Me", "Miki Matsubara", 250_000, id = 8)
+        // The single's length, not the album's that Apple lists first, is still the song.
+        assertEquals("https://music.youtube.com/watch?v=door0000000", picks("4:12", editions))
+        assertNull(picks("3:30", editions))
+        // Another song by the same artist in the same search lends it no length.
+        assertNull(picks("3:30", appleSong("Stay With Me", "Miki Matsubara", 312_000) + "," + appleSong("Mayonaka no Door", "Miki Matsubara", 210_000, id = 8)))
+    }
+
+    @Test
+    fun aSongNamedOtherwiseAtHomeIsItUpToTheSameLengthGiveOrTakeEightSeconds() {
+        val song = MusicMetadata("Stay With Me", "Miki Matsubara")
+        fun finds(length: String): String? {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("真夜中のドア", "松原みき • Pocket Park • $length", videoId = "stay0000000")),
+                apple = mapOf("AR" to appleSong("Stay With Me", "Miki Matsubara", 250_000)), elsewhere = mapOf("JP" to appleSong("真夜中のドア", "松原みき", 250_000))
+            )
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        assertEquals("https://music.youtube.com/watch?v=stay0000000", finds("4:18"))
+        assertNull(finds("4:19"))
     }
 
     @Test

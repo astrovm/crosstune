@@ -4149,6 +4149,30 @@ class MainActivityTest {
     }
 
     @Test
+    fun aSongAnotherAppPlaysIsntTakenForTheOneAskedWhateverItsName() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val phone = FakePlayback().apply { access = true }
+        MainActivity.playbackFactory = { phone }
+        fake.handler = { request -> FakeSpotify.html(request, """{"title":"tasogare no bay city","author_name":"JUNKO YAGAMI"}""") }
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
+        launch()
+        resolveTyped("https://music.youtube.com/watch?v=QLHMhVonF-s")
+        val play = string(R.string.play_in_background, "YouTube Music")
+        waitUntil { composeRule.onAllNodes(hasContentDescription(play) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        // Another app plays as it's asked, and goes on to another song, which isn't YouTube Music's.
+        phone.onThePhone = Heard.Song(MusicMetadata("Podcast", "Host"), null, app = "com.spotify.music")
+        click(play)
+        waitForText(string(R.string.player_waiting, "YouTube Music"))
+        phone.onThePhone = Heard.Song(MusicMetadata("Next Episode", "Host"), null, app = "com.spotify.music")
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText("Next Episode")).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.player_waiting, "YouTube Music"))).fetchSemanticsNodes().isNotEmpty())
+        phone.onThePhone = Heard.Song(MusicMetadata("黄昏のBAY CITY", "八神純子"), null, app = youTubeMusic)
+        waitForText("黄昏のBAY CITY")
+    }
+
+    @Test
     @OptIn(ExperimentalTestApi::class)
     fun thePlayersSongRepeatsIsLikedPlaysWhatsNextSleepsAndOpensItsCard() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName

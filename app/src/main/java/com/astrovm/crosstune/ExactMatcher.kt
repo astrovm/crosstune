@@ -25,6 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger
 internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>)
 
 /**
+ * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
+ * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before.
+ */
+internal const val MATCH_VERSION = 2
+
+/**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
  * Search API and Deezer's public API, plus the search behind Bandcamp's, YouTube Music's, TIDAL's,
  * SoundCloud's and Audiomack's own websites, and Qobuz's store pages, which have no documented API.
@@ -176,9 +182,9 @@ internal class ExactMatcher(
         return url.url?.let(Match::Found) ?: Match.Missing
     }
 
-    /** By the song's length too, when it's known, as an edit of a song is often named just like it. */
+    /** By the song's length too, when it's known, as an edit of a song is often named just like it; and by how songs are matched, so what was found before is looked for again. */
     private fun cacheKey(kind: String, target: String, metadata: MusicMetadata) =
-        (listOf(kind, target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) + listOfNotNull(metadata.lengthMs)).joinToString("|")
+        (listOf("$kind@$MATCH_VERSION", target, metadata.type.name, metadata.title, metadata.artist, metadata.url.orEmpty()) + listOfNotNull(metadata.lengthMs)).joinToString("|")
 
     /**
      * What was found for [metadata] before, or [lookUp]'s answer, which is kept when it found
