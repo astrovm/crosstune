@@ -1,1 +1,3 @@
 Practice cards write and spell the words the way the lyrics do, unless you pick a way for a card side.
+Tapping a practice card's sound while it plays stops it.
+In kana, only the kanji change: katakana stays as written.

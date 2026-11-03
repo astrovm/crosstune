@@ -509,12 +509,12 @@ internal val UiState.visualsPlay get() = VisualsPlay(visualsSkips, visualsDrops,
 internal enum class WordsAs { WRITTEN, KANA, LATIN }
 
 /**
- * What shows instead of line [index] as the words are set to show: its kana, or its Latin letters,
+ * What shows instead of line [index] as the words are set to show: its kanji in kana, or its Latin letters,
  * once its reading's worked out; null as written.
  */
 internal fun Learning.insteadOf(index: Int): String? {
     val reading = lines.getOrNull(index) ?: return null
-    if (showsAs == WordsAs.KANA) return reading.reading
+    if (showsAs == WordsAs.KANA) return reading.kana
     if (showsAs == WordsAs.LATIN) return reading.latin(romajiTyped).takeIf { it.isNotBlank() }
     return null
 }

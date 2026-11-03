@@ -219,7 +219,7 @@ private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, le
     // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
     if (preview != null) {
         val side = if (preview.back) cards.back else cards.front
-        CardSideEditor(line, side, lyrics, typed, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, onChange = onSide)
+        CardSideEditor(line, side, lyrics, typed, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE, playing = practice.sound == LineSound.PLAYING, onChange = onSide)
         return
     }
     val front = cards.front
@@ -350,18 +350,19 @@ private fun AppLoading(app: String?) {
     }
 }
 
-/** The line's sound: a ring that fills as it plays, with bars that move while it does, and a play button once it's played. */
+/** The line's sound: a ring that fills as it plays, with bars that move while it does, which stop it when tapped, and a play button once it's played. */
 @Composable
 private fun SoundButton(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
     val played = remember(line, sound) { Animatable(0f) }
     LaunchedEffect(line, sound) {
         if (sound == LineSound.PLAYING) played.animateTo(1f, tween(((line.endMs ?: 0L) - (line.startMs ?: 0L)).toInt().coerceAtLeast(0), easing = LinearEasing))
     }
+    val stop = stringResource(R.string.practice_stop)
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(SOUND_SIZE + 8.dp)) {
         if (sound == LineSound.PLAYING) CircularProgressIndicator(progress = { played.value }, strokeWidth = 3.dp, modifier = Modifier.size(SOUND_SIZE + 8.dp))
-        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE)) {
+        Surface(onClick = onPlay, enabled = sound == LineSound.PLAYED || sound == LineSound.PLAYING, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(SOUND_SIZE)) {
             Box(contentAlignment = Alignment.Center) {
-                if (sound == LineSound.PLAYING) Bars(SOUND_SIZE / 3)
+                if (sound == LineSound.PLAYING) Bars(SOUND_SIZE / 3, Modifier.semantics { contentDescription = stop })
                 else Icon(painterResource(R.drawable.ic_play), contentDescription = stringResource(R.string.practice_play), modifier = Modifier.size(SOUND_SIZE / 2))
             }
         }
@@ -372,9 +373,9 @@ private val SOUND_SIZE = 48.dp
 
 /** Bars rising and falling, out of step, while a line plays. */
 @Composable
-private fun Bars(height: Dp) {
+private fun Bars(height: Dp, modifier: Modifier = Modifier) {
     val beat = rememberInfiniteTransition(label = "bars")
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(height)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically, modifier = modifier.height(height)) {
         repeat(BARS) { index ->
             val level by beat.animateFloat(0.25f, 1f, infiniteRepeatable(tween(450, delayMillis = index * 90), RepeatMode.Reverse), label = "bar $index")
             Box(Modifier.width(3.dp).height(height * level).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimaryContainer))

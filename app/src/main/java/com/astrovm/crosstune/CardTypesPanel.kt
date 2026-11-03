@@ -235,7 +235,7 @@ private fun CardTypeEditor(type: CardType, onPreview: (CardPreview?) -> Unit, ch
  * The Latin letters are spelled as the lyrics spell them, as typed when [typed].
  */
 @Composable
-internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, typed: Boolean, onPlay: () -> Unit, canPlay: Boolean, onChange: (CardSide) -> Unit) {
+internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, typed: Boolean, onPlay: () -> Unit, canPlay: Boolean, playing: Boolean, onChange: (CardSide) -> Unit) {
     val script = cardScript(line)
     val wordsAs = buildList {
         add(WordsAs.WRITTEN)
@@ -244,7 +244,7 @@ internal fun CardSideEditor(line: SavedLine, side: CardSide, lyrics: WordsAs, ty
     }
     val shows = side.writes(line, lyrics)
     val small = MaterialTheme.typography.bodyLarge
-    SoundRow(side.sound, onPlay, canPlay) { onChange(side.copy(sound = it)) }
+    SoundRow(side.sound, onPlay, canPlay, playing) { onChange(side.copy(sound = it)) }
     // Readings go over the words as written, in Japanese or Chinese.
     if ((script == Script.JAPANESE || script == Script.CHINESE) && shows == WordsAs.WRITTEN) {
         CardLayer(R.string.lyrics_readings, side.readings, { onChange(side.copy(readings = it)) }, side.readingScale, MIN_READING_SCALE..MAX_READING_SCALE, { onChange(side.copy(readingScale = it)) }) {
@@ -298,15 +298,17 @@ internal fun cardScript(line: SavedLine): Script? =
 
 /** The line's sound as a layer of a card's side: an eye to turn it on or off, and the button it makes. */
 @Composable
-private fun SoundRow(on: Boolean, onPlay: () -> Unit, canPlay: Boolean, onToggle: (Boolean) -> Unit) {
+private fun SoundRow(on: Boolean, onPlay: () -> Unit, canPlay: Boolean, playing: Boolean, onToggle: (Boolean) -> Unit) {
     val name = stringResource(R.string.practice_play)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(48.dp).toggleable(on, role = Role.Switch, onValueChange = onToggle).semantics { contentDescription = name }
         ) { AppIcon(if (on) R.drawable.ic_visibility else R.drawable.ic_visibility_off, contentDescription = null) }
+        // Playing, the same button stops it, as the card's does.
         IconButton(onClick = onPlay, enabled = canPlay) {
-            AppIcon(R.drawable.ic_play, contentDescription = stringResource(R.string.lyrics_play))
+            if (playing) AppIcon(R.drawable.ic_pause, contentDescription = stringResource(R.string.practice_stop))
+            else AppIcon(R.drawable.ic_play, contentDescription = stringResource(R.string.lyrics_play))
         }
     }
 }

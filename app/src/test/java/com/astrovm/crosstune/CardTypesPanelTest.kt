@@ -254,6 +254,16 @@ class CardTypesPanelTest {
     }
 
     @Test
+    fun theLinesSoundStopsFromTheOptionsWhileItPlays() {
+        show(sound = LineSound.PLAYING)
+        openOptions()
+        edit(string(R.string.card_type_read))
+        composeRule.onNodeWithContentDescription(string(R.string.lyrics_play)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_stop)).assertIsEnabled().performClick()
+        assertEquals(1, replays)
+    }
+
+    @Test
     fun aTurnedCardsReadingCanBePutRightFromItsOptions() {
         show(turned = true)
         openOptions()

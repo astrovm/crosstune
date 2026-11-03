@@ -387,6 +387,7 @@
     <string name="learn_song_times">唱了 %1$d 次</string>
     <string name="learn_song_new_words">有要學的詞</string>
     <string name="practice_play">播放這一行</string>
+    <string name="practice_stop">停止這一行</string>
     <string name="practice_loading">正在 %1$s 中開啟</string>
     <string name="practice_done">已練習 %1$d 項</string>
     <string name="practice_back_to">回到 %1$s</string>

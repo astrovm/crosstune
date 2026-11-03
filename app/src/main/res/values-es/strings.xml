@@ -387,6 +387,7 @@
     <string name="learn_song_times">Se canta %1$d veces</string>
     <string name="learn_song_new_words">Tiene palabras para saber</string>
     <string name="practice_play">Escuchar la línea</string>
+    <string name="practice_stop">Parar la línea</string>
     <string name="practice_loading">Abriendo en %1$s</string>
     <string name="practice_done">%1$d practicadas</string>
     <string name="practice_back_to">Volver a %1$s</string>

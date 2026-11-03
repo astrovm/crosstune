@@ -387,6 +387,7 @@
     <string name="learn_song_times">%1$d번 불림</string>
     <string name="learn_song_new_words">알아둘 단어 있음</string>
     <string name="practice_play">이 줄 재생</string>
+    <string name="practice_stop">이 줄 멈추기</string>
     <string name="practice_loading">%1$s에서 여는 중</string>
     <string name="practice_done">%1$d개 연습함</string>
     <string name="practice_back_to">%1$s(으)로 돌아가기</string>

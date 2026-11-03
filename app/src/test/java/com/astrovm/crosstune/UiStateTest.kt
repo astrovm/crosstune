@@ -75,4 +75,12 @@ class UiStateTest {
         assertNull(learning.copy(script = Script.KOREAN).insteadOf(0))
         assertEquals("yoru", learning.copy(script = Script.KOREAN, wordsAs = WordsAs.LATIN).insteadOf(0))
     }
+
+    @Test
+    fun inKanaOnlyTheKanjiChangeAndKatakanaStaysAsWritten() {
+        val door = LineReading(listOf(Ruby("胸", "むね"), Ruby("のドアを"), Ruby("叩", "たた"), Ruby("いても")), "むねのどあをたたいても", "mune no doa o tataite mo")
+        assertEquals("むねのドアをたたいても", Learning(script = Script.JAPANESE, lines = listOf(door), wordsAs = WordsAs.KANA).insteadOf(0))
+        // Not in parts, it's the reading as it is.
+        assertEquals("よる", LineReading(emptyList(), "よる", "yoru").kana)
+    }
 }

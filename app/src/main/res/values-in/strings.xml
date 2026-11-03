@@ -387,6 +387,7 @@
     <string name="learn_song_times">Dinyanyikan %1$d kali</string>
     <string name="learn_song_new_words">Ada kata untuk dipelajari</string>
     <string name="practice_play">Putar baris</string>
+    <string name="practice_stop">Hentikan baris</string>
     <string name="practice_loading">Membuka di %1$s</string>
     <string name="practice_done">%1$d dilatih</string>
     <string name="practice_back_to">Kembali ke %1$s</string>
