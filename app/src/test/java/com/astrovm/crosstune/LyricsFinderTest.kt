@@ -1859,6 +1859,63 @@ class LyricsFinderTest {
         assertEquals(lrclib.map { (ms, text) -> LyricLine(ms + 6_000, text) }, (found(playing) as Lyrics.Found).lines)
     }
 
+    /** LRCLIB with [lrclib], timed for a recording 6 seconds shorter than [anotherTake]'s, and NetEase with [netEase], as long as it. */
+    private fun twoSheets(lrclib: List<Pair<Long, String>>, netEase: List<Pair<Long, String>>) {
+        fun sheet(lines: List<Pair<Long, String>>) = lines.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${lasting(answer("Song", "Band", "", synced = sheet(lrclib)), 260.0)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}],"duration":266000}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(sheet(netEase))}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private val anotherTake = MusicMetadata("Song", "Band", lengthMs = 266_100)
+
+    private val sungWords = listOf("Every word I sing here", "Falls down around my feet", "Nothing left to say now", "Under the city lights", "Waiting for the morning", "Holding on to nothing", "Running from the thunder", "Calling out your name", "Singing till the sun comes")
+
+    private fun takenLines() = (found(anotherTake) as Lyrics.Found).lines.map { it.timeMs to it.text }
+
+    @Test
+    fun wordsAreOnlyToldTimedApartWithSixLinesInCommon() {
+        // Each line a few seconds later, then hardly: no take is sung like that.
+        fun lines(count: Int) = sungWords.take(count).mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+        fun jumping(count: Int) = lines(count).mapIndexed { line, (ms, text) -> ms + (if (line % 2 == 0) 3_000 else 500) to text }
+        twoSheets(lines(6), jumping(6))
+        assertEquals(lines(6), takenLines())
+        // Five lines are too few to tell a take from words timed badly, so NetEase's, as long as the recording, stay.
+        twoSheets(lines(5), jumping(5))
+        assertEquals(jumping(5), takenLines())
+    }
+
+    @Test
+    fun wordsAreToldTimedApartWhenTheGapBetweenThemJumpsMoreOftenThanNot() {
+        val lrclib = sungWords.mapIndexed { line, text -> 10_000L + line * 4_000L to text } + (50_000L to "And that's where it ends")
+        // NetEase's have a line to open with and one in the middle LRCLIB's don't, and lack LRCLIB's last.
+        fun netEase(laterBy: List<Long>) = listOf(8_000L to "Count us in before we start") +
+            sungWords.take(5).mapIndexed { line, text -> lrclib[line].first + laterBy[line] to text } + (35_500L to "A line only they have") +
+            sungWords.drop(5).mapIndexed { line, text -> lrclib[line + 5].first + laterBy[line + 5] to text }
+        // Six seconds later, then nine from the fifth line, back and forth: 4 of 8 gaps jump, as in a take cut here and there.
+        val half = netEase(listOf(6_000L, 6_000, 6_000, 6_000, 6_000, 9_000, 6_000, 9_000, 6_000))
+        twoSheets(lrclib, half)
+        assertEquals(half, takenLines())
+        // 5 of 8: more often than not, so no take is sung like that.
+        twoSheets(lrclib, netEase(listOf(6_000L, 6_000, 6_000, 6_000, 9_000, 6_000, 9_000, 6_000, 9_000)))
+        assertEquals(lrclib, takenLines())
+    }
+
+    @Test
+    fun wordsInOtherLettersCantBeToldTimedApartSoTheOnesTimedForARecordingAsLongStay() {
+        val words = listOf("ここにいて", "あなたのてを", "ゆびのさきが", "みゃくはくを", "すこしは", "ほらみどりの", "しあわせの", "なつにきらめいて")
+        val lrclib = words.mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+        val jumbled = listOf(13_000L, 19_500L, 20_200L, 27_000L, 27_600L, 33_500L, 34_100L, 42_000L).zip(words)
+        twoSheets(lrclib, jumbled)
+        assertEquals(jumbled, takenLines())
+    }
+
     @Test
     fun ofSeveralRecordingsOnNetEaseTheOneAsLongAsTheSongPlayingIsTaken() {
         fake.handler = { request ->
