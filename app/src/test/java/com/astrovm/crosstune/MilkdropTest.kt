@@ -565,6 +565,32 @@ class MilkdropTest {
     }
 
     @Test
+    fun aSharperSizeTriedWhileThePhoneGetsBusyIsLeftAtOnceAndTriedAgainOnceItsNot() {
+        // Full is too slow, but the phone gets busy for 4 seconds, as the speech model hears the song, just as it's tried.
+        val milkdrop = SizedMilkdrop(listOf(30L, 20L, 15L, 10L))
+        val tooSharp = mutableMapOf<String, Int>()
+        var busyFrom: Long? = null
+        val (renderer, told) = sized(milkdrop, sizes = mapOf("a" to 1), busy = { busyFrom?.let { clock - it < 4_000 } ?: false }, tooSharp = tooSharp)
+        val changes = mutableListOf<Pair<Long, Int>>()
+        renderer.onSize = {
+            changes += clock to renderer.size
+            if (busyFrom == null && renderer.size == 0) busyFrom = clock
+        }
+        renderer.created()
+        renderer.drawFor(30_000)
+        // Busy, the size tried can't be told, and too slow it would stutter all that while: it's left at once.
+        assertEquals(listOf("a" to 0, "a" to 1, "a" to 0, "a" to 1), told)
+        // Starting at its own size, two thirds, is a change too.
+        assertEquals(listOf(1, 0, 1, 0, 1), changes.map { it.second })
+        // Left on the next frame or so, not two seconds later.
+        assertTrue(changes[2].first - changes[1].first <= 100)
+        // Tried again once the phone's not busy, it's left within two seconds as too slow, and that's remembered.
+        assertTrue(changes[3].first >= busyFrom!! + 4_000)
+        assertTrue(changes[4].first - changes[3].first <= 2_000)
+        assertEquals(mapOf("a" to 0), tooSharp)
+    }
+
+    @Test
     fun onAHotPhoneAPresetTooSlowIsDrawnSmallerButNeitherStruckNorRememberedAsTooSharp() {
         val milkdrop = SizedMilkdrop(listOf(200L, 100L, 60L, 40L))
         val struck = mutableListOf<String>()

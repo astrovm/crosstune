@@ -605,7 +605,8 @@ internal class MilkdropRenderer(
         val took = at - drawnAt
         val preset = current ?: return
         // Held at one size for a bench, or slowed by other work, it's not the preset's speed.
-        if (fixedSize != null || busy()) return
+        if (fixedSize != null) return
+        if (busy()) return leaveTry(preset)
         // A frame that took this long was paused, out of sight, rather than slow.
         if (at < timingFrom || took >= PAUSED_MS) return
         timedAt.addLast(at)
@@ -627,6 +628,17 @@ internal class MilkdropRenderer(
             trying = true
             resize(preset, size - 1)
         }
+    }
+
+    /**
+     * A sharper size being tried, with the phone busy, so it can't be told whether [preset] keeps up
+     * there: back to the size it kept up at, rather than maybe stuttering till the work's done, and
+     * tried again after, as it wasn't too slow.
+     */
+    private fun leaveTry(preset: String) {
+        if (!trying) return
+        trying = false
+        resize(preset, size + 1)
     }
 
     /** [preset] keeping up: a sharper size tried is kept, and it's told it's fast enough once a showing. */
