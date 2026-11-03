@@ -2293,19 +2293,21 @@ internal class MainViewModel(
         // Whether any singing was found where the words are, while hearing on.
         var found = false
         while (true) {
+            // Whether a voice was heard in this while's first seconds, before the rest of it is in.
+            var voiced = false
             // Heard against the lines as they're shown, so already where they're sung, a little off at most.
             val shown = LyricsSync.adjust(lines, shownPoints)
             // Heard where lines are sung, so there are words to hear.
             delay(untilSung(shown, uiState.following?.clock ?: return, heardTo, straightOn) ?: return)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return
             singingTries++
-            val sung = hearOnce(hearing, lines, heardFirst(song, lines, clock, shown, heardTo == null)) ?: return
+            val sung = hearOnce(hearing, lines, heardFirst(song, lines, clock, shown, heardTo == null) { voiced = true }) ?: return
             if (!stillPlays(song, lines, clock)) return
             // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
             // while is heard straight on, wherever the words are timed: the singing may be well after them.
             val shift = SungAlignment.shiftMs(sung, clock::positionAt, shown)
             straightOn = shift == null
-            found = foundSinging(found, sung, clock, shown, shift)
+            found = foundSinging(found, sung, clock, shown, shift, voiced)
             val first = heardTo == null
             heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
             if (shift == null) {
@@ -2322,15 +2324,35 @@ internal class MainViewModel(
      * The first few seconds of a while, told as soon as they're heard: lines sung in them are put where
      * they're heard at once, not once the whole while is, as words timed far off are wrong all the while.
      * On the song's [first] while, no voice where the [shown] lines are timed doubts them instead: lines
-     * timed into an intro aren't shown sung all the while it's heard. On any while, a voice there lifts
-     * that doubt, as soon as it's heard.
+     * timed into an intro aren't shown sung all the while it's heard. But the speech model sometimes
+     * hears singing as music alone, depending on just where what it hears starts, so it's only doubted
+     * when the seconds heard again a little later, as asked for, have none either. On any while, a voice
+     * there lifts that doubt, as soon as it's heard, and is told [voiced].
      */
-    private fun heardFirst(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>, first: Boolean): suspend (Sung) -> Unit = { heard ->
-        if (stillPlays(song, lines, clock)) {
+    private fun heardFirst(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>, first: Boolean, voiced: () -> Unit): suspend (Sung) -> Boolean {
+        var quiet = 0
+        return heard@{ heard ->
+            if (!stillPlays(song, lines, clock)) return@heard false
             val shift = SungAlignment.shiftMs(heard, clock::positionAt, shown)
-            if (shift != null) placeHeard(song, heard, clock, shown, shift)
-            else if (!noVoice(heard, clock, shown)) doubtTiming(false)
-            else if (first) doubtTiming(true)
+            when {
+                shift != null -> {
+                    voiced()
+                    placeHeard(song, heard, clock, shown, shift)
+                    false
+                }
+                !noVoice(heard, clock, shown) -> {
+                    voiced()
+                    doubtTiming(false)
+                    false
+                }
+                !first -> false
+                // Music alone, heard once: heard again a little later before it's believed.
+                ++quiet < QUIET_HEARINGS -> true
+                else -> {
+                    doubtTiming(true)
+                    false
+                }
+            }
         }
     }
 
@@ -2342,7 +2364,7 @@ internal class MainViewModel(
     }
 
     /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when nothing is, as for want of the speech model, which is offered then. */
-    private suspend fun hearOnce(hearing: SingingHearing, lines: List<LyricLine>, first: (suspend (Sung) -> Unit)?): Sung? {
+    private suspend fun hearOnce(hearing: SingingHearing, lines: List<LyricLine>, first: (suspend (Sung) -> Boolean)?): Sung? {
         val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'), first)
         // The model isn't fetched on mobile data by itself: it's offered by hand.
         if (sung == null && hearing.missesModel && !modelClosed) uiState = uiState.copy(singingModel = ModelOffer.MISSING)
@@ -2359,11 +2381,12 @@ internal class MainViewModel(
      * Whether singing's been found where the words are, [found] before or now, [shift] off. Till it is,
      * no voice heard where they're timed doubts them, so no line's shown sung; a voice heard there, even
      * with too few of its words made out to place them, says they're not timed into an intro after all,
-     * as the speech model sometimes hears a while of singing as music alone.
+     * as the speech model sometimes hears a while of singing as music alone. So does one [voiced] in
+     * the while's first seconds, though the whole while is heard as music alone.
      */
-    private fun foundSinging(found: Boolean, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long?): Boolean {
+    private fun foundSinging(found: Boolean, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long?, voiced: Boolean): Boolean {
         if (found) return true
-        doubtTiming(shift == null && noVoice(sung, clock, shown))
+        doubtTiming(shift == null && !voiced && noVoice(sung, clock, shown))
         return shift != null
     }
 
@@ -4377,6 +4400,8 @@ internal class MainViewModel(
         const val SINGING_TRIES = 3
         /** Lines sung in what's heard, at least, so enough words to match are heard. */
         const val SINGING_LINES = 3
+        /** How many of a while's first seconds heard as music alone doubt the words' timing: the speech model often misses a voice once. */
+        const val QUIET_HEARINGS = 2
         /** The last moment of what's heard, where a line starting hasn't been sung yet. */
         const val SINGING_TAIL_MS = 3_000L
         /** How long before a line's timed to start it's heard from, as the words may be timed a little late. */

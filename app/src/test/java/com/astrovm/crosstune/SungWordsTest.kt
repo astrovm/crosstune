@@ -350,14 +350,44 @@ class SungWordsTest {
         val lengths = mutableListOf<Int>()
         val listener = listener(microphone, hearing = { samples, _ -> lengths += samples.size; listOf(HeardWord("Oh", 320)) })
         val told = mutableListOf<Sung>()
-        assertEquals(Sung(1_234, listOf(HeardWord("Oh", 320))), listener.hear(null) { told += it })
+        assertEquals(Sung(1_234, listOf(HeardWord("Oh", 320))), listener.hear(null) { told += it; false })
         assertEquals(listOf(Sung(1_234, listOf(HeardWord("Oh", 320)))), told)
         assertEquals(listOf(16_000 * SingingListener.FIRST_SECONDS, 16_000 * SingingListener.SECONDS), lengths)
         // Nothing heard in them, or sound that ends before they're in, tells nothing.
         val none = mutableListOf<Sung>()
-        listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = FakeWords(emptyList())).hear(null) { none += it }
-        listener(FakeMicrophone().apply { play(SingingListener.FIRST_SECONDS - 1.0); end() }).hear(null) { none += it }
+        listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = FakeWords(emptyList())).hear(null) { none += it; true }
+        listener(FakeMicrophone().apply { play(SingingListener.FIRST_SECONDS - 1.0); end() }).hear(null) { none += it; true }
         assertEquals(emptyList<Sung>(), none)
+    }
+
+    @Test
+    fun theFirstSecondsAreHeardAgainFromAFewSecondsInWhenAsked() = runBlocking {
+        val microphone = FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }
+        val lengths = mutableListOf<Int>()
+        val listener = listener(microphone, hearing = { samples, _ -> lengths += samples.size; listOf(HeardWord("[MUSIC]", 320)) })
+        val told = mutableListOf<Sung>()
+        // Asked to after the first seconds only, as the second time's answer is let be.
+        assertEquals(Sung(1_234, listOf(HeardWord("[MUSIC]", 320))), listener.hear(null) { told += it; told.size == 1 })
+        val again = 1_234L + SingingListener.AGAIN_SECONDS * 1000
+        assertEquals(listOf(Sung(1_234, listOf(HeardWord("[MUSIC]", 320))), Sung(again, listOf(HeardWord("[MUSIC]", 320)))), told)
+        assertEquals(listOf(16_000 * SingingListener.FIRST_SECONDS, 16_000 * SingingListener.FIRST_SECONDS, 16_000 * SingingListener.SECONDS), lengths)
+    }
+
+    @Test
+    fun theSecondsHeardAgainAreThoseFromAFewSecondsIn() = runBlocking {
+        // Each second of sound says which second it is.
+        val microphone = FakeMicrophone().apply { repeat(SingingListener.SECONDS) { second -> playSecond(second) } }
+        val starts = mutableListOf<Float>()
+        val listener = listener(microphone, hearing = { samples, _ -> starts += samples[0]; listOf(HeardWord("[MUSIC]", 320)) })
+        listener.hear(null) { true }
+        assertEquals(listOf(0f, SingingListener.AGAIN_SECONDS / 32768f, 0f), starts)
+    }
+
+    @Test
+    fun soundEndingBeforeTheSecondsToHearAgainAreInEndsTheHearing() = runBlocking {
+        val told = mutableListOf<Sung>()
+        assertNull(listener(FakeMicrophone().apply { play(SingingListener.FIRST_SECONDS + 1.0); end() }).hear(null) { told += it; true })
+        assertEquals(1, told.size)
     }
 
     @Test
