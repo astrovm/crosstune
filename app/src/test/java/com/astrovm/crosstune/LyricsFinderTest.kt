@@ -740,6 +740,71 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aNoteOnHowASongIsPlayedIsLeftOutOfItsWordsButSungWordsInBracketsStay() {
+        val song = MusicMetadata("Message in a Bottle", "The Police")
+        fun cleaned(vararg lines: String, source: String = LyricsFinder.NETEASE) =
+            LyricsFinder.cleaned(Lyrics.Found(lines.joinToString("\n"), source = source), song).words
+        // In either kind of bracket, with or without a space, after the words or on a line of its own.
+        assertEquals("Sending out an sos\nA hundred", cleaned("Sending out an sos（repeat and fade）", "A hundred"))
+        assertEquals("Sending out an sos\nA hundred", cleaned("Sending out an sos (repeat and fade)", "A hundred"))
+        assertEquals("Sending out an sos\nA hundred", cleaned("Sending out an sos", "（Repeat and fade）", "A hundred"))
+        assertEquals("Sending out an sos\n\nA hundred", cleaned("Sending out an sos", "(x2)", "", "A hundred"))
+        // What other notes look like, from any site.
+        for (note in listOf("(x2)", "(X2)", "(2x)", "（×4）", "(ｘ２)", "(Fade out)", "(fade-out)", "(Repeat to fade)", "(repeat chorus)", "(Repeat 2 times)", "(2 times)", "(Chorus x2)", "[Repeat and fade]", "【Fade out】")) {
+            assertEquals("Sos\nA hundred", cleaned("Sos $note", "A hundred", source = "lrclib"))
+        }
+        // At the start, or between words, with the space it was set off by.
+        assertEquals("Sending out an sos", cleaned("(x2) Sending out an sos"))
+        assertEquals("Sending out an sos", cleaned("Sending (fade out) out an sos"))
+        assertEquals("Sending out an sos", cleaned("Sending out (x2) (fade out) an sos"))
+        // Sung words in brackets, and words a note could be but a singer says too.
+        val sung = listOf(
+            "(Every breath you take)", "I love you (I love you)", "Stayin' alive (ah, ah, ah, ah)", "Roar (repeat)", "Love me twice (twice)",
+            "(repeat, repeat)", "(Repeat after me)", "Fade (fade away)", "(Again!)", "Time (2)", "Take it (out)", "Wait (in the dark)", "(x)", "(fade)", "(fades)", "(times)", "()",
+            "Sos (repeat and fade", "Sos repeat and fade)", "Sos repeat and fade"
+        )
+        assertEquals(sung.joinToString("\n"), cleaned(*sung.toTypedArray()))
+        assertEquals(sung.joinToString("\n"), cleaned(*sung.toTypedArray(), source = "lrclib"))
+    }
+
+    @Test
+    fun aNoteOnHowASongIsPlayedIsLeftOutOfTimedLinesAndWordsTimedOneByOneWithTheirTimes() {
+        val song = MusicMetadata("Message in a Bottle", "The Police")
+        fun word(ms: Long, text: String) = TimedWord(ms, text)
+        val lines = listOf(
+            LyricLine(1_000, "Just a castaway"),
+            // The note apart from the words before it, and on a word with them.
+            LyricLine(
+                2_000, "Sending out an sos（repeat and fade）",
+                listOf(word(2_000, "Sending "), word(2_300, "out "), word(2_600, "an "), word(2_900, "sos（repeat "), word(3_000, "and "), word(3_100, "fade）")), endMs = 3_500
+            ),
+            LyricLine(4_000, "Sending out an sos (x2)", listOf(word(4_000, "Sending "), word(4_300, "out "), word(4_600, "an "), word(4_900, "sos "), word(5_000, "(x2)")), endMs = 5_500),
+            // A note first, then the words; a note that is all there is; and a pause, which stays.
+            LyricLine(6_000, "(x2) Hello", listOf(word(6_000, "(x2) "), word(6_100, "Hello")), endMs = 6_900),
+            LyricLine(7_000, "(fade out)", listOf(word(7_000, "(fade "), word(7_100, "out)"))),
+            LyricLine(8_000, "（fade out）"),
+            LyricLine(9_000, ""),
+            LyricLine(20_000, "I love you (I love you)", listOf(word(20_000, "I "), word(20_100, "love "), word(20_200, "you "), word(20_300, "(I "), word(20_400, "love "), word(20_500, "you)")))
+        )
+        val found = LyricsFinder.cleaned(Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = LyricsFinder.NETEASE), song)
+        assertEquals(listOf("Just a castaway", "Sending out an sos", "Sending out an sos", "Hello", "", "I love you (I love you)"), found.lines.map { it.text })
+        assertEquals(listOf(1_000L, 2_000L, 4_000L, 6_000L, 9_000L, 20_000L), found.lines.map { it.timeMs })
+        assertEquals("Just a castaway\nSending out an sos\nSending out an sos\nHello\n\nI love you (I love you)", found.words)
+        // The words keep their times and make up the line, as before.
+        assertEquals(listOf("Sending ", "out ", "an ", "sos"), found.lines[1].words.map { it.text })
+        assertEquals(listOf(2_000L, 2_300L, 2_600L, 2_900L), found.lines[1].words.map { it.timeMs })
+        assertEquals(listOf("Sending ", "out ", "an ", "sos"), found.lines[2].words.map { it.text })
+        // The line ends when its words do, where the note was timed apart from them; not guessed where it wasn't.
+        assertEquals(listOf(3_500L, 5_000L, 6_900L), found.lines.slice(1..3).map { it.endMs })
+        assertEquals(listOf("Hello"), found.lines[3].words.map { it.text })
+        assertEquals(listOf(6_100L), found.lines[3].words.map { it.timeMs })
+        for (line in found.lines.filter { it.words.isNotEmpty() }) assertEquals(line.text, line.words.joinToString("") { it.text })
+        assertEquals(6, found.lines[5].words.size)
+        // A different site's lines are cleaned the same.
+        assertEquals("Hello", LyricsFinder.cleaned(Lyrics.Found("(x2) Hello", listOf(LyricLine(0, "(x2) Hello")), source = "lrclib"), song).lines.single().text)
+    }
+
+    @Test
     fun brokenTextIsMendedWhereItCanBe() {
         fun cleaned(words: String, source: String = LyricsFinder.NETEASE) = LyricsFinder.cleaned(Lyrics.Found(words, source = source), hatsukoi).words
         // An apostrophe stored escaped, and a lost character NetEase writes as 锟斤拷.
