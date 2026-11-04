@@ -198,6 +198,16 @@ The rest stay unscored. My guess, not measured: Whisper writes a word in kana wh
 
 One of the 6 hearings on the GPU died with a memory access fault, on Gee. It didn't happen again when run again, and `set --cached` resumes after it, so I left it at that.
 
+
+### The words the app really shows
+
+That table replays the words given to prep. `set` now also keeps the words the app finds (`ID.found.json`), and a replay plays those, as the phone does. Each line is held to its truth by its words, so fewer lines are scored where another sheet breaks them differently. No app change between these, same 41 songs, whisper.cpp a46fadb3, with the truth PR #708 reads:
+
+| Words replayed | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|---:|
+| As given to prep | 1114 | 296 | 590 | 92 | 355 |
+| As the app finds them | 1083 | 319 | 638 | 90 | 295 |
+
 ## Limits of the timing table
 
 Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded, and the overall
