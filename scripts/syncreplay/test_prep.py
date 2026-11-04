@@ -1,10 +1,12 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, Mock, patch
@@ -27,6 +29,24 @@ class ResumeTest(unittest.TestCase):
             (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
             (r.OUT / 'fake.heard20.json').write_text('{}')
             self.assertEqual([], r.prepped())
+
+class HeardBinaryTest(unittest.TestCase):
+    def test_songs_heard_at_once_build_the_hearing_program_once(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'HEARD', Path(directory)):
+            program = Path(directory) / 'heard'
+            builds = []
+
+            def build(command, check):
+                builds.append(command)
+                # Long enough for the others to find no program yet.
+                threading.Event().wait(0.05)
+                program.write_text('')
+
+            with patch.object(r.subprocess, 'run', side_effect=build), ThreadPoolExecutor(4) as pool:
+                found = list(pool.map(lambda _: r.heard_binary(), range(4)))
+        self.assertEqual([program] * 4, found)
+        self.assertEqual(2, len(builds))  # Set up and built, once.
+
 
 class CheckpointTest(unittest.TestCase):
     def test_interrupted_hearing_keeps_and_resumes_completed_window(self):

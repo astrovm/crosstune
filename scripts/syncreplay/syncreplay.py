@@ -55,6 +55,7 @@ import shlex
 import statistics
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
@@ -63,6 +64,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "syncreplay"
 HEARD = OUT / "heard"
+HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
 APP_MODEL = "tiny-q5_1"
 # Each while is heard on its own, on one thread, so how many at once only changes how long it takes.
@@ -98,9 +100,11 @@ def audio(path, kind="f32le"):
 
 
 def heard_binary():
-    if not (HEARD / "heard").exists():
-        subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
-        subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
+    # Songs are heard at once, and the first of each would otherwise all build it, over each other.
+    with HEARD_BUILT:
+        if not (HEARD / "heard").exists():
+            subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
+            subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
     return HEARD / "heard"
 
 
