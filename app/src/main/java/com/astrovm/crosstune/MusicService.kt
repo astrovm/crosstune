@@ -134,8 +134,9 @@ internal enum class MusicService(
 
     /**
      * The same page as [link], for an app that doesn't open its own website's: Qobuz's opens only
-     * open.qobuz.com, where a search is a path, never the web player's play.qobuz.com, and Deezer's
-     * and TIDAL's open no search on the web, only their own links to one. Null when the app opens [link].
+     * open.qobuz.com, never the web player's play.qobuz.com, and there a search can't say what for, so it
+     * opens empty. Deezer's and TIDAL's open no search on the web, only their own links to one. Null when
+     * the app opens [link].
      */
     private fun appOnlyLink(link: String): String? {
         val url = link.toHttpUrlOrNull() ?: return null
@@ -179,9 +180,7 @@ internal enum class MusicService(
 internal fun sameApp(one: String?, other: String?, installed: (String) -> Boolean): Boolean =
     one == other || (one != null && !installed(one) && MusicService.ofOwnApp(one)?.appPackages?.contains(other) == true)
 
-private fun qobuzAppLink(url: HttpUrl): String? = url.takeIf { it.host == "play.qobuz.com" }?.newBuilder()?.host("open.qobuz.com")?.query(null)?.apply {
-    if (url.pathSegments == listOf("search")) url.queryParameter("q")?.let(::addPathSegment)
-}?.build()?.toString()
+private fun qobuzAppLink(url: HttpUrl): String? = url.takeIf { it.host == "play.qobuz.com" }?.newBuilder()?.host("open.qobuz.com")?.query(null)?.build()?.toString()
 
 private fun deezerAppLink(url: HttpUrl): String? = url.pathSegments.takeIf { url.host == "www.deezer.com" && it.size == 2 && it[0] == "search" }
     ?.let { "deezer-query://www.deezer.com/search?" + query("query", it[1]) }

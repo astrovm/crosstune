@@ -477,11 +477,12 @@ internal class ExactMatcher(
     /**
      * Qobuz's API needs an account, but its store's search page lists each song with its album:
      * enough for songs and albums. Its artists aren't told apart there, so they're left to the search.
+     * It answers only a phone's browser: anything else, a desktop browser too, gets a 403.
      */
     private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
         if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
         val url = "https://www.qobuz.com/us-en/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
-        val page = client.newCall(Request.Builder().url(url).get().build()).answer(ioDispatcher) { response ->
+        val page = client.newCall(Request.Builder().url(url).asPhoneBrowser().get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
             response.body.stringAtMost()
         }

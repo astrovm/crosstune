@@ -1584,7 +1584,10 @@ class ExactMatcherTest {
             </div></li>"""
         val page = "<ul class=\"ListContainer\">" + item("Song (Live)", "Band • Live Record", "11", "live1") +
             item("Song", "Band\n •\n Studio &amp; Co", "12", "studio2") + item("Broken", "", "", "") + "</ul>"
-        fake.handler = { request -> FakeSpotify.html(request, page) }
+        // Qobuz's store answers only a phone's browser, as measured: a desktop browser's name, or OkHttp's, gets a 403 (#673).
+        fake.handler = { request ->
+            if (request.header("User-Agent").orEmpty().contains("Mobile")) FakeSpotify.html(request, page) else FakeSpotify.html(request, "Access Denied", code = 403)
+        }
         assertEquals("https://play.qobuz.com/track/12", find(MusicService.QOBUZ, MusicMetadata("Song", "Band")))
         assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/Song%20Band"))
         assertEquals("https://play.qobuz.com/album/studio2", find(MusicService.QOBUZ, MusicMetadata("Studio & Co", "Band", ItemType.ALBUM)))

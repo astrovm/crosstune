@@ -1060,8 +1060,9 @@ class PlaybackTest {
     @Test
     fun linksAnAppDoesntOpenAreTriedAfterInTheFormItDoes() {
         val qobuz = MusicService.QOBUZ.packageName
+        // Qobuz's app has no link to a search for something: a path after /search opens its home, and it ignores a query (#673).
         assertEquals(
-            listOf(qobuz to "https://play.qobuz.com/search?q=Song%20Band", qobuz to "https://open.qobuz.com/search/Song%20Band"),
+            listOf(qobuz to "https://play.qobuz.com/search?q=Song%20Band", qobuz to "https://open.qobuz.com/search"),
             MusicService.QOBUZ.appLinks("https://play.qobuz.com/search?q=Song%20Band")
         )
         assertEquals("https://open.qobuz.com/album/studio2", MusicService.QOBUZ.appLinks("https://play.qobuz.com/album/studio2?ref=x").last().second)
