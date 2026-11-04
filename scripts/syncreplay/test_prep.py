@@ -287,6 +287,35 @@ echo '[[["Every", 8.9], ["time", 9.2]], [["Every", 8.9]]]'
             self.assertEqual(r.words_heard(Path('vocals.wav'), 'en'), [[('every', 8.9)]])
 
 
+class SungLanguageTest(unittest.TestCase):
+    """What's heard goes by the audio, unless the lyrics can't be in that language: Dynamite sounded Korean."""
+    def told(self, lyrics, probabilities):
+        with tempfile.TemporaryDirectory() as folder, patch.object(r, 'OUT', Path(folder)), \
+                patch.object(r, 'separated_voice', return_value=Path('vocals.wav')), patch.object(r, 'audio', return_value=[]), \
+                patch.object(r, 'truth_model') as model:
+            (Path(folder) / 'song.lyrics.json').write_text(json.dumps([[0, line] for line in lyrics]))
+            model.return_value.detect_language.return_value = (probabilities[0][0], probabilities[0][1], probabilities)
+            first = r.sung_language('song')
+            model.return_value.detect_language.side_effect = AssertionError('kept, so not told again')
+            self.assertEqual(first, r.sung_language('song'))
+            return first
+
+    def test_lyrics_with_none_of_that_writing_rule_a_language_out(self):
+        self.assertEqual('en', self.told(["'Cause I'm in the stars tonight"], [('ko', 0.6), ('ja', 0.3), ('en', 0.1)]))
+
+    def test_a_little_of_that_writing_is_enough(self):
+        self.assertEqual('ko', self.told(['Aha, listen boy', '너무너무 멋져'], [('ko', 0.6), ('en', 0.4)]))
+
+    def test_kanji_alone_can_be_japanese(self):
+        self.assertEqual('ja', self.told(['移り行く街'], [('ja', 0.9), ('zh', 0.1)]))
+
+    def test_a_language_in_latin_letters_stays_what_it_sounds_like(self):
+        self.assertEqual('es', self.told(['No puedo creer'], [('es', 0.9), ('en', 0.1)]))
+
+    def test_no_language_fits_goes_by_how_it_sounds(self):
+        self.assertEqual('ko', self.told(['移り行く'], [('ko', 0.6), ('ru', 0.4)]))
+
+
 class AgreedTest(unittest.TestCase):
     def test_a_line_timed_apart_by_two_hearings_is_left_out(self):
         # The Police's chorus: one hearing lost it at 120 s and matched the line to the next one, at 161 s.

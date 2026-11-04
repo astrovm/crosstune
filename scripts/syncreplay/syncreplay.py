@@ -181,13 +181,21 @@ def truth_model():
     return WhisperModel("medium", device="cpu", compute_type="int8", cpu_threads=4)
 
 
+# Languages with a writing of their own, which their lyrics show.
+WRITING = {"ko": "[\uac00-\ud7a3]", "ja": "[\u3040-\u30ff\u3400-\u9fff]", "zh": "[\u3400-\u9fff]", "ru": "[\u0400-\u04ff]", "uk": "[\u0400-\u04ff]",
+           "ar": "[\u0600-\u06ff]", "he": "[\u0590-\u05ff]", "th": "[\u0e00-\u0e7f]", "el": "[\u0370-\u03ff]", "hi": "[\u0900-\u097f]"}
+
+
 def sung_language(song):
     """What the song is sung in, kept in ID.language, standing in for what the app tells from its words:
-    the app hears in that language, and heard in English, a song in Spanish lines up with nothing."""
+    the app hears in that language, and heard in English, a song in Spanish lines up with nothing.
+    The sound alone can be wrong, as Dynamite sounds Korean, so a language the lyrics have none of the writing of is out."""
     kept = OUT / f"{song}.language"
     if not kept.exists() or not kept.read_text().strip():
-        language, _, _ = truth_model().detect_language(audio(separated_voice(song, OUT / f"{song}.wav")), vad_filter=True, language_detection_segments=LANGUAGE_SEGMENTS)
-        atomic_text(kept, language)
+        language, _, likely = truth_model().detect_language(audio(separated_voice(song, OUT / f"{song}.wav")), vad_filter=True, language_detection_segments=LANGUAGE_SEGMENTS)
+        words = " ".join(text for _, text in json.loads((OUT / f"{song}.lyrics.json").read_text()))
+        fits = (name for name, _ in likely if name not in WRITING or re.search(WRITING[name], words))
+        atomic_text(kept, next(fits, language))
     return kept.read_text()
 
 
