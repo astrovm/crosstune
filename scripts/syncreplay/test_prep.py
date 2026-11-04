@@ -1,6 +1,8 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -360,6 +362,32 @@ class SungLanguageTest(unittest.TestCase):
         self.assertEqual('ko', self.told(['移り行く'], [('ko', 0.6), ('ru', 0.4)]))
 
 
+class EveryWritingTest(unittest.TestCase):
+    """Truth was blind to lyrics in anything but Latin letters: Japanese songs scored no line at all."""
+    def test_latin_words_stay_one_piece_without_accents_or_punctuation(self):
+        self.assertEqual(["don't"], r.pieces('Don’t,'))
+        self.assertEqual(['corazon'], r.pieces('corazón'))
+        self.assertEqual(['bababa'], r.pieces('ba-ba-ba'))
+        self.assertEqual([], r.pieces('...'))
+
+    def test_writing_without_spaces_goes_letter_by_letter(self):
+        self.assertEqual(['移', 'り', '行', 'く'], r.pieces('移り行く'))
+        self.assertEqual(['ガ', 'ラ', 'ス'], r.pieces('ｶﾞﾗｽ'))
+        self.assertEqual(['너', '무'], r.pieces('너무,'))
+
+    def test_other_spaced_writing_stays_whole_words(self):
+        self.assertEqual(['любовь'], r.pieces('Любовь!'))
+
+    def test_lines_in_japanese_are_timed(self):
+        heard = [('移', 5.0), ('り', 5.0), ('行', 5.5), ('く', 5.5), ('街', 6.0), ('心', 9.0), ('視', 9.5)]
+        self.assertEqual({0: 5.0, 1: 9.0}, r.line_starts(heard, ['移り行く街', '心視']))
+
+    def test_hearing_gives_each_letter_the_time_of_its_word(self):
+        with patch.dict(os.environ, {'WHISPER_PYTHON': 'gpu'}), \
+                patch.object(r.subprocess, 'run', return_value=SimpleNamespace(stdout=json.dumps([[['移り', 5.0], ['行く', 6.0]]]))):
+            self.assertEqual([[('移', 5.0), ('り', 5.0), ('行', 6.0), ('く', 6.0)]], r.words_heard(Path('voice.wav'), 'ja'))
+
+
 class AgreedTest(unittest.TestCase):
     def test_a_line_timed_apart_by_two_hearings_is_left_out(self):
         # The Police's chorus: one hearing lost it at 120 s and matched the line to the next one, at 161 s.
@@ -402,11 +430,21 @@ class WordsShownTest(unittest.TestCase):
         lines = ['New line here', 'One two three', 'Four, five', '', 'Six seven', 'eight', 'Nine ten']
         self.assertEqual({1: 1.0, 2: 3.1, 3: 4.2, 5: 5.3}, r.sung_lines('song', lines))
 
+    def test_lines_in_any_writing_line_up(self):
+        ours = ['\u3042\u306a\u305f\u306e\u80f8\u306e\u4e2d', '\u8857\u306e\u706f\u304c\u6d88\u3048\u308b\u9803']
+        self.assertEqual({0: 1, 1: 2}, r.lined_up(ours, ['La la', *ours]))
+
     def test_the_same_words_keep_their_truth(self):
         self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', ['One two, three', '', 'Four five', 'Six seven eight', 'Nine ten']))
 
     def test_words_with_no_lines_are_all_dark(self):
         self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', []))
+
+    def test_a_replay_that_found_no_words_scores_as_all_dark(self):
+        (r.OUT / 'song.from0.shown.json').write_text(json.dumps(dict(lines=[], shown=[], placed=[dict(at=0, times=[])], known=[], heard=[])))
+        with contextlib.redirect_stdout(io.StringIO()) as said:
+            self.assertEqual({}, r.score(argparse.Namespace(id='song', start=0, placed=False)))
+        self.assertIn('never shown 4', said.getvalue())
 
     def test_words_kept_are_this_songs_though_the_next_songs_came_after(self):
         kept = r.OUT / 'kept'
