@@ -633,9 +633,13 @@ def watch(args):
 
 def behind(song, kept, lit):
     """How far behind what's heard the app's clock is: each while kept, found in the recording, against where the app said the song was."""
+    files = sorted(kept.glob("heard-*.pcm"))
+    if not files:
+        print("The app heard nothing to check its clock by, so it's taken as right.")
+        return 0
     import numpy as np
     offs = []
-    for f in sorted(kept.glob("heard-*.pcm")):
+    for f in files:
         started = int(re.search(r"heard-(\d+)", f.name).group(1))
         clock = min(lit, key=lambda e: abs(e[1] - started))
         app = clock[2] + started - clock[1]
@@ -650,9 +654,6 @@ def behind(song, kept, lit):
         at = int(np.argmax(match / loud)) / 16
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
-    if not offs:
-        print("The app heard nothing to check its clock by, so it's taken as right.")
-        return 0
     return statistics.median(offs)
 
 
