@@ -1577,9 +1577,9 @@ class ExactMatcherTest {
             return fake.requestedUrls.last().substringAfter("qobuz.com/").substringBefore("/")
         }
         assertEquals("us-en", asks("US"))
-        assertEquals("jp-ja", asks("JP"))
-        // The rest share the UK's numbers, and Latin America's stores and Portugal's list none.
-        listOf("GB", "IE", "DE", "AU", "AR", "BR", "PT", "").forEach { assertEquals(it, "gb-en", asks(it)) }
+        // The rest share the UK's numbers, but Japan's store names songs in Japanese, so they'd never match,
+        // and Latin America's stores and Portugal's list no numbers.
+        listOf("GB", "IE", "DE", "AU", "JP", "AR", "BR", "PT", "").forEach { assertEquals(it, "gb-en", asks(it)) }
     }
 
     @Test

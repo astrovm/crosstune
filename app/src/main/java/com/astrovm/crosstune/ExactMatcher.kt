@@ -480,16 +480,12 @@ internal class ExactMatcher(
      * enough for songs and albums. Its artists aren't told apart there, so they're left to the search.
      * It answers only a phone's browser: anything else, a desktop browser too, gets a 403.
      * A song's number differs between its stores, and Qobuz's app shows only a loading page for one
-     * that isn't its country's. The US and Japan have their own; the rest share the UK's, and Latin
-     * America's stores and Portugal's list none.
+     * that isn't its country's. The US has its own; the rest share the UK's, but Japan's store names
+     * songs in Japanese, so they'd never match, and Latin America's stores and Portugal's list none.
      */
     private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
         if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
-        val store = when (country) {
-            "US" -> "us-en"
-            "JP" -> "jp-ja"
-            else -> "gb-en"
-        }
+        val store = if (country == "US") "us-en" else "gb-en"
         val url = "https://www.qobuz.com/$store/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
         val page = client.newCall(Request.Builder().url(url).asPhoneBrowser().get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
