@@ -170,63 +170,75 @@ class TableTest(unittest.TestCase):
             self.assertFalse((r.OUT / 'replay.json').exists())
             self.assertFalse((r.OUT / 'replay.songs').exists())
 
-class Sound:
-    """Nine seconds of sound, as long as it needs to be for one stretch of 8."""
-    def __len__(self):
-        return 16 * 9000
+class HeardWhenAskedTest(unittest.TestCase):
+    def test_prep_hears_every_20_seconds_and_the_last_stretch(self):
+        self.assertEqual(r.seed(list(range(0, 45000, 1000))), [0, 20000, 40000, 44000])
 
-    def __getitem__(self, _):
-        return SimpleNamespace(tobytes=lambda: b'')
+    def test_a_song_with_only_those_is_complete(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            for suffix in ('wav', 'language', 'lyrics.json', 'truth.jsonl'):
+                (r.OUT / f'fake.{suffix}').write_text('fake')
+            for length in r.LENGTHS:
+                r.heard_file('fake', length, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in r.seed(list(range(0, 61020 - length, 1000)))}))
+            with patch.object(r.subprocess, 'check_output', return_value=b'61.021'):
+                self.assertTrue(r.complete('fake'))
 
+    def asked(self, heard, kept):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'windows') as windows:
+            r.heard_file('fake', 20000, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in kept}))
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(heard=heard)))
+            new = r.hear_asked('fake', ['fake.from0.shown.json'])
+        return new, [call.kwargs['wanted'](list(range(0, 41000, 1000))) for call in windows.call_args_list]
 
-class HeardOnTheGpuTest(unittest.TestCase):
-    def built(self, gpu):
-        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'HEARD', Path(directory) / 'heard'), patch.object(r.subprocess, 'run') as run:
-            return r.heard_binary(gpu).parent.name, run.call_args_list[0].args[0]
+    def test_a_stretch_asked_for_is_heard_at_the_nearest_second(self):
+        new, wanted = self.asked([dict(seconds=20, **{'from': 3400}), dict(seconds=20, **{'from': 7600})], [0, 40000])
+        self.assertEqual((new, wanted), (2, [[3000, 8000]]))
 
-    def test_the_gpu_has_its_own_build_with_vulkan(self):
-        folder, cmake = self.built(True)
-        self.assertEqual(folder, 'heard-gpu')
-        self.assertIn('-DGGML_VULKAN=ON', cmake)
+    def test_past_the_last_stretch_or_before_the_first_is_the_nearest_there_is(self):
+        self.assertEqual(self.asked([dict(seconds=20, **{'from': 90000}), dict(seconds=20, **{'from': -900})], [0, 40000]), (0, []))
 
-    def test_the_cpu_build_has_no_vulkan(self):
-        folder, cmake = self.built(False)
-        self.assertEqual(folder, 'heard')
-        self.assertNotIn('-DGGML_VULKAN=ON', cmake)
+    def test_what_was_heard_already_is_not_heard_again(self):
+        self.assertEqual(self.asked([dict(seconds=20, **{'from': 3000})], [0, 3000, 40000]), (0, []))
 
-    def test_with_it_on_the_gpu_works_alongside_the_cpu(self):
-        with patch.dict(os.environ, {'HEARD_GPU': '1'}):
-            self.assertEqual(r.hearers(), [True] * r.HEARD_ON_THE_GPU_AT_ONCE + [False] * r.HEARD_AT_ONCE)
+    def test_a_song_with_no_replay_yet_asks_for_nothing(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'windows') as windows:
+            self.assertEqual(r.hear_asked('fake', ['fake.from0.shown.json']), 0)
+        windows.assert_not_called()
 
-    def test_without_it_only_the_cpu_hears(self):
-        env = {key: value for key, value in os.environ.items() if key != 'HEARD_GPU'}
-        with patch.dict(os.environ, env, clear=True):
-            self.assertEqual(r.hearers(), [False] * r.HEARD_AT_ONCE)
-
-    def test_the_cpu_gives_way_and_the_gpu_does_not(self):
-        heard = []
-        def answer(command, **kwargs):
-            heard.append(command[:3])
-            return argparse.Namespace(stdout=b'0\tword\n')
+    def replays(self, run, args, new):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
-                patch.object(r, 'hearers', return_value=[False]), patch.object(r, 'as_the_phone_hears', return_value=Sound()), \
-                patch.object(r, 'heard_binary', side_effect=lambda gpu: Path('gpu' if gpu else 'cpu')), patch.object(r, 'model_file', return_value=Path('tiny')), \
-                patch.object(r, 'sung_language', return_value='en'), patch.object(r.subprocess, 'run', side_effect=answer):
-            r.windows('song', Path('song.wav'), 8000)
-        self.assertEqual(heard, [['nice', '-n', '10']])
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r, 'hear_asked', side_effect=new) as heard, \
+                patch.object(r, 'score', return_value=None), \
+                patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)) as gradle:
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)])))
+            (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
+            with patch('sys.stdout'):
+                run(args)
+        return gradle.call_count, heard.call_count
 
-    def test_only_a_hearer_on_the_gpu_is_told_to_use_it(self):
-        heard = []
-        def answer(command, **kwargs):
-            heard.append((command[0], kwargs['env'].get('HEARD_GPU')))
-            return argparse.Namespace(stdout=b'0\tword\n')
-        env = {key: value for key, value in os.environ.items() if key != 'HEARD_GPU'}
-        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.dict(os.environ, env, clear=True), \
-                patch.object(r, 'hearers', return_value=[True]), patch.object(r, 'as_the_phone_hears', return_value=Sound()), \
-                patch.object(r, 'heard_binary', side_effect=lambda gpu: Path('gpu' if gpu else 'cpu')), patch.object(r, 'model_file', return_value=Path('tiny')), \
-                patch.object(r, 'sung_language', return_value='en'), patch.object(r.subprocess, 'run', side_effect=answer):
-            r.windows('song', Path('song.wav'), 8000)
-        self.assertEqual(heard, [('gpu', '1')])
+    def test_all_replays_until_nothing_new_is_asked(self):
+        args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='')
+        self.assertEqual(self.replays(r.run_all, args, [2, 1, 0]), (3, 3))
+
+    def test_all_hears_nothing_for_another_set(self):
+        args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.other')
+        self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
+
+    def run_args(self, **changed):
+        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, gradle='fake-gradle'), **changed})
+
+    def test_one_song_replays_until_nothing_new_is_asked(self):
+        self.assertEqual(self.replays(r.run, self.run_args(), [1, 0]), (2, 2))
+
+    def test_one_song_on_another_model_hears_nothing(self):
+        self.assertEqual(self.replays(r.run, self.run_args(model='base-q5_1'), []), (1, 0))
+
+    def test_a_second_play_asks_too(self):
+        with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
+                tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+            r.run(self.run_args(behind_again=500))
+        heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'])
 
 
 class ReplayAllTest(unittest.TestCase):

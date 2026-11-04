@@ -3,7 +3,7 @@
 far from where each line is really sung the app showed it.
 
   python3 scripts/syncreplay/syncreplay.py set [--cached]        # find and prep the song set
-  python3 scripts/syncreplay/syncreplay.py all                   # one replay, per-song and overall table
+  python3 scripts/syncreplay/syncreplay.py all                   # replays, hearing what they ask for; per-song and overall table
   python3 scripts/syncreplay/syncreplay.py prep ID LYRICS.json   # once per recording: see below
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
@@ -36,16 +36,15 @@ they match does the replay stand for the phone.
 For ROCm Demucs only, set DEMUCS_PYTHON to a ROCm Python and DEMUCS_DEVICE=cuda;
 without these it uses the current Python on CPU. Set WHISPER_PYTHON to a ROCm Python with openai-whisper for
 truth on the GPU: it hears each song twice and keeps the lines both time alike, in about the time the CPU takes
-to hear it once (measurements.md). Set HEARD_GPU to have the GPU hear too, alongside the CPU
-(with CXXFLAGS for where the Vulkan headers are, the first time).
+to hear it once (measurements.md). Hearing stays on CPU, as it stands for the phone's.
 `set --cached` resumes the existing set without another live search. Prep keeps truth for unchanged lyrics
-and checkpoints every heard window atomically, so an interrupted song resumes too.
+and checkpoints every heard window atomically, so an interrupted song resumes too. Prep hears only every 20 s,
+and a replay hears the rest it asks for, keeping it, so a change to the app's timing hears only what's new.
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
 import json
 import os
-import queue
 import shutil
 import re
 import shlex
@@ -64,8 +63,9 @@ HEARD = OUT / "heard"
 APP_MODEL = "tiny-q5_1"
 # Each while is heard on its own, on one thread, so how many at once only changes how long it takes.
 HEARD_AT_ONCE = max(1, (os.cpu_count() or 4) - 2)
-# More at once on the GPU doesn't hear more: 3, 6 and 10 at once all heard 0.6 to 0.8 stretches a second (measurements.md).
-HEARD_ON_THE_GPU_AT_ONCE = 3
+# Songs at once when a replay asks for more, as each has only a few stretches to hear.
+SONGS_HEARD_AT_ONCE = 4
+SEED_EVERY = 20
 LANGUAGE_SEGMENTS = 4
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
 # What the app hears at once, and at the start of a song, in ms.
@@ -91,17 +91,11 @@ def audio(path, kind="f32le"):
     return np.frombuffer(raw, np.float32) if kind == "f32le" else np.frombuffer(raw, np.int16).astype(np.float32) / 32768
 
 
-def heard_binary(gpu=False):
-    folder = HEARD.with_name("heard-gpu") if gpu else HEARD
-    if not (folder / "heard").exists():
-        subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(folder), "-DCMAKE_BUILD_TYPE=Release"] + (["-DGGML_VULKAN=ON"] if gpu else []), check=True)
-        subprocess.run(["cmake", "--build", str(folder), "-j", "4"], check=True)
-    return folder / "heard"
-
-
-def hearers():
-    """Who hears at once, True for one on the GPU: with HEARD_GPU, those as well as the CPU's, as each takes the stretches left when it's free."""
-    return [True] * (HEARD_ON_THE_GPU_AT_ONCE if os.environ.get("HEARD_GPU") else 0) + [False] * HEARD_AT_ONCE
+def heard_binary():
+    if not (HEARD / "heard").exists():
+        subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
+        subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
+    return HEARD / "heard"
 
 
 def model_file(model):
@@ -134,34 +128,30 @@ def as_the_phone_hears(path):
     return (byte * 256 / 32768).astype(np.float32)
 
 
-def windows(song, wav, length, model=APP_MODEL, clean=False):
+def seed(starts):
+    """What prep hears, so a replay has something near wherever it asks, and knows how long the song is."""
+    return sorted(set(starts[::SEED_EVERY] + starts[-1:]))
+
+
+def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     """What whisper.cpp hears with `model` in each `length` ms from every STEP_MS, as the app hears it,
     or, `clean`, as it would from the sound played itself (AudioPlaybackCapture), 16 bits as it is."""
     out = heard_file(song, length, f"{model}.clean" if clean else model)
     done = json.loads(out.read_text()) if out.exists() else {}
     a = audio(wav) if clean else as_the_phone_hears(wav)
-    free = queue.Queue()
-    for gpu in hearers():
-        free.put(gpu)
-    binaries = {gpu: heard_binary(gpu) for gpu in set(free.queue)}
+    binary = heard_binary()
     weights = model_file(model)
-    starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
+    starts = list(range(0, len(a) // 16 - length, STEP_MS))
+    starts = [s for s in (wanted(starts) if wanted else starts) if str(s) not in done]
     language = sung_language(song)
 
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
-        gpu = free.get()
-        env = {key: value for key, value in os.environ.items() if key != "HEARD_GPU"}
-        try:
-            # A model that can't run hears nothing, so it fails here rather than passing for silence.
-            # The GPU needs little of the CPU, but can't go on without it, so only the CPU's hearers give way to everything else.
-            text = subprocess.run(([] if gpu else ["nice", "-n", "10"]) + [str(binaries[gpu]), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True,
-                                  env={**env, "HEARD_THREADS": "1", **({"HEARD_GPU": "1"} if gpu else {})}).stdout.decode("utf-8", "replace")
-        finally:
-            free.put(gpu)
+        # A model that can't run hears nothing, so it fails here rather than passing for silence.
+        text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
-    with ThreadPoolExecutor(free.qsize()) as pool:
+    with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
         for start, words in pool.map(hear, starts):
             done[str(start)] = words
             atomic_text(out, json.dumps(done))
@@ -305,7 +295,25 @@ def prep(args):
         measured(args.id, "demucs", lambda: separated_voice(args.id, wav))
         measured(args.id, "truth", lambda: truth(args.id, wav, [text for _, text in lyrics if text.strip()]))
     for length in LENGTHS:
-        measured(args.id, f"heard{length // 1000}", lambda: windows(args.id, wav, length))
+        measured(args.id, f"heard{length // 1000}", lambda: windows(args.id, wav, length, wanted=seed))
+
+
+def hear_asked(song, replays):
+    """Hears each stretch these replays of the song asked for and got only something near to: how many new ones.
+    What's heard in one decides what's asked next, so it takes a few replays to settle (measurements.md)."""
+    plays = [json.loads((OUT / name).read_text()) for name in replays if (OUT / name).exists()]
+    new = 0
+    for length in LENGTHS:
+        asked = [h["from"] for play in plays for h in play.get("heard", []) if h["seconds"] * 1000 == length]
+        if not asked:
+            continue
+        done = json.loads(heard_file(song, length, APP_MODEL).read_text())
+        last = max(map(int, done))
+        missing = sorted({min(max(0, (at + STEP_MS // 2) // STEP_MS * STEP_MS), last) for at in asked} - set(map(int, done)))
+        if missing:
+            windows(song, OUT / f"{song}.wav", length, wanted=lambda starts, missing=missing: [s for s in missing if s in starts])
+            new += len(missing)
+    return new
 
 
 def run(args):
@@ -315,13 +323,17 @@ def run(args):
     replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
-    asked.write_text(json.dumps(replay))
-    try:
-        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
-    finally:
-        asked.unlink()
-    if done.returncode:
-        sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+    plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
+    while True:
+        asked.write_text(json.dumps(replay))
+        try:
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        finally:
+            asked.unlink()
+        if done.returncode:
+            sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+        if args.model != APP_MODEL or not hear_asked(args.id, plays):
+            break
     shown = score(args)
     if phone_lit is not None:
         compare(phone_lit, shown)
@@ -600,7 +612,7 @@ def complete(song):
         if not path.exists():
             return False
         done = json.loads(path.read_text())
-        if any(str(start) not in done for start in range(0, milliseconds - length, STEP_MS)):
+        if any(str(start) not in done for start in seed(list(range(0, milliseconds - length, STEP_MS)))):
             return False
     return True
 
@@ -618,14 +630,22 @@ def run_all(args):
     asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
     names = OUT / "replay.songs"
-    names.write_text("\n".join(songs) + "\n")
-    try:
-        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
-    finally:
-        asked.unlink()
-        names.unlink()
-    if done.returncode:
-        sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+    wanted = asked.read_text()
+    while True:
+        asked.write_text(wanted)
+        names.write_text("\n".join(songs) + "\n")
+        try:
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        finally:
+            asked.unlink()
+            names.unlink()
+        if done.returncode:
+            sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+        if args.heard:
+            break
+        with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
+            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from0.shown.json"]), songs)):
+                break
     titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
     totals = dict(lines=0, close=0, on=0, dark=0, early=0)
     all_lags = []

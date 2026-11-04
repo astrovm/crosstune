@@ -105,9 +105,25 @@ Replays of 23 songs, 581 scored lines, with an unchanged app:
 
 So a coarser grid costs about 2 points, more than two runs differ, and prep stays at every second.
 
-One 20-second stretch took 1.2 to 2.3 s on the GPU with 0.5 s of CPU, and 6.3 to 6.9 s with 4.3 s of CPU on the CPU, 5 times
-faster. But more at once doesn't hear more on the GPU: 3, 6 and 10 at once heard 0.8, 0.6 and 0.8 stretches a second, with other GPU
-work running. 10 at once on the CPU heard about 1.3 a second under load. So the GPU hears alongside the CPU rather than instead of it.
+On the GPU, Vulkan's words don't stand in for the CPU's. One 20-second stretch took 1.2 to 2.3 s, against 6.3 to 6.9 s on the CPU,
+but 3, 6 and 10 at once heard only 0.8, 0.6 and 0.8 stretches a second with other GPU work running, against about 1.3 for 10 on the CPU.
+Replayed with the GPU's words for each stretch asked, against the CPU's: 139 lines within 0.3 s rather than 145, 281 within 0.5 s rather
+than 291, 91 dark rather than 86, 50 of 857 lit lines moved over 0.5 s, and 64 of 231 stretches had the same words. On Bad Luck, the only
+song compared, the replay on the CPU is a median 0.02 s from the phone, at worst 0.1 s. So hearing stays on the CPU.
+
+## Hearing only what a replay asks for
+
+The same 23 songs, starting from a stretch every 20 s, then hearing what each replay asked for, against every second:
+
+| Round | New stretches | Stretches so far, of 12,054 | Lines lit in both | Lit in one only | Worst difference |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 192 | 860 | 844 | 42 | 23.2 s |
+| 2 | 30 | 890 | 868 | 10 | 2.1 s |
+| 3 | 9 | 899 | 868 | 0 | 1.1 s |
+| 4 | 0 | 899 | 868 | 0 | 0.1 s |
+
+Settled, it's as close to every second as two runs of every second are to each other (868 lit in both, worst 0.1 s),
+from 7.5% of the stretches. So prep hears every 20 s, and replays hear the rest. Each round was 73 to 101 s under load.
 
 ## Limits of the timing table
 
