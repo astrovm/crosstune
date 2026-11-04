@@ -1,13 +1,15 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name('syncreplay.py'))
 r = importlib.util.module_from_spec(spec)
@@ -27,6 +29,24 @@ class ResumeTest(unittest.TestCase):
             (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
             (r.OUT / 'fake.heard20.json').write_text('{}')
             self.assertEqual([], r.prepped())
+
+class HeardBinaryTest(unittest.TestCase):
+    def test_songs_heard_at_once_build_the_hearing_program_once(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'HEARD', Path(directory)):
+            program = Path(directory) / 'heard'
+            builds = []
+
+            def build(command, check):
+                builds.append(command)
+                # Long enough for the others to find no program yet.
+                threading.Event().wait(0.05)
+                program.write_text('')
+
+            with patch.object(r.subprocess, 'run', side_effect=build), ThreadPoolExecutor(4) as pool:
+                found = list(pool.map(lambda _: r.heard_binary(), range(4)))
+        self.assertEqual([program] * 4, found)
+        self.assertEqual(2, len(builds))  # Set up and built, once.
+
 
 class CheckpointTest(unittest.TestCase):
     def test_interrupted_hearing_keeps_and_resumes_completed_window(self):
@@ -159,6 +179,7 @@ class TableTest(unittest.TestCase):
             (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(
                 lines=['One', 'Two', 'Three', 'Unmatched'],
                 shown=[dict(line=0, at=10000), dict(line=1, at=11000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One'], [1, 'Two'], [2, 'Three'], [3, 'Unmatched']]))
             (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=start)) + '\n'
                                                        for n, start in enumerate([10.2, 20, 30])))
             output = io.StringIO()
@@ -211,6 +232,7 @@ class HeardWhenAskedTest(unittest.TestCase):
                 patch.object(r, 'score', return_value=None), \
                 patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)) as gradle:
             (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[1000, 'One']]))
             (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
             with patch('sys.stdout'):
                 run(args)
@@ -271,6 +293,7 @@ class ReplayAllTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
                 patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay):
             (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[0, 'One']]))
             (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
             with patch('sys.stdout'):
                 r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.thin5'))
@@ -362,6 +385,82 @@ class TruthTest(unittest.TestCase):
                 patch.object(r, 'write_truth') as wrote:
             r.truth('song', Path('song.wav'), lines)
         wrote.assert_called_once_with('song', lines, {1: 12.0})
+
+
+class WordsShownTest(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        patcher = patch.object(r, 'OUT', Path(directory.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        (r.OUT / 'song.lyrics.json').write_text(json.dumps([[1000, 'One two, three'], [2000, ''], [3000, 'Four five'], [4000, 'Six seven eight'], [5000, 'Nine ten']]))
+        (r.OUT / 'song.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, text='', start=at)) + '\n' for n, at in ((0, 1.0), (1, 3.1), (2, 4.2), (3, 5.3))))
+
+    def test_truth_follows_a_lines_words_not_its_number(self):
+        # Other words for the song, with a line more up front, broken elsewhere and spelt otherwise.
+        lines = ['New line here', 'One two three', 'Four, five', '', 'Six seven', 'eight', 'Nine ten']
+        self.assertEqual({1: 1.0, 2: 3.1, 3: 4.2, 5: 5.3}, r.sung_lines('song', lines))
+
+    def test_the_same_words_keep_their_truth(self):
+        self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', ['One two, three', '', 'Four five', 'Six seven eight', 'Nine ten']))
+
+    def test_words_with_no_lines_are_all_dark(self):
+        self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', []))
+
+    def test_words_kept_are_this_songs_though_the_next_songs_came_after(self):
+        kept = r.OUT / 'kept'
+        kept.mkdir()
+        (kept / 'lyrics.json').write_text(json.dumps([
+            ['this', json.dumps(dict(lines=[[1000, 'One two three'], [3000, 'Four five']]))],
+            ['next', json.dumps(dict(lines=[[1000, 'Another song altogether']]))],
+        ]))
+        self.assertEqual('One two three', r.found_words('song', kept)['lines'][0][1])
+
+
+class PhoneTest(unittest.TestCase):
+    def test_a_title_keeps_its_commas(self):
+        session = 'package=app\nstate=PlaybackState {state=PLAYING(3), position=2041, buffered position=0, speed=1.0, updated=5000, actions=1}\nmetadata: size=9, description=Police, The   Magic Audio Flac, uploader, uploader\n'
+        with patch.object(r, 'shell', return_value=session):
+            self.assertEqual(('Police, The   Magic Audio Flac', 5000 - 2041), r.playing('app'))
+
+    def test_the_app_may_name_a_song_shorter_than_the_music_app(self):
+        self.assertTrue(r.names('<node text="Magic Is Every Little Thing" />', 'Police, The   Magic Is Every Little Thing Audio Flac'))
+        self.assertTrue(r.names('<node text="Jump" />', 'Jump'))
+
+    def test_a_word_or_the_history_on_the_main_screen_is_not_the_song(self):
+        self.assertFalse(r.names('<node text="Magic" />', 'Police, The   Magic Is Every Little Thing Audio Flac'))
+        self.assertFalse(r.names('<node text="Link or song" /><node text="Jump" />', 'Jump'))
+
+    def test_a_line_sung_after_the_check_stopped_isnt_dark(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
+                patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
+            (r.OUT / 'song.wav').write_text('')
+            (r.OUT / 'song.lyrics.json').write_text(json.dumps([[1000, 'One'], [90000, 'Two']]))
+            (r.OUT / 'song.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n' + json.dumps(dict(line=1, start=90.0)) + '\n')
+            kept = r.OUT / 'kept'
+            kept.mkdir()
+            (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\n')
+            r.score_phone('song', kept)
+        self.assertIn('never lit 0', said.call_args_list[-1].args[0])
+
+    def test_the_app_keeping_nothing_it_heard_leaves_its_clock_as_it_said(self):
+        # Words timed word by word don't need hearing, so a check can end with nothing kept. Plastic Love did.
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print') as said:
+            self.assertEqual(0, r.behind(MagicMock(), Path(directory), [(0, 100, 1000)]))
+        self.assertIn('heard nothing', said.call_args_list[-1].args[0])
+
+    def test_no_line_with_truth_lit_still_scores(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
+                patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
+            (r.OUT / 'song.wav').write_text('')
+            (r.OUT / 'song.lyrics.json').write_text(json.dumps([[1000, 'One'], [2000, 'Two']]))
+            (r.OUT / 'song.truth.jsonl').write_text(json.dumps(dict(line=1, start=2.0)) + '\n')
+            kept = r.OUT / 'kept'
+            kept.mkdir()
+            (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\nlit -1 at 200 pos 3000\n')
+            r.score_phone('song', kept)
+        self.assertIn('never lit 1', said.call_args_list[-1].args[0])
 
 
 if __name__ == '__main__':
