@@ -53,8 +53,11 @@ internal interface Milkdrop {
     /** The first [count] of [samples], 8-bit mono, centred on 128. */
     fun hear(samples: ByteArray, count: Int)
     fun draw()
-    /** Darkens what was just drawn by [shade], from 0, as it is, to 1, black. */
-    fun darken(shade: Float)
+    /**
+     * Darkens what was just drawn by [shade], from 0, as it is, to 1, black, then holds every color
+     * at or under [ceiling], so the brightest of it stays under words; 1 lets it be as bright as it got.
+     */
+    fun darken(shade: Float, ceiling: Float)
     /** Waits till what's drawn is on the screen, to time it. */
     fun finish()
     fun close()
@@ -87,22 +90,34 @@ internal class NativeMilkdrop(private val context: Context) : Milkdrop {
 
     private var width = 0
     private var height = 0
-    /** The shade's program and where its darkness goes, made once per GL context; 0 till then. */
+    /** The shade's program and where its color goes, made once per GL context; 0 till then. */
     private var shadeProgram = 0
-    private var shadeDarkness = 0
+    private var shadeColor = 0
 
-    /** A black triangle over the whole frame, its darkness blended over what's there. */
-    override fun darken(shade: Float) {
+    /**
+     * A black triangle over the whole frame, its darkness blended over what's there, then one of the
+     * ceiling's gray that only takes over where what's there is brighter. Both by blending, which
+     * costs a phone or a TV next to nothing, rather than by reading the frame back to curve it.
+     */
+    override fun darken(shade: Float, ceiling: Float) {
         if (shadeProgram == 0) shadeProgram = shadeProgram()
         if (shadeProgram == 0) return
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, width, height)
         GLES30.glUseProgram(shadeProgram)
-        GLES30.glUniform1f(shadeDarkness, shade)
         GLES30.glBindVertexArray(0)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+        if (shade > 0f) {
+            GLES30.glUniform4f(shadeColor, 0f, 0f, 0f, shade)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+        }
+        if (ceiling < 1f) {
+            GLES30.glBlendEquation(GLES30.GL_MIN)
+            GLES30.glUniform4f(shadeColor, ceiling, ceiling, ceiling, 1f)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+            GLES30.glBlendEquation(GLES30.GL_FUNC_ADD)
+        }
         // As projectM found it, so its next frame draws as it expects.
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glUseProgram(0)
@@ -120,7 +135,7 @@ internal class NativeMilkdrop(private val context: Context) : Milkdrop {
         val linked = IntArray(1)
         GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, linked, 0)
         if (linked[0] == 0) return 0
-        shadeDarkness = GLES30.glGetUniformLocation(program, "darkness")
+        shadeColor = GLES30.glGetUniformLocation(program, "shadeColor")
         return program
     }
 
@@ -142,9 +157,9 @@ internal class NativeMilkdrop(private val context: Context) : Milkdrop {
 void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0, 0.0, 1.0); }"""
         private const val SHADE_COLOR = """#version 300 es
 precision mediump float;
-uniform float darkness;
+uniform vec4 shadeColor;
 out vec4 color;
-void main() { color = vec4(0.0, 0.0, 0.0, darkness); }"""
+void main() { color = shadeColor; }"""
 
         /** Missing, e.g. on a phone whose processor it wasn't built for, there are just no visuals. */
         private val loaded = runCatching { System.loadLibrary("milkdrop") }.isSuccess
@@ -476,6 +491,10 @@ internal class MilkdropRenderer(
     @Volatile
     var shade = 0f
 
+    /** How bright the brightest of them can be, from the main thread; 1 as bright as they get. */
+    @Volatile
+    var ceiling = 1f
+
     /** Found too slow, once or twice, dropped, or sized, till [settings] have caught up. */
     private val slowOnce = mutableSetOf<String>()
     private val slow = mutableSetOf<String>()
@@ -538,7 +557,7 @@ internal class MilkdropRenderer(
         }
         listen()
         milkdrop.draw()
-        shade.takeIf { it > 0f }?.let(milkdrop::darken)
+        if (shade > 0f || ceiling < 1f) milkdrop.darken(shade, ceiling)
         // Waited for, so a frame's time is how long the phone took to draw it, not just to be asked to.
         milkdrop.finish()
     }
@@ -1013,7 +1032,7 @@ private class GlThread(private val target: Any, private val renderer: MilkdropRe
  * from then on each time [drops] does, and pick as [settings] say. With [only], just that one shows.
  * [onFps] is told each second, on the main thread, how many frames a second the phone could draw it at.
  * [hears] is whether Android lets them hear what plays, which needs the microphone. [shade] darkens
- * them, so words read over them. [behind] puts them behind the window, filling it, as behind the
+ * them and [ceiling] holds their brightest down, so words read over them. [behind] puts them behind the window, filling it, as behind the
  * words; otherwise they're in among the views, clipped and moved like any other.
  */
 internal data class VisualsPlay(
@@ -1024,6 +1043,7 @@ internal data class VisualsPlay(
     val onFps: (Int) -> Unit = {},
     val hears: Boolean = true,
     val shade: Float = 0f,
+    val ceiling: Float = 1f,
     val behind: Boolean = false
 )
 
@@ -1072,6 +1092,7 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
         factory = { if (play.behind) MilkdropBehind(it, renderer) else MilkdropView(it, renderer) },
         update = {
             renderer.shade = play.shade
+            renderer.ceiling = play.ceiling
             renderer.settings = play.settings
             renderer.skipTo(play.skips)
             renderer.dropTo(play.drops)
