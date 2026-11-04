@@ -461,7 +461,8 @@ def sung_lines(song, lines):
     """When the n-th of [lines] with words is sung, by n. Truth is for the words given to prep; words the app really
     showed may be others, so each line's truth is found by its words. One with no truth isn't scored."""
     given = [line for _, line in json.loads((OUT / f"{song}.lyrics.json").read_text()) if line.strip()]
-    shown = [line for line in lines if line.strip()]
+    # Words with no lines yet, as found untimed, are all dark, as nothing placed them.
+    shown = [line for line in lines if line.strip()] or given
     same = lined_up(given, shown)
     sung = {}
     for row in (OUT / f"{song}.truth.jsonl").read_text().splitlines():
@@ -659,6 +660,12 @@ def score_phone(song_id, kept):
     for k in sorted(sung):
         text = words[next(i for i in nth if nth[i] == k)][:34]
         print(f"{k:2d} sung {sung[k]:6.1f}  " + (f"lit {first[k]:6.1f} lag {lags[k]:+5.1f}  {text}" if k in lags else f"never lit   {text}"))
+    # Truth has only some of the lines: any line timed before the check stopped and never lit is dark too.
+    timed = [(line[0] / 1000, i) for i, line in enumerate(found_words(song_id, kept)["lines"]) if line[1].strip()] if (kept / "lyrics.json").exists() else []
+    lit_lines = {i for i, _, _ in lit}
+    span = (min(pos for i, _, pos in lit if i >= 0) / 1000, played_to) if any(i >= 0 for i, _, _ in lit) else (0, 0)
+    dark = [i for at, i in timed if span[0] <= at <= span[1] and i not in lit_lines]
+    print(f"Lines dark among all timed from the first lit to the end: {len(dark)} of {sum(span[0] <= at <= span[1] for at, _ in timed)}: {dark}")
     print(f"{song_id} on the phone, the app's clock {lag / 1000:.2f} s behind: {sum(abs(x) <= ON_TIME_S for x in lags.values())}/{len(lags)} within {ON_TIME_S} s, "
           f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, median {statistics.median(abs(x) for x in lags.values()):.2f} s; never lit {sum(k not in first for k in sung)}")
     return first, lag
