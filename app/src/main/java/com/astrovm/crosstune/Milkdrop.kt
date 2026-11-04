@@ -753,6 +753,15 @@ internal class MilkdropRenderer(
     private var skipsAsked = skips
     private var skipsDone = skips
 
+    /** Takes up what the screen asks of the visuals now, from the main thread. */
+    fun follow(play: VisualsPlay) {
+        shade = play.shade
+        ceiling = play.ceiling
+        settings = play.settings
+        skipTo(play.skips)
+        dropTo(play.drops)
+    }
+
     /** Moves on to the next preset at the next frame, once for each time [skips] has gone up. */
     fun skipTo(skips: Int) {
         skipsAsked = skips
@@ -1090,13 +1099,7 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
     }
     AndroidView(
         factory = { if (play.behind) MilkdropBehind(it, renderer) else MilkdropView(it, renderer) },
-        update = {
-            renderer.shade = play.shade
-            renderer.ceiling = play.ceiling
-            renderer.settings = play.settings
-            renderer.skipTo(play.skips)
-            renderer.dropTo(play.drops)
-        },
+        update = { renderer.follow(play) },
         modifier = modifier
     )
     }

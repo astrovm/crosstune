@@ -43,6 +43,11 @@ AIM = 4.5
 TOP, BOTTOM = 320, 1990
 # How much of the screen a tall line takes: shorter rows of text are readings.
 WORDS_ROW = 44
+# A made-up song, with something in every band for the presets to react to.
+SURVEY_BEAT = "0.8*sin(2*PI*55*t)*exp(-8*mod(t,0.5))+0.4*sin(2*PI*330*t)*exp(-25*mod(t+0.25,0.5))+0.25*(random(0)*2-1)*exp(-40*mod(t,0.125))+0.25*sin(2*PI*880*t)*sin(2*PI*0.2*t)"
+# A line to come at the usual brightness: its alpha, the visuals' shade with words over them and their ceiling.
+WAS = (0.6, 0.725)
+NOW = (0.85, 0.725, 56 / 255)
 
 
 def adb(*command, stdin=None):
@@ -262,35 +267,46 @@ def report(args):
             print(f"{kind:14}{len(got):7}{got.min():7.2f}{np.percentile(got, 5):7.2f}{np.median(got):8.2f}{(got < AIM).mean() * 100:6.1f}%{(got < 3).mean() * 100:5.1f}%{np.percentile(strokes[kind], 5):11.2f}")
 
 
+def failing(frames, alpha, shade, ceiling=1.0):
+    """Per frame, how much of the screen a line [alpha] bright fails 4.5 to 1 on, with the visuals as [shade] and [ceiling] leave them."""
+    import numpy as np
+    behind = np.minimum(frames.astype(float) * (1 - shade), ceiling * 255)
+    words = np.array([0xED, 0xEA, 0xF4], dtype=float)  # OnNight, as the visuals are always under the dark theme's words
+    a, b = luminance(words * alpha + behind * (1 - alpha)), luminance(behind)
+    return ((np.maximum(a, b) + 0.05) / (np.minimum(a, b) + 0.05) < AIM).mean(axis=(1, 2))
+
+
 def survey(args):
     import numpy as np
     spec = importlib.util.spec_from_file_location("milkdrop_render", ROOT / "scripts/milkdrop-render/render.py")
     render = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(render)
-    thumbs = importlib.util.spec_from_file_location("milkdrop_thumbs", ROOT / "scripts/milkdrop-render/thumbs.py")
-    beat = importlib.util.module_from_spec(thumbs)
-    thumbs.loader.exec_module(beat)
     width, height, seconds, every = 180, 386, 20, render.FPS * 2
     binary = render.build()
     args.frames.mkdir(parents=True, exist_ok=True)
     audio, cues = args.frames / "beat.f32", args.frames / "cues.txt"
-    render.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"aevalsrc='{beat.BEAT}':s=44100:d={seconds + 5}", "-f", "f32le", "-ac", "2", "-ar", "44100", audio])
+    render.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"aevalsrc='{SURVEY_BEAT}':s=44100:d={seconds + 5}", "-f", "f32le", "-ac", "2", "-ar", "44100", audio])
     rows = []
-    # What a line to come, as bright as it was before Issue #688, would need behind it at the usual brightness.
-    usual, fails_over = 0.275, 70
     for name in presets():
         cues.write_text(f"0 {ROOT / 'app/src/main/assets/milkdrop' / (name + '.milk')}\n")
-        made = subprocess.run([str(binary), audio, cues, str(width), str(height), str(seconds * render.FPS), str(render.PREROLL)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False).stdout
-        frames = np.frombuffer(made, dtype=np.uint8)
-        count = frames.size // (width * height * 4)
+        try:
+            made = subprocess.run([str(binary), audio, cues, str(width), str(height), str(seconds * render.FPS), str(render.PREROLL)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=240).stdout
+        except subprocess.TimeoutExpired:
+            print(f"{name}: took too long")
+            continue
+        drawn = np.frombuffer(made, dtype=np.uint8)
+        count = drawn.size // (width * height * 4)
         if not count:
             print(f"{name}: drew nothing")
             continue
-        frames = frames[:count * width * height * 4].reshape(count, height, width, 4)[every - 1::every, ..., :3]
-        rows.append(((frames.max(axis=3) * usual >= fails_over).mean(axis=(1, 2)).max(), name))
-    for share, name in sorted(rows, reverse=True):
-        print(f"{share * 100:5.0f}%  {name}")
-    print(f"{sum(share > 0.05 for share, _ in rows)} of {len(rows)} go over {fails_over} on more than 5% of the screen in some frame")
+        frames = drawn[:count * width * height * 4].reshape(count, height, width, 4)[every - 1::every, ..., :3]
+        rows.append((failing(frames, *WAS).max(), failing(frames, *NOW).max(), name))
+    print("worst frame's share of the screen a line to come fails on: before Issue #688, now")
+    for was, now, name in sorted(rows, reverse=True):
+        print(f"{was * 100:5.0f}% {now * 100:5.0f}%  {name}")
+    for over in (0.05, 0.25, 0.5):
+        print(f"over {over * 100:.0f}% of the screen: {sum(row[0] > over for row in rows)} of {len(rows)} before, {sum(row[1] > over for row in rows)} now")
 
 
 def main():

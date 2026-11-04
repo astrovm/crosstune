@@ -118,6 +118,16 @@ class MilkdropTest {
     }
 
     @Test
+    fun whatTheScreenAsksOfTheVisualsIsWhatTheyDraw() {
+        val milkdrop = FakeMilkdrop()
+        val renderer = renderer(milkdrop)
+        renderer.created()
+        renderer.follow(VisualsPlay(shade = 0.5f, ceiling = 0.3f))
+        renderer.frame()
+        assertEquals(listOf("draw", "darken 0.5 0.3"), milkdrop.calls.takeLast(2))
+    }
+
+    @Test
     fun aCeilingAloneStillHoldsTheBrightestDown() {
         val milkdrop = FakeMilkdrop()
         val renderer = renderer(milkdrop)
