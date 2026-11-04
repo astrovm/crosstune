@@ -929,7 +929,7 @@ class ListeningTest {
             // Kept, the next network comes while it's still giving up on the one that went away; what
             // it asks first, asked again, is it trying on the new one.
             if (keeping.get() && !first.compareAndSet(null, url) && url == first.get()) back.set(true)
-            if (keeping.get() && first.get() == url && !back.get()) android.os.Handler(android.os.Looper.getMainLooper()).post { controllerModel().unmeteredChanged(true) }
+            if (keeping.get() && first.get() == url && !back.get()) networkBackNow()
             if (!back.get()) throw IOException("offline")
             FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
         }
@@ -941,6 +941,20 @@ class ListeningTest {
         keeping.set(true)
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
+    }
+
+    /**
+     * The next network, told to the app on its own thread before the request asked on the last one
+     * fails: told after, it'd only start over, and going round again wouldn't be what's tried.
+     */
+    private fun networkBackNow() {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return controllerModel().unmeteredChanged(true)
+        val told = java.util.concurrent.CountDownLatch(1)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            controllerModel().unmeteredChanged(true)
+            told.countDown()
+        }
+        assertTrue(told.await(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS))
     }
 
     @Test

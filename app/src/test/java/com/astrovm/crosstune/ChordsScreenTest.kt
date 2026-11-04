@@ -181,6 +181,19 @@ class ChordsScreenTest {
     }
 
     @Test
+    fun chordsStayOverTheWordsShownInKanaOrLatinLetters() {
+        val text = "夜空の星を見上げて君を想う夜"
+        val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を見上げて君を想う夜"))
+        val reading = LineReading(parts, "よぞらのほしをみあげてきみをおもうよる", "yozora no hoshi wo miagete kimi wo omou yoru")
+        val chords = ChordsState(on = true, sheet = ChordSheet(listOf(SheetLine(text, listOf(Chord(0, "Am"), Chord(3, "F")))), capo = 0, site = ChordSite.U_FRET, url = "https://www.ufret.jp/song.php?data=1"))
+        var learning by mutableStateOf(Learning(script = Script.JAPANESE, lines = listOf(reading), wordsAs = WordsAs.KANA))
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(UiState(lyricsFor = song, lyrics = text, lyricLines = listOf(LyricLine(1_000, text)), chords = chords, learning = learning), ScreenActions()) } }
+        assertEquals(listOf("Am", "F"), chordsOver("よぞらのほし" + "を見上げて君を想う夜"))
+        learning = learning.copy(wordsAs = WordsAs.LATIN)
+        assertEquals(listOf("Am", "F"), chordsOver(reading.romanized))
+    }
+
+    @Test
     fun readingsAndChordsKeepLightingTheWordsAsTheyAreSung() {
         val text = "夜空の星を見上げて君を想う夜"
         val parts = listOf(Ruby("夜空", "よぞら"), Ruby("の"), Ruby("星", "ほし"), Ruby("を見上げて君を想う夜"))

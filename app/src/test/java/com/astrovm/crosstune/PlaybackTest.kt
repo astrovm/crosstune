@@ -1045,6 +1045,46 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongOpensInAnAppThatTakesOnlyItsOwnLinksThroughOneOfThose() {
+        // Qobuz's app opens open.qobuz.com, as Qobuz shares, and no web player link (#673).
+        shadowOf(app).checkActivities(true)
+        val qobuz = ComponentName(MusicService.QOBUZ.packageName, "${MusicService.QOBUZ.packageName}.DeepLinkActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(qobuz)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            qobuz, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
+        )
+        assertTrue(playback.openSong(MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/12"))
+        assertEquals("https://open.qobuz.com/track/12", shadowOf(app).nextStartedActivity.dataString)
+    }
+
+    @Test
+    fun linksAnAppDoesntOpenAreTriedAfterInTheFormItDoes() {
+        val qobuz = MusicService.QOBUZ.packageName
+        assertEquals(
+            listOf(qobuz to "https://play.qobuz.com/search?q=Song%20Band", qobuz to "https://open.qobuz.com/search/Song%20Band"),
+            MusicService.QOBUZ.appLinks("https://play.qobuz.com/search?q=Song%20Band")
+        )
+        assertEquals("https://open.qobuz.com/album/studio2", MusicService.QOBUZ.appLinks("https://play.qobuz.com/album/studio2?ref=x").last().second)
+        assertEquals("https://open.qobuz.com/search", MusicService.QOBUZ.appLinks("https://play.qobuz.com/search").last().second)
+        assertEquals(
+            "deezer-query://www.deezer.com/search?query=Song%20Band%20%26%20Co",
+            MusicService.DEEZER.appLinks(MusicService.DEEZER.searchUrl("Song Band & Co")).last().second
+        )
+        assertEquals("tidal://search?q=Song%20Band%20%26%20Co", MusicService.TIDAL.appLinks(MusicService.TIDAL.searchUrl("Song Band & Co")).last().second)
+        // What the apps open themselves goes as it is, and nothing else.
+        for (link in listOf(
+            "https://www.deezer.com/track/1", "https://www.deezer.com/search", "https://www.deezer.com/en/search/x", "https://deezer.page.link/x",
+            "https://listen.tidal.com/search/x", "https://listen.tidal.com/search", "https://tidal.com/browse/track/1", "deezer://www.deezer.com/search/x"
+        )) {
+            val service = if ("deezer" in link) MusicService.DEEZER else MusicService.TIDAL
+            assertEquals(link, listOf(service.packageName to link), service.appLinks(link))
+        }
+        assertEquals(listOf(qobuz to "https://open.qobuz.com/track/12"), MusicService.QOBUZ.appLinks("https://open.qobuz.com/track/12"))
+        assertEquals(listOf(MusicService.SPOTIFY.packageName to "https://play.qobuz.com/track/12"), MusicService.SPOTIFY.appLinks("https://play.qobuz.com/track/12"))
+        assertEquals(listOf(MusicService.DEEZER.packageName to "https://listen.tidal.com/search?q=x"), MusicService.DEEZER.appLinks("https://listen.tidal.com/search?q=x"))
+    }
+
+    @Test
     fun aSpotifyPagePlayingInABrowserIsItsSong() {
         allow()
         sounding()

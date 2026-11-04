@@ -1,8 +1,10 @@
-Practice cards write words as the lyrics do, unless you pick a way for a side.
+Practice cards write words as the lyrics do, or as you pick.
 Tap a playing card's sound to stop it.
-In kana, only kanji change: katakana stays, or turns hiragana if you like.
-Play opens the song itself, not a fan's upload, even as a single or in two languages.
-The player no longer waits for a song the music app already plays.
-Japanese songs named in English get their chords.
-Visuals draw as sharp as your phone keeps up with.
-Lyrics light up again sooner and are timed better.
+In kana, only kanji change unless you pick hiragana.
+Play opens the song itself, not a fan's upload.
+The player won't wait for a song already playing.
+More Japanese songs get chords, also over kana and Latin.
+Lyrics in all capitals read normally.
+Visuals are as sharp as your phone allows.
+Fewer lyrics stay dark, and they're better timed.
+Qobuz opens in its app, and Deezer and TIDAL searches too.
