@@ -346,6 +346,8 @@ def run(args):
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
     replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
+    if args.like_phone:
+        replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
     plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
@@ -371,14 +373,19 @@ def like_phone(args):
     visualizer. Gives when the phone lit each line, to hold the replay to."""
     kept = OUT / "phone" / args.id
     log = (kept / "log.txt").read_text()
-    said = re.search(r"said (\d+) at \d+ playing true", log)
+    said = re.search(r"said (\d+) at (\d+) playing true", log)
     args.start = int(said.group(1)) if said else 0
     lit, args.behind = score_phone(args.id, kept)
     args.behind = round(args.behind)
     # Each while is heard right after the last is worked out, so the gaps between them are the working out.
     whiles = sorted((int(re.search(r"heard-(\d+)", f.name).group(1)), f.stat().st_size // 2 * 1000 // 16000) for f in kept.glob("heard-*.pcm"))
     gaps = [after - (start + ms) for (start, ms), (after, _) in zip(whiles, whiles[1:])]
-    args.work = round(statistics.median(gaps)) if gaps else args.work
+    # The shortest is the working out alone. The rest also wait for what's still being worked out from before,
+    # so the phone took 3.8 s over one while and 27 s over the next, and each is replayed as it went.
+    args.work = min(gaps) if gaps else args.work
+    args.works = gaps
+    # Where in the song each while began, as what's heard depends on it: the phone's first began 1.3 s later than the replay's.
+    args.whiles = [args.start + start - int(said.group(2)) + args.behind for start, _ in whiles] if said else []
     # Only playback capture logs what it captured; the visualizer's sound is heard as `hear` makes it by default.
     clean = "captured " in log
     args.model = f"{APP_MODEL}.clean" if clean else APP_MODEL
@@ -388,7 +395,7 @@ def like_phone(args):
     if not heard_file(args.id, LENGTHS[0], args.model).exists():
         print(f"The phone heard the sound played itself, and the replay hears through the visualizer: for the same, first `hear {args.id} --clean`.")
         args.model = APP_MODEL
-    print(f"As on the phone: from {args.start} ms, the clock {args.behind} ms behind, {args.work} ms to work out each while, "
+    print(f"As on the phone: from {args.start} ms, the clock {args.behind} ms behind, {args.works or args.work} ms to work out each while, "
           f"hearing {'the sound played (Shizuku)' if clean else 'through the visualizer'}")
     return lit
 

@@ -100,6 +100,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
         workMs = asked.optLong("work", WORK_MS)
+        workedOut = asked.optJSONArray("works")?.let { works -> (0 until works.length()).map { works.getLong(it) } }.orEmpty()
+        whilesFrom = asked.optJSONArray("whiles")?.let { whiles -> (0 until whiles.length()).map { whiles.getLong(it) } }.orEmpty()
         val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
         // The words as the app really found them, when kept, over those prep was given.
         val kept = File(dir, "$song.found.json").takeIf { it.exists() }?.let { JSONObject(it.readText()) }
@@ -215,6 +217,12 @@ class SyncReplayTest(private val name: String, private val index: Int) {
     /** How long the phone takes to work out the words in what it heard, after hearing it. */
     private var workMs = WORK_MS
 
+    /** How long the phone took over each whole while, one by one, when the replay is held to a phone run. */
+    private var workedOut = emptyList<Long>()
+
+    /** Where in the song the phone began each while, when the replay is held to a phone run. */
+    private var whilesFrom = emptyList<Long>()
+
     /** How far the music app's clock is behind what it plays, this time. */
     private var behindMs = 0L
 
@@ -227,26 +235,30 @@ class SyncReplayTest(private val name: String, private val index: Int) {
      */
     private inner class Replayed(private val heard: Map<Int, Map<Long, List<Pair<Long, String>>>>) : SingingHearing {
         override val missesModel = false
+        private var whiles = 0
 
         override suspend fun fetchModel() = true
 
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? = coroutineScope {
-            val at = SystemClock.elapsedRealtime()
             // What's heard is where the song really is, ahead of the app's clock.
-            val from = playback.playing.value!!.clock.positionAt(at) + behindMs
+            fun position() = playback.playing.value!!.clock.positionAt(SystemClock.elapsedRealtime()) + behindMs
+            whilesFrom.getOrNull(whiles)?.let { delay(maxOf(0L, it - position())) }
+            val at = SystemClock.elapsedRealtime()
+            val from = position()
             if (first != null) launch {
                 val again = SingingListener.AGAIN_SECONDS * 1000L
                 if (first(heard(SingingListener.FIRST_SECONDS, at, from))) first(heard(SingingListener.FIRST_SECONDS, at + again, from + again))
             }
-            heard(SingingListener.SECONDS, at, from)
+            // A while waits for what's still being worked out from before it, so the phone took 3.8 s over one and 27 s over the next.
+            heard(SingingListener.SECONDS, at, from, workedOut.getOrElse(whiles++) { workMs })
         }
 
         /** What was heard in the [seconds] from [from] in the song, at [at], once it's worked out. */
-        private suspend fun heard(seconds: Int, at: Long, from: Long): Sung {
+        private suspend fun heard(seconds: Int, at: Long, from: Long, work: Long = workMs): Sung {
             val stretches = heard.getValue(seconds)
             val start = stretches.keys.minBy { kotlin.math.abs(it - from) }
             // Worked out once it's all in: working out the words takes as long however much there is, as the model always works on 30 seconds.
-            delay(maxOf(0L, at + seconds * 1000L + workMs - SystemClock.elapsedRealtime()))
+            delay(maxOf(0L, at + seconds * 1000L + work - SystemClock.elapsedRealtime()))
             heardLog.put(JSONObject().put("from", from).put("start", start).put("seconds", seconds).put("words", stretches.getValue(start).joinToString(" ") { it.second.trim() }))
             return Sung(at, stretches.getValue(start).filter { it.first >= 0 }.map { (ms, text) -> HeardWord(text.trim(), ms + start - from) }.filter { it.text.isNotEmpty() })
         }
@@ -258,7 +270,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         override fun show(preset: String, smooth: Boolean) = false
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() = Unit
-        override fun darken(shade: Float) = Unit
+        override fun darken(shade: Float, ceiling: Float) = Unit
         override fun finish() = Unit
         override fun close() = Unit
     }
