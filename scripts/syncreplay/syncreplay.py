@@ -545,7 +545,9 @@ def behind(song, kept, lit):
             sys.exit(f"{f.name} is silent: the app heard nothing of the music. Was the media volume 0?")
         n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
         match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
-        loud = np.sqrt(np.convolve(song ** 2, np.ones(len(heard)), "valid")[:len(match)]) + 1e-9
+        # A running sum, as sliding one while over a whole song took minutes for each heard.
+        energy = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
+        loud = np.sqrt(np.maximum(energy[len(heard):] - energy[:-len(heard)], 0))[:len(match)] + 1e-9
         at = int(np.argmax(match / loud)) / 16
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
