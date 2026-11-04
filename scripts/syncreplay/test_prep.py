@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name('syncreplay.py'))
 r = importlib.util.module_from_spec(spec)
@@ -212,6 +212,7 @@ class HeardWhenAskedTest(unittest.TestCase):
                 patch.object(r, 'score', return_value=None), \
                 patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)) as gradle:
             (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)])))
+            (r.OUT / 'fake.lyrics.json').write_text(json.dumps([[1000, 'One']]))
             (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
             with patch('sys.stdout'):
                 run(args)
@@ -391,7 +392,7 @@ class PhoneTest(unittest.TestCase):
         self.assertFalse(r.names('<node text="Link or song" /><node text="Jump" />', 'Jump'))
 
     def test_a_line_sung_after_the_check_stopped_isnt_dark(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=__import__('numpy').zeros(4)), \
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
                 patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
             (r.OUT / 'song.wav').write_text('')
             (r.OUT / 'song.lyrics.json').write_text(json.dumps([[1000, 'One'], [90000, 'Two']]))
