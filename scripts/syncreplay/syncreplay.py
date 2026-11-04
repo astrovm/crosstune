@@ -414,8 +414,10 @@ def score(args):
             nth[i] = len(nth)
     first = lit_first(shown)
     lags = {k: first[k] - sung[k] for k in sung if k in first}
+    # With no words found there's no line to tell a line sung by: truth still says how many went unshown.
+    line_of = {k: i for i, k in nth.items()}
     for k in sorted(sung):
-        text = shown["lines"][next(i for i in nth if nth[i] == k)][:34]
+        text = shown["lines"][line_of[k]][:34] if k in line_of else ""
         print(f"{k:2d} sung {sung[k]:6.1f}  " + (f"shown {first[k]:6.1f} lag {lags[k]:+5.1f}  {text}" if k in lags else f"never shown   {text}"))
     if args.placed:
         for p in shown["placed"]:
@@ -423,9 +425,9 @@ def score(args):
     # The lines sung once the words were first put right: what can be right as the song plays.
     fixed = shown["placed"][1]["at"] / 1000 if len(shown["placed"]) > 1 else 0
     live = [lag for k, lag in lags.items() if sung[k] > fixed]
+    how = f"median {statistics.median(abs(x) for x in live):.2f} s, worst {max(live, key=abs):+.1f} s" if live else "none shown"
     print(f"{args.id} from {args.start} ms: lines sung after the first fix at {fixed:.1f} s: "
-          f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, median {statistics.median(abs(x) for x in live):.2f} s, "
-          f"worst {max(live, key=abs):+.1f} s; never shown {sum(k not in first for k in sung)}")
+          f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, {how}; never shown {sum(k not in first for k in sung)}")
     early = [lag for lag in lags.values() if lag < -ON_TIME_S]
     print(f"shown sung early, before its voice: {len(early)}/{len(lags)} lines" + (f", by up to {-min(early):.1f} s" if early else ""))
     return first
@@ -435,8 +437,8 @@ def lined_up(ours, theirs):
     """Which of [ours] are which of [theirs], by index: those starting with the same word, by their words matched
     in order, as many as can be, and with most of the shorter one's words the same. Other words for a song may
     break its lines elsewhere or spell them otherwise: "In the wild West End, sometime" and "In the wild west end sometime"."""
-    a = [(norm(w), i) for i, line in enumerate(ours) for w in line.split() if norm(w)]
-    b = [(norm(w), j) for j, line in enumerate(theirs) for w in line.split() if norm(w)]
+    a = [(piece, i) for i, line in enumerate(ours) for piece in pieces(line)]
+    b = [(piece, j) for j, line in enumerate(theirs) for piece in pieces(line)]
     most = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
     for i in range(len(a) - 1, -1, -1):
         for j in range(len(b) - 1, -1, -1):

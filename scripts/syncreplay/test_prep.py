@@ -1,6 +1,8 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -407,11 +409,21 @@ class WordsShownTest(unittest.TestCase):
         lines = ['New line here', 'One two three', 'Four, five', '', 'Six seven', 'eight', 'Nine ten']
         self.assertEqual({1: 1.0, 2: 3.1, 3: 4.2, 5: 5.3}, r.sung_lines('song', lines))
 
+    def test_lines_in_any_writing_line_up(self):
+        ours = ['\u3042\u306a\u305f\u306e\u80f8\u306e\u4e2d', '\u8857\u306e\u706f\u304c\u6d88\u3048\u308b\u9803']
+        self.assertEqual({0: 1, 1: 2}, r.lined_up(ours, ['La la', *ours]))
+
     def test_the_same_words_keep_their_truth(self):
         self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', ['One two, three', '', 'Four five', 'Six seven eight', 'Nine ten']))
 
     def test_words_with_no_lines_are_all_dark(self):
         self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', []))
+
+    def test_a_replay_that_found_no_words_scores_as_all_dark(self):
+        (r.OUT / 'song.from0.shown.json').write_text(json.dumps(dict(lines=[], shown=[], placed=[dict(at=0, times=[])], known=[], heard=[])))
+        with contextlib.redirect_stdout(io.StringIO()) as said:
+            self.assertEqual({}, r.score(argparse.Namespace(id='song', start=0, placed=False)))
+        self.assertIn('never shown 4', said.getvalue())
 
     def test_words_kept_are_this_songs_though_the_next_songs_came_after(self):
         kept = r.OUT / 'kept'
