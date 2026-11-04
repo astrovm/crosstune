@@ -1,10 +1,18 @@
 package com.astrovm.crosstune
 
+private val lyricWord = Regex("""[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*""")
+
+/** More of a copy's words than this with a capital is title case. German's nouns stay well under it. */
+private const val TITLE_CASE_SHARE = 0.4
+
+/** How long a word is for each letter another copy may spell otherwise and it still be the same name. */
+private const val LETTERS_PER_MISSPELLING = 4
+
 /** Capitals from other copies of the same words, only where a capital there can mean a name. */
 internal class LyricCase(copies: List<String>) {
     /** Each copy's words, and which of them can say something about being a name. */
     private val inside = copies.flatMap { copy ->
-        val words = word.findAll(copy).toList()
+        val words = lyricWord.findAll(copy).toList()
         val inside = words.indices.filter { index -> index > 0 && insideASentence(copy.substring(words[index - 1].range.last + 1, words[index].range.first)) }
         // A capital on most words, as a copy in capitals or in title case has, says nothing about any of them.
         if (inside.count { words[it].value.first().isUpperCase() } > inside.size * TITLE_CASE_SHARE) emptyList()
@@ -20,9 +28,9 @@ internal class LyricCase(copies: List<String>) {
 
     /** Letter for letter, so even timings which split a word keep their places. */
     fun apply(text: String): String {
-        val words = word.findAll(text).toList()
+        val words = lyricWord.findAll(text).toList()
         var index = 0
-        return word.replace(text) { token ->
+        return lyricWord.replace(text) { token ->
             val here = index++
             val key = context(words, here)
             val spelling = if (key in cases) cases[key] else respelled(token.value, between[neighbors(words, here)])
@@ -72,14 +80,4 @@ internal class LyricCase(copies: List<String>) {
      * break, a full stop, an opening bracket or quote, can start one, and then its capital says nothing.
      */
     private fun insideASentence(gap: String) = gap == "-" || gap.all { it == ',' || (it.isWhitespace() && it !in "\r\n") }
-
-    private companion object {
-        val word = Regex("""[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*""")
-
-        /** More of a copy's words than this with a capital is title case. German's nouns stay well under it. */
-        const val TITLE_CASE_SHARE = 0.4
-
-        /** How long a word is for each letter another copy may spell otherwise and it still be the same name. */
-        const val LETTERS_PER_MISSPELLING = 4
-    }
 }
