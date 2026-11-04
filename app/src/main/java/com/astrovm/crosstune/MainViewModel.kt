@@ -1421,7 +1421,7 @@ internal class MainViewModel(
         if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
         val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
         // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does.
-        seenIn(back, song, app, link, mustPlay = true)
+        seenPlaying(back, song, app, link, mustPlay = true)
         back.comesBack()
         watchLeft(song)
         return true
@@ -1457,13 +1457,9 @@ internal class MainViewModel(
     private data class Seen(val following: Following?, val playing: Heard.Song?)
 
     /**
-     * Whether [app] is seen, within [LOAD_SONG_MS], to have [song], [mustPlay] it or not, or, whatever the app names it,
-     * to have gone on to play something other than what it played when asked.
+     * What [app] is seen, within [LOAD_SONG_MS], to do: to have [song], [mustPlay] it or not, or, whatever the app names it,
+     * to have gone on to play something other than what it played when asked. Null if neither.
      */
-    private suspend fun seenIn(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Boolean =
-        seenPlaying(source, song, app, link, mustPlay) != null
-
-    /** What [seenIn] saw, or null if it saw nothing. */
     private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Seen? {
         val over = uiState.player?.over
         val (following, playing) = withTimeoutOrNull(LOAD_SONG_MS) {

@@ -1523,6 +1523,30 @@ class PlaybackTest {
         playback.playQueued(MusicMetadata("Other", "Band"), 3)
     }
 
+    /** What an app is asked for by name, which Robolectric doesn't pass on to it. */
+    @Implements(MediaController.TransportControls::class)
+    class AskedByName {
+        @Implementation
+        fun playFromSearch(query: String?, extras: android.os.Bundle?) {
+            asked += query to extras?.getString(android.provider.MediaStore.EXTRA_MEDIA_TITLE)
+        }
+
+        companion object {
+            val asked = mutableListOf<Pair<String?, String?>>()
+        }
+    }
+
+    @Test
+    @Config(shadows = [AskedByName::class])
+    fun anAppIsAskedForASongByTheNameItsStoreKnowsIt() = runBlocking {
+        AskedByName.asked.clear()
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band"))
+        // Searched as a video calls it, Qobuz lists only tributes (Issue #673).
+        assertTrue(playback.playSong(MusicMetadata("Despacito ft. Daddy Yankee", "Luis Fonsi"), "com.spotify.music"))
+        assertEquals(listOf("Despacito Luis Fonsi" to "Despacito ft. Daddy Yankee"), AskedByName.asked)
+    }
+
     @Test
     fun aSongIsAskedForByNameFromTheAppItWasIn() = runBlocking {
         // Without access, or with no music app to ask, there's no one to ask.

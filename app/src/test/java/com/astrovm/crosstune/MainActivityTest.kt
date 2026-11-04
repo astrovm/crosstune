@@ -7981,4 +7981,50 @@ class MainActivityTest {
         const val TIMEOUT_MS = 5_000L
         const val NOW_PLAYING_SHARE = "A Song by Example Band\nhttps://www.google.com/search?q=A+Song+by+Example+Band"
     }
+
+    /** A song handed to Crosstune with Qobuz chosen, whose stores number it differently, and the time it's given to start. */
+    private fun qobuzSongOpened(phone: FakePlayback) {
+        fun page(number: Int) = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Song">Song</a>
+                <p class="ListItem__artists">Band • Album</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$number"></button>
+            </div></li>"""
+        fake.handler = { request ->
+            when {
+                request.url.host != "www.qobuz.com" -> FakeSpotify.html(request, """{"title":"Song","author_name":"Band"}""")
+                "/us-en/" in request.url.encodedPath -> FakeSpotify.html(request, page(1))
+                else -> FakeSpotify.html(request, page(2))
+            }
+        }
+        MainActivity.playbackFactory = { phone }
+        // Playing right away is what has a song looked up there, rather than searched for.
+        prefs().edit().putString("default_target", "QOBUZ").putBoolean("play_right_away", true).commit()
+        launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=aaaaaaaaaaa")
+        })
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(QobuzNumbers.WAIT_MS))
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun aSongThatDoesntStartInQobuzsAppIsOpenedOnItsOtherStoresNumber() {
+        val phone = FakePlayback().apply { access = true }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.QOBUZ.packageName, "Qobuz"))
+        qobuzSongOpened(phone)
+        waitUntil { phone.opened.isNotEmpty() }
+        val first = nextStartedActivity()!!.dataString!!
+        val numbers = setOf("https://play.qobuz.com/track/1", "https://play.qobuz.com/track/2")
+        assertEquals(numbers.single { it.substringAfterLast("/") == first.substringAfterLast("/") }.let { numbers - it }.single(), phone.opened.single().second)
+    }
+
+    @Test
+    fun aSongOpenedOnTheWebForWantOfQobuzsAppIsntWatched() {
+        val phone = FakePlayback().apply { access = true }
+        qobuzSongOpened(phone)
+        assertTrue(phone.opened.isEmpty())
+        assertEquals(1, fake.requestedUrls.count { "www.qobuz.com" in it })
+    }
 }
