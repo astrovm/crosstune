@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import android.content.SharedPreferences
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -2107,6 +2108,7 @@ internal class MainViewModel(
      * the one shown was heard playing, as the next song. A song picked to read stays.
      */
     private fun heardAlong(hearing: Heard.Song) {
+        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "fingerprint ${hearing.offsetMs} at ${hearing.startedAtMs} match ${hearing.matchId} app $appFollowing lead $appLeadMs guessed $guessedLeadMs")
         val song = hearing.metadata
         val shown = uiState.lyricsFor ?: return
         if (!sameSong(song, shown) && heardSong?.let { sameSong(it, shown) } != true) return

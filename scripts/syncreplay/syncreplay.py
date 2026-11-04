@@ -657,8 +657,25 @@ def behind(song, kept, lit):
     return statistics.median(offs)
 
 
+def phone_lines(log):
+    """Each line lit on the player's clock, before fingerprint calibration moves it."""
+    player = None
+    lit = []
+    for row in log.splitlines():
+        said = re.search(r"said -?\d+ at \d+ playing (true|false), kept (-?\d+) at (\d+)", row)
+        if said:
+            player = (int(said[2]), int(said[3]), said[1] == "true")
+        shown = re.search(r"lit (-?\d+) at (\d+) pos (-?\d+)", row)
+        if shown:
+            line, at, pos = map(int, shown.groups())
+            if player is not None:
+                pos = player[0] + (at - player[1] if player[2] else 0)
+            lit.append((line, at, pos))
+    return lit
+
+
 def score_phone(song_id, kept):
-    lit = [(int(i), int(at), int(pos)) for i, at, pos in re.findall(r"lit (-?\d+) at (\d+) pos (-?\d+)", (kept / "log.txt").read_text())]
+    lit = phone_lines((kept / "log.txt").read_text())
     if not lit:
         sys.exit("No lines lit in the log: was the dev app reinstalled after the log was added, and the words open?")
     lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit)

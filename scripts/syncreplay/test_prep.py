@@ -436,6 +436,15 @@ class WordsShownTest(unittest.TestCase):
 
 
 class PhoneTest(unittest.TestCase):
+    def test_line_times_use_the_player_even_when_the_following_clock_jumps(self):
+        log = ('said 24000 at 100000 playing true, kept 24000 at 100000\n'
+               'lit 0 at 116000 pos 30000\n'
+               'lit 6 at 142000 pos 93000\n')
+        self.assertEqual([(0, 116000, 40000), (6, 142000, 66000)], r.phone_lines(log))
+
+    def test_line_times_without_player_log_keep_the_old_clock(self):
+        self.assertEqual([(0, 100, 1000)], r.phone_lines('lit 0 at 100 pos 1000\n'))
+
     def test_a_title_keeps_its_commas(self):
         session = 'package=app\nstate=PlaybackState {state=PLAYING(3), position=2041, buffered position=0, speed=1.0, updated=5000, actions=1}\nmetadata: size=9, description=Police, The   Magic Audio Flac, uploader, uploader\n'
         with patch.object(r, 'shell', return_value=session):
