@@ -66,10 +66,32 @@ DEMUCS_PYTHON="$HOME/.cache/crosstune-syncreplay-gpu/bin/python" DEMUCS_DEVICE=c
   nice -n 10 "$HOME/.cache/crosstune-syncreplay-venv/bin/python" scripts/syncreplay/syncreplay.py set --cached
 ```
 
-Without those environment variables, separation uses CPU. Truth and hearing always use CPU.
+Without those environment variables, separation and truth use the CPU. Hearing always uses the CPU.
 
 The missing Japanese row had the wrong artist: カシミヤのほほえみ is by 八神純子,
 [as credited in the published lyrics](https://www.uta-net.com/song/96712/), not 国分友里恵.
+
+## Truth on the GPU with PyTorch
+
+Whisper medium through PyTorch on ROCm (`WHISPER_PYTHON`), which unlike Vulkan keeps the CPU's times.
+One hearing isn't enough: Whisper retries a stretch it can't make out by sampling at random, so hearings differ.
+Four hearings of XB7AmIsxzfI, all with the same settings, heard 214, 294, 276 and 277 words. The one with 214 lost
+the chorus at 120 s and matched that line to the next one, at 161.78 s, 41.21 s off with nothing to show for it.
+So the GPU hears each song twice and keeps only the lines both time within 0.5 s (`agreed`).
+
+Against the saved CPU truth, under a load of about 25 on 12 cores:
+
+| Recording | Two GPU hearings, seconds | CPU / GPU / common lines | Median difference | Worst difference | Within 0.3 s |
+|---|---:|---:|---:|---:|---:|
+| LhLmgg_u29k | 378.8 | 21 / 21 / 21 | 0.000 | 1.22 | 17 |
+| XB7AmIsxzfI | 473.6 | 15 / 17 / 11 | 0.010 | 0.56 | 10 |
+| 0_RLLNRWur4 | 427.3 | 40 / 36 / 35 | 0.000 | 0.78 | 34 |
+| ZnrSNEah_20 | 166.4 | 24 / 24 / 24 | 0.000 | 0.14 | 24 |
+| All | | 91 common | 0.000 | 1.22 | 85 |
+
+The CPU's own repeat run on LhLmgg_u29k differed by a median of 0.02 s and at worst 1.22 s, so this is as close as
+the CPU is to itself. CPU truth on the same machine in the same hour took 174 to 780 s for one hearing. The GPU was
+about 10% busy, as the CPU work around it was waiting its turn, so these times say more about the load than the GPU.
 
 ## Limits of the timing table
 

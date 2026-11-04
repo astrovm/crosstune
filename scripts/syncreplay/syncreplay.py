@@ -34,7 +34,9 @@ whether it heard the sound played itself, with Shizuku, or through the visualize
 first for the former). It then says how far each line is from when the phone lit it: only while
 they match does the replay stand for the phone.
 For ROCm Demucs only, set DEMUCS_PYTHON to a ROCm Python and DEMUCS_DEVICE=cuda;
-without these it uses the current Python on CPU. Truth and hearing stay on CPU.
+without these it uses the current Python on CPU. Set WHISPER_PYTHON to a ROCm Python with openai-whisper for
+truth on the GPU: it hears each song twice and keeps the lines both time alike, in about the time the CPU takes
+to hear it once (measurements.md). Hearing stays on CPU, as it stands for the phone's.
 `set --cached` resumes the existing set without another live search. Prep keeps truth for unchanged lyrics
 and checkpoints every heard window atomically, so an interrupted song resumes too.
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
@@ -58,7 +60,8 @@ OUT = ROOT / "build" / "syncreplay"
 HEARD = OUT / "heard"
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
 APP_MODEL = "tiny-q5_1"
-HEARD_AT_ONCE = 6
+# Each while is heard on its own, on one thread, so how many at once only changes how long it takes.
+HEARD_AT_ONCE = max(1, (os.cpu_count() or 4) - 2)
 LANGUAGE_SEGMENTS = 4
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
 # What the app hears at once, and at the start of a song, in ms.
@@ -178,13 +181,23 @@ def sung_language(song):
     return kept.read_text()
 
 
-def truth(song, wav, lines):
-    """When each line with words is really sung: faster-whisper medium's word times on the separated voice,
-    matched in order to the words. A line counts only when its first word and most of the rest match."""
-    vocals = separated_voice(song, wav)
-    model = truth_model()
-    segments, _ = model.transcribe(audio(vocals), language=sung_language(song), word_timestamps=True, condition_on_previous_text=False, beam_size=5)
-    heard = [(norm(w.word), w.start) for s in segments for w in s.words if norm(w.word)]
+def words_heard(vocals, language):
+    """Each word Whisper medium hears in the voice and when, once per hearing: twice on a GPU with WHISPER_PYTHON
+    (measurements.md), once with faster-whisper on the CPU, where a second would take minutes more."""
+    gpu = os.environ.get("WHISPER_PYTHON")
+    if gpu:
+        said = subprocess.run([gpu, "-I", str(Path(__file__).with_name("whisper_gpu.py")), str(vocals), language],
+                              check=True, stdout=subprocess.PIPE, text=True).stdout
+        hearings = json.loads(said)
+    else:
+        segments, _ = truth_model().transcribe(audio(vocals), language=language, word_timestamps=True, condition_on_previous_text=False, beam_size=5)
+        hearings = [[(w.word, w.start) for s in segments for w in s.words]]
+    return [[(norm(word), start) for word, start in words if norm(word)] for words in hearings]
+
+
+def line_starts(heard, lines):
+    """When each line starts in these heard words, matched in order to the lyrics. A line counts only when its
+    first word and most of the rest match."""
     lyric = [(norm(w), i) for i, line in enumerate(lines) for w in line.split() if norm(w)]
     most = [[0] * (len(lyric) + 1) for _ in range(len(heard) + 1)]
     for i in range(len(heard) - 1, -1, -1):
@@ -206,7 +219,21 @@ def truth(song, wav, lines):
         words = [j for j, (_, i) in enumerate(lyric) if i == n]
         if words and words[0] in at and sum(j in at for j in words) * 2 > len(words):
             starts[n] = at[words[0]]
-    write_truth(song, lines, voiced(vocals, starts))
+    return starts
+
+
+def agreed(hearings):
+    """The lines every hearing times alike. A hearing can lose a stretch of the song, and then a repeated line
+    matches its next time around, off by a whole verse with nothing else to show for it (The Police's chorus)."""
+    first, *rest = hearings
+    return {n: start for n, start in first.items() if all(n in other and abs(other[n] - start) <= ON_TIME_S for other in rest)}
+
+
+def truth(song, wav, lines):
+    """When each line with words is really sung, from Whisper medium's word times on the separated voice."""
+    vocals = separated_voice(song, wav)
+    hearings = [line_starts(heard, lines) for heard in words_heard(vocals, sung_language(song))]
+    write_truth(song, lines, voiced(vocals, agreed(hearings)))
 
 
 def voiced(vocals, starts):
