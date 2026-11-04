@@ -9,6 +9,7 @@ git submodule update --init --recursive   # projectM is built from source for th
 ./gradlew :app:assembleDebug              # "Crosstune Dev"; builds play and foss
 ./gradlew :app:testPlayDebugUnitTest --tests '*MainActivityTest.aSongPlays*'   # one test
 ./gradlew :app:ci                         # all tests + coverage gates + lint + detekt + APKs
+scripts/gradle-box/gradle-box.sh TASK...   # Gradle in a container, in turn with other checkouts; how agents and test runs build
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
 python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed on a real recording, line by line against when it's sung; prep first, see the script
 python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
