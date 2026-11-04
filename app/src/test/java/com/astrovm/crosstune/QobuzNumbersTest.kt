@@ -38,39 +38,10 @@ class QobuzNumbersTest {
         passes(1)
         assertEquals(listOf(song to link), looked)
         assertEquals(listOf(qobuz to "https://play.qobuz.com/track/2"), phone.opened.toList())
-        assertTrue(phone.songsAsked.isEmpty())
-        // That one plays: nothing more's asked.
-        phone.onThePhone = Heard.Song(song, null, app = qobuz)
+        // Once only: there's no third, and asked by name Qobuz stays on the loading page.
         passes(QobuzNumbers.WAIT_MS * 3)
         assertEquals(1, phone.opened.size)
         assertTrue(phone.songsAsked.isEmpty())
-    }
-
-    @Test
-    fun aSongNeitherNumberPlaysIsAskedForByName() {
-        numbers.opened(song, qobuz, link)
-        passes(QobuzNumbers.WAIT_MS * 2)
-        assertEquals(listOf(song to qobuz), phone.songsAsked.toList())
-        phone.onThePhone = Heard.Song(MusicMetadata("Song (Remastered)", "Band"), null, app = qobuz)
-        passes(QobuzNumbers.WAIT_MS)
-        assertTrue(phone.plays.isEmpty())
-    }
-
-    @Test
-    fun whatItPlaysByNameIsStoppedWhenItsSomeoneElses() {
-        numbers.opened(song, qobuz, link)
-        passes(QobuzNumbers.WAIT_MS * 2)
-        phone.onThePhone = Heard.Song(MusicMetadata("Song (Tribute)", "Someone Else"), null, app = qobuz)
-        passes(1)
-        assertEquals(listOf(false), phone.plays.toList())
-    }
-
-    @Test
-    fun askedByNameAndNotStartingIsLeftAtThat() {
-        numbers.opened(song, qobuz, link)
-        passes(QobuzNumbers.WAIT_MS * 4)
-        assertEquals(1, phone.songsAsked.size)
-        assertTrue(phone.plays.isEmpty())
     }
 
     @Test
@@ -136,13 +107,13 @@ class QobuzNumbersTest {
     }
 
     @Test
-    fun withNoOtherNumberItGoesStraightToItsName() {
+    fun withNoOtherNumberItStays() {
         other = null
         numbers.opened(song, qobuz, link)
         passes(QobuzNumbers.WAIT_MS)
         assertEquals(1, looked.size)
         assertTrue(phone.opened.isEmpty())
-        assertEquals(listOf(song to qobuz), phone.songsAsked.toList())
+        assertTrue(phone.songsAsked.isEmpty())
     }
 
     @Test
