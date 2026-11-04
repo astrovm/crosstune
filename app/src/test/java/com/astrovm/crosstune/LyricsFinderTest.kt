@@ -2120,6 +2120,81 @@ class LyricsFinderTest {
         assertEquals(lrclib.map { (ms, text) -> LyricLine(ms + 6_000, text) }, (found(playing) as Lyrics.Found).lines)
     }
 
+    /** LRCLIB with [lrclib], timed a line at a time, and NetEase with [netEase] word by word: when each line starts, and how long each of its words takes. */
+    private fun rushedSheets(lrclib: List<Pair<Long, String>>, netEase: List<Triple<Long, Long, String>>) {
+        val sheet = lrclib.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
+        val byWord = netEase.joinToString("\n") { (start, wordMs, text) ->
+            val words = text.split(' ')
+            "[$start,${words.size * wordMs}]" + words.mapIndexed { at, word -> "(${start + at * wordMs},$wordMs,0)$word${if (at < words.lastIndex) " " else ""}" }.joinToString("")
+        }
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${lasting(answer("Song", "Band", "", synced = sheet), 260.0)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}],"duration":260000}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private val rushedSong = MusicMetadata("Song", "Band", lengthMs = 260_000)
+
+    private fun evenSheet(count: Int = sungWords.size) = sungWords.take(count).mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+
+    /** The words each as [evenSheet] has them, 200 ms later, unhurried, except as [rushed] says: a line's index, its start, and how long each of its words takes. */
+    private fun netEaseSheet(count: Int = sungWords.size, shiftMs: Long = 200, vararg rushed: Triple<Int, Long, Long>) = sungWords.take(count).mapIndexed { line, text ->
+        rushed.firstOrNull { it.first == line }?.let { Triple(it.second, it.third, text) } ?: Triple(10_000L + line * 4_000L + shiftMs, 400L, text)
+    }
+
+    @Test
+    fun linesGoneByFasterThanAnyoneSingsStartWhereAnotherSheetHasThem() {
+        // Seven words a second and more: timed late, in a hurry to catch up with the next line, as NetEase has Expresso Love.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 15_000L, 160L), Triple(1, 15_900L, 100L))))
+        val lines = (found(rushedSong) as Lyrics.Found).lines
+        assertEquals(sungWords.indices.map { 10_200L + it * 4_000L }, lines.map { it.timeMs })
+        // Their words spread out over the time they now have, up to the next line; the rest as they were.
+        assertEquals(listOf(10_200L, 11_000L, 11_800L, 12_600L, 13_400L), lines[0].words.map { it.timeMs })
+        assertEquals(14_200L, lines[0].endMs)
+        assertEquals(listOf(14_200L, 14_640L, 15_080L, 15_520L, 15_960L), lines[1].words.map { it.timeMs })
+        assertEquals(16_400L, lines[1].endMs)
+        assertEquals(listOf(18_200L, 18_600L, 19_000L, 19_400L, 19_800L), lines[2].words.map { it.timeMs })
+    }
+
+    @Test
+    fun anotherTakesSheetPutsRushedLinesBackBySoMuchLess() {
+        // All six seconds later: the take is another, and the rushed line still comes back, as far from the rest as that sheet has it.
+        rushedSheets(evenSheet(), netEaseSheet(shiftMs = 6_000, rushed = arrayOf(Triple(0, 20_000L, 160L))))
+        assertEquals(sungWords.indices.map { 16_000L + it * 4_000L }, (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs })
+    }
+
+    @Test
+    fun linesThatOnlySeemRushedStayAsTimed() {
+        fun times() = (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs }
+        val others = sungWords.indices.drop(1).map { 10_200L + it * 4_000L }
+        // Rushed, but where the other sheet has them, near enough: Into the Groove opens with one sung on time.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 11_700L, 160L))))
+        assertEquals(listOf(11_700L) + others, times())
+        // Off, but unhurried.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 13_000L, 400L))))
+        assertEquals(listOf(13_000L) + others, times())
+        // Rushed and earlier than the other sheet has it: it isn't catching up with anything.
+        rushedSheets(evenSheet().map { (ms, text) -> if (ms == 10_000L) 13_000L to text else ms to text }, netEaseSheet(rushed = arrayOf(Triple(0, 10_200L, 160L))))
+        assertEquals(listOf(10_200L) + others, times())
+    }
+
+    @Test
+    fun rushedLinesStayWithoutASheetToGoBy() {
+        fun times() = (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs }
+        // Five lines in common aren't enough to tell where the rest are.
+        rushedSheets(evenSheet(5), netEaseSheet(5, rushed = arrayOf(Triple(0, 13_000L, 160L))))
+        assertEquals(listOf(13_000L) + (1..4).map { 10_200L + it * 4_000L }, times())
+        // Nor is a sheet timed all over the place.
+        val jumbled = listOf(0L, 6_500L, 200L, 7_000L, 600L, 6_500L, 100L, 8_000L, 300L)
+        rushedSheets(evenSheet(), sungWords.indices.map { Triple(if (it == 0) 13_000L else 10_000L + it * 4_000L + jumbled[it], if (it == 0) 160L else 400L, sungWords[it]) })
+        assertEquals(13_000L, times().first())
+    }
+
     /** LRCLIB with [lrclib], timed for a recording 6 seconds shorter than [anotherTake]'s, and NetEase with [netEase], as long as it. */
     private fun twoSheets(lrclib: List<Pair<Long, String>>, netEase: List<Pair<Long, String>>) {
         fun sheet(lines: List<Pair<Long, String>>) = lines.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
