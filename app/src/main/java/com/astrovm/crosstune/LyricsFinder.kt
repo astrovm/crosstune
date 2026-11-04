@@ -691,14 +691,20 @@ internal class LyricsFinder(
             underName(metadata.copy(title = title), timeoutMs).also { answer ->
                 if (answer is Lyrics.Found) {
                     val native = romanizedScript(answer.words) == null
-                    if (kept == null || timing(answer) > timing(kept) ||
-                        (native && romanizedScript(kept.words) != null && timing(answer) == timing(kept))) fallback = answer
+                    fallback = if (kept == null) answer else betterNamed(kept, answer)
                     // Untimed words stay as a fallback while the other names may have timings.
                     if (native && timing(answer) >= WELL_TIMED && fallback === answer) return answer
                 }
             }
         }
         return fallback ?: answers.reduce(::better)
+    }
+
+    /** Across a title's names, better timing wins; among equals, the song's own script does. */
+    private fun betterNamed(first: Lyrics.Found, second: Lyrics.Found): Lyrics.Found {
+        if (timing(second) > timing(first)) return second
+        val ownScript = romanizedScript(first.words) != null && romanizedScript(second.words) == null
+        return if (ownScript && timing(second) == timing(first)) second else first
     }
 
     /**
