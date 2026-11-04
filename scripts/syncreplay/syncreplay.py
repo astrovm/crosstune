@@ -145,7 +145,7 @@ def at_hearing_level(sound):
     """As SingingListener.atHearingLevel does, before the speech model hears it."""
     import numpy as np
     level = float(np.sqrt(np.mean(sound.astype(np.float64) ** 2)))
-    return (sound * (min(HEARING_LEVEL / level, MOST_RAISED) if level > 0 else 1)).astype(np.float32)
+    return (sound * (max(1.0, min(HEARING_LEVEL / level, MOST_RAISED)) if level > 0 else 1)).astype(np.float32)
 
 
 def seed(starts):

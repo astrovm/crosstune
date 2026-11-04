@@ -61,6 +61,7 @@ class HearingLevelTest(unittest.TestCase):
         import numpy as np
         self.assertAlmostEqual(0.5, float(np.sqrt(np.mean(r.at_hearing_level(np.array([0.2, -0.2])) ** 2))), places=5)
         self.assertAlmostEqual(0.06, float(r.at_hearing_level(np.array([0.01, -0.01]))[0]), places=5)
+        self.assertAlmostEqual(0.9, float(r.at_hearing_level(np.array([0.9, -0.9]))[0]), places=5)
         self.assertEqual([0.0, 0.0], list(r.at_hearing_level(np.zeros(2))))
 
 

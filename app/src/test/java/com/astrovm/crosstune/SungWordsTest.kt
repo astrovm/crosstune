@@ -357,9 +357,10 @@ class SungWordsTest {
     }
 
     @Test
-    fun loudSoundIsBroughtDownToTheSameLevel() {
+    fun soundAlreadyLoudEnoughIsHeardAsItIs() {
+        // As Android's visualizer gives it, filling its 8 bits: changed at all, the model hears other words in it.
         val loud = ShortArray(16_000) { if (it % 2 == 0) 30_000 else -30_000 }
-        assertEquals(SingingListener.HEARING_LEVEL.toDouble(), level(SingingListener.atHearingLevel(loud)), 0.001)
+        assertEquals(loud.map { it / 32768f }, SingingListener.atHearingLevel(loud).toList())
     }
 
     @Test

@@ -173,19 +173,23 @@ internal class SingingListener(
         private const val CHUNK = ShazamSignature.SAMPLE_RATE / 10
 
         /**
-         * How loud what's heard is made, as the speech model hears level as well as words, and what it's
-         * given is as loud as wherever it came from. A phone's own sound, a third of this, heard a voice
-         * in 11 of 40 stretches sung in; at this, 32. Louder heard no more.
+         * How loud quiet sound is made, as the speech model hears level as well as words, and sound played
+         * back to the app comes as quiet as the song was mastered. On a phone's own sound, a third of this,
+         * 20 seconds with singing in them heard a voice 8 times in 30; at this, 24 times. Louder heard no more.
          */
         const val HEARING_LEVEL = 0.5f
 
         /** The most sound is raised to get there, which is as far as was tried, so a quiet room's hiss stays that. */
         const val MOST_RAISED = 6f
 
-        /** The sound in [audio] from -1 to 1, at [HEARING_LEVEL] overall. Its peaks can go past 1, which the model doesn't mind. */
+        /**
+         * The sound in [audio] from -1 to 1, raised to [HEARING_LEVEL] overall if it's under it. Louder sound is
+         * left as it is, as Android's visualizer's is: 2% louder or quieter, the model hears other words in half
+         * of it. Peaks can go past 1, which the model doesn't mind.
+         */
         fun atHearingLevel(audio: ShortArray): FloatArray {
             val level = sqrt(audio.sumOf { it.toDouble() * it } / audio.size) / 32768
-            val raised = if (level > 0) minOf(HEARING_LEVEL / level, MOST_RAISED.toDouble()).toFloat() else 1f
+            val raised = (HEARING_LEVEL / level).coerceIn(1.0, MOST_RAISED.toDouble()).toFloat()
             return FloatArray(audio.size) { audio[it] / 32768f * raised }
         }
     }
