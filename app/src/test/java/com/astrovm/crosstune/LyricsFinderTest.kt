@@ -586,6 +586,49 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun capitalsBorrowNamesFromTheCopyAlreadyFetchedWithoutBorrowingLineStarts() {
+        val loud = "WE WALK WITH MIRA THROUGH THE NIGHT\nWE WAIT BY THE RIVER UNTIL DAWN"
+        val other = "We walk\nWith Mira through the night\nWe wait by the river until dawn"
+        val yrc = loud.lines().mapIndexed { i, text ->
+            "[${i * 10_000},9000]" + text.split(" ").mapIndexed { j, word -> "(${i * 10_000 + j * 500},500,0)$word " }.joinToString("")
+        }.joinToString("\n")
+        var searches = 0
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> {
+                    searches++
+                    FakeSpotify.html(request, "[${answer("Song", "Band", other)}]")
+                }
+                "music.163.com" -> FakeSpotify.html(request, if (request.url.encodedPath == "/api/search/get")
+                    """{"result":{"songs":[{"id":2,"name":"Song","artists":[{"name":"Band"}]}]}}"""
+                    else """{"yrc":{"lyric":${quote(yrc)}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+        val result = found(song) as Lyrics.Found
+        assertEquals("We walk with Mira through the night\nWe wait by the river until dawn", result.words)
+        assertEquals(result.words.lines(), result.lines.map { it.text.trim() })
+        assertEquals("Mira ", result.lines.first().words[3].text)
+        assertEquals(1, searches)
+    }
+
+    @Test
+    fun restoredCapitalsKeepSplitWordTimingsAndSurviveCleaningAgain() {
+        val text = "WE MEET MIRA BESIDE THE RIVER TONIGHT"
+        val line = LyricLine(1000, text, listOf(TimedWord(1000, "WE MEET MI"), TimedWord(2000, "RA BESIDE THE RIVER TONIGHT")))
+        val copy = Lyrics.Found("We meet Mira beside the river tonight")
+        val result = LyricsFinder.cleaned(Lyrics.Found(text, listOf(line)), song, listOf(copy))
+        assertEquals("We meet Mira beside the river tonight", result.words)
+        assertEquals(result.words, result.lines.single().text)
+        assertEquals(listOf(TimedWord(1000, "We meet Mi"), TimedWord(2000, "ra beside the river tonight")), result.lines.single().words)
+        assertEquals(result, LyricsFinder.cleaned(result, song))
+        assertEquals(copy, LyricsFinder.cleaned(copy, song, listOf(Lyrics.Found(text))))
+        val plain = LyricsFinder.cleaned(Lyrics.Found(text), song, listOf(copy))
+        assertEquals(result.words, plain.words)
+        assertTrue(plain.lines.isEmpty())
+    }
+
+    @Test
     fun aSongInCapitalsReadsInSentenceCaseWordsAndAllAndItsSpacesBreak() {
         val nb = "\u00a0"
         fun line(ms: Long, vararg words: String) = LyricLine(ms, words.joinToString(nb), words.mapIndexed { i, word -> TimedWord(ms + i * 300L, if (i < words.size - 1) word + nb else word) })

@@ -238,12 +238,6 @@ internal fun mended(line: String): String {
     return mended
 }
 
-/** Whether [words] are in capitals, nearly every letter that has them, as some sites keep a whole song. */
-private fun inCapitals(words: String): Boolean {
-    val cased = words.filter { it.isLetter() && it.lowercaseChar() != it.uppercaseChar() }
-    return cased.length >= MIN_CASED_LETTERS && cased.count(Char::isUpperCase) >= cased.length * CAPITALS_SHARE
-}
-
 /**
  * [line], written in capitals, as a sentence is written: a capital to start it and each sentence in
  * it, and I. Letter for letter, so words timed one by one can be cut from it again.
@@ -270,10 +264,6 @@ private fun inSentenceCase(texts: List<String>): List<String> {
     var at = 0
     return texts.map { text -> line.substring(at, at + text.length).also { at += text.length } }
 }
-
-/** Letters with a case a song needs, and the share of them in capitals, to count as written in capitals. */
-private const val MIN_CASED_LETTERS = 20
-private const val CAPITALS_SHARE = 0.9
 
 private fun strictly(text: String, charset: Charset): ByteArray? = try {
     charset.newEncoder().onUnmappableCharacter(CodingErrorAction.REPORT).encode(CharBuffer.wrap(text)).let { buffer -> ByteArray(buffer.remaining()).also(buffer::get) }
@@ -547,10 +537,10 @@ internal class LyricsFinder(
         // timed as well for this one.
         val otherTake = own != null && !fits(own, metadata) && rest is Lyrics.Found && rest.lengthMs != null && fits(rest, metadata) && timing(rest) >= timing(own)
         val found = if (own == null || otherTake) rest else better(own, rest)
-        val word = byWord.await() ?: return@withContext Best(found)
+        val word = byWord.await()
         // Another take's words, timed word by word, don't beat this one's, timed a line at a time.
-        if (found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) return@withContext Best(found)
-        Best(better(word, found))
+        val chosen = if (word == null || found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) found else better(word, found)
+        Best(if (chosen is Lyrics.Found) cleaned(chosen, metadata, listOfNotNull(own, rest as? Lyrics.Found, word)) else chosen)
     }
 
     /** With no words of its own for a cover, the words of the song it covers. */
@@ -1258,7 +1248,7 @@ internal class LyricsFinder(
          * NetEase's contributors add; a song a site keeps in capitals, in sentence case. Words kept from before get each fix too, with no need to look
          * them up again.
          */
-        fun cleaned(found: Lyrics.Found, song: MusicMetadata): Lyrics.Found {
+        fun cleaned(found: Lyrics.Found, song: MusicMetadata, copies: List<Lyrics.Found> = emptyList()): Lyrics.Found {
             val netEase = found.source?.startsWith(NETEASE) == true
             // A whole song in capitals, as some sites keep it, reads as it's written elsewhere: in sentences.
             val shouting = inCapitals(found.words.ifBlank { found.lines.joinToString("\n") { it.text } })
@@ -1271,7 +1261,20 @@ internal class LyricsFinder(
             val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
                 .clean { it.text }
             val kept = found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
-            return if (shouting) inSentenceCase(kept) else kept
+            return if (shouting) restoredCase(inSentenceCase(kept), copies.filterNot { inCapitals(it.words) }.map { cleaned(it, song).words }) else kept
+        }
+
+        /** Borrow only the capitals supported by the same neighboring words in copies already fetched. */
+        private fun restoredCase(found: Lyrics.Found, copies: List<String>): Lyrics.Found {
+            val casing = LyricCase(copies)
+            val texts = casing.apply(found.lines.joinToString("\n") { it.text }).lines()
+            val timed = casing.apply(found.lines.joinToString("\n") { line -> line.words.joinToString("") { it.text } }).lines()
+            return found.copy(words = casing.apply(found.words), lines = found.lines.mapIndexed { index, line ->
+                var at = 0
+                line.copy(text = texts[index], words = line.words.map { word ->
+                    word.copy(text = timed[index].substring(at, at + word.text.length)).also { at += word.text.length }
+                })
+            })
         }
 
         private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it }
