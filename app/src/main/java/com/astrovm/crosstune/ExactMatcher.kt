@@ -366,7 +366,6 @@ internal class ExactMatcher(
 
     private suspend fun itunesCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
-        val artists = SongNames.artists(metadata.artist)
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", searchQuery(metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)))
             .addQueryParameter("entity", "song")
@@ -375,22 +374,20 @@ internal class ExactMatcher(
             .build()
         return fetchJson(url.toString()).optJSONArray("results")?.objects()?.firstOrNull { result ->
             val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("trackName")))
-            val credit = SongNames.normalize(result.optString("artistName"))
-            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
+            title.isNotEmpty() && name.startsWith(title) && sameArtist(metadata, result.optString("artistName"))
         }?.let { it.optString("artworkUrl100").ifBlank { null }?.replace("100x100bb", "600x600bb") }
     }
 
     private suspend fun deezerCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
-        // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
-        val artists = SongNames.artists(metadata.artist)
         // Searched for without its edition tag too: Deezer finds nothing for "Song (2018 Remix) (2024
         // Remaster)", though it has "Song (2018 Remix)", whose cover is the same.
         val searched = metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)
         return searchDeezer(searched).firstOrNull { result ->
             val name = SongNames.normalize(SongNames.withoutEditionTag(MetadataParsers.deezerTitle(result)))
-            val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
-            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
+            // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do. Being
+            // inside a longer name won't: Adele Harley isn't Adele, and has a Hello of their own.
+            title.isNotEmpty() && name.startsWith(title) && sameArtist(metadata, result.optJSONObject("artist")?.optString("name").orEmpty())
         }?.optJSONObject("album")?.let { it.optString("cover_big").ifBlank { null } }
     }
 
