@@ -539,7 +539,11 @@ internal class LyricsFinder(
         val found = if (own == null || otherTake) rest else better(own, rest)
         val word = byWord.await()
         // Another take's words, timed word by word, don't beat this one's, timed a line at a time.
-        val chosen = if (word == null || found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) found else better(word, found)
+        val chosen = when {
+            word == null -> found
+            found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata) -> found
+            else -> better(word, found)
+        }
         Best(if (chosen is Lyrics.Found) cleaned(chosen, metadata, listOfNotNull(own, rest as? Lyrics.Found, word)) else chosen)
     }
 
