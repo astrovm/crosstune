@@ -42,6 +42,7 @@ and checkpoints every heard window atomically, so an interrupted song resumes to
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
+import html
 import json
 import os
 import shutil
@@ -75,6 +76,8 @@ TIMING_LOG = "CrosstuneTiming"
 DEV_APP = "com.astrovm.crosstune.dev"
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
 LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps")
+# Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
+MIN_NAME = 8
 
 
 def norm(word):
@@ -398,12 +401,23 @@ def tap(text, tries=20):
     return False
 
 
-def shows(text, tries=20):
-    """Whether something on screen shows [text], soon."""
+def names(screen, title):
+    """Whether [screen] has a text naming the song [title] plays as: the app may tell it by a shorter name
+    than the music app's, as "Every Little Thing She Does Is Magic" for "Police, The   Every Little Thing She Does Is Magic Audio Flac"."""
+    # The main screen's history may name it too, with the words not open at all.
+    if 'text="Link or song"' in screen:
+        return False
+    wanted = re.sub(r"\W", "", title.lower())
+    shown = (re.sub(r"\W", "", html.unescape(text).lower()) for text in re.findall(r'text="([^"]*)"', screen))
+    return any(text and (text == wanted or (len(text) >= MIN_NAME and text in wanted)) for text in shown)
+
+
+def shows(title, tries=40):
+    """Whether something on screen names the song [title], soon: a recording named badly is heard first, which takes a while."""
     for _ in range(tries):
         try:
             shell("uiautomator", "dump", "/sdcard/window.xml")
-            if f'text="{text}"' in shell("cat", "/sdcard/window.xml"):
+            if names(shell("cat", "/sdcard/window.xml"), title):
                 return True
         except subprocess.CalledProcessError:
             pass
@@ -417,7 +431,8 @@ def playing(app):
     if len(session) < 2:
         return None
     state = re.search(r"state=PLAYING\(3\), position=(\d+),.*?updated=(\d+)", session[1][:3000])
-    title = re.search(r"description=([^,]*),", session[1][:3000])
+    # Title, artist, album: a title may have commas of its own ("Police, The   Every Little Thing..."), so it's all before the last two.
+    title = re.search(r"description=(.*), [^,\n]*, [^,\n]*$", session[1][:3000], re.MULTILINE)
     return (title.group(1), int(state.group(2)) - int(state.group(1))) if state and title else None
 
 
@@ -466,12 +481,14 @@ def watch(args):
         time.sleep(0.5)
     else:
         sys.exit(f"{args.app} didn't play {args.id}")
-    title, zero = song
+    zero = song[1]
     # Picked up as it plays, as when Crosstune is opened on a song already playing.
     shell("monkey", "-p", DEV_APP, "-c", "android.intent.category.LAUNCHER", "1")
     # The words of what's playing, not a song of the same name under Recent, which would open it again.
     if not tap("Lyrics of what's playing"):
         sys.exit("Couldn't open the words in Crosstune: is the phone unlocked?")
+    # Only now, as a music app just started may still tell the last song's name as it starts this one.
+    title = playing(args.app)[0]
     if not shows(title):
         sys.exit(f"Crosstune opened the words of another song, not {title}")
     while float(shell("cat", "/proc/uptime").split()[0]) * 1000 - zero < args.seconds * 1000:
@@ -488,6 +505,8 @@ def watch(args):
         if name.startswith("heard-"):
             (kept / name).write_bytes(adb("exec-out", "run-as", DEV_APP, "cat", f"cache/{name}"))
     (kept / "log.txt").write_text(log)
+    # The words the app really showed, which needn't be those prep was given.
+    (kept / "lyrics.json").write_bytes(adb("exec-out", "run-as", DEV_APP, "cat", "cache/lyrics.json"))
     shell("run-as", DEV_APP, "find", "cache", "-name", "heard-*.pcm", "-delete")
     score_phone(args.id, kept)
 
@@ -505,7 +524,9 @@ def behind(song, kept, lit):
             sys.exit(f"{f.name} is silent: the app heard nothing of the music. Was the media volume 0?")
         n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
         match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
-        loud = np.sqrt(np.convolve(song ** 2, np.ones(len(heard)), "valid")[:len(match)]) + 1e-9
+        # How loud each stretch of the song is, as a running sum: np.convolve takes minutes on a whole song.
+        running = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
+        loud = np.sqrt(np.maximum(running[len(heard):] - running[:-len(heard)], 0)[:len(match)]) + 1e-9
         at = int(np.argmax(match / loud)) / 16
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
