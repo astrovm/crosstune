@@ -1,6 +1,6 @@
 # Prep measurements
 
-Measured on 2026-11-03 on a shared 12-core / 31 GB PC with an RX 6800 (gfx1030, 16 GB).
+Measured on 2026-11-03 on a shared PC with 6 cores (12 threads) and 31 GB with an RX 6800 (gfx1030, 16 GB).
 Other agents were building, so these are elapsed times under that load, not isolated throughput.
 Raw logs and comparisons stay in `build/syncreplay/bench/`.
 
@@ -79,7 +79,7 @@ Four hearings of XB7AmIsxzfI, all with the same settings, heard 214, 294, 276 an
 the chorus at 120 s and matched that line to the next one, at 161.78 s, 41.21 s off with nothing to show for it.
 So the GPU hears each song twice and keeps only the lines both time within 0.5 s (`agreed`).
 
-Against the saved CPU truth, under a load of about 25 on 12 cores:
+Against the saved CPU truth, under a load of about 25 on 6 cores (12 threads):
 
 | Recording | Two GPU hearings, seconds | CPU / GPU / common lines | Median difference | Worst difference | Within 0.3 s |
 |---|---:|---:|---:|---:|---:|
