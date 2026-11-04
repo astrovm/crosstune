@@ -316,6 +316,32 @@ class SungLanguageTest(unittest.TestCase):
         self.assertEqual('ko', self.told(['移り行く'], [('ko', 0.6), ('ru', 0.4)]))
 
 
+class EveryWritingTest(unittest.TestCase):
+    """Truth was blind to lyrics in anything but Latin letters: Japanese songs scored no line at all."""
+    def test_latin_words_stay_one_piece_without_accents_or_punctuation(self):
+        self.assertEqual(["don't"], r.pieces('Don’t,'))
+        self.assertEqual(['corazon'], r.pieces('corazón'))
+        self.assertEqual(['bababa'], r.pieces('ba-ba-ba'))
+        self.assertEqual([], r.pieces('...'))
+
+    def test_writing_without_spaces_goes_letter_by_letter(self):
+        self.assertEqual(['移', 'り', '行', 'く'], r.pieces('移り行く'))
+        self.assertEqual(['ガ', 'ラ', 'ス'], r.pieces('ｶﾞﾗｽ'))
+        self.assertEqual(['너', '무'], r.pieces('너무,'))
+
+    def test_other_spaced_writing_stays_whole_words(self):
+        self.assertEqual(['любовь'], r.pieces('Любовь!'))
+
+    def test_lines_in_japanese_are_timed(self):
+        heard = [('移', 5.0), ('り', 5.0), ('行', 5.5), ('く', 5.5), ('街', 6.0), ('心', 9.0), ('視', 9.5)]
+        self.assertEqual({0: 5.0, 1: 9.0}, r.line_starts(heard, ['移り行く街', '心視']))
+
+    def test_hearing_gives_each_letter_the_time_of_its_word(self):
+        with patch.dict(os.environ, {'WHISPER_PYTHON': 'gpu'}), \
+                patch.object(r.subprocess, 'run', return_value=SimpleNamespace(stdout=json.dumps([[['移り', 5.0], ['行く', 6.0]]]))):
+            self.assertEqual([[('移', 5.0), ('り', 5.0), ('行', 6.0), ('く', 6.0)]], r.words_heard(Path('voice.wav'), 'ja'))
+
+
 class AgreedTest(unittest.TestCase):
     def test_a_line_timed_apart_by_two_hearings_is_left_out(self):
         # The Police's chorus: one hearing lost it at 120 s and matched the line to the next one, at 161 s.

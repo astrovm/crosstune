@@ -81,8 +81,15 @@ DEV_APP = "com.astrovm.crosstune.dev"
 LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps")
 
 
-def norm(word):
-    return re.sub(r"[^a-z0-9']", "", unicodedata.normalize("NFKD", word.lower().replace("’", "'")))
+# Written without spaces, so what's heard can split anywhere: each letter is matched by itself.
+UNSPACED = "\u3040-\u30ff\u3400-\u9fff\uac00-\ud7a3"
+
+
+def pieces(word):
+    """What's matched of a word, in any writing: Latin letters without accents or punctuation, as one piece."""
+    word = unicodedata.normalize("NFKC", word.lower().replace("’", "'"))
+    bare = "".join(c for ch in word for c in (unicodedata.normalize("NFKD", ch) if ch < "\u0250" else ch) if ch >= "\u0250" or not unicodedata.combining(c))
+    return re.findall(f"[{UNSPACED}]|[^{UNSPACED}]+", re.sub(r"[^\w']|_", "", bare))
 
 
 def audio(path, kind="f32le"):
@@ -210,13 +217,13 @@ def words_heard(vocals, language):
     else:
         segments, _ = truth_model().transcribe(audio(vocals), language=language, word_timestamps=True, condition_on_previous_text=False, beam_size=5)
         hearings = [[(w.word, w.start) for s in segments for w in s.words]]
-    return [[(norm(word), start) for word, start in words if norm(word)] for words in hearings]
+    return [[(piece, start) for word, start in words for piece in pieces(word)] for words in hearings]
 
 
 def line_starts(heard, lines):
     """When each line starts in these heard words, matched in order to the lyrics. A line counts only when its
     first word and most of the rest match."""
-    lyric = [(norm(w), i) for i, line in enumerate(lines) for w in line.split() if norm(w)]
+    lyric = [(piece, i) for i, line in enumerate(lines) for word in line.split() for piece in pieces(word)]
     most = [[0] * (len(lyric) + 1) for _ in range(len(heard) + 1)]
     for i in range(len(heard) - 1, -1, -1):
         for j in range(len(lyric) - 1, -1, -1):
