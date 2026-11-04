@@ -35,9 +35,9 @@ first for the former). It then says how far each line is from when the phone lit
 they match does the replay stand for the phone.
 For ROCm Demucs only, set DEMUCS_PYTHON to a ROCm Python and DEMUCS_DEVICE=cuda;
 without these it uses the current Python on CPU. Truth and hearing stay on CPU.
-`set --cached` resumes the existing set without another live search. Prep keeps truth already made
+`set --cached` resumes the existing set without another live search. Prep keeps truth for unchanged lyrics
 and checkpoints every heard window atomically, so an interrupted song resumes too.
-Wants ffmpeg, yt-dlp, cmake, and demucs, faster-whisper and numpy in the Python running it.
+Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
 import json
@@ -94,7 +94,9 @@ def heard_binary():
 def model_file(model):
     path = OUT / f"ggml-{model}.bin"
     if not path.exists():
-        subprocess.run(["curl", "-sSLo", str(path), MODEL_URL.format(model)], check=True)
+        temporary = path.with_name(path.name + ".download")
+        subprocess.run(["curl", "-fsSL", "--retry", "2", "-o", str(temporary), MODEL_URL.format(model)], check=True)
+        temporary.replace(path)
     return path
 
 
@@ -170,9 +172,9 @@ def sung_language(song):
     """What the song is sung in, kept in ID.language, standing in for what the app tells from its words:
     the app hears in that language, and heard in English, a song in Spanish lines up with nothing."""
     kept = OUT / f"{song}.language"
-    if not kept.exists():
+    if not kept.exists() or not kept.read_text().strip():
         language, _, _ = truth_model().detect_language(audio(separated_voice(song, OUT / f"{song}.wav")), vad_filter=True, language_detection_segments=LANGUAGE_SEGMENTS)
-        kept.write_text(language)
+        atomic_text(kept, language)
     return kept.read_text()
 
 
@@ -238,10 +240,20 @@ def measured(song, phase, work):
 def prep(args):
     OUT.mkdir(parents=True, exist_ok=True)
     lyrics = json.loads(Path(args.lyrics).read_text())
-    (OUT / f"{args.id}.lyrics.json").write_text(json.dumps(lyrics))
+    kept = OUT / f"{args.id}.lyrics.json"
+    reference = OUT / f"{args.id}.truth.jsonl"
+    if reference.exists() and (not kept.exists() or json.loads(kept.read_text()) != lyrics):
+        reference.replace(reference.with_name(reference.name + ".previous"))
+    atomic_text(kept, json.dumps(lyrics))
     wav = OUT / f"{args.id}.wav"
     if not wav.exists():
-        subprocess.run(["yt-dlp", "-q", "-f", "bestaudio", "-x", "--audio-format", "wav", "-o", str(OUT / f"{args.id}.%(ext)s"), f"https://music.youtube.com/watch?v={args.id}"], check=True)
+        downloading = OUT / "downloading"
+        downloading.mkdir(exist_ok=True)
+        downloaded = downloading / wav.name
+        # An interrupted ffmpeg conversion can leave a WAV that yt-dlp would otherwise reuse.
+        downloaded.unlink(missing_ok=True)
+        subprocess.run(["yt-dlp", "-q", "-f", "bestaudio", "-x", "--audio-format", "wav", "-o", str(downloading / f"{args.id}.%(ext)s"), f"https://music.youtube.com/watch?v={args.id}"], check=True)
+        downloaded.replace(wav)
     if not (OUT / f"{args.id}.truth.jsonl").exists():
         measured(args.id, "demucs", lambda: separated_voice(args.id, wav))
         measured(args.id, "truth", lambda: truth(args.id, wav, [text for _, text in lyrics if text.strip()]))
@@ -529,6 +541,8 @@ def find_set(args):
 def complete(song):
     """Both hearing lengths must contain every window, including after an interrupted write."""
     if not all((OUT / f"{song}.{suffix}").exists() for suffix in ("wav", "language", "lyrics.json", "truth.jsonl")):
+        return False
+    if not (OUT / f"{song}.language").read_text().strip():
         return False
     duration = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                                                "-of", "default=nw=1:nk=1", str(OUT / f"{song}.wav")]))
