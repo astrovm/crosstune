@@ -257,6 +257,37 @@ class HeardWhenAskedTest(unittest.TestCase):
     def test_one_song_on_another_model_hears_nothing(self):
         self.assertEqual(self.replays(r.run, self.run_args(model='base-q5_1'), []), (1, 0))
 
+    def test_a_phone_checks_answers_are_placed_on_the_players_clock(self):
+        log = "\n".join((
+            "11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 23891 at 2341106216 playing true, kept 23891 at 2341106216",
+            "11-04 17:57:55.088 7559 7559 D CrosstuneTiming: recognized 177000 at 2341106000 match 40 received 2341106417 speed 0.5 length 294000",
+            "11-04 17:57:58.048 7559 7559 D CrosstuneTiming: fingerprint 50155 at 2341105307 match 40 app Following(clock=x) lead null guessed null",
+            "11-04 17:58:11.108 7559 7559 D CrosstuneTiming: fingerprint 23906 at 2341118482 match 31 received 2341122437 speed 0.997 length null app x",
+        ))
+        answers = r.phone_answers(log, 294000, 309000)
+        zero = 2341106216 - 23891
+        self.assertEqual(dict(at=2341106000 - zero, receivedAt=24092, songMs=177000, matchId='40', speed=0.5), answers['initial'])
+        self.assertEqual([
+            dict(at=2341105307 - zero, receivedAt=27052, songMs=50155, matchId='40', speed=1.0),
+            dict(at=2341118482 - zero, receivedAt=40112, songMs=23906, matchId='31', speed=0.997),
+        ], answers['events'])
+        self.assertEqual((294000, 309000), (answers['wordsLength'], answers['videoLength']))
+
+    def test_an_older_phone_check_starts_from_the_first_line_lit(self):
+        log = "\n".join((
+            "11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 23891 at 2341106216 playing true, kept 23891 at 2341106216",
+            "11-04 17:57:55.088 7559 7559 D CrosstuneTiming: lit 11 at 2341106423 pos 177755",
+            "11-04 17:57:58.048 7559 7559 D CrosstuneTiming: fingerprint 50155 at 2341105307 match 40 app x",
+        ))
+        answers = r.phone_answers(log, 294000, 309000)
+        self.assertEqual(dict(at=24098, receivedAt=24098, songMs=177755, matchId='40', speed=1.0), answers['initial'])
+
+    def test_a_phone_check_without_a_clock_or_an_answer_says_so(self):
+        with self.assertRaisesRegex(SystemExit, 'no clock'):
+            r.phone_answers("11-04 17:57:55.088 7559 7559 D CrosstuneTiming: lit 11 at 2341106423 pos 177755", 1, 1)
+        with self.assertRaisesRegex(SystemExit, 'no answer'):
+            r.phone_answers("11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 1 at 2 playing true, kept 1 at 2", 1, 1)
+
     def test_recorded_fingerprints_are_given_to_the_app_replay(self):
         with patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score'), \
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):

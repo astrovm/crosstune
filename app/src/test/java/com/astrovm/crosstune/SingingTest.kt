@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import org.junit.After
@@ -138,10 +139,10 @@ class SingingTest {
     }
 
     /** The music app plays the song from [positionMs], or pauses there; each call is news to Crosstune. */
-    private fun plays(positionMs: Long = 0, playing: Boolean = true, durationMs: Long? = null, speed: Float = 1f) {
+    private fun plays(positionMs: Long = 0, playing: Boolean = true, durationMs: Long? = null, speed: Float = 1f, video: Boolean = false) {
         startedAt = SystemClock.elapsedRealtime()
         startedFromMs = positionMs
-        playback.playing.value = Following(PlaybackClock(positionMs, startedAt, speed, playing), "YouTube Music", canSeek = true, durationMs = durationMs)
+        playback.playing.value = Following(PlaybackClock(positionMs, startedAt, speed, playing), "YouTube Music", canSeek = true, video = video, durationMs = durationMs)
         composeRule.waitForIdle()
     }
 
@@ -186,6 +187,85 @@ class SingingTest {
         plays(positionMs = 200)
         composeRule.waitForIdle()
         assertEquals(1, singing.hears)
+    }
+
+    /** Shazam's answers: each one [songMs] into the song, for audio heard just now, then no more. */
+    private fun shazamAnswers(vararg songMs: Long) {
+        val answers = songMs.iterator()
+        MainActivity.hearingFactory = {
+            SongHearing {
+                if (!answers.hasNext()) awaitCancellation()
+                Heard.Song(MusicMetadata("Demo", "Band"), null, answers.next(), SystemClock.elapsedRealtime(), "reference")
+            }
+        }
+    }
+
+    /** Where the music app's clock is when the first line is lit, whatever part of that is how far ahead it's taken to be. */
+    private fun firstLineOnAppsClock() = SystemClock.elapsedRealtime().let { now -> firstLineMs() + playback.playing.value!!.clock.positionAt(now) - followedAt() }
+
+    @Test
+    fun aVideoNoAnswerFitsIsLinedUpByTheSingingAlone() {
+        // Heard as a part played again, the answer is minutes from what the video could be.
+        shazamAnswers(180_000)
+        singing.answer = { sung(SHIFT_MS) }
+        openLyrics()
+        plays(positionMs = 1_000, video = true)
+        waitUntil { singing.hears >= 1 && model().uiState.following?.timingKnown == true }
+        assertEquals(SHIFT_MS, firstLineMs())
+    }
+
+    @Test
+    fun aVideoFarFromItsWordsNoAnswerFitsIsLinedUpByTheSingingAlone() {
+        shazamAnswers(180_000)
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 1_000, video = true)
+        waitUntil { singing.hears >= 1 && model().uiState.following?.timingKnown == true }
+        assertEquals(FAR_MS, firstLineMs())
+    }
+
+    @Test
+    fun aVideoWhoseSongMayNotHaveStartedIsntHeardForItsSingingYet() {
+        // Sixty seconds longer than its words, it may still be in what opens it.
+        lyricsTimedFor(30)
+        shazamAnswers(180_000)
+        openLyrics()
+        plays(positionMs = 1_000, video = true, durationMs = 90_000)
+        passes(5_000)
+        assertEquals(0, singing.hears)
+    }
+
+    @Test
+    fun anAnswerHeardAfterTheSingingPlacedTheLinesDoesntMoveThem() {
+        shazamAnswers(180_000, 4_000)
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 1_000, video = true)
+        waitUntil { model().uiState.following?.timingKnown == true }
+        val off = firstLineOnAppsClock()
+        composeRule.runOnIdle { model().listenAlong() }
+        passes(1_000)
+        assertEquals(off.toDouble(), firstLineOnAppsClock().toDouble(), 500.0)
+    }
+
+    @Test
+    fun aVideoPlacedFromOneAnswerIsWhereItWasOpenedAgain() {
+        // The video 2 seconds ahead of the words, as one answer says, and the singing another 4 off from there.
+        shazamAnswers(0)
+        singing.answer = { sung(FAR_MS + 2_000L) }
+        openLyrics()
+        plays(positionMs = 2_000, video = true)
+        waitUntil { model().uiState.lyricsSynced }
+        val off = firstLineOnAppsClock()
+        // Next time nothing's heard yet, so what's kept has to say it without that answer.
+        shazamAnswers()
+        singing.answer = { CompletableDeferred<Sung?>().await() }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().showLyrics() }
+        waitUntil { model().uiState.lyricLines.size == lines.size }
+        plays(positionMs = 2_000, video = true)
+        waitUntil { model().uiState.following?.timingKnown == true }
+        assertEquals(off.toDouble(), firstLineOnAppsClock().toDouble(), 500.0)
     }
 
     private fun shown(id: Int) = composeRule.onAllNodesWithText(app.getString(id)).fetchSemanticsNodes().isNotEmpty()

@@ -46,6 +46,7 @@ import org.junit.Assert.assertNotNull
 import android.os.Looper
 import android.os.PowerManager
 import android.Manifest
+import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.shadows.ShadowWindowManagerImpl
 import org.robolectric.shadow.api.Shadow
@@ -2230,6 +2231,29 @@ class ListeningTest {
         hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, (heardSeconds * 1000).toLong(), SystemClock.elapsedRealtime(), "reference"))
         waitForText("Demo one")
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+    }
+
+    /** Heard twice: the first answer opens the words, the second keeps them in time. */
+    private fun heardTwice(): List<String> {
+        val hearing = FakeHearing()
+        heardVideo(hearing)
+        hearing.song("Demo", 12.0, matchId = "reference")
+        waitUntil(TIMEOUT_MS) { hearing.listens == 3 }
+        return ShadowLog.getLogsForTag(TIMING_LOG).map { it.msg }
+    }
+
+    /** The phone check reads every fingerprint from this log, so it replays what the phone was told. */
+    @Test
+    fun aTimingCheckLogsEachAnswerShazamGave() {
+        ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
+        val logged = heardTwice()
+        assertTrue(logged.toString(), logged.any { it.startsWith("recognized 2000 ") })
+        assertTrue(logged.toString(), logged.any { it.startsWith("fingerprint 12000 ") })
+    }
+
+    @Test
+    fun nothingAboutTimingIsLoggedUnlessAsked() {
+        assertEquals(emptyList<String>(), heardTwice())
     }
 
     @Test

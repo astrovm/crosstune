@@ -1957,9 +1957,10 @@ internal class MainViewModel(
         if (uiState.lyrics.isEmpty() || working) return
         val key = RecordingKey.of(song)
         // Where lines were heard this time only isn't kept: next time the app's clock may be sure.
-        val lines = if (heardPoints.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, syncPoints))
+        val points = withGuess(syncPoints)
+        val lines = if (heardPoints.isEmpty() && points == syncPoints) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, points))
         val words = KeptWords(
-            uiState.lyrics, lines, uiState.lyricsSynced, found, foundLines, restored, syncPoints,
+            uiState.lyrics, lines, uiState.lyricsSynced, found, foundLines, restored, points,
             // A translation that failed is asked for again.
             learning.copy(translations = if (learning.translationFailed) emptyList() else learning.translations),
             // Chords none were found for are looked for again.
@@ -2122,7 +2123,7 @@ internal class MainViewModel(
         appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
         val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
         val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
-        appFollowing?.takeIf { needsLead(it) && syncPoints.isEmpty() }?.let { app ->
+        appFollowing?.takeIf { needsLead(it) && shownPoints.isEmpty() }?.let { app ->
             val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
             heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extra) }?.let { lead ->
                 appLeadMs = lead
@@ -2153,6 +2154,9 @@ internal class MainViewModel(
         } else {
             hear(steadied(heardClock, heard.clock ?: return), hearing.matchId, gap)
         }
+        // A part played again is heard as its other time, again and again, so where the song is steadies on
+        // that: with nothing to go by yet, the first answer the video could have is taken as soon as it's heard.
+        appFollowing?.takeIf { mayGuessLead(it) && guessedLeadMs == null && sameSong(song, shown) }?.let { guessLead(it, heard.clock) }
         keepInTime()
     }
 
@@ -2257,7 +2261,7 @@ internal class MainViewModel(
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
         // Put in time by hand, the words keep to the guess they were put in time from.
-        appFollowing?.takeIf { it.video && appLeadMs == null && calibrationAttempted && syncPoints.isEmpty() && !songMayNotHaveStarted() }?.let { app -> guessLead(app, shown) }
+        appFollowing?.takeIf { mayGuessLead(it) && calibrationAttempted }?.let { app -> guessLead(app, shown) }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
         hearSinging()
     }
@@ -2480,8 +2484,12 @@ internal class MainViewModel(
         }
     }
 
-    /** Whether a music app on the phone plays the song, lined up with its words. */
-    private fun playingLinedUp() = uiState.following?.let { it.app != null && it.clock.playing && (it.timingKnown || unheard) } == true
+    /**
+     * Whether a music app on the phone plays the song, lined up with its words, or a video well into
+     * its song with no hearing it could have, as every answer may be a part played again: the singing
+     * is what's left to line it up by.
+     */
+    private fun playingLinedUp() = uiState.following?.let { it.app != null && it.clock.playing && (it.timingKnown || unheard || !songMayNotHaveStarted()) } == true
 
     /** Whether to [doubt] where the words are timed, with no singing heard there, so no line's shown sung till it's found. */
     private fun doubtTiming(doubt: Boolean) {
@@ -2519,16 +2527,20 @@ internal class MainViewModel(
         foundLines.isNotEmpty() && syncPoints.isEmpty() && handGap == null && appLeadMs == null && found?.timedFor(song.lengthMs ?: appFollowing?.durationMs) == false &&
             !(lining && alongJob?.isActive == true)
 
+    /** Whether how far [app]'s video is ahead may still be guessed: not lined up yet, by hearings or the singing, and well into its song. */
+    private fun mayGuessLead(app: Following) = app.video && appLeadMs == null && shownPoints.isEmpty() && !songMayNotHaveStarted()
+
     /** Takes how far [app]'s video is ahead of [song] from its last hearing, when that's a lead a video could have. */
-    private fun guessLead(app: Following, song: MusicMetadata) {
+    private fun guessLead(app: Following, song: MusicMetadata) = guessLead(app, heardClock?.takeIf { heardSong?.let { sameSong(it, song) } == true && now() - heardAtMs <= HEARD_LATELY_MS })
+
+    private fun guessLead(app: Following, heard: PlaybackClock?) {
         val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
-        leadOf(app, song)?.takeIf { it in LeadTiming.possible(extra) }?.let { guessedLeadMs = it }
+        leadOf(app, heard)?.takeIf { it in LeadTiming.possible(extra) }?.let { guessedLeadMs = it }
     }
 
-    /** How far [app]'s video is ahead of [song], by where the song was heard a moment ago, both playing. */
-    private fun leadOf(app: Following, song: MusicMetadata): Long? {
-        val heard = heardClock?.takeIf { it.playing && app.clock.playing && now() - heardAtMs <= HEARD_LATELY_MS } ?: return null
-        if (heardSong?.let { sameSong(it, song) } != true) return null
+    /** How far [app]'s video is ahead of the song [heard] there, both playing. */
+    private fun leadOf(app: Following, heard: PlaybackClock?): Long? {
+        if (heard?.playing != true || !app.clock.playing) return null
         val at = now()
         return app.clock.positionAt(at) - heard.positionAt(at)
     }
@@ -2544,7 +2556,7 @@ internal class MainViewModel(
     /** [app]'s place less how far it was heard to be ahead of the words, as [inSong] has it. */
     private fun leadTaken(app: Following?): Following? {
         if (app == null || (!app.video && appLeadMs == null)) return app
-        val lead = leadNow ?: return if (calibrationAttempted || syncPoints.isNotEmpty()) app.copy(timingKnown = syncPoints.isNotEmpty())
+        val lead = leadNow ?: return if (calibrationAttempted || shownPoints.isNotEmpty()) app.copy(timingKnown = shownPoints.isNotEmpty())
             else uiState.lyricsFor?.let(::heardFollowing) ?: app.copy(timingKnown = false)
         return app.copy(clock = app.clock.copy(positionMs = app.clock.positionMs - lead))
     }
@@ -2604,7 +2616,7 @@ internal class MainViewModel(
                     appLeadMs = leadStore.load(song)?.also { if (playing.video) leadSavedLines(song, playing.appPackage, it) }
                 }
                 // A first fingerprint suggests an intro through the same checks as later guesses.
-                if (playing?.video == true && appLeadMs == null && !calibrationAttempted && syncPoints.isEmpty() && !songMayNotHaveStarted()) guessLead(playing, song)
+                if (playing?.let(::mayGuessLead) == true && !calibrationAttempted) guessLead(playing, song)
                 // Playing the release the words are timed for, it's heard too, once, to put them right on any other.
                 val lines = playing?.let(::needsLead) == true && appLeadMs == null && syncPoints.isEmpty()
                 if (playing != null && playing.clock.playing && (lines || learnsGap(playing)) && !calibrationAttempted && mayCalibrate()) {
@@ -2680,6 +2692,10 @@ internal class MainViewModel(
         heardThisTime = false
         liningUp = false
         appFollowing = null
+        if (guessedLeadMs != null && syncPoints.isNotEmpty()) {
+            syncPoints = withGuess(syncPoints)
+            showPoints()
+        }
         appLeadMs = null
         guessedLeadMs = null
         leadMatch = null
@@ -3039,11 +3055,17 @@ internal class MainViewModel(
         // Put in time by hand or for good, what was heard this time only gives way.
         heardPoints = emptyList()
         // Kept for the words as found, which is how they're found next time.
-        syncStore.save(song, foundLines, points)
+        syncStore.save(song, foundLines, withGuess(points))
         uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points)), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
         keepInTime()
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)
+    }
+
+    /** [points] put in time from a video's guessed lead, as they are without it: where they're kept, as next time nothing's heard yet. */
+    private fun withGuess(points: List<SyncPoint>): List<SyncPoint> {
+        val guess = guessedLeadMs?.takeIf { appLeadMs == null } ?: return points
+        return points.map { it.copy(songMs = it.songMs + guess) }
     }
 
     private var restoreJob: Job? = null

@@ -36,6 +36,7 @@ open. The JSON has `wordsLength`, `videoLength`, `initial` and `events`: each an
 unadjusted player clock; `songMs` is the position Shazam returned for audio starting at `at`.
 Use `--from` for the player position when the initial answer opened the words. Keep recordings
 and these answers under build/, with the exact lyric sheet in ID.found.json.
+`fingerprints ID [--kept DIR]` makes that JSON from what a `phone` check kept, and says the `--from`.
 `run --like-phone` replays it as the last `phone` check went, from what it kept: where the app picked
 the song up, how far its clock was behind, how long the phone took to work out each while, the words it
 showed, and whether it heard the sound played itself, with Shizuku, or through the visualizer (`hear --clean`
@@ -54,6 +55,7 @@ Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the P
 import argparse
 import html
 import json
+from datetime import datetime
 import os
 import shutil
 import re
@@ -686,6 +688,57 @@ def phone_lines(log):
     return lit
 
 
+def phone_answers(log, words_length, video_length):
+    """What Shazam told the app in a `phone` check, on the player's clock, as `run --fingerprints` replays it.
+    The log's own time says when each answer came, as its first lines don't. The first answer's `recognized`
+    row is from a later app: before it, it's where the first line lit was."""
+    rows = log.splitlines()
+    def wall(row):
+        day, clock = row.split()[:2]
+        when = datetime.strptime(f"2026-{day} {clock}", "%Y-%m-%d %H:%M:%S.%f")
+        return round(when.timestamp() * 1000)
+    said = [re.search(r"said -?\d+ at \d+ playing true, kept (-?\d+) at (\d+)", row) for row in rows]
+    said = [(row, match) for row, match in zip(rows, said) if match]
+    if not said:
+        raise SystemExit("The phone's log has no clock from the music app, so its answers can't be placed.")
+    row, last = said[-1]
+    zero = int(last[2]) - int(last[1])
+    to_elapsed = int(last[2]) - wall(row)
+    def answer(row, song, at, match, speed):
+        return dict(at=at - zero, receivedAt=wall(row) + to_elapsed - zero, songMs=song, matchId=match, speed=speed)
+    events, initial = [], None
+    for row in rows:
+        heard = re.search(r"(fingerprint|recognized) (\d+) at (\d+) match (\S+)(?: received \d+ speed ([\d.]+))?", row)
+        if not heard:
+            continue
+        told = answer(row, int(heard[2]), int(heard[3]), heard[4], float(heard[5] or 1))
+        if heard[1] == "fingerprint":
+            events.append(told)
+        elif initial is None:
+            initial = told
+    if initial is None:
+        lit = next((m for m in map(re.compile(r"lit -?\d+ at (\d+) pos (-?\d+)").search, rows) if m), None)
+        if lit is None or not events:
+            raise SystemExit("The phone's log has no answer to start from.")
+        initial = dict(at=int(lit[1]) - zero, receivedAt=int(lit[1]) - zero, songMs=int(lit[2]), matchId=events[0]["matchId"], speed=1.0)
+    return dict(wordsLength=words_length, videoLength=video_length, initial=initial, events=events)
+
+
+def fingerprints(args):
+    kept = Path(args.kept) if args.kept else OUT / "phone" / args.id
+    log = (kept / "log.txt").read_text()
+    lyrics = (kept / "lyrics.json").read_text()
+    words = OUT / f"{args.id}.found.json"
+    length = json.loads(words.read_text())["length"] if words.exists() else found_words(args.id, kept)["length"]
+    video = re.search(r"duration:(\d+)", lyrics)
+    if not video:
+        raise SystemExit("The phone's cache doesn't say how long the video is.")
+    answers = phone_answers(log, length, int(video[1]))
+    out = Path(args.out) if args.out else OUT / f"{args.id}.fingerprints.json"
+    atomic_text(out, json.dumps(answers))
+    print(f"{out}: {len(answers['events'])} answers. Replay it with `run {args.id} --from {answers['initial']['at']} --fingerprints {out}`")
+
+
 def score_phone(song_id, kept):
     lit = phone_lines((kept / "log.txt").read_text())
     if not lit:
@@ -865,6 +918,11 @@ def main():
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
             p.add_argument("--fingerprints", help="JSON recording of the initial recognition and later answers on the player clock")
             p.add_argument("--like-phone", action="store_true", help="as the last `phone` check of it went, held to the lines it lit; sets --from, --behind, --work and --model")
+    p = steps.add_parser("fingerprints")
+    p.add_argument("id")
+    p.add_argument("--kept", help="the folder a `phone` check kept, when not its own")
+    p.add_argument("--out", help="where to write them, when not ID.fingerprints.json")
+    p.set_defaults(go=fingerprints)
     p = steps.add_parser("set")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--find-only", action="store_true", help="find the songs and their words, without prepping them")
