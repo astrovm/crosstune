@@ -27,6 +27,7 @@ import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
+import java.text.Normalizer
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /** What LRCLIB's Retry-After asks for when it's busy. */
@@ -49,6 +50,94 @@ private val closingFiller = Regex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)"""
 
 /** A note under a heading, not sung: wholly in brackets, "（Some Writer / Another）", or who it's by, "BY SOMEONE". */
 private val headingNote = Regex("""[（(\[].*[）)\]]|by\s+\S.*""", RegexOption.IGNORE_CASE)
+
+/** A bracketed stretch, in any of the brackets lyrics are written with: "（repeat and fade）", "(x2)", "[fade out]", "【2x】". */
+private val bracketed = Regex("""[（(\[【][^（()）\[\]【】]*[）)\]】]""")
+
+/** What a note on how a song is played says besides its direction: "repeat and fade", "fade out", "repeat chorus 2 times". */
+private val noteFiller = setOf("and", "to", "in", "out", "the", "then", "till", "until", "chorus", "verse", "bridge", "intro", "outro", "last", "final", "times")
+
+/** What makes a note a direction to the band: repeating, fading or a count, "x2", "2x", "×4". */
+private val noteDirection = Regex("""repeat(?:s|ed|ing)?|fad(?:e|es|ed|ing)|x\d+|\d+x""")
+
+/** A count alone, "x2" or "2x", which no one sings. */
+private val noteCount = Regex("""x\d+|\d+x""")
+
+/**
+ * Whether what's in a bracket is a note on how the song is played, not sung: only words of such a
+ * note, with a direction among them, and more than one word, or a count alone. "repeat" or "fade"
+ * alone, or with a sung word, "fade away", could be an echo or a backing line, so it stays.
+ */
+private fun isPerformanceNote(inside: String): Boolean {
+    val words = Normalizer.normalize(inside, Normalizer.Form.NFKC).lowercase().replace('×', 'x')
+        .split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
+    val counted = "times" in words && words.any { word -> word.all(Char::isDigit) }
+    val onlyNote = words.all { it in noteFiller || noteDirection.matches(it) || it.all(Char::isDigit) }
+    return onlyNote && (counted || words.any(noteDirection::matches)) && (words.size >= 2 || noteCount.matches(words.first()))
+}
+
+/** Which characters of [text] are performance notes, with the space before each; null when it has none. A note that starts the line leaves a space to trim. */
+private fun noteMask(text: String): BooleanArray? {
+    val notes = bracketed.findAll(text).filter { isPerformanceNote(it.value.substring(1, it.value.length - 1)) }.toList()
+    if (notes.isEmpty()) return null
+    val cut = BooleanArray(text.length)
+    for (note in notes) {
+        var start = note.range.first
+        while (start > 0 && text[start - 1].isWhitespace()) start--
+        for (at in start..note.range.last) cut[at] = true
+    }
+    return cut
+}
+
+private fun String.without(cut: BooleanArray, from: Int = 0) = filterIndexed { at, _ -> !cut[from + at] }
+
+/** [line] without its performance notes; the same when it has none. */
+private fun withoutPerformanceNotes(line: String): String = noteMask(line)?.let { line.without(it).trim() } ?: line
+
+/**
+ * [line] without its performance notes, the words timed one by one cut the same way, each keeping
+ * its own time; null when a note was all there is. A note that ends the line, timed apart from its
+ * words, takes its time off the line's end: a card to practice it would play the silence too.
+ */
+private fun withoutPerformanceNotes(line: LyricLine): LyricLine? {
+    val joined = line.words.joinToString("") { it.text }
+    val cut = noteMask(joined)
+    val cutWords = cut?.let { mask -> cutFrom(line.words, mask) } ?: line.words
+    val words = if (cut == null) line.words else cutWords.withoutBlankWords().trimmedAtTheEnds()
+    // Both read the same where the words make up the line, as timed ones do.
+    val text = if (joined == line.text) words.joinToString("") { it.text } else withoutPerformanceNotes(line.text)
+    if (text.isBlank() && line.text.isNotBlank()) return null
+    return line.copy(text = text, words = words, endMs = if (cut == null) line.endMs else endBeforeNote(line, cutWords))
+}
+
+/** [words], each without the characters [cut] marks, over all of them joined. A word may be left with nothing, or a space. */
+private fun cutFrom(words: List<TimedWord>, cut: BooleanArray): List<TimedWord> {
+    var from = 0
+    return words.map { word -> word.copy(text = word.text.without(cut, from)).also { from += word.text.length } }
+}
+
+/** The words without those left with no more than a space, which goes to the word before it, as timed words keep their spaces. */
+private fun List<TimedWord>.withoutBlankWords(): List<TimedWord> = fold(emptyList()) { kept, word ->
+    when {
+        word.text.isNotBlank() -> kept + word
+        kept.isEmpty() -> kept
+        else -> kept.dropLast(1) + kept.last().copy(text = kept.last().text + word.text)
+    }
+}
+
+private fun List<TimedWord>.trimmedAtTheEnds(): List<TimedWord> =
+    mapIndexed { at, word -> word.copy(text = word.text.let { if (at == 0) it.trimStart() else it }.let { if (at == lastIndex) it.trimEnd() else it }) }
+
+/**
+ * When [line] ends once its notes are cut, [cutWords] being its words so: where the first word of a
+ * note that ends it begins. Where the note was on a word with others, there's no telling, and it ends as it did.
+ */
+private fun endBeforeNote(line: LyricLine, cutWords: List<TimedWord>): Long? {
+    val last = cutWords.indexOfLast { it.text.isNotBlank() }
+    val noteStart = line.words.getOrNull(last + 1)?.timeMs ?: return line.endMs
+    val whole = last >= 0 && cutWords[last].text.trimEnd() == line.words[last].text.trimEnd()
+    return line.endMs?.let { if (whole) minOf(it, noteStart) else it }
+}
 
 /** A year, as after the artist under a heading: "The Band（1972）". */
 private val year = Regex("""(?:19|20)\d\d""")
@@ -1275,7 +1364,7 @@ internal class LyricsFinder(
         const val CACHE_VERSION = 14
 
         /**
-         * [found] without what's since learned to be left out: a site's ad, from any site, and what
+         * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what
          * NetEase's contributors add; a song a site keeps in capitals, in sentence case. Words kept from before get each fix too, with no need to look
          * them up again.
          */
@@ -1288,8 +1377,10 @@ internal class LyricsFinder(
             val commas = netEase && "\\'" in found.words
             fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
             fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
-            val words = found.words.lines().map(::mend).clean { it }.joinToString("\n").trim()
+            val words = found.words.lines().map(::mend).mapNotNull { line -> withoutPerformanceNotes(line).takeUnless { it.isBlank() && line.isNotBlank() } }
+                .clean { it }.joinToString("\n").trim()
             val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
+                .mapNotNull { withoutPerformanceNotes(it) }
                 .clean { it.text }
             val kept = found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
             return if (shouting) restoredCase(inSentenceCase(kept), copies.map { it.words }) else kept
@@ -1308,7 +1399,7 @@ internal class LyricsFinder(
             })
         }
 
-        private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it }
+        private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it || withoutPerformanceNotes(it) != it }
 
         private fun inSentenceCase(found: Lyrics.Found) = found.copy(
             words = found.words.lines().joinToString("\n", transform = ::inSentenceCase),
