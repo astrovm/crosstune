@@ -32,9 +32,8 @@ class WordsContrastTest {
     private val dimmest = minOf(lineAlpha(-1, waiting = false, coming = false), lineAlpha(1, waiting = false, coming = false), UNSUNG_ALPHA)
 
     private fun assertLinesRead(onSurface: Color, onVariant: Color, primary: Color, ground: Color) {
-        assertReads("Words", onSurface, dimmest, ground)
-        assertReads("Chords and translations", wordsHelp(primary, onSurface), dimmest, ground)
-        assertReads("Readings", wordsHelp(onVariant, onSurface), dimmest, ground)
+        assertReads("Words and readings", onSurface, dimmest, ground)
+        assertReads("Chords and translations", wordsAccent(primary, onSurface), dimmest, ground)
         assertReads("A chord not being played", onVariant, lineAlpha(0, waiting = false, coming = false), ground)
     }
 

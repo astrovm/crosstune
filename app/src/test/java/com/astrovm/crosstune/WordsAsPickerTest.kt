@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -87,13 +89,13 @@ class WordsAsPickerTest {
     @Test
     fun evenTheBrightestVisualLeavesReadableWordsAndSoftensFurtherBehindAMenu() {
         val play = overBrightestVisuals()
-        assertEquals("A bright visual must stay behind the words", VISUALS_CEILING, play().ceiling)
-        assertEquals(0.5f, play().shade)
+        assertEquals("A bright visual must stay behind the words", VISUALS_CEILING, play().ceiling, 0.001f)
+        assertEquals(0.5f, play().shade, 0.001f)
         val app = ApplicationProvider.getApplicationContext<Application>()
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_learn)).performClick()
         compose.waitForIdle()
-        assertEquals("An open menu should soften the background further", 0.75f, play().shade)
-        assertEquals(VISUALS_CEILING, play().ceiling)
+        assertEquals("An open menu should soften the background further", 0.75f, play().shade, 0.001f)
+        assertEquals(VISUALS_CEILING, play().ceiling, 0.001f)
     }
 
     @Test
@@ -103,11 +105,14 @@ class WordsAsPickerTest {
         compose.onNodeWithContentDescription(app.getString(R.string.visuals_options)).performClick()
         compose.onNodeWithText(app.getString(R.string.visuals_only)).performClick()
         compose.waitForIdle()
-        assertEquals(0f, play().shade)
-        assertEquals(1f, play().ceiling)
-        compose.onNodeWithContentDescription(app.getString(R.string.visuals_show_words)).performClick()
+        assertEquals(0f, play().shade, 0f)
+        assertEquals(1f, play().ceiling, 0f)
+        val showWords = app.getString(R.string.visuals_show_words)
+        compose.onNode(SemanticsMatcher("shows the words") {
+            SemanticsActions.OnClick in it.config && it.config[SemanticsActions.OnClick].label == showWords
+        }).performClick()
         compose.waitForIdle()
-        assertEquals(0.5f, play().shade)
-        assertEquals(VISUALS_CEILING, play().ceiling)
+        assertEquals(0.5f, play().shade, 0.001f)
+        assertEquals(VISUALS_CEILING, play().ceiling, 0.001f)
     }
 }

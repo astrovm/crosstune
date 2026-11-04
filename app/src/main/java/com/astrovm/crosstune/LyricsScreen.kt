@@ -1839,13 +1839,13 @@ internal fun lineAlpha(place: Int?, waiting: Boolean, coming: Boolean): Float = 
 }
 
 /** How bright the line coming next is a moment before it's sung, when set to. */
-private const val COMING_ALPHA = 0.9f
+private const val COMING_ALPHA = 0.92f
 
 /** How bright the lines still to come are. */
-private const val TO_COME_ALPHA = 0.8f
+private const val TO_COME_ALPHA = 0.85f
 
 /** How bright the lines already sung are: the dimmest a line gets, and still readable; see WordsContrastTest. */
-internal const val SUNG_ALPHA = 0.7f
+internal const val SUNG_ALPHA = 0.75f
 
 /**
  * Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
@@ -1890,7 +1890,7 @@ private fun LineWords(
         val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }
         ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, sung, coming, style, ruby, help?.readingScale ?: READING_SCALE)
     } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
-        RubyLine(reading.parts, style, help.readingScale, readingColor = wordsHelp(MaterialTheme.colorScheme.onSurfaceVariant))
+        RubyLine(reading.parts, style, help.readingScale, readingColor = MaterialTheme.colorScheme.onSurface)
     } else if (sung != null && words.isNotEmpty()) {
         SungWords(words, sung, style)
     } else if (coming && words.isNotEmpty()) {
@@ -1915,22 +1915,20 @@ private fun LineHelps(help: LineHelp?, instead: String?, style: TextStyle, look:
     val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f, textAlign = style.textAlign)
     // Shown in them already, they'd say it twice.
     if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
-        Text(it, style = small, color = wordsHelp(MaterialTheme.colorScheme.onSurfaceVariant))
+        Text(it, style = small, color = MaterialTheme.colorScheme.onSurface)
     }
     help?.translation?.let {
         val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale * look.translation, lineHeight = TRANSLATION_LINE * help.translationScale * look.translation, textAlign = style.textAlign)
-        Text(it, style = translated, color = wordsHelp(MaterialTheme.colorScheme.primary), modifier = Modifier.padding(top = 2.dp))
+        Text(it, style = translated, color = wordsAccent(), modifier = Modifier.padding(top = 2.dp))
     }
 }
 
-/** [color] for what goes with a line's words, closer to the words' own, as it's dimmed along with them. */
+/** The color of a line's chords and translation, which are dimmed along with its words. */
 @Composable
-private fun wordsHelp(color: Color) = wordsHelp(color, MaterialTheme.colorScheme.onSurface)
+private fun wordsAccent() = wordsAccent(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
 
-internal fun wordsHelp(color: Color, words: Color) = lerp(color, words, WORDS_HELP_LIFT)
-
-/** How much of the words' color what goes with them takes on: as little as leaves it readable on a dim line, so a chord stays a chord's color. */
-private const val WORDS_HELP_LIFT = 0.6f
+/** [primary] leaning to the color of the [words], only as far as leaves it readable on a dim line, so a chord stays a chord's color. */
+internal fun wordsAccent(primary: Color, words: Color) = lerp(primary, words, 0.6f)
 
 private fun alignment(centered: Boolean) = if (centered) TextAlign.Center else TextAlign.Unspecified
 
@@ -1991,12 +1989,11 @@ internal val ChordLit = SemanticsPropertyKey<Int>("ChordLit")
  */
 @Composable
 private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, coming: Boolean, style: TextStyle, ruby: List<Ruby>?, readingScale: Float) {
-    val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = wordsHelp(MaterialTheme.colorScheme.primary))
-    val readingColor = wordsHelp(MaterialTheme.colorScheme.onSurfaceVariant)
+    val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = wordsAccent())
     if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
     val text = line.text.ifBlank { "♪" }
     if (chords.over.isEmpty()) {
-        if (ruby != null) RubyLine(ruby, style, readingScale, readingColor = readingColor) else Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
+        if (ruby != null) RubyLine(ruby, style, readingScale, readingColor = MaterialTheme.colorScheme.onSurface) else Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
         return
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
@@ -2006,7 +2003,7 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     // Read only where it's drawn, so a new chord played just draws it again.
     val playing = remember { mutableIntStateOf(-1) }
     playing.intValue = now?.first ?: -1
-    val over = readingStyle(style, readingScale).copy(color = readingColor)
+    val over = readingStyle(style, readingScale).copy(color = MaterialTheme.colorScheme.onSurface)
     val written = remember(ruby, readingScale, text) { ruby?.let { rubyText(it, readingScale) } ?: AnnotatedString(text) }
     val shown = chordedWords(line, text, written, ruby, now?.second, coming)
     val measurer = rememberTextMeasurer()

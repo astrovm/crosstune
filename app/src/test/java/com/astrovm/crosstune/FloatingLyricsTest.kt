@@ -113,7 +113,7 @@ class FloatingLyricsTest {
             }
         }
         compose.waitForIdle()
-        assertEquals(VISUALS_CEILING, drawn.ceiling)
+        assertEquals(VISUALS_CEILING, drawn.ceiling, 0f)
     }
 
     private val night = LineReading(listOf(Ruby("夜", "よる")), "よる", "yoru")
