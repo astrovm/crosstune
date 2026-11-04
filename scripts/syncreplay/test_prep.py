@@ -163,12 +163,27 @@ class TableTest(unittest.TestCase):
                                                        for n, start in enumerate([10.2, 20, 30])))
             output = io.StringIO()
             with redirect_stdout(output):
-                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0))
+                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard=''))
             rows = output.getvalue().splitlines()
             self.assertEqual(['all', '3', '1', '1', '1', '1', '-9.0'], rows[2].split()[:7])
             self.assertIn('Reference coverage: 3/4', rows[3])
             self.assertFalse((r.OUT / 'replay.json').exists())
             self.assertFalse((r.OUT / 'replay.songs').exists())
+
+class ReplayAllTest(unittest.TestCase):
+    def test_it_replays_the_set_of_what_was_heard_it_is_asked_for(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay):
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)])))
+            (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
+            with patch('sys.stdout'):
+                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.thin5'))
+        self.assertEqual(asked[0]['songs'][0]['heard'], '.thin5')
+
 
 class WordsHeardTest(unittest.TestCase):
     def test_a_gpu_python_hears_the_words_with_the_same_model(self):
