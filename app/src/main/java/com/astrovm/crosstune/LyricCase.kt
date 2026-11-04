@@ -49,18 +49,6 @@ internal class LyricCase(copies: List<String>) {
         return a.first() == b.first() && lettersApart(a, b) <= maxOf(a.length, b.length) / LETTERS_PER_MISSPELLING
     }
 
-    /** How many letters to change, add or take away to make [a] into [b]. */
-    private fun lettersApart(a: String, b: String): Int {
-        var row = IntArray(b.length + 1) { it }
-        for (i in a.indices) {
-            val next = IntArray(b.length + 1)
-            next[0] = i + 1
-            for (j in b.indices) next[j + 1] = minOf(row[j + 1] + 1, next[j] + 1, row[j] + if (a[i] == b[j]) 0 else 1)
-            row = next
-        }
-        return row[b.length]
-    }
-
     /** [lines] together, so a word's neighbors can be on the next line, each one as long as it was. */
     fun apply(lines: List<String>): List<String> {
         val cased = apply(lines.joinToString("\n"))
@@ -80,4 +68,16 @@ internal class LyricCase(copies: List<String>) {
      * break, a full stop, an opening bracket or quote, can start one, and then its capital says nothing.
      */
     private fun insideASentence(gap: String) = gap == "-" || gap.all { it == ',' || (it.isWhitespace() && it !in "\r\n") }
+}
+
+/** How many letters to change, add or take away to make [a] into [b]. */
+internal fun lettersApart(a: String, b: String): Int {
+    var row = IntArray(b.length + 1) { it }
+    for (i in a.indices) {
+        val next = IntArray(b.length + 1)
+        next[0] = i + 1
+        for (j in b.indices) next[j + 1] = minOf(row[j + 1] + 1, next[j] + 1, row[j] + if (a[i] == b[j]) 0 else 1)
+        row = next
+    }
+    return row[b.length]
 }

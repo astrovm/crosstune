@@ -80,4 +80,21 @@ class LyricCaseTest {
         // Spelled otherwise, a capital further in says nothing about where this copy has it.
         assertEquals("We meet Macbride here", LyricCase(listOf("We meet McBride here")).apply("We meet macbride here"))
     }
+
+    @Test fun bothNeighborsHaveToMatch() {
+        val casing = LyricCase(listOf("we walk to Mira now and then"))
+        assertEquals("we walk to mira tonight and then", casing.apply("we walk to mira tonight and then"))
+        assertEquals("we ran at mira now and then", casing.apply("we ran at mira now and then"))
+        val spelled = LyricCase(listOf("we walk to the Rivers now and then"))
+        assertEquals("we walk to the rivers tonight and then", spelled.apply("we walk to the rivers tonight and then"))
+        assertEquals("we walk to a riverz now and then", spelled.apply("we walk to a riverz now and then"))
+    }
+
+    @Test fun lettersApartCountsEveryChange() {
+        assertEquals(0, lettersApart("mira", "mira"))
+        assertEquals(3, lettersApart("kitten", "sitting"))
+        assertEquals(3, lettersApart("", "abc"))
+        assertEquals(3, lettersApart("abc", ""))
+        assertEquals(2, lettersApart("charibdes", "charybdis"))
+    }
 }
