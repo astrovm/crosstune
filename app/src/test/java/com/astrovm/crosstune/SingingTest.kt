@@ -839,6 +839,27 @@ class SingingTest {
     }
 
     @Test
+    fun singingFoundInAWhilesFirstSecondsIsntDoubtedByMusicAloneAfter() {
+        // The words heard in the first seconds, while the speech model hears the whole while, and the next, as music alone.
+        val times = listOf(2, 5, 8, 30, 33, 36)
+        lyricsTimedFor(null, times)
+        val last = CompletableDeferred<Sung?>()
+        singing.early = { if (singing.hears == 1) sungAt(times, times.map { 1_000L }) else musicAlone() }
+        singing.answer = { if (singing.hears < 3) musicAlone() else last.await() }
+        openLyrics()
+        plays()
+        passes(500)
+        waitUntil { singing.hears == 1 }
+        passes(30_000)
+        waitUntil { singing.hears == 2 }
+        passes(20_000)
+        waitUntil { singing.hears == 3 }
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.following!!.timingKnown)
+        last.complete(null)
+    }
+
+    @Test
     fun aVoiceThatMatchesNothingIsntSingingFoundSoMusicAloneAfterDoubtsTheTiming() {
         // Not the words of the song, or not made out, but sung where they should be: nothing's doubted yet.
         val times = listOf(2, 5, 8, 30, 33, 36)

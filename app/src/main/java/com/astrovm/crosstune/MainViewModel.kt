@@ -2301,7 +2301,7 @@ internal class MainViewModel(
             delay(untilSung(shown, uiState.following?.clock ?: return, heardTo, straightOn) ?: return)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return
             singingTries++
-            val sung = hearOnce(hearing, lines, heardFirst(song, lines, clock, shown, heardTo == null) { voiced = true }) ?: return
+            val sung = hearOnce(hearing, lines, heardFirst(song, lines, clock, shown, heardTo == null, { found = true }) { voiced = true }) ?: return
             if (!stillPlays(song, lines, clock)) return
             // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
             // while is heard straight on, wherever the words are timed: the singing may be well after them.
@@ -2327,15 +2327,17 @@ internal class MainViewModel(
      * timed into an intro aren't shown sung all the while it's heard. But the speech model sometimes
      * hears singing as music alone, depending on just where what it hears starts, so it's only doubted
      * when the seconds heard again a little later, as asked for, have none either. On any while, a voice
-     * there lifts that doubt, as soon as it's heard, and is told [voiced].
+     * there lifts that doubt, as soon as it's heard, and is told [voiced]; the words themselves are told
+     * [found] too, as the singing's been found, however the rest of the song comes to be heard.
      */
-    private fun heardFirst(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>, first: Boolean, voiced: () -> Unit): suspend (Sung) -> Boolean {
+    private fun heardFirst(song: MusicMetadata, lines: List<LyricLine>, clock: PlaybackClock, shown: List<LyricLine>, first: Boolean, found: () -> Unit, voiced: () -> Unit): suspend (Sung) -> Boolean {
         var quiet = 0
         return heard@{ heard ->
             if (!stillPlays(song, lines, clock)) return@heard false
             val shift = SungAlignment.shiftMs(heard, clock::positionAt, shown)
             when {
                 shift != null -> {
+                    found()
                     voiced()
                     placeHeard(song, heard, clock, shown, shift)
                     false
