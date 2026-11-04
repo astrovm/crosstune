@@ -71,6 +71,9 @@ APP_MODEL = "tiny-q5_1"
 HEARD_AT_ONCE = max(1, (os.cpu_count() or 4) - 2)
 # Songs at once when a replay asks for more, as each has only a few stretches to hear.
 SONGS_HEARD_AT_ONCE = 4
+# As in SingingListener, which test_prep holds these to.
+HEARING_LEVEL = 0.5
+MOST_RAISED = 6.0
 SEED_EVERY = 20
 LANGUAGE_SEGMENTS = 4
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
@@ -120,7 +123,7 @@ def model_file(model):
 def heard_file(song, length, model):
     """What `model` heard in each `length` ms of `song`: the app's model's is the plain one. A model
     named with ".clean" heard the recording itself rather than through the visualizer."""
-    return OUT / f"{song}.heard{length // 1000}{'' if model == APP_MODEL else '.' + model}.json"  # SyncReplayTest reads the same names
+    return OUT / f"{song}.heard{length // 1000}.level{'' if model == APP_MODEL else '.' + model}.json"  # SyncReplayTest reads the same names
 
 
 def as_the_phone_hears(path):
@@ -136,6 +139,13 @@ def as_the_phone_hears(path):
     byte = np.clip(a >> shift[:, None], -128, 127).ravel()
     byte = byte[:len(byte) // 3 * 3].reshape(-1, 3).mean(axis=1)
     return (byte * 256 / 32768).astype(np.float32)
+
+
+def at_hearing_level(sound):
+    """As SingingListener.atHearingLevel does, before the speech model hears it."""
+    import numpy as np
+    level = float(np.sqrt(np.mean(sound.astype(np.float64) ** 2)))
+    return (sound * (min(HEARING_LEVEL / level, MOST_RAISED) if level > 0 else 1)).astype(np.float32)
 
 
 def seed(starts):
@@ -156,7 +166,7 @@ def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     language = sung_language(song)
 
     def hear(start):
-        seg = a[start * 16:(start + length) * 16]
+        seg = at_hearing_level(a[start * 16:(start + length) * 16])
         # A model that can't run hears nothing, so it fails here rather than passing for silence.
         text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
@@ -831,7 +841,7 @@ def main():
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
     p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
-    p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")
+    p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.level.thin5.json")
     p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")

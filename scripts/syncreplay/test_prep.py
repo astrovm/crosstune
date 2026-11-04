@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import threading
@@ -27,7 +28,7 @@ class ResumeTest(unittest.TestCase):
     def test_hearing_alone_does_not_make_song_prepped(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
             (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
-            (r.OUT / 'fake.heard20.json').write_text('{}')
+            r.heard_file('fake', 20000, r.APP_MODEL).write_text('{}')
             self.assertEqual([], r.prepped())
 
 class HeardBinaryTest(unittest.TestCase):
@@ -46,6 +47,21 @@ class HeardBinaryTest(unittest.TestCase):
                 found = list(pool.map(lambda _: r.heard_binary(), range(4)))
         self.assertEqual([program] * 4, found)
         self.assertEqual(2, len(builds))  # Set up and built, once.
+
+
+class HearingLevelTest(unittest.TestCase):
+    def test_the_replay_raises_sound_as_the_app_does(self):
+        app = (Path(__file__).parents[2] / 'app/src/main/java/com/astrovm/crosstune/SungWords.kt').read_text()
+        self.assertEqual(r.HEARING_LEVEL, float(re.search(r'HEARING_LEVEL = ([\d.]+)f', app).group(1)))
+        self.assertEqual(r.MOST_RAISED, float(re.search(r'MOST_RAISED = ([\d.]+)f', app).group(1)))
+        self.assertIn('hears.words(SingingListener.atHearingLevel(audio), language)', app)
+
+    @unittest.skipUnless(importlib.util.find_spec('numpy'), 'needs numpy, as hearing does')
+    def test_sound_is_raised_at_most_so_far_and_silence_stays_silent(self):
+        import numpy as np
+        self.assertAlmostEqual(0.5, float(np.sqrt(np.mean(r.at_hearing_level(np.array([0.2, -0.2])) ** 2))), places=5)
+        self.assertAlmostEqual(0.06, float(r.at_hearing_level(np.array([0.01, -0.01]))[0]), places=5)
+        self.assertEqual([0.0, 0.0], list(r.at_hearing_level(np.zeros(2))))
 
 
 class CheckpointTest(unittest.TestCase):
@@ -76,6 +92,7 @@ class CheckpointTest(unittest.TestCase):
         import subprocess
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
                 patch.object(r, 'as_the_phone_hears', return_value=Samples()), \
+                patch.object(r, 'at_hearing_level', side_effect=lambda sound: sound), \
                 patch.object(r, 'heard_binary', return_value=Path('heard')), \
                 patch.object(r, 'model_file', return_value=Path('model')), \
                 patch.object(r, 'sung_language', return_value='en'), \
