@@ -335,13 +335,53 @@ class SungWordsTest {
         assertEquals(Sung(1_234, listOf(HeardWord("Oh", 320), HeardWord("show", 820))), listener.hear("es", null))
         assertEquals(listOf(File("model")), models)
         assertEquals("es", words.language)
-        // 16 kHz, as whisper.cpp hears, from -1 to 1.
+        // 16 kHz, as whisper.cpp hears.
         val samples = words.samples!!
         assertEquals(16_000 * SingingListener.SECONDS, samples.size)
-        assertEquals(99 / 32768f, samples[99])
         assertEquals(0f, samples[100])
+        assertTrue(samples[99] > 0f)
         assertTrue(microphone.closed)
         assertTrue(words.closed)
+    }
+
+    private fun level(samples: FloatArray) = kotlin.math.sqrt(samples.sumOf { it.toDouble() * it } / samples.size)
+
+    @Test
+    fun quietSoundIsRaisedToTheLevelWordsAreHeardAt() {
+        // About what a phone plays a song at: a sixth of full scale, and a square wave so its level is plain.
+        val quiet = ShortArray(16_000) { if (it % 2 == 0) 5_000 else -5_000 }
+        val heard = SingingListener.atHearingLevel(quiet)
+        assertEquals(SingingListener.HEARING_LEVEL.toDouble(), level(heard), 0.001)
+        // Only its level changes.
+        assertEquals(-heard[0], heard[1])
+    }
+
+    @Test
+    fun loudSoundIsBroughtDownToTheSameLevel() {
+        val loud = ShortArray(16_000) { if (it % 2 == 0) 30_000 else -30_000 }
+        assertEquals(SingingListener.HEARING_LEVEL.toDouble(), level(SingingListener.atHearingLevel(loud)), 0.001)
+    }
+
+    @Test
+    fun soundBarelyThereIsntRaisedIntoSomethingHeard() {
+        // A room's hiss through a microphone: raised to the level, it would be heard as words.
+        val hiss = ShortArray(16_000) { if (it % 2 == 0) 30 else -30 }
+        assertEquals(30 * SingingListener.MOST_RAISED / 32768.0, level(SingingListener.atHearingLevel(hiss)), 0.0001)
+    }
+
+    @Test
+    fun silenceStaysSilent() {
+        assertTrue(SingingListener.atHearingLevel(ShortArray(16_000)).all { it == 0f })
+        assertEquals(0, SingingListener.atHearingLevel(ShortArray(0)).size)
+    }
+
+    @Test
+    fun whatsHeardIsRaisedBeforeTheModelHearsIt() = runBlocking {
+        val microphone = FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }
+        val words = FakeWords(listOf(HeardWord("Oh", 320)))
+        listener(microphone, hearing = words).hear(null, null)
+        val sound = ShortArray(16_000 * SingingListener.SECONDS) { (it % 100).toShort() }
+        assertEquals(SingingListener.atHearingLevel(sound).toList(), words.samples!!.toList())
     }
 
     @Test
@@ -380,7 +420,7 @@ class SungWordsTest {
         val starts = mutableListOf<Float>()
         val listener = listener(microphone, hearing = { samples, _ -> starts += samples[0]; listOf(HeardWord("[MUSIC]", 320)) })
         listener.hear(null) { true }
-        assertEquals(listOf(0f, SingingListener.AGAIN_SECONDS / 32768f, 0f), starts)
+        assertEquals(listOf(0f, SingingListener.AGAIN_SECONDS * SingingListener.MOST_RAISED / 32768f, 0f), starts)
     }
 
     @Test

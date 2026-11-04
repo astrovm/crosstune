@@ -19,6 +19,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.Normalizer
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 /** A word heard sung, and when it starts, [atMs] into what was heard. */
 internal data class HeardWord(val text: String, val atMs: Long)
@@ -129,7 +130,7 @@ internal class SingingListener(
     private suspend fun words(model: File, audio: ShortArray, language: String?): List<HeardWord>? = withContext(computeDispatcher) {
         val hears = hearing(model) ?: return@withContext null
         try {
-            Busy.during { hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language) }.ifEmpty { null }
+            Busy.during { hears.words(SingingListener.atHearingLevel(audio), language) }.ifEmpty { null }
         } finally {
             (hears as? Closeable)?.close()
         }
@@ -170,6 +171,23 @@ internal class SingingListener(
         private const val AGAIN_SAMPLES = ShazamSignature.SAMPLE_RATE * AGAIN_SECONDS
         private const val AGAIN_END = AGAIN_SAMPLES + FIRST_SAMPLES
         private const val CHUNK = ShazamSignature.SAMPLE_RATE / 10
+
+        /**
+         * How loud what's heard is made, as the speech model hears level as well as words, and what it's
+         * given is as loud as wherever it came from. A phone's own sound, a third of this, heard a voice
+         * in 11 of 40 stretches sung in; at this, 32. Louder heard no more.
+         */
+        const val HEARING_LEVEL = 0.5f
+
+        /** The most sound is raised to get there, which is as far as was tried, so a quiet room's hiss stays that. */
+        const val MOST_RAISED = 6f
+
+        /** The sound in [audio] from -1 to 1, at [HEARING_LEVEL] overall. Its peaks can go past 1, which the model doesn't mind. */
+        fun atHearingLevel(audio: ShortArray): FloatArray {
+            val level = sqrt(audio.sumOf { it.toDouble() * it } / audio.size) / 32768
+            val raised = if (level > 0) minOf(HEARING_LEVEL / level, MOST_RAISED.toDouble()).toFloat() else 1f
+            return FloatArray(audio.size) { audio[it] / 32768f * raised }
+        }
     }
 }
 
