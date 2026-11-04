@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.app.SearchManager
 import android.content.ClipData
 import android.content.ClipDescription
 import androidx.activity.BackEventCompat
@@ -412,6 +413,41 @@ class MainActivityTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals(opened.dataString, nextStartedActivity()!!.dataString)
         assertOnlyCoverSearches()
+    }
+
+    @Test
+    fun aSongFoundOnBandcampIsAskedForInItsAppBySearchTwiceNotOpenedByItsPage() {
+        prefs().edit().putString("default_target", "BANDCAMP").commit()
+        fake.handler = { request ->
+            FakeSpotify.html(request, """{"auto":{"results":[{"type":"t","name":"A Song","band_name":"Example Band","item_url_root":"https://exampleband.bandcamp.com","item_url_path":"https://exampleband.bandcamp.com/track/a-song"}]}}""")
+        }
+        launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
+        })
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val first = nextStartedActivity()!!
+        // The second goes a moment after the first, once the app has started.
+        assertNull(nextStartedActivity())
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(SECOND_START_MS))
+        val sent = listOf(first, nextStartedActivity()!!)
+        for (intent in sent) {
+            assertEquals(Intent.ACTION_SEARCH, intent.action)
+            assertEquals(ComponentName(MusicService.BANDCAMP.packageName, MusicService.BANDCAMP_SEARCH_ACTIVITY), intent.component)
+            assertEquals("A Song Example Band", intent.getStringExtra(SearchManager.QUERY))
+        }
+        assertNull(nextStartedActivity())
+    }
+
+    @Test
+    fun aSongNotFoundOnBandcampIsSearchedForInItsAppToo() {
+        prefs().edit().putString("default_target", "BANDCAMP").commit()
+        launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
+        })
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals("A Song Example Band", nextStartedActivity()!!.getStringExtra(SearchManager.QUERY))
     }
 
     @Test

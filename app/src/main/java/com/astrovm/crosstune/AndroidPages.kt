@@ -5,6 +5,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import androidx.core.net.toUri
 
@@ -15,6 +17,22 @@ internal fun Context.tryStartActivity(intent: Intent): Boolean = try {
 } catch (_: ActivityNotFoundException) {
     false
 }
+
+/**
+ * Starts [intent], then again after [SECOND_START_MS]. Bandcamp's app loses the first search it's sent while it starts,
+ * and takes the one sent once it is up; sent back to back, both land in its start and are lost. Already up, it takes either.
+ * The second may be refused from the background, and the first is then all there is.
+ */
+internal fun Context.tryStartActivityTwice(intent: Intent): Boolean {
+    val opened = tryStartActivity(intent)
+    if (opened) {
+        val app = applicationContext
+        Handler(Looper.getMainLooper()).postDelayed({ runCatching { app.startActivity(Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }, SECOND_START_MS)
+    }
+    return opened
+}
+
+internal const val SECOND_START_MS = 700L
 
 /** Crosstune's App info: where the microphone is allowed, and restricted settings. */
 internal fun Context.openAppInfo() {

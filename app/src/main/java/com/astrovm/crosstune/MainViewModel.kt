@@ -43,8 +43,15 @@ internal sealed interface Effect {
     /**
      * [packageName] is null for custom destinations, which open in whatever app handles the URL.
      * [atMs] is when it was asked, so one that waited while Crosstune was away isn't opened long after.
+     * [asking] is the song's name as a search, for an app that opens no page of its website's, only a search ([MusicService.appSearch]).
      */
-    data class Open(val url: String, val packageName: String?, val finishAfterOpen: Boolean, val atMs: Long = SystemClock.elapsedRealtime()) : Effect
+    data class Open(
+        val url: String,
+        val packageName: String?,
+        val finishAfterOpen: Boolean,
+        val atMs: Long = SystemClock.elapsedRealtime(),
+        val asking: String? = null
+    ) : Effect
     data class Share(val url: String) : Effect
 
     /**
@@ -1272,7 +1279,7 @@ internal class MainViewModel(
                 // Before the app's asked, so what it played until then isn't taken for the list's start.
                 playOn(all, service, destination, queue, name)
                 val asked = app != null && playback?.playList(app, queue.url, mustStart = true) == true
-                if (!playThere(first, app, queue.url, asked, exact = true)) effectChannel.send(Effect.Open(queue.url, app, finishAfterOpen = false))
+                if (!playThere(first, app, queue.url, asked, exact = true)) effectChannel.send(opening(queue.url, app, finishAfterOpen = false, song = first))
             } finally {
                 if (isActive) uiState = uiState.copy(queueProgress = null)
             }
@@ -1303,7 +1310,7 @@ internal class MainViewModel(
                 playQueue?.play(tracks, service, app, 1, listOf(first), name)
                 if (!playThere(first, app, link, asked = false, exact = true)) {
                     playQueue?.stop()
-                    effectChannel.send(Effect.Open(link, app, finishAfterOpen = false))
+                    effectChannel.send(opening(link, app, finishAfterOpen = false, song = first))
                 }
                 return@launch
             }
@@ -1329,12 +1336,12 @@ internal class MainViewModel(
         trackJob = viewModelScope.launch {
             // A song from a playlist on the same service is opened by its own link.
             track.url?.takeIf { destination.matchService != null && MusicLinks.serviceFor(it) == destination.matchService }?.let { url ->
-                effectChannel.send(Effect.Open(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false))
+                effectChannel.send(opening(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false, song = track))
                 return@launch
             }
             // YouTube and YouTube Music play the same videos, so one opens as itself in the other.
             track.url?.let { MusicLinks.linkFor(it) }?.youtubeVideoOn(destination.matchService)?.let { url ->
-                effectChannel.send(Effect.Open(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false))
+                effectChannel.send(opening(destination.adapt(url).forSharing(), destination.packageName, finishAfterOpen = false, song = track))
                 return@launch
             }
             val match = destination.matchService?.takeIf { uiState.exactMatch }?.let { service ->
@@ -1353,7 +1360,7 @@ internal class MainViewModel(
                 return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
             watchNumber(track, destination, url, exactUrl != null)
-            effectChannel.send(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
+            effectChannel.send(opening(url.forSharing(), destination.packageName, finishAfterOpen = false, song = track))
         }
     }
 
@@ -1706,6 +1713,10 @@ internal class MainViewModel(
         showLyricsFor(player.song, playing = player.played)
     }
 
+    /** Opens [url] in [packageName], with [song] named for an app that takes a search, not its page. */
+    private fun opening(url: String, packageName: String?, finishAfterOpen: Boolean, song: MusicMetadata? = uiState.result) =
+        Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery))
+
     /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
         val url = prepareDestination(destination) ?: return
@@ -1721,7 +1732,7 @@ internal class MainViewModel(
                     return
                 }
                 NotFoundAction.ORIGINAL -> if (original != null) {
-                    effectChannel.send(Effect.Open(original.url, original.service?.packageName, finishAfterOpen))
+                    effectChannel.send(opening(original.url, original.service?.packageName, finishAfterOpen))
                     return
                 }
                 NotFoundAction.SEARCH -> Unit
@@ -1734,7 +1745,7 @@ internal class MainViewModel(
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
         uiState.result?.let { watchNumber(it, destination, url, uiState.destinationUrls[destination]?.exact != false) }
-        effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
+        effectChannel.send(opening(url, destination.packageName, finishAfterOpen))
     }
 
     /** A song opened in Qobuz's app by its [exact] number at [link] is watched from before it's opened, so what played until then is known. */
@@ -1747,7 +1758,7 @@ internal class MainViewModel(
     fun searchAnyway() {
         val destination = uiState.resultDestination
         val url = uiState.destinationUrls[destination]?.url ?: return
-        effectChannel.trySend(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
+        effectChannel.trySend(opening(url.forSharing(), destination.packageName, finishAfterOpen = false))
     }
 
     /**
@@ -1759,10 +1770,10 @@ internal class MainViewModel(
         val action = uiState.notFoundAction
         when {
             action == NotFoundAction.ORIGINAL && opensWhere != null ->
-                effectChannel.send(Effect.Open(opensWhere.url, opensWhere.service?.packageName, finishAfterOpen))
+                effectChannel.send(opening(opensWhere.url, opensWhere.service?.packageName, finishAfterOpen, song))
             // Searched, also when it's set to open where it's from and that's unknown.
             action == NotFoundAction.SEARCH || action == NotFoundAction.ORIGINAL ->
-                effectChannel.send(Effect.Open(searchUrl.forSharing(), destination.packageName, finishAfterOpen))
+                effectChannel.send(opening(searchUrl.forSharing(), destination.packageName, finishAfterOpen, song))
             else -> uiState = uiState.copy(
                 notFoundOffer = NotFoundOffer(song, destination, opensWhere, searchUrl), handingOff = false
             )
@@ -1775,8 +1786,8 @@ internal class MainViewModel(
         uiState = uiState.copy(notFoundOffer = null)
         val link = offer.original
         effectChannel.trySend(
-            if (original && link != null) Effect.Open(link.url, link.service?.packageName, finishAfterOpen = false)
-            else Effect.Open(offer.searchUrl.forSharing(), offer.destination.packageName, finishAfterOpen = false)
+            if (original && link != null) opening(link.url, link.service?.packageName, finishAfterOpen = false, song = offer.song)
+            else opening(offer.searchUrl.forSharing(), offer.destination.packageName, finishAfterOpen = false, song = offer.song)
         )
     }
 
@@ -3877,7 +3888,7 @@ internal class MainViewModel(
         pendingOpen = false
         uiState = uiState.copy(showDestinationPicker = false, isMatching = false)
         val finishAfterOpen = lastRequest?.openWhenReady == true
-        effectChannel.trySend(Effect.Open(link.url, link.service?.packageName, finishAfterOpen))
+        effectChannel.trySend(opening(link.url, link.service?.packageName, finishAfterOpen))
     }
 
     fun dismissDestinationPicker() {
@@ -3947,7 +3958,7 @@ internal class MainViewModel(
             ) {
                 return@launch openMissing(entry.metadata, entry.link, destination, url, finishAfterOpen)
             }
-            effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
+            effectChannel.send(opening(url, destination.packageName, finishAfterOpen, entry.metadata))
         }
     }
 

@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.KeyguardManager
 import android.content.ActivityNotFoundException
 import android.content.ContextWrapper
+import android.app.SearchManager
 import android.content.ComponentName
 import android.content.IntentFilter
 import android.content.Intent
@@ -41,6 +42,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import java.time.Duration
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -1083,6 +1085,49 @@ class PlaybackTest {
         assertEquals(listOf(qobuz to "https://open.qobuz.com/track/12"), MusicService.QOBUZ.appLinks("https://open.qobuz.com/track/12"))
         assertEquals(listOf(MusicService.SPOTIFY.packageName to "https://play.qobuz.com/track/12"), MusicService.SPOTIFY.appLinks("https://play.qobuz.com/track/12"))
         assertEquals(listOf(MusicService.DEEZER.packageName to "https://listen.tidal.com/search?q=x"), MusicService.DEEZER.appLinks("https://listen.tidal.com/search?q=x"))
+    }
+
+    @Test
+    fun bandcampsAppIsAskedForASongBySearchAsItOpensNoPageOfItsWebsite() {
+        val bandcamp = MusicService.BANDCAMP.packageName
+        // A search link holds what to ask; a song's page doesn't, so it's asked for by the name it's given.
+        val search = MusicService.BANDCAMP.searchUrl("Song Band & Co")
+        assertEquals("Song Band & Co", MusicService.BANDCAMP.appSearch(search, asking = null))
+        assertEquals("Song Band & Co", MusicService.BANDCAMP.appSearch(search, asking = "Other"))
+        assertEquals("Song Band", MusicService.BANDCAMP.appSearch("https://band.bandcamp.com/track/song", asking = "Song Band"))
+        assertNull(MusicService.BANDCAMP.appSearch("https://band.bandcamp.com/track/song", asking = null))
+        assertNull(MusicService.BANDCAMP.appSearch("https://band.bandcamp.com/track/song", asking = " "))
+        assertNull(MusicService.BANDCAMP.appSearch("https://bandcamp.com/search", asking = null))
+        assertNull(MusicService.BANDCAMP.appSearch("not a link", asking = "Song Band"))
+        // Other apps open their links, or are asked another way.
+        assertNull(MusicService.QOBUZ.appSearch(MusicService.QOBUZ.searchUrl("Song"), asking = "Song"))
+        assertNull(MusicService.searchIn(MusicService.SPOTIFY.packageName, "https://open.spotify.com/track/x", "Song"))
+        assertNull(MusicService.searchIn(bandcamp, "https://band.bandcamp.com/track/song", null))
+        val intent = MusicService.searchIn(bandcamp, "https://band.bandcamp.com/track/song", "Song Band")!!
+        assertEquals(Intent.ACTION_SEARCH, intent.action)
+        assertEquals(ComponentName(bandcamp, MusicService.BANDCAMP_SEARCH_ACTIVITY), intent.component)
+        assertEquals("Song Band", intent.getStringExtra(SearchManager.QUERY))
+    }
+
+    @Test
+    fun aSearchIsSentToBandcampsAppTwiceAndAnAppThatIsGoneIsLeftToTheBrowser() {
+        shadowOf(app).checkActivities(true)
+        val bandcamp = MusicService.BANDCAMP.packageName
+        val component = ComponentName(bandcamp, MusicService.BANDCAMP_SEARCH_ACTIVITY)
+        shadowOf(app.packageManager).addActivityIfNotPresent(component)
+        shadowOf(app.packageManager).addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
+        assertTrue(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
+        // The second goes a moment after the first, once the app has started.
+        val first = shadowOf(app).nextStartedActivity
+        assertNull(shadowOf(app).nextStartedActivity)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SECOND_START_MS))
+        val sent = listOf(first, shadowOf(app).nextStartedActivity)
+        assertTrue(sent.all { it.action == Intent.ACTION_SEARCH && it.getStringExtra(SearchManager.QUERY) == "Song Band" && it.component == component })
+        assertNull(shadowOf(app).nextStartedActivity)
+        // A song's page holds no words to ask for, and an app that isn't there takes nothing.
+        assertFalse(playback.openSong(bandcamp, "https://band.bandcamp.com/track/song"))
+        shadowOf(app.packageManager).removeActivity(component)
+        assertFalse(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
     }
 
     @Test
