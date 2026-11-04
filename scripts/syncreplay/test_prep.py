@@ -461,6 +461,24 @@ class PhoneTest(unittest.TestCase):
             r.score_phone('song', kept)
         self.assertIn('never lit 0', said.call_args_list[-1].args[0])
 
+    def test_the_app_keeping_nothing_it_heard_leaves_its_clock_as_it_said(self):
+        # Words timed word by word don't need hearing, so a check can end with nothing kept. Plastic Love did.
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print') as said:
+            self.assertEqual(0, r.behind(MagicMock(), Path(directory), [(0, 100, 1000)]))
+        self.assertIn('heard nothing', said.call_args_list[-1].args[0])
+
+    def test_no_line_with_truth_lit_still_scores(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
+                patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
+            (r.OUT / 'song.wav').write_text('')
+            (r.OUT / 'song.lyrics.json').write_text(json.dumps([[1000, 'One'], [2000, 'Two']]))
+            (r.OUT / 'song.truth.jsonl').write_text(json.dumps(dict(line=1, start=2.0)) + '\n')
+            kept = r.OUT / 'kept'
+            kept.mkdir()
+            (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\nlit -1 at 200 pos 3000\n')
+            r.score_phone('song', kept)
+        self.assertIn('never lit 1', said.call_args_list[-1].args[0])
+
 
 if __name__ == '__main__':
     unittest.main()
