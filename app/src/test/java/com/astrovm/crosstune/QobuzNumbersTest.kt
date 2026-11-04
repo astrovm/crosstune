@@ -64,12 +64,12 @@ class QobuzNumbersTest {
     }
 
     @Test
-    fun someoneElsesSongStartingDoesntCount() {
-        // As Qobuz does, waking on what it was left on.
+    fun wakingOnWhatItWasLeftOnLosesTheLinkSoTheSameNumberIsSentAgain() {
         numbers.opened(song, qobuz, link)
         phone.onThePhone = Heard.Song(MusicMetadata("Left On", "Someone Else"), null, app = qobuz)
         passes(QobuzNumbers.WAIT_MS)
-        assertEquals(1, phone.opened.size)
+        assertEquals(listOf(qobuz to link), phone.opened.toList())
+        assertTrue(looked.isEmpty())
     }
 
     @Test

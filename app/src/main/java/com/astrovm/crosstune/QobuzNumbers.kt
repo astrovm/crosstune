@@ -37,8 +37,14 @@ internal class QobuzNumbers(
         val started = withTimeoutOrNull(WAIT_MS) {
             playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title && isTheSong(it.metadata, song) }
         }
-        if (started == null) otherLink(song, link)?.let { playback.openSong(app, it) }
+        if (started == null) (if (over == null && playsElse(app)) link else otherLink(song, link))?.let { playback.openSong(app, it) }
     }
+
+    /**
+     * Woken from closed and playing what it was left on, which it does now and then, Qobuz lost the link rather than got stuck
+     * on its number: the same number sent again played, where the other store's didn't.
+     */
+    private fun playsElse(app: String) = playback.nowPlaying()?.let { sameApp(app, it.app, installed) } == true
 
     /** Whatever else Qobuz calls it, as "(Remastered)". Not a cover, nor what it was left on as it wakes. */
     private fun isTheSong(playing: MusicMetadata, song: MusicMetadata) =
