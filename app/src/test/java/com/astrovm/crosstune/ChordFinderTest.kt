@@ -911,6 +911,34 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aTitleIsLookedUpWithoutWhatItAddsInBrackets() {
+        val words = listOf("川の道を歩いていく", "朝の光に歌っている")
+        val inTwo = "プラスティック・ラブ (Directors Edit Version) - Plastic Love(Directors Edit Version)"
+        // As YouTube Music names it: U-FRET only finds it by its name alone.
+        fake.handler = uFret(
+            mapOf("プラスティック・ラブ" to uFretResult(6, "プラスティック・ラブ", "竹内まりや")),
+            mapOf(
+                "https://music.163.com/api/search/get" to netEase("Plastic Love" to listOf("竹内まりや")),
+                "https://www.ufret.jp/song.php?data=6" to uFretSong("[Am]川の道を歩いていく", "朝の光に歌っている")
+            )
+        )
+        for (title in listOf(inTwo, "プラスティック・ラブ (Directors Edit Version)")) {
+            assertEquals(title, "https://www.ufret.jp/song.php?data=6", (chords(MusicMetadata(title, "Mariya Takeuchi"), words) as ChordFinder.Chords.Found).sheet.url)
+        }
+        // Ultimate Guitar only finds it by its name alone in Latin letters.
+        val sheet = "https://tabs.ultimate-guitar.com/tab/plastic-1"
+        fake.handler = { request ->
+            if (request.url.host == "www.ultimate-guitar.com" && request.url.queryParameter("value") == "Plastic Love Mariya Takeuchi") {
+                FakeSpotify.html(request, ugSearch(ugResult(sheet, "Plastic Love", "Mariya Takeuchi", 3)))
+            } else {
+                answer(request, mapOf(sheet to ugTab(ugWalking), "https://www.ultimate-guitar.com/search.php" to ugSearch()))
+            }
+        }
+        val english = listOf("Walking down the river road", "Singing to the morning light")
+        assertEquals(sheet, (chords(MusicMetadata(inTwo, "Mariya Takeuchi"), english) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
     fun aTitleInTwoIsLookedUpByEachAndTheOriginalComesBeforeACover() {
         val song = MusicMetadata("プラスティック・ラブ - Plastic Love", "Mariya Takeuchi")
         val words = listOf("川の道を歩いていく", "朝の光に歌っている")
