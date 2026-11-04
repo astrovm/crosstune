@@ -26,7 +26,11 @@ internal object SongNames {
     private val conjunction = Regex("""\s+(?:and|y|und|et)\s+""", RegexOption.IGNORE_CASE)
 
     /** A guest credited in the title, as "(feat. Emel)", which some services leave out. */
-    private val featuring = Regex("""\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]""", RegexOption.IGNORE_CASE)
+    private val featuring = Regex(
+        // Or written out, as a video's title has it, "Despacito ft. Daddy Yankee", though not "6 ft. Under".
+        """\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]|(?<!\d)\s+(?:feat\.?|ft\.?|featuring)\s+[^()\[\]]*?(?=\s*[(\[]|$)""",
+        RegexOption.IGNORE_CASE
+    )
     private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
 
     /**

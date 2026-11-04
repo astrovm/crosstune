@@ -7,10 +7,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Qobuz's app shows a loading page, for good, for a song's number that its account's catalog doesn't have, and its
- * stores number about one song in four differently. Asked by name it plays whatever comes first, covers too, and which
- * catalog an account follows can't be told. So a song opened there by its number is watched, and if it hasn't started in
- * a while, it's opened on the number of the other store.
+ * Qobuz's app shows a loading page, for good, for a song's number that its account can't play, and which number that is
+ * can't be told from the phone's country: on one account, of seven songs its UK and US stores number differently, the
+ * UK's number played three. So a song opened there by its number is watched. If it hasn't started in a while, it's opened
+ * on the number of the other store, then asked for by name, which plays what comes first in Qobuz's search, so someone
+ * else's song is stopped.
  * Kept by the app rather than a screen, as the screen closes as it opens a song.
  */
 internal class QobuzNumbers(
@@ -28,14 +29,29 @@ internal class QobuzNumbers(
         val over = playback.nowPlaying()?.takeIf { sameApp(app, it.app, installed) }?.metadata
         // Already on it, it's brought forward, and there's no start to see.
         if (over != null && SongNames.same(over.title, song.title) && SongNames.sameArtist(over.artist, song.artist)) return
-        job = scope.launch {
-            // Whatever Qobuz calls the song: anything new playing there means it took the number.
-            val started = withTimeoutOrNull(WAIT_MS) {
-                playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title }
-            }
-            if (started == null) otherLink(song, link)?.let { playback.openSong(app, it) }
-        }
+        job = scope.launch { tryAll(song, app, link, over) }
     }
+
+    private suspend fun tryAll(song: MusicMetadata, app: String, link: String, over: MusicMetadata?) {
+        if (started(song, app, over) != null) return
+        val other = otherLink(song, link)
+        if (other != null && playback.openSong(app, other) && started(song, app, over) != null) return
+        playback.playSong(song, app)
+        val named = playing(app, over) ?: return
+        if (!SongNames.sameArtist(named.artist, song.artist)) playback.playPause(named, false)
+    }
+
+    private suspend fun started(song: MusicMetadata, app: String, over: MusicMetadata?) = playing(app, over) { isTheSong(it, song) }
+
+    /** What [app] goes on to play that it didn't before, and is [wanted], if it does within [WAIT_MS]. */
+    private suspend fun playing(app: String, over: MusicMetadata?, wanted: (MusicMetadata) -> Boolean = { true }): MusicMetadata? =
+        withTimeoutOrNull(WAIT_MS) {
+            playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title && wanted(it.metadata) }
+        }?.metadata
+
+    /** Whatever else Qobuz calls it, as "(Remastered)". Not a cover, nor what it was left on as it wakes. */
+    private fun isTheSong(playing: MusicMetadata, song: MusicMetadata) =
+        SongNames.sameArtist(playing.artist, song.artist) || SongNames.same(playing.title, song.title)
 
     fun off() {
         job?.cancel()

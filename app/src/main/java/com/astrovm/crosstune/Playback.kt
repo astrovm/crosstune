@@ -498,7 +498,7 @@ internal class MediaSessionPlayback(
         }
         // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
         if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
-        else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
+        else asked.transportControls.playFromSearch(searchQuery(song), wanted)
     }
 
     // The app may be installed as a build patched from it, under a name of its own, or as its TV app.

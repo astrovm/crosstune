@@ -1417,11 +1417,9 @@ internal class MainViewModel(
      * False, with the player closed, when it could be neither.
      */
     private suspend fun playThere(song: MusicMetadata, app: String?, link: String, asked: Boolean, exact: Boolean): Boolean {
-        val source = playback
-        val sees = source?.hasAccess() == true
-        // Played in that app, not another that has it too.
-        if (asked && (!sees || seenIn(source, song, app, link, mustPlay = false))) return true
-        val back = source?.takeIf { exact && sees && app != null && it.openSong(app, link) } ?: return false.also { closePlayer() }
+        val source = playback?.takeIf { it.hasAccess() }
+        if (asked && (source == null || playsAsAsked(source, song, app, link, exact))) return true
+        val back = source?.takeIf { exact && app != null && openWatched(it, song, app, link) } ?: return false.also { closePlayer() }
         // Left once it plays, not once it shows the song: YouTube Music, left before it starts, never does.
         seenIn(back, song, app, link, mustPlay = true)
         back.comesBack()
@@ -1429,23 +1427,56 @@ internal class MainViewModel(
         return true
     }
 
+    /** Whether [app], asked for [song], was seen to play it. Someone else's song it stopped when there's no [exact] link to take over. */
+    private suspend fun playsAsAsked(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, exact: Boolean): Boolean {
+        // Played in that app, not another that has it too.
+        val seen = seenPlaying(source, song, app, link, mustPlay = false) ?: return false
+        val cover = coverIn(seen, song, app) ?: return true
+        if (!exact) source.playPause(cover, false)
+        return false
+    }
+
+    /** [app] opened on [song]'s [link], watched from before that if Qobuz's, as it can stay on a loading page there. */
+    private fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
+        if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.opened(song, app, link)
+        return source.openSong(app, link)
+    }
+
+    /**
+     * What [app], asked by name, was [seen] to play when it's someone else's song. It plays what comes first in its search,
+     * which can be a cover: Qobuz played tribute albums for Despacito and Gangnam Style. It may also play on from what it
+     * was left on as it wakes. An app's other name for the artist only has it opened on the song's link, which plays the same song.
+     */
+    private fun coverIn(seen: Seen, song: MusicMetadata, app: String?): MusicMetadata? {
+        // YouTube Music is asked by its own link, not by name, and its artists are often the channel's.
+        if (seen.following != null || MusicService.ofPackage(app) == MusicService.YOUTUBE_MUSIC) return null
+        return seen.playing?.metadata?.takeUnless { SongNames.sameArtist(it.artist, song.artist) }
+    }
+
+    /** What an app was seen doing with a song it was asked for: playing it as that song, or something it calls otherwise. */
+    private data class Seen(val following: Following?, val playing: Heard.Song?)
+
     /**
      * Whether [app] is seen, within [LOAD_SONG_MS], to have [song], [mustPlay] it or not, or, whatever the app names it,
      * to have gone on to play something other than what it played when asked.
      */
-    private suspend fun seenIn(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Boolean {
+    private suspend fun seenIn(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Boolean =
+        seenPlaying(source, song, app, link, mustPlay) != null
+
+    /** What [seenIn] saw, or null if it saw nothing. */
+    private suspend fun seenPlaying(source: PlaybackSource, song: MusicMetadata, app: String?, link: String, mustPlay: Boolean): Seen? {
         val over = uiState.player?.over
         val (following, playing) = withTimeoutOrNull(LOAD_SONG_MS) {
             combine(source.follow(song), source.nowPlayingUpdates(), ::Pair).first { (following, playing) ->
                 following != null && (!mustPlay || following.clock.playing) && sameApp(app, following.appPackage, interception::isInstalled) ||
                     following == null && playing != null && startedAsked(playing, app, over, link)
             }
-        } ?: return false
+        } ?: return null
         // Seen to go on to it from another song, that's what the app calls the song at that link. Not from nothing, as an
         // app may show what it played last a moment first.
         val wentOn = playing?.takeIf { following == null && over != null && !sameSong(it.metadata, over) }
         if (app != null && wentOn != null) playedAs[app to link] = wentOn.metadata
-        return true
+        return Seen(following, playing)
     }
 
     /**

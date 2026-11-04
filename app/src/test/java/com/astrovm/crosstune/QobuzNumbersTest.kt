@@ -38,9 +38,39 @@ class QobuzNumbersTest {
         passes(1)
         assertEquals(listOf(song to link), looked)
         assertEquals(listOf(qobuz to "https://play.qobuz.com/track/2"), phone.opened.toList())
-        // Once only: there's no third.
-        passes(QobuzNumbers.WAIT_MS * 2)
+        assertTrue(phone.songsAsked.isEmpty())
+        // That one plays: nothing more's asked.
+        phone.onThePhone = Heard.Song(song, null, app = qobuz)
+        passes(QobuzNumbers.WAIT_MS * 3)
         assertEquals(1, phone.opened.size)
+        assertTrue(phone.songsAsked.isEmpty())
+    }
+
+    @Test
+    fun aSongNeitherNumberPlaysIsAskedForByName() {
+        numbers.opened(song, qobuz, link)
+        passes(QobuzNumbers.WAIT_MS * 2)
+        assertEquals(listOf(song to qobuz), phone.songsAsked.toList())
+        phone.onThePhone = Heard.Song(MusicMetadata("Song (Remastered)", "Band"), null, app = qobuz)
+        passes(QobuzNumbers.WAIT_MS)
+        assertTrue(phone.plays.isEmpty())
+    }
+
+    @Test
+    fun whatItPlaysByNameIsStoppedWhenItsSomeoneElses() {
+        numbers.opened(song, qobuz, link)
+        passes(QobuzNumbers.WAIT_MS * 2)
+        phone.onThePhone = Heard.Song(MusicMetadata("Song (Tribute)", "Someone Else"), null, app = qobuz)
+        passes(1)
+        assertEquals(listOf(false), phone.plays.toList())
+    }
+
+    @Test
+    fun askedByNameAndNotStartingIsLeftAtThat() {
+        numbers.opened(song, qobuz, link)
+        passes(QobuzNumbers.WAIT_MS * 4)
+        assertEquals(1, phone.songsAsked.size)
+        assertTrue(phone.plays.isEmpty())
     }
 
     @Test
@@ -60,6 +90,23 @@ class QobuzNumbersTest {
         numbers.opened(song, qobuz, link)
         passes(QobuzNumbers.WAIT_MS)
         assertEquals(1, phone.opened.size)
+    }
+
+    @Test
+    fun someoneElsesSongStartingDoesntCount() {
+        // As Qobuz does, waking on what it was left on.
+        numbers.opened(song, qobuz, link)
+        phone.onThePhone = Heard.Song(MusicMetadata("Left On", "Someone Else"), null, app = qobuz)
+        passes(QobuzNumbers.WAIT_MS)
+        assertEquals(1, phone.opened.size)
+    }
+
+    @Test
+    fun theSameTitleUnderAnotherNameForTheArtistCounts() {
+        numbers.opened(song, qobuz, link)
+        phone.onThePhone = Heard.Song(MusicMetadata("Song", "Another Name"), null, app = qobuz)
+        passes(QobuzNumbers.WAIT_MS)
+        assertTrue(phone.opened.isEmpty())
     }
 
     @Test
@@ -89,12 +136,13 @@ class QobuzNumbersTest {
     }
 
     @Test
-    fun withNoOtherNumberItStays() {
+    fun withNoOtherNumberItGoesStraightToItsName() {
         other = null
         numbers.opened(song, qobuz, link)
         passes(QobuzNumbers.WAIT_MS)
         assertEquals(1, looked.size)
         assertTrue(phone.opened.isEmpty())
+        assertEquals(listOf(song to qobuz), phone.songsAsked.toList())
     }
 
     @Test
