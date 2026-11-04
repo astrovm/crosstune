@@ -263,6 +263,9 @@ class WordsShownTest(unittest.TestCase):
     def test_the_same_words_keep_their_truth(self):
         self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', ['One two, three', '', 'Four five', 'Six seven eight', 'Nine ten']))
 
+    def test_words_with_no_lines_are_all_dark(self):
+        self.assertEqual({0: 1.0, 1: 3.1, 2: 4.2, 3: 5.3}, r.sung_lines('song', []))
+
     def test_words_kept_are_this_songs_though_the_next_songs_came_after(self):
         kept = r.OUT / 'kept'
         kept.mkdir()
