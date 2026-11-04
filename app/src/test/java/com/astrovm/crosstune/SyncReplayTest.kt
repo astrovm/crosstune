@@ -101,7 +101,10 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val fromMs = asked.getLong("from")
         workMs = asked.optLong("work", WORK_MS)
         val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
-        val lyrics = JSONArray(File(dir, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
+        // The words as the app really found them, when kept, over those prep was given.
+        val kept = File(dir, "$song.found.json").takeIf { it.exists() }?.let { JSONObject(it.readText()) }
+        val lyrics = kept?.getJSONArray("lines")?.takeIf { it.length() > 0 }?.let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
+            ?: JSONArray(File(dir, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
         // What was heard in each stretch, by how long it is in seconds and where it starts.
         val heard = listOf(SingingListener.SECONDS, SingingListener.FIRST_SECONDS).associateWith { seconds ->
             JSONObject(File(dir, "$song.heard$seconds${asked.optString("heard")}.json").readText()).let { windows ->
@@ -117,7 +120,20 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val words = if (lyrics.all { it.first < 0 }) JSONObject().put("plainLyrics", lyrics.joinToString("\n") { it.second })
         else JSONObject().put("syncedLyrics", lyrics.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d] %s".format(ms / 60_000, ms / 1000 % 60, ms % 1000 / 10, text) })
         val found = JSONArray().put(words.put("trackName", "Demo").put("artistName", "Band").put("duration", lengthMs / 1000)).toString()
-        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") found else """{"title":"Demo","author_name":"Band"}""") }
+        // Words timed word by word, as the app found them, only come from NetEase.
+        val byWord = kept?.let { foundByWord(it, lengthMs) }
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                when {
+                    byWord != null && request.url.host == "lrclib.net" -> "[]"
+                    byWord != null && request.url.encodedPath.endsWith("/search/get") -> byWord.first
+                    byWord != null && request.url.encodedPath.endsWith("/song/lyric") -> byWord.second
+                    request.url.host == "lrclib.net" -> found
+                    else -> """{"title":"Demo","author_name":"Band"}"""
+                }
+            )
+        }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
@@ -133,6 +149,23 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, durationMs = lengthMs)
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(AGAIN_MS))
         }
+    }
+
+    /**
+     * NetEase's answers to its search and its lyric request, for words kept as the app keeps them: each
+     * line [ms, text, [[ms, word]...], end]. Null for words not timed word by word, which LRCLIB's stand in for.
+     */
+    private fun foundByWord(kept: JSONObject, lengthMs: Long): Pair<String, String>? {
+        val lines = kept.getJSONArray("lines").let { list -> (0 until list.length()).map { list.getJSONArray(it) } }.filter { it.getString(1).isNotBlank() }
+        if (lines.isEmpty() || lines.any { it.optJSONArray(2)?.length() ?: 0 == 0 }) return null
+        val yrc = lines.joinToString("\n") { line ->
+            val words = line.getJSONArray(2).let { list -> (0 until list.length()).map { list.getJSONArray(it) } }
+            "[${line.getLong(0)},${line.optLong(3, 0L).let { end -> if (end > 0) end - line.getLong(0) else 0L }}]" + words.joinToString("") { "(${it.getLong(0)},0,0)${it.getString(1)}" }
+        }
+        val song = JSONObject().put("id", 1).put("name", "Demo").put("duration", lengthMs)
+            .put("artists", JSONArray().put(JSONObject().put("name", "Band"))).put("album", JSONObject().put("name", "Demo"))
+        return JSONObject().put("result", JSONObject().put("songs", JSONArray().put(song))).toString() to
+            JSONObject().put("yrc", JSONObject().put("lyric", yrc)).put("lrc", JSONObject().put("lyric", "")).toString()
     }
 
     /**

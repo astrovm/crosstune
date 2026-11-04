@@ -13,7 +13,8 @@ import java.io.File
  * The songs of scripts/syncreplay/songs.tsv, found as the app finds them: each one's recording on
  * YouTube Music, and its words, for `syncreplay.py set` to prep and replay. Live, so it only runs
  * when that script asks, by leaving set.asked in build/syncreplay. Writes set.json there, and each
- * song's words as ID.lyrics.json: [ms, line] each, or -1 for ms when the words came without timing.
+ * song's words as ID.lyrics.json: [ms, line] each, or -1 for ms when the words came without timing,
+ * and as ID.found.json, as the app keeps them: each line's words too, when it's timed word by word.
  */
 @RunWith(RobolectricTestRunner::class)
 class SyncSetTest {
@@ -43,6 +44,11 @@ class SyncSetTest {
                 val lines = found.lines.map { it.timeMs to it.text }.ifEmpty { found.words.lines().filter { it.isNotBlank() }.map { -1L to it.trim() } }
                 // Words already kept for a song, as from the phone's own cache, stay as they are.
                 File(dir, "$id.lyrics.json").takeUnless { it.exists() }?.writeText(JSONArray(lines.map { (ms, text) -> JSONArray().put(ms).put(text) }).toString())
+                // And as the app found them, word by word when they are, for the replay.
+                val keptLines = JSONArray(found.lines.map { line ->
+                    JSONArray().put(line.timeMs).put(line.text).put(JSONArray(line.words.map { JSONArray().put(it.timeMs).put(it.text) })).apply { line.endMs?.let { put(it) } }
+                })
+                File(dir, "$id.found.json").writeText(JSONObject().put("source", found.source).put("length", found.lengthMs).put("lines", keptLines).toString())
                 entry.put("source", found.source).put("lengthMs", found.lengthMs).put("timed", found.lines.isNotEmpty()).put("lines", lines.size)
             }
             set.put(entry)
