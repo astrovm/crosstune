@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "Casten naar een tv"
+    ],
+    [
+      "p",
+      "In de builds van Google Play en GitHub kun je een nummer casten naar Crosstune op je Android TV of Google TV. Google Cast, onderdeel van Google Play-services, zoekt tv's op je lokale netwerk en verzorgt het casten. Als je cast, stuurt Crosstune de tv de titel, artiest, link en cover van het nummer, en daarna wat jij vraagt: pauzeren, afspelen, overslaan, spoelen, vertaling en uitspraak. De tv vertelt je telefoon wat hij speelt. Dit gaat tussen je telefoon en je tv, nooit naar de ontwikkelaar, en Google verwerkt het volgens het eigen privacybeleid. De build zonder Google Play-services kan niet casten en stuurt niets van dien aard."
+    ],
+    [
+      "h2",
       "Machtigingen en beveiliging"
     ],
     [

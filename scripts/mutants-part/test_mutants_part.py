@@ -31,6 +31,17 @@ class Parts(unittest.TestCase):
             self.assertEqual(sum(parts, []), lines, n)
             self.assertLessEqual(max(map(len, parts)) - min(map(len, parts)), 1, n)
 
+    def test_main_and_play_sources_are_both_partitioned(self):
+        with tempfile.TemporaryDirectory() as root:
+            sources = [Path(root) / name for name in ('main', 'play')]
+            for source, name in zip(sources, ('Main', 'Cast')):
+                (source / 'com/example').mkdir(parents=True)
+                (source / f'com/example/{name}.kt').write_text('one\ntwo\n')
+            self.assertEqual(mutants_part.all_lines(sources), [
+                'com/example/Cast.kt:1', 'com/example/Cast.kt:2',
+                'com/example/Main.kt:1', 'com/example/Main.kt:2',
+            ])
+
     def test_a_part_out_of_range_is_refused(self):
         for k in (-1, 4):
             with self.assertRaises(ValueError):

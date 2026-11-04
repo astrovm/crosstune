@@ -337,7 +337,7 @@ def run(args):
     while True:
         asked.write_text(json.dumps(replay))
         try:
-            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testPlayDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
         finally:
             asked.unlink()
         if done.returncode:
@@ -591,7 +591,7 @@ def find_set(args):
         OUT.mkdir(parents=True, exist_ok=True)
         asked.write_text("")
         try:
-            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testPlayDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
         finally:
             asked.unlink()
         if done.returncode:
@@ -652,7 +652,7 @@ def run_all(args):
         asked.write_text(wanted)
         names.write_text("\n".join(songs) + "\n")
         try:
-            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testPlayDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
         finally:
             asked.unlink()
             names.unlink()

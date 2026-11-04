@@ -17,19 +17,21 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCES = ROOT / "app/src/main/java"
+SOURCES = (ROOT / "app/src/main/java", ROOT / "app/src/play/java")
 LINES = ROOT / "app/build/mutants/part-lines.txt"
-REPORT = ROOT / "app/build/reports/pitest/debug/mutations.xml"
+REPORT = ROOT / "app/build/reports/pitest/playDebug/mutations.xml"
 
 
 def all_lines(sources=SOURCES):
     """Every line of every Kotlin file, as "com/astrovm/crosstune/File.kt:12", the way PIT names one."""
-    lines = []
-    for file in sorted(sources.rglob("*.kt")):
-        name = file.relative_to(sources).as_posix()
-        count = len(file.read_text(encoding="utf-8").splitlines())
-        lines += [f"{name}:{n}" for n in range(1, count + 1)]
-    return lines
+    roots = (sources,) if isinstance(sources, Path) else sources
+    lines = set()
+    for source in roots:
+        for file in source.rglob("*.kt"):
+            name = file.relative_to(source).as_posix()
+            count = len(file.read_text(encoding="utf-8").splitlines())
+            lines.update((name, n) for n in range(1, count + 1))
+    return [f"{name}:{n}" for name, n in sorted(lines)]
 
 
 def part(lines, k, n):
@@ -66,7 +68,7 @@ def main(argv=None):
         LINES.parent.mkdir(parents=True, exist_ok=True)
         LINES.write_text("\n".join(lines) + "\n")
         REPORT.unlink(missing_ok=True)
-        subprocess.run([*shlex.split(args.gradle), ":app:pitestDebug", f"-PmutateLines={LINES}"], cwd=ROOT, check=True)
+        subprocess.run([*shlex.split(args.gradle), ":app:pitestPlayDebug", f"-PmutateLines={LINES}", "-PmutateVerbose=true"], cwd=ROOT, check=True)
         rows, total = lived(REPORT)
     for row in rows:
         print(row)

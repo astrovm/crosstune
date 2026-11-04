@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "TV'ye yayınlama"
+    ],
+    [
+      "p",
+      "Google Play ve GitHub sürümlerinde bir şarkıyı Android TV'ndeki veya Google TV'ndeki Crosstune'a yayınlayabilirsin. Google Play Hizmetleri'nin parçası olan Google Cast, yerel ağındaki TV'leri arar ve yayını taşır. Yayınladığında Crosstune, TV'ye şarkının adını, sanatçısını, bağlantısını ve kapağını, sonra da istediklerini gönderir: duraklat, oynat, atla, ileri geri sar, çeviri ve okunuşlar. TV, ne oynattığını telefonuna söyler. Bu, telefonunla TV'n arasında kalır, geliştiriciye hiç gitmez ve Google bunu kendi gizlilik politikasına göre işler. Google Play Hizmetleri olmayan sürümde yayınlama yoktur ve böyle bir şey göndermez."
+    ],
+    [
+      "h2",
       "İzinler ve güvenlik"
     ],
     [

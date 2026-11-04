@@ -15,6 +15,9 @@ android {
         targetSdk = 37
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The app has a play and a foss build; the profile is made on the play one, and shared by both.
+        missingDimensionStrategy("store", "play")
     }
 
     compileOptions {

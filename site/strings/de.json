@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "Auf einen Fernseher streamen"
+    ],
+    [
+      "p",
+      "In den Builds für Google Play und GitHub kannst du einen Song an Crosstune auf deinem Android TV oder Google TV streamen. Google Cast, Teil der Google Play-Dienste, sucht Fernseher in deinem lokalen Netzwerk und übernimmt die Übertragung. Beim Streamen sendet Crosstune dem Fernseher Titel, Interpret, Link und Cover des Songs und danach, was du verlangst: Pause, Wiedergabe, Überspringen, Spulen, Übersetzung und Lesehilfen. Der Fernseher meldet deinem Handy, was er spielt. Das läuft zwischen deinem Handy und deinem Fernseher, nie zum Entwickler, und Google verarbeitet es nach der eigenen Datenschutzerklärung. Der Build ohne Google Play-Dienste hat kein Streamen und sendet nichts dergleichen."
+    ],
+    [
+      "h2",
       "Berechtigungen und Sicherheit"
     ],
     [

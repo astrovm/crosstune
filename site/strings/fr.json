@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "Diffusion sur une télévision"
+    ],
+    [
+      "p",
+      "Dans les versions Google Play et GitHub, tu peux diffuser un morceau vers Crosstune sur ton Android TV ou Google TV. Google Cast, qui fait partie des services Google Play, cherche les téléviseurs sur ton réseau local et assure la diffusion. Quand tu diffuses, Crosstune envoie au téléviseur le titre, l'artiste, le lien et la pochette du morceau, puis ce que tu lui demandes : pause, lecture, passer, avancer, traduction et lectures. Le téléviseur dit à ton téléphone ce qu'il joue. Cela reste entre ton téléphone et ton téléviseur, jamais chez le développeur, et Google le traite selon sa propre politique de confidentialité. La version sans services Google Play ne diffuse pas et n'envoie rien de tel."
+    ],
+    [
+      "h2",
       "Autorisations et sécurité"
     ],
     [

@@ -159,6 +159,14 @@
     ],
     [
       "h2",
+      "Cast ke TV"
+    ],
+    [
+      "p",
+      "Di build Google Play dan GitHub, kamu bisa meng-cast lagu ke Crosstune di Android TV atau Google TV-mu. Google Cast, bagian dari Google Play Services, mencari TV di jaringan lokalmu dan membawa cast-nya. Saat kamu cast, Crosstune mengirim judul, artis, tautan, dan sampul lagu ke TV, lalu apa yang kamu minta: jeda, putar, lewati, geser, terjemahan, dan bacaan. TV memberi tahu ponselmu apa yang diputarnya. Semua ini terjadi antara ponsel dan TV-mu, tidak pernah ke pengembang, dan Google menanganinya sesuai kebijakan privasinya sendiri. Build tanpa Google Play Services tidak punya cast dan tidak mengirim hal semacam itu."
+    ],
+    [
+      "h2",
       "Izin dan keamanan"
     ],
     [

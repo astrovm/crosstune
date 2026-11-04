@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs ./gradlew for this checkout in a container, in turn with every other checkout on this machine.
 #
-#   scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*LyricsFinderTest*'
+#   scripts/gradle-box/gradle-box.sh :app:testPlayDebugUnitTest --tests '*LyricsFinderTest*'
 #
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest of
 # $HOME. Builds wait in line for a slot, first come first served, and say how many are ahead: waiting
