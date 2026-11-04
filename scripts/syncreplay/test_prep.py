@@ -1,0 +1,368 @@
+import argparse
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import Mock, patch
+
+spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name('syncreplay.py'))
+r = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(r)
+
+class ResumeTest(unittest.TestCase):
+    def test_truth_without_hearing_is_resumed(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
+            (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
+            with patch.object(r, 'prep') as prep, patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle="fake-gradle"))
+            prep.assert_called_once()
+
+    def test_hearing_alone_does_not_make_song_prepped(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
+            (r.OUT / 'fake.heard20.json').write_text('{}')
+            self.assertEqual([], r.prepped())
+
+class CheckpointTest(unittest.TestCase):
+    def test_interrupted_hearing_keeps_and_resumes_completed_window(self):
+        class Samples:
+            def __len__(self):
+                return 22001 * 16
+
+            def __getitem__(self, key):
+                return self
+
+            def tobytes(self):
+                return b"fake audio"
+
+        class SerialPool:
+            def __init__(self, workers):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def map(self, fn, values):
+                return map(fn, values)
+
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'as_the_phone_hears', return_value=Samples()), \
+                patch.object(r, 'heard_binary', return_value=Path('heard')), \
+                patch.object(r, 'model_file', return_value=Path('model')), \
+                patch.object(r, 'sung_language', return_value='en'), \
+                patch.object(r, 'ThreadPoolExecutor', SerialPool):
+            answer = argparse.Namespace(stdout=b'0\t word\n')
+            with patch.object(r.subprocess, 'run', side_effect=[answer, subprocess.CalledProcessError(1, 'heard')]):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    r.windows('fake', Path('fake.wav'), 20000)
+            checkpoint = r.heard_file('fake', 20000, r.APP_MODEL)
+            self.assertEqual({'0': [[0, ' word']]}, json.loads(checkpoint.read_text()))
+            with patch.object(r.subprocess, 'run', return_value=answer) as heard:
+                r.windows('fake', Path('fake.wav'), 20000)
+                self.assertEqual(2, heard.call_count)
+            self.assertEqual({'0', '1000', '2000'}, set(json.loads(checkpoint.read_text())))
+
+    def test_complete_rejects_partial_windows(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            for suffix in ('wav', 'language', 'lyrics.json', 'truth.jsonl'):
+                (r.OUT / f'fake.{suffix}').write_text('fake')
+            for length in r.LENGTHS:
+                r.heard_file('fake', length, r.APP_MODEL).write_text('{}')
+            with patch.object(r.subprocess, 'check_output', return_value=b'21.021'):
+                self.assertFalse(r.complete('fake'))
+                for length in r.LENGTHS:
+                    r.heard_file('fake', length, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in range(0, 21020 - length, 1000)}))
+                self.assertTrue(r.complete('fake'))
+
+class CacheTest(unittest.TestCase):
+    def test_changed_lyrics_rebuild_truth_and_keep_previous_reference(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'fake.wav').write_bytes(b'fake audio')
+            (r.OUT / 'fake.lyrics.json').write_text('[[0, "Old words"]]')
+            (r.OUT / 'fake.truth.jsonl').write_text('old reference')
+            incoming = r.OUT / 'incoming.json'
+            incoming.write_text('[[0, "New words"]]')
+            with patch.object(r, 'truth') as truth, patch.object(r, 'separated_voice'), patch.object(r, 'windows'):
+                r.prep(argparse.Namespace(id='fake', lyrics=str(incoming)))
+            truth.assert_called_once()
+            self.assertEqual('old reference', (r.OUT / 'fake.truth.jsonl.previous').read_text())
+            self.assertFalse((r.OUT / 'fake.truth.jsonl').exists())
+
+    def test_interrupted_audio_download_is_not_published_and_can_resume(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            incoming = r.OUT / 'incoming.json'
+            incoming.write_text('[[0, "Fake words"]]')
+            def download(command, **kwargs):
+                destination = Path(command[command.index('-o') + 1].replace('%(ext)s', 'wav'))
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(b'partial audio')
+                raise subprocess.CalledProcessError(1, command)
+            with patch.object(r.subprocess, 'run', side_effect=download):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    r.prep(argparse.Namespace(id='fake', lyrics=str(incoming)))
+            self.assertFalse((r.OUT / 'fake.wav').exists())
+            def finish(command, **kwargs):
+                destination = Path(command[command.index('-o') + 1].replace('%(ext)s', 'wav'))
+                self.assertFalse(destination.exists())
+                destination.write_bytes(b'complete audio')
+            with patch.object(r.subprocess, 'run', side_effect=finish), patch.object(r, 'truth'), \
+                    patch.object(r, 'separated_voice'), patch.object(r, 'windows'):
+                r.prep(argparse.Namespace(id='fake', lyrics=str(incoming)))
+            self.assertEqual(b'complete audio', (r.OUT / 'fake.wav').read_bytes())
+
+    def test_unchanged_lyrics_preserve_truth(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            for suffix, content in [('wav', 'fake audio'), ('lyrics.json', '[[0, "Same words"]]'), ('truth.jsonl', 'saved reference')]:
+                (r.OUT / f'fake.{suffix}').write_text(content)
+            with patch.object(r, 'truth') as truth, patch.object(r, 'windows'):
+                r.prep(argparse.Namespace(id='fake', lyrics=str(r.OUT / 'fake.lyrics.json')))
+            truth.assert_not_called()
+            self.assertEqual('saved reference', (r.OUT / 'fake.truth.jsonl').read_text())
+
+    def test_complete_model_download_is_published(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            def download(command, **kwargs):
+                Path(command[command.index('-o') + 1]).write_bytes(b'complete weights')
+            with patch.object(r.subprocess, 'run', side_effect=download):
+                result = r.model_file('fake')
+            self.assertEqual(b'complete weights', result.read_bytes())
+            self.assertFalse(result.with_name(result.name + '.download').exists())
+
+    def test_failed_model_download_never_publishes_partial_weights(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            def download(command, **kwargs):
+                Path(command[command.index('-o') + 1] if '-o' in command else command[2]).write_bytes(b'partial weights')
+                raise subprocess.CalledProcessError(1, command)
+            with patch.object(r.subprocess, 'run', side_effect=download):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    r.model_file('fake')
+            self.assertFalse((r.OUT / 'ggml-fake.bin').exists())
+
+class TableTest(unittest.TestCase):
+    def test_overall_includes_worst_dark_and_reference_coverage(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), \
+                patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(
+                lines=['One', 'Two', 'Three', 'Unmatched'],
+                shown=[dict(line=0, at=10000), dict(line=1, at=11000)])))
+            (r.OUT / 'fake.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=start)) + '\n'
+                                                       for n, start in enumerate([10.2, 20, 30])))
+            output = io.StringIO()
+            with redirect_stdout(output):
+                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard=''))
+            rows = output.getvalue().splitlines()
+            self.assertEqual(['all', '3', '1', '1', '1', '1', '-9.0'], rows[2].split()[:7])
+            self.assertIn('Reference coverage: 3/4', rows[3])
+            self.assertFalse((r.OUT / 'replay.json').exists())
+            self.assertFalse((r.OUT / 'replay.songs').exists())
+
+class HeardWhenAskedTest(unittest.TestCase):
+    def test_prep_hears_every_20_seconds_and_the_last_stretch(self):
+        self.assertEqual(r.seed(list(range(0, 45000, 1000))), [0, 20000, 40000, 44000])
+
+    def test_a_song_with_only_those_is_complete(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            for suffix in ('wav', 'language', 'lyrics.json', 'truth.jsonl'):
+                (r.OUT / f'fake.{suffix}').write_text('fake')
+            for length in r.LENGTHS:
+                r.heard_file('fake', length, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in r.seed(list(range(0, 61020 - length, 1000)))}))
+            with patch.object(r.subprocess, 'check_output', return_value=b'61.021'):
+                self.assertTrue(r.complete('fake'))
+
+    def asked(self, heard, kept):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'windows') as windows:
+            r.heard_file('fake', 20000, r.APP_MODEL).write_text(json.dumps({str(n): [] for n in kept}))
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(heard=heard)))
+            new = r.hear_asked('fake', ['fake.from0.shown.json'])
+        return new, [call.kwargs['wanted'](list(range(0, 41000, 1000))) for call in windows.call_args_list]
+
+    def test_a_stretch_asked_for_is_heard_at_the_nearest_second(self):
+        new, wanted = self.asked([dict(seconds=20, **{'from': 3400}), dict(seconds=20, **{'from': 7600})], [0, 40000])
+        self.assertEqual((new, wanted), (2, [[3000, 8000]]))
+
+    def test_past_the_last_stretch_or_before_the_first_is_the_nearest_there_is(self):
+        self.assertEqual(self.asked([dict(seconds=20, **{'from': 90000}), dict(seconds=20, **{'from': -900})], [0, 40000]), (0, []))
+
+    def test_what_was_heard_already_is_not_heard_again(self):
+        self.assertEqual(self.asked([dict(seconds=20, **{'from': 3000})], [0, 3000, 40000]), (0, []))
+
+    def test_a_song_with_no_replay_yet_asks_for_nothing(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'windows') as windows:
+            self.assertEqual(r.hear_asked('fake', ['fake.from0.shown.json']), 0)
+        windows.assert_not_called()
+
+    def replays(self, run, args, new):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r, 'hear_asked', side_effect=new) as heard, \
+                patch.object(r, 'score', return_value=None), \
+                patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)) as gradle:
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)])))
+            (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
+            with patch('sys.stdout'):
+                run(args)
+        return gradle.call_count, heard.call_count
+
+    def test_all_replays_until_nothing_new_is_asked(self):
+        args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='')
+        self.assertEqual(self.replays(r.run_all, args, [2, 1, 0]), (3, 3))
+
+    def test_all_hears_nothing_for_another_set(self):
+        args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.other')
+        self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
+
+    def run_args(self, **changed):
+        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, gradle='fake-gradle'), **changed})
+
+    def test_one_song_replays_until_nothing_new_is_asked(self):
+        self.assertEqual(self.replays(r.run, self.run_args(), [1, 0]), (2, 2))
+
+    def test_one_song_on_another_model_hears_nothing(self):
+        self.assertEqual(self.replays(r.run, self.run_args(model='base-q5_1'), []), (1, 0))
+
+    def test_a_replay_held_to_the_phone_takes_each_while_as_long_as_the_phone_did(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None), \
+                patch.object(r, 'score_phone', return_value=({}, 0)), patch.object(r, 'compare'), patch.object(r.subprocess, 'run', side_effect=replay):
+            kept = Path(directory) / 'phone' / 'fake'
+            kept.mkdir(parents=True)
+            (kept / 'log.txt').write_text('said 566 at 66 playing true')
+            r.heard_file('fake', r.LENGTHS[0], r.APP_MODEL).write_text('{}')
+            # 20 s heard each time, begun 3.8 s, 27.1 s and 11.3 s after the last one ended.
+            for start in (10000, 33800, 80900, 112200):
+                with open(kept / f'heard-{start}.pcm', 'wb') as sound:
+                    sound.truncate(640000)
+            r.run(self.run_args(id='fake', like_phone=True))
+        self.assertEqual(asked[0]['works'], [3800, 27100, 11300])
+        self.assertEqual(asked[0]['work'], 3800)
+        self.assertEqual(asked[0]['whiles'], [10500, 34300, 81400, 112700])
+
+    def test_a_second_play_asks_too(self):
+        with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
+                tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
+            r.run(self.run_args(behind_again=500))
+        heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'])
+
+
+class ReplayAllTest(unittest.TestCase):
+    def test_it_replays_the_set_of_what_was_heard_it_is_asked_for(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'prepped', return_value=['fake']), patch.object(r.subprocess, 'run', side_effect=replay):
+            (r.OUT / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)])))
+            (r.OUT / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
+            with patch('sys.stdout'):
+                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.thin5'))
+        self.assertEqual(asked[0]['songs'][0]['heard'], '.thin5')
+
+
+class WordsHeardTest(unittest.TestCase):
+    def test_a_gpu_python_hears_the_words_with_the_same_model(self):
+        with tempfile.TemporaryDirectory() as temp:
+            gpu = Path(temp) / 'python'
+            asked = Path(temp) / 'asked'
+            gpu.write_text(f"""#!/bin/sh
+echo "$@" > {asked}
+echo '[[["Every", 8.9], ["time", 9.2]], [["Every", 8.9]]]'
+""")
+            gpu.chmod(0o755)
+            with patch.dict(os.environ, {'WHISPER_PYTHON': str(gpu)}), patch.object(r, 'truth_model') as cpu:
+                heard = r.words_heard(Path('vocals.wav'), 'en')
+            cpu.assert_not_called()
+            self.assertEqual(heard, [[('every', 8.9), ('time', 9.2)], [('every', 8.9)]])
+            said = asked.read_text()
+            self.assertIn('whisper_gpu.py vocals.wav en', said)
+
+    def test_a_failure_on_the_gpu_stops_rather_than_passing_for_no_words(self):
+        with patch.dict(os.environ, {'WHISPER_PYTHON': '/bin/false'}), patch.object(r, 'truth_model'):
+            with self.assertRaises(subprocess.CalledProcessError):
+                r.words_heard(Path('vocals.wav'), 'en')
+
+    def test_without_one_it_stays_on_the_cpu(self):
+        word = SimpleNamespace(word=' Every', start=8.9)
+        model = Mock()
+        model.transcribe.return_value = ([SimpleNamespace(words=[word])], None)
+        env = {key: value for key, value in os.environ.items() if key != 'WHISPER_PYTHON'}
+        with patch.dict(os.environ, env, clear=True), patch.object(r, 'truth_model', return_value=model), patch.object(r, 'audio'):
+            self.assertEqual(r.words_heard(Path('vocals.wav'), 'en'), [[('every', 8.9)]])
+
+
+class SungLanguageTest(unittest.TestCase):
+    """What's heard goes by the audio, unless the lyrics can't be in that language: Dynamite sounded Korean."""
+    def told(self, lyrics, probabilities):
+        with tempfile.TemporaryDirectory() as folder, patch.object(r, 'OUT', Path(folder)), \
+                patch.object(r, 'separated_voice', return_value=Path('vocals.wav')), patch.object(r, 'audio', return_value=[]), \
+                patch.object(r, 'truth_model') as model:
+            (Path(folder) / 'song.lyrics.json').write_text(json.dumps([[0, line] for line in lyrics]))
+            model.return_value.detect_language.return_value = (probabilities[0][0], probabilities[0][1], probabilities)
+            first = r.sung_language('song')
+            model.return_value.detect_language.side_effect = AssertionError('kept, so not told again')
+            self.assertEqual(first, r.sung_language('song'))
+            return first
+
+    def test_lyrics_with_none_of_that_writing_rule_a_language_out(self):
+        self.assertEqual('en', self.told(["'Cause I'm in the stars tonight"], [('ko', 0.6), ('ja', 0.3), ('en', 0.1)]))
+
+    def test_a_little_of_that_writing_is_enough(self):
+        self.assertEqual('ko', self.told(['Aha, listen boy', '너무너무 멋져'], [('ko', 0.6), ('en', 0.4)]))
+
+    def test_kanji_alone_can_be_japanese(self):
+        self.assertEqual('ja', self.told(['移り行く街'], [('ja', 0.9), ('zh', 0.1)]))
+
+    def test_a_language_in_latin_letters_stays_what_it_sounds_like(self):
+        self.assertEqual('es', self.told(['No puedo creer'], [('es', 0.9), ('en', 0.1)]))
+
+    def test_no_language_fits_goes_by_how_it_sounds(self):
+        self.assertEqual('ko', self.told(['移り行く'], [('ko', 0.6), ('ru', 0.4)]))
+
+
+class AgreedTest(unittest.TestCase):
+    def test_a_line_timed_apart_by_two_hearings_is_left_out(self):
+        # The Police's chorus: one hearing lost it at 120 s and matched the line to the next one, at 161 s.
+        self.assertEqual(r.agreed([{25: 120.57, 27: 126.24}, {25: 161.78, 27: 126.3}]), {27: 126.24})
+
+    def test_a_line_only_one_hearing_found_is_left_out(self):
+        self.assertEqual(r.agreed([{1: 10.0, 2: 20.0}, {1: 10.0}]), {1: 10.0})
+
+    def test_times_within_what_counts_as_on_time_are_the_same_time(self):
+        self.assertEqual(r.agreed([{1: 10.0}, {1: 10.0 + r.ON_TIME_S}]), {1: 10.0})
+
+    def test_one_hearing_has_nothing_to_disagree_with(self):
+        self.assertEqual(r.agreed([{1: 10.0, 2: 20.0}]), {1: 10.0, 2: 20.0})
+
+
+class TruthTest(unittest.TestCase):
+    def test_lines_come_from_what_every_hearing_agrees_on(self):
+        lines = ['every little thing', 'she does is magic']
+        chorus = [('every', 10.0), ('little', 10.5), ('thing', 11.0), ('she', 12.0), ('does', 12.5), ('is', 13.0), ('magic', 13.5)]
+        lost = [('every', 50.0), ('little', 50.5), ('thing', 51.0), ('she', 12.0), ('does', 12.5), ('is', 13.0), ('magic', 13.5)]
+        with patch.object(r, 'separated_voice', return_value=Path('vocals.wav')), patch.object(r, 'sung_language', return_value='en'), \
+                patch.object(r, 'words_heard', return_value=[chorus, lost]), patch.object(r, 'voiced', side_effect=lambda _, starts: starts), \
+                patch.object(r, 'write_truth') as wrote:
+            r.truth('song', Path('song.wav'), lines)
+        wrote.assert_called_once_with('song', lines, {1: 12.0})
+
+
+if __name__ == '__main__':
+    unittest.main()

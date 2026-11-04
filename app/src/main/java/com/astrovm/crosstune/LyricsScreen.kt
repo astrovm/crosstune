@@ -490,7 +490,8 @@ private fun WithVisuals(state: UiState, only: Boolean, wordsBack: Animatable<Flo
             val reading = readingShade + (1f - readingShade) * state.visualsShade
             // Swiped back to, the words and their shade come as far as the swipe has.
             val coming = if (only) wordsBack.value else 1f
-            LocalVisuals.current(state.visualsPlay.copy(shade = reading * coming, behind = true), Modifier.fillMaxSize())
+            val ceiling = 1f - (1f - VISUALS_CEILING) * coming
+            LocalVisuals.current(state.visualsPlay.copy(shade = reading * coming, ceiling = ceiling, behind = true), Modifier.fillMaxSize())
             if (only) {
                 HiddenSystemBars()
                 if (coming > 0f) Box(Modifier.graphicsLayer { alpha = coming }) { content(Color.Transparent) }
@@ -1816,6 +1817,13 @@ private fun LyricLineText(
         LineHelps(help, instead, style, look)
     }
 }
+
+/**
+ * The brightest any color of the visuals gets under words, however bright they're set or a preset goes,
+ * so the lines stand apart even over a white frame. At the usual brightness only the top fifth of a
+ * preset's range goes flat, where darkening it all this far would dim everything by a fifth.
+ */
+internal const val VISUALS_CEILING = 0.22f
 
 /**
  * How bright a line is by its [place]: the one being sung brightest, those to come less, those sung

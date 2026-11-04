@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs ./gradlew for this checkout in a container, in turn with every other checkout on this machine.
 #
-#   scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*LyricsFinderTest*'
+#   scripts/gradle-box/gradle-box.sh :app:testPlayDebugUnitTest --tests '*LyricsFinderTest*'
 #
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest of
 # $HOME. Builds wait in line for a slot, first come first served, and say how many are ahead: waiting
@@ -12,8 +12,10 @@
 # refresh it after many new dependencies: delete seed/ with no build running, and the next build that
 # succeeds makes it again.
 #
-# GRADLE_BOX_MEMORY is each build's limit in GiB, 8 by default. GRADLE_BOX_SLOTS is how many run at
-# once, by default as many as fit in three quarters of the RAM.
+# GRADLE_BOX_MEMORY is each build's limit in GiB, 16 by default: :app:ci holds about 13 at its peak,
+# between Gradle, the Kotlin compiler and, from 12 GiB, two test processes side by side, and at 8 or 12
+# one of them gets killed. GRADLE_BOX_SLOTS is how many run at once, by default as many as fit in
+# three quarters of the RAM, and at least one.
 set -euo pipefail
 
 image=docker.io/library/eclipse-temurin:25-jdk
@@ -28,7 +30,7 @@ if [[ ! -d $sdk ]]; then
     exit 1
 fi
 
-memory=${GRADLE_BOX_MEMORY:-8}
+memory=${GRADLE_BOX_MEMORY:-16}
 ram=$(awk '/^MemTotal/ { print int($2 / 1048576 + 0.5) }' /proc/meminfo)
 slots=${GRADLE_BOX_SLOTS:-$((ram * 3 / 4 / memory))}
 ((slots >= 1)) || slots=1
