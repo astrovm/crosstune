@@ -95,6 +95,7 @@ internal class SingingListener(
     override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
         val recording = withContext(recordDispatcher) { sound.open() } ?: return null
+        val raised = recording is AsMastered
         val (file, heard) = recording.use {
             // The model first, so what's heard is fresh when it's listened to.
             val file = model()
@@ -107,7 +108,7 @@ internal class SingingListener(
                     val heard = withContext(recordDispatcher) {
                         record(recording, again) { startedAt, part ->
                             // Told back where it was asked, while the rest is still heard.
-                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.let { if (first(Sung(startedAt, it))) hearAgain(file, again.await(), language, first) } }
+                            if (first != null) this@coroutineScope.launch { words(file, part, language, raised)?.let { if (first(Sung(startedAt, it))) hearAgain(file, again.await(), language, raised, first) } }
                         }
                     }
                     // Sound that ended before them has none to hear again.
@@ -117,20 +118,20 @@ internal class SingingListener(
                 )
         }
         keepTo?.let { File(it, "heard-${heard.first}.pcm").writeBytes(ByteBuffer.allocate(heard.second.size * 2).order(ByteOrder.LITTLE_ENDIAN).apply { asShortBuffer().put(heard.second) }.array()) }
-        val words = words(file, heard.second, language) ?: return null
+        val words = words(file, heard.second, language, raised) ?: return null
         return Sung(heard.first, words)
     }
 
     /** The sound in [part], from when it started, heard with [model] and told [first]. */
-    private suspend fun hearAgain(model: File, part: Pair<Long, ShortArray>, language: String?, first: suspend (Sung) -> Boolean) {
-        words(model, part.second, language)?.let { first(Sung(part.first, it)) }
+    private suspend fun hearAgain(model: File, part: Pair<Long, ShortArray>, language: String?, raised: Boolean, first: suspend (Sung) -> Boolean) {
+        words(model, part.second, language, raised)?.let { first(Sung(part.first, it)) }
     }
 
-    /** The words sung in [audio], heard with [model], in [language] when it's known; null when it can't be loaded, or hears none. */
-    private suspend fun words(model: File, audio: ShortArray, language: String?): List<HeardWord>? = withContext(computeDispatcher) {
+    /** The words sung in [audio], [raised] to [atHearingLevel] or not, heard with [model], in [language] when it's known; null when it can't be loaded, or hears none. */
+    private suspend fun words(model: File, audio: ShortArray, language: String?, raised: Boolean): List<HeardWord>? = withContext(computeDispatcher) {
         val hears = hearing(model) ?: return@withContext null
         try {
-            Busy.during { hears.words(SingingListener.atHearingLevel(audio), language) }.ifEmpty { null }
+            Busy.during { hears.words(if (raised) atHearingLevel(audio) else FloatArray(audio.size) { audio[it] / 32768f }, language) }.ifEmpty { null }
         } finally {
             (hears as? Closeable)?.close()
         }
@@ -173,20 +174,16 @@ internal class SingingListener(
         private const val CHUNK = ShazamSignature.SAMPLE_RATE / 10
 
         /**
-         * How loud quiet sound is made, as the speech model hears level as well as words, and sound played
-         * back to the app comes as quiet as the song was mastered. On a phone's own sound, a third of this,
-         * 20 seconds with singing in them heard a voice 8 times in 30; at this, 24 times. Louder heard no more.
+         * How loud sound [AsMastered] is made, as the speech model hears level as well as words. A phone's own
+         * sound comes at about a third of this: 20 seconds with singing in them heard a voice 8 times in 30, and
+         * 24 times at this. Louder heard no more. The visuals' tap already gives about this.
          */
         const val HEARING_LEVEL = 0.5f
 
         /** The most sound is raised to get there, which is as far as was tried, so a quiet room's hiss stays that. */
         const val MOST_RAISED = 6f
 
-        /**
-         * The sound in [audio] from -1 to 1, raised to [HEARING_LEVEL] overall if it's under it. Louder sound is
-         * left as it is, as Android's visualizer's is: 2% louder or quieter, the model hears other words in half
-         * of it. Peaks can go past 1, which the model doesn't mind.
-         */
+        /** The sound in [audio] from -1 to 1, raised to [HEARING_LEVEL] overall if it's under it. Peaks can go past 1, which the model doesn't mind. */
         fun atHearingLevel(audio: ShortArray): FloatArray {
             val level = sqrt(audio.sumOf { it.toDouble() * it } / audio.size) / 32768
             val raised = (HEARING_LEVEL / level).coerceIn(1.0, MOST_RAISED.toDouble()).toFloat()

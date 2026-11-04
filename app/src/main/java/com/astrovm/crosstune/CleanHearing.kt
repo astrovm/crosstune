@@ -2,6 +2,9 @@ package com.astrovm.crosstune
 
 import kotlin.math.abs
 
+/** Sound as quiet as its song was mastered, as an app plays it, rather than filled to full scale as the visuals' tap gives it. */
+internal class AsMastered(recording: Recording) : Recording by recording
+
 /**
  * What an app on the phone plays, heard through [clean], the 16-bit sound it plays, when it can be:
  * the visuals' 8-bit tap, [played], loses quiet words under loud music, mostly in live recordings.
@@ -10,7 +13,7 @@ import kotlin.math.abs
  */
 internal class CleanFirst(private val clean: Microphone?, private val played: Microphone) : Microphone {
     override fun open(): Recording? {
-        if (clean != null && hearsSound(clean)) clean.open()?.let { return it }
+        if (clean != null && hearsSound(clean)) clean.open()?.let { return AsMastered(it) }
         return played.open()
     }
 

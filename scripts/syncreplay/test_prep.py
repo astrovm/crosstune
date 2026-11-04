@@ -54,7 +54,7 @@ class HearingLevelTest(unittest.TestCase):
         app = (Path(__file__).parents[2] / 'app/src/main/java/com/astrovm/crosstune/SungWords.kt').read_text()
         self.assertEqual(r.HEARING_LEVEL, float(re.search(r'HEARING_LEVEL = ([\d.]+)f', app).group(1)))
         self.assertEqual(r.MOST_RAISED, float(re.search(r'MOST_RAISED = ([\d.]+)f', app).group(1)))
-        self.assertIn('hears.words(SingingListener.atHearingLevel(audio), language)', app)
+        self.assertIn('if (raised) atHearingLevel(audio)', app)
 
     @unittest.skipUnless(importlib.util.find_spec('numpy'), 'needs numpy, as hearing does')
     def test_sound_is_raised_at_most_so_far_and_silence_stays_silent(self):
@@ -63,6 +63,27 @@ class HearingLevelTest(unittest.TestCase):
         self.assertAlmostEqual(0.06, float(r.at_hearing_level(np.array([0.01, -0.01]))[0]), places=5)
         self.assertAlmostEqual(0.9, float(r.at_hearing_level(np.array([0.9, -0.9]))[0]), places=5)
         self.assertEqual([0.0, 0.0], list(r.at_hearing_level(np.zeros(2))))
+
+    def hears(self, clean):
+        import numpy as np
+        given = []
+
+        def run(command, input, capture_output, check, env):
+            given.append(np.frombuffer(input, np.float32))
+            return argparse.Namespace(stdout=b'')
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'audio', return_value=np.full(64000, 0.1, np.float32)), patch.object(r, 'as_the_phone_hears', return_value=np.full(64000, 0.1, np.float32)), \
+                patch.object(r, 'heard_binary', return_value=Path('heard')), patch.object(r, 'model_file', return_value=Path('model')), \
+                patch.object(r, 'sung_language', return_value='en'), patch.object(r.subprocess, 'run', side_effect=run):
+            r.windows('fake', Path('fake.wav'), 3000, clean=clean, wanted=lambda starts: starts[:1])
+            names = [f.name for f in Path(directory).iterdir()]
+        return round(float(given[0][0]), 3), names
+
+    @unittest.skipUnless(importlib.util.find_spec('numpy'), 'needs numpy, as hearing does')
+    def test_only_the_sound_played_itself_is_raised(self):
+        self.assertEqual((0.5, ['fake.heard3.tiny-q5_1.raised.json']), self.hears(True))
+        self.assertEqual((0.1, ['fake.heard3.json']), self.hears(False))
 
 
 class CheckpointTest(unittest.TestCase):
@@ -93,7 +114,6 @@ class CheckpointTest(unittest.TestCase):
         import subprocess
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
                 patch.object(r, 'as_the_phone_hears', return_value=Samples()), \
-                patch.object(r, 'at_hearing_level', side_effect=lambda sound: sound), \
                 patch.object(r, 'heard_binary', return_value=Path('heard')), \
                 patch.object(r, 'model_file', return_value=Path('model')), \
                 patch.object(r, 'sung_language', return_value='en'), \
@@ -264,8 +284,19 @@ class HeardWhenAskedTest(unittest.TestCase):
         args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.other')
         self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
 
+    def test_all_can_hear_the_sound_played_itself_until_nothing_new_is_asked(self):
+        args = argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='', clean=True)
+        with patch.object(r, 'windows') as windows:
+            self.assertEqual(self.replays(r.run_all, args, [1, 0]), (2, 2))
+        self.assertEqual({r.seed}, {call.kwargs['wanted'] for call in windows.call_args_list})
+        self.assertTrue(all(call.kwargs['clean'] for call in windows.call_args_list))
+        self.assertEqual(f'.{r.clean_model(r.APP_MODEL)}', args.heard)
+
     def run_args(self, **changed):
         return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, gradle='fake-gradle'), **changed})
+
+    def test_one_song_hears_the_sound_played_itself_as_asked_too(self):
+        self.assertEqual(self.replays(r.run, self.run_args(model=r.clean_model(r.APP_MODEL)), [1, 0]), (2, 2))
 
     def test_one_song_replays_until_nothing_new_is_asked(self):
         self.assertEqual(self.replays(r.run, self.run_args(), [1, 0]), (2, 2))

@@ -122,8 +122,8 @@ def model_file(model):
 
 def heard_file(song, length, model):
     """What `model` heard in each `length` ms of `song`: the app's model's is the plain one. A model
-    named with ".clean" heard the recording itself rather than through the visualizer."""
-    return OUT / f"{song}.heard{length // 1000}.level{'' if model == APP_MODEL else '.' + model}.json"  # SyncReplayTest reads the same names
+    named with ".raised" heard the recording itself, as the app hears the sound played, rather than through the visualizer."""
+    return OUT / f"{song}.heard{length // 1000}{'' if model == APP_MODEL else '.' + model}.json"  # SyncReplayTest reads the same names
 
 
 def as_the_phone_hears(path):
@@ -141,8 +141,13 @@ def as_the_phone_hears(path):
     return (byte * 256 / 32768).astype(np.float32)
 
 
+def clean_model(model):
+    """The name of what `model` heard in the sound played itself, raised as the app raises it."""
+    return f"{model}.raised"
+
+
 def at_hearing_level(sound):
-    """As SingingListener.atHearingLevel does, before the speech model hears it."""
+    """As SingingListener.atHearingLevel does to sound played itself, before the speech model hears it."""
     import numpy as np
     level = float(np.sqrt(np.mean(sound.astype(np.float64) ** 2)))
     return (sound * (max(1.0, min(HEARING_LEVEL / level, MOST_RAISED)) if level > 0 else 1)).astype(np.float32)
@@ -155,8 +160,8 @@ def seed(starts):
 
 def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     """What whisper.cpp hears with `model` in each `length` ms from every STEP_MS, as the app hears it,
-    or, `clean`, as it would from the sound played itself (AudioPlaybackCapture), 16 bits as it is."""
-    out = heard_file(song, length, f"{model}.clean" if clean else model)
+    or, `clean`, as it would from the sound played itself (AudioPlaybackCapture), 16 bits, raised as the app raises it."""
+    out = heard_file(song, length, clean_model(model) if clean else model)
     done = json.loads(out.read_text()) if out.exists() else {}
     a = audio(wav) if clean else as_the_phone_hears(wav)
     binary = heard_binary()
@@ -166,7 +171,8 @@ def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     language = sung_language(song)
 
     def hear(start):
-        seg = at_hearing_level(a[start * 16:(start + length) * 16])
+        seg = a[start * 16:(start + length) * 16]
+        seg = at_hearing_level(seg) if clean else seg
         # A model that can't run hears nothing, so it fails here rather than passing for silence.
         text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
@@ -326,7 +332,7 @@ def prep(args):
         measured(args.id, f"heard{length // 1000}", lambda: windows(args.id, wav, length, wanted=seed))
 
 
-def hear_asked(song, replays):
+def hear_asked(song, replays, clean=False):
     """Hears each stretch these replays of the song asked for and got only something near to: how many new ones.
     What's heard in one decides what's asked next, so it takes a few replays to settle (measurements.md)."""
     plays = [json.loads((OUT / name).read_text()) for name in replays if (OUT / name).exists()]
@@ -335,11 +341,11 @@ def hear_asked(song, replays):
         asked = [h["from"] for play in plays for h in play.get("heard", []) if h["seconds"] * 1000 == length]
         if not asked:
             continue
-        done = json.loads(heard_file(song, length, APP_MODEL).read_text())
+        done = json.loads(heard_file(song, length, clean_model(APP_MODEL) if clean else APP_MODEL).read_text())
         last = max(map(int, done))
         missing = sorted({min(max(0, (at + STEP_MS // 2) // STEP_MS * STEP_MS), last) for at in asked} - set(map(int, done)))
         if missing:
-            windows(song, OUT / f"{song}.wav", length, wanted=lambda starts, missing=missing: [s for s in missing if s in starts])
+            windows(song, OUT / f"{song}.wav", length, clean=clean, wanted=lambda starts, missing=missing: [s for s in missing if s in starts])
             new += len(missing)
     return new
 
@@ -360,7 +366,8 @@ def run(args):
             asked.unlink()
         if done.returncode:
             sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
-        if args.model != APP_MODEL or not hear_asked(args.id, plays):
+        clean = args.model == clean_model(APP_MODEL)
+        if (args.model != APP_MODEL and not clean) or not hear_asked(args.id, plays, clean):
             break
     shown = score(args)
     if phone_lit is not None:
@@ -384,7 +391,7 @@ def like_phone(args):
     args.work = round(statistics.median(gaps)) if gaps else args.work
     # Only playback capture logs what it captured; the visualizer's sound is heard as `hear` makes it by default.
     clean = "captured " in log
-    args.model = f"{APP_MODEL}.clean" if clean else APP_MODEL
+    args.model = clean_model(APP_MODEL) if clean else APP_MODEL
     # The words the phone showed, not those prep was given.
     if (kept / "lyrics.json").exists():
         atomic_text(OUT / f"{args.id}.found.json", json.dumps(found_words(args.id, kept)))
@@ -745,6 +752,12 @@ def prepped():
 def run_all(args):
     """Every prepped song replayed from the start in one go, and how its lines came out against when they're sung."""
     songs = prepped()
+    clean = getattr(args, "clean", False)
+    if clean:
+        # What's heard this way starts as prep's does, so a replay has something near wherever it asks.
+        args.heard = f".{clean_model(APP_MODEL)}"
+        with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
+            list(pool.map(lambda song: [windows(song, OUT / f"{song}.wav", length, clean=True, wanted=seed) for length in LENGTHS], songs))
     asked = OUT / "replay.json"
     asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
@@ -760,10 +773,10 @@ def run_all(args):
             names.unlink()
         if done.returncode:
             sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
-        if args.heard:
+        if args.heard and not clean:
             break
         with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
-            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from0.shown.json"]), songs)):
+            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from0.shown.json"], clean), songs)):
                 break
     titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
     totals = dict(lines=0, close=0, on=0, dark=0, early=0)
@@ -841,12 +854,13 @@ def main():
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
     p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
-    p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.level.thin5.json")
+    p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")
+    p.add_argument("--clean", action="store_true", help="hear the sound played itself, as with Shizuku, not through the visualizer")
     p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")
     p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")
-    p.add_argument("--clean", action="store_true", help="hear the recording itself, not through the visualizer; then run --model MODEL.clean")
+    p.add_argument("--clean", action="store_true", help="hear the recording itself, not through the visualizer; then run --model MODEL.raised")
     p.set_defaults(go=hear)
     p = steps.add_parser("phone")
     p.add_argument("id")

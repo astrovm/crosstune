@@ -335,11 +335,11 @@ class SungWordsTest {
         assertEquals(Sung(1_234, listOf(HeardWord("Oh", 320), HeardWord("show", 820))), listener.hear("es", null))
         assertEquals(listOf(File("model")), models)
         assertEquals("es", words.language)
-        // 16 kHz, as whisper.cpp hears.
+        // 16 kHz, as whisper.cpp hears, from -1 to 1.
         val samples = words.samples!!
         assertEquals(16_000 * SingingListener.SECONDS, samples.size)
+        assertEquals(99 / 32768f, samples[99])
         assertEquals(0f, samples[100])
-        assertTrue(samples[99] > 0f)
         assertTrue(microphone.closed)
         assertTrue(words.closed)
     }
@@ -377,12 +377,19 @@ class SungWordsTest {
     }
 
     @Test
-    fun whatsHeardIsRaisedBeforeTheModelHearsIt() = runBlocking {
+    fun soundAsMasteredIsRaisedBeforeTheModelHearsIt() = runBlocking {
         val microphone = FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }
-        val words = FakeWords(listOf(HeardWord("Oh", 320)))
-        listener(microphone, hearing = words).hear(null, null)
+        val heard = mutableListOf<FloatArray>()
+        val listener = listener(Microphone { microphone.open()?.let(::AsMastered) }, hearing = { samples, _ -> heard += samples; listOf(HeardWord("[MUSIC]", 320)) })
+        // The first seconds, those from a few seconds in, and all of it.
+        listener.hear(null) { true }
         val sound = ShortArray(16_000 * SingingListener.SECONDS) { (it % 100).toShort() }
-        assertEquals(SingingListener.atHearingLevel(sound).toList(), words.samples!!.toList())
+        val seconds = 16_000 * SingingListener.FIRST_SECONDS
+        val again = 16_000 * SingingListener.AGAIN_SECONDS
+        assertEquals(
+            listOf(sound.copyOf(seconds), sound.copyOfRange(again, again + seconds), sound).map { SingingListener.atHearingLevel(it).toList() },
+            heard.map { it.toList() }
+        )
     }
 
     @Test
@@ -421,7 +428,7 @@ class SungWordsTest {
         val starts = mutableListOf<Float>()
         val listener = listener(microphone, hearing = { samples, _ -> starts += samples[0]; listOf(HeardWord("[MUSIC]", 320)) })
         listener.hear(null) { true }
-        assertEquals(listOf(0f, SingingListener.AGAIN_SECONDS * SingingListener.MOST_RAISED / 32768f, 0f), starts)
+        assertEquals(listOf(0f, SingingListener.AGAIN_SECONDS / 32768f, 0f), starts)
     }
 
     @Test

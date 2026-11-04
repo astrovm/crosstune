@@ -1,9 +1,11 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Which sound a song's heard through: the clean one music apps play, or the visuals' tap. */
@@ -88,5 +90,34 @@ class CleanFirstTest {
         assertNull(CleanFirst(null, Microphone { null }).open())
         val recording = Sound(5).open()
         assertSame(recording, CleanFirst(Microphone { null }, Microphone { recording }).open())
+    }
+
+    @Test
+    fun theSoundItPlaysIsKnownToBeAsMastered() {
+        val ended = BooleanArray(1)
+        val clean = Microphone {
+            object : Recording {
+                override fun read(buffer: ShortArray, offset: Int, count: Int): Int {
+                    buffer[offset] = 100
+                    return 1
+                }
+
+                override fun close() {
+                    ended[0] = true
+                }
+            }
+        }
+        val heard = CleanFirst(clean, Microphone { null }).open()!!
+        assertTrue(heard is AsMastered)
+        // Otherwise it's that sound.
+        val samples = ShortArray(1)
+        assertEquals(1, heard.read(samples, 0, 1))
+        assertEquals(100.toShort(), samples[0])
+        ended[0] = false
+        heard.close()
+        assertTrue(ended[0])
+        // What the visuals' tap hears isn't: it's filled to full scale as it's heard.
+        val tap = FakeMicrophone()
+        assertFalse(CleanFirst(null, tap).open() is AsMastered)
     }
 }
