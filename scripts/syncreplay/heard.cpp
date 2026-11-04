@@ -12,7 +12,7 @@ int main(int argc, char** argv) {
     whisper_context* ctx = whisper_init_from_file_with_params(argv[1], cp);
     std::vector<float> s; float f; while (fread(&f, 4, 1, stdin) == 1) s.push_back(f);
     whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);
-    p.beam_search.beam_size = 5; p.n_threads = 4; p.no_context = true; p.token_timestamps = true;
+    p.beam_search.beam_size = 5; p.n_threads = getenv("HEARD_THREADS") ? atoi(getenv("HEARD_THREADS")) : 4; p.no_context = true; p.token_timestamps = true;
     p.print_progress = p.print_realtime = p.print_special = p.print_timestamps = false;
     p.language = argc > 2 ? argv[2] : "auto";
     if (argc > 3 && argv[3][0]) p.initial_prompt = argv[3];
