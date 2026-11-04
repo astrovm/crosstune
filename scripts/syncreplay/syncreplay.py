@@ -641,6 +641,9 @@ def behind(song, kept, lit):
         at = int(np.argmax(match / loud)) / 16
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
+    if not offs:
+        print("The app heard nothing to check its clock by, so it's taken as right.")
+        return 0
     return statistics.median(offs)
 
 
@@ -671,7 +674,7 @@ def score_phone(song_id, kept):
     dark = [i for at, i in timed if span[0] <= at <= span[1] and i not in lit_lines]
     print(f"Lines dark among all timed from the first lit to the end: {len(dark)} of {sum(span[0] <= at <= span[1] for at, _ in timed)}: {dark}")
     print(f"{song_id} on the phone, the app's clock {lag / 1000:.2f} s behind: {sum(abs(x) <= ON_TIME_S for x in lags.values())}/{len(lags)} within {ON_TIME_S} s, "
-          f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, median {statistics.median(abs(x) for x in lags.values()):.2f} s; never lit {sum(k not in first for k in sung)}")
+          f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, {f"median {statistics.median(abs(x) for x in lags.values()):.2f} s" if lags else "none lit"}; never lit {sum(k not in first for k in sung)}")
     return first, lag
 
 
