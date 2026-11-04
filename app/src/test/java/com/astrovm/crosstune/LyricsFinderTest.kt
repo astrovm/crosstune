@@ -760,7 +760,7 @@ class LyricsFinderTest {
         // Sung words in brackets, and words a note could be but a singer says too.
         val sung = listOf(
             "(Every breath you take)", "I love you (I love you)", "Stayin' alive (ah, ah, ah, ah)", "Roar (repeat)", "Love me twice (twice)",
-            "(repeat, repeat)", "(Repeat after me)", "Fade (fade away)", "(Again!)", "Time (2)", "Take it (out)", "Wait (in the dark)", "(x)", "(fade)", "(fades)", "(times)", "()",
+            "(repeat, repeat)", "(Repeat after me)", "Fade (fade away)", "(Again!)", "Time (2)", "Take it (out)", "Wait (in the dark)", "Roar (repeat!)", "Roar (...fade)", "(x)", "(fade)", "(fades)", "(times)", "()",
             "Sos (repeat and fade", "Sos repeat and fade)", "Sos repeat and fade"
         )
         assertEquals(sung.joinToString("\n"), cleaned(*sung.toTypedArray()))
@@ -783,13 +783,27 @@ class LyricsFinderTest {
             LyricLine(6_000, "(x2) Hello", listOf(word(6_000, "(x2) "), word(6_100, "Hello")), endMs = 6_900),
             LyricLine(7_000, "(fade out)", listOf(word(7_000, "(fade "), word(7_100, "out)"))),
             LyricLine(8_000, "（fade out）"),
-            LyricLine(9_000, ""),
+            // Two notes before the words leave no space in front of them; a note after the first word only.
+            LyricLine(10_000, "(x2) (fade out) Again", listOf(word(10_000, "(x2) "), word(10_100, "(fade "), word(10_200, "out) "), word(10_300, "Again"))),
+            LyricLine(11_000, "Hello (x2)", listOf(word(11_000, "Hello "), word(11_100, "(x2)")), endMs = 11_500),
+            // Lines whose text isn't their words joined are cut by their text.
+            LyricLine(12_000, "Sos, again (x2)", listOf(word(12_000, "Sos,"), word(12_100, " (x2)"))),
+            LyricLine(13_000, "Hello there", listOf(word(13_000, "Hello"), word(13_100, "there"))),
+            // A note between words leaves its space with the word before.
+            LyricLine(13_500, "Hello (x2) there", listOf(word(13_500, "Hello "), word(13_600, "(x2) "), word(13_700, "there"))),
+            LyricLine(14_000, ""),
             LyricLine(20_000, "I love you (I love you)", listOf(word(20_000, "I "), word(20_100, "love "), word(20_200, "you "), word(20_300, "(I "), word(20_400, "love "), word(20_500, "you)")))
         )
         val found = LyricsFinder.cleaned(Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = LyricsFinder.NETEASE), song)
-        assertEquals(listOf("Just a castaway", "Sending out an sos", "Sending out an sos", "Hello", "", "I love you (I love you)"), found.lines.map { it.text })
-        assertEquals(listOf(1_000L, 2_000L, 4_000L, 6_000L, 9_000L, 20_000L), found.lines.map { it.timeMs })
-        assertEquals("Just a castaway\nSending out an sos\nSending out an sos\nHello\n\nI love you (I love you)", found.words)
+        assertEquals(listOf("Just a castaway", "Sending out an sos", "Sending out an sos", "Hello", "Again", "Hello", "Sos, again", "Hello there", "Hello there", "", "I love you (I love you)"), found.lines.map { it.text })
+        assertEquals(listOf(1_000L, 2_000L, 4_000L, 6_000L, 10_000L, 11_000L, 12_000L, 13_000L, 13_500L, 14_000L, 20_000L), found.lines.map { it.timeMs })
+        assertEquals("Just a castaway\nSending out an sos\nSending out an sos\nHello\nAgain\nHello\nSos, again\nHello there\nHello there\n\nI love you (I love you)", found.words)
+        assertEquals(listOf("Again"), found.lines[4].words.map { it.text })
+        assertEquals(11_100L, found.lines[5].endMs)
+        assertEquals(listOf("Hello"), found.lines[5].words.map { it.text })
+        assertEquals(listOf("Sos,"), found.lines[6].words.map { it.text })
+        assertEquals(listOf("Hello", "there"), found.lines[7].words.map { it.text })
+        assertEquals(listOf("Hello ", "there"), found.lines[8].words.map { it.text })
         // The words keep their times and make up the line, as before.
         assertEquals(listOf("Sending ", "out ", "an ", "sos"), found.lines[1].words.map { it.text })
         assertEquals(listOf(2_000L, 2_300L, 2_600L, 2_900L), found.lines[1].words.map { it.timeMs })
@@ -798,8 +812,8 @@ class LyricsFinderTest {
         assertEquals(listOf(3_500L, 5_000L, 6_900L), found.lines.slice(1..3).map { it.endMs })
         assertEquals(listOf("Hello"), found.lines[3].words.map { it.text })
         assertEquals(listOf(6_100L), found.lines[3].words.map { it.timeMs })
-        for (line in found.lines.filter { it.words.isNotEmpty() }) assertEquals(line.text, line.words.joinToString("") { it.text })
-        assertEquals(6, found.lines[5].words.size)
+        for (line in found.lines.filter { it.words.isNotEmpty() && it.text.startsWith("Sos,").not() && it.text != "Hello there" }) assertEquals(line.text, line.words.joinToString("") { it.text })
+        assertEquals(6, found.lines[10].words.size)
         // A different site's lines are cleaned the same.
         assertEquals("Hello", LyricsFinder.cleaned(Lyrics.Found("(x2) Hello", listOf(LyricLine(0, "(x2) Hello")), source = "lrclib"), song).lines.single().text)
     }

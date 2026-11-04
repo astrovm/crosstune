@@ -106,17 +106,26 @@ private fun withoutPerformanceNotes(line: LyricLine): LyricLine? {
     val joined = line.words.joinToString("") { it.text }
     val cut = noteMask(joined)
     val cutWords = cut?.let { mask -> cutFrom(line.words, mask) } ?: line.words
-    val words = if (cut == null) line.words else cutWords.filter { it.text.isNotEmpty() }.trimmedAtTheEnds()
+    val words = if (cut == null) line.words else cutWords.withoutBlankWords().trimmedAtTheEnds()
     // Both read the same where the words make up the line, as timed ones do.
     val text = if (cut != null && joined == line.text) words.joinToString("") { it.text } else withoutPerformanceNotes(line.text)
     if (text.isBlank() && line.text.isNotBlank()) return null
     return line.copy(text = text, words = words, endMs = if (cut == null) line.endMs else endBeforeNote(line, cutWords))
 }
 
-/** [words], each without the characters [cut] marks, over all of them joined. A word may be left empty. */
+/** [words], each without the characters [cut] marks, over all of them joined. A word may be left with nothing, or a space. */
 private fun cutFrom(words: List<TimedWord>, cut: BooleanArray): List<TimedWord> {
     var from = 0
     return words.map { word -> word.copy(text = word.text.without(cut, from)).also { from += word.text.length } }
+}
+
+/** The words without those left with no more than a space, which goes to the word before it, as timed words keep their spaces. */
+private fun List<TimedWord>.withoutBlankWords(): List<TimedWord> = fold(emptyList()) { kept, word ->
+    when {
+        word.text.isNotBlank() -> kept + word
+        kept.isEmpty() -> kept
+        else -> kept.dropLast(1) + kept.last().copy(text = kept.last().text + word.text)
+    }
 }
 
 private fun List<TimedWord>.trimmedAtTheEnds(): List<TimedWord> =
@@ -127,7 +136,7 @@ private fun List<TimedWord>.trimmedAtTheEnds(): List<TimedWord> =
  * note that ends it begins. Where the note was on a word with others, there's no telling, and it ends as it did.
  */
 private fun endBeforeNote(line: LyricLine, cutWords: List<TimedWord>): Long? {
-    val last = cutWords.indexOfLast { it.text.isNotEmpty() }
+    val last = cutWords.indexOfLast { it.text.isNotBlank() }
     val noteStart = line.words.getOrNull(last + 1)?.timeMs ?: return line.endMs
     val whole = last >= 0 && cutWords[last].text.trimEnd() == line.words[last].text.trimEnd()
     return line.endMs?.let { if (whole) minOf(it, noteStart) else it }
