@@ -255,6 +255,27 @@ class HeardWhenAskedTest(unittest.TestCase):
     def test_one_song_on_another_model_hears_nothing(self):
         self.assertEqual(self.replays(r.run, self.run_args(model='base-q5_1'), []), (1, 0))
 
+    def test_a_replay_held_to_the_phone_takes_each_while_as_long_as_the_phone_did(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None), \
+                patch.object(r, 'score_phone', return_value=({}, 0)), patch.object(r, 'compare'), patch.object(r.subprocess, 'run', side_effect=replay):
+            kept = Path(directory) / 'phone' / 'fake'
+            kept.mkdir(parents=True)
+            (kept / 'log.txt').write_text('said 566 at 66 playing true')
+            r.heard_file('fake', r.LENGTHS[0], r.APP_MODEL).write_text('{}')
+            # 20 s heard each time, begun 3.8 s, 27.1 s and 11.3 s after the last one ended.
+            for start in (10000, 33800, 80900, 112200):
+                with open(kept / f'heard-{start}.pcm', 'wb') as sound:
+                    sound.truncate(640000)
+            r.run(self.run_args(id='fake', like_phone=True))
+        self.assertEqual(asked[0]['works'], [3800, 27100, 11300])
+        self.assertEqual(asked[0]['work'], 3800)
+        self.assertEqual(asked[0]['whiles'], [10500, 34300, 81400, 112700])
+
     def test_a_second_play_asks_too(self):
         with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
@@ -422,6 +443,24 @@ class PhoneTest(unittest.TestCase):
             (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\n')
             r.score_phone('song', kept)
         self.assertIn('never lit 0', said.call_args_list[-1].args[0])
+
+    def test_the_app_keeping_nothing_it_heard_leaves_its_clock_as_it_said(self):
+        # Words timed word by word don't need hearing, so a check can end with nothing kept. Plastic Love did.
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print') as said:
+            self.assertEqual(0, r.behind(MagicMock(), Path(directory), [(0, 100, 1000)]))
+        self.assertIn('heard nothing', said.call_args_list[-1].args[0])
+
+    def test_no_line_with_truth_lit_still_scores(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
+                patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
+            (r.OUT / 'song.wav').write_text('')
+            (r.OUT / 'song.lyrics.json').write_text(json.dumps([[1000, 'One'], [2000, 'Two']]))
+            (r.OUT / 'song.truth.jsonl').write_text(json.dumps(dict(line=1, start=2.0)) + '\n')
+            kept = r.OUT / 'kept'
+            kept.mkdir()
+            (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\nlit -1 at 200 pos 3000\n')
+            r.score_phone('song', kept)
+        self.assertIn('never lit 1', said.call_args_list[-1].args[0])
 
 
 if __name__ == '__main__':
