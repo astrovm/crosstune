@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -841,7 +842,7 @@ internal class MilkdropRenderer(
  * Shows what [renderer] draws in among the views, clipped and moved like any other, as in Settings
  * and behind the floating words. Drawing stops while it's out of sight.
  */
-internal class MilkdropView(context: Context, private val renderer: MilkdropRenderer) : TextureView(context), TextureView.SurfaceTextureListener {
+internal class MilkdropView(context: Context, @get:VisibleForTesting val renderer: MilkdropRenderer) : TextureView(context), TextureView.SurfaceTextureListener {
     private var thread: GlThread? = null
 
     init {
