@@ -2214,6 +2214,37 @@ class ListeningTest {
     }
 
     @Test
+    fun aFingerprintJumpCannotReplaceTheVideosExistingLead() {
+        val hearing = FakeHearing()
+        listeningAlong(hearing)
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
+        val phone = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "video:demo"), null)
+            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
+        }
+        MainActivity.playbackFactory = { phone }
+        allowMicrophone()
+        launch()
+        composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        hearing.song("Demo", 2.0, matchId = "reference")
+        waitForText("Demo one")
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        val before = controllerModel().uiState.following!!.clock
+        // The same reference gives two consistent but false positions, 37 seconds ahead.
+        repeat(2) { index ->
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(10))
+            composeRule.runOnIdle { hearing.song("Demo", (before.positionAt(SystemClock.elapsedRealtime()) + 37_000) / 1000.0, matchId = "reference") }
+            waitUntil(TIMEOUT_MS) { hearing.listens == index + 3 }
+        }
+        composeRule.runOnIdle {
+            val at = SystemClock.elapsedRealtime()
+            assertTrue(controllerModel().uiState.following.toString(), kotlin.math.abs(controllerModel().uiState.following!!.clock.positionAt(at) - before.positionAt(at)) < 1_000)
+        }
+    }
+
+    @Test
     fun oneHearingFollowsAVideoMeanwhileButIsntKept() {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)

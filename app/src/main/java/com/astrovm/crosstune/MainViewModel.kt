@@ -1777,7 +1777,6 @@ internal class MainViewModel(
 
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
     private var appLeadMs: Long? = null
-    private var appLeadVerified = false
     /**
      * How far the video is ahead by the last hearing alone, while hearings don't agree on it yet: the
      * words follow from there meanwhile, rather than stand still, but it's never kept.
@@ -2123,7 +2122,6 @@ internal class MainViewModel(
             val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
             heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extra) }?.let { lead ->
                 appLeadMs = lead
-                appLeadVerified = true
                 leadMatch = hearing.matchId
                 leadStore.save(shown, lead)
                 if (app.video) leadSavedLines(shown, app.appPackage, lead)
@@ -2254,7 +2252,6 @@ internal class MainViewModel(
      */
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
-        appFollowing?.takeIf { it.video && !appLeadVerified && !calibrationAttempted && syncPoints.isEmpty() }?.let { app -> leadOf(app, shown)?.let { appLeadMs = it } }
         // Put in time by hand, the words keep to the guess they were put in time from.
         appFollowing?.takeIf { it.video && appLeadMs == null && calibrationAttempted && syncPoints.isEmpty() && !songMayNotHaveStarted() }?.let { app -> guessLead(app, shown) }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
@@ -2601,7 +2598,6 @@ internal class MainViewModel(
                 if (playing == null && autoCalibrating) stopListeningAlong()
                 if (playing?.let(::needsLead) == true && appLeadMs == null) {
                     appLeadMs = leadStore.load(song)?.also { if (playing.video) leadSavedLines(song, playing.appPackage, it) }
-                    appLeadVerified = appLeadMs != null
                 }
                 // Once it's being listened for, only an intro heard to agree in several places lines the video up.
                 if (playing?.video == true && appLeadMs == null && !calibrationAttempted && syncPoints.isEmpty()) leadOf(playing, song)?.let { appLeadMs = it }
@@ -2682,7 +2678,6 @@ internal class MainViewModel(
         appFollowing = null
         appLeadMs = null
         guessedLeadMs = null
-        appLeadVerified = false
         leadMatch = null
         uiState = uiState.copy(following = null)
     }
