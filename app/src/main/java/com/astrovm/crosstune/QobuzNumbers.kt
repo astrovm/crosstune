@@ -24,7 +24,9 @@ internal class QobuzNumbers(
     /** Watches [app], about to open on [song] at [link]. */
     fun opened(song: MusicMetadata, app: String, link: String) {
         off()
-        if (!playback.hasAccess()) return
+        // Asked here, as a link can open before the screen's look at what's installed is done. Not installed, it opens on
+        // the web, where nothing's seen to play.
+        if (!playback.hasAccess() || !installed(app)) return
         val over = playback.nowPlaying()?.takeIf { sameApp(app, it.app, installed) }?.metadata
         // Already on it, it's brought forward, and there's no start to see.
         if (over != null && SongNames.same(over.title, song.title) && SongNames.sameArtist(over.artist, song.artist)) return

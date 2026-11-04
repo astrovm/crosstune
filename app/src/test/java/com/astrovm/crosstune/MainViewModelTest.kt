@@ -1436,7 +1436,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply { access = true }
         val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
         var asked = 0
-        val numbers = QobuzNumbers(playback, { _, _ -> asked++; "https://play.qobuz.com/track/2" }, { true }, scope)
+        val numbers = QobuzNumbers(playback, { _, _ -> asked++; "https://play.qobuz.com/track/2" }, app::hasApp, scope)
         fun opened(service: MusicService?, link: String = ytLink): Int {
             asked = 0
             playback.opened.clear()
@@ -1468,6 +1468,44 @@ class MainViewModelTest {
         } finally {
             scope.cancel()
         }
+    }
+
+    @Test
+    fun aSongOpenedBeforeAndroidSaidWhatsInstalledIsStillWatched() {
+        // A link that came in with Qobuz's number kept opens at once, while the look at what's installed is still running.
+        val song = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Thriller">Thriller</a>
+                <p class="ListItem__artists">Michael Jackson • Thriller</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;625089"></button>
+            </div></li>"""
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.qobuz.com" -> FakeSpotify.html(request, song)
+                else -> FakeSpotify.html(request, """{"title":"Thriller","author_name":"Michael Jackson"}""")
+            }
+        }
+        val playback = FakePlayback().apply { access = true }
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
+        var asked = 0
+        val numbers = QobuzNumbers(playback, { _, _ -> asked++; null }, app::hasApp, scope)
+        prefs().edit().putString("default_target", MusicService.QOBUZ.name).commit()
+        val model = model(playback = playback, qobuzNumbers = numbers)
+        model.refreshSystemState()
+        idle()
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.QOBUZ.packageName, "Qobuz"))
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.onUrlChange(ytLink)
+        model.resolveTypedInput()
+        until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
+        assertEquals(emptySet<MusicService>(), model.uiState.installed)
+        model.openResult()
+        until("opened") { effects.isNotEmpty() }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(QobuzNumbers.WAIT_MS))
+        idle()
+        scope.cancel()
+        assertEquals(1, asked)
     }
 
     @Test
