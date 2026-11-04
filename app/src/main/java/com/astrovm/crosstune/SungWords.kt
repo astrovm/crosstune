@@ -303,7 +303,18 @@ internal object SungAlignment {
         }.sortedByDescending { it.second }
         val best = found.firstOrNull()?.takeIf { it.second >= MIN_FAR_WORDS } ?: return null
         val other = found.firstOrNull { abs(it.first - best.first) > AGREE_MS }
-        return best.first.takeIf { other == null || other.second * FAR_CLEARLY < best.second }
+        // Where the lines are is a place too, though the words heard there may not agree how far off they are.
+        val stays = abs(best.first) > MAX_SHIFT_MS && matchingWhereTimed(heard, lines) * FAR_CLEARLY >= best.second
+        return best.first.takeIf { !stays && (other == null || other.second * FAR_CLEARLY < best.second) }
+    }
+
+    /** How many words [heard] match the lines timed to be sung while they were heard, however far off each says it is. */
+    private fun matchingWhereTimed(heard: List<Pair<String, Long>>, lines: List<LyricLine>): Int {
+        val here = lines.filterIndexed { index, line ->
+            line.timeMs <= heard.last().second && (lines.getOrNull(index + 1)?.timeMs ?: Long.MAX_VALUE) > heard.first().second
+        }
+        val timed = here.indices.flatMap { line -> wordsOf(here[line], here.getOrNull(line + 1)?.timeMs, line) }
+        return matched(heard.map { it.first }, timed.map { it.text }).size
     }
 
     /** Where most of [shifts], each with its line, agree within [within] ms; null when they're too few to tell, or split. */

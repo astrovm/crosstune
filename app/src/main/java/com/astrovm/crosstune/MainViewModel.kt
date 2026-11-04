@@ -2519,7 +2519,10 @@ internal class MainViewModel(
     }
 
     /** Whether a music app on the phone plays the song, lined up with its words. */
-    private fun playingLinedUp() = uiState.following?.let { it.app != null && it.clock.playing && (it.timingKnown || unheard) } == true
+    private fun playingLinedUp() = uiState.following?.let { it.app != null && it.clock.playing && (it.timingKnown || unheard || shazamGaveUp) } == true
+
+    /** Whether Shazam couldn't line up the video playing, as a sped-up upload's place in the song can't be: only the singing's left to light its lines. */
+    private val shazamGaveUp get() = appFollowing?.video == true && calibrationAttempted && alongJob?.isActive != true
 
     /** Whether to [doubt] where the words are timed, with no singing heard there, so no line's shown sung till it's found. */
     private fun doubtTiming(doubt: Boolean) {

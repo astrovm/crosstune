@@ -2,8 +2,11 @@
 """Replays a real recording through the app's lyrics timing, in about half a minute, and says how
 far from where each line is really sung the app showed it.
 
+  python3 scripts/syncreplay/syncreplay.py set [--cached]        # find and prep the song set
+  python3 scripts/syncreplay/syncreplay.py all                   # replays, hearing what they ask for; per-song and overall table
   python3 scripts/syncreplay/syncreplay.py prep ID LYRICS.json   # once per recording: see below
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
+  python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
   python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
@@ -25,16 +28,34 @@ words in Crosstune for S seconds, and times each line lit from the app's own log
 really is comes from lining up what the app heard with the recording, as a music app's clock runs
 behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
 A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
-Wants ffmpeg, yt-dlp, cmake, and demucs, faster-whisper and numpy in the Python running it.
+Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
+its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
+`run --like-phone` replays it as the last `phone` check went, from what it kept: where the app picked
+the song up, how far its clock was behind, how long the phone took to work out each while, the words it
+showed, and whether it heard the sound played itself, with Shizuku, or through the visualizer (`hear --clean`
+first for the former). It then says how far each line is from when the phone lit it: only while
+they match does the replay stand for the phone. The words a song's found with go in ID.found.json, which
+every replay plays over those given to prep, word by word when they're timed so: `set` writes it too.
+For ROCm Demucs only, set DEMUCS_PYTHON to a ROCm Python and DEMUCS_DEVICE=cuda;
+without these it uses the current Python on CPU. Set WHISPER_PYTHON to a ROCm Python with openai-whisper for
+truth on the GPU: it hears each song twice and keeps the lines both time alike, in about the time the CPU takes
+to hear it once (measurements.md). Hearing stays on CPU, as it stands for the phone's.
+`set --cached` resumes the existing set without another live search. Prep keeps truth for unchanged lyrics
+and checkpoints every heard window atomically, so an interrupted song resumes too. Prep hears only every 20 s,
+and a replay hears the rest it asks for, keeping it, so a change to the app's timing hears only what's new.
+Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
+import html
 import json
 import os
+import shutil
 import re
 import shlex
 import statistics
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
@@ -43,8 +64,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "syncreplay"
 HEARD = OUT / "heard"
+HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
 APP_MODEL = "tiny-q5_1"
+# Each while is heard on its own, on one thread, so how many at once only changes how long it takes.
+HEARD_AT_ONCE = max(1, (os.cpu_count() or 4) - 2)
+# Songs at once when a replay asks for more, as each has only a few stretches to hear.
+SONGS_HEARD_AT_ONCE = 4
+SEED_EVERY = 20
+LANGUAGE_SEGMENTS = 4
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
 # What the app hears at once, and at the start of a song, in ms.
 LENGTHS = (20_000, 8_000)
@@ -57,10 +85,19 @@ TIMING_LOG = "CrosstuneTiming"
 DEV_APP = "com.astrovm.crosstune.dev"
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
 LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps")
+# Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
+MIN_NAME = 8
 
 
-def norm(word):
-    return re.sub(r"[^a-z0-9']", "", unicodedata.normalize("NFKD", word.lower().replace("’", "'")))
+# Written without spaces, so what's heard can split anywhere: each letter is matched by itself.
+UNSPACED = "\u3040-\u30ff\u3400-\u9fff\uac00-\ud7a3"
+
+
+def pieces(word):
+    """What's matched of a word, in any writing: Latin letters without accents or punctuation, as one piece."""
+    word = unicodedata.normalize("NFKC", word.lower().replace("’", "'"))
+    bare = "".join(c for ch in word for c in (unicodedata.normalize("NFKD", ch) if ch < "\u0250" else ch) if ch >= "\u0250" or not unicodedata.combining(c))
+    return re.findall(f"[{UNSPACED}]|[^{UNSPACED}]+", re.sub(r"[^\w']|_", "", bare))
 
 
 def audio(path, kind="f32le"):
@@ -70,16 +107,20 @@ def audio(path, kind="f32le"):
 
 
 def heard_binary():
-    if not (HEARD / "heard").exists():
-        subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
-        subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
+    # Songs are heard at once, and the first of each would otherwise all build it, over each other.
+    with HEARD_BUILT:
+        if not (HEARD / "heard").exists():
+            subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
+            subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
     return HEARD / "heard"
 
 
 def model_file(model):
     path = OUT / f"ggml-{model}.bin"
     if not path.exists():
-        subprocess.run(["curl", "-sSLo", str(path), MODEL_URL.format(model)], check=True)
+        temporary = path.with_name(path.name + ".download")
+        subprocess.run(["curl", "-fsSL", "--retry", "2", "-o", str(temporary), MODEL_URL.format(model)], check=True)
+        temporary.replace(path)
     return path
 
 
@@ -104,7 +145,12 @@ def as_the_phone_hears(path):
     return (byte * 256 / 32768).astype(np.float32)
 
 
-def windows(song, wav, length, model=APP_MODEL, clean=False):
+def seed(starts):
+    """What prep hears, so a replay has something near wherever it asks, and knows how long the song is."""
+    return sorted(set(starts[::SEED_EVERY] + starts[-1:]))
+
+
+def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     """What whisper.cpp hears with `model` in each `length` ms from every STEP_MS, as the app hears it,
     or, `clean`, as it would from the sound played itself (AudioPlaybackCapture), 16 bits as it is."""
     out = heard_file(song, length, f"{model}.clean" if clean else model)
@@ -112,31 +158,82 @@ def windows(song, wav, length, model=APP_MODEL, clean=False):
     a = audio(wav) if clean else as_the_phone_hears(wav)
     binary = heard_binary()
     weights = model_file(model)
-    starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
+    starts = list(range(0, len(a) // 16 - length, STEP_MS))
+    starts = [s for s in (wanted(starts) if wanted else starts) if str(s) not in done]
+    language = sung_language(song)
 
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
         # A model that can't run hears nothing, so it fails here rather than passing for silence.
-        text = subprocess.run([str(binary), str(weights), "en", ""], input=seg.tobytes(), capture_output=True, check=True).stdout.decode("utf-8", "replace")
+        text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
-    with ThreadPoolExecutor(1) as pool:
+    with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
         for start, words in pool.map(hear, starts):
             done[str(start)] = words
-    out.write_text(json.dumps(done))
+            atomic_text(out, json.dumps(done))
 
 
-def truth(song, wav, lines):
-    """When each line with words is really sung: faster-whisper medium's word times on the separated voice,
-    matched in order to the words. A line counts only when its first word and most of the rest match."""
+def atomic_text(path, text):
+    """A killed writer leaves the last complete checkpoint usable."""
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(text)
+    temporary.replace(path)
+
+
+def separated_voice(song, wav):
     vocals = OUT / "htdemucs" / song / "vocals.wav"
     if not vocals.exists():
-        subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals", "-j", "1", "-o", str(OUT), str(wav)], check=True)
+        temporary = OUT / "separating"
+        subprocess.run([os.environ.get("DEMUCS_PYTHON", sys.executable), "-m", "demucs", "--two-stems=vocals",
+                        "-d", os.environ.get("DEMUCS_DEVICE", "cpu"), "-j", "1", "-o", str(temporary), str(wav)], check=True)
+        vocals.parent.mkdir(parents=True, exist_ok=True)
+        (temporary / "htdemucs" / song / "vocals.wav").replace(vocals)
+        shutil.rmtree(temporary / "htdemucs" / song)
+    return vocals
+
+
+def truth_model():
     from faster_whisper import WhisperModel
-    model = WhisperModel("medium", device="cpu", compute_type="int8", cpu_threads=4)
-    segments, _ = model.transcribe(audio(vocals), language="en", word_timestamps=True, condition_on_previous_text=False, beam_size=5)
-    heard = [(norm(w.word), w.start) for s in segments for w in s.words if norm(w.word)]
-    lyric = [(norm(w), i) for i, line in enumerate(lines) for w in line.split() if norm(w)]
+    return WhisperModel("medium", device="cpu", compute_type="int8", cpu_threads=4)
+
+
+# Languages with a writing of their own, which their lyrics show.
+WRITING = {"ko": "[\uac00-\ud7a3]", "ja": "[\u3040-\u30ff\u3400-\u9fff]", "zh": "[\u3400-\u9fff]", "ru": "[\u0400-\u04ff]", "uk": "[\u0400-\u04ff]",
+           "ar": "[\u0600-\u06ff]", "he": "[\u0590-\u05ff]", "th": "[\u0e00-\u0e7f]", "el": "[\u0370-\u03ff]", "hi": "[\u0900-\u097f]"}
+
+
+def sung_language(song):
+    """What the song is sung in, kept in ID.language, standing in for what the app tells from its words:
+    the app hears in that language, and heard in English, a song in Spanish lines up with nothing.
+    The sound alone can be wrong, as Dynamite sounds Korean, so a language the lyrics have none of the writing of is out."""
+    kept = OUT / f"{song}.language"
+    if not kept.exists() or not kept.read_text().strip():
+        language, _, likely = truth_model().detect_language(audio(separated_voice(song, OUT / f"{song}.wav")), vad_filter=True, language_detection_segments=LANGUAGE_SEGMENTS)
+        words = " ".join(text for _, text in json.loads((OUT / f"{song}.lyrics.json").read_text()))
+        fits = (name for name, _ in likely if name not in WRITING or re.search(WRITING[name], words))
+        atomic_text(kept, next(fits, language))
+    return kept.read_text()
+
+
+def words_heard(vocals, language):
+    """Each word Whisper medium hears in the voice and when, once per hearing: twice on a GPU with WHISPER_PYTHON
+    (measurements.md), once with faster-whisper on the CPU, where a second would take minutes more."""
+    gpu = os.environ.get("WHISPER_PYTHON")
+    if gpu:
+        said = subprocess.run([gpu, "-I", str(Path(__file__).with_name("whisper_gpu.py")), str(vocals), language],
+                              check=True, stdout=subprocess.PIPE, text=True).stdout
+        hearings = json.loads(said)
+    else:
+        segments, _ = truth_model().transcribe(audio(vocals), language=language, word_timestamps=True, condition_on_previous_text=False, beam_size=5)
+        hearings = [[(w.word, w.start) for s in segments for w in s.words]]
+    return [[(piece, start) for word, start in words for piece in pieces(word)] for words in hearings]
+
+
+def line_starts(heard, lines):
+    """When each line starts in these heard words, matched in order to the lyrics. A line counts only when its
+    first word and most of the rest match."""
+    lyric = [(piece, i) for i, line in enumerate(lines) for word in line.split() for piece in pieces(word)]
     most = [[0] * (len(lyric) + 1) for _ in range(len(heard) + 1)]
     for i in range(len(heard) - 1, -1, -1):
         for j in range(len(lyric) - 1, -1, -1):
@@ -157,7 +254,21 @@ def truth(song, wav, lines):
         words = [j for j, (_, i) in enumerate(lyric) if i == n]
         if words and words[0] in at and sum(j in at for j in words) * 2 > len(words):
             starts[n] = at[words[0]]
-    write_truth(song, lines, voiced(vocals, starts))
+    return starts
+
+
+def agreed(hearings):
+    """The lines every hearing times alike. A hearing can lose a stretch of the song, and then a repeated line
+    matches its next time around, off by a whole verse with nothing else to show for it (The Police's chorus)."""
+    first, *rest = hearings
+    return {n: start for n, start in first.items() if all(n in other and abs(other[n] - start) <= ON_TIME_S for other in rest)}
+
+
+def truth(song, wav, lines):
+    """When each line with words is really sung, from Whisper medium's word times on the separated voice."""
+    vocals = separated_voice(song, wav)
+    hearings = [line_starts(heard, lines) for heard in words_heard(vocals, sung_language(song))]
+    write_truth(song, lines, voiced(vocals, agreed(hearings)))
 
 
 def voiced(vocals, starts):
@@ -177,57 +288,143 @@ def voiced(vocals, starts):
 
 
 def write_truth(song, lines, starts):
-    with open(OUT / f"{song}.truth.jsonl", "w") as f:
-        for n, line in enumerate(lines):
-            if n in starts:
-                f.write(json.dumps({"line": n, "text": line, "start": round(starts[n], 2)}) + "\n")
+    atomic_text(OUT / f"{song}.truth.jsonl", "".join(
+        json.dumps({"line": n, "text": line, "start": round(starts[n], 2)}) + "\n"
+        for n, line in enumerate(lines) if n in starts))
+
+
+def measured(song, phase, work):
+    started = time.monotonic()
+    work()
+    print(f"{song} {phase}: {time.monotonic() - started:.2f} s", flush=True)
 
 
 def prep(args):
     OUT.mkdir(parents=True, exist_ok=True)
     lyrics = json.loads(Path(args.lyrics).read_text())
-    (OUT / f"{args.id}.lyrics.json").write_text(json.dumps(lyrics))
+    kept = OUT / f"{args.id}.lyrics.json"
+    reference = OUT / f"{args.id}.truth.jsonl"
+    if reference.exists() and (not kept.exists() or json.loads(kept.read_text()) != lyrics):
+        reference.replace(reference.with_name(reference.name + ".previous"))
+    atomic_text(kept, json.dumps(lyrics))
     wav = OUT / f"{args.id}.wav"
     if not wav.exists():
-        subprocess.run(["yt-dlp", "-q", "-f", "bestaudio", "-x", "--audio-format", "wav", "-o", str(OUT / f"{args.id}.%(ext)s"), f"https://music.youtube.com/watch?v={args.id}"], check=True)
-    truth(args.id, wav, [text for _, text in lyrics if text.strip()])
+        downloading = OUT / "downloading"
+        downloading.mkdir(exist_ok=True)
+        downloaded = downloading / wav.name
+        # An interrupted ffmpeg conversion can leave a WAV that yt-dlp would otherwise reuse.
+        downloaded.unlink(missing_ok=True)
+        subprocess.run(["yt-dlp", "-q", "-f", "bestaudio", "-x", "--audio-format", "wav", "-o", str(downloading / f"{args.id}.%(ext)s"), f"https://music.youtube.com/watch?v={args.id}"], check=True)
+        downloaded.replace(wav)
+    if not (OUT / f"{args.id}.truth.jsonl").exists():
+        measured(args.id, "demucs", lambda: separated_voice(args.id, wav))
+        measured(args.id, "truth", lambda: truth(args.id, wav, [text for _, text in lyrics if text.strip()]))
     for length in LENGTHS:
-        windows(args.id, wav, length)
+        measured(args.id, f"heard{length // 1000}", lambda: windows(args.id, wav, length, wanted=seed))
+
+
+def hear_asked(song, replays):
+    """Hears each stretch these replays of the song asked for and got only something near to: how many new ones.
+    What's heard in one decides what's asked next, so it takes a few replays to settle (measurements.md)."""
+    plays = [json.loads((OUT / name).read_text()) for name in replays if (OUT / name).exists()]
+    new = 0
+    for length in LENGTHS:
+        asked = [h["from"] for play in plays for h in play.get("heard", []) if h["seconds"] * 1000 == length]
+        if not asked:
+            continue
+        done = json.loads(heard_file(song, length, APP_MODEL).read_text())
+        last = max(map(int, done))
+        missing = sorted({min(max(0, (at + STEP_MS // 2) // STEP_MS * STEP_MS), last) for at in asked} - set(map(int, done)))
+        if missing:
+            windows(song, OUT / f"{song}.wav", length, wanted=lambda starts, missing=missing: [s for s in missing if s in starts])
+            new += len(missing)
+    return new
 
 
 def run(args):
+    phone_lit = like_phone(args) if args.like_phone else None
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
     replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
+    if args.like_phone:
+        replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
-    asked.write_text(json.dumps(replay))
-    try:
-        done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
-    finally:
-        asked.unlink()
-    if done.returncode:
-        sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
-    score(args)
+    plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
+    while True:
+        asked.write_text(json.dumps(replay))
+        try:
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        finally:
+            asked.unlink()
+        if done.returncode:
+            sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+        if args.model != APP_MODEL or not hear_asked(args.id, plays):
+            break
+    shown = score(args)
+    if phone_lit is not None:
+        compare(phone_lit, shown)
+
+
+def like_phone(args):
+    """Sets the replay up as the last `phone` check of the song went, from what it kept: where the app
+    picked the song up, how far its clock was behind, how long the phone took to work out each while
+    heard, and whether it heard the sound played itself (Shizuku's playback capture) or through the
+    visualizer. Gives when the phone lit each line, to hold the replay to."""
+    kept = OUT / "phone" / args.id
+    log = (kept / "log.txt").read_text()
+    said = re.search(r"said (\d+) at (\d+) playing true", log)
+    args.start = int(said.group(1)) if said else 0
+    lit, args.behind = score_phone(args.id, kept)
+    args.behind = round(args.behind)
+    # Each while is heard right after the last is worked out, so the gaps between them are the working out.
+    whiles = sorted((int(re.search(r"heard-(\d+)", f.name).group(1)), f.stat().st_size // 2 * 1000 // 16000) for f in kept.glob("heard-*.pcm"))
+    gaps = [after - (start + ms) for (start, ms), (after, _) in zip(whiles, whiles[1:])]
+    # The shortest is the working out alone. The rest also wait for what's still being worked out from before,
+    # so the phone took 3.8 s over one while and 27 s over the next, and each is replayed as it went.
+    args.work = min(gaps) if gaps else args.work
+    args.works = gaps
+    # Where in the song each while began, as what's heard depends on it: the phone's first began 1.3 s later than the replay's.
+    args.whiles = [args.start + start - int(said.group(2)) + args.behind for start, _ in whiles] if said else []
+    # Only playback capture logs what it captured; the visualizer's sound is heard as `hear` makes it by default.
+    clean = "captured " in log
+    args.model = f"{APP_MODEL}.clean" if clean else APP_MODEL
+    # The words the phone showed, not those prep was given.
+    if (kept / "lyrics.json").exists():
+        atomic_text(OUT / f"{args.id}.found.json", json.dumps(found_words(args.id, kept)))
+    if not heard_file(args.id, LENGTHS[0], args.model).exists():
+        print(f"The phone heard the sound played itself, and the replay hears through the visualizer: for the same, first `hear {args.id} --clean`.")
+        args.model = APP_MODEL
+    print(f"As on the phone: from {args.start} ms, the clock {args.behind} ms behind, {args.works or args.work} ms to work out each while, "
+          f"hearing {'the sound played (Shizuku)' if clean else 'through the visualizer'}")
+    return lit
+
+
+def compare(phone_lit, shown):
+    """How far the replay's line times are from the phone's: the replay only stands for the phone while they match."""
+    both = sorted(k for k in phone_lit if k in shown)
+    for k in both:
+        print(f"{k:2d} phone {phone_lit[k]:6.1f}  replay {shown[k]:6.1f}  {shown[k] - phone_lit[k]:+5.1f}")
+    off = [abs(shown[k] - phone_lit[k]) for k in both]
+    only = sorted(set(phone_lit) ^ set(shown))
+    print(f"The replay against the phone: {len(both)} lines lit in both, median {statistics.median(off):.2f} s apart, worst {max(off):.1f} s"
+          + (f"; lit in only one: {only}" if only else ""))
 
 
 def score(args):
     shown = json.loads((OUT / f"{args.id}.from{args.start}.shown.json").read_text())
-    sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{args.id}.truth.jsonl")}
-    # The app's line to the n-th line with words, and when each was first shown sung after the one before.
+    sung = sung_lines(args.id, shown["lines"])
+    # The app's line to the n-th line with words.
     nth = {}
     for i, text in enumerate(shown["lines"]):
         if text.strip():
             nth[i] = len(nth)
-    first, after = {}, -1
-    for e in shown["shown"]:
-        k = nth.get(e["line"])
-        if k is not None and k not in first and e["at"] > after:
-            first[k] = e["at"] / 1000
-            after = e["at"]
+    first = lit_first(shown)
     lags = {k: first[k] - sung[k] for k in sung if k in first}
+    # With no words found there's no line to tell a line sung by: truth still says how many went unshown.
+    line_of = {k: i for i, k in nth.items()}
     for k in sorted(sung):
-        text = shown["lines"][next(i for i in nth if nth[i] == k)][:34]
+        text = shown["lines"][line_of[k]][:34] if k in line_of else ""
         print(f"{k:2d} sung {sung[k]:6.1f}  " + (f"shown {first[k]:6.1f} lag {lags[k]:+5.1f}  {text}" if k in lags else f"never shown   {text}"))
     if args.placed:
         for p in shown["placed"]:
@@ -235,11 +432,72 @@ def score(args):
     # The lines sung once the words were first put right: what can be right as the song plays.
     fixed = shown["placed"][1]["at"] / 1000 if len(shown["placed"]) > 1 else 0
     live = [lag for k, lag in lags.items() if sung[k] > fixed]
+    how = f"median {statistics.median(abs(x) for x in live):.2f} s, worst {max(live, key=abs):+.1f} s" if live else "none shown"
     print(f"{args.id} from {args.start} ms: lines sung after the first fix at {fixed:.1f} s: "
-          f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, median {statistics.median(abs(x) for x in live):.2f} s, "
-          f"worst {max(live, key=abs):+.1f} s; never shown {sum(k not in first for k in sung)}")
+          f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, {how}; never shown {sum(k not in first for k in sung)}")
     early = [lag for lag in lags.values() if lag < -ON_TIME_S]
     print(f"shown sung early, before its voice: {len(early)}/{len(lags)} lines" + (f", by up to {-min(early):.1f} s" if early else ""))
+    return first
+
+
+def lined_up(ours, theirs):
+    """Which of [ours] are which of [theirs], by index: those starting with the same word, by their words matched
+    in order, as many as can be, and with most of the shorter one's words the same. Other words for a song may
+    break its lines elsewhere or spell them otherwise: "In the wild West End, sometime" and "In the wild west end sometime"."""
+    a = [(piece, i) for i, line in enumerate(ours) for word in line.split() for piece in pieces(word)]
+    b = [(piece, j) for j, line in enumerate(theirs) for word in line.split() for piece in pieces(word)]
+    most = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+    for i in range(len(a) - 1, -1, -1):
+        for j in range(len(b) - 1, -1, -1):
+            most[i][j] = most[i + 1][j + 1] + 1 if a[i][0] == b[j][0] else max(most[i + 1][j], most[i][j + 1])
+    same, i, j = {}, 0, 0
+    while i < len(a) and j < len(b):
+        if a[i][0] == b[j][0]:
+            same[i] = j
+            i += 1
+            j += 1
+        elif most[i + 1][j] >= most[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    first_a, first_b = {}, {}
+    for n, (_, line) in enumerate(a):
+        first_a.setdefault(line, n)
+    for n, (_, line) in enumerate(b):
+        first_b.setdefault(line, n)
+    pairs = {}
+    for line, start in first_a.items():
+        other = same.get(start)
+        if other is None or first_b.get(b[other][1]) != other:
+            continue
+        ours_words = [n for n, (_, l) in enumerate(a) if l == line]
+        theirs_words = {n for n, (_, l) in enumerate(b) if l == b[other][1]}
+        if sum(same.get(n) in theirs_words for n in ours_words) * 2 > min(len(ours_words), len(theirs_words)):
+            pairs[line] = b[other][1]
+    return pairs
+
+
+def sung_lines(song, lines):
+    """When the n-th of [lines] with words is sung, by n. Truth is for the words given to prep; words the app really
+    showed may be others, so each line's truth is found by its words. One with no truth isn't scored."""
+    given = [line for _, line in json.loads((OUT / f"{song}.lyrics.json").read_text()) if line.strip()]
+    # Words with no lines yet, as found untimed, are all dark, as nothing placed them.
+    shown = [line for line in lines if line.strip()] or given
+    same = lined_up(given, shown)
+    sung = {}
+    for row in (OUT / f"{song}.truth.jsonl").read_text().splitlines():
+        truth = json.loads(row)
+        if truth["line"] in same:
+            sung[same[truth["line"]]] = truth["start"]
+    return sung
+
+
+def found_words(song, kept):
+    """The words the app showed in a `phone` check, as its cache has them. It looks ahead to the next song's
+    too, so it's those most like the words given to prep."""
+    given = [line for _, line in json.loads((OUT / f"{song}.lyrics.json").read_text())]
+    found = [json.loads(entry[1]) for entry in json.loads((kept / "lyrics.json").read_text())]
+    return max(found, key=lambda words: len(lined_up(given, [line[1] for line in words["lines"]])))
 
 
 def adb(*command):
@@ -270,12 +528,23 @@ def tap(text, tries=20):
     return False
 
 
-def shows(text, tries=20):
-    """Whether something on screen shows [text], soon."""
+def names(screen, title):
+    """Whether [screen] has a text naming the song [title] plays as: the app may tell it by a shorter name
+    than the music app's, as "Every Little Thing She Does Is Magic" for "Police, The   Every Little Thing She Does Is Magic Audio Flac"."""
+    # The main screen's history may name it too, with the words not open at all.
+    if 'text="Link or song"' in screen:
+        return False
+    wanted = re.sub(r"\W", "", title.lower())
+    shown = (re.sub(r"\W", "", html.unescape(text).lower()) for text in re.findall(r'text="([^"]*)"', screen))
+    return any(text and (text == wanted or (len(text) >= MIN_NAME and text in wanted)) for text in shown)
+
+
+def shows(title, tries=40):
+    """Whether something on screen names the song [title], soon: a recording named badly is heard first, which takes a while."""
     for _ in range(tries):
         try:
             shell("uiautomator", "dump", "/sdcard/window.xml")
-            if f'text="{text}"' in shell("cat", "/sdcard/window.xml"):
+            if names(shell("cat", "/sdcard/window.xml"), title):
                 return True
         except subprocess.CalledProcessError:
             pass
@@ -289,7 +558,8 @@ def playing(app):
     if len(session) < 2:
         return None
     state = re.search(r"state=PLAYING\(3\), position=(\d+),.*?updated=(\d+)", session[1][:3000])
-    title = re.search(r"description=([^,]*),", session[1][:3000])
+    # Title, artist, album: a title may have commas of its own ("Police, The   Every Little Thing..."), so it's all before the last two.
+    title = re.search(r"description=(.*), [^,\n]*, [^,\n]*$", session[1][:3000], re.MULTILINE)
     return (title.group(1), int(state.group(2)) - int(state.group(1))) if state and title else None
 
 
@@ -338,12 +608,14 @@ def watch(args):
         time.sleep(0.5)
     else:
         sys.exit(f"{args.app} didn't play {args.id}")
-    title, zero = song
+    zero = song[1]
     # Picked up as it plays, as when Crosstune is opened on a song already playing.
     shell("monkey", "-p", DEV_APP, "-c", "android.intent.category.LAUNCHER", "1")
     # The words of what's playing, not a song of the same name under Recent, which would open it again.
     if not tap("Lyrics of what's playing"):
         sys.exit("Couldn't open the words in Crosstune: is the phone unlocked?")
+    # Only now, as a music app just started may still tell the last song's name as it starts this one.
+    title = playing(args.app)[0]
     if not shows(title):
         sys.exit(f"Crosstune opened the words of another song, not {title}")
     while float(shell("cat", "/proc/uptime").split()[0]) * 1000 - zero < args.seconds * 1000:
@@ -360,15 +632,21 @@ def watch(args):
         if name.startswith("heard-"):
             (kept / name).write_bytes(adb("exec-out", "run-as", DEV_APP, "cat", f"cache/{name}"))
     (kept / "log.txt").write_text(log)
+    # The words the app really showed, which needn't be those prep was given.
+    (kept / "lyrics.json").write_bytes(adb("exec-out", "run-as", DEV_APP, "cat", "cache/lyrics.json"))
     shell("run-as", DEV_APP, "find", "cache", "-name", "heard-*.pcm", "-delete")
     score_phone(args.id, kept)
 
 
 def behind(song, kept, lit):
     """How far behind what's heard the app's clock is: each while kept, found in the recording, against where the app said the song was."""
+    files = sorted(kept.glob("heard-*.pcm"))
+    if not files:
+        print("The app heard nothing to check its clock by, so it's taken as right.")
+        return 0
     import numpy as np
     offs = []
-    for f in sorted(kept.glob("heard-*.pcm")):
+    for f in files:
         started = int(re.search(r"heard-(\d+)", f.name).group(1))
         clock = min(lit, key=lambda e: abs(e[1] - started))
         app = clock[2] + started - clock[1]
@@ -377,7 +655,9 @@ def behind(song, kept, lit):
             sys.exit(f"{f.name} is silent: the app heard nothing of the music. Was the media volume 0?")
         n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
         match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
-        loud = np.sqrt(np.convolve(song ** 2, np.ones(len(heard)), "valid")[:len(match)]) + 1e-9
+        # A running sum, as sliding one while over a whole song took minutes for each heard.
+        energy = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
+        loud = np.sqrt(np.maximum(energy[len(heard):] - energy[:-len(heard)], 0))[:len(match)] + 1e-9
         at = int(np.argmax(match / loud)) / 16
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
@@ -389,20 +669,150 @@ def score_phone(song_id, kept):
     if not lit:
         sys.exit("No lines lit in the log: was the dev app reinstalled after the log was added, and the words open?")
     lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit)
-    sung = {(t := json.loads(l))["line"]: t["start"] for l in open(OUT / f"{song_id}.truth.jsonl")}
-    # The app's lines are the found words', as in LYRICS.json given to prep; truth counts only those with words.
-    words = [line for _, line in json.loads((OUT / f"{song_id}.lyrics.json").read_text())]
+    # The app's lines are the words it showed, kept from its cache; truth counts only those with words.
+    words = [line[1] for line in found_words(song_id, kept)["lines"]] if (kept / "lyrics.json").exists() else [line for _, line in json.loads((OUT / f"{song_id}.lyrics.json").read_text())]
+    sung = sung_lines(song_id, words)
     nth = {i: k for k, i in enumerate(i for i, line in enumerate(words) if line.strip())}
     first = {}
     for i, _, pos in lit:
         if nth.get(i) is not None and nth[i] not in first:
             first[nth[i]] = (pos + lag) / 1000
+    # A line sung after the check stopped isn't dark.
+    played_to = (max(pos for _, _, pos in lit) + lag) / 1000
+    sung = {k: at for k, at in sung.items() if at <= played_to}
     lags = {k: first[k] - sung[k] for k in sung if k in first}
     for k in sorted(sung):
         text = words[next(i for i in nth if nth[i] == k)][:34]
         print(f"{k:2d} sung {sung[k]:6.1f}  " + (f"lit {first[k]:6.1f} lag {lags[k]:+5.1f}  {text}" if k in lags else f"never lit   {text}"))
+    # Truth has only some of the lines: any line timed before the check stopped and never lit is dark too.
+    timed = [(line[0] / 1000, i) for i, line in enumerate(found_words(song_id, kept)["lines"]) if line[1].strip()] if (kept / "lyrics.json").exists() else []
+    lit_lines = {i for i, _, _ in lit}
+    span = (min(pos for i, _, pos in lit if i >= 0) / 1000, played_to) if any(i >= 0 for i, _, _ in lit) else (0, 0)
+    dark = [i for at, i in timed if span[0] <= at <= span[1] and i not in lit_lines]
+    print(f"Lines dark among all timed from the first lit to the end: {len(dark)} of {sum(span[0] <= at <= span[1] for at, _ in timed)}: {dark}")
     print(f"{song_id} on the phone, the app's clock {lag / 1000:.2f} s behind: {sum(abs(x) <= ON_TIME_S for x in lags.values())}/{len(lags)} within {ON_TIME_S} s, "
-          f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, median {statistics.median(abs(x) for x in lags.values()):.2f} s; never lit {sum(k not in first for k in sung)}")
+          f"{sum(abs(x) <= 1 for x in lags.values())}/{len(lags)} within 1 s, {f"median {statistics.median(abs(x) for x in lags.values()):.2f} s" if lags else "none lit"}; never lit {sum(k not in first for k in sung)}")
+    return first, lag
+
+
+def find_set(args):
+    """Finds the songs of songs.tsv as the app does (SyncSetTest), then preps each not prepped yet."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    if not args.cached:
+        asked = OUT / "set.asked"
+        OUT.mkdir(parents=True, exist_ok=True)
+        asked.write_text("")
+        try:
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        finally:
+            asked.unlink()
+        if done.returncode:
+            sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+    found = json.loads((OUT / "set.json").read_text())
+    for song in found:
+        print(f"{song.get('id') or 'not on YouTube Music':12} {song.get('source') or 'no words':14} {'timed' if song.get('timed') else 'untimed':8} {song['title']} - {song['artist']}")
+    if args.find_only:
+        return
+    failures = []
+    for song in found:
+        if song.get("id") and song.get("lines") and not complete(song["id"]):
+            print(f"Prepping {song['id']}: {song['title']} - {song['artist']}", flush=True)
+            try:
+                prep(argparse.Namespace(id=song["id"], lyrics=str(OUT / f"{song['id']}.lyrics.json")))
+            except (subprocess.CalledProcessError, OSError) as error:
+                failures.append(song["id"])
+                print(f"Failed {song['id']}: {error}", file=sys.stderr, flush=True)
+    if failures:
+        sys.exit(f"Prep failed for {len(failures)} songs: {', '.join(failures)}. Rerun set --cached to resume.")
+
+
+def complete(song):
+    """Both hearing lengths must contain every window, including after an interrupted write."""
+    if not all((OUT / f"{song}.{suffix}").exists() for suffix in ("wav", "language", "lyrics.json", "truth.jsonl")):
+        return False
+    if not (OUT / f"{song}.language").read_text().strip():
+        return False
+    duration = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                               "-of", "default=nw=1:nk=1", str(OUT / f"{song}.wav")]))
+    # The visualizer discards the last incomplete mixer block, as windows() does.
+    milliseconds = int(round(duration * 48000)) // BLOCK * (BLOCK // 48)
+    for length in LENGTHS:
+        path = heard_file(song, length, APP_MODEL)
+        if not path.exists():
+            return False
+        done = json.loads(path.read_text())
+        if any(str(start) not in done for start in seed(list(range(0, milliseconds - length, STEP_MS)))):
+            return False
+    return True
+
+
+def prepped():
+    """Every song with complete prep, including both lengths of hearing."""
+    return sorted(f.name.removesuffix(".truth.jsonl") for f in OUT.glob("*.truth.jsonl")
+                  if complete(f.name.removesuffix(".truth.jsonl")))
+
+
+def run_all(args):
+    """Every prepped song replayed from the start in one go, and how its lines came out against when they're sung."""
+    songs = prepped()
+    asked = OUT / "replay.json"
+    asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
+    # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
+    names = OUT / "replay.songs"
+    wanted = asked.read_text()
+    while True:
+        asked.write_text(wanted)
+        names.write_text("\n".join(songs) + "\n")
+        try:
+            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncReplayTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+        finally:
+            asked.unlink()
+            names.unlink()
+        if done.returncode:
+            sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+        if args.heard:
+            break
+        with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
+            if not sum(pool.map(lambda song: hear_asked(song, [f"{song}.from0.shown.json"]), songs)):
+                break
+    titles = {song.get("id"): song["title"] for song in json.loads((OUT / "set.json").read_text())} if (OUT / "set.json").exists() else {}
+    totals = dict(lines=0, close=0, on=0, dark=0, early=0)
+    all_lags = []
+    lyric_lines = 0
+    print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
+    for song in songs:
+        shown = json.loads((OUT / f"{song}.from0.shown.json").read_text())
+        sung = sung_lines(song, shown["lines"])
+        first = lit_first(shown)
+        lags = [first[k] - sung[k] for k in sung if k in first]
+        all_lags.extend(lags)
+        lyric_lines += sum(bool(text.strip()) for text in shown["lines"])
+        row = dict(lines=len(sung), close=sum(abs(x) <= 0.3 for x in lags), on=sum(abs(x) <= ON_TIME_S for x in lags),
+                   dark=sum(k not in first for k in sung), early=sum(x < -ON_TIME_S for x in lags))
+        for key in totals:
+            totals[key] += row[key]
+        worst = f"{max(lags, key=abs):+.1f}" if lags else "-"
+        print(f"{song:12} {row['lines']:5} {row['close']:6} {row['on']:6} {row['dark']:5} {row['early']:5} {worst:>6}  {titles.get(song, '')[:40]}")
+    t = totals
+    worst = f"{max(all_lags, key=abs):+.1f}" if all_lags else "-"
+    print(f"{'all':12} {t['lines']:5} {t['close']:6} {t['on']:6} {t['dark']:5} {t['early']:5} {worst:>6}  "
+          f"{100 * t['close'] / max(t['lines'], 1):.0f}% within 0.3 s, {100 * t['on'] / max(t['lines'], 1):.0f}% within {ON_TIME_S} s, {t['dark']} dark")
+    print(f"Reference coverage: {t['lines']}/{lyric_lines} nonempty lyric lines. Unmatched lines have no truth and are not scored.")
+
+
+def lit_first(shown):
+    """When each line with words was first shown, after the one before it, by its place among them."""
+    nth = {}
+    for i, text in enumerate(shown["lines"]):
+        if text.strip():
+            nth[i] = len(nth)
+    first, after = {}, -1
+    for e in shown["shown"]:
+        k = nth.get(e["line"])
+        if k is not None and k not in first and e["at"] > after:
+            first[k] = e["at"] / 1000
+            after = e["at"]
+    return first
 
 
 def hear(args):
@@ -425,12 +835,24 @@ def main():
         p.set_defaults(go=go)
         if name == "run":
             p.add_argument("--gradle", default="./gradlew --max-workers=4")
-            # The phone takes about this long, but it varies, and where each later stretch is heard with it.
-            p.add_argument("--work", type=int, default=2500, help="ms the phone takes to work out what it heard")
+            # A Galaxy S22 Ultra took 3.9 to 4.6 s for each 20 s; it varies, and where each later stretch is heard with it.
+            p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
             # YouTube Music's was 450 to 880 ms behind, each time a little different.
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+            p.add_argument("--like-phone", action="store_true", help="as the last `phone` check of it went, held to the lines it lit; sets --from, --behind, --work and --model")
+    p = steps.add_parser("set")
+    p.add_argument("--gradle", default="./gradlew --max-workers=4")
+    p.add_argument("--find-only", action="store_true", help="find the songs and their words, without prepping them")
+    p.add_argument("--cached", action="store_true", help="resume the songs already found in set.json without finding them again")
+    p.set_defaults(go=find_set)
+    p = steps.add_parser("all")
+    p.add_argument("--gradle", default="./gradlew --max-workers=4")
+    p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
+    p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
+    p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")
+    p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")
     p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")

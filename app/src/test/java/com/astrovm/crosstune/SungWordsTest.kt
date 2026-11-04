@@ -199,6 +199,25 @@ class SungWordsTest {
     }
 
     /** The words of [lines] after their first, sung evenly over the first 2.4 s of the 3 s each line has. */
+    @Test
+    fun wordsHeardAboutAsWellWhereTheLinesAreDontMoveThemFarOff() {
+        // The same words sung twice, 48 s apart, spaced differently, and heard without their lines'
+        // first words: spaced as the later ones, they agree there, and they don't agree here.
+        val sung = listOf(
+            "Skip the signs of my body" to Pair(25_000L, 72_000L),
+            "Wait im on tonight" to Pair(31_000L, 76_000L),
+            "Here im starting to" to Pair(33_500L, 78_000L),
+            "Far away and gone" to Pair(36_000L, 80_000L)
+        )
+        val lines = sung.map { (text, at) -> LyricLine(at.first, text) } + sung.map { (text, at) -> LyricLine(at.second, text) }
+        val heard = listOf(
+            "the" to 24_640L, "signs" to 25_120L, "of" to 25_920L, "my" to 26_240L, "body" to 26_560L,
+            "im" to 28_426L, "on" to 28_640L, "tonight" to 28_853L,
+            "im" to 30_400L, "starting" to 30_600L, "to" to 31_400L
+        ).map { (text, at) -> HeardWord(text, at + SungAlignment.HEARD_LATE_MS) }
+        assertNull(SungAlignment.shiftMs(Sung(0, heard), { it }, lines))
+    }
+
     private fun heardMidLine(lines: List<LyricLine>, shiftMs: Long) = Sung(0, lines.flatMap { line ->
         val words = line.text.split(' ')
         val letters = words.sumOf { it.length }
