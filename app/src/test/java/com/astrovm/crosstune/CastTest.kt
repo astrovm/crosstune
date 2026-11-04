@@ -213,4 +213,19 @@ class CastTest {
         shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_LEANBACK, true)
         assertSame(NoCast, platformCastSender(app))
     }
+    @Test
+    fun castingNeverBorrowsTheLinkOfAnotherSongAndPrefersTheOpenPlayer() {
+        val song = MusicMetadata("Song", "Artist", url = "https://example.com/metadata")
+        val other = song.copy(title = "Other")
+        val link = MusicLink(MusicService.YOUTUBE_MUSIC, ItemType.TRACK, "demo", "https://example.com/result")
+        val state = UiState(result = song, link = link, player = PlayerState(song, null, "https://example.com/player"))
+        assertEquals("https://example.com/player", state.linkToCast(song))
+        assertEquals(link.url, state.copy(player = null).linkToCast(song))
+        assertEquals(link.url, state.copy(player = state.player?.copy(song = other)).linkToCast(song))
+        assertEquals(song.url, state.copy(result = other, player = null).linkToCast(song))
+        assertEquals(song.url, UiState().linkToCast(song))
+        assertEquals(link.url, state.copy(player = state.player?.copy(link = null)).linkToCast(song))
+        assertNull(UiState().linkToCast(song.copy(url = null)))
+    }
+
 }

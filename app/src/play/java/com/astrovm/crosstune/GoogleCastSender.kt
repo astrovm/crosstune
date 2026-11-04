@@ -1,13 +1,9 @@
 package com.astrovm.crosstune
 
 import android.content.Context
-import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.mediarouter.app.MediaRouteChooserDialog
 import androidx.mediarouter.app.MediaRouteControllerDialog
-import com.google.android.gms.cast.MediaInfo
-import com.google.android.gms.cast.MediaLoadRequestData
-import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.cast.MediaSeekOptions
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
@@ -16,8 +12,6 @@ import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.cast.MediaStatus
-import com.google.android.gms.common.images.WebImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -82,19 +76,8 @@ internal class GoogleCastSender(private val context: Context) : CastSender {
     private fun state(): CastTvState? {
         val client = remote ?: return null
         val info = client.mediaInfo ?: return null
-        val meta = info.metadata
         val status = client.mediaStatus ?: return null
-        val playerState = status.playerState
-        return CastTvState(
-            title = meta?.getString(MediaMetadata.KEY_TITLE).orEmpty(),
-            artist = meta?.getString(MediaMetadata.KEY_ARTIST).orEmpty(),
-            playing = playerState == MediaStatus.PLAYER_STATE_PLAYING || playerState == MediaStatus.PLAYER_STATE_BUFFERING,
-            positionMs = client.approximateStreamPosition,
-            durationMs = client.streamDuration.takeIf { it > 0 },
-            canSeek = status.isMediaCommandSupported(MediaStatus.COMMAND_SEEK),
-            canSkipNext = status.isMediaCommandSupported(MediaStatus.COMMAND_QUEUE_NEXT),
-            canSkipPrevious = status.isMediaCommandSupported(MediaStatus.COMMAND_QUEUE_PREVIOUS)
-        )
+        return castRemoteState(info, status, client.approximateStreamPosition, client.streamDuration)
     }
 
     override fun chooseTv(context: Context) {
@@ -107,33 +90,22 @@ internal class GoogleCastSender(private val context: Context) : CastSender {
     }
 
     override fun load(song: CastSong) {
-        val meta = MediaMetadata(MediaMetadata.MEDIA_TYPE_MUSIC_TRACK).apply {
-            putString(MediaMetadata.KEY_TITLE, song.title)
-            putString(MediaMetadata.KEY_ARTIST, song.artist)
-            song.artworkUrl?.let { addImage(WebImage(Uri.parse(it))) }
-        }
-        val info = MediaInfo.Builder(song.link ?: song.title)
-            .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-            .setContentType("audio/*")
-            .setMetadata(meta)
-            .setCustomData(song.toJson())
-            .apply { song.durationMs?.let(::setStreamDuration) }
-            .build()
-        remote?.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).setCustomData(song.toJson()).build())
+        remote?.load(castLoadRequest(song))
     }
 
     override fun send(command: CastCommand) {
         val client = remote ?: return
-        when (command) {
-            CastCommand.Play -> client.play()
-            CastCommand.Pause -> client.pause()
-            CastCommand.Stop -> client.stop()
-            is CastCommand.Seek -> client.seek(MediaSeekOptions.Builder().setPosition(command.positionMs).build())
-            CastCommand.Next -> client.queueNext(null)
-            CastCommand.Previous -> client.queuePrev(null)
-            is CastCommand.Translation, is CastCommand.Readings ->
-                command.message()?.let { cast?.sessionManager?.currentCastSession?.sendMessage(CAST_NAMESPACE, it) }
-        }
+        sendCastCommand(command, object : CastTransport {
+            override fun play() { client.play() }
+            override fun pause() { client.pause() }
+            override fun stop() { client.stop() }
+            override fun seek(positionMs: Long) { client.seek(MediaSeekOptions.Builder().setPosition(positionMs).build()) }
+            override fun next() { client.queueNext(null) }
+            override fun previous() { client.queuePrev(null) }
+            override fun message(value: String) {
+                cast?.sessionManager?.currentCastSession?.sendMessage(CAST_NAMESPACE, value)
+            }
+        })
     }
 
     override fun disconnect() {

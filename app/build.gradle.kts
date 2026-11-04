@@ -162,7 +162,7 @@ kover {
                 classes("com.astrovm.crosstune.NativeWhisper*")
                 // Google Cast needs Google Play Services and a TV or Chromecast on the network, which unit
                 // tests have neither of; it's checked on a phone and a TV. What it's told, and what it says, is tested.
-                classes("com.astrovm.crosstune.GoogleCast*")
+                classes("com.astrovm.crosstune.GoogleCastSender*", "com.astrovm.crosstune.GoogleCastReceiver", "com.astrovm.crosstune.GoogleCastReceiver\$*")
                 // Gradle writes this one, and only Google Cast's app id reads it, so no test of ours loads it.
                 classes("com.astrovm.crosstune.BuildConfig")
                 // Capturing what music apps play needs Android's projection, given only on a phone,

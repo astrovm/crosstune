@@ -1518,7 +1518,7 @@ internal class MainViewModel(
 
     /** Hands [song] to the TV, and stops it in the phone's app: from now on the phone's player is the TV's remote. */
     private fun castTo(song: MusicMetadata) {
-        val link = uiState.player?.takeIf { it.song == song }?.link ?: uiState.link?.takeIf { uiState.result == song }?.url ?: song.url
+        val link = uiState.linkToCast(song)
         // Not the TV's yet: the phone's app is asked first.
         casting?.casting(null)
         viewModelScope.launch {

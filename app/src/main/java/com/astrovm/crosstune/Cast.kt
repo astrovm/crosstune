@@ -220,3 +220,7 @@ internal class CastPlayback(
     override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean) =
         tv(song) != null || source.playSong(song, app, link, mustStart)
 }
+
+/** Use a link only when it belongs to the song being handed over, preferring its open player. */
+internal fun UiState.linkToCast(song: MusicMetadata): String? =
+    player?.takeIf { it.song == song }?.link ?: link?.takeIf { result == song }?.url ?: song.url
