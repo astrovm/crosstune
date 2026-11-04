@@ -309,7 +309,7 @@ class HeardWhenAskedTest(unittest.TestCase):
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
                 patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
             r.run(self.run_args(behind_again=500))
-        heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'])
+        heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'], False)
 
 
 class ReplayAllTest(unittest.TestCase):
