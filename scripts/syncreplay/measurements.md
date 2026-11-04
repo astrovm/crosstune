@@ -127,7 +127,7 @@ from 7.5% of the stretches. So prep hears every 20 s, and replays hear the rest.
 
 ## The whole set
 
-The 41 songs prepped, each from its start, with truth from two GPU hearings and what's heard asked for by the replay (899 of 12,054 stretches on the 3 songs checked). Run with `all`, on whisper.cpp a46fadb3.
+The 41 songs prepped, each from its start, with truth from two GPU hearings and what's heard asked for by the replay. Run with `all`, on whisper.cpp a46fadb3.
 
 | Song | Lines | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
 |---|---:|---:|---:|---:|---:|---:|
@@ -135,7 +135,7 @@ The 41 songs prepped, each from its start, with truth from two GPU hearings and 
 | Otro Como Tú | 38 | 16 | 24 | 0 | 14 | -1.1 |
 | Ciclos Banais | 41 | 0 | 0 | 41 | 0 | - |
 | Lose Yourself | 74 | 9 | 40 | 0 | 34 | -1.1 |
-| Every Little Thing She Does Is Magic | 26 | 22 | 24 | 0 | 0 | +11.0 |
+| Every Little Thing She Does Is Magic | 26 | 21 | 24 | 0 | 0 | +10.9 |
 | 99 Luftballons | 24 | 10 | 15 | 0 | 9 | -1.1 |
 | Bohemian Rhapsody | 46 | 24 | 35 | 0 | 9 | -1.6 |
 | Hotel California | 54 | 12 | 29 | 0 | 14 | +4.0 |
@@ -145,21 +145,21 @@ The 41 songs prepped, each from its start, with truth from two GPU hearings and 
 | Into the Groove | 63 | 15 | 39 | 0 | 0 | +1.5 |
 | Take On Me | 16 | 5 | 14 | 0 | 2 | -1.3 |
 | Blinding Lights | 26 | 14 | 23 | 0 | 3 | -0.6 |
-| カシミヤのほほえみ | 0 | 0 | 0 | 0 | 0 | - |
+| カシミヤのほほえみ | 14 | 1 | 3 | 0 | 10 | -0.8 |
 | LhLmgg_u29k | 21 | 6 | 9 | 0 | 10 | -1.1 |
 | Tell It to My Heart | 38 | 8 | 19 | 0 | 18 | -2.2 |
-| Blue Monday | 22 | 2 | 3 | 0 | 19 | -2.3 |
+| Blue Monday | 22 | 1 | 3 | 0 | 19 | -2.3 |
 | Francesita | 4 | 1 | 1 | 2 | 1 | -2.8 |
-| 二人だけのセレモニー | 2 | 0 | 0 | 2 | 0 | - |
-| Plastic Love | 0 | 0 | 0 | 0 | 0 | - |
-| Easy Love | 0 | 0 | 0 | 0 | 0 | - |
+| 二人だけのセレモニー | 28 | 0 | 0 | 28 | 0 | - |
+| Plastic Love | 15 | 0 | 0 | 0 | 15 | -11.3 |
+| Easy Love | 12 | 1 | 3 | 0 | 9 | -0.8 |
 | Águas de Março | 47 | 12 | 23 | 0 | 24 | -1.2 |
 | Don't Go | 19 | 2 | 14 | 0 | 4 | +10.3 |
 | XB7AmIsxzfI | 17 | 10 | 16 | 0 | 1 | -0.6 |
 | Time to Pretend | 25 | 3 | 10 | 0 | 14 | -1.3 |
 | Dancing Queen | 26 | 13 | 24 | 0 | 0 | +1.3 |
 | Bad Guy | 33 | 4 | 30 | 0 | 3 | -0.7 |
-| Stay With Me | 3 | 0 | 1 | 0 | 2 | -0.6 |
+| Stay With Me | 34 | 2 | 12 | 0 | 22 | -1.0 |
 | Bizarre Love Triangle | 24 | 6 | 10 | 2 | 5 | -24.1 |
 | Nel blu dipinto di blu | 12 | 0 | 0 | 0 | 12 | -1.2 |
 | Radio Ga Ga | 31 | 20 | 22 | 0 | 6 | -1.6 |
@@ -167,24 +167,39 @@ The 41 songs prepped, each from its start, with truth from two GPU hearings and 
 | Smells Like Teen Spirit | 9 | 0 | 0 | 0 | 8 | +2.3 |
 | Hips Don't Lie | 59 | 13 | 25 | 4 | 29 | -48.8 |
 | La Vie en rose | 28 | 11 | 20 | 0 | 3 | +1.8 |
-| Gee | 11 | 0 | 0 | 0 | 11 | -2.4 |
+| Gee | 29 | 1 | 8 | 0 | 21 | -1.1 |
 | De Música Ligera | 13 | 6 | 6 | 0 | 0 | +6.7 |
 | Flaca | 42 | 10 | 17 | 0 | 24 | +2.8 |
-| Shape of You | 42 | 9 | 29 | 0 | 13 | -0.8 |
+| Shape of You | 42 | 8 | 28 | 0 | 14 | -0.8 |
 | It's My Life | 23 | 2 | 3 | 2 | 16 | +5.3 |
-| **All** | **1107** | **298** | **590** | **91** | **350** | |
+| **All** | **1223** | **300** | **614** | **117** | **415** | |
 
-Scored: 1107 of 1799 lines with words.
+Scored: 1223 of 1799 lines with words: 25% within 0.3 s, 50% within 0.5 s, 117 dark.
 
-Two things make that number kinder than it looks:
+Ciclos Banais, Have In Mind and Nada Más Que Hablar found words with no times at all, and the app only hears timed words (`hearSinging`, which needs lines), so all their lines are dark: 75 of the 117. That's what the app does today, not a fault of the replay.
 
-1. The 5 Japanese songs score 5 lines between them, and Gee 11, as the matcher only reads Latin letters (below).
-2. Ciclos Banais, Have In Mind and Nada Más Que Hablar found words with no times at all, and the app only hears timed words (`hearSinging`, which needs lines), so all their lines are dark: 75 of the 91 dark. That's what the app does today, not a fault of the replay.
+## Every writing
+
+Truth used to read only Latin letters, so the 5 Japanese songs scored 5 lines between them and Gee 11. `pieces` now matches every writing, one letter at a time where it's written without spaces.
+
+| Song | Lines with words | Truth before | Truth now |
+|---|---:|---:|---:|
+| Gee | 72 | 11 | 29 |
+| Stay With Me | 51 | 3 | 34 |
+| カシミヤのほほえみ | 31 | 0 | 14 |
+| Plastic Love | 26 | 0 | 15 |
+| Easy Love | 33 | 0 | 12 |
+| 二人だけのセレモニー | 38 | 2 | 28 |
+| All | 251 | 16 | 132 |
+
+Of the 11,191 words not in these writings across the set, 3 match differently, all for the better: Whisper and the lyrics both write `großer`, which used to lose its `ß`.
+
+The rest stay unscored mostly as Whisper writes a word in kana where the lyrics use kanji, or the reverse.
+
+One of the 6 hearings on the GPU died with a memory access fault, on Gee. It didn't happen again when run again, and `set --cached` resumes after it, so I left it at that.
 
 ## Limits of the timing table
 
-Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded.
-In particular, the existing truth matcher strips non-Latin characters; Japanese and Korean songs
-can therefore have very little reference coverage. The overall table prints that coverage explicitly.
-Issue #662's target is every line within 0.3 s, none dark. Passing scores on matched lines alone
-cannot establish that target for all sung lines. No app timing behavior is changed in this PR.
+Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded, and the overall
+table prints that coverage explicitly. Issue #662's target is every line within 0.3 s, none dark. Passing scores on
+matched lines alone cannot establish that target for all sung lines. No app timing behavior is changed in this PR.
