@@ -585,31 +585,91 @@ class LyricsFinderTest {
         assertEquals((listOf("ft. Someone") + sung).joinToString("\n"), cleaned("Hatsukoi", "ft. Someone"))
     }
 
-    @Test
-    fun capitalsBorrowNamesFromTheCopyAlreadyFetchedWithoutBorrowingLineStarts() {
-        val loud = "WE WALK WITH MIRA THROUGH THE NIGHT\nWE WAIT BY THE RIVER UNTIL DAWN"
-        val other = "We walk\nWith Mira through the night\nWe wait by the river until dawn"
-        val yrc = loud.lines().mapIndexed { i, text ->
-            "[${i * 10_000},9000]" + text.split(" ").mapIndexed { j, word -> "(${i * 10_000 + j * 500},500,0)$word " }.joinToString("")
-        }.joinToString("\n")
-        var searches = 0
+    private val loudLines = "WE WALK WITH MIRA THROUGH THE NIGHT\nWE WAIT BY THE RIVER UNTIL DAWN"
+    private val namedLines = "We walk\nWith Mira through the night\nWe wait by the river until dawn"
+    private val recasedLines = "We walk with Mira through the night\nWe wait by the river until dawn"
+
+    /** NetEase has the song, as [lyric] says; elsewhere [others] answers. */
+    private fun onNetEase(lyric: String, others: (Request) -> Response) {
         fake.handler = { request ->
-            when (request.url.host) {
-                "lrclib.net" -> {
-                    searches++
-                    FakeSpotify.html(request, "[${answer("Song", "Band", other)}]")
-                }
-                "music.163.com" -> FakeSpotify.html(request, if (request.url.encodedPath == "/api/search/get")
-                    """{"result":{"songs":[{"id":2,"name":"Song","artists":[{"name":"Band"}]}]}}"""
-                    else """{"yrc":{"lyric":${quote(yrc)}}}""")
-                else -> FakeSpotify.html(request, """{"results":[]}""")
+            when {
+                request.url.host != "music.163.com" -> others(request)
+                request.url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":2,"name":"Song","artists":[{"name":"Band"}]}]}}""")
+                else -> FakeSpotify.html(request, lyric)
             }
         }
+    }
+
+    private val loudByWord = """{"yrc":{"lyric":${quote(loudLines.lines().mapIndexed { i, text ->
+        "[${i * 10_000},9000]" + text.split(" ").mapIndexed { j, word -> "(${i * 10_000 + j * 500},500,0)$word " }.joinToString("")
+    }.joinToString("\n"))}}}"""
+
+    @Test
+    fun capitalsBorrowNamesFromTheCopyAlreadyFetchedWithoutBorrowingLineStarts() {
+        // LRCLIB's words have no timings, so they give way to NetEase's, in capitals, and are only a copy to learn from.
+        var searches = 0
+        onNetEase(loudByWord) { request ->
+            if (request.url.host == "lrclib.net") {
+                searches++
+                FakeSpotify.html(request, "[${answer("Song", "Band", namedLines)}]")
+            } else FakeSpotify.html(request, """{"results":[]}""")
+        }
         val result = found(song) as Lyrics.Found
-        assertEquals("We walk with Mira through the night\nWe wait by the river until dawn", result.words)
+        assertEquals(recasedLines, result.words)
         assertEquals(result.words.lines(), result.lines.map { it.text.trim() })
         assertEquals("Mira ", result.lines.first().words[3].text)
+        // Nothing more is asked for to learn it.
         assertEquals(1, searches)
+        assertEquals(1, fake.requestedUrls.count { "/api/song/lyric" in it })
+    }
+
+    @Test
+    fun capitalsBorrowNamesFromNetEaseWhenItIsntTheOneChosen() {
+        val loud = loudLines.lines().mapIndexed { i, line -> "[00:${i + 10}.00]$line" }.joinToString("\n")
+        val timed = namedLines.lines().mapIndexed { i, line -> "[00:${i + 10}.00]$line" }.joinToString("\n")
+        onNetEase("""{"lrc":{"lyric":${quote(timed)}}}""") { request ->
+            if (request.url.host == "lrclib.net") FakeSpotify.html(request, "[${answer("Song", "Band", loudLines, synced = loud)}]")
+            else FakeSpotify.html(request, """{"results":[]}""")
+        }
+        val result = found(song) as Lyrics.Found
+        assertEquals("lrclib", result.source)
+        assertEquals(recasedLines, result.words)
+    }
+
+    @Test
+    fun capitalsBorrowNamesFromYouTubeMusicWhenItIsntTheOneChosen() {
+        everywhere("[]", youTubeMusicPage("We walk" to 1_000L, "With Mira through the night" to 12_000L, "We wait by the river until dawn" to 23_000L))
+        val others = fake.handler
+        onNetEase(loudByWord, others)
+        val result = runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found
+        assertEquals("netease", result.source)
+        assertEquals(recasedLines, result.words)
+    }
+
+    @Test
+    fun aCoverInCapitalsBorrowsNamesFromTheOriginalsCopies() {
+        val cover = MusicMetadata("Song (In the Style of Band) [Karaoke Version]", "Ameritz Karaoke", lengthMs = 201_000)
+        fake.handler = { request ->
+            val asked = request.url.toString()
+            when {
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                request.url.host == "lrclib.net" && "artist_name=Band" in asked -> FakeSpotify.html(request, "[${answer("Song", "Band", namedLines)}]")
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                request.url.encodedPath == "/api/search/get" && "Band" in asked ->
+                    FakeSpotify.html(request, """{"result":{"songs":[{"id":2,"name":"Song","artists":[{"name":"Band"}]}]}}""")
+                request.url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, loudByWord)
+                else -> FakeSpotify.html(request, """{"result":{"songs":[]}}""")
+            }
+        }
+        val result = found(cover) as Lyrics.Found
+        assertEquals("netease, the original's", result.source)
+        assertEquals(recasedLines, result.words)
+    }
+
+    @Test
+    fun capitalsWithNoOtherCopyStayInSentenceCase() {
+        onNetEase(loudByWord) { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[]" else """{"results":[]}""") }
+        assertEquals("We walk with mira through the night\nWe wait by the river until dawn", (found(song) as Lyrics.Found).words)
     }
 
     @Test
