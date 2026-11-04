@@ -76,7 +76,7 @@ private fun isPerformanceNote(inside: String): Boolean {
     return onlyNote && (counted || words.any(noteDirection::matches)) && (words.size >= 2 || noteCount.matches(words.first()))
 }
 
-/** Which characters of [text] are performance notes, with the space that set each off; null when it has none. */
+/** Which characters of [text] are performance notes, with the space before each; null when it has none. A note that starts the line leaves a space to trim. */
 private fun noteMask(text: String): BooleanArray? {
     val notes = bracketed.findAll(text).filter { isPerformanceNote(it.value.substring(1, it.value.length - 1)) }.toList()
     if (notes.isEmpty()) return null
@@ -84,10 +84,7 @@ private fun noteMask(text: String): BooleanArray? {
     for (note in notes) {
         var start = note.range.first
         while (start > 0 && text[start - 1].isWhitespace()) start--
-        var end = note.range.last + 1
-        // A note that starts the line takes the space after it instead.
-        if (text.substring(0, note.range.first).isBlank()) while (end < text.length && text[end].isWhitespace()) end++
-        for (at in start until end) cut[at] = true
+        for (at in start..note.range.last) cut[at] = true
     }
     return cut
 }
@@ -108,7 +105,7 @@ private fun withoutPerformanceNotes(line: LyricLine): LyricLine? {
     val cutWords = cut?.let { mask -> cutFrom(line.words, mask) } ?: line.words
     val words = if (cut == null) line.words else cutWords.withoutBlankWords().trimmedAtTheEnds()
     // Both read the same where the words make up the line, as timed ones do.
-    val text = if (cut != null && joined == line.text) words.joinToString("") { it.text } else withoutPerformanceNotes(line.text)
+    val text = if (joined == line.text) words.joinToString("") { it.text } else withoutPerformanceNotes(line.text)
     if (text.isBlank() && line.text.isNotBlank()) return null
     return line.copy(text = text, words = words, endMs = if (cut == null) line.endMs else endBeforeNote(line, cutWords))
 }
