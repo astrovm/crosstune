@@ -10,6 +10,7 @@ Raw logs and comparisons stay in `build/syncreplay/bench/`.
 | Truth, full LhLmgg_u29k | 346.82 | 34.40 | Keep CPU; Vulkan changes the reference |
 | Hearing, 24 existing 8-second windows of 5WEjz2YoH80 | 32.2 | 9.3 | Keep CPU; Vulkan changes words and timestamps |
 | CPU hearing, full LhLmgg_u29k, 20-second windows | 512.77 | | Keep CPU |
+| CPU hearing, full LhLmgg_u29k, 8-second windows | 189.20 | | Keep CPU |
 
 ROCm: existing `~/.cache/crosstune-syncreplay-gpu/bin/python`, torch 2.14.1+rocm7.2.
 CPU: existing `~/.cache/crosstune-syncreplay-venv/bin/python`, torch 2.15.0+cu132 with no CUDA device.
@@ -20,6 +21,11 @@ Full-song CPU and GPU vocal files had identical sample counts (23,108,400), corr
 and difference SNR 18.3135 dB. Demucs random shifts were unseeded, so this is a signal comparison,
 not proof of numerical equivalence. Fresh CPU separation plus transcription also differed from the
 saved reference: 20 common lines, median 0.02 s, worst 1.22 s. The saved truth was preserved.
+
+The initial short-window benchmark was stopped when available RAM approached 4 GB, freeing memory
+for prep and the other agents. It was measured after RAM recovered. Summing these phase measurements
+gives 1173.58 s on CPU versus 1067.12 s with GPU separation (9.1% less). This is a sum of phases
+measured under changing load, not a measured end-to-end speedup.
 
 ## Vulkan checks
 
