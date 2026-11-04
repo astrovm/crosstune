@@ -21,6 +21,10 @@ class LyricCaseTest {
         assertEquals("", casing.apply(""))
     }
 
+    @Test fun capitalsUseTheOtherCopysLetterRatherThanAnEnglishUppercaseMapping() {
+        assertEquals("We visit İnara beside the sea", LyricCase(listOf("We visit İnara beside the sea")).apply("We visit inara beside the sea"))
+    }
+
     @Test fun wordsAtTheEndAndUnicodeAndPunctuationKeepTheirPlaces() {
         val text = "We visit élver, then meet o’nera!"
         val result = LyricCase(listOf("We visit Élver, then meet O'Nera!")).apply(text)

@@ -19,7 +19,7 @@ internal class LyricCase(copies: List<String>) {
         return word.replace(text) { token ->
             val spelling = cases[context(words, index++)]
             token.value.mapIndexed { at, letter ->
-                if (spelling?.getOrNull(at)?.isUpperCase() == true) letter.uppercaseChar() else letter
+                spelling?.getOrNull(at)?.takeIf(Char::isUpperCase) ?: letter
             }.joinToString("")
         }
     }
