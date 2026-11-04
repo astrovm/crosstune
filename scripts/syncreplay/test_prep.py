@@ -445,6 +445,16 @@ class PhoneTest(unittest.TestCase):
     def test_line_times_without_player_log_keep_the_old_clock(self):
         self.assertEqual([(0, 100, 1000)], r.phone_lines('lit 0 at 100 pos 1000\n'))
 
+    def test_phone_waits_for_the_requested_song_before_opening_lyrics(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'shell', return_value=''), patch.object(r, 'adb'), \
+                patch.object(r.time, 'sleep'), patch.object(r, 'tap', return_value=False), \
+                patch.object(r, 'playing', side_effect=[('Previous song', 100), ('Song requested', 200)]) as playing:
+            (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', title='Song requested')]))
+            with self.assertRaisesRegex(SystemExit, "Couldn't open"):
+                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150))
+            self.assertEqual(2, playing.call_count)
+
     def test_a_title_keeps_its_commas(self):
         session = 'package=app\nstate=PlaybackState {state=PLAYING(3), position=2041, buffered position=0, speed=1.0, updated=5000, actions=1}\nmetadata: size=9, description=Police, The   Magic Audio Flac, uploader, uploader\n'
         with patch.object(r, 'shell', return_value=session):

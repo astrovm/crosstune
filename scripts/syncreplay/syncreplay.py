@@ -594,9 +594,13 @@ def watch(args):
         width, height = map(int, re.search(r"(\d+)x(\d+)", shell("wm", "size")).groups())
         shell("input", "swipe", str(width // 2), str(height * 9 // 10), str(width // 2), str(height * 3 // 10), "200")
     shell("am", "start", "-a", "android.intent.action.VIEW", "-d", f"https://music.youtube.com/watch?v={args.id}", "-p", args.app)
+    song_set = OUT / "set.json"
+    songs = json.loads(song_set.read_text()) if song_set.exists() else []
+    wanted = next((song["title"] for song in songs if song.get("id") == args.id), None)
     for _ in range(60):
         song = playing(args.app)
-        if song:
+        # A restarted player may still publish the previous song while the requested link opens.
+        if song and (wanted is None or "".join(pieces(wanted)) in "".join(pieces(song[0]))):
             break
         time.sleep(0.5)
     else:
