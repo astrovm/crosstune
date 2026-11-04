@@ -25,8 +25,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.Robolectric
-import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
@@ -38,11 +38,12 @@ import java.io.File
  * scripts/syncreplay, comes back after the time hearing takes, and when each line is shown is
  * written down, for the script to hold against when it's really sung. Only when the script asks.
  * The music app's clock may be a little behind what it plays, as YouTube Music's is, by more or less
- * each time; asked to, the song plays a second time, with what was learnt the first kept.
+ * each time; asked to, the song plays a second time, with what was learnt the first kept. Several
+ * songs asked for at once are each played in an app of their own.
  */
-@RunWith(RobolectricTestRunner::class)
+@RunWith(ParameterizedRobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h900dp")
-class SyncReplayTest {
+class SyncReplayTest(private val name: String, private val index: Int) {
 
     @get:Rule
     val composeRule = createEmptyComposeRule()
@@ -92,14 +93,15 @@ class SyncReplayTest {
 
     @Test
     fun replay() {
-        // Run from the app's own folder, the replay's where the whole project builds.
-        val dir = listOf(File("../build/syncreplay"), File("build/syncreplay")).firstOrNull { File(it, "replay.json").exists() }
-        assumeTrue("Only when scripts/syncreplay asks", dir != null)
+        val dir = replays()
+        assumeTrue("$name: only when scripts/syncreplay asks", dir != null && index >= 0)
         if (dir == null) return
-        val asked = JSONObject(File(dir, "replay.json").readText())
+        val asked = JSONObject(File(dir, "replay.json").readText()).let { it.optJSONArray("songs")?.getJSONObject(index) ?: it }
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
         workMs = asked.optLong("work", WORK_MS)
+        workedOut = asked.optJSONArray("works")?.let { works -> (0 until works.length()).map { works.getLong(it) } }.orEmpty()
+        whilesFrom = asked.optJSONArray("whiles")?.let { whiles -> (0 until whiles.length()).map { whiles.getLong(it) } }.orEmpty()
         val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
         val lyrics = JSONArray(File(dir, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
         // What was heard in each stretch, by how long it is in seconds and where it starts.
@@ -113,21 +115,19 @@ class SyncReplayTest {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear()
             .putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
             .putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
-        val lrc = lyrics.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d] %s".format(ms / 60_000, ms / 1000 % 60, ms % 1000 / 10, text.replace("\"", "\\\"")) }
-        fake.handler = { request ->
-            FakeSpotify.html(
-                request,
-                if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":${lengthMs / 1000},"syncedLyrics":"${lrc.replace("\n", "\\n")}"}]"""
-                else """{"title":"Demo","author_name":"Band"}"""
-            )
-        }
+        // Words found without timing, -1 for each line's time, come as such: nothing's heard for them, so their lines stay dark.
+        val words = if (lyrics.all { it.first < 0 }) JSONObject().put("plainLyrics", lyrics.joinToString("\n") { it.second })
+        else JSONObject().put("syncedLyrics", lyrics.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d] %s".format(ms / 60_000, ms / 1000 % 60, ms % 1000 / 10, text) })
+        val found = JSONArray().put(words.put("trackName", "Demo").put("artistName", "Band").put("duration", lengthMs / 1000)).toString()
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") found else """{"title":"Demo","author_name":"Band"}""") }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
         val button = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(button)[0].performScrollTo().performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.lyricLines.isNotEmpty() }
+        // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
+        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } }
         behind.forEachIndexed { time, behindMs ->
             val played = play(fromMs, lengthMs, behindMs)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
@@ -170,7 +170,8 @@ class SyncReplayTest {
             val times = state.lyricLines.map { it.timeMs + off + behindMs }
             if (times != lastPlaced) placed.put(JSONObject().put("at", atMs + behindMs).put("times", JSONArray(times)))
             lastPlaced = times
-            val index = SyncedLyrics.indexAt(state.lyricLines, following.clock.positionAt(now))
+            // Lit as the screen lights it: a moment early, so the eye is there first.
+            val index = SyncedLyrics.indexAt(state.lyricLines, following.ahead(state.linesEarlyMs).clock.positionAt(now))
             if (index != last && index >= 0) shown.put(JSONObject().put("line", index).put("text", state.lyricLines[index].text).put("at", atMs + behindMs))
             last = index
         }
@@ -182,6 +183,12 @@ class SyncReplayTest {
 
     /** How long the phone takes to work out the words in what it heard, after hearing it. */
     private var workMs = WORK_MS
+
+    /** How long the phone took over each whole while, one by one, when the replay is held to a phone run. */
+    private var workedOut = emptyList<Long>()
+
+    /** Where in the song the phone began each while, when the replay is held to a phone run. */
+    private var whilesFrom = emptyList<Long>()
 
     /** How far the music app's clock is behind what it plays, this time. */
     private var behindMs = 0L
@@ -195,26 +202,30 @@ class SyncReplayTest {
      */
     private inner class Replayed(private val heard: Map<Int, Map<Long, List<Pair<Long, String>>>>) : SingingHearing {
         override val missesModel = false
+        private var whiles = 0
 
         override suspend fun fetchModel() = true
 
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? = coroutineScope {
-            val at = SystemClock.elapsedRealtime()
             // What's heard is where the song really is, ahead of the app's clock.
-            val from = playback.playing.value!!.clock.positionAt(at) + behindMs
+            fun position() = playback.playing.value!!.clock.positionAt(SystemClock.elapsedRealtime()) + behindMs
+            whilesFrom.getOrNull(whiles)?.let { delay(maxOf(0L, it - position())) }
+            val at = SystemClock.elapsedRealtime()
+            val from = position()
             if (first != null) launch {
                 val again = SingingListener.AGAIN_SECONDS * 1000L
                 if (first(heard(SingingListener.FIRST_SECONDS, at, from))) first(heard(SingingListener.FIRST_SECONDS, at + again, from + again))
             }
-            heard(SingingListener.SECONDS, at, from)
+            // A while waits for what's still being worked out from before it, so the phone took 3.8 s over one and 27 s over the next.
+            heard(SingingListener.SECONDS, at, from, workedOut.getOrElse(whiles++) { workMs })
         }
 
         /** What was heard in the [seconds] from [from] in the song, at [at], once it's worked out. */
-        private suspend fun heard(seconds: Int, at: Long, from: Long): Sung {
+        private suspend fun heard(seconds: Int, at: Long, from: Long, work: Long = workMs): Sung {
             val stretches = heard.getValue(seconds)
             val start = stretches.keys.minBy { kotlin.math.abs(it - from) }
             // Worked out once it's all in: working out the words takes as long however much there is, as the model always works on 30 seconds.
-            delay(maxOf(0L, at + seconds * 1000L + workMs - SystemClock.elapsedRealtime()))
+            delay(maxOf(0L, at + seconds * 1000L + work - SystemClock.elapsedRealtime()))
             heardLog.put(JSONObject().put("from", from).put("start", start).put("seconds", seconds).put("words", stretches.getValue(start).joinToString(" ") { it.second.trim() }))
             return Sung(at, stretches.getValue(start).filter { it.first >= 0 }.map { (ms, text) -> HeardWord(text.trim(), ms + start - from) }.filter { it.text.isNotEmpty() })
         }
@@ -231,14 +242,30 @@ class SyncReplayTest {
         override fun close() = Unit
     }
 
-    private companion object {
-        const val TIMEOUT_MS = 10_000L
-        const val STEP_MS = 100L
+    companion object {
+        /** Where scripts/syncreplay leaves what to replay, run from the app's own folder or the project's. */
+        private fun replays() = listOf(File("../build/syncreplay"), File("build/syncreplay")).firstOrNull { File(it, "replay.json").exists() }
 
-        /** About how long a phone takes to work out the words in what it heard, after hearing it. */
-        const val WORK_MS = 2_500L
+        /**
+         * Each song asked for: several named in replay.songs, one line each, in replay.json's "songs" in
+         * the same order; or the one replay.json is. None asked, the one test is skipped. Read outside
+         * Robolectric, where Android's JSON can't run, so the names come as plain lines.
+         */
+        @JvmStatic
+        @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
+        fun songs(): List<Array<Any>> {
+            val dir = replays() ?: return listOf(arrayOf("none", -1))
+            val names = File(dir, "replay.songs").takeIf { it.exists() }?.readLines()?.filter { it.isNotBlank() } ?: listOf("asked")
+            return names.mapIndexed { index, name -> arrayOf(name, index) }
+        }
+
+        private const val TIMEOUT_MS = 10_000L
+        private const val STEP_MS = 100L
+
+        /** About how long a phone takes to work out the words in what it heard, after hearing it: a Galaxy S22 Ultra took 3.9 to 4.6 s. */
+        private const val WORK_MS = 4_500L
 
         /** How long the song stays stopped before it's played again. */
-        const val AGAIN_MS = 5_000L
+        private const val AGAIN_MS = 5_000L
     }
 }
