@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
                     playQueue = queue,
                     queueOrder = order,
                     sleepTimer = sleepTimer(applicationContext),
+                    qobuzNumbers = qobuzNumbers(applicationContext, matcher),
                     offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher)
                 )
             }
@@ -381,6 +382,18 @@ class MainActivity : ComponentActivity() {
             // One made for another app, as each test makes, is done with.
             sleepTimer?.second?.off()
             return SleepTimer(playbackFactory(app), CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)).also { sleepTimer = app to it }
+        }
+
+        private var qobuzNumbers: Pair<Context, QobuzNumbers>? = null
+
+        /** What tries Qobuz's other number, the app's rather than a screen's, as the screen closes as it opens a song. */
+        internal fun qobuzNumbers(context: Context, matcher: ExactMatcher): QobuzNumbers {
+            val app = context.applicationContext
+            qobuzNumbers?.takeIf { it.first === app }?.let { return it.second }
+            // One made for another app, as each test makes, is done with.
+            qobuzNumbers?.second?.off()
+            return QobuzNumbers(playbackFactory(app), matcher::otherQobuzLink, app::hasApp, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate))
+                .also { qobuzNumbers = app to it }
         }
 
         /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */

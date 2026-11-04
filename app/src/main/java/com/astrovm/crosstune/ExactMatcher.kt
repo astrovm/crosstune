@@ -483,9 +483,23 @@ internal class ExactMatcher(
      * that isn't its country's. The US has its own; the rest share the UK's, but Japan's store names
      * songs in Japanese, so they'd never match, and Latin America's stores and Portugal's list none.
      */
-    private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
-        if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
-        val store = if (country == "US") "us-en" else "gb-en"
+    private suspend fun findOnQobuz(metadata: MusicMetadata): String? =
+        if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) null else findOnQobuzStore(qobuzStore, metadata)
+
+    /** The store [findOnQobuz] asks. */
+    private val qobuzStore = if (country == "US") "us-en" else "gb-en"
+
+    /**
+     * The number of [song] in the store [findOnQobuz] doesn't ask, when it isn't [link]'s: stores differ on about one song
+     * in four, and which one an account follows can't be told. Null with no other, or no answer.
+     */
+    suspend fun otherQobuzLink(song: MusicMetadata, link: String): String? = try {
+        findOnQobuzStore(if (qobuzStore == "us-en") "gb-en" else "us-en", song)?.takeIf { it != link }
+    } catch (_: IOException) {
+        null
+    }
+
+    private suspend fun findOnQobuzStore(store: String, metadata: MusicMetadata): String? {
         val url = "https://www.qobuz.com/$store/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
         val page = client.newCall(Request.Builder().url(url).asPhoneBrowser().get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")

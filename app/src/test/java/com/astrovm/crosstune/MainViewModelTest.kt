@@ -11,6 +11,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -72,7 +73,8 @@ class MainViewModelTest {
         reports: ReportSender? = null,
         listener: SongHearing = SongHearing { Heard.Nothing },
         queueOrder: QueueOrder? = null,
-        offline: OfflineSongs? = null
+        offline: OfflineSongs? = null,
+        qobuzNumbers: QobuzNumbers? = null
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -95,6 +97,7 @@ class MainViewModelTest {
             songSearcher = songSearcher,
             reports = reports,
             queueOrder = queueOrder,
+            qobuzNumbers = qobuzNumbers,
             offline = offline
         ).also { made += it }
     }
@@ -1413,5 +1416,57 @@ class MainViewModelTest {
         until("opened in the app") { effects.isNotEmpty() }
         assertNull(model.uiState.player)
         assertEquals(MusicService.TIDAL.packageName, (effects.single() as Effect.Open).packageName)
+    }
+
+    @Test
+    fun onlyASongOpenedInQobuzsAppByItsNumberIsWatched() {
+        val song = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Thriller">Thriller</a>
+                <p class="ListItem__artists">Michael Jackson • Thriller</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;625089"></button>
+            </div></li>"""
+        var found = true
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.qobuz.com" -> FakeSpotify.html(request, if (found) song else "")
+                else -> FakeSpotify.html(request, """{"title":"Thriller","author_name":"Michael Jackson"}""")
+            }
+        }
+        val playback = FakePlayback().apply { access = true }
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
+        var asked = 0
+        val numbers = QobuzNumbers(playback, { _, _ -> asked++; "https://play.qobuz.com/track/2" }, { true }, scope)
+        fun opened(service: MusicService?, link: String = ytLink): Int {
+            asked = 0
+            playback.opened.clear()
+            service?.let { shadowOf(app.packageManager).installPackage(installedApp(it.packageName, "Music")) }
+            prefs().edit().putString("default_target", service?.name ?: MusicService.QOBUZ.name).commit()
+            val model = model(playback = playback, qobuzNumbers = numbers)
+            model.refreshSystemState()
+            idle()
+            val effects = mutableListOf<Effect>()
+            model.viewModelScope.launch { model.effects.collect { effects += it } }
+            model.onUrlChange(link)
+            model.resolveTypedInput()
+            until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
+            model.openResult()
+            until("opened") { effects.isNotEmpty() || model.uiState.resultMissing }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(QobuzNumbers.WAIT_MS))
+            idle()
+            return asked
+        }
+        try {
+            // Not installed, it opens on the web, where nothing's seen to play.
+            assertEquals(0, opened(null))
+            assertEquals(1, opened(MusicService.QOBUZ))
+            // Any other app's left alone, and a search has no number to swap.
+            assertEquals(0, opened(MusicService.DEEZER))
+            // Another song, as one looked up before is opened on the number kept with it.
+            found = false
+            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=aaaaaaaaaaa"))
+        } finally {
+            scope.cancel()
+        }
     }
 }

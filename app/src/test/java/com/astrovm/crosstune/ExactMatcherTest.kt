@@ -1583,6 +1583,33 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun qobuzsOtherStoreGivesTheNumberThisPhonesStoreDoesnt() {
+        fun item(track: String) = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Song">Song</a>
+                <p class="ListItem__artists">Band • Album</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$track"></button>
+            </div></li>"""
+        val song = MusicMetadata("Song", "Band")
+        fake.handler = { request ->
+            when {
+                "/us-en/" in request.url.toString() -> FakeSpotify.html(request, item("45242130"))
+                else -> FakeSpotify.html(request, item("625089"))
+            }
+        }
+        fun other(country: String, link: String) = runBlocking { matcher(country).otherQobuzLink(song, link) }
+        assertEquals("https://play.qobuz.com/track/625089", other("US", "https://play.qobuz.com/track/45242130"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/gb-en/search/tracks/"))
+        assertEquals("https://play.qobuz.com/track/45242130", other("IE", "https://play.qobuz.com/track/625089"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/"))
+        // The same number there, there's nothing else to try.
+        assertNull(other("IE", "https://play.qobuz.com/track/45242130"))
+        // No answer from the store is no other number, not a failure to show.
+        fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
+        assertNull(other("US", "https://play.qobuz.com/track/45242130"))
+    }
+
+    @Test
     fun qobuzFindsSongsAndAlbumsOnItsStoresSearchPage() {
         fun item(title: String, credit: String, track: String, album: String) = """
             <li><div class="ListItem">

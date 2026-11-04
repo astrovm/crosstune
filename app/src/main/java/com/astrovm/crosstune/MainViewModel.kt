@@ -125,6 +125,8 @@ internal class MainViewModel(
     private val queueOrder: QueueOrder? = null,
     /** Pauses the music after a while, see [playerSleep]. */
     private val sleepTimer: SleepTimer? = null,
+    /** Tries Qobuz's other number for a song it doesn't play, see [QobuzNumbers]. */
+    private val qobuzNumbers: QobuzNumbers? = null,
     /** The songs, albums and playlists kept for offline; nullable so tests need none. */
     private val offline: OfflineSongs? = null
 ) : ViewModel() {
@@ -1350,6 +1352,7 @@ internal class MainViewModel(
             if (match == ExactMatcher.Match.Missing && service != null && canBeMissing(service, track)) {
                 return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
+            watchNumber(track, destination, url, exactUrl != null)
             effectChannel.send(Effect.Open(url.forSharing(), destination.packageName, finishAfterOpen = false))
         }
     }
@@ -1699,7 +1702,16 @@ internal class MainViewModel(
             playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage, interception::isInstalled) }
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
+        uiState.result?.let { watchNumber(it, destination, url, uiState.destinationUrls[destination]?.exact != false) }
         effectChannel.send(Effect.Open(url, destination.packageName, finishAfterOpen))
+    }
+
+    /** A song opened in Qobuz's app by its [exact] number at [link] is watched from before it's opened, so what played until then is known. */
+    private fun watchNumber(song: MusicMetadata, destination: Destination, link: String, exact: Boolean) {
+        val service = (destination as? Destination.Service)?.service
+        if (exact && song.type == ItemType.TRACK && service == MusicService.QOBUZ && service in uiState.installed) {
+            qobuzNumbers?.opened(song, destination.packageName, link)
+        }
     }
 
     /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
