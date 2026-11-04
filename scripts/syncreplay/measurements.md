@@ -198,3 +198,39 @@ In particular, the existing truth matcher strips non-Latin characters; Japanese 
 can therefore have very little reference coverage. The overall table prints that coverage explicitly.
 Issue #662's target is every line within 0.3 s, none dark. Passing scores on matched lines alone
 cannot establish that target for all sung lines. No app timing behavior is changed in this PR.
+
+## How loud the speech model hears
+
+The speech model hears level as well as words, and the two ways the app hears a song come at different levels. Level over each 20 s:
+
+| Sound | 5th percentile | Median | 95th percentile |
+|---|---:|---:|---:|
+| Android's visualizer, as the replay makes it, 10 songs | 0.449 | 0.530 | 0.628 |
+| The recording itself, the same songs | 0.143 | 0.295 | 0.548 |
+| Playback capture on the Samsung, Expresso Love | 0.125 | 0.165 | 0.184 |
+| Playback capture on the Samsung, Every Little Thing | 0.160 | 0.185 | 0.235 |
+
+So the app raises playback capture's sound to 0.5, at most 6 times, and leaves the visualizer's alone.
+
+The sound the phone kept from 6 checks of the build before, heard again at each level, with nothing played. whisper.cpp d1be6fde and a46fadb3 heard exactly the same at the phone's level.
+
+| Stretches with singing | Expresso Love, as it came | Raised | Every Little Thing, as it came | Raised |
+|---|---:|---:|---:|---:|
+| 20 s that heard a voice | 8 of 20 | 18 of 20 | 0 of 10 | 6 of 10 |
+| 20 s with 3 or more of the song's words | 8 of 20 | 17 of 20 | 0 of 10 | 5 of 10 |
+| Whiles whose first two 8 s both heard music alone | 1 of 19 | 0 of 19 | 5 of 10 | 0 of 10 |
+
+Whiles like that last row are what turn the lines dark.
+
+The whole set through playback capture, `all --clean`, 41 songs, 1083 lines:
+
+| Sound heard | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|
+| The recording as it is | 344 | 669 | 84 | 276 |
+| 2% louder, which can't matter | 346 | 643 | 84 | 300 |
+| 0.68 times, the level the phone gets | 320 | 654 | 84 | 284 |
+| Raised, as the app now does | 338 | 649 | 84 | 291 |
+
+The 2% row is the noise: hearing the same stretch twice gives the same words (30 of 30), but 2% louder changes them in 18 of 30, and that alone moved 26 lines. So what raising does to this table is within that. Nor can this table show what raising is for: no row goes dark on these songs, and the 84 are words with no timing or none heard. The replay at the phone's level still hears more than the phone: on The Police, a voice in 16 of 21 stretches against 9 of 21. Why is still unknown.
+
+Raising the visualizer's sound too, by 2 to 9% on songs under 0.5, took the visualizer's table from 638 lines within 0.5 s to 636 and made a false jump of 148 s on Expresso Love for 36 s, for no gain. Lowering it as well took 39 songs from 613 to 595. So it's left alone, and `all` isn't changed by this.
