@@ -27,9 +27,10 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
 /**
  * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
- * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was.
+ * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
+ * 4, as Qobuz's songs are found in the phone's own store, whose numbers open where the US store's may not.
  */
-internal const val MATCH_VERSION = 3
+internal const val MATCH_VERSION = 4
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -478,10 +479,18 @@ internal class ExactMatcher(
      * Qobuz's API needs an account, but its store's search page lists each song with its album:
      * enough for songs and albums. Its artists aren't told apart there, so they're left to the search.
      * It answers only a phone's browser: anything else, a desktop browser too, gets a 403.
+     * A song's number differs between its stores, and Qobuz's app shows only a loading page for one
+     * that isn't its country's. The US and Japan have their own; the rest share the UK's, and Latin
+     * America's stores and Portugal's list none.
      */
     private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
         if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
-        val url = "https://www.qobuz.com/us-en/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
+        val store = when (country) {
+            "US" -> "us-en"
+            "JP" -> "jp-ja"
+            else -> "gb-en"
+        }
+        val url = "https://www.qobuz.com/$store/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
         val page = client.newCall(Request.Builder().url(url).asPhoneBrowser().get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
             response.body.stringAtMost()

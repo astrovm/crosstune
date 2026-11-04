@@ -1568,6 +1568,21 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun qobuzIsAskedInTheStoreWhoseNumbersOpenOnThisPhone() {
+        // A song's number differs between Qobuz's stores, and the app shows only a loading page for one
+        // that isn't its country's: Expresso Love is 45242130 in the US store and 625089 in the others (#673).
+        fake.handler = { request -> FakeSpotify.html(request, "") }
+        fun asks(country: String): String {
+            runBlocking { matcher(country).find(MusicService.QOBUZ, MusicMetadata("Song", "Band")) }
+            return fake.requestedUrls.last().substringAfter("qobuz.com/").substringBefore("/")
+        }
+        assertEquals("us-en", asks("US"))
+        assertEquals("jp-ja", asks("JP"))
+        // The rest share the UK's numbers, and Latin America's stores and Portugal's list none.
+        listOf("GB", "IE", "DE", "AU", "AR", "BR", "PT", "").forEach { assertEquals(it, "gb-en", asks(it)) }
+    }
+
+    @Test
     fun qobuzFindsSongsAndAlbumsOnItsStoresSearchPage() {
         fun item(title: String, credit: String, track: String, album: String) = """
             <li><div class="ListItem">
@@ -1589,7 +1604,7 @@ class ExactMatcherTest {
             if (request.header("User-Agent").orEmpty().contains("Mobile")) FakeSpotify.html(request, page) else FakeSpotify.html(request, "Access Denied", code = 403)
         }
         assertEquals("https://play.qobuz.com/track/12", find(MusicService.QOBUZ, MusicMetadata("Song", "Band")))
-        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/Song%20Band"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/gb-en/search/tracks/Song%20Band"))
         assertEquals("https://play.qobuz.com/album/studio2", find(MusicService.QOBUZ, MusicMetadata("Studio & Co", "Band", ItemType.ALBUM)))
         // Qobuz's artists aren't told apart, so there's nothing to look up, and the search stands in.
         val asked = fake.requestedUrls.size
