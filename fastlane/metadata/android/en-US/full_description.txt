@@ -8,7 +8,7 @@ Someone sends you a link from one music service, but you listen on another. Tap 
 <li>Playlists and albums show their songs: open any one in the music app you picked, copy or share the list, or play it all, in order or shuffled, in YouTube Music, YouTube, TIDAL or Spotify.</li>
 <li>Send each service somewhere different, like YouTube links to YouTube Music and everything else to Apple Music.</li>
 <li>Show in Crosstune first: the song plays in the music app you picked while you stay.</li>
-<li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud and Audiomack can open the song, album or artist itself instead of a search, Bandcamp and Qobuz the song or album, and YouTube the song.</li>
+<li>Apple Music, Deezer, YouTube Music, TIDAL, SoundCloud and Audiomack can open the song, album or artist itself instead of a search, Qobuz the song or album, Bandcamp the same, or a search in its app, and YouTube the song.</li>
 <li>Add other apps and sites that have a search page.</li>
 <li>Paste with one tap, search and reopen recent links, or open a copied link from the home screen widget, the Quick Settings tile, or by long-pressing the app icon.</li>
 <li>Names a song playing nearby: Crosstune listens itself, or opens Shazam or Google's song search. Also opens Shazam links and songs shared from Pixel Now Playing.</li>

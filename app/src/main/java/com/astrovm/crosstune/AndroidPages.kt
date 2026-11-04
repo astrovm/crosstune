@@ -21,13 +21,15 @@ internal fun Context.tryStartActivity(intent: Intent): Boolean = try {
 /**
  * Starts [intent], then again after [SECOND_START_MS]. Bandcamp's app loses the first search it's sent while it starts,
  * and takes the one sent once it is up; sent back to back, both land in its start and are lost. Already up, it takes either.
- * The second may be refused from the background, and the first is then all there is.
+ * The second may be refused from the background, and the first is then all there is. Both go in a task of the app's own:
+ * in Crosstune's, the task keeps the link that began it, so that link again only brings back whatever the app last searched.
  */
 internal fun Context.tryStartActivityTwice(intent: Intent): Boolean {
-    val opened = tryStartActivity(intent)
+    val own = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val opened = tryStartActivity(own)
     if (opened) {
         val app = applicationContext
-        Handler(Looper.getMainLooper()).postDelayed({ runCatching { app.startActivity(Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }, SECOND_START_MS)
+        Handler(Looper.getMainLooper()).postDelayed({ runCatching { app.startActivity(own) } }, SECOND_START_MS)
     }
     return opened
 }

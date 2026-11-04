@@ -435,6 +435,8 @@ class MainActivityTest {
             assertEquals(Intent.ACTION_SEARCH, intent.action)
             assertEquals(ComponentName(MusicService.BANDCAMP.packageName, MusicService.BANDCAMP_SEARCH_ACTIVITY), intent.component)
             assertEquals("A Song Example Band", intent.getStringExtra(SearchManager.QUERY))
+            // In Crosstune's task, the same link again only brings that task back, with whatever it last searched.
+            assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         }
         assertNull(nextStartedActivity())
     }
