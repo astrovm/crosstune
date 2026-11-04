@@ -105,20 +105,32 @@ private fun withoutPerformanceNotes(line: String): String = noteMask(line)?.let 
 private fun withoutPerformanceNotes(line: LyricLine): LyricLine? {
     val joined = line.words.joinToString("") { it.text }
     val cut = noteMask(joined)
-    var words = line.words
-    var endMs = line.endMs
-    if (cut != null) {
-        var from = 0
-        val cutWords = line.words.map { word -> word.copy(text = word.text.without(cut, from)).also { from += word.text.length } }
-        val last = cutWords.indexOfLast { it.text.isNotEmpty() }
-        val noteStart = line.words.getOrNull(last + 1)?.timeMs
-        if (endMs != null && noteStart != null && last >= 0 && cutWords[last].text.trimEnd() == line.words[last].text.trimEnd()) endMs = minOf(endMs, noteStart)
-        val kept = cutWords.filter { it.text.isNotEmpty() }
-        words = kept.mapIndexed { at, word -> word.copy(text = word.text.let { if (at == 0) it.trimStart() else it }.let { if (at == kept.lastIndex) it.trimEnd() else it }) }
-    }
+    val cutWords = cut?.let { mask -> cutFrom(line.words, mask) } ?: line.words
+    val words = if (cut == null) line.words else cutWords.filter { it.text.isNotEmpty() }.trimmedAtTheEnds()
     // Both read the same where the words make up the line, as timed ones do.
     val text = if (cut != null && joined == line.text) words.joinToString("") { it.text } else withoutPerformanceNotes(line.text)
-    return if (text.isBlank() && line.text.isNotBlank()) null else line.copy(text = text, words = words, endMs = endMs)
+    if (text.isBlank() && line.text.isNotBlank()) return null
+    return line.copy(text = text, words = words, endMs = if (cut == null) line.endMs else endBeforeNote(line, cutWords))
+}
+
+/** [words], each without the characters [cut] marks, over all of them joined. A word may be left empty. */
+private fun cutFrom(words: List<TimedWord>, cut: BooleanArray): List<TimedWord> {
+    var from = 0
+    return words.map { word -> word.copy(text = word.text.without(cut, from)).also { from += word.text.length } }
+}
+
+private fun List<TimedWord>.trimmedAtTheEnds(): List<TimedWord> =
+    mapIndexed { at, word -> word.copy(text = word.text.let { if (at == 0) it.trimStart() else it }.let { if (at == lastIndex) it.trimEnd() else it }) }
+
+/**
+ * When [line] ends once its notes are cut, [cutWords] being its words so: where the first word of a
+ * note that ends it begins. Where the note was on a word with others, there's no telling, and it ends as it did.
+ */
+private fun endBeforeNote(line: LyricLine, cutWords: List<TimedWord>): Long? {
+    val last = cutWords.indexOfLast { it.text.isNotEmpty() }
+    val noteStart = line.words.getOrNull(last + 1)?.timeMs ?: return line.endMs
+    val whole = last >= 0 && cutWords[last].text.trimEnd() == line.words[last].text.trimEnd()
+    return line.endMs?.let { if (whole) minOf(it, noteStart) else it }
 }
 
 /** A year, as after the artist under a heading: "The Band（1972）". */
