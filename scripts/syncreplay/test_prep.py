@@ -170,6 +170,53 @@ class TableTest(unittest.TestCase):
             self.assertFalse((r.OUT / 'replay.json').exists())
             self.assertFalse((r.OUT / 'replay.songs').exists())
 
+class Sound:
+    """Nine seconds of sound, as long as it needs to be for one stretch of 8."""
+    def __len__(self):
+        return 16 * 9000
+
+    def __getitem__(self, _):
+        return SimpleNamespace(tobytes=lambda: b'')
+
+
+class HeardOnTheGpuTest(unittest.TestCase):
+    def built(self, gpu):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'HEARD', Path(directory) / 'heard'), patch.object(r.subprocess, 'run') as run:
+            return r.heard_binary(gpu).parent.name, run.call_args_list[0].args[0]
+
+    def test_the_gpu_has_its_own_build_with_vulkan(self):
+        folder, cmake = self.built(True)
+        self.assertEqual(folder, 'heard-gpu')
+        self.assertIn('-DGGML_VULKAN=ON', cmake)
+
+    def test_the_cpu_build_has_no_vulkan(self):
+        folder, cmake = self.built(False)
+        self.assertEqual(folder, 'heard')
+        self.assertNotIn('-DGGML_VULKAN=ON', cmake)
+
+    def test_with_it_on_the_gpu_works_alongside_the_cpu(self):
+        with patch.dict(os.environ, {'HEARD_GPU': '1'}):
+            self.assertEqual(r.hearers(), [True] * r.HEARD_ON_THE_GPU_AT_ONCE + [False] * r.HEARD_AT_ONCE)
+
+    def test_without_it_only_the_cpu_hears(self):
+        env = {key: value for key, value in os.environ.items() if key != 'HEARD_GPU'}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(r.hearers(), [False] * r.HEARD_AT_ONCE)
+
+    def test_only_a_hearer_on_the_gpu_is_told_to_use_it(self):
+        heard = []
+        def answer(command, **kwargs):
+            heard.append((command[0], kwargs['env'].get('HEARD_GPU')))
+            return argparse.Namespace(stdout=b'0\tword\n')
+        env = {key: value for key, value in os.environ.items() if key != 'HEARD_GPU'}
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.dict(os.environ, env, clear=True), \
+                patch.object(r, 'hearers', return_value=[True]), patch.object(r, 'as_the_phone_hears', return_value=Sound()), \
+                patch.object(r, 'heard_binary', side_effect=lambda gpu: Path('gpu' if gpu else 'cpu')), patch.object(r, 'model_file', return_value=Path('tiny')), \
+                patch.object(r, 'sung_language', return_value='en'), patch.object(r.subprocess, 'run', side_effect=answer):
+            r.windows('song', Path('song.wav'), 8000)
+        self.assertEqual(heard, [('gpu', '1')])
+
+
 class ReplayAllTest(unittest.TestCase):
     def test_it_replays_the_set_of_what_was_heard_it_is_asked_for(self):
         asked = []

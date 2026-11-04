@@ -36,7 +36,8 @@ they match does the replay stand for the phone.
 For ROCm Demucs only, set DEMUCS_PYTHON to a ROCm Python and DEMUCS_DEVICE=cuda;
 without these it uses the current Python on CPU. Set WHISPER_PYTHON to a ROCm Python with openai-whisper for
 truth on the GPU: it hears each song twice and keeps the lines both time alike, in about the time the CPU takes
-to hear it once (measurements.md). Hearing stays on CPU, as it stands for the phone's.
+to hear it once (measurements.md). Set HEARD_GPU to have the GPU hear too, alongside the CPU
+(with CXXFLAGS for where the Vulkan headers are, the first time).
 `set --cached` resumes the existing set without another live search. Prep keeps truth for unchanged lyrics
 and checkpoints every heard window atomically, so an interrupted song resumes too.
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
@@ -44,6 +45,7 @@ Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the P
 import argparse
 import json
 import os
+import queue
 import shutil
 import re
 import shlex
@@ -62,6 +64,8 @@ HEARD = OUT / "heard"
 APP_MODEL = "tiny-q5_1"
 # Each while is heard on its own, on one thread, so how many at once only changes how long it takes.
 HEARD_AT_ONCE = max(1, (os.cpu_count() or 4) - 2)
+# More at once on the GPU doesn't hear more: 3, 6 and 10 at once all heard 0.6 to 0.8 stretches a second (measurements.md).
+HEARD_ON_THE_GPU_AT_ONCE = 3
 LANGUAGE_SEGMENTS = 4
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{}.bin"
 # What the app hears at once, and at the start of a song, in ms.
@@ -87,11 +91,17 @@ def audio(path, kind="f32le"):
     return np.frombuffer(raw, np.float32) if kind == "f32le" else np.frombuffer(raw, np.int16).astype(np.float32) / 32768
 
 
-def heard_binary():
-    if not (HEARD / "heard").exists():
-        subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(HEARD), "-DCMAKE_BUILD_TYPE=Release"], check=True)
-        subprocess.run(["cmake", "--build", str(HEARD), "-j", "4"], check=True)
-    return HEARD / "heard"
+def heard_binary(gpu=False):
+    folder = HEARD.with_name("heard-gpu") if gpu else HEARD
+    if not (folder / "heard").exists():
+        subprocess.run(["cmake", "-S", str(Path(__file__).parent), "-B", str(folder), "-DCMAKE_BUILD_TYPE=Release"] + (["-DGGML_VULKAN=ON"] if gpu else []), check=True)
+        subprocess.run(["cmake", "--build", str(folder), "-j", "4"], check=True)
+    return folder / "heard"
+
+
+def hearers():
+    """Who hears at once, True for one on the GPU: with HEARD_GPU, those as well as the CPU's, as each takes the stretches left when it's free."""
+    return [True] * (HEARD_ON_THE_GPU_AT_ONCE if os.environ.get("HEARD_GPU") else 0) + [False] * HEARD_AT_ONCE
 
 
 def model_file(model):
@@ -130,18 +140,27 @@ def windows(song, wav, length, model=APP_MODEL, clean=False):
     out = heard_file(song, length, f"{model}.clean" if clean else model)
     done = json.loads(out.read_text()) if out.exists() else {}
     a = audio(wav) if clean else as_the_phone_hears(wav)
-    binary = heard_binary()
+    free = queue.Queue()
+    for gpu in hearers():
+        free.put(gpu)
+    binaries = {gpu: heard_binary(gpu) for gpu in set(free.queue)}
     weights = model_file(model)
     starts = [s for s in range(0, len(a) // 16 - length, STEP_MS) if str(s) not in done]
     language = sung_language(song)
 
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
-        # A model that can't run hears nothing, so it fails here rather than passing for silence.
-        text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
+        gpu = free.get()
+        env = {key: value for key, value in os.environ.items() if key != "HEARD_GPU"}
+        try:
+            # A model that can't run hears nothing, so it fails here rather than passing for silence.
+            text = subprocess.run([str(binaries[gpu]), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True,
+                                  env={**env, "HEARD_THREADS": "1", **({"HEARD_GPU": "1"} if gpu else {})}).stdout.decode("utf-8", "replace")
+        finally:
+            free.put(gpu)
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
-    with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
+    with ThreadPoolExecutor(free.qsize()) as pool:
         for start, words in pool.map(hear, starts):
             done[str(start)] = words
             atomic_text(out, json.dumps(done))

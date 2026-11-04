@@ -8,7 +8,7 @@ static void quiet(ggml_log_level, const char*, void*) {}
 int main(int argc, char** argv) {
     whisper_log_set(quiet, nullptr);
     whisper_context_params cp = whisper_context_default_params();
-    cp.use_gpu = false; cp.flash_attn = false; cp.dtw_token_timestamps = true; cp.dtw_aheads_preset = getenv("BASE") ? WHISPER_AHEADS_BASE : WHISPER_AHEADS_TINY;
+    cp.use_gpu = getenv("HEARD_GPU") != nullptr; cp.flash_attn = false; cp.dtw_token_timestamps = true; cp.dtw_aheads_preset = getenv("BASE") ? WHISPER_AHEADS_BASE : WHISPER_AHEADS_TINY;
     whisper_context* ctx = whisper_init_from_file_with_params(argv[1], cp);
     std::vector<float> s; float f; while (fread(&f, 4, 1, stdin) == 1) s.push_back(f);
     whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_BEAM_SEARCH);

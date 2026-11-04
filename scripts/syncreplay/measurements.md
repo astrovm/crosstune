@@ -103,9 +103,11 @@ Replays of 23 songs, 581 scored lines, with an unchanged app:
 | A stretch every second, run 2 | 143 | 286 | 86 | 0 |
 | A stretch every 5 seconds | 133 | 274 | 82 | 62 |
 
-So a coarser grid costs about 2 points, more than two runs differ, and prep stays at every second. Vulkan heard 194
-stretches in 177 s with 3 workers, 1.1 a second, about what 10 CPU workers manage under load, so hearing stays on the CPU
-for speed alone. Whether its words would change the table wasn't measured.
+So a coarser grid costs about 2 points, more than two runs differ, and prep stays at every second.
+
+One 20-second stretch took 1.2 to 2.3 s on the GPU with 0.5 s of CPU, and 6.3 to 6.9 s with 4.3 s of CPU on the CPU, 5 times
+faster. But more at once doesn't hear more on the GPU: 3, 6 and 10 at once heard 0.8, 0.6 and 0.8 stretches a second, with other GPU
+work running. 10 at once on the CPU heard about 1.3 a second under load. So the GPU hears alongside the CPU rather than instead of it.
 
 ## Limits of the timing table
 
