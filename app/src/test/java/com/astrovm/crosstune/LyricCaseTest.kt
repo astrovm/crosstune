@@ -15,6 +15,9 @@ class LyricCaseTest {
         assertEquals("We walk with Mira", LyricCase(listOf("We walk\nWith Mira")).apply("We walk with mira"))
         assertEquals("We walk with mira", LyricCase(listOf("WE WALK WITH MIRA THROUGH THE NIGHT")).apply("We walk with mira"))
         assertEquals("We walk with mira", LyricCase(emptyList()).apply("We walk with mira"))
+        for (gap in listOf("\r", "\r\n", "\n", ". ", "! ", "? ", ": ")) {
+            assertEquals("We walk with mira", LyricCase(listOf("We walk${gap}With mira")).apply("We walk with mira"))
+        }
         assertEquals("", casing.apply(""))
     }
 

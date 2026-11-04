@@ -8,7 +8,7 @@ internal class LyricCase(copies: List<String>) {
             val previous = words.getOrNull(index - 1) ?: return@mapIndexedNotNull null
             val gap = copy.substring(previous.range.last + 1, token.range.first)
             // A capital starting a line or sentence says nothing about whether this is a name.
-            if (gap.any { it in "\n.!?:" }) null else context(words, index) to token.value
+            if (gap.any { it in "\r\n.!?:" }) null else context(words, index) to token.value
         }
     }.groupBy({ it.first }, { it.second }).mapValues { (_, spellings) -> spellings.distinct().singleOrNull() }
 
