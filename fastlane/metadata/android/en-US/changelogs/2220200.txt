@@ -1,0 +1,8 @@
+Lyrics light on videos Shazam can't line up.
+Words sung again later don't move lines far off.
+Lines timed late at the start begin on time.
+More songs get timed lyrics.
+Bright visuals don't wash out the lyrics.
+Notes like (repeat and fade) stay out of the lyrics.
+Names keep their capitals in lyrics in all capitals.
+Hearing a very short stretch doesn't close the app.

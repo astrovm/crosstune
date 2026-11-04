@@ -642,8 +642,34 @@ internal class LyricsFinder(
         val word = byWord.await() ?: return@coroutineScope Best(found)
         // Another take's words, timed word by word, don't beat this one's, timed a line at a time.
         if (found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) return@coroutineScope Best(found)
-        Best(better(word, found))
+        Best(if (found is Lyrics.Found) rushedTimedAs(word, found) else word)
     }
+
+    /**
+     * [word]'s lines with those that go by faster than anyone sings them put back where [other], the
+     * same words timed another way, has them, as far from its other lines. Whoever timed them word by
+     * word fell behind and hurried to catch up, as NetEase's Expresso Love opens, 5 s late; a quick line
+     * that's no later there than the rest was only sung quickly. Its words spread out up to the next line.
+     */
+    private fun rushedTimedAs(word: Lyrics.Found, other: Lyrics.Found): Lyrics.Found {
+        val same = sameLines(word.lines, other.lines)
+        if (same.size < MIN_SAME_LINES || timedApart(word, other)) return word
+        val gap = same.map { (ours, theirs) -> theirs.timeMs - ours.timeMs }.sorted()[same.size / 2]
+        val back = same.filter { (ours, theirs) -> rushed(ours) && ours.timeMs - theirs.timeMs + gap > JUMP_MS }.associate { (ours, theirs) -> ours to theirs.timeMs - gap }
+        val lines = word.lines.mapIndexed { index, line ->
+            val at = back[line]
+            val end = line.endMs
+            if (at == null || end == null) return@mapIndexed line
+            val until = minOf(end, word.lines.getOrNull(index + 1)?.let { back[it] ?: it.timeMs } ?: end)
+            line.copy(timeMs = at, endMs = until, words = line.words.map { it.copy(timeMs = at + (it.timeMs - line.timeMs) * (until - at) / (end - line.timeMs).coerceAtLeast(1)) })
+        }
+        // Put back past the line before, the sheets aren't telling the same story.
+        return if (TimingEvidence.usable(lines)) word.copy(lines = lines) else word
+    }
+
+    /** Whether [line] goes by faster than anyone sings it, by the words it's timed with. */
+    private fun rushed(line: LyricLine): Boolean =
+        line.words.isNotEmpty() && line.endMs != null && line.endMs - line.timeMs < RUSHED_MS_A_WORD * line.words.size
 
     /** These words, kept for a song in capitals to take its names from, as they've been fetched anyway. */
     private suspend fun <T : Lyrics> T.seen(): T = also { if (it is Lyrics.Found) currentCoroutineContext()[Answers]?.copies?.add(it) }
@@ -1359,9 +1385,9 @@ internal class LyricsFinder(
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
          * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment;
-         * 14 for untimed words kept before the other title names were checked for timings.
+         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed.
          */
-        const val CACHE_VERSION = 14
+        const val CACHE_VERSION = 15
 
         /**
          * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what
@@ -1423,6 +1449,9 @@ internal class LyricsFinder(
         /** Lines two copies must have alike to tell how differently they're timed, and how far a gap between them jumps to count. */
         private const val MIN_SAME_LINES = 6
         private const val JUMP_MS = 1_500L
+
+        /** How quick a line's words are, at most, to be said in a hurry; the fastest rap on the songs tried is 165 ms a word. */
+        private const val RUSHED_MS_A_WORD = 200L
 
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */
