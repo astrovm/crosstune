@@ -595,7 +595,7 @@ def run_all(args):
     """Every prepped song replayed from the start in one go, and how its lines came out against when they're sung."""
     songs = prepped()
     asked = OUT / "replay.json"
-    asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": ""} for song in songs]}))
+    asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
     names = OUT / "replay.songs"
     names.write_text("\n".join(songs) + "\n")
@@ -682,6 +682,7 @@ def main():
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
     p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
+    p.add_argument("--heard", default="", help="replay another set of what was heard: .thin5 reads ID.heard20.thin5.json")
     p.set_defaults(go=run_all)
     p = steps.add_parser("hear")
     p.add_argument("id")
