@@ -437,8 +437,8 @@ def lined_up(ours, theirs):
     """Which of [ours] are which of [theirs], by index: those starting with the same word, by their words matched
     in order, as many as can be, and with most of the shorter one's words the same. Other words for a song may
     break its lines elsewhere or spell them otherwise: "In the wild West End, sometime" and "In the wild west end sometime"."""
-    a = [(piece, i) for i, line in enumerate(ours) for piece in pieces(line)]
-    b = [(piece, j) for j, line in enumerate(theirs) for piece in pieces(line)]
+    a = [(piece, i) for i, line in enumerate(ours) for word in line.split() for piece in pieces(word)]
+    b = [(piece, j) for j, line in enumerate(theirs) for word in line.split() for piece in pieces(word)]
     most = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
     for i in range(len(a) - 1, -1, -1):
         for j in range(len(b) - 1, -1, -1):
