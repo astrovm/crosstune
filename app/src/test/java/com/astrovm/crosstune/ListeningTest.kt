@@ -2215,7 +2215,7 @@ class ListeningTest {
     }
 
     /** A video first named by its fingerprint, as opening lyrics of what is playing does. */
-    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0) {
+    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val phone = FakePlayback().apply {
@@ -2231,6 +2231,7 @@ class ListeningTest {
         hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, (heardSeconds * 1000).toLong(), SystemClock.elapsedRealtime(), "reference"))
         waitForText("Demo one")
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        return phone
     }
 
     /** Heard twice: the first answer opens the words, the second keeps them in time. */
@@ -2254,6 +2255,65 @@ class ListeningTest {
     @Test
     fun nothingAboutTimingIsLoggedUnlessAsked() {
         assertEquals(emptyList<String>(), heardTwice())
+    }
+
+    /** Each answer [songMs] into the song, playing at [speed], heard just now; waits for the next listen. */
+    private fun hearsAt(hearing: FakeHearing, songMs: Long, speed: Float) {
+        val before = hearing.listens
+        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band"), null, songMs, SystemClock.elapsedRealtime(), "reference", speed = speed))
+        waitUntil(TIMEOUT_MS) { hearing.listens > before }
+    }
+
+    private fun playerAt(phone: FakePlayback, positionMs: Long) {
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(positionMs, SystemClock.elapsedRealtime())) }
+        composeRule.waitForIdle()
+    }
+
+    /** Followed from one answer 10 seconds into the video, as Shazam's other answers, wherever they say it is, say how fast it goes. */
+    private fun videoHeardGoingAt(hearing: FakeHearing, speeds: List<Float>): FakePlayback {
+        val phone = heardVideo(hearing)
+        // Each impossible as a place in it, as a part played again is.
+        speeds.forEach { hearsAt(hearing, 200_000, it) }
+        return phone
+    }
+
+    @Test
+    fun aVideoSlowerThanItsSongKeepsToItAsItPlays() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.99f, 0.97f, 0.99f))
+        playerAt(phone, 42_000)
+        composeRule.runOnIdle {
+            val at = SystemClock.elapsedRealtime()
+            // 2 seconds into the song 12 into the video, and 30 seconds of the video later, 29.7 of the song.
+            assertEquals(31_700.0, controllerModel().uiState.following!!.clock.positionAt(at).toDouble(), 150.0)
+            assertEquals(0.99f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+        }
+    }
+
+    @Test
+    fun aLineOfASlowVideoIsSoughtWhereItIs() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.99f, 0.99f, 0.99f))
+        playerAt(phone, 12_000)
+        composeRule.runOnIdle { controllerModel().seekLyrics(40_000) }
+        // 38 seconds of the song after its second 2, at 12 in the video, take 38.4 of the video.
+        assertEquals(50_384.0, phone.seeks.last().toDouble(), 100.0)
+    }
+
+    @Test
+    fun oneOrTwoAnswersDontSayHowFastAVideoGoes() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.5f, 0.5f))
+        playerAt(phone, 42_000)
+        composeRule.runOnIdle {
+            assertEquals(32_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
+        }
+    }
+
+    @Test
+    fun aVideoIsntTakenToGoAtASpeedNoVideoGoes() {
+        val phone = videoHeardGoingAt(FakeHearing(), listOf(0.5f, 0.5f, 0.5f))
+        playerAt(phone, 42_000)
+        composeRule.runOnIdle {
+            assertEquals(32_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 150.0)
+        }
     }
 
     @Test

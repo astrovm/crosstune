@@ -1783,6 +1783,12 @@ internal class MainViewModel(
      * words follow from there meanwhile, rather than stand still, but it's never kept.
      */
     private var guessedLeadMs: Long? = null
+
+    /** Where in what the app plays how far it's ahead was taken: a video may go a little slower or faster than the song, as an old transfer does, so it's only that far ahead there. */
+    private var leadFromMs = 0L
+
+    /** How fast each hearing of the video said it goes, wherever it said it is: a part played again is heard elsewhere, but at this speed. */
+    private val leadSpeeds = mutableListOf<Float>()
     /** The recording Shazam matched the hearings [appLeadMs] was learnt from to, this time. */
     private var leadMatch: String? = null
 
@@ -2119,7 +2125,10 @@ internal class MainViewModel(
         // While a music app plays the song shown, it says exactly what plays: a hearing naming it
         // otherwise, as Shazam calls "Song (2018 Remix)" just "Song (Remix)", is the same song.
         if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
-        if (hearing.clock != null) heardAtMs = now()
+        if (hearing.clock != null) {
+            heardAtMs = now()
+            leadSpeeds += hearing.speed
+        }
         appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
         val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
         val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
@@ -2127,6 +2136,7 @@ internal class MainViewModel(
             val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
             heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extra) }?.let { lead ->
                 appLeadMs = lead
+                leadFromMs = app.clock.positionAt(now())
                 leadMatch = hearing.matchId
                 leadStore.save(shown, lead)
                 if (app.video) leadSavedLines(shown, app.appPackage, lead)
@@ -2535,14 +2545,12 @@ internal class MainViewModel(
 
     private fun guessLead(app: Following, heard: PlaybackClock?) {
         val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
-        leadOf(app, heard)?.takeIf { it in LeadTiming.possible(extra) }?.let { guessedLeadMs = it }
-    }
-
-    /** How far [app]'s video is ahead of the song [heard] there, both playing. */
-    private fun leadOf(app: Following, heard: PlaybackClock?): Long? {
-        if (heard?.playing != true || !app.clock.playing) return null
-        val at = now()
-        return app.clock.positionAt(at) - heard.positionAt(at)
+        val at = heard?.takeIf { it.playing && app.clock.playing } ?: return
+        val from = app.clock.positionAt(at.atMs)
+        (from - at.positionMs).takeIf { it in LeadTiming.possible(extra) }?.let { lead ->
+            guessedLeadMs = lead
+            leadFromMs = from
+        }
     }
 
     /**
@@ -2558,11 +2566,22 @@ internal class MainViewModel(
         if (app == null || (!app.video && appLeadMs == null)) return app
         val lead = leadNow ?: return if (calibrationAttempted || shownPoints.isNotEmpty()) app.copy(timingKnown = shownPoints.isNotEmpty())
             else uiState.lyricsFor?.let(::heardFollowing) ?: app.copy(timingKnown = false)
-        return app.copy(clock = app.clock.copy(positionMs = app.clock.positionMs - lead))
+        val speed = leadSpeed
+        return app.copy(clock = app.clock.copy(positionMs = leadFromMs - lead + ((app.clock.positionMs - leadFromMs) * speed).toLong(), speed = app.clock.speed * speed))
     }
 
     /** [positionMs] in the song, where the app playing it has it: later, in a video ahead of it. */
-    private fun inApp(positionMs: Long) = positionMs + (leadNow?.takeIf { appFollowing != null } ?: 0L)
+    private fun inApp(positionMs: Long): Long {
+        val lead = leadNow?.takeIf { appFollowing != null } ?: return positionMs
+        return leadFromMs + ((positionMs - leadFromMs + lead) / leadSpeed).toLong()
+    }
+
+    /** How fast the video goes by the song, as most hearings of it say, once enough have: one's speed is well off at times, so it's their middle one. */
+    private val leadSpeed: Float
+        get() {
+            if (leadSpeeds.size < LEAD_SPEED_HEARINGS) return 1f
+            return leadSpeeds.sorted()[leadSpeeds.size / 2].takeIf { it in LEAD_SPEEDS } ?: 1f
+        }
 
     /** How far the video is ahead: as lined up, or else as last heard. */
     private val leadNow get() = appLeadMs ?: guessedLeadMs
@@ -2597,6 +2616,7 @@ internal class MainViewModel(
         gapTiming = LeadTiming()
         gapMatch = null
         calibrationAttempted = false
+        leadSpeeds.clear()
         placeHeard()
         uiState = uiState.copy(following = heardFollowing(song))
         val source = playback?.takeIf { it.hasAccess() } ?: return
@@ -2613,7 +2633,11 @@ internal class MainViewModel(
                 // nothing for it, and the microphone would hear the room, as between two songs.
                 if (playing == null && autoCalibrating) stopListeningAlong()
                 if (playing?.let(::needsLead) == true && appLeadMs == null) {
-                    appLeadMs = leadStore.load(song)?.also { if (playing.video) leadSavedLines(song, playing.appPackage, it) }
+                    leadStore.load(song)?.let { lead ->
+                        appLeadMs = lead
+                        leadFromMs = playing.clock.positionAt(now())
+                        if (playing.video) leadSavedLines(song, playing.appPackage, lead)
+                    }
                 }
                 // A first fingerprint suggests an intro through the same checks as later guesses.
                 if (playing?.let(::mayGuessLead) == true && !calibrationAttempted) guessLead(playing, song)
@@ -3044,6 +3068,7 @@ internal class MainViewModel(
     /** The music app's video put [leadMs] ahead of the words, and kept so, for it and the lines saved from it. */
     private fun moveLead(song: MusicMetadata, leadMs: Long) {
         appLeadMs = leadMs
+        leadFromMs = appFollowing?.clock?.positionAt(now()) ?: 0L
         leadStore.save(song, leadMs)
         appFollowing?.takeIf { it.video }?.let { leadSavedLines(song, it.appPackage, leadMs) }
         // Hearings from before were taken with the gap as it was.
@@ -3064,8 +3089,8 @@ internal class MainViewModel(
 
     /** [points] put in time from a video's guessed lead, as they are without it: where they're kept, as next time nothing's heard yet. */
     private fun withGuess(points: List<SyncPoint>): List<SyncPoint> {
-        val guess = guessedLeadMs?.takeIf { appLeadMs == null } ?: return points
-        return points.map { it.copy(songMs = it.songMs + guess) }
+        if (guessedLeadMs == null || appLeadMs != null) return points
+        return points.map { it.copy(songMs = inApp(it.songMs)) }
     }
 
     private var restoreJob: Job? = null
@@ -4421,6 +4446,10 @@ internal class MainViewModel(
 
         /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
         const val SINGING_TRIES = 3
+
+        /** Hearings of a video it takes to say how fast it goes, and the speeds it could go at, as by [AudioTiming]. */
+        const val LEAD_SPEED_HEARINGS = 3
+        val LEAD_SPEEDS = 0.9f..1.1f
         /** Lines sung in what's heard, at least, so enough words to match are heard. */
         const val SINGING_LINES = 3
         /** How many of a while's first seconds heard as music alone doubt the words' timing: the speech model often misses a voice once. */

@@ -231,8 +231,10 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             val following = state.following?.takeIf { it.timingKnown } ?: continue
             val now = SystemClock.elapsedRealtime()
             // In the song, by the music app's own clock: the lines as shown, less how far the app's clock is put right.
-            val off = playback.playing.value!!.clock.positionAt(now) - following.clock.positionAt(now)
-            val times = state.lyricLines.map { it.timeMs + off + behindMs }
+            val appAt = playback.playing.value!!.clock.positionAt(now)
+            val heardAt = following.clock.positionAt(now)
+            // A video slower than its song has each line where it gets to at that speed, so they stay put as it plays.
+            val times = state.lyricLines.map { (appAt + behindMs + (it.timeMs - heardAt) / following.clock.speed).toLong() / STEP_MS * STEP_MS }
             if (times != lastPlaced) placed.put(JSONObject().put("at", atMs + behindMs).put("times", JSONArray(times)))
             lastPlaced = times
             // Lit as the screen lights it: a moment early, so the eye is there first.

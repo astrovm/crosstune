@@ -743,7 +743,7 @@ def fingerprints(args):
     answers = phone_answers(log, length, int(video[1]))
     out = Path(args.out) if args.out else OUT / f"{args.id}.fingerprints.json"
     atomic_text(out, json.dumps(answers))
-    print(f"{out}: {len(answers['events'])} answers. Replay it with `run {args.id} --from {answers['initial']['at']} --fingerprints {out}`")
+    print(f"{out}: {len(answers['events'])} answers. Replay it with `run {args.id} --from {answers['initial']['receivedAt']} --fingerprints {out}`")
 
 
 def score_phone(song_id, kept):
