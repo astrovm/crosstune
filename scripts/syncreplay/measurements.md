@@ -194,7 +194,7 @@ Truth used to read only Latin letters, so the 5 Japanese songs scored 5 lines be
 
 Of the 11,191 words not in these writings across the set, 3 match differently, all for the better: Whisper and the lyrics both write `großer`, which used to lose its `ß`.
 
-The rest stay unscored mostly as Whisper writes a word in kana where the lyrics use kanji, or the reverse.
+The rest stay unscored. My guess, not measured: Whisper writes a word in kana where the lyrics use kanji, or the reverse.
 
 One of the 6 hearings on the GPU died with a memory access fault, on Gee. It didn't happen again when run again, and `set --cached` resumes after it, so I left it at that.
 
