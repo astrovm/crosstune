@@ -124,7 +124,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val button = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(button)[0].performScrollTo().performClick()
-        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.lyricLines.isNotEmpty() }
+        // The lookup over, not lines found: words without timing have none until the singing places them, and words timed past the recording's end aren't taken.
+        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } }
         behind.forEachIndexed { time, behindMs ->
             val played = play(fromMs, lengthMs, behindMs)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())

@@ -93,6 +93,20 @@ The CPU's own repeat run on LhLmgg_u29k differed by a median of 0.02 s and at wo
 the CPU is to itself. CPU truth on the same machine in the same hour took 174 to 780 s for one hearing. The GPU was
 about 10% busy, as the CPU work around it was waiting its turn, so these times say more about the load than the GPU.
 
+## Hearing less, or on the GPU
+
+Replays of 23 songs, 581 scored lines, with an unchanged app:
+
+| What was heard | Within 0.3 s | Within 0.5 s | Dark | Lit lines that moved over 0.5 s |
+|---|---:|---:|---:|---:|
+| A stretch every second, run 1 | 145 | 291 | 86 | |
+| A stretch every second, run 2 | 143 | 286 | 86 | 0 |
+| A stretch every 5 seconds | 133 | 274 | 82 | 62 |
+
+So a coarser grid costs about 2 points, more than two runs differ, and prep stays at every second. Vulkan heard 194
+stretches in 177 s with 3 workers, 1.1 a second, about what 10 CPU workers manage under load, so hearing stays on the CPU
+for speed alone. Whether its words would change the table wasn't measured.
+
 ## Limits of the timing table
 
 Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded.
