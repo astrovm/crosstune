@@ -105,7 +105,7 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
     val tint by animateColorAsState(coverColor(cover, actions.loadArtwork) ?: MaterialTheme.colorScheme.primary, tween(durationMillis = 700), label = "practice tint")
     val ground = MaterialTheme.colorScheme.surface
     Surface(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))) {
+        Box(modifier = Modifier.fillMaxSize().background(coverWash(tint, ground))) {
             Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().widthIn(max = ContentMaxWidth).align(Alignment.TopCenter)) {
                 // All caught up, the kinds of card can still be set, shown on a line kept.
                 val optionLine = practice.line ?: state.savedLines.firstOrNull { it.practisable }.takeIf { practice.total == 0 }

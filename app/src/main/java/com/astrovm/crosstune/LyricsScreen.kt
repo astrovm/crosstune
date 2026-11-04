@@ -319,7 +319,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier
-                else Modifier.background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
+                else Modifier.background(coverWash(tint, ground))
             )
     ) {
         if (state.visuals) {

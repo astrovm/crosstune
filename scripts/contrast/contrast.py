@@ -18,7 +18,8 @@ Set ANDROID_SERIAL when more than one phone is connected.
 `report` gives WCAG contrast of word pixels against the ring right around them, 2 to 8 pixels out,
 piece of glyph by piece of glyph, for each kind of text: worst, 5th percentile, median, and how many
 pieces are under 4.5 and 3. The lines can sit a few pixels off from the shot without visuals, so the worst
-can be a sliver of a glyph measured against itself: look at it before believing it.
+can be a sliver of a glyph measured against itself: look at it before believing it. The last column is
+each glyph's stroke alone, without its blended edge.
 
 `survey` needs only what scripts/milkdrop-render/render.py needs, and says how much of the screen would fail
 for lines to come at the usual brightness, per preset, brightest first.
@@ -204,25 +205,33 @@ def lined_up(ink, rows, shots_at):
 
 
 def contrasts(kind, light, ring, size=32, step=16):
+    """For each piece of glyph: all its pixels against the ring, and its stroke's own color against the ring.
+
+    All of them counts each glyph's blended edge too, which costs dark words on a light ground more than
+    light words on a dark one. The stroke is the color WCAG means.
+    """
     import numpy as np
-    out = []
+    whole, stroke = [], []
     ys = np.where(kind.any(axis=1))[0]
     if not len(ys):
-        return out
+        return whole, stroke
+    def ratio(a, b):
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
     for y in range(ys[0], ys[-1], step):
         for x in range(0, kind.shape[1] - size, step):
             word, around = kind[y:y + size, x:x + size], ring[y:y + size, x:x + size]
             if word.sum() >= 30 and around.sum() >= 20:
-                a, b = light[y:y + size, x:x + size][word].mean(), light[y:y + size, x:x + size][around].mean()
-                out.append((max(a, b) + 0.05) / (min(a, b) + 0.05))
-    return out
+                pixels, behind = light[y:y + size, x:x + size][word], light[y:y + size, x:x + size][around].mean()
+                whole.append(ratio(pixels.mean(), behind))
+                stroke.append(ratio(np.percentile(pixels, 15 if pixels.mean() < behind else 85), behind))
+    return whole, stroke
 
 
 def report(args):
     import numpy as np
     from PIL import Image
     from scipy import ndimage
-    found = {}
+    found, strokes = {}, {}
     for preset in sorted(p for p in args.run.iterdir() if (p / "words.png").exists()):
         ink, rows = kinds(preset / "words.png")
         if args.no_visuals:
@@ -243,12 +252,14 @@ def report(args):
         for shot in at:
             light = luminance(np.array(Image.open(shot).convert("RGB")).astype(float))
             for kind, mask in by_kind.items():
-                found.setdefault(kind, []).extend(contrasts(mask, light, ring))
-    print(f'{"":14}{"pieces":>7}{"worst":>7}{"p5":>7}{"median":>8}{"<" + str(AIM):>7}{"<3":>6}')
+                whole, stroke = contrasts(mask, light, ring)
+                found.setdefault(kind, []).extend(whole)
+                strokes.setdefault(kind, []).extend(stroke)
+    print(f'{"":14}{"pieces":>7}{"worst":>7}{"p5":>7}{"median":>8}{"<" + str(AIM):>7}{"<3":>6}{"stroke p5":>11}')
     for kind in ("sung words", "past words", "coming words", "sung chords", "other chords", "small"):
         got = np.array(found.get(kind, []))
         if len(got):
-            print(f"{kind:14}{len(got):7}{got.min():7.2f}{np.percentile(got, 5):7.2f}{np.median(got):8.2f}{(got < AIM).mean() * 100:6.1f}%{(got < 3).mean() * 100:5.1f}%")
+            print(f"{kind:14}{len(got):7}{got.min():7.2f}{np.percentile(got, 5):7.2f}{np.median(got):8.2f}{(got < AIM).mean() * 100:6.1f}%{(got < 3).mean() * 100:5.1f}%{np.percentile(strokes[kind], 5):11.2f}")
 
 
 def survey(args):

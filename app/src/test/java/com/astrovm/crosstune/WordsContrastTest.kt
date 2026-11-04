@@ -2,12 +2,12 @@ package com.astrovm.crosstune
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.luminance
 import com.astrovm.crosstune.ui.theme.DarkColorScheme
 import com.astrovm.crosstune.ui.theme.LightColorScheme
 import com.astrovm.crosstune.ui.theme.Palette
 import com.astrovm.crosstune.ui.theme.pureBlack
 import com.astrovm.crosstune.ui.theme.withAccent
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -16,11 +16,7 @@ class WordsContrastTest {
     private val aim = 4.5f
 
     /** [ink] drawn [alpha] bright over [ground], against [ground], as WCAG counts it. */
-    private fun contrast(ink: Color, alpha: Float, ground: Color): Float {
-        val drawn = ink.copy(alpha = alpha).compositeOver(ground).luminance()
-        val behind = ground.luminance()
-        return (maxOf(drawn, behind) + 0.05f) / (minOf(drawn, behind) + 0.05f)
-    }
+    private fun contrast(ink: Color, alpha: Float, ground: Color) = contrast(ink.copy(alpha = alpha).compositeOver(ground), ground)
 
     private val brightestVisual = Color(VISUALS_CEILING, VISUALS_CEILING, VISUALS_CEILING)
 
@@ -54,5 +50,40 @@ class WordsContrastTest {
             assertLinesRead(dark.onSurface, dark.onSurfaceVariant, dark.primary, dark.pureBlack().surface)
             assertLinesRead(light.onSurface, light.onSurfaceVariant, light.primary, light.surface)
         }
+    }
+
+    /** The corners of what [coverColor] can come to, around the wheel. */
+    private val covers = (0 until 360 step 30).flatMap { hue ->
+        listOf(0.35f, 0.9f).flatMap { saturation -> listOf(0.55f, 0.95f).map { value -> Color.hsv(hue.toFloat(), saturation, value) } }
+    }
+
+    @Test
+    fun everyLineAndChordReadsOnTheCoverWashWhereItsStrongestWhateverTheCover() {
+        Palette.entries.forEach { palette ->
+            listOf(
+                DarkColorScheme.withAccent(palette.dark),
+                DarkColorScheme.withAccent(palette.dark).pureBlack(),
+                LightColorScheme.withAccent(palette.light)
+            ).forEach { scheme ->
+                covers.forEach { cover ->
+                    val strength = washStrength(cover, scheme.surface, scheme.onSurface, scheme.onSurfaceVariant, wordsAccent(scheme.primary, scheme.onSurface))
+                    assertLinesRead(scheme.onSurface, scheme.onSurfaceVariant, scheme.primary, cover.copy(alpha = strength).compositeOver(scheme.surface))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aCoverStillColorsTheScreenWhereWordsAllowIt() {
+        val scheme = DarkColorScheme.withAccent(Palette.VIOLET.dark)
+        val accent = wordsAccent(scheme.primary, scheme.onSurface)
+        assertEquals(0.5f, washStrength(Color(0xFF8C1C13), scheme.surface, scheme.onSurface, scheme.onSurfaceVariant, accent), 0.001f)
+        val light = washStrength(Color.hsv(50f, 0.35f, 0.95f), scheme.surface, scheme.onSurface, scheme.onSurfaceVariant, accent)
+        assertTrue("A light cover has to give way for light words: $light", light < 0.5f)
+    }
+
+    @Test
+    fun aGroundTheWordsCanNotReadOnGetsNoWashAtAll() {
+        assertEquals(0f, washStrength(Color.Gray, Color.Gray, Color.Gray, Color.Gray, Color.Gray), 0.001f)
     }
 }

@@ -62,9 +62,12 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.draw.alpha
 import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -292,6 +295,33 @@ internal fun coverColor(url: String?, load: suspend (String) -> ImageBitmap?): C
         }
     }
     return color
+}
+
+/** The cover's color coming down a screen from the top, under the song's words and anything else on it. */
+@Composable
+internal fun coverWash(tint: Color, ground: Color): Brush {
+    val colors = MaterialTheme.colorScheme
+    val strongest = remember(tint, ground, colors.onSurface, colors.onSurfaceVariant, colors.primary) {
+        washStrength(tint, ground, colors.onSurface, colors.onSurfaceVariant, wordsAccent(colors.primary, colors.onSurface))
+    }
+    return Brush.verticalGradient(0f to tint.copy(alpha = strongest), 0.55f to tint.copy(alpha = strongest * 0.24f), 1f to ground)
+}
+
+/**
+ * How strong the wash can be: the most a cover colors the screen, less when it would take the words
+ * below 4.5 to 1. A light cover under light words, or a dark one under dark words, can't have as much.
+ */
+internal fun washStrength(tint: Color, ground: Color, words: Color, wordsAtFull: Color, accent: Color): Float =
+    generateSequence(0.5f) { it - 0.02f }.takeWhile { it > 0f }.firstOrNull { strength ->
+        val behind = tint.copy(alpha = strength).compositeOver(ground)
+        listOf(words.copy(alpha = SUNG_ALPHA), accent.copy(alpha = SUNG_ALPHA), wordsAtFull).all { contrast(it.compositeOver(behind), behind) >= 4.5f }
+    } ?: 0f
+
+/** WCAG's contrast between two opaque colors. */
+internal fun contrast(one: Color, other: Color): Float {
+    val a = one.luminance()
+    val b = other.luminance()
+    return (maxOf(a, b) + 0.05f) / (minOf(a, b) + 0.05f)
 }
 
 /** Opens a web page in the browser; with none to open it, says so rather than crashing. */
