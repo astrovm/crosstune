@@ -6,7 +6,11 @@
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest of
 # $HOME. Builds wait in line for a slot, first come first served, and say how many are ahead: waiting
 # is normal, not a hang. Each slot keeps its Gradle home, so a new worktree downloads nothing again.
-# Gradle's file locks don't reach across containers, which is why two slots never share one.
+#
+# The first build to succeed keeps its downloads in seed/, which every later build reads, read-only,
+# through Gradle's GRADLE_RO_DEP_CACHE, so a slot starting empty downloads only what's new since. To
+# refresh it after many new dependencies: delete seed/ with no build running, and the next build that
+# succeeds makes it again.
 #
 # GRADLE_BOX_MEMORY is each build's limit in GiB, 8 by default. GRADLE_BOX_SLOTS is how many run at
 # once, by default as many as fit in three quarters of the RAM.
@@ -77,7 +81,12 @@ while :; do
 done
 
 home=$state/gradle-$slot
+seed=$state/seed
 mkdir -p "$home"
+# Gradle itself isn't a dependency, so the read-only cache doesn't cover it.
+if [[ -d $seed/wrapper && ! -d $home/wrapper ]]; then
+    cp -a --reflink=auto "$seed/wrapper" "$home/wrapper"
+fi
 box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
     -v "$root:$root" -v "$sdk:$sdk:ro" -v "$home:$home"
     -w "$root" -e "ANDROID_HOME=$sdk" -e "GRADLE_USER_HOME=$home")
@@ -85,6 +94,20 @@ box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
+
+[[ -d $seed/modules-2 ]] && box+=(-v "$seed:$seed:ro" -e "GRADLE_RO_DEP_CACHE=$seed")
+
+# Made apart and moved in whole, so no build reads half of it. A build holds this slot until it's done.
+keep_downloads() {
+    [[ -d $home/caches/modules-2 && ! -e $seed ]] || return 0
+    local new=$state/seed.$$
+    mkdir -p "$new"
+    cp -a --reflink=auto "$home/caches/modules-2" "$new/"
+    [[ ! -d $home/wrapper ]] || cp -a --reflink=auto "$home/wrapper" "$new/"
+    # Gradle takes a directory with these in it for one in use, not a read-only copy.
+    find "$new" \( -name '*.lock' -o -name gc.properties \) -delete
+    mv -T "$new" "$seed" 2>/dev/null || rm -rf "$new"
+}
 
 # A child rather than exec, so the ticket goes when it ends, and stopping this stops the build.
 nice -n 10 podman run "${box[@]}" "$image" ./gradlew --no-daemon "$@" &
@@ -94,4 +117,5 @@ status=0
 while kill -0 "$child" 2>/dev/null; do
     wait "$child" || status=$?
 done
+((status != 0)) || keep_downloads
 exit "$status"
