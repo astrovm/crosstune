@@ -225,7 +225,7 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
 
     def run_args(self, **changed):
-        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, gradle='fake-gradle'), **changed})
+        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, skew=None, shazam_ahead=0, words_length=None, video=False, gradle='fake-gradle'), **changed})
 
     def test_one_song_replays_until_nothing_new_is_asked(self):
         self.assertEqual(self.replays(r.run, self.run_args(), [1, 0]), (2, 2))
@@ -237,7 +237,7 @@ class HeardWhenAskedTest(unittest.TestCase):
         with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
                 patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
-            r.run(self.run_args(behind_again=500))
+            r.run(self.run_args(behind_again=500, skew=None, shazam_ahead=0, words_length=None, video=False))
         heard.assert_called_once_with('fake', ['fake.from0.first.shown.json', 'fake.from0.shown.json'])
 
 
