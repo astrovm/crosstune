@@ -1177,6 +1177,61 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun untimedWordsCachedBeforeAlternateNamesWereCheckedAreLookedUpAgain() {
+        val song = MusicMetadata("夜の歌 - Night Song", "Band")
+        val file = File.createTempFile("lyrics-alternate", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        runBlocking { cache.put("13\u0000${RecordingKey.of(song)}", """{"words":"古い歌","lines":[],"provisional":false}""") }
+        respond("[${answer(song.title, song.artist, "架空の歌", "[00:01.00]架空の歌")}]")
+        val result = runBlocking { LyricsFinder(fake.client(), "test", busyPauseMs = 0, cache = cache).lyricsOf(song) } as Lyrics.Found
+        assertEquals(listOf(LyricLine(1000, "架空の歌")), result.lines)
+        file.delete()
+    }
+
+    @Test
+    fun untimedWordsUnderABilingualTitleGiveWayToTimingUnderEitherName() {
+        for (title in listOf("夜の歌 - Night Song", "Night Song - 夜の歌", "Night Song - Evening Song")) {
+            val names = SongNames.titleNames(title)
+            for (timedName in names) {
+                fake.requestedUrls.clear()
+                fake.handler = { request ->
+                    val name = request.url.queryParameter("track_name")
+                    val body = when (request.url.host) {
+                        "lrclib.net" -> if (name in names) "[${answer(name.orEmpty(), "Band", "架空の歌", if (name == timedName) "[00:01.00]架空の歌" else "")}]" else "[]"
+                        "itunes.apple.com" -> """{"results":[]}"""
+                        else -> """{"result":{"songs":[]}}"""
+                    }
+                    FakeSpotify.html(request, body)
+                }
+                val result = runBlocking { finder().firstLook(MusicMetadata(title, "Band", lengthMs = 213000)).lyrics } as Lyrics.Found
+                assertEquals("$title / $timedName", listOf(LyricLine(1000, "架空の歌")), result.lines)
+                val asked = fake.requestedUrls.filter { it.startsWith("https://lrclib.net/") }
+                    .mapNotNull { it.toHttpUrl().queryParameter("track_name") }
+                assertEquals(names.take(names.indexOf(timedName) + 1), asked)
+            }
+        }
+    }
+
+    @Test
+    fun untimedAlternateNamesKeepTheFirstWordsAndSingleNamesAreNotRetried() {
+        for (title in listOf("夜の歌 - Night Song", "Night Song", "夜の歌")) {
+            fake.requestedUrls.clear()
+            fake.handler = { request ->
+                val name = request.url.queryParameter("track_name")
+                val body = when (request.url.host) {
+                    "lrclib.net" -> "[${answer(name.orEmpty(), "Band", if (name == title) "最初の歌" else "別の歌")}]"
+                    "itunes.apple.com" -> """{"results":[]}"""
+                    else -> """{"result":{"songs":[]}}"""
+                }
+                FakeSpotify.html(request, body)
+            }
+            assertEquals("最初の歌", (runBlocking { finder().firstLook(MusicMetadata(title, "Band")).lyrics } as Lyrics.Found).words)
+            assertEquals(SongNames.titleNames(title), fake.requestedUrls.filter { it.startsWith("https://lrclib.net/") }
+                .mapNotNull { it.toHttpUrl().queryParameter("track_name") })
+        }
+    }
+
+    @Test
     fun wordsInRomajiUnderOneNameGiveWayToJapaneseUnderTheOther() {
         // LRCLIB has "僕の手 - Boku no Te" timed in romaji; NetEase has 僕の手, written 仆の手, timed in Japanese.
         val romaji = "[00:01.00] boku no te wo shirimasen ka\n[00:05.00] yukue fumei ni narimashita\n[00:09.00] ima sugu sagashi ni ikanai to"

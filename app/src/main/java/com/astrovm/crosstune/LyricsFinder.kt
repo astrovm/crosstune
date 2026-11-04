@@ -682,17 +682,23 @@ internal class LyricsFinder(
      * own, in its script, under another, when they're timed as well.
      */
     private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
-        var romanized: Lyrics.Found? = null
-        val answers = (SongNames.titleNames(metadata.title) + SongNames.bareTitle(metadata.title)).distinct().map { title ->
+        var fallback: Lyrics.Found? = null
+        val names = SongNames.titleNames(metadata.title).distinct()
+        val answers = (names + SongNames.bareTitle(metadata.title)).distinct().map { title ->
+            val kept = fallback
+            // A bare title may name another edit; timedWell checks whether its times can be lent.
+            if (title !in names && kept != null && romanizedScript(kept.words) == null) return kept
             underName(metadata.copy(title = title), timeoutMs).also { answer ->
-                val kept = romanized
                 if (answer is Lyrics.Found) {
-                    if (kept == null && romanizedScript(answer.words) != null) romanized = answer
-                    else if (kept == null || (romanizedScript(answer.words) == null && timing(answer) >= timing(kept))) return answer
+                    val native = romanizedScript(answer.words) == null
+                    if (kept == null || timing(answer) > timing(kept) ||
+                        (native && romanizedScript(kept.words) != null && timing(answer) == timing(kept))) fallback = answer
+                    // Untimed words stay as a fallback while the other names may have timings.
+                    if (native && timing(answer) >= WELL_TIMED && fallback === answer) return answer
                 }
             }
         }
-        return romanized ?: answers.reduce(::better)
+        return fallback ?: answers.reduce(::better)
     }
 
     /**
@@ -1249,9 +1255,10 @@ internal class LyricsFinder(
         /**
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
-         * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment.
+         * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment;
+         * 14 for untimed words kept before the other title names were checked for timings.
          */
-        const val CACHE_VERSION = 13
+        const val CACHE_VERSION = 14
 
         /**
          * [found] without what's since learned to be left out: a site's ad, from any site, and what
