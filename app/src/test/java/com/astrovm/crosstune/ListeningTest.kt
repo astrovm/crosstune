@@ -2213,9 +2213,8 @@ class ListeningTest {
         assertEquals(1, hearing.listens)
     }
 
-    @Test
-    fun aFingerprintJumpCannotReplaceTheVideosExistingLead() {
-        val hearing = FakeHearing()
+    /** A video first named by its fingerprint, as opening lyrics of what is playing does. */
+    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0) {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val phone = FakePlayback().apply {
@@ -2228,9 +2227,27 @@ class ListeningTest {
         launch()
         composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        hearing.song("Demo", 2.0, matchId = "reference")
+        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, (heardSeconds * 1000).toLong(), SystemClock.elapsedRealtime(), "reference"))
         waitForText("Demo one")
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+    }
+
+    @Test
+    fun aVideoKeepsTheLengthJustHeardWhenThePlayerDoesNotKnowIt() {
+        heardVideo(FakeHearing(), recognizedMs = 52_000)
+        assertEquals(52_000L, controllerModel().uiState.lyricsFor!!.lengthMs)
+    }
+
+    @Test
+    fun aVideoDoesNotStartAtAnImpossibleFingerprintPosition() {
+        heardVideo(FakeHearing(), heardSeconds = 39.0)
+        assertFalse(controllerModel().uiState.following.toString(), controllerModel().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun aFingerprintJumpCannotReplaceTheVideosExistingLead() {
+        val hearing = FakeHearing()
+        heardVideo(hearing)
         val before = controllerModel().uiState.following!!.clock
         // The same reference gives two consistent but false positions, 37 seconds ahead.
         repeat(2) { index ->

@@ -257,6 +257,17 @@ class HeardWhenAskedTest(unittest.TestCase):
     def test_one_song_on_another_model_hears_nothing(self):
         self.assertEqual(self.replays(r.run, self.run_args(model='base-q5_1'), []), (1, 0))
 
+    def test_recorded_fingerprints_are_given_to_the_app_replay(self):
+        with patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score'), \
+                tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            fingerprints = r.OUT / 'fingerprints.json'
+            fingerprints.write_text(json.dumps(dict(initial=dict(at=20000, songMs=10000, receivedAt=20000), events=[])))
+            def replay(*args, **kwargs):
+                self.assertEqual(json.loads(fingerprints.read_text()), json.loads((r.OUT / 'replay.json').read_text()).get('fingerprints'))
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(fingerprints=str(fingerprints)))
+
     def test_a_second_play_asks_too(self):
         with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \

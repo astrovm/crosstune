@@ -30,6 +30,12 @@ behind what it plays, by more or less each time. It forgets what was learnt firs
 A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
+`run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
+open. The JSON has `wordsLength`, `videoLength`, `initial` and `events`: each answer has `at`,
+`receivedAt`, `songMs`, `matchId` and optional `speed`. `at` and `receivedAt` are milliseconds on the
+unadjusted player clock; `songMs` is the position Shazam returned for audio starting at `at`.
+Use `--from` for the player position when the initial answer opened the words. Keep recordings
+and these answers under build/, with the exact lyric sheet in ID.found.json.
 `run --like-phone` replays it as the last `phone` check went, from what it kept: where the app picked
 the song up, how far its clock was behind, how long the phone took to work out each while, the words it
 showed, and whether it heard the sound played itself, with Shizuku, or through the visualizer (`hear --clean`
@@ -348,6 +354,8 @@ def run(args):
     replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
+    if getattr(args, "fingerprints", None):
+        replay["fingerprints"] = json.loads(Path(args.fingerprints).read_text())
     plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
     while True:
         asked.write_text(json.dumps(replay))
@@ -855,6 +863,7 @@ def main():
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+            p.add_argument("--fingerprints", help="JSON recording of the initial recognition and later answers on the player clock")
             p.add_argument("--like-phone", action="store_true", help="as the last `phone` check of it went, held to the lines it lit; sets --from, --behind, --work and --model")
     p = steps.add_parser("set")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")

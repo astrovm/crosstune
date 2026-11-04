@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -87,6 +88,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         MainActivity.lookAheadLyrics = true
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.quietPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
+        MainActivity.hearingFactory = null
         MainActivity.singingFactory = realSinging
         MainActivity.lyricsLanguageFactory = null
     }
@@ -99,6 +101,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val asked = JSONObject(File(dir, "replay.json").readText()).let { it.optJSONArray("songs")?.getJSONObject(index) ?: it }
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
+        val fingerprints = asked.optJSONObject("fingerprints")
         workMs = asked.optLong("work", WORK_MS)
         val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
         // The words as the app really found them, when kept, over those prep was given.
@@ -119,7 +122,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         // Words found without timing, -1 for each line's time, come as such: nothing's heard for them, so their lines stay dark.
         val words = if (lyrics.all { it.first < 0 }) JSONObject().put("plainLyrics", lyrics.joinToString("\n") { it.second })
         else JSONObject().put("syncedLyrics", lyrics.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d] %s".format(ms / 60_000, ms / 1000 % 60, ms % 1000 / 10, text) })
-        val found = JSONArray().put(words.put("trackName", "Demo").put("artistName", "Band").put("duration", lengthMs / 1000)).toString()
+        val wordsLength = fingerprints?.optLong("wordsLength", lengthMs) ?: lengthMs
+        val found = JSONArray().put(words.put("trackName", "Demo").put("artistName", "Band").put("duration", wordsLength / 1000)).toString()
         // Words timed word by word, as the app found them, only come from NetEase.
         val byWord = kept?.let { foundByWord(it, lengthMs) }
         fake.handler = { request ->
@@ -134,12 +138,20 @@ class SyncReplayTest(private val name: String, private val index: Int) {
                 }
             )
         }
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        val intent = if (fingerprints == null) {
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        } else {
+            replayFingerprints(fingerprints, fromMs, lengthMs)
+            Intent(Intent.ACTION_MAIN)
+        }.setClass(app, MainActivity::class.java)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
-        val button = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.onAllNodes(button)[0].performScrollTo().performClick()
+        if (fingerprints != null) composeRule.runOnIdle { model().listen(lyrics = true) }
+        else {
+            val button = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
+            composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onAllNodes(button)[0].performScrollTo().performClick()
+        }
         // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } }
         behind.forEachIndexed { time, behindMs ->
@@ -149,6 +161,26 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, durationMs = lengthMs)
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(AGAIN_MS))
         }
+    }
+
+    /** The phone's recognition answers, including false occurrences, on its continuous player clock. */
+    private var fingerprintStartedAt: Long? = null
+
+    private fun replayFingerprints(recorded: JSONObject, fromMs: Long, lengthMs: Long) {
+        val startedAt = SystemClock.elapsedRealtime()
+        fingerprintStartedAt = startedAt
+        val song = MusicMetadata("Demo", "Band", lengthMs = recorded.optLong("wordsLength", lengthMs))
+        playback.onThePhone = Heard.Song(song.copy(lengthMs = null, recordingId = "video:replay"), null)
+        playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, video = true, durationMs = recorded.optLong("videoLength", lengthMs))
+        val initial = recorded.getJSONObject("initial")
+        val events = recorded.getJSONArray("events")
+        var next = -1
+        MainActivity.hearingFactory = { SongHearing {
+            val event = if (next < 0) initial else events.optJSONObject(next) ?: awaitCancellation()
+            next++
+            delay(maxOf(0L, startedAt + event.getLong("receivedAt") - fromMs - SystemClock.elapsedRealtime()))
+            Heard.Song(song, null, event.getLong("songMs"), startedAt + event.getLong("at") - fromMs, event.optString("matchId").ifEmpty { null }, speed = event.optDouble("speed", 1.0).toFloat())
+        } }
     }
 
     /**
@@ -175,8 +207,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
     private fun play(fromMs: Long, lengthMs: Long, behindMs: Long): JSONObject {
         this.behindMs = behindMs
         heardLog = JSONArray()
-        val startedAt = SystemClock.elapsedRealtime()
-        playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, durationMs = lengthMs)
+        val startedAt = fingerprintStartedAt ?: SystemClock.elapsedRealtime()
+        if (fingerprintStartedAt == null) playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, durationMs = lengthMs)
         composeRule.waitForIdle()
         // Each line, by its text and the time it's shown first after the one before, where the song is then.
         val shown = JSONArray()

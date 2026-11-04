@@ -1015,6 +1015,7 @@ internal class MainViewModel(
     }
 
     private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
+        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "recognized ${heard.offsetMs} at ${heard.startedAtMs} match ${heard.matchId} received ${now()} speed ${heard.speed} length ${heard.metadata.lengthMs}")
         retryListens = false
         showSong(heard.metadata, heard.appleMusicId)
         // Once it's shown, as showing it forgets what was heard for whatever was shown before.
@@ -1842,7 +1843,10 @@ internal class MainViewModel(
     /** [requested] as its words are looked up: as the app playing it has it, when one does. */
     private fun asPlayed(requested: MusicMetadata): MusicMetadata {
         val current = playback?.recording(requested)?.takeIf { sameSong(it, requested) && it.recordingId != null }
-        return current?.let { RecordingKey.asPlayed(requested, it) } ?: requested
+        return current?.let { playing ->
+            val recognizedLength = heardSong?.takeIf { it == requested && now() - heardAtMs <= HEARD_LATELY_MS }?.lengthMs
+            RecordingKey.asPlayed(requested, playing).let { it.copy(lengthMs = it.lengthMs ?: recognizedLength) }
+        } ?: requested
     }
 
     /** The words of songs shown, by recording, while they're being looked up ahead. */
@@ -2107,7 +2111,7 @@ internal class MainViewModel(
      * the one shown was heard playing, as the next song. A song picked to read stays.
      */
     private fun heardAlong(hearing: Heard.Song) {
-        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "fingerprint ${hearing.offsetMs} at ${hearing.startedAtMs} match ${hearing.matchId} app $appFollowing lead $appLeadMs guessed $guessedLeadMs")
+        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "fingerprint ${hearing.offsetMs} at ${hearing.startedAtMs} match ${hearing.matchId} received ${now()} speed ${hearing.speed} length ${hearing.metadata.lengthMs} app ${appFollowing?.clock} video ${appFollowing?.video} duration ${appFollowing?.durationMs} lead $appLeadMs guessed $guessedLeadMs")
         val song = hearing.metadata
         val shown = uiState.lyricsFor ?: return
         if (!sameSong(song, shown) && heardSong?.let { sameSong(it, shown) } != true) return
@@ -2599,8 +2603,8 @@ internal class MainViewModel(
                 if (playing?.let(::needsLead) == true && appLeadMs == null) {
                     appLeadMs = leadStore.load(song)?.also { if (playing.video) leadSavedLines(song, playing.appPackage, it) }
                 }
-                // Once it's being listened for, only an intro heard to agree in several places lines the video up.
-                if (playing?.video == true && appLeadMs == null && !calibrationAttempted && syncPoints.isEmpty()) leadOf(playing, song)?.let { appLeadMs = it }
+                // A first fingerprint suggests an intro through the same checks as later guesses.
+                if (playing?.video == true && appLeadMs == null && !calibrationAttempted && syncPoints.isEmpty() && !songMayNotHaveStarted()) guessLead(playing, song)
                 // Playing the release the words are timed for, it's heard too, once, to put them right on any other.
                 val lines = playing?.let(::needsLead) == true && appLeadMs == null && syncPoints.isEmpty()
                 if (playing != null && playing.clock.playing && (lines || learnsGap(playing)) && !calibrationAttempted && mayCalibrate()) {
