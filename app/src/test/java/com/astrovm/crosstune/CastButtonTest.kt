@@ -58,10 +58,12 @@ class CastButtonTest {
         }
         compose.onNodeWithTag("actual").assertWidthIsEqualTo(64.dp).assertHeightIsEqualTo(64.dp)
         assertArrayEquals(pixels("expected"), pixels("actual"))
-        compose.onNodeWithTag("actual").performClick()
+        // Compare the icons before tapping: a tap starts a ripple on just the real button.
         compose.runOnIdle { to = "Living room" }
         compose.onNodeWithContentDescription("Casting to Living room").assertExists()
         assertArrayEquals(pixels("expected"), pixels("actual"))
+        compose.onNodeWithTag("actual").performClick()
+        compose.runOnIdle { to = null }
         compose.onNodeWithTag("actual").performClick()
         assertEquals(2, taps)
     }
