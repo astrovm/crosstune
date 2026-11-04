@@ -89,6 +89,14 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun linesAsFarFromTheKnownPaceAsATakeIsSungStillGoOnAtTheirOwn() {
+        // Only a pace of 0 lets the lines lie along exactly 0.05 of it to the last bit; any other is off by one.
+        assertEquals(4_000L, LyricsSync.timeOf(80_000, listOf(SyncPoint(0, 0), SyncPoint(40_000, 2_000)), 0.0))
+        // A hair further off, it's lines timed out of place, and they go on at the known pace.
+        assertEquals(2_002L, LyricsSync.timeOf(80_000, listOf(SyncPoint(0, 0), SyncPoint(40_000, 2_002)), 0.0))
+    }
+
+    @Test
     fun aRecordingKnownToPlayFasterGoesOnAtItsPacePastTheLinesPutInTime() {
         // Bizarre Love Triangle's upload plays 3.5% faster than the release its words are timed for.
         val pace = 1 / 1.035
