@@ -299,6 +299,27 @@ class HeardWhenAskedTest(unittest.TestCase):
             with patch.object(r.subprocess, 'run', side_effect=replay):
                 r.run(self.run_args(fingerprints=str(fingerprints)))
 
+    def test_a_replay_held_to_the_phone_takes_each_while_as_long_as_the_phone_did(self):
+        asked = []
+        def replay(*_, **__):
+            asked.append(json.loads((r.OUT / 'replay.json').read_text()))
+            return argparse.Namespace(returncode=0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score', return_value=None), \
+                patch.object(r, 'score_phone', return_value=({}, 0)), patch.object(r, 'compare'), patch.object(r.subprocess, 'run', side_effect=replay):
+            kept = Path(directory) / 'phone' / 'fake'
+            kept.mkdir(parents=True)
+            (kept / 'log.txt').write_text('said 566 at 66 playing true')
+            r.heard_file('fake', r.LENGTHS[0], r.APP_MODEL).write_text('{}')
+            # 20 s heard each time, begun 3.8 s, 27.1 s and 11.3 s after the last one ended.
+            for start in (10000, 33800, 80900, 112200):
+                with open(kept / f'heard-{start}.pcm', 'wb') as sound:
+                    sound.truncate(640000)
+            r.run(self.run_args(id='fake', like_phone=True))
+        self.assertEqual(asked[0]['works'], [3800, 27100, 11300])
+        self.assertEqual(asked[0]['work'], 3800)
+        self.assertEqual(asked[0]['whiles'], [10500, 34300, 81400, 112700])
+
     def test_a_second_play_asks_too(self):
         with patch.object(r, 'hear_asked', return_value=0) as heard, patch.object(r, 'score', return_value=None), \
                 tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \

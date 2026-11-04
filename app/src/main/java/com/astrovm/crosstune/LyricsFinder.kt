@@ -27,6 +27,7 @@ import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
+import java.text.Normalizer
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /** What LRCLIB's Retry-After asks for when it's busy. */
@@ -49,6 +50,94 @@ private val closingFiller = Regex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)"""
 
 /** A note under a heading, not sung: wholly in brackets, "（Some Writer / Another）", or who it's by, "BY SOMEONE". */
 private val headingNote = Regex("""[（(\[].*[）)\]]|by\s+\S.*""", RegexOption.IGNORE_CASE)
+
+/** A bracketed stretch, in any of the brackets lyrics are written with: "（repeat and fade）", "(x2)", "[fade out]", "【2x】". */
+private val bracketed = Regex("""[（(\[【][^（()）\[\]【】]*[）)\]】]""")
+
+/** What a note on how a song is played says besides its direction: "repeat and fade", "fade out", "repeat chorus 2 times". */
+private val noteFiller = setOf("and", "to", "in", "out", "the", "then", "till", "until", "chorus", "verse", "bridge", "intro", "outro", "last", "final", "times")
+
+/** What makes a note a direction to the band: repeating, fading or a count, "x2", "2x", "×4". */
+private val noteDirection = Regex("""repeat(?:s|ed|ing)?|fad(?:e|es|ed|ing)|x\d+|\d+x""")
+
+/** A count alone, "x2" or "2x", which no one sings. */
+private val noteCount = Regex("""x\d+|\d+x""")
+
+/**
+ * Whether what's in a bracket is a note on how the song is played, not sung: only words of such a
+ * note, with a direction among them, and more than one word, or a count alone. "repeat" or "fade"
+ * alone, or with a sung word, "fade away", could be an echo or a backing line, so it stays.
+ */
+private fun isPerformanceNote(inside: String): Boolean {
+    val words = Normalizer.normalize(inside, Normalizer.Form.NFKC).lowercase().replace('×', 'x')
+        .split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
+    val counted = "times" in words && words.any { word -> word.all(Char::isDigit) }
+    val onlyNote = words.all { it in noteFiller || noteDirection.matches(it) || it.all(Char::isDigit) }
+    return onlyNote && (counted || words.any(noteDirection::matches)) && (words.size >= 2 || noteCount.matches(words.first()))
+}
+
+/** Which characters of [text] are performance notes, with the space before each; null when it has none. A note that starts the line leaves a space to trim. */
+private fun noteMask(text: String): BooleanArray? {
+    val notes = bracketed.findAll(text).filter { isPerformanceNote(it.value.substring(1, it.value.length - 1)) }.toList()
+    if (notes.isEmpty()) return null
+    val cut = BooleanArray(text.length)
+    for (note in notes) {
+        var start = note.range.first
+        while (start > 0 && text[start - 1].isWhitespace()) start--
+        for (at in start..note.range.last) cut[at] = true
+    }
+    return cut
+}
+
+private fun String.without(cut: BooleanArray, from: Int = 0) = filterIndexed { at, _ -> !cut[from + at] }
+
+/** [line] without its performance notes; the same when it has none. */
+private fun withoutPerformanceNotes(line: String): String = noteMask(line)?.let { line.without(it).trim() } ?: line
+
+/**
+ * [line] without its performance notes, the words timed one by one cut the same way, each keeping
+ * its own time; null when a note was all there is. A note that ends the line, timed apart from its
+ * words, takes its time off the line's end: a card to practice it would play the silence too.
+ */
+private fun withoutPerformanceNotes(line: LyricLine): LyricLine? {
+    val joined = line.words.joinToString("") { it.text }
+    val cut = noteMask(joined)
+    val cutWords = cut?.let { mask -> cutFrom(line.words, mask) } ?: line.words
+    val words = if (cut == null) line.words else cutWords.withoutBlankWords().trimmedAtTheEnds()
+    // Both read the same where the words make up the line, as timed ones do.
+    val text = if (joined == line.text) words.joinToString("") { it.text } else withoutPerformanceNotes(line.text)
+    if (text.isBlank() && line.text.isNotBlank()) return null
+    return line.copy(text = text, words = words, endMs = if (cut == null) line.endMs else endBeforeNote(line, cutWords))
+}
+
+/** [words], each without the characters [cut] marks, over all of them joined. A word may be left with nothing, or a space. */
+private fun cutFrom(words: List<TimedWord>, cut: BooleanArray): List<TimedWord> {
+    var from = 0
+    return words.map { word -> word.copy(text = word.text.without(cut, from)).also { from += word.text.length } }
+}
+
+/** The words without those left with no more than a space, which goes to the word before it, as timed words keep their spaces. */
+private fun List<TimedWord>.withoutBlankWords(): List<TimedWord> = fold(emptyList()) { kept, word ->
+    when {
+        word.text.isNotBlank() -> kept + word
+        kept.isEmpty() -> kept
+        else -> kept.dropLast(1) + kept.last().copy(text = kept.last().text + word.text)
+    }
+}
+
+private fun List<TimedWord>.trimmedAtTheEnds(): List<TimedWord> =
+    mapIndexed { at, word -> word.copy(text = word.text.let { if (at == 0) it.trimStart() else it }.let { if (at == lastIndex) it.trimEnd() else it }) }
+
+/**
+ * When [line] ends once its notes are cut, [cutWords] being its words so: where the first word of a
+ * note that ends it begins. Where the note was on a word with others, there's no telling, and it ends as it did.
+ */
+private fun endBeforeNote(line: LyricLine, cutWords: List<TimedWord>): Long? {
+    val last = cutWords.indexOfLast { it.text.isNotBlank() }
+    val noteStart = line.words.getOrNull(last + 1)?.timeMs ?: return line.endMs
+    val whole = last >= 0 && cutWords[last].text.trimEnd() == line.words[last].text.trimEnd()
+    return line.endMs?.let { if (whole) minOf(it, noteStart) else it }
+}
 
 /** A year, as after the artist under a heading: "The Band（1972）". */
 private val year = Regex("""(?:19|20)\d\d""")
@@ -553,8 +642,34 @@ internal class LyricsFinder(
         val word = byWord.await() ?: return@coroutineScope Best(found)
         // Another take's words, timed word by word, don't beat this one's, timed a line at a time.
         if (found is Lyrics.Found && fits(found, metadata) && !fits(word, metadata)) return@coroutineScope Best(found)
-        Best(better(word, found))
+        Best(if (found is Lyrics.Found) rushedTimedAs(word, found) else word)
     }
+
+    /**
+     * [word]'s lines with those that go by faster than anyone sings them put back where [other], the
+     * same words timed another way, has them, as far from its other lines. Whoever timed them word by
+     * word fell behind and hurried to catch up, as NetEase's Expresso Love opens, 5 s late; a quick line
+     * that's no later there than the rest was only sung quickly. Its words spread out up to the next line.
+     */
+    private fun rushedTimedAs(word: Lyrics.Found, other: Lyrics.Found): Lyrics.Found {
+        val same = sameLines(word.lines, other.lines)
+        if (same.size < MIN_SAME_LINES || timedApart(word, other)) return word
+        val gap = same.map { (ours, theirs) -> theirs.timeMs - ours.timeMs }.sorted()[same.size / 2]
+        val back = same.filter { (ours, theirs) -> rushed(ours) && ours.timeMs - theirs.timeMs + gap > JUMP_MS }.associate { (ours, theirs) -> ours to theirs.timeMs - gap }
+        val lines = word.lines.mapIndexed { index, line ->
+            val at = back[line]
+            val end = line.endMs
+            if (at == null || end == null) return@mapIndexed line
+            val until = minOf(end, word.lines.getOrNull(index + 1)?.let { back[it] ?: it.timeMs } ?: end)
+            line.copy(timeMs = at, endMs = until, words = line.words.map { it.copy(timeMs = at + (it.timeMs - line.timeMs) * (until - at) / (end - line.timeMs).coerceAtLeast(1)) })
+        }
+        // Put back past the line before, the sheets aren't telling the same story.
+        return if (TimingEvidence.usable(lines)) word.copy(lines = lines) else word
+    }
+
+    /** Whether [line] goes by faster than anyone sings it, by the words it's timed with. */
+    private fun rushed(line: LyricLine): Boolean =
+        line.words.isNotEmpty() && line.endMs != null && line.endMs - line.timeMs < RUSHED_MS_A_WORD * line.words.size
 
     /** These words, kept for a song in capitals to take its names from, as they've been fetched anyway. */
     private suspend fun <T : Lyrics> T.seen(): T = also { if (it is Lyrics.Found) currentCoroutineContext()[Answers]?.copies?.add(it) }
@@ -1270,12 +1385,12 @@ internal class LyricsFinder(
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
          * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment;
-         * 14 for untimed words kept before the other title names were checked for timings.
+         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed.
          */
-        const val CACHE_VERSION = 14
+        const val CACHE_VERSION = 15
 
         /**
-         * [found] without what's since learned to be left out: a site's ad, from any site, and what
+         * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what
          * NetEase's contributors add; a song a site keeps in capitals, in sentence case. Words kept from before get each fix too, with no need to look
          * them up again.
          */
@@ -1288,8 +1403,10 @@ internal class LyricsFinder(
             val commas = netEase && "\\'" in found.words
             fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
             fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
-            val words = found.words.lines().map(::mend).clean { it }.joinToString("\n").trim()
+            val words = found.words.lines().map(::mend).mapNotNull { line -> withoutPerformanceNotes(line).takeUnless { it.isBlank() && line.isNotBlank() } }
+                .clean { it }.joinToString("\n").trim()
             val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
+                .mapNotNull { withoutPerformanceNotes(it) }
                 .clean { it.text }
             val kept = found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
             return if (shouting) restoredCase(inSentenceCase(kept), copies.map { it.words }) else kept
@@ -1308,7 +1425,7 @@ internal class LyricsFinder(
             })
         }
 
-        private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it }
+        private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it || withoutPerformanceNotes(it) != it }
 
         private fun inSentenceCase(found: Lyrics.Found) = found.copy(
             words = found.words.lines().joinToString("\n", transform = ::inSentenceCase),
@@ -1332,6 +1449,9 @@ internal class LyricsFinder(
         /** Lines two copies must have alike to tell how differently they're timed, and how far a gap between them jumps to count. */
         private const val MIN_SAME_LINES = 6
         private const val JUMP_MS = 1_500L
+
+        /** How quick a line's words are, at most, to be said in a hurry; the fastest rap on the songs tried is 165 ms a word. */
+        private const val RUSHED_MS_A_WORD = 200L
 
 
         /** What NetEase writes for a song without words: "pure music, please enjoy". */

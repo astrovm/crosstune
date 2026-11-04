@@ -874,6 +874,20 @@ class SingingTest {
     }
 
     @Test
+    fun aVideoShazamCantLineUpIsHeardSoItsLinesLight() {
+        val shazam = FakeHearing()
+        MainActivity.hearingFactory = { shazam }
+        singing.answer = { sung(SHIFT_MS) }
+        openLyrics()
+        plays(video = true)
+        // As a sped-up upload of a longer release is: Shazam never hears it anywhere a video could be.
+        repeat(6) { shazam.next.trySend(Heard.Nothing) }
+        waitUntil { singing.hears > 0 }
+        waitUntil { model().uiState.following?.timingKnown == true }
+        assertEquals(SHIFT_MS, firstLineMs())
+    }
+
+    @Test
     fun onlyAPhoneWithMemoryToSpareHearsTheSinging() {
         fun withMemory(bytes: Long): SingingHearing? {
             val memory = android.app.ActivityManager.MemoryInfo().apply { totalMem = bytes }
@@ -1218,7 +1232,7 @@ class SingingTest {
         override fun show(preset: String, smooth: Boolean) = false
         override fun hear(samples: ByteArray, count: Int) = Unit
         override fun draw() = Unit
-        override fun darken(shade: Float) = Unit
+        override fun darken(shade: Float, ceiling: Float) = Unit
         override fun finish() = Unit
         override fun close() = Unit
     }
