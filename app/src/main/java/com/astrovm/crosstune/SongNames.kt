@@ -31,6 +31,8 @@ internal object SongNames {
         """\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]|(?<!\d)\s+(?:feat\.?|ft\.?|featuring)\s+[^()\[\]]*?(?=\s*[(\[]|$)""",
         RegexOption.IGNORE_CASE
     )
+    /** What marks a title as a music video's, as K-pop does, which no store has it under. */
+    private val videoMark = Regex("""\s*[(\[]\s*M/V\s*[)\]]|\s+M/V\b""", RegexOption.IGNORE_CASE)
     private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
 
     /**
@@ -108,7 +110,7 @@ internal object SongNames {
         var stripped = title
         // "Song - 2012 Remaster (Mono)" has two, and a title that's only a tag is left as it is.
         while (true) {
-            val unfeatured = stripped.replace(featuring, "")
+            val unfeatured = stripped.replace(featuring, "").replace(videoMark, "")
             val tag = editionTag.find(unfeatured)?.value.orEmpty()
             if (words(tag).any { it in OTHER_RECORDING }) return unfeatured
             val shorter = unfeatured.replace(editionTag, "")
