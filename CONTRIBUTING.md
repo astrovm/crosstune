@@ -13,7 +13,7 @@ You need the Android SDK and JDK 17 or newer; CI builds with JDK 25. When buildi
 ./gradlew :app:ci              # the same checks CI runs
 ```
 
-`scripts/gradle-box/gradle-box.sh` runs any of these in a container instead, with only the checkout, the SDK and the debug key in it. Several checkouts on one machine take turns, and it says how many builds are ahead of yours. Each slot keeps its Gradle home, so a new worktree downloads nothing again. It needs podman.
+`scripts/gradle-box/gradle-box.sh` runs any of these in a container instead, with only the checkout, the SDK and the debug key in it. Several checkouts on one machine take turns, and it says how many builds are ahead of yours. Downloads are kept and shared, so a new worktree or an empty slot doesn't fetch them again. It needs podman.
 
 `:app:ci` runs the Robolectric tests with a 100% line and 88% branch coverage gate, lint, [detekt](https://detekt.dev)'s checks for tangled logic, and the debug and minified release builds. Reports go to `app/build/reports/`. CI runs the tests, lint and builds as parallel jobs, and skips them for pull requests that only change text and tools around the app: README, this file, `AGENTS.md`, `LICENSE`, `docs/`, `fastlane/`, `screenshots/`, `site/`, `report/`, `extension/`, and the site, shots, recording, visuals and build box scripts. The tests of the release, shots, visuals and build box scripts (`test_*.py` next to them) and of the report Worker run either way.
 

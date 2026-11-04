@@ -11,6 +11,15 @@ BOX = Path(__file__).with_name("gradle-box.sh")
 ROOT = Path(__file__).resolve().parents[2]
 FAKE_PODMAN = """#!/bin/sh
 echo "$$ $*" >> "$FAKE_DIR/asked"
+if [ -n "$FAKE_DOWNLOADS" ]; then
+    for arg in "$@"; do
+        case "$arg" in GRADLE_USER_HOME=*)
+            home="${arg#GRADLE_USER_HOME=}"
+            mkdir -p "$home/caches/modules-2/files-2.1" "$home/wrapper/dists"
+            touch "$home/caches/modules-2/files-2.1/some.jar" "$home/caches/modules-2/modules-2.lock" "$home/caches/modules-2/gc.properties" "$home/wrapper/dists/gradle.zip"
+        esac
+    done
+fi
 touch "$FAKE_DIR/started.$FAKE_RUN"
 while [ -e "$FAKE_DIR/hold.$FAKE_RUN" ]; do sleep 0.05; done
 exit "${FAKE_EXIT:-0}"
@@ -155,6 +164,47 @@ class GradleBoxTest(unittest.TestCase):
         self.assertEqual(box.returncode, 0, output)
         self.assertNotIn("ahead of you", output)
         self.assertEqual(list(queue.iterdir()), [])
+
+    def seed(self):
+        return self.dir / "state" / "seed"
+
+    def test_the_first_build_keeps_its_downloads_for_every_other_slot(self):
+        box = self.start("a", "help", FAKE_DOWNLOADS="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertTrue((self.seed() / "modules-2" / "files-2.1" / "some.jar").exists())
+        self.assertTrue((self.seed() / "wrapper" / "dists" / "gradle.zip").exists())
+        # Gradle refuses a read-only cache with these in it.
+        self.assertFalse((self.seed() / "modules-2" / "modules-2.lock").exists())
+        self.assertFalse((self.seed() / "modules-2" / "gc.properties").exists())
+        self.assertEqual([path.name for path in (self.dir / "state").glob("seed.*")], [])
+
+    def test_a_failed_build_keeps_nothing(self):
+        box = self.start("a", "help", FAKE_DOWNLOADS="1", FAKE_EXIT="1")
+        box.communicate(timeout=20)
+        self.assertFalse(self.seed().exists())
+
+    def test_a_new_slot_reads_the_kept_downloads_and_downloads_nothing_again(self):
+        (self.seed() / "modules-2").mkdir(parents=True)
+        (self.seed() / "wrapper").mkdir()
+        (self.seed() / "wrapper" / "gradle.zip").touch()
+        box = self.start("a", "help")
+        box.communicate(timeout=20)
+        command = self.asked()[0]
+        self.assertIn(f"-v {self.seed()}:{self.seed()}:ro", command)
+        self.assertIn(f"GRADLE_RO_DEP_CACHE={self.seed()}", command)
+        self.assertTrue((self.dir / "state" / "gradle-1" / "wrapper" / "gradle.zip").exists())
+
+    def test_kept_downloads_stay_as_they_are_once_there(self):
+        (self.seed() / "modules-2").mkdir(parents=True)
+        box = self.start("a", "help", FAKE_DOWNLOADS="1")
+        box.communicate(timeout=20)
+        self.assertEqual(list((self.seed() / "modules-2").iterdir()), [])
+
+    def test_without_kept_downloads_there_is_nothing_to_read(self):
+        box = self.start("a", "help")
+        box.communicate(timeout=20)
+        self.assertNotIn("GRADLE_RO_DEP_CACHE", self.asked()[0])
 
     def test_stopping_it_stops_the_build(self):
         self.hold("first")
