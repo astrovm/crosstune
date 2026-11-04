@@ -154,7 +154,8 @@ def windows(song, wav, length, model=APP_MODEL, clean=False):
         env = {key: value for key, value in os.environ.items() if key != "HEARD_GPU"}
         try:
             # A model that can't run hears nothing, so it fails here rather than passing for silence.
-            text = subprocess.run([str(binaries[gpu]), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True,
+            # The GPU needs little of the CPU, but can't go on without it, so only the CPU's hearers give way to everything else.
+            text = subprocess.run(([] if gpu else ["nice", "-n", "10"]) + [str(binaries[gpu]), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True,
                                   env={**env, "HEARD_THREADS": "1", **({"HEARD_GPU": "1"} if gpu else {})}).stdout.decode("utf-8", "replace")
         finally:
             free.put(gpu)

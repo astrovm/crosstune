@@ -203,6 +203,18 @@ class HeardOnTheGpuTest(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             self.assertEqual(r.hearers(), [False] * r.HEARD_AT_ONCE)
 
+    def test_the_cpu_gives_way_and_the_gpu_does_not(self):
+        heard = []
+        def answer(command, **kwargs):
+            heard.append(command[:3])
+            return argparse.Namespace(stdout=b'0\tword\n')
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'hearers', return_value=[False]), patch.object(r, 'as_the_phone_hears', return_value=Sound()), \
+                patch.object(r, 'heard_binary', side_effect=lambda gpu: Path('gpu' if gpu else 'cpu')), patch.object(r, 'model_file', return_value=Path('tiny')), \
+                patch.object(r, 'sung_language', return_value='en'), patch.object(r.subprocess, 'run', side_effect=answer):
+            r.windows('song', Path('song.wav'), 8000)
+        self.assertEqual(heard, [['nice', '-n', '10']])
+
     def test_only_a_hearer_on_the_gpu_is_told_to_use_it(self):
         heard = []
         def answer(command, **kwargs):
