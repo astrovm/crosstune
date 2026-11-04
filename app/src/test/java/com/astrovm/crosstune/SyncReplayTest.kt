@@ -113,7 +113,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear()
             .putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
             .putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
-        // Words found without timing, -1 for each line's time, come as such: the singing heard places them.
+        // Words found without timing, -1 for each line's time, come as such: nothing's heard for them, so their lines stay dark.
         val words = if (lyrics.all { it.first < 0 }) JSONObject().put("plainLyrics", lyrics.joinToString("\n") { it.second })
         else JSONObject().put("syncedLyrics", lyrics.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d] %s".format(ms / 60_000, ms / 1000 % 60, ms % 1000 / 10, text) })
         val found = JSONArray().put(words.put("trackName", "Demo").put("artistName", "Band").put("duration", lengthMs / 1000)).toString()
@@ -124,7 +124,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val button = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(button)[0].performScrollTo().performClick()
-        // The lookup over, not lines found: words without timing have none until the singing places them, and words timed past the recording's end aren't taken.
+        // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } }
         behind.forEachIndexed { time, behindMs ->
             val played = play(fromMs, lengthMs, behindMs)

@@ -125,6 +125,62 @@ The same 23 songs, starting from a stretch every 20 s, then hearing what each re
 Settled, it's as close to every second as two runs of every second are to each other (868 lit in both, worst 0.1 s),
 from 7.5% of the stretches. So prep hears every 20 s, and replays hear the rest. Each round was 73 to 101 s under load.
 
+## The whole set
+
+The 41 songs prepped, each from its start, with truth from two GPU hearings and what's heard asked for by the replay (899 of 12,054 stretches on the 3 songs checked). Run with `all`, on whisper.cpp a46fadb3.
+
+| Song | Lines | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---:|---:|---:|---:|---:|---:|
+| Expresso Love | 36 | 13 | 21 | 4 | 9 | +2.1 |
+| Otro Como Tú | 38 | 16 | 24 | 0 | 14 | -1.1 |
+| Ciclos Banais | 41 | 0 | 0 | 41 | 0 | - |
+| Lose Yourself | 74 | 9 | 40 | 0 | 34 | -1.1 |
+| Every Little Thing She Does Is Magic | 26 | 22 | 24 | 0 | 0 | +11.0 |
+| 99 Luftballons | 24 | 10 | 15 | 0 | 9 | -1.1 |
+| Bohemian Rhapsody | 46 | 24 | 35 | 0 | 9 | -1.6 |
+| Hotel California | 54 | 12 | 29 | 0 | 14 | +4.0 |
+| Have In Mind (Kalimba Mix) | 17 | 0 | 0 | 17 | 0 | - |
+| Despacito | 55 | 9 | 25 | 0 | 29 | +6.2 |
+| Dynamite | 23 | 11 | 19 | 0 | 4 | -1.0 |
+| Into the Groove | 63 | 15 | 39 | 0 | 0 | +1.5 |
+| Take On Me | 16 | 5 | 14 | 0 | 2 | -1.3 |
+| Blinding Lights | 26 | 14 | 23 | 0 | 3 | -0.6 |
+| カシミヤのほほえみ | 0 | 0 | 0 | 0 | 0 | - |
+| LhLmgg_u29k | 21 | 6 | 9 | 0 | 10 | -1.1 |
+| Tell It to My Heart | 38 | 8 | 19 | 0 | 18 | -2.2 |
+| Blue Monday | 22 | 2 | 3 | 0 | 19 | -2.3 |
+| Francesita | 4 | 1 | 1 | 2 | 1 | -2.8 |
+| 二人だけのセレモニー | 2 | 0 | 0 | 2 | 0 | - |
+| Plastic Love | 0 | 0 | 0 | 0 | 0 | - |
+| Easy Love | 0 | 0 | 0 | 0 | 0 | - |
+| Águas de Março | 47 | 12 | 23 | 0 | 24 | -1.2 |
+| Don't Go | 19 | 2 | 14 | 0 | 4 | +10.3 |
+| XB7AmIsxzfI | 17 | 10 | 16 | 0 | 1 | -0.6 |
+| Time to Pretend | 25 | 3 | 10 | 0 | 14 | -1.3 |
+| Dancing Queen | 26 | 13 | 24 | 0 | 0 | +1.3 |
+| Bad Guy | 33 | 4 | 30 | 0 | 3 | -0.7 |
+| Stay With Me | 3 | 0 | 1 | 0 | 2 | -0.6 |
+| Bizarre Love Triangle | 24 | 6 | 10 | 2 | 5 | -24.1 |
+| Nel blu dipinto di blu | 12 | 0 | 0 | 0 | 12 | -1.2 |
+| Radio Ga Ga | 31 | 20 | 22 | 0 | 6 | -1.6 |
+| Nada Más Que Hablar (En Vivo) | 17 | 0 | 0 | 17 | 0 | - |
+| Smells Like Teen Spirit | 9 | 0 | 0 | 0 | 8 | +2.3 |
+| Hips Don't Lie | 59 | 13 | 25 | 4 | 29 | -48.8 |
+| La Vie en rose | 28 | 11 | 20 | 0 | 3 | +1.8 |
+| Gee | 11 | 0 | 0 | 0 | 11 | -2.4 |
+| De Música Ligera | 13 | 6 | 6 | 0 | 0 | +6.7 |
+| Flaca | 42 | 10 | 17 | 0 | 24 | +2.8 |
+| Shape of You | 42 | 9 | 29 | 0 | 13 | -0.8 |
+| It's My Life | 23 | 2 | 3 | 2 | 16 | +5.3 |
+| **All** | **1107** | **298** | **590** | **91** | **350** | |
+
+Scored: 1107 of 1799 lines with words.
+
+Two things make that number kinder than it looks:
+
+1. The 5 Japanese songs score 5 lines between them, and Gee 11, as the matcher only reads Latin letters (below).
+2. Ciclos Banais, Have In Mind and Nada Más Que Hablar found words with no times at all, and the app only hears timed words (`hearSinging`, which needs lines), so all their lines are dark: 75 of the 91 dark. That's what the app does today, not a fault of the replay.
+
 ## Limits of the timing table
 
 Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded.
