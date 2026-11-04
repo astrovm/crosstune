@@ -45,8 +45,8 @@ class MilkdropTest {
         override fun draw() {
             calls += "draw"
         }
-        override fun darken(shade: Float) {
-            calls += "darken $shade"
+        override fun darken(shade: Float, ceiling: Float) {
+            calls += "darken $shade $ceiling"
         }
         override fun finish() = Unit
         override fun close() {
@@ -110,7 +110,31 @@ class MilkdropTest {
         renderer.shade = 0.6f
         clock += 40
         renderer.frame()
-        assertEquals(listOf("draw", "darken 0.6"), milkdrop.calls.takeLast(2))
+        assertEquals(listOf("draw", "darken 0.6 1.0"), milkdrop.calls.takeLast(2))
+        renderer.ceiling = 0.2f
+        clock += 40
+        renderer.frame()
+        assertEquals(listOf("draw", "darken 0.6 0.2"), milkdrop.calls.takeLast(2))
+    }
+
+    @Test
+    fun whatTheScreenAsksOfTheVisualsIsWhatTheyDraw() {
+        val milkdrop = FakeMilkdrop()
+        val renderer = renderer(milkdrop)
+        renderer.created()
+        renderer.follow(VisualsPlay(shade = 0.5f, ceiling = 0.3f))
+        renderer.frame()
+        assertEquals(listOf("draw", "darken 0.5 0.3"), milkdrop.calls.takeLast(2))
+    }
+
+    @Test
+    fun aCeilingAloneStillHoldsTheBrightestDown() {
+        val milkdrop = FakeMilkdrop()
+        val renderer = renderer(milkdrop)
+        renderer.created()
+        renderer.ceiling = 0.2f
+        renderer.frame()
+        assertEquals(listOf("draw", "darken 0.0 0.2"), milkdrop.calls.takeLast(2))
     }
 
     @Test
@@ -424,7 +448,7 @@ class MilkdropTest {
         override fun draw() {
             clock += drawMs.getValue(showing)
         }
-        override fun darken(shade: Float) = Unit
+        override fun darken(shade: Float, ceiling: Float) = Unit
         override fun finish() {
             clock += finishMs[showing] ?: 0
         }
@@ -477,7 +501,7 @@ class MilkdropTest {
         override fun draw() {
             clock += ms[renderer.size]
         }
-        override fun darken(shade: Float) = Unit
+        override fun darken(shade: Float, ceiling: Float) = Unit
         override fun finish() = Unit
         override fun close() = Unit
     }

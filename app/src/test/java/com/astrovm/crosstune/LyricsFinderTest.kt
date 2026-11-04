@@ -740,6 +740,88 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aNoteOnHowASongIsPlayedIsLeftOutOfItsWordsButSungWordsInBracketsStay() {
+        val song = MusicMetadata("Message in a Bottle", "The Police")
+        fun cleaned(vararg lines: String, source: String = LyricsFinder.NETEASE) =
+            LyricsFinder.cleaned(Lyrics.Found(lines.joinToString("\n"), source = source), song).words
+        // In either kind of bracket, with or without a space, after the words or on a line of its own.
+        assertEquals("Sending out an sos\nA hundred", cleaned("Sending out an sos（repeat and fade）", "A hundred"))
+        assertEquals("Sending out an sos\nA hundred", cleaned("Sending out an sos (repeat and fade)", "A hundred"))
+        assertEquals("Sending out an sos\nA hundred", cleaned("Sending out an sos", "（Repeat and fade）", "A hundred"))
+        assertEquals("Sending out an sos\n\nA hundred", cleaned("Sending out an sos", "(x2)", "", "A hundred"))
+        // What other notes look like, from any site.
+        for (note in listOf("(x2)", "(X2)", "(2x)", "（×4）", "(ｘ２)", "(Fade out)", "(fade-out)", "(Repeat to fade)", "(repeat chorus)", "(Repeat 2 times)", "(2 times)", "(Chorus x2)", "[Repeat and fade]", "【Fade out】")) {
+            assertEquals("Sos\nA hundred", cleaned("Sos $note", "A hundred", source = "lrclib"))
+        }
+        // At the start, or between words, with the space it was set off by.
+        assertEquals("Sending out an sos", cleaned("(x2) Sending out an sos"))
+        assertEquals("Sending out an sos", cleaned("Sending (fade out) out an sos"))
+        assertEquals("Sending out an sos", cleaned("Sending out (x2) (fade out) an sos"))
+        // Sung words in brackets, and words a note could be but a singer says too.
+        val sung = listOf(
+            "(Every breath you take)", "I love you (I love you)", "Stayin' alive (ah, ah, ah, ah)", "Roar (repeat)", "Love me twice (twice)",
+            "(repeat, repeat)", "(Repeat after me)", "Fade (fade away)", "(Again!)", "Time (2)", "Take it (out)", "Wait (in the dark)", "Roar (repeat!)", "Roar (...fade)", "(x)", "(fade)", "(fades)", "(times)", "()",
+            "Sos (repeat and fade", "Sos repeat and fade)", "Sos repeat and fade"
+        )
+        assertEquals(sung.joinToString("\n"), cleaned(*sung.toTypedArray()))
+        assertEquals(sung.joinToString("\n"), cleaned(*sung.toTypedArray(), source = "lrclib"))
+    }
+
+    @Test
+    fun aNoteOnHowASongIsPlayedIsLeftOutOfTimedLinesAndWordsTimedOneByOneWithTheirTimes() {
+        val song = MusicMetadata("Message in a Bottle", "The Police")
+        fun word(ms: Long, text: String) = TimedWord(ms, text)
+        val lines = listOf(
+            LyricLine(1_000, "Just a castaway"),
+            // The note apart from the words before it, and on a word with them.
+            LyricLine(
+                2_000, "Sending out an sos（repeat and fade）",
+                listOf(word(2_000, "Sending "), word(2_300, "out "), word(2_600, "an "), word(2_900, "sos（repeat "), word(3_000, "and "), word(3_100, "fade）")), endMs = 3_500
+            ),
+            LyricLine(4_000, "Sending out an sos (x2)", listOf(word(4_000, "Sending "), word(4_300, "out "), word(4_600, "an "), word(4_900, "sos "), word(5_000, "(x2)")), endMs = 5_500),
+            // A note first, then the words; a note that is all there is; and a pause, which stays.
+            LyricLine(6_000, "(x2) Hello", listOf(word(6_000, "(x2) "), word(6_100, "Hello")), endMs = 6_900),
+            LyricLine(7_000, "(fade out)", listOf(word(7_000, "(fade "), word(7_100, "out)"))),
+            LyricLine(8_000, "（fade out）"),
+            // Two notes before the words leave no space in front of them; a note after the first word only.
+            LyricLine(10_000, "(x2) (fade out) Again", listOf(word(10_000, "(x2) "), word(10_100, "(fade "), word(10_200, "out) "), word(10_300, "Again"))),
+            LyricLine(11_000, "Hello (x2)", listOf(word(11_000, "Hello "), word(11_100, "(x2)")), endMs = 11_500),
+            // Lines whose text isn't their words joined are cut by their text.
+            LyricLine(12_000, "Sos, again (x2)", listOf(word(12_000, "Sos,"), word(12_100, " (x2)"))),
+            LyricLine(13_000, "Hello there", listOf(word(13_000, "Hello"), word(13_100, "there"))),
+            // A note between words leaves its space with the word before.
+            LyricLine(13_500, "Hello (x2) there", listOf(word(13_500, "Hello "), word(13_600, "(x2) "), word(13_700, "there"))),
+            // A note first in the same word as the words after it.
+            LyricLine(13_800, "(x2) Hello there", listOf(word(13_800, "(x2) Hello "), word(13_900, "there"))),
+            LyricLine(14_000, ""),
+            LyricLine(20_000, "I love you (I love you)", listOf(word(20_000, "I "), word(20_100, "love "), word(20_200, "you "), word(20_300, "(I "), word(20_400, "love "), word(20_500, "you)")))
+        )
+        val found = LyricsFinder.cleaned(Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = LyricsFinder.NETEASE), song)
+        assertEquals(listOf("Just a castaway", "Sending out an sos", "Sending out an sos", "Hello", "Again", "Hello", "Sos, again", "Hello there", "Hello there", "Hello there", "", "I love you (I love you)"), found.lines.map { it.text })
+        assertEquals(listOf(1_000L, 2_000L, 4_000L, 6_000L, 10_000L, 11_000L, 12_000L, 13_000L, 13_500L, 13_800L, 14_000L, 20_000L), found.lines.map { it.timeMs })
+        assertEquals("Just a castaway\nSending out an sos\nSending out an sos\nHello\nAgain\nHello\nSos, again\nHello there\nHello there\nHello there\n\nI love you (I love you)", found.words)
+        assertEquals(listOf("Again"), found.lines[4].words.map { it.text })
+        assertEquals(11_100L, found.lines[5].endMs)
+        assertEquals(listOf("Hello"), found.lines[5].words.map { it.text })
+        assertEquals(listOf("Sos,"), found.lines[6].words.map { it.text })
+        assertEquals(listOf("Hello", "there"), found.lines[7].words.map { it.text })
+        assertEquals(listOf("Hello ", "there"), found.lines[8].words.map { it.text })
+        assertEquals(listOf("Hello ", "there"), found.lines[9].words.map { it.text })
+        // The words keep their times and make up the line, as before.
+        assertEquals(listOf("Sending ", "out ", "an ", "sos"), found.lines[1].words.map { it.text })
+        assertEquals(listOf(2_000L, 2_300L, 2_600L, 2_900L), found.lines[1].words.map { it.timeMs })
+        assertEquals(listOf("Sending ", "out ", "an ", "sos"), found.lines[2].words.map { it.text })
+        // The line ends when its words do, where the note was timed apart from them; not guessed where it wasn't.
+        assertEquals(listOf(3_500L, 5_000L, 6_900L), found.lines.slice(1..3).map { it.endMs })
+        assertEquals(listOf("Hello"), found.lines[3].words.map { it.text })
+        assertEquals(listOf(6_100L), found.lines[3].words.map { it.timeMs })
+        for (line in found.lines.filter { it.words.isNotEmpty() && it.text.startsWith("Sos,").not() && it.text != "Hello there" }) assertEquals(line.text, line.words.joinToString("") { it.text })
+        assertEquals(6, found.lines[11].words.size)
+        // A different site's lines are cleaned the same.
+        assertEquals("Hello", LyricsFinder.cleaned(Lyrics.Found("(x2) Hello", listOf(LyricLine(0, "(x2) Hello")), source = "lrclib"), song).lines.single().text)
+    }
+
+    @Test
     fun brokenTextIsMendedWhereItCanBe() {
         fun cleaned(words: String, source: String = LyricsFinder.NETEASE) = LyricsFinder.cleaned(Lyrics.Found(words, source = source), hatsukoi).words
         // An apostrophe stored escaped, and a lost character NetEase writes as 锟斤拷.
@@ -2036,6 +2118,81 @@ class LyricsFinderTest {
         // Six seconds later all through, as for a take with a longer intro, NetEase's are this take's.
         fake.handler = netEase(lrclib.map { (ms, text) -> ms + 6_000 to text })
         assertEquals(lrclib.map { (ms, text) -> LyricLine(ms + 6_000, text) }, (found(playing) as Lyrics.Found).lines)
+    }
+
+    /** LRCLIB with [lrclib], timed a line at a time, and NetEase with [netEase] word by word: when each line starts, and how long each of its words takes. */
+    private fun rushedSheets(lrclib: List<Pair<Long, String>>, netEase: List<Triple<Long, Long, String>>) {
+        val sheet = lrclib.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
+        val byWord = netEase.joinToString("\n") { (start, wordMs, text) ->
+            val words = text.split(' ')
+            "[$start,${words.size * wordMs}]" + words.mapIndexed { at, word -> "(${start + at * wordMs},$wordMs,0)$word${if (at < words.lastIndex) " " else ""}" }.joinToString("")
+        }
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[${lasting(answer("Song", "Band", "", synced = sheet), 260.0)}]")
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":1,"name":"Song","artists":[{"name":"Band"}],"duration":260000}]}}""")
+                url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    private val rushedSong = MusicMetadata("Song", "Band", lengthMs = 260_000)
+
+    private fun evenSheet(count: Int = sungWords.size) = sungWords.take(count).mapIndexed { line, text -> 10_000L + line * 4_000L to text }
+
+    /** The words each as [evenSheet] has them, 200 ms later, unhurried, except as [rushed] says: a line's index, its start, and how long each of its words takes. */
+    private fun netEaseSheet(count: Int = sungWords.size, shiftMs: Long = 200, vararg rushed: Triple<Int, Long, Long>) = sungWords.take(count).mapIndexed { line, text ->
+        rushed.firstOrNull { it.first == line }?.let { Triple(it.second, it.third, text) } ?: Triple(10_000L + line * 4_000L + shiftMs, 400L, text)
+    }
+
+    @Test
+    fun linesGoneByFasterThanAnyoneSingsStartWhereAnotherSheetHasThem() {
+        // Seven words a second and more: timed late, in a hurry to catch up with the next line, as NetEase has Expresso Love.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 15_000L, 160L), Triple(1, 15_900L, 100L))))
+        val lines = (found(rushedSong) as Lyrics.Found).lines
+        assertEquals(sungWords.indices.map { 10_200L + it * 4_000L }, lines.map { it.timeMs })
+        // Their words spread out over the time they now have, up to the next line; the rest as they were.
+        assertEquals(listOf(10_200L, 11_000L, 11_800L, 12_600L, 13_400L), lines[0].words.map { it.timeMs })
+        assertEquals(14_200L, lines[0].endMs)
+        assertEquals(listOf(14_200L, 14_640L, 15_080L, 15_520L, 15_960L), lines[1].words.map { it.timeMs })
+        assertEquals(16_400L, lines[1].endMs)
+        assertEquals(listOf(18_200L, 18_600L, 19_000L, 19_400L, 19_800L), lines[2].words.map { it.timeMs })
+    }
+
+    @Test
+    fun anotherTakesSheetPutsRushedLinesBackBySoMuchLess() {
+        // All six seconds later: the take is another, and the rushed line still comes back, as far from the rest as that sheet has it.
+        rushedSheets(evenSheet(), netEaseSheet(shiftMs = 6_000, rushed = arrayOf(Triple(0, 20_000L, 160L))))
+        assertEquals(sungWords.indices.map { 16_000L + it * 4_000L }, (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs })
+    }
+
+    @Test
+    fun linesThatOnlySeemRushedStayAsTimed() {
+        fun times() = (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs }
+        val others = sungWords.indices.drop(1).map { 10_200L + it * 4_000L }
+        // Rushed, but where the other sheet has them, near enough: Into the Groove opens with one sung on time.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 11_700L, 160L))))
+        assertEquals(listOf(11_700L) + others, times())
+        // Off, but unhurried.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 13_000L, 400L))))
+        assertEquals(listOf(13_000L) + others, times())
+        // Rushed and earlier than the other sheet has it: it isn't catching up with anything.
+        rushedSheets(evenSheet().map { (ms, text) -> if (ms == 10_000L) 13_000L to text else ms to text }, netEaseSheet(rushed = arrayOf(Triple(0, 10_200L, 160L))))
+        assertEquals(listOf(10_200L) + others, times())
+    }
+
+    @Test
+    fun rushedLinesStayWithoutASheetToGoBy() {
+        fun times() = (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs }
+        // Five lines in common aren't enough to tell where the rest are.
+        rushedSheets(evenSheet(5), netEaseSheet(5, rushed = arrayOf(Triple(0, 13_000L, 160L))))
+        assertEquals(listOf(13_000L) + (1..4).map { 10_200L + it * 4_000L }, times())
+        // Nor is a sheet timed all over the place.
+        val jumbled = listOf(0L, 6_500L, 200L, 7_000L, 600L, 6_500L, 100L, 8_000L, 300L)
+        rushedSheets(evenSheet(), sungWords.indices.map { Triple(if (it == 0) 13_000L else 10_000L + it * 4_000L + jumbled[it], if (it == 0) 160L else 400L, sungWords[it]) })
+        assertEquals(13_000L, times().first())
     }
 
     /** LRCLIB with [lrclib], timed for a recording 6 seconds shorter than [anotherTake]'s, and NetEase with [netEase], as long as it. */

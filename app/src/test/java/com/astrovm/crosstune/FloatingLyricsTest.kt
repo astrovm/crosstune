@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.text.TextLayoutResult
@@ -101,6 +102,18 @@ class FloatingLyricsTest {
     fun aBandDarkEnoughNeedsNoOutlineOnTheWordsAndVisualsFloatBehindOthers() {
         show(UiState(lyricsFor = song, lyricLines = lines, following = at(1_500), floating = FloatingOptions(background = 0.8f)))
         compose.onNodeWithText("Second").assertExists()
+    }
+
+    @Test
+    fun visualsBehindFloatingWordsKeepTheirBrightestDownToo() {
+        var drawn = VisualsPlay()
+        compose.setContent {
+            CompositionLocalProvider(LocalVisuals provides { play, _ -> drawn = play }) {
+                CrosstuneTheme { FloatingLyrics(UiState(lyricsFor = song, lyricLines = lines, following = at(1_500), floating = FloatingOptions(visuals = true)), Modifier) }
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(VISUALS_CEILING, drawn.ceiling, 0f)
     }
 
     private val night = LineReading(listOf(Ruby("夜", "よる")), "よる", "yoru")
