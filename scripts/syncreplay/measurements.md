@@ -214,12 +214,6 @@ Truth is an estimated reference, not a human audit of every lyric. Unmatched lin
 table prints that coverage explicitly. Issue #662's target is every line within 0.3 s, none dark. Passing scores on
 matched lines alone cannot establish that target for all sung lines. No app timing behavior is changed in this PR.
 
-Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded.
-In particular, the existing truth matcher strips non-Latin characters; Japanese and Korean songs
-can therefore have very little reference coverage. The overall table prints that coverage explicitly.
-Issue #662's target is every line within 0.3 s, none dark. Passing scores on matched lines alone
-cannot establish that target for all sung lines. No app timing behavior is changed in this PR.
-
 ## PR #674: the pace and the remaining line errors
 
 Measured on 2026-11-04, on b0bbbe44, with the cached recordings and hearing,
