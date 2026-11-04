@@ -1708,10 +1708,8 @@ internal class MainViewModel(
 
     /** A song opened in Qobuz's app by its [exact] number at [link] is watched from before it's opened, so what played until then is known. */
     private fun watchNumber(song: MusicMetadata, destination: Destination, link: String, exact: Boolean) {
-        val service = (destination as? Destination.Service)?.service
-        if (exact && song.type == ItemType.TRACK && service == MusicService.QOBUZ && service in uiState.installed) {
-            qobuzNumbers?.opened(song, destination.packageName, link)
-        }
+        val app = (destination as? Destination.Service)?.takeIf { it.service == MusicService.QOBUZ && it.service in uiState.installed } ?: return
+        if (exact && song.type == ItemType.TRACK) qobuzNumbers?.opened(song, app.packageName, link)
     }
 
     /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
