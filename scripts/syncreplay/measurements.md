@@ -181,6 +181,16 @@ Two things make that number kinder than it looks:
 1. The 5 Japanese songs score 5 lines between them, and Gee 11, as the matcher only reads Latin letters (below).
 2. Ciclos Banais, Have In Mind and Nada Más Que Hablar found words with no times at all, and the app only hears timed words (`hearSinging`, which needs lines), so all their lines are dark: 75 of the 91 dark. That's what the app does today, not a fault of the replay.
 
+
+### The words the app really shows
+
+That table replays the words given to prep. `set` now also keeps the words the app finds (`ID.found.json`), and a replay plays those, as the phone does. Each line is held to its truth by its words, so fewer lines are scored where another sheet breaks them differently. No app change between these, same 41 songs, whisper.cpp a46fadb3, with the truth PR #708 reads:
+
+| Words replayed | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|---:|
+| As given to prep | 1114 | 296 | 590 | 92 | 355 |
+| As the app finds them | 1083 | 319 | 638 | 90 | 295 |
+
 ## Limits of the timing table
 
 Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded.
