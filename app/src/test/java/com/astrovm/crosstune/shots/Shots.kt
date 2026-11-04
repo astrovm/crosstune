@@ -30,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -307,7 +308,7 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
         composeRule.setContent {
             CrosstuneTheme(darkTheme = darkTheme, palette = Palette.VIOLET) {
                 CompositionLocalProvider(
-                    LocalVisuals provides { play, modifier -> VisualFrame(play.shade, modifier) },
+                    LocalVisuals provides { play, modifier -> VisualFrame(play.shade, play.ceiling, modifier) },
                     LocalResources provides released(activity.resources)
                 ) {
                     Box(Modifier.fillMaxSize()) {
@@ -351,9 +352,9 @@ abstract class Shots(private val lang: String, private val darkTheme: Boolean = 
     }
 
     @Composable
-    private fun VisualFrame(shade: Float, modifier: Modifier) {
+    private fun VisualFrame(shade: Float, ceiling: Float, modifier: Modifier) {
         // Darkened as the visuals darken themselves.
-        visualFrame?.let { Image(it, null, modifier.drawWithContent { drawContent(); drawRect(Color.Black.copy(alpha = shade)) }, contentScale = ContentScale.Crop) }
+        visualFrame?.let { Image(it, null, modifier.drawWithContent { drawContent(); drawRect(Color.Black.copy(alpha = shade)); drawRect(Color(ceiling, ceiling, ceiling), blendMode = BlendMode.Darken) }, contentScale = ContentScale.Crop) }
     }
 
     private fun show(state: UiState) = show { state }
