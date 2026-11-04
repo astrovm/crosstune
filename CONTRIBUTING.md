@@ -118,6 +118,13 @@ python3 scripts/milkdrop-render/render.py song.mp3 visuals.mp4 --start 60 --seco
 
 Run it without `--preset` to list the presets. It builds projectM from `third_party/projectm` into `build/milkdrop-render/` the first time, with a clock that moves one frame per frame, so slow renders still keep time with the song. It needs ffmpeg, CMake, Ninja, and the EGL and OpenGL headers.
 
+[`scripts/contrast/contrast.py`](scripts/contrast/contrast.py) measures how readable the lyrics are over the visuals, from real screenshots on a phone, for each kind of text. It needs NumPy, SciPy and Pillow; the top of the script says what the phone needs:
+
+```bash
+python3 scripts/contrast/contrast.py shots build/contrast/after 0 10 51 98 14 7
+python3 scripts/contrast/contrast.py report build/contrast/after
+```
+
 Added or removed a preset? [`textures.py`](scripts/milkdrop-render/textures.py) copies the images the presets draw with from a checkout of the texture pack, and names those it lacks. Then [`thumbs.py`](scripts/milkdrop-render/thumbs.py) redraws the stills **Settings** → **Visuals** shows for them, into `app/src/main/assets/milkdrop-thumbs/`. Also list each new one under its kind in [`milkdrop-kinds.txt`](app/src/main/assets/milkdrop-kinds.txt): the folder it's in in projectM's Cream of the Crop pack, or `classics`.
 
 ```bash
