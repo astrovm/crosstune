@@ -89,8 +89,15 @@ LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps")
 MIN_NAME = 8
 
 
-def norm(word):
-    return re.sub(r"[^a-z0-9']", "", unicodedata.normalize("NFKD", word.lower().replace("’", "'")))
+# Written without spaces, so what's heard can split anywhere: each letter is matched by itself.
+UNSPACED = "\u3040-\u30ff\u3400-\u9fff\uac00-\ud7a3"
+
+
+def pieces(word):
+    """What's matched of a word, in any writing: Latin letters without accents or punctuation, as one piece."""
+    word = unicodedata.normalize("NFKC", word.lower().replace("’", "'"))
+    bare = "".join(c for ch in word for c in (unicodedata.normalize("NFKD", ch) if ch < "\u0250" else ch) if ch >= "\u0250" or not unicodedata.combining(c))
+    return re.findall(f"[{UNSPACED}]|[^{UNSPACED}]+", re.sub(r"[^\w']|_", "", bare))
 
 
 def audio(path, kind="f32le"):
@@ -220,13 +227,13 @@ def words_heard(vocals, language):
     else:
         segments, _ = truth_model().transcribe(audio(vocals), language=language, word_timestamps=True, condition_on_previous_text=False, beam_size=5)
         hearings = [[(w.word, w.start) for s in segments for w in s.words]]
-    return [[(norm(word), start) for word, start in words if norm(word)] for words in hearings]
+    return [[(piece, start) for word, start in words for piece in pieces(word)] for words in hearings]
 
 
 def line_starts(heard, lines):
     """When each line starts in these heard words, matched in order to the lyrics. A line counts only when its
     first word and most of the rest match."""
-    lyric = [(norm(w), i) for i, line in enumerate(lines) for w in line.split() if norm(w)]
+    lyric = [(piece, i) for i, line in enumerate(lines) for word in line.split() for piece in pieces(word)]
     most = [[0] * (len(lyric) + 1) for _ in range(len(heard) + 1)]
     for i in range(len(heard) - 1, -1, -1):
         for j in range(len(lyric) - 1, -1, -1):
@@ -414,8 +421,10 @@ def score(args):
             nth[i] = len(nth)
     first = lit_first(shown)
     lags = {k: first[k] - sung[k] for k in sung if k in first}
+    # With no words found there's no line to tell a line sung by: truth still says how many went unshown.
+    line_of = {k: i for i, k in nth.items()}
     for k in sorted(sung):
-        text = shown["lines"][next(i for i in nth if nth[i] == k)][:34]
+        text = shown["lines"][line_of[k]][:34] if k in line_of else ""
         print(f"{k:2d} sung {sung[k]:6.1f}  " + (f"shown {first[k]:6.1f} lag {lags[k]:+5.1f}  {text}" if k in lags else f"never shown   {text}"))
     if args.placed:
         for p in shown["placed"]:
@@ -423,9 +432,9 @@ def score(args):
     # The lines sung once the words were first put right: what can be right as the song plays.
     fixed = shown["placed"][1]["at"] / 1000 if len(shown["placed"]) > 1 else 0
     live = [lag for k, lag in lags.items() if sung[k] > fixed]
+    how = f"median {statistics.median(abs(x) for x in live):.2f} s, worst {max(live, key=abs):+.1f} s" if live else "none shown"
     print(f"{args.id} from {args.start} ms: lines sung after the first fix at {fixed:.1f} s: "
-          f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, median {statistics.median(abs(x) for x in live):.2f} s, "
-          f"worst {max(live, key=abs):+.1f} s; never shown {sum(k not in first for k in sung)}")
+          f"{sum(abs(x) <= ON_TIME_S for x in live)}/{len(live)} within {ON_TIME_S} s, {how}; never shown {sum(k not in first for k in sung)}")
     early = [lag for lag in lags.values() if lag < -ON_TIME_S]
     print(f"shown sung early, before its voice: {len(early)}/{len(lags)} lines" + (f", by up to {-min(early):.1f} s" if early else ""))
     return first
@@ -435,8 +444,8 @@ def lined_up(ours, theirs):
     """Which of [ours] are which of [theirs], by index: those starting with the same word, by their words matched
     in order, as many as can be, and with most of the shorter one's words the same. Other words for a song may
     break its lines elsewhere or spell them otherwise: "In the wild West End, sometime" and "In the wild west end sometime"."""
-    a = [(norm(w), i) for i, line in enumerate(ours) for w in line.split() if norm(w)]
-    b = [(norm(w), j) for j, line in enumerate(theirs) for w in line.split() if norm(w)]
+    a = [(piece, i) for i, line in enumerate(ours) for word in line.split() for piece in pieces(word)]
+    b = [(piece, j) for j, line in enumerate(theirs) for word in line.split() for piece in pieces(word)]
     most = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
     for i in range(len(a) - 1, -1, -1):
         for j in range(len(b) - 1, -1, -1):
