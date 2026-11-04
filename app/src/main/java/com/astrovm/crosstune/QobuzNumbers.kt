@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -33,11 +35,19 @@ internal class QobuzNumbers(
         job = scope.launch { tryOther(song, app, link, over) }
     }
 
-    private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?) {
+    private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?) = coroutineScope {
+        // Asked now, not once the wait is over: 8 s and then a store that took 2 s came just past what Android allows [WAIT_MS].
+        val other = async { otherLink(song, link) }
         val started = withTimeoutOrNull(WAIT_MS) {
             playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title && isTheSong(it.metadata, song) }
         }
-        if (started == null) (if (over == null && playsElse(app)) link else otherLink(song, link))?.let { playback.openSong(app, it) }
+        val next = when {
+            started != null -> null
+            over == null && playsElse(app) -> link
+            else -> other.await()
+        }
+        other.cancel()
+        next?.let { playback.openSong(app, it) }
     }
 
     /**
@@ -55,7 +65,7 @@ internal class QobuzNumbers(
     }
 
     companion object {
-        /** Android lets Crosstune open an app only for some 10 s after it left the screen, the second lookup included. */
+        /** Android lets Crosstune open an app only for 10 s after its screen closed (measured: blocked at 10.0 s, allowed at 9.6 s). */
         const val WAIT_MS = 8_000L
     }
 }
