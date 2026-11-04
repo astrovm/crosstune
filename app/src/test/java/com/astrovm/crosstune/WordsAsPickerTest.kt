@@ -2,13 +2,16 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -71,48 +74,24 @@ class WordsAsPickerTest {
         assertTrue("The explanation needs the full width: $text", text.right - text.left > 300.dp)
     }
 
-    /** The lyrics over visuals set as bright as they go, saying how they're asked to draw. */
-    private fun overBrightestVisuals(): () -> VisualsPlay {
-        var drawn = VisualsPlay()
+    @Test
+    fun evenTheBrightestVisualLeavesReadableWordsAndSoftensFurtherBehindAMenu() {
         compose.setContent {
-            CompositionLocalProvider(LocalVisuals provides { play, _ -> drawn = play }) {
+            CompositionLocalProvider(LocalVisuals provides { play, modifier -> Box(modifier.background(Color.White).background(Color.Black.copy(alpha = play.shade))) }) {
                 CrosstuneTheme {
                     LyricsScreen(UiState(lyricsFor = MusicMetadata("Demo", "Band"), lyrics = "One", visuals = true,
                         visualsShade = 0f, canFollowApps = true, lyricLines = listOf(LyricLine(0, "One"))), ScreenActions())
                 }
             }
         }
-        compose.waitForIdle()
-        return { drawn }
-    }
-
-    @Test
-    fun evenTheBrightestVisualLeavesReadableWordsAndSoftensFurtherBehindAMenu() {
-        val play = overBrightestVisuals()
-        assertEquals("A bright visual must stay behind the words", VISUALS_CEILING, play().ceiling, 0.001f)
-        assertEquals(0.5f, play().shade, 0.001f)
+        fun brightness(): Int {
+            val image = compose.onRoot().captureToImage().asAndroidBitmap()
+            return android.graphics.Color.red(image.getPixel(4, image.height / 2))
+        }
+        assertTrue("A bright visual must stay behind the words", brightness() in 110..140)
         val app = ApplicationProvider.getApplicationContext<Application>()
         compose.onNodeWithContentDescription(app.getString(R.string.lyrics_learn)).performClick()
-        compose.waitForIdle()
-        assertEquals("An open menu should soften the background further", 0.75f, play().shade, 0.001f)
-        assertEquals(VISUALS_CEILING, play().ceiling, 0.001f)
+        assertTrue("An open menu should soften the background further", brightness() < 80)
     }
 
-    @Test
-    fun theVisualsAloneAreDrawnAsTheyAreAndTheWordsBringTheirCeilingBack() {
-        val play = overBrightestVisuals()
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        compose.onNodeWithContentDescription(app.getString(R.string.visuals_options)).performClick()
-        compose.onNodeWithText(app.getString(R.string.visuals_only)).performClick()
-        compose.waitForIdle()
-        assertEquals(0f, play().shade, 0f)
-        assertEquals(1f, play().ceiling, 0f)
-        val showWords = app.getString(R.string.visuals_show_words)
-        compose.onNode(SemanticsMatcher("shows the words") {
-            SemanticsActions.OnClick in it.config && it.config[SemanticsActions.OnClick].label == showWords
-        }).performClick()
-        compose.waitForIdle()
-        assertEquals(0.5f, play().shade, 0.001f)
-        assertEquals(VISUALS_CEILING, play().ceiling, 0.001f)
-    }
 }

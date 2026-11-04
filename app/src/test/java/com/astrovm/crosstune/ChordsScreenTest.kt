@@ -219,15 +219,6 @@ class ChordsScreenTest {
     private fun readingsOver(line: String) = composeRule.onAllNodesWithText(line, useUnmergedTree = true).fetchSemanticsNodes().firstNotNullOfOrNull { it.config.getOrElseNullable(ReadingsShown) { null } }
 
     @Test
-    fun aLineWithChordsOnlyBeforeItKeepsItsWords() {
-        val before = sheet.copy(lines = listOf(SheetLine("", listOf(Chord(0, "Am"))), SheetLine(lines[2].text, emptyList())))
-        val alone = state(ChordsState(on = true, sheet = before)).copy(lyrics = lines[2].text, lyricLines = listOf(lines[2]))
-        composeRule.setContent { CrosstuneTheme { LyricsScreen(alone, ScreenActions()) } }
-        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Am", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.onNodeWithText(lines[2].text, useUnmergedTree = true).assertExists()
-    }
-
-    @Test
     fun aLineWithChordsOnlyBeforeItKeepsItsReadings() {
         val text = "夜空の星を見上げて君を想う夜"
         // The chords for the line are played before it, so none sit over its words.

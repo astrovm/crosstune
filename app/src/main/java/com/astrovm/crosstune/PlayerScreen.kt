@@ -293,7 +293,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .background(coverWash(tint, ground))
+                .background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
                 // Up for its words, down from the top to put it away.
                 .swipeLayers(downFromTop = true)
                 .statusBarsPadding()

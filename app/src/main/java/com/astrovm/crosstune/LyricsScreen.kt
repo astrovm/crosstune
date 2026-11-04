@@ -177,7 +177,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -319,7 +318,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             // The cover's colour would only tint the visuals, so it shows without them.
             .then(
                 if (state.visuals) Modifier
-                else Modifier.background(coverWash(tint, ground))
+                else Modifier.background(Brush.verticalGradient(0f to tint.copy(alpha = 0.5f), 0.55f to tint.copy(alpha = 0.12f), 1f to ground))
             )
     ) {
         if (state.visuals) {
@@ -853,13 +852,6 @@ private val EDGE_FADE = 40.dp
 
 /** The darkest the ground over the visuals goes, so they never vanish altogether. */
 internal const val MAX_VISUALS_SHADE = 0.9f
-
-/**
- * The brightest any color of the visuals gets under words, however bright they're set or a preset goes,
- * which is what keeps even the dimmest line readable over a white frame. At the usual brightness only
- * the top fifth of a preset's range goes flat, where darkening it all this far would dim everything by a fifth.
- */
-internal const val VISUALS_CEILING = 0.22f
 
 /** How long the song's info and the bar stay after the last touch or remote key. */
 private const val TOOLS_SHOWN_MS = 5_000L
@@ -1826,6 +1818,13 @@ private fun LyricLineText(
 }
 
 /**
+ * The brightest any color of the visuals gets under words, however bright they're set or a preset goes,
+ * so the lines stand apart even over a white frame. At the usual brightness only the top fifth of a
+ * preset's range goes flat, where darkening it all this far would dim everything by a fifth.
+ */
+internal const val VISUALS_CEILING = 0.22f
+
+/**
  * How bright a line is by its [place]: the one being sung brightest, those to come less, those sung
  * least; set to, the one [coming] next nearly as bright a moment before it's sung. Every line alike
  * while nothing says where the song is, or [waiting] for its first line.
@@ -1834,18 +1833,15 @@ internal fun lineAlpha(place: Int?, waiting: Boolean, coming: Boolean): Float = 
     place == null || waiting -> 0.9f
     place == 0 -> 1f
     coming -> COMING_ALPHA
-    place < 0 -> SUNG_ALPHA
+    place < 0 -> 0.4f
     else -> TO_COME_ALPHA
 }
 
 /** How bright the line coming next is a moment before it's sung, when set to. */
-private const val COMING_ALPHA = 0.92f
+private const val COMING_ALPHA = 0.85f
 
 /** How bright the lines still to come are. */
-private const val TO_COME_ALPHA = 0.85f
-
-/** How bright the lines already sung are: the dimmest a line gets, and still readable; see WordsContrastTest. */
-internal const val SUNG_ALPHA = 0.75f
+private const val TO_COME_ALPHA = 0.6f
 
 /**
  * Tapped, the music app goes there when it can; held, or tapped when it can't, the line opens to study.
@@ -1890,7 +1886,7 @@ private fun LineWords(
         val ruby = reading?.parts?.takeIf { help.readings && it.any { part -> part.reading != null } && it.joinToString("") { part -> part.text } == text }
         ChordedLine(LyricLine(timeMs, text, words), nextMs, chords, sung, coming, style, ruby, help?.readingScale ?: READING_SCALE)
     } else if (help?.readings == true && reading != null && reading.parts.any { it.reading != null }) {
-        RubyLine(reading.parts, style, help.readingScale, readingColor = MaterialTheme.colorScheme.onSurface)
+        RubyLine(reading.parts, style, help.readingScale)
     } else if (sung != null && words.isNotEmpty()) {
         SungWords(words, sung, style)
     } else if (coming && words.isNotEmpty()) {
@@ -1915,20 +1911,13 @@ private fun LineHelps(help: LineHelp?, instead: String?, style: TextStyle, look:
     val small = MaterialTheme.typography.bodyLarge.copy(fontSize = style.fontSize * 0.62f, lineHeight = style.lineHeight * 0.62f, textAlign = style.textAlign)
     // Shown in them already, they'd say it twice.
     if (help?.romanized == true) help.latin?.takeIf { it.isNotBlank() && it != instead }?.let {
-        Text(it, style = small, color = MaterialTheme.colorScheme.onSurface)
+        Text(it, style = small, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     help?.translation?.let {
         val translated = MaterialTheme.typography.bodyLarge.copy(fontSize = TRANSLATION_SIZE * help.translationScale * look.translation, lineHeight = TRANSLATION_LINE * help.translationScale * look.translation, textAlign = style.textAlign)
-        Text(it, style = translated, color = wordsAccent(), modifier = Modifier.padding(top = 2.dp))
+        Text(it, style = translated, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp))
     }
 }
-
-/** The color of a line's chords and translation, which are dimmed along with its words. */
-@Composable
-private fun wordsAccent() = wordsAccent(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
-
-/** [primary] leaning to the color of the [words], only as far as leaves it readable on a dim line, so a chord stays a chord's color. */
-internal fun wordsAccent(primary: Color, words: Color) = lerp(primary, words, 0.6f)
 
 private fun alignment(centered: Boolean) = if (centered) TextAlign.Center else TextAlign.Unspecified
 
@@ -1971,7 +1960,7 @@ private fun SungWords(words: List<TimedWord>, following: Following, style: TextS
 }
 
 /** How bright the words of the line being sung are before they're sung. */
-internal const val UNSUNG_ALPHA = SUNG_ALPHA
+private const val UNSUNG_ALPHA = 0.45f
 
 /** How bright the rest of the line coming next is, past its first word, as it brightens ahead: drawn within it, as bright as the lines after it. */
 private const val AHEAD_REST_ALPHA = TO_COME_ALPHA / COMING_ALPHA
@@ -1989,11 +1978,11 @@ internal val ChordLit = SemanticsPropertyKey<Int>("ChordLit")
  */
 @Composable
 private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, following: Following?, coming: Boolean, style: TextStyle, ruby: List<Ruby>?, readingScale: Float) {
-    val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = wordsAccent())
+    val chordStyle = style.copy(fontSize = style.fontSize * CHORD_SCALE, lineHeight = style.lineHeight * CHORD_SCALE, color = MaterialTheme.colorScheme.primary)
     if (chords.before.isNotEmpty()) Text(chords.before.joinToString("   "), style = chordStyle)
     val text = line.text.ifBlank { "♪" }
     if (chords.over.isEmpty()) {
-        if (ruby != null) RubyLine(ruby, style, readingScale, readingColor = MaterialTheme.colorScheme.onSurface) else Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
+        if (ruby != null) RubyLine(ruby, style, readingScale) else Text(text, style = style, color = MaterialTheme.colorScheme.onSurface)
         return
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
@@ -2003,11 +1992,10 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
     // Read only where it's drawn, so a new chord played just draws it again.
     val playing = remember { mutableIntStateOf(-1) }
     playing.intValue = now?.first ?: -1
-    val over = readingStyle(style, readingScale).copy(color = MaterialTheme.colorScheme.onSurface)
+    val over = readingStyle(style, readingScale).copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val written = remember(ruby, readingScale, text) { ruby?.let { rubyText(it, readingScale) } ?: AnnotatedString(text) }
     val shown = chordedWords(line, text, written, ruby, now?.second, coming)
     val measurer = rememberTextMeasurer()
-    // Only ever on the line being sung, at full brightness, so it needs no lifting.
     val dim = MaterialTheme.colorScheme.onSurfaceVariant
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     Text(
