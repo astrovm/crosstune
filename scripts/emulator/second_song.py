@@ -33,7 +33,7 @@ LINKS = ['https://www.deezer.com/track/3135556', 'https://www.deezer.com/track/9
 def run(command, **kwargs):
     result = subprocess.run(command, capture_output=True, text=True, timeout=60, **kwargs)
     if result.returncode:
-        raise RuntimeError(result.stdout + result.stderr)
+        raise RuntimeError(f'{command[0]} exited {result.returncode}: {result.stdout}{result.stderr}')
     return result.stdout
 
 
@@ -42,6 +42,7 @@ def main():
     parser.add_argument('phase', choices=['before', 'after'])
     parser.add_argument('--device-cli', required=True)
     parser.add_argument('--service', choices=SERVICES)
+    parser.add_argument('--kind', choices=['search', 'link'])
     parser.add_argument('--output', type=Path, default=Path('build/second-song'))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
@@ -93,10 +94,12 @@ def main():
     for target, label in SERVICES.items():
         if args.service and target != args.service:
             continue
-        if not adb('shell', 'pm', 'path', PACKAGES[target]).strip():
+        if 'package:' + PACKAGES[target] not in adb('shell', 'pm', 'list', 'packages', PACKAGES[target]).splitlines():
             (args.output / (args.phase + '-' + target + '.not-testable.txt')).write_text('App is not installed on the Samsung.')
             continue
         for kind in ['search', 'link']:
+            if args.kind and kind != args.kind:
+                continue
             for card in [True, False]:
                 prefix = f'{args.phase}-{target}-{kind}-{card}'
                 if (args.output / (prefix + '-1.png')).exists():

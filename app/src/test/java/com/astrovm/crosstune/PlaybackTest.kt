@@ -1054,6 +1054,7 @@ class PlaybackTest {
         val direct = shadowOf(app).nextStartedActivity
         assertEquals("com.spotify.music", direct.`package`)
         assertEquals("https://open.spotify.com/track/1", direct.dataString)
+        assertTrue(direct.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
     }
 
     @Test
