@@ -83,6 +83,13 @@ class SungWordsTest {
     }
 
     @Test
+    fun differentSyllablesAreNotMatchedByTheirSharedLetters() {
+        val written = timed("가나마바사자차카타파하", "고노모보소조초코토포호", "구누무부수주추쿠투푸후")
+        val sung = heard(timed("거너머버서저처커터퍼허", "기니미비시지치키티피히", "그느므브스즈츠크트프흐"), 1_000)
+        assertNull(SungAlignment.shiftMs(sung, fromTheStart, written))
+    }
+
+    @Test
     fun unspacedLyricsMatchSingingSplitElsewhere() {
         val lines = timed("夜の海を歩く", "朝の光が見える", "君の声を探す")
         val sung = Sung(0, listOf(
