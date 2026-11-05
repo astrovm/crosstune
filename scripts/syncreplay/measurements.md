@@ -303,3 +303,29 @@ on any commit above, so it is dropped.
 
 `all` on b2449bdc: 1223 lines, 301 within 0.3 s, 619 within 0.5 s, 113 dark, 415 shown early. The same as
 this branch before the merge (the 41 songs don't pass `--skew`, so this shows nothing got worse).
+
+## Rebuilding the lost set (2026-11-05)
+
+The earlier replay set was lost during the worktree move. Its scores above are historical,
+not the baseline for PR #728. Fresh recordings and prep live in
+`/mnt/data/dev/agent-cache/crosstune-syncreplay`, linked from `build/syncreplay`.
+The fresh live lookup returned 39 entries, 38 with a recording and words; it did not find
+カシミヤのほほえみ. The reported Police recording `XB7AmIsxzfI` is also prepared explicitly.
+Final comparisons must use the same new inputs on main and the PR.
+
+Voice separation on the newly fetched `XB7AmIsxzfI`, same htdemucs model and random seed,
+with four CPU threads, PyTorch 2.14.1+rocm7.2 and torchaudio 2.11.0+rocm7.2:
+
+| Backend | Seconds | Samples at 44.1 kHz |
+|---|---:|---:|
+| CPU | 117.23 | 11,695,617 |
+| RX 6800 | 16.06 | 11,695,617 |
+
+Correlation was 0.9999999999 and difference SNR 97.29 dB. The GPU is 7.30 times faster,
+so fresh prep uses it for separation. Reproduce with `benchmark_separation.py RECORDING OUTPUT`;
+the output directory must be in the agent cache. The model is downloaded before timing.
+
+`scripts/syncreplay/setup.sh` installs prep tools with uv. Set `REPLAY_CACHE` to the cache
+above and `REPLAY_ROCM=1` for this GPU. It requires the system's ROCm driver, ffmpeg,
+yt-dlp, CMake and a C++ compiler; it does not install those. Model downloads should use
+`HF_HOME`, `TORCH_HOME` and `XDG_CACHE_HOME` inside the agent cache.
