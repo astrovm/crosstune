@@ -16,4 +16,13 @@ if [[ ${REPLAY_ROCM:-0} == 1 ]]; then
     index=https://download.pytorch.org/whl/rocm7.2
 fi
 uv pip install --python "$cache/venv/bin/python" torch==2.14.1 torchaudio==2.11.0 --index-url "$index"
-uv pip install --python "$cache/venv/bin/python" demucs faster-whisper numpy openai-whisper soundfile torchcodec
+uv pip install --python "$cache/venv/bin/python" demucs faster-whisper numpy soundfile torchcodec
+if [[ ${REPLAY_ROCM:-0} == 1 ]]; then
+    # Whisper's Linux dependency assumes NVIDIA. ROCm supplies the same module through triton-rocm.
+    uv pip install --python "$cache/venv/bin/python" more-itertools numba tiktoken tqdm
+    uv pip install --python "$cache/venv/bin/python" --no-deps openai-whisper
+    uv pip uninstall --python "$cache/venv/bin/python" triton
+    uv pip install --python "$cache/venv/bin/python" --reinstall triton-rocm==3.8.0 --index-url "$index"
+else
+    uv pip install --python "$cache/venv/bin/python" openai-whisper
+fi

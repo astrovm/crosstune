@@ -251,7 +251,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             last = index
         }
         val lines = JSONArray(model().uiState.lyricLines.map { it.text })
-        return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog)
+        return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).put("lyricsSpeed", model().uiState.following?.clock?.speed)
     }
 
     private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
