@@ -213,3 +213,93 @@ That table replays the words given to prep. `set` now also keeps the words the a
 Truth is an estimated reference, not a human audit of every lyric. Unmatched lines are excluded, and the overall
 table prints that coverage explicitly. Issue #662's target is every line within 0.3 s, none dark. Passing scores on
 matched lines alone cannot establish that target for all sung lines. No app timing behavior is changed in this PR.
+
+## PR #674: the pace and the remaining line errors
+
+Measured on 2026-11-04, on b0bbbe44, with the cached recordings and hearing,
+through `GRADLE_BOX_MEMORY=16 GRADLE_BOX_SLOTS=1 nice -n 10 scripts/gradle-box/gradle-box.sh`
+passed as the replay's `--gradle` command. No device was used.
+
+`run ZnrSNEah_20 --video --skew 0.0349 --shazam-ahead 45467 --words-length 0`:
+
+| Measured case | Within 0.5 s after the first fix | Median absolute error | Worst error |
+|---|---:|---:|---:|
+| Without pace, `--skew 0` | 6/13 | 0.78 s | +2.0 s |
+| Retained implementation | 7/13 | 0.33 s | -1.0 s |
+| Rejected: average the heard anchors' offsets at the known pace | 7/13 | 0.33 s | -1.4 s |
+| Target | 13/13 | at most 0.5 s | at most 0.5 s absolute |
+
+The retained replay first makes timing known at 69.045 s. Its first visible placement
+already uses the pace: the first two lyric times, 10.20 and 13.14 s, are placed
+at 33.710 and 36.551 s, 2.841 s apart rather than 2.940 s. Pace is not applied late.
+The score's "first fix" is the *second visible placement*, at 103.345 s, so the
+13-line result excludes the three chorus lines at 80.30, 83.90 and 87.56 s.
+Eight reference lines before 69 s never light; the phone's separate count is not this replay's count.
+
+After that first fix, the missed reference lines are 14 (+0.9 s), 19 (-1.0 s),
+20 (-0.7 s), 22 (+0.6 s), 24 (+0.9 s), and 26 (+0.7 s), rounded to tenths.
+The 135.745 s hearing changes extrapolated placement by about 0.55 s.
+This suggested carrying the last heard line's noise into the rest of the song.
+A regression with balanced noise at both faster and slower paces failed first
+(expected 117000 ms, got 116700 ms). The candidate averaged the offsets, but did not improve the recording's score
+and worsened its worst error. It was rejected before a green unit-test run;
+both the change and its proposed regression were reverted.
+
+The lyric sheet and reference do not agree on one offset at the known pace.
+For example, reference lines 14 and 15 are sung at 111.47 and 115.77 s, but their
+sheet times are 91.28 and 94.45 s. At `1 / 1.0349`, that sheet interval is 3.063 s,
+versus 4.300 s in the reference. Their required offsets differ by 1.237 s:
+no fixed offset can put both within 0.5 s. Searching every offset interval endpoint
+with hindsight puts at most 10/13 of the later reference lines within 0.5 s.
+This is an upper bound for a fixed offset at Shazam's pace, not for individual
+line corrections, and is not an offset to put in the app.
+
+There is no evidence here that changing the truth would fix the score. Current
+truth and the preserved `.truth.jsonl.cpu` agree within 0.14 s for all 24 common
+lines (at most 0.02 s on the three largest pace-only residuals, lines 14, 19, 20).
+Both are model estimates, not independent human measurements. The later tiny-model
+hearings are also noisy: the 111 s stretch hears "Whenever I get away" and
+"I just don't know what to do" for different words in the sheet. The next 136 s
+stretch hears only fragments. Better individual line evidence is needed to reach
+the target; shifting every later line cannot do it.
+
+No second cached recording is identified as sped up or slowed down in `songs.tsv`
+or `set.json`. Faster and slower synthetic timing were considered, but this is
+only one real recording with measured Shazam skew. The earlier 15/19 experiment
+used a different path and scoring population; it is not evidence of 13/13 on this path.
+
+### Re-measured on the merged head
+
+Measured on 2026-11-04 on bc4e6088 (main at dd8bfa7b merged in), the replay set up as above.
+The owner took the 7/13 as better, not fixed: the 0.5 s target stays unmet.
+
+| Measured case | Within 0.5 s | Median absolute error | Worst error | Shown early |
+|---|---:|---:|---:|---:|
+| `--skew 0` | 6/13 | 0.78 s | +2.0 s | 0/16 |
+| `--skew 0.0349` | 7/13 | 0.33 s | -1.0 s | 2/16 |
+
+Both cases still never light 8 lines. All 41 songs, `syncreplay.py all`, this branch against main at the
+same base: identical per song and overall, 1223 lines, 301 within 0.3 s, 619 within 0.5 s, 113 dark,
+415 shown early. The 41 songs don't pass `--skew`, so they show nothing worse, not an improvement.
+
+The phone check, `phone ZnrSNEah_20 --seconds 200 --app app.morphe.android.apps.youtube.music`, one run on the
+Samsung at media volume 1, on the APK built from bc4e6088: 12/23 within 0.5 s, 16/23 within 1 s, median 0.47 s,
+1 never lit. On b0bbbe44 it was 10/22, 17/22, median 0.54 s, 2 never lit. The Google YouTube Music build on that
+phone pauses whenever another app is in front, so Crosstune hears nothing and the check can't run with it.
+
+### Together with PR #717 (hearing speeds of a video's lead)
+
+A video's speed could be counted twice: PR #717 takes it off the video's clock once three hearings agree, and the
+pace of the words took it again. The pace now only applies while the clock isn't taking the speed
+(`MainViewModel.leadSpeedTaken`).
+
+The replay can't show this. `run ZnrSNEah_20 --video --skew 0.0349 --shazam-ahead 45467 --words-length 0`, run
+on c5a96476, on b2449bdc, and on b2449bdc with the fix switched off (`pace = wordsPace`), gives the same each time:
+7/13 within 0.5 s, median 0.33 s, worst -1.0 s, 7/18 shown early, 6 never shown. The replay never reaches the
+fix, so what pins it is the two tests in `ListeningTest` (`aVideosSpeedIsntCountedTwiceOnceItIsTakenOffItsClock`,
+`aVideoTooFarOffItsSongsSpeedToTakeItOffItsClockKeepsThePaceOfItsWords`), watched failing without it.
+An earlier version of this section said 8/13 and 1/18 shown early for the fixed code. That didn't reproduce
+on any commit above, so it is dropped.
+
+`all` on b2449bdc: 1223 lines, 301 within 0.3 s, 619 within 0.5 s, 113 dark, 415 shown early. The same as
+this branch before the merge (the 41 songs don't pass `--skew`, so this shows nothing got worse).

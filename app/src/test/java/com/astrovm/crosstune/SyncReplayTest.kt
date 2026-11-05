@@ -39,7 +39,8 @@ import java.io.File
  * scripts/syncreplay, comes back after the time hearing takes, and when each line is shown is
  * written down, for the script to hold against when it's really sung. Only when the script asks.
  * The music app's clock may be a little behind what it plays, as YouTube Music's is, by more or less
- * each time; asked to, the song plays a second time, with what was learnt the first kept. Several
+ * each time; asked to, the song plays a second time, with what was learnt the first kept, and Shazam
+ * hears it, faster or slower than the recording it matches, as it does a sped-up upload. Several
  * songs asked for at once are each played in an app of their own.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -118,14 +119,19 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         }
         val lengthMs = heard.getValue(SingingListener.SECONDS).keys.max() + SingingListener.SECONDS * 1000L
         MainActivity.singingFactory = { _, _ -> Replayed(heard) }
+        if (asked.has("skew")) MainActivity.hearingFactory = { Shazam(asked.getDouble("skew"), asked.optLong("shazamAhead")) }
+        // The words may be timed for another release, as long as LRCLIB says, or it may not say.
+        val wordsMs = (fingerprints ?: asked).optLong("wordsLength", lengthMs)
+        video = asked.optBoolean("video")
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear()
             .putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
             .putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
         // Words found without timing, -1 for each line's time, come as such: nothing's heard for them, so their lines stay dark.
         val words = if (lyrics.all { it.first < 0 }) JSONObject().put("plainLyrics", lyrics.joinToString("\n") { it.second })
         else JSONObject().put("syncedLyrics", lyrics.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d] %s".format(ms / 60_000, ms / 1000 % 60, ms % 1000 / 10, text) })
-        val wordsLength = fingerprints?.optLong("wordsLength", lengthMs) ?: lengthMs
-        val found = JSONArray().put(words.put("trackName", "Demo").put("artistName", "Band").put("duration", wordsLength / 1000)).toString()
+        words.put("trackName", "Demo").put("artistName", "Band")
+        if (wordsMs > 0) words.put("duration", wordsMs / 1000)
+        val found = JSONArray().put(words).toString()
         // Words timed word by word, as the app found them, only come from NetEase.
         val byWord = kept?.let { foundByWord(it, lengthMs) }
         fake.handler = { request ->
@@ -160,7 +166,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             val played = play(fromMs, lengthMs, behindMs)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
             // Stopped at the end, then played again a while later.
-            playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, durationMs = lengthMs)
+            playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(AGAIN_MS))
         }
     }
@@ -210,7 +216,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         this.behindMs = behindMs
         heardLog = JSONArray()
         val startedAt = fingerprintStartedAt ?: SystemClock.elapsedRealtime()
-        if (fingerprintStartedAt == null) playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, durationMs = lengthMs)
+        if (fingerprintStartedAt == null) playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
         composeRule.waitForIdle()
         // Each line, by its text and the time it's shown first after the one before, where the song is then.
         val shown = JSONArray()
@@ -250,6 +256,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
 
     /** How long the phone takes to work out the words in what it heard, after hearing it. */
     private var workMs = WORK_MS
+
+    /** Whether the music app plays the song's video. */
+    private var video = false
 
     /** How long the phone took over each whole while, one by one, when the replay is held to a phone run. */
     private var workedOut = emptyList<Long>()
@@ -298,6 +307,19 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         }
     }
 
+    /**
+     * Shazam, hearing the song [skew] faster than the recording it matches, where it's [aheadMs] further
+     * on at its start, as it hears a sped-up upload of a longer release, a few seconds after it's asked.
+     */
+    private inner class Shazam(private val skew: Double, private val aheadMs: Long) : SongHearing {
+        override suspend fun listen(): Heard {
+            delay(SHAZAM_MS)
+            val at = SystemClock.elapsedRealtime()
+            val playing = playback.playing.value!!.clock.positionAt(at) + behindMs
+            return Heard.Song(MusicMetadata("Demo", "Band"), null, aheadMs + (playing * (1 + skew)).toLong(), at, matchId = "replayed", speed = (1 + skew).toFloat())
+        }
+    }
+
     private object NoMilkdrop : Milkdrop {
         override fun open(width: Int, height: Int) = false
         override fun size(width: Int, height: Int) = Unit
@@ -331,6 +353,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
 
         /** About how long a phone takes to work out the words in what it heard, after hearing it: a Galaxy S22 Ultra took 3.9 to 4.6 s. */
         private const val WORK_MS = 4_500L
+
+        /** How long Shazam takes to name what it hears. */
+        const val SHAZAM_MS = 4_000L
 
         /** How long the song stays stopped before it's played again. */
         private const val AGAIN_MS = 5_000L

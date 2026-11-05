@@ -2292,6 +2292,35 @@ class ListeningTest {
         }
     }
 
+    /** How far "Demo three" is from "Demo one" in the words as shown, 40 s as they're found. */
+    private fun wordsSpan() = controllerModel().uiState.lyricLines.let { it[2].timeMs - it[0].timeMs }
+
+    @Test
+    fun aVideosSpeedIsntCountedTwiceOnceItIsTakenOffItsClock() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing)
+        playerAt(phone, 12_000)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        // Heard going slower than the recording the words are timed for, the lines past the one put in time go on at its pace...
+        hearsAt(hearing, 200_000, 0.9f)
+        composeRule.runOnIdle { assertEquals(40_000 / 0.9, wordsSpan().toDouble(), 1.0) }
+        // ...until the video's speed, once enough hearings agree, is taken off its clock: it's the clock that goes at it then.
+        repeat(2) { hearsAt(hearing, 200_000, 0.9f) }
+        composeRule.runOnIdle { assertEquals(0.9f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+        composeRule.runOnIdle { assertEquals(40_000L, wordsSpan()) }
+    }
+
+    @Test
+    fun aVideoTooFarOffItsSongsSpeedToTakeItOffItsClockKeepsThePaceOfItsWords() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing)
+        playerAt(phone, 12_000)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        repeat(3) { hearsAt(hearing, 200_000, 0.5f) }
+        composeRule.runOnIdle { assertEquals(1f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+        composeRule.runOnIdle { assertEquals(80_000L, wordsSpan()) }
+    }
+
     @Test
     fun aLineOfASlowVideoIsSoughtWhereItIs() {
         val phone = videoHeardGoingAt(FakeHearing(), listOf(0.99f, 0.99f, 0.99f))
