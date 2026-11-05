@@ -165,11 +165,47 @@ class QobuzNumbersTest {
     }
 
     @Test
-    fun anotherAppPlayingDoesntCount() {
+    fun anotherAppPlayingCancelsTheRetry() {
         numbers.opened(song, qobuz, link)
         phone.onThePhone = Heard.Song(MusicMetadata("Other", "Band"), null, app = "other.app")
         passes(QobuzNumbers.WAIT_MS)
-        assertEquals(1, phone.opened.size)
+        assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
+    fun anotherTitleByTheSameArtistDoesntStopTheRetry() {
+        phone.onThePhone = Heard.Song(MusicMetadata("Old song", "Band"), null, app = qobuz)
+        numbers.opened(song, qobuz, link)
+        passes(1_000)
+        phone.onThePhone = Heard.Song(MusicMetadata("Next old queue song", "Band"), null, app = qobuz)
+        passes(QobuzNumbers.WAIT_MS)
+        assertEquals(listOf(qobuz to "https://play.qobuz.com/track/2"), phone.opened.toList())
+    }
+
+    @Test
+    fun aTitleWrittenBothWaysStillCounts() {
+        numbers.opened(MusicMetadata("ミステリー・ガール - Mystery Girl", "Band"), qobuz, link)
+        phone.onThePhone = Heard.Song(MusicMetadata("Mystery Girl (Remastered)", "Band"), null, app = qobuz)
+        passes(QobuzNumbers.WAIT_MS)
+        assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
+    fun anExistingOtherPlayerDoesntCancelUntilItChanges() {
+        phone.onThePhone = Heard.Song(MusicMetadata("Before", "Someone"), null, app = "other.app")
+        numbers.opened(song, qobuz, link)
+        passes(QobuzNumbers.WAIT_MS)
+        assertEquals(listOf(qobuz to "https://play.qobuz.com/track/2"), phone.opened.toList())
+    }
+
+    @Test
+    fun switchingAppsWhileTheStoreIsStillAnsweringCancelsItToo() {
+        val slow = QobuzNumbers(phone, { _, _ -> delay(QobuzNumbers.WAIT_MS * 2); other }, { true }, scope)
+        slow.opened(song, qobuz, link)
+        passes(QobuzNumbers.WAIT_MS + 1_000)
+        phone.onThePhone = Heard.Song(MusicMetadata("Other", "Someone"), null, app = "other.app")
+        passes(QobuzNumbers.WAIT_MS * 2)
+        assertTrue(phone.opened.isEmpty())
     }
 
     @Test

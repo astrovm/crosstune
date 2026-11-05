@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -32,7 +33,18 @@ internal class QobuzNumbers(
         val over = playback.nowPlaying()?.takeIf { sameApp(app, it.app, installed) }?.metadata
         // Already on it, it's brought forward, and there's no start to see.
         if (over != null && SongNames.same(over.title, song.title) && SongNames.sameArtist(over.artist, song.artist)) return
-        job = scope.launch { tryOther(song, app, link, over) }
+        job = scope.launch {
+            // The first value is what was playing before this open, possibly in another app.
+            val moved = launch {
+                playback.nowPlayingUpdates().drop(1).first { it != null && !sameApp(app, it.app, installed) }
+                off()
+            }
+            try {
+                tryOther(song, app, link, over)
+            } finally {
+                moved.cancel()
+            }
+        }
     }
 
     private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?) {
@@ -58,9 +70,11 @@ internal class QobuzNumbers(
      */
     private fun playsElse(app: String) = playback.nowPlaying()?.let { sameApp(app, it.app, installed) } == true
 
-    /** Whatever else Qobuz calls it, as "(Remastered)". Not a cover, nor what it was left on as it wakes. */
+    /** A title or an explicit translated name, including edition tags. An artist alone also names its old queue. */
     private fun isTheSong(playing: MusicMetadata, song: MusicMetadata) =
-        SongNames.sameArtist(playing.artist, song.artist) || SongNames.same(playing.title, song.title)
+        SongNames.titleNames(song.title).any { wanted ->
+            SongNames.titleNames(playing.title).any { SongNames.same(it, wanted) }
+        }
 
     fun off() {
         job?.cancel()

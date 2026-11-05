@@ -151,6 +151,11 @@ internal class MainViewModel(
                 return source.openSong(app, link).also { if (!it) uncover() }
             }
 
+            override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
+                qobuzNumbers?.off()
+                return source.playSong(song, app, link, mustStart)
+            }
+
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
             override fun playPause(song: MusicMetadata, play: Boolean) {
                 leftJob?.cancel()
@@ -794,7 +799,7 @@ internal class MainViewModel(
             // Intercepted services' links include pages Crosstune can't convert, such as a
             // SoundCloud feed; hand those straight to the service's app.
             val service = MusicLinks.serviceFor(incoming) ?: return rejectInput()
-            effectChannel.trySend(Effect.Open(incoming, service.packageName, finishAfterOpen = true))
+            effectChannel.trySend(opening(incoming, service.packageName, finishAfterOpen = true, song = null))
             return
         }
         if (input is LinkInput.Link) uiState = uiState.copy(linkText = input.link.url)
@@ -1373,13 +1378,13 @@ internal class MainViewModel(
             if (match == ExactMatcher.Match.Missing && service != null && canBeMissing(service, track)) {
                 return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
-            watchNumber(track, destination, url, exactUrl != null)
             effectChannel.send(opening(url.forSharing(), destination.packageName, finishAfterOpen = false, song = track))
         }
     }
 
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
     fun openResult(destination: Destination? = null, finishAfterOpen: Boolean = false) {
+        qobuzNumbers?.off()
         val chosen = destination ?: uiState.resultDestination
         adoptDefault(chosen)
         pendingOpen = false
@@ -1396,6 +1401,7 @@ internal class MainViewModel(
      * when it can't be asked, or, for YouTube Music, has only a search for it.
      */
     fun playResult() {
+        qobuzNumbers?.off()
         val destination = uiState.resultDestination as? Destination.Service ?: return
         adoptDefault(destination)
         val song = uiState.result ?: return
@@ -1459,6 +1465,7 @@ internal class MainViewModel(
 
     /** [app] opened on [song]'s [link], watched from before that if Qobuz's, as it can stay on a loading page there. */
     private fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
+        qobuzNumbers?.off()
         if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.opened(song, app, link)
         return source.openSong(app, link)
     }
@@ -1724,8 +1731,13 @@ internal class MainViewModel(
     }
 
     /** Opens [url] in [packageName], with [song] named for an app that takes a search, not its page. */
-    private fun opening(url: String, packageName: String?, finishAfterOpen: Boolean, song: MusicMetadata? = uiState.result) =
-        Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery))
+    private fun opening(url: String, packageName: String?, finishAfterOpen: Boolean, song: MusicMetadata? = uiState.result): Effect.Open {
+        qobuzNumbers?.off()
+        if (song != null && packageName == MusicService.QOBUZ.packageName && MusicLinks.linkFor(url)?.type == ItemType.TRACK) {
+            qobuzNumbers?.opened(song, packageName, url)
+        }
+        return Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery))
+    }
 
     /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
@@ -1754,14 +1766,7 @@ internal class MainViewModel(
             playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage, interception::isInstalled) }
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
-        uiState.result?.let { watchNumber(it, destination, url, uiState.destinationUrls[destination]?.exact != false) }
         effectChannel.send(opening(url, destination.packageName, finishAfterOpen))
-    }
-
-    /** A song opened in Qobuz's app by its [exact] number at [link] is watched from before it's opened, so what played until then is known. */
-    private fun watchNumber(song: MusicMetadata, destination: Destination, link: String, exact: Boolean) {
-        val app = (destination as? Destination.Service)?.takeIf { it.service == MusicService.QOBUZ } ?: return
-        if (exact && song.type == ItemType.TRACK) qobuzNumbers?.opened(song, app.packageName, link)
     }
 
     /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
@@ -4166,6 +4171,7 @@ internal class MainViewModel(
     }
 
     private fun cancelTrackWork() {
+        qobuzNumbers?.off()
         trackJob?.cancel()
         trackJob = null
         uiState = uiState.copy(queueProgress = null, isMatching = false)
@@ -4254,7 +4260,7 @@ internal class MainViewModel(
     private suspend fun openAsIs(video: MusicLink) {
         pendingOpen = false
         val packageName = if (video.frontendUrl == null) MusicService.YOUTUBE.packageName else null
-        effectChannel.send(Effect.Open(video.frontendUrl ?: video.url, packageName, finishAfterOpen = true))
+        effectChannel.send(opening(video.frontendUrl ?: video.url, packageName, finishAfterOpen = true, song = null))
     }
 
     fun setOnlyMusicVideos(enabled: Boolean) {

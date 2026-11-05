@@ -1521,10 +1521,15 @@ class MainViewModelTest {
             model.onUrlChange(link)
             model.resolveTypedInput()
             until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
+            // A previous handoff must lose its retry even when this one is another app or a search.
+            numbers.opened(MusicMetadata("Previous", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/99")
+            asked = 0
+            playback.opened.clear()
             model.openResult()
             until("opened") { effects.isNotEmpty() || model.uiState.resultMissing }
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(QobuzNumbers.WAIT_MS))
             idle()
+            if (service != MusicService.QOBUZ || !found) assertTrue(playback.opened.isEmpty())
             return asked
         }
         try {
