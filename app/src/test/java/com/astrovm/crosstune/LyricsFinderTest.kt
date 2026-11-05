@@ -684,6 +684,13 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun halfTheMatchingLinesCannotOutvoteTwoDifferentWordBreaks() {
+        val copy = Lyrics.Found("Bird song\nBird song\nBir d song")
+        val chosen = Lyrics.Found("Birdsong")
+        assertEquals(chosen, LyricsFinder.cleaned(chosen, song, listOf(copy)))
+    }
+
+    @Test
     fun repeatedOtherWordsCannotSupplySpacesForThisLine() {
         val text = "Birdsong"
         val copy = Lyrics.Found("Bird wing\nBird wing")
