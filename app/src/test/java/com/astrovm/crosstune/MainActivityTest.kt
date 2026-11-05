@@ -4089,6 +4089,8 @@ class MainActivityTest {
         // Its app's icon brings that app forward as it is; with nothing to open it with, nothing happens.
         click(playingIn)
         assertNull(nextStartedActivity())
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.error_no_app_to_open))
         installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         click(playingIn)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }

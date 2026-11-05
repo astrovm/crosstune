@@ -28,6 +28,7 @@ SEARCHES = [('Crosstune Unreleased First', 'Test Band'), ('Crosstune Unreleased 
 PACKAGES = dict(zip(SERVICES, ['com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music']))
 TEST_APPS = {'com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music'}
 LINKS = ['https://www.deezer.com/track/3135556', 'https://www.deezer.com/track/908604612']
+DEEZER_SOURCES = ['https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT', 'https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b']
 
 
 def run(command, **kwargs):
@@ -43,6 +44,9 @@ def main():
     parser.add_argument('--device-cli', required=True)
     parser.add_argument('--service', choices=SERVICES)
     parser.add_argument('--kind', choices=['search', 'link'])
+    parser.add_argument('--routes', choices=['all', 'primary'], default='all', help='primary checks card searches and directly shared song links')
+    parser.add_argument('--allow-sound', action='store_true', help='Daytime run: preserve the current media volume rather than requiring zero')
+    parser.add_argument('--keep-playing', action='store_true', help='Keep apps running between songs to check warm activity reuse')
     parser.add_argument('--output', type=Path, default=Path('build/second-song'))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
@@ -59,6 +63,8 @@ def main():
         return run([args.device_cli, *command])
 
     def quiet():
+        if args.allow_sound:
+            return
         volume = adb('shell', 'cmd', 'media_session', 'volume', '--stream', '3', '--get')
         if not re.search(r'volume is 0\b', volume):
             raise RuntimeError('Refusing to open an app with nonzero media volume: ' + volume)
@@ -70,13 +76,17 @@ def main():
         (args.output / (name + '.tree.txt')).write_text(device('snapshot', '-i'))
         device('screenshot', str((args.output / (name + '.png')).resolve()))
 
-    def stop_playing():
+    def stop_playing(cleanup=False):
+        if args.keep_playing and not cleanup:
+            return
         sessions = adb('shell', 'dumpsys', 'media_session')
         for block in re.split(r'(?=package=)', sessions):
             package = re.match(r'package=([^\s]+)', block)
             if package and re.search(r'state=PlaybackState \{state=PLAYING', block):
                 # The untitled YouTube session belongs to the owner's TV.
-                if 'youtube' in package.group(1) and not re.search(r'description=\S', block):
+                description = re.search(r'description=([^\r\n]*)', block)
+                title = description.group(1).split(',')[0].strip() if description else ''
+                if 'youtube' in package.group(1) and title in ['', 'null', 'None']:
                     continue
                 if package.group(1) in TEST_APPS:
                     if current_name:
@@ -101,6 +111,8 @@ def main():
             if args.kind and kind != args.kind:
                 continue
             for card in [True, False]:
+                if args.routes == 'primary' and card != (kind == 'search'):
+                    continue
                 prefix = f'{args.phase}-{target}-{kind}-{card}'
                 if (args.output / (prefix + '-1.png')).exists():
                     continue
@@ -121,16 +133,19 @@ def main():
                             else:
                                 entry.set('value', value)
                         adb('shell', 'run-as', APP, 'sh', '-c', "'cat > shared_prefs/crosstune_preferences.xml'", input=ET.tostring(prefs, encoding='unicode'))
+                        quiet()
+                        device('open', APP)
                         for index, (title, artist) in enumerate(SEARCHES):
                             name = prefix + '-' + str(index)
                             current_name = name
-                            adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
+                            device('hardware-button', 'wake')
                             adb('shell', 'wm', 'dismiss-keyguard')
                             if kind == 'search':
                                 share = f'{title} by {artist}\nhttps://www.google.com/search?q={title.replace(" ", "+")}+by+{artist.replace(" ", "+")}'
                                 start(['-a', 'android.intent.action.SEND', '-t', 'text/plain', '--es', 'android.intent.extra.TEXT', share])
                             else:
-                                start(['-a', 'android.intent.action.SEND', '-t', 'text/plain', '--es', 'android.intent.extra.TEXT', LINKS[index]])
+                                link = (DEEZER_SOURCES if target == 'DEEZER' else LINKS)[index]
+                                start(['-a', 'android.intent.action.SEND', '-t', 'text/plain', '--es', 'android.intent.extra.TEXT', link])
                             stop_playing()
                             time.sleep(8)
                             stop_playing()
@@ -150,10 +165,13 @@ def main():
                             capture(name)
                             print('Captured', name, flush=True)
                     finally:
-                        adb('shell', 'am', 'force-stop', APP)
-                        adb('shell', 'run-as', APP, 'sh', '-c', "'cat > shared_prefs/crosstune_preferences.xml'", input=saved)
-                        stop_playing()
-                        quiet()
+                        try:
+                            adb('shell', 'am', 'force-stop', APP)
+                            adb('shell', 'run-as', APP, 'sh', '-c', "'cat > shared_prefs/crosstune_preferences.xml'", input=saved)
+                            stop_playing(cleanup=True)
+                            quiet()
+                        finally:
+                            device('close')
 
 
 if __name__ == '__main__':

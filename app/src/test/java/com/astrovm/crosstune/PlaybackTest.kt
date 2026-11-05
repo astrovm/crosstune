@@ -1083,6 +1083,32 @@ class PlaybackTest {
         assertEquals(tidal, second.`package`)
         assertTrue(second.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertNull(shadowOf(app).nextStartedActivity)
+
+        // Switching services also cancels the search, through either launch path.
+        val spotify = MusicService.SPOTIFY.packageName
+        val spotifyScreen = ComponentName(spotify, "$spotify.Player")
+        shadowOf(app.packageManager).addActivityIfNotPresent(spotifyScreen)
+        shadowOf(app.packageManager).addIntentFilterForActivity(spotifyScreen, IntentFilter(Intent.ACTION_VIEW).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addDataScheme("https")
+        })
+        for (throughScreen in listOf(false, true)) {
+            assertTrue(playback.openSong(tidal, MusicService.TIDAL.searchUrl("Old")))
+            val waiting = requireNotNull(shadowOf(app).nextStartedActivity)
+            org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, waiting).create()
+            assertEquals("tidal://my-collection", shadowOf(app).nextStartedActivity.dataString)
+            val next = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://open.spotify.com/track/new")).setPackage(spotify)
+            if (throughScreen) {
+                assertTrue(app.openLeavingTimeToOpenAgain(next))
+                val bridge = requireNotNull(shadowOf(app).nextStartedActivity)
+                org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, bridge).create()
+            } else {
+                assertTrue(app.tryStartMusicActivity(next))
+            }
+            assertEquals(next.dataString, shadowOf(app).nextStartedActivity.dataString)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+            assertNull("The old TIDAL search must not cover the new service", shadowOf(app).nextStartedActivity)
+        }
     }
 
     @Test
