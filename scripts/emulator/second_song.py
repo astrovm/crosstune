@@ -94,6 +94,25 @@ def main():
                     adb('shell', 'am', 'force-stop', package.group(1))
                     print('Stopped playback:', package.group(1), flush=True)
 
+    def tap_action(tree, label):
+        for attempt in range(2):
+            chosen = re.search(r'\[group\] "([^"]+), Choose app"', tree)
+            actual_label = chosen.group(1) if chosen else label
+            action = next((text for text in [f'Search in {actual_label}', f'Open in {actual_label}'] if '"' + text + '"' in tree), None)
+            if action is None:
+                return False
+            selector = 'label=' + json.dumps(action) + ' enabled=true'
+            try:
+                device('wait', selector)
+                device('press', selector)
+                return True
+            except RuntimeError as error:
+                if attempt or not any(word in str(error).lower() for word in ['selector', 'timeout', 'timed out']):
+                    raise
+                # An exact-match answer can replace Open with Search while the card is read.
+                tree = device('snapshot', '-i')
+        return False
+
     def start(extra):
         quiet()
         # Each launch argument is its own token, including text containing spaces.
@@ -151,12 +170,8 @@ def main():
                             stop_playing()
                             tree = device('snapshot', '-i')
                             if card or kind == 'search':
-                                chosen = re.search(r'\[group\] "([^"]+), Choose app"', tree)
-                                actual_label = chosen.group(1) if chosen else label
-                                action = next((text for text in [f'Search in {actual_label}', f'Open in {actual_label}'] if '"' + text + '"' in tree), None)
-                                if action:
-                                    quiet()
-                                    device('press', 'label=' + json.dumps(action))
+                                quiet()
+                                if tap_action(tree, label):
                                     stop_playing()
                                 else:
                                     print('No card action:', name, flush=True)

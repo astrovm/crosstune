@@ -4047,6 +4047,9 @@ class MainActivityTest {
         tapOpen()
         waitForText(string(R.string.error_no_app_to_open))
 
+        // A fresh card separates a successful launch from the earlier missing-app error.
+        typeUrl("")
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
         installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         tapOpen()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
@@ -4054,6 +4057,7 @@ class MainActivityTest {
         assertEquals(Intent.ACTION_MAIN, shown.action)
         assertNull(shown.data)
         assertEquals(youTubeMusic, shown.component?.packageName ?: shown.`package`)
+        assertTextAbsent(string(R.string.error_no_app_to_open))
     }
 
     @Test
