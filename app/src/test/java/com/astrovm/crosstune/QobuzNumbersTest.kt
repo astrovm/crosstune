@@ -1,6 +1,9 @@
 package com.astrovm.crosstune
 
+import android.content.ContextWrapper
+import android.content.pm.PackageInfo
 import android.os.Looper
+import androidx.test.core.app.ApplicationProvider
 import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +12,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,7 +33,10 @@ class QobuzNumbersTest {
     private val link = "https://play.qobuz.com/track/1"
 
     @After
-    fun tearDown() = scope.cancel()
+    fun tearDown() {
+        scope.cancel()
+        MainActivity.playbackFactory = ::MediaSessionPlayback
+    }
 
     private companion object {
         const val STORE_ANSWERS_MS = 2_000L
@@ -48,6 +56,36 @@ class QobuzNumbersTest {
         passes(QobuzNumbers.WAIT_MS * 3)
         assertEquals(1, phone.opened.size)
         assertTrue(phone.songsAsked.isEmpty())
+    }
+
+    @Test
+    fun theAppKeepsOneWatchSoEveryScreenSharesIt() {
+        MainActivity.playbackFactory = { phone }
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val matcher = ExactMatcher(FakeSpotify().client(), "AR")
+        val kept = MainActivity.qobuzNumbers(app, matcher)
+        assertSame(kept, MainActivity.qobuzNumbers(app, matcher))
+        kept.off()
+    }
+
+    @Test
+    fun aWatchMadeForAnotherAppIsDoneWith() {
+        MainActivity.playbackFactory = { phone }
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = qobuz })
+        val matcher = ExactMatcher(FakeSpotify().client(), "AR")
+        val first = MainActivity.qobuzNumbers(app, matcher)
+        first.opened(song, qobuz, link)
+        // Left playing something else, which would send it the same number again once the wait is over.
+        phone.onThePhone = Heard.Song(MusicMetadata("Another", "Someone"), null, app = qobuz)
+        val another = object : ContextWrapper(app) {
+            override fun getApplicationContext() = this
+        }
+        val next = MainActivity.qobuzNumbers(another, matcher)
+        assertNotSame(first, next)
+        passes(QobuzNumbers.WAIT_MS * 2)
+        assertTrue(phone.opened.isEmpty())
+        next.off()
     }
 
     @Test

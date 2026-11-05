@@ -1166,6 +1166,51 @@ class PlaybackTest {
     }
 
     @Test
+    fun aLinkAnAppDoesntOpenDoesntCountAsOpeningIt() = runBlocking {
+        allow()
+        val qobuz = MusicService.QOBUZ.packageName
+        val session = player(qobuz, "Qobuz", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(session)
+        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) }
+        shadowOf(session).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(fails.await())
+        assertFalse(playback.openSong(qobuz, "https://play.qobuz.com/track/12"))
+        // Nothing of Qobuz's is in front, so there's nothing to stay behind.
+        playback.comesBack()
+        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component?.className)
+    }
+
+    @Test
+    fun comingBackWithNothingOpenedYetComesBack() {
+        playback.comesBack()
+        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component?.className)
+    }
+
+    @Test
+    fun qobuzOpenedIsLeftInFrontWhenItOnlyPlaysThere() = runBlocking {
+        allow()
+        val qobuz = MusicService.QOBUZ.packageName
+        val session = player(qobuz, "Qobuz", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(session)
+        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) }
+        shadowOf(session).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(fails.await())
+        assertTrue(playback.playsOnlyInFront(qobuz))
+        val component = ComponentName(qobuz, "$qobuz.DeepLinkActivity")
+        shadowOf(app.packageManager).addActivityIfNotPresent(component)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            component, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("play.qobuz.com", null) }
+        )
+        assertTrue(playback.openSong(qobuz, "https://play.qobuz.com/track/12"))
+        assertEquals(OpenSongActivity::class.java.name, shadowOf(app).nextStartedActivity.component?.className)
+        // Behind Crosstune it would stop, and the screen that opened it counts as opening it.
+        playback.comesBack()
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+
+    @Test
     fun bandcampAskedBySearchIsLeftInFrontWhenItOnlyPlaysThere() = runBlocking {
         allow()
         val bandcamp = MusicService.BANDCAMP.packageName
