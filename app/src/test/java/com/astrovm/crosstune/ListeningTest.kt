@@ -2321,12 +2321,13 @@ class ListeningTest {
         hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
         composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime(), speed = 1.05f))
             controllerModel().listenAlong()
             controllerModel().syncLine(0)
         }
-        repeat(4) { hearsAt(hearing, 200_000, 0.9f) }
+        repeat(4) { hearsAt(hearing, 200_000, 0.945f) }
         composeRule.runOnIdle {
-            assertEquals(0.9f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(0.945f, controllerModel().uiState.following!!.clock.speed, 0.001f)
             assertEquals(40_000L, wordsSpan())
         }
     }
