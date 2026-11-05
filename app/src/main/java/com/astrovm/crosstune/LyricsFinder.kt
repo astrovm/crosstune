@@ -355,21 +355,26 @@ internal fun inSentenceCase(line: String): String {
     return String(letters)
 }
 
-/** Consecutive capital words are a phrase, rather than a lone acronym or a brief shout such as HEY!. */
-private fun capitalWord(word: String) = word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
+/** Consecutive capital words are a phrase; spelled-out letters such as Y M C A aren't words. */
+private fun capitalWord(word: String) = word.count(Char::isLetter) > 1 && word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
 
-private fun capitalLine(line: String) = line.split(Regex("\\s+")).windowed(2).any { pair -> pair.all(::capitalWord) }
+private fun capitalLetters(line: String): Set<Int> =
+    Regex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } }
+        .flatten().flatMap { it.range }.toSet()
+
+private fun capitalLine(line: String) = capitalLetters(line).isNotEmpty()
 
 private fun needsSentenceCase(words: String) = inCapitals(words) || words.lines().any(::capitalLine)
 
-/** Names in the normally written part of a line still count; its capital phrase says nothing. */
-private fun caseEvidence(copy: String) = copy.lines().joinToString("\n") { line ->
-    if (line.none(Char::isLowerCase)) "" else if (capitalLine(line)) line.split(Regex("\\s+")).joinToString(" ") { if (capitalWord(it)) it.lowercase() else it } else line
+/** Nearly all-capital sheets cannot supply names, even when a contributor missed a letter. */
+private fun caseEvidence(copy: String) = if (inCapitals(copy)) "" else copy.lines().joinToString("\n") { line ->
+    val capitals = capitalLetters(line)
+    line.mapIndexed { at, letter -> if (at in capitals) letter.lowercaseChar() else letter }.joinToString("")
 }
 
 /** Words timed one by one, [texts], in sentence case as the line they make up. */
-private fun inSentenceCase(texts: List<String>): List<String> {
-    val line = inSentenceCase(texts.joinToString(""))
+private fun inSentenceCase(texts: List<String>, sentence: (String) -> String): List<String> {
+    val line = sentence(texts.joinToString(""))
     var at = 0
     return texts.map { text -> line.substring(at, at + text.length).also { at += text.length } }
 }
@@ -1452,11 +1457,15 @@ internal class LyricsFinder(
 
         private fun inSentenceCase(found: Lyrics.Found): Lyrics.Found {
             val whole = inCapitals(found.words)
-            fun sentence(line: String) = if (whole || capitalLine(line)) inSentenceCase(line) else line
+            fun sentence(line: String): String {
+                val normal = inSentenceCase(line)
+                val capitals = capitalLetters(line)
+                return if (whole) normal else line.mapIndexed { at, letter -> if (at in capitals) normal[at] else letter }.joinToString("")
+            }
             return found.copy(
                 words = found.words.lines().joinToString("\n", transform = ::sentence),
                 lines = found.lines.map { line ->
-                    if (whole || capitalLine(line.text)) line.copy(text = sentence(line.text), words = line.words.zip(inSentenceCase(line.words.map { it.text })) { word, text -> word.copy(text = text) }) else line
+                    if (whole || capitalLine(line.text)) line.copy(text = sentence(line.text), words = line.words.zip(inSentenceCase(line.words.map { it.text }, ::sentence)) { word, text -> word.copy(text = text) }) else line
                 }
             )
         }

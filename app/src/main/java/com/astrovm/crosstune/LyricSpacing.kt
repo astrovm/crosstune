@@ -15,7 +15,7 @@ internal class LyricSpacing(copies: List<String>) {
         return parts.map { part ->
             buildString {
                 for (letter in part) {
-                    if (!letter.isWhitespace() && at in additions && previous?.isWhitespace() == false) append(' ')
+                    if (letter.isLetter() && at in additions && previous?.isLetter() == true) append(' ')
                     append(letter)
                     if (!letter.isWhitespace()) at++
                     previous = letter

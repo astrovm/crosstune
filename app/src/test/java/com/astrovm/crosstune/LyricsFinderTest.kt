@@ -684,6 +684,27 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun spelledOutAcronymsKeepTheirCapitalsBesideACapitalPhrase() {
+        val text = "We stay at the Y M C A\nWe meet NASA tonight\nWe meet Mira AND WALK HOME"
+        assertEquals("We stay at the Y M C A\nWe meet NASA tonight\nWe meet Mira and walk home",
+            LyricsFinder.cleaned(Lyrics.Found(text), song).words)
+    }
+
+    @Test
+    fun nearlyCapitalCopiesCannotSupplyBrokenCapitals() {
+        val text = "MESSAGE IN A BOTTLE\nMESSAGE IN A BOTTLe\nMESSAGE IN A BOTTLE"
+        assertEquals("Message in a bottle\nMessage in a bottle\nMessage in a bottle",
+            LyricsFinder.cleaned(Lyrics.Found(text), song).words)
+    }
+
+    @Test
+    fun newSpacesDoNotSeparatePunctuationFromItsWord() {
+        val text = "Blast off, we stay here\nRadio what is new?"
+        val copy = Lyrics.Found("Blast off , we stay here\nRadio what is new ?")
+        assertEquals(text, LyricsFinder.cleaned(Lyrics.Found(text), song, listOf(copy)).words)
+    }
+
+    @Test
     fun savedSentenceCaseIsStillReadableOfflineDuringTheRefresh() {
         val file = File.createTempFile("lyrics-old-offline", ".json").apply { delete(); deleteOnExit() }
         val cache = LookupCache(file, Dispatchers.Unconfined)
