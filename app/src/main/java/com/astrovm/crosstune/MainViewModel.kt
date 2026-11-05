@@ -1849,10 +1849,7 @@ internal class MainViewModel(
     /** [requested] as its words are looked up: as the app playing it has it, when one does. */
     private fun asPlayed(requested: MusicMetadata): MusicMetadata {
         val current = playback?.recording(requested)?.takeIf { sameSong(it, requested) && it.recordingId != null }
-        return current?.let { playing ->
-            val recognizedLength = heardSong?.takeIf { it == requested && now() - heardAtMs <= HEARD_LATELY_MS }?.lengthMs
-            RecordingKey.asPlayed(requested, playing).let { it.copy(lengthMs = it.lengthMs ?: recognizedLength) }
-        } ?: requested
+        return current?.let { RecordingKey.asPlayed(requested, it) } ?: requested
     }
 
     /** The words of songs shown, by recording, while they're being looked up ahead. */
@@ -2133,8 +2130,7 @@ internal class MainViewModel(
         val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
         val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
         appFollowing?.takeIf { needsLead(it) && shownPoints.isEmpty() }?.let { app ->
-            val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
-            heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extra) }?.let { lead ->
+            heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extraIn(app)) }?.let { lead ->
                 appLeadMs = lead
                 leadFromMs = app.clock.positionAt(now())
                 leadMatch = hearing.matchId
@@ -2173,9 +2169,12 @@ internal class MainViewModel(
     /** Whether the video playing may still be before its song: it isn't yet as far in as it's longer than the song. */
     private fun songMayNotHaveStarted(): Boolean {
         val app = appFollowing?.takeIf { it.video } ?: return false
-        val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } } ?: return false
+        val extra = extraIn(app) ?: return false
         return app.clock.positionAt(now()) < extra
     }
+
+    /** How much longer what [app] plays is than what the words are timed for, when both are known. */
+    private fun extraIn(app: Following) = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
 
     /**
      * Whether [app] plays the very release the words are timed for, as long, so where it is is where
@@ -2270,8 +2269,6 @@ internal class MainViewModel(
      */
     private fun keepInTime() {
         val shown = uiState.lyricsFor ?: return
-        // Put in time by hand, the words keep to the guess they were put in time from.
-        appFollowing?.takeIf { mayGuessLead(it) && calibrationAttempted }?.let { app -> guessLead(app, shown) }
         uiState = uiState.copy(following = inSong(appFollowing) ?: heardFollowing(shown), lyricsOffTake = timedForAnother(shown))
         hearSinging()
     }
@@ -2544,10 +2541,9 @@ internal class MainViewModel(
     private fun guessLead(app: Following, song: MusicMetadata) = guessLead(app, heardClock?.takeIf { heardSong?.let { sameSong(it, song) } == true && now() - heardAtMs <= HEARD_LATELY_MS })
 
     private fun guessLead(app: Following, heard: PlaybackClock?) {
-        val extra = app.durationMs?.let { playing -> found?.lengthMs?.let { playing - it } }
         val at = heard?.takeIf { it.playing && app.clock.playing } ?: return
         val from = app.clock.positionAt(at.atMs)
-        (from - at.positionMs).takeIf { it in LeadTiming.possible(extra) }?.let { lead ->
+        (from - at.positionMs).takeIf { it in LeadTiming.possible(extraIn(app)) }?.let { lead ->
             guessedLeadMs = lead
             leadFromMs = from
         }
@@ -2633,14 +2629,15 @@ internal class MainViewModel(
                 // nothing for it, and the microphone would hear the room, as between two songs.
                 if (playing == null && autoCalibrating) stopListeningAlong()
                 if (playing?.let(::needsLead) == true && appLeadMs == null) {
-                    leadStore.load(song)?.let { lead ->
+                    // Kept for words timed otherwise, or kept wrongly, as a false answer once was, it can't be how far this one's ahead.
+                    leadStore.load(song)?.takeIf { it in LeadTiming.possible(extraIn(playing)) }?.let { lead ->
                         appLeadMs = lead
                         leadFromMs = playing.clock.positionAt(now())
                         if (playing.video) leadSavedLines(song, playing.appPackage, lead)
                     }
                 }
-                // A first fingerprint suggests an intro through the same checks as later guesses.
-                if (playing?.let(::mayGuessLead) == true && !calibrationAttempted) guessLead(playing, song)
+                // Heard before the app said where it is, or before the song could have started, the answer goes by now.
+                if (playing?.let(::mayGuessLead) == true && guessedLeadMs == null) guessLead(playing, song)
                 // Playing the release the words are timed for, it's heard too, once, to put them right on any other.
                 val lines = playing?.let(::needsLead) == true && appLeadMs == null && syncPoints.isEmpty()
                 if (playing != null && playing.clock.playing && (lines || learnsGap(playing)) && !calibrationAttempted && mayCalibrate()) {
@@ -2716,10 +2713,6 @@ internal class MainViewModel(
         heardThisTime = false
         liningUp = false
         appFollowing = null
-        if (guessedLeadMs != null && syncPoints.isNotEmpty()) {
-            syncPoints = withGuess(syncPoints)
-            showPoints()
-        }
         appLeadMs = null
         guessedLeadMs = null
         leadMatch = null
@@ -3067,8 +3060,8 @@ internal class MainViewModel(
 
     /** The music app's video put [leadMs] ahead of the words, and kept so, for it and the lines saved from it. */
     private fun moveLead(song: MusicMetadata, leadMs: Long) {
+        // Moved by as much as the words were, from where the video's speed is already taken from.
         appLeadMs = leadMs
-        leadFromMs = appFollowing?.clock?.positionAt(now()) ?: 0L
         leadStore.save(song, leadMs)
         appFollowing?.takeIf { it.video }?.let { leadSavedLines(song, it.appPackage, leadMs) }
         // Hearings from before were taken with the gap as it was.

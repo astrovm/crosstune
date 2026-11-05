@@ -2215,20 +2215,21 @@ class ListeningTest {
     }
 
     /** A video first named by its fingerprint, as opening lyrics of what is playing does. */
-    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0): FakePlayback {
+    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0, playerMs: Long = 12_000): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val phone = FakePlayback().apply {
             access = true
             onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "video:demo"), null)
-            playing.value = Following(PlaybackClock(12_000, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
+            playing.value = Following(PlaybackClock(playerMs, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
         }
         MainActivity.playbackFactory = { phone }
         allowMicrophone()
         launch()
         composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
-        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, (heardSeconds * 1000).toLong(), SystemClock.elapsedRealtime(), "reference"))
+        // Heard from the moment the player said where it is, so how far apart they are is exact.
+        hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band", lengthMs = recognizedMs), null, kotlin.math.round(heardSeconds * 1000).toLong(), phone.playing.value!!.clock.atMs, "reference"))
         waitForText("Demo one")
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
         return phone
@@ -2249,7 +2250,9 @@ class ListeningTest {
         ShadowLog.setLoggable(TIMING_LOG, android.util.Log.DEBUG)
         val logged = heardTwice()
         assertTrue(logged.toString(), logged.any { it.startsWith("recognized 2000 ") })
-        assertTrue(logged.toString(), logged.any { it.startsWith("fingerprint 12000 ") })
+        val answer = logged.first { it.startsWith("fingerprint 12000 ") }
+        assertTrue(answer, " app PlaybackClock(" in answer)
+        assertTrue(answer, " video true duration 62000 lead " in answer)
     }
 
     @Test
@@ -2317,9 +2320,147 @@ class ListeningTest {
     }
 
     @Test
-    fun aVideoKeepsTheLengthJustHeardWhenThePlayerDoesNotKnowIt() {
+    fun aLengthHeardOnlyTellsTakesApartWhenThePlayerDoesNotKnowIt() {
         heardVideo(FakeHearing(), recognizedMs = 52_000)
-        assertEquals(52_000L, controllerModel().uiState.lyricsFor!!.lengthMs)
+        val song = controllerModel().uiState.lyricsFor!!
+        assertEquals(52_000L, song.heardLengthMs)
+        // It isn't said to be this recording's length, so the words looked up and kept stay the player's.
+        assertNull(song.lengthMs)
+        assertEquals(RecordingKey.of(MusicMetadata("Demo", "Band", recordingId = "video:demo")), RecordingKey.of(song))
+    }
+
+    /** The song heard [leadMs] behind what the video plays now, as the answer's taken to say. */
+    private fun heardBehind(hearing: FakeHearing, phone: FakePlayback, leadMs: Long, speed: Float = 1f) =
+        hearsAt(hearing, phone.playing.value!!.clock.positionAt(SystemClock.elapsedRealtime()) - leadMs, speed)
+
+    /** How far the video is ahead of the words followed, as they go now. */
+    private fun followedBehind(phone: FakePlayback) = SystemClock.elapsedRealtime().let { at ->
+        phone.playing.value!!.clock.positionAt(at) - controllerModel().uiState.following!!.clock.positionAt(at)
+    }
+
+    private fun assertLinedUp(lined: Boolean) =
+        composeRule.runOnIdle { assertEquals(controllerModel().uiState.following.toString(), lined, controllerModel().uiState.following!!.timingKnown) }
+
+    // A video 10 seconds longer than its words may be 8 seconds behind them, or 18 ahead.
+    @Test
+    fun aVideoAsFarBehindItsWordsAsOneCouldBeIsLinedUp() {
+        heardVideo(FakeHearing(), heardSeconds = 33.0, playerMs = 25_000)
+        assertLinedUp(true)
+    }
+
+    @Test
+    fun aVideoAnyFurtherBehindItsWordsIsnt() {
+        heardVideo(FakeHearing(), heardSeconds = 33.001, playerMs = 25_000)
+        assertLinedUp(false)
+    }
+
+    @Test
+    fun aVideoAsFarAheadOfItsWordsAsOneCouldBeIsLinedUp() {
+        heardVideo(FakeHearing(), heardSeconds = 7.0, playerMs = 25_000)
+        assertLinedUp(true)
+    }
+
+    @Test
+    fun aVideoAnyFurtherAheadOfItsWordsIsnt() {
+        heardVideo(FakeHearing(), heardSeconds = 6.999, playerMs = 25_000)
+        assertLinedUp(false)
+    }
+
+    @Test
+    fun theOneRightAnswerAfterAFalseOneLinesAVideoUp() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing, heardSeconds = 39.0)
+        assertLinedUp(false)
+        heardBehind(hearing, phone, 10_000)
+        assertLinedUp(true)
+        composeRule.runOnIdle { assertEquals(10_000.0, followedBehind(phone).toDouble(), 100.0) }
+    }
+
+    /** Heard while the video, 4 seconds ahead, can't be told from its 10 seconds of extra yet; then [laterMs] on, the player says where it is. */
+    private fun heardBeforeItMayHaveStarted(laterMs: Long): FakePlayback {
+        val phone = heardVideo(FakeHearing(), heardSeconds = 1.0, playerMs = 5_000)
+        assertLinedUp(false)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(laterMs))
+        composeRule.runOnIdle { SystemClock.elapsedRealtime().let { at -> phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(phone.playing.value!!.clock.positionAt(at), at)) } }
+        composeRule.waitForIdle()
+        return phone
+    }
+
+    @Test
+    fun aVideoHeardBeforeItsSongMayHaveStartedIsLinedUpOnceItMayHave() {
+        val phone = heardBeforeItMayHaveStarted(8_000)
+        assertLinedUp(true)
+        composeRule.runOnIdle { assertEquals(4_000.0, followedBehind(phone).toDouble(), 100.0) }
+    }
+
+    @Test
+    fun aVideoHeardLongAgoIsntLinedUpByThat() {
+        heardBeforeItMayHaveStarted(61_000)
+        assertLinedUp(false)
+    }
+
+    @Test
+    fun aVideoFollowedAgainGoesAsFastAsItsHeardToFromThenOn() {
+        val hearing = FakeHearing()
+        val phone = videoHeardGoingAt(hearing, listOf(0.9f, 0.9f, 0.9f))
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        val listens = hearing.listens
+        composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+        waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        heardBehind(hearing, phone, 10_000)
+        composeRule.runOnIdle { assertEquals(1f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
+    }
+
+    @Test
+    fun aVideoOpenedAgainWellIntoItIsTakenToGoSlowerOnlyFromThere() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        playerAt(phone, 100_000)
+        val listens = hearing.listens
+        composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+        waitUntil(TIMEOUT_MS) { hearing.listens > listens }
+        // The first opens the words, so it's from after that they're followed.
+        repeat(4) { hearsAt(hearing, 200_000, 0.9f) }
+        playerAt(phone, 130_000)
+        // 30 seconds of the video from where it was opened, 27 of the song.
+        composeRule.runOnIdle { assertEquals(LeadStore(prefs()).load(song)!! + 3_000.0, followedBehind(phone).toDouble(), 500.0) }
+    }
+
+    @Test
+    fun aLineOfASlowVideoTappedAsItsSungIsWhereItsSungAndGoesOnFromThere() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        val song = controllerModel().uiState.lyricsFor!!
+        for (index in 0..2) {
+            composeRule.runOnIdle {
+                val position = 2_000L + index * 10_000
+                phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(position + 10_000, SystemClock.elapsedRealtime()))
+                hearing.next.trySend(Heard.Song(MusicMetadata("Demo", "Band"), null, position + 5_000, SystemClock.elapsedRealtime(), "longer", speed = 0.9f))
+            }
+            if (index < 2) waitUntil(TIMEOUT_MS) { hearing.listens == index + 2 }
+        }
+        waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
+        playerAt(phone, 20_000)
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { lit("Demo two") }
+        playerAt(phone, 50_000)
+        // 30 seconds of the video from where the line, 10 seconds in, was tapped: 27 of the song.
+        composeRule.runOnIdle { assertEquals(37_000.0, controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime()).toDouble(), 500.0) }
+    }
+
+    @Test
+    fun aLeadKeptThatNoVideoOfTheseWordsCouldHaveGivesWayToWhatsHeard() {
+        LeadStore(prefs()).save(MusicMetadata("Demo", "Band", recordingId = "video:demo"), -27_000)
+        val phone = heardVideo(FakeHearing())
+        composeRule.runOnIdle { assertEquals(10_000.0, followedBehind(phone).toDouble(), 100.0) }
     }
 
     @Test

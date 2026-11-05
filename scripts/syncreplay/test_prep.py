@@ -498,6 +498,48 @@ class WordsShownTest(unittest.TestCase):
         self.assertEqual('One two three', r.found_words('song', kept)['lines'][0][1])
 
 
+class FoundWordsTest(unittest.TestCase):
+    def found(self, *kept):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'song.lyrics.json').write_text(json.dumps([[0, 'One two three'], [1, 'Four five six']]))
+            (r.OUT / 'lyrics.json').write_text(json.dumps([['key', json.dumps(words)] for words in kept]))
+            return r.found_words('song', r.OUT)
+
+    def test_the_words_it_settled_on_over_those_it_first_found(self):
+        first = dict(lines=[[0, 'One two three'], [1, 'Four five six']], provisional=True, source='first')
+        settled = dict(lines=[[0, 'One two three Four five six']], source='settled')
+        self.assertEqual('settled', self.found(first, settled)['source'])
+
+    def test_the_last_of_those_still_to_settle(self):
+        first = dict(lines=[[0, 'One two three']], provisional=True, source='first')
+        last = dict(lines=[[0, 'One two three']], provisional=True, source='last')
+        self.assertEqual('last', self.found(first, last)['source'])
+
+    def test_not_the_next_songs(self):
+        next_song = dict(lines=[[0, 'Seven eight nine']], source='next')
+        ours = dict(lines=[[0, 'One two three']], provisional=True, source='ours')
+        self.assertEqual('ours', self.found(ours, next_song)['source'])
+
+
+class LearntTest(unittest.TestCase):
+    def test_how_far_a_video_is_ahead_is_forgotten_too(self):
+        self.assertIn('video_timing', r.LEARNT)
+
+
+class AdbTest(unittest.TestCase):
+    def test_goes_to_the_phone_named_and_no_other(self):
+        with patch.dict(r.os.environ, {'ANDROID_SERIAL': 'phone', 'ADB': 'adb-tool'}), patch.object(r.subprocess, 'run') as run:
+            r.adb('logcat', '-c')
+        self.assertEqual(['adb-tool', '-s', 'phone', 'logcat', '-c'], run.call_args.args[0])
+
+    def test_with_no_phone_named_nothing_runs(self):
+        for serial in ({}, {'ANDROID_SERIAL': ''}):
+            with patch.dict(r.os.environ, serial, clear=True), patch.object(r.subprocess, 'run') as run:
+                with self.assertRaises(SystemExit):
+                    r.adb('logcat', '-c')
+            run.assert_not_called()
+
+
 class PhoneTest(unittest.TestCase):
     def test_line_times_use_the_player_even_when_the_following_clock_jumps(self):
         log = ('said 24000 at 100000 playing true, kept 24000 at 100000\n'

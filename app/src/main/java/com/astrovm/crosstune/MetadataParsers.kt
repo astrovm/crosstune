@@ -21,7 +21,12 @@ internal data class MusicMetadata(
     /** How long a song lasts, when its service or the app playing it says, to tell its versions apart. */
     val lengthMs: Long? = null,
     /** The playing app's recording, when it identifies it; a duration-based identity when it doesn't. */
-    val recordingId: String? = null
+    val recordingId: String? = null,
+    /**
+     * How long it lasts where it was heard or opened, when the app playing it says nothing: enough to
+     * tell apart timed copies of its takes, but not to say this recording is that one.
+     */
+    val heardLengthMs: Long? = null
 )
 
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */

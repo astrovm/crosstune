@@ -8,7 +8,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
-  python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
+  ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
@@ -92,7 +92,7 @@ ON_TIME_S = 0.5
 TIMING_LOG = "CrosstuneTiming"
 DEV_APP = "com.astrovm.crosstune.dev"
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
-LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps")
+LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps", "video_timing")
 # Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
 MIN_NAME = 8
 
@@ -507,12 +507,20 @@ def found_words(song, kept):
     too, so it's those most like the words given to prep."""
     given = [line for _, line in json.loads((OUT / f"{song}.lyrics.json").read_text())]
     found = [json.loads(entry[1]) for entry in json.loads((kept / "lyrics.json").read_text())]
-    return max(found, key=lambda words: len(lined_up(given, [line[1] for line in words["lines"]])))
+    same = [len(lined_up(given, [line[1] for line in words["lines"]])) for words in found]
+    # The song's own may be kept twice, first as they were found and then as they were settled on, and
+    # those may break their lines otherwise: the settled ones are the lines it lit.
+    ours = [words for words, lines in zip(found, same) if lines * 2 >= max(same)]
+    return next((words for words in reversed(ours) if not words.get("provisional")), ours[-1])
 
 
 def adb(*command):
+    # With the phone gone, adb on its own goes to whatever else is connected, like someone's emulator.
+    serial = os.environ.get("ANDROID_SERIAL")
+    if not serial:
+        sys.exit("Say which phone in ANDROID_SERIAL")
     tool = os.environ.get("ADB", str(Path.home() / "Android" / "Sdk" / "platform-tools" / "adb"))
-    return subprocess.run([tool, *command], capture_output=True, check=True).stdout
+    return subprocess.run([tool, "-s", serial, *command], capture_output=True, check=True).stdout
 
 
 def shell(*command):
