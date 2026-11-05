@@ -103,7 +103,7 @@ internal object LyricsSync {
 internal class LyricsSyncStore(private val preferences: SharedPreferences) {
 
     fun load(song: MusicMetadata, lines: List<LyricLine>): List<SyncPoint> {
-        val array = saved(song, lines)?.optJSONArray("points") ?: return emptyList()
+        val array = saved(song, lines)?.optJSONArray("points") ?: JSONArray()
         return LyricsSync.withoutSlips((0 until array.length()).mapNotNull { index ->
             array.optJSONArray(index)?.let { SyncPoint(it.optLong(0), it.optLong(1)) }
         }.sortedBy { it.lineMs })

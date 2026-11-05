@@ -182,6 +182,19 @@ class LyricsSyncTest {
     }
 
     @Test
+    fun aLaterPlayFindsTheLinesAndThePaceKeptBeforeIt() {
+        val points = listOf(SyncPoint(10_000, 12_000), SyncPoint(30_000, 33_000))
+        LyricsSyncStore(prefs).save(song, lines, points, 0.966)
+        // Another store, as on the next play, reads both back from the phone's preferences.
+        val later = LyricsSyncStore(prefs)
+        assertEquals(points, later.load(song, lines))
+        assertEquals(0.966, later.pace(song, lines), 0.0)
+        // And a pace kept with no line at all has no lines to give back.
+        LyricsSyncStore(prefs).save(song, lines, emptyList(), 0.966)
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs).load(song, lines))
+    }
+
+    @Test
     fun correctionsBelongToOneRecordingOnly() {
         val store = LyricsSyncStore(prefs)
         val one = song.copy(recordingId = "player:one", lengthMs = 200_000)
