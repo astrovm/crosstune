@@ -25,6 +25,7 @@ SERVICES = {
     'YOUTUBE_MUSIC@app.morphe.android.apps.youtube.music': 'YouTube Music',
 }
 SEARCHES = [('Crosstune Unreleased First', 'Test Band'), ('Crosstune Unreleased Second', 'Test Band')]
+PACKAGES = dict(zip(SERVICES, ['com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music']))
 TEST_APPS = {'com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music'}
 LINKS = ['https://www.deezer.com/track/3135556', 'https://www.deezer.com/track/908604612']
 
@@ -61,6 +62,13 @@ def main():
         if not re.search(r'volume is 0\b', volume):
             raise RuntimeError('Refusing to open an app with nonzero media volume: ' + volume)
 
+    current_name = None
+
+    def capture(name):
+        (args.output / (name + '.tasks.txt')).write_text(adb('shell', 'dumpsys', 'activity', 'activities'))
+        (args.output / (name + '.tree.txt')).write_text(device('snapshot', '-i'))
+        device('screenshot', str((args.output / (name + '.png')).resolve()))
+
     def stop_playing():
         sessions = adb('shell', 'dumpsys', 'media_session')
         for block in re.split(r'(?=package=)', sessions):
@@ -70,6 +78,8 @@ def main():
                 if 'youtube' in package.group(1) and not re.search(r'description=\S', block):
                     continue
                 if package.group(1) in TEST_APPS:
+                    if current_name:
+                        capture(current_name + '.before-stop')
                     adb('shell', 'am', 'force-stop', package.group(1))
                     print('Stopped playback:', package.group(1), flush=True)
 
@@ -82,6 +92,9 @@ def main():
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     for target, label in SERVICES.items():
         if args.service and target != args.service:
+            continue
+        if not adb('shell', 'pm', 'path', PACKAGES[target]).strip():
+            (args.output / (args.phase + '-' + target + '.not-testable.txt')).write_text('App is not installed on the Samsung.')
             continue
         for kind in ['search', 'link']:
             for card in [True, False]:
@@ -107,6 +120,7 @@ def main():
                         adb('shell', 'run-as', APP, 'sh', '-c', "'cat > shared_prefs/crosstune_preferences.xml'", input=ET.tostring(prefs, encoding='unicode'))
                         for index, (title, artist) in enumerate(SEARCHES):
                             name = prefix + '-' + str(index)
+                            current_name = name
                             adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
                             adb('shell', 'wm', 'dismiss-keyguard')
                             if kind == 'search':
@@ -128,9 +142,7 @@ def main():
                                     print('No card action:', name, flush=True)
                             time.sleep(12)
                             stop_playing()
-                            (args.output / (name + '.tasks.txt')).write_text(adb('shell', 'dumpsys', 'activity', 'activities'))
-                            (args.output / (name + '.tree.txt')).write_text(device('snapshot', '-i'))
-                            device('screenshot', str((args.output / (name + '.png')).resolve()))
+                            capture(name)
                             print('Captured', name, flush=True)
                     finally:
                         adb('shell', 'am', 'force-stop', APP)
