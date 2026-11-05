@@ -1,5 +1,8 @@
+Qobuz opens the song in its app and plays it.
+Bandcamp's app opens searching for the song.
+Covers come from the song's own artist.
 Lyrics light on videos Shazam can't line up.
-Words sung again later don't move lines far off.
+Lines don't jump on repeated words or music.
 Lines timed late at the start begin on time.
 More songs get timed lyrics.
 Bright visuals don't wash out the lyrics.
