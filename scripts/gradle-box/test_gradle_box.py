@@ -211,16 +211,44 @@ class GradleBoxTest(unittest.TestCase):
         for slot, age in ((2, 100), (3, 200)):
             home = state / f"gradle-{slot}"
             home.mkdir(parents=True)
-            (home / "data").write_bytes(b"x" * 8192)
+            (home / "data").write_bytes(b"x" * 1048576)
             os.utime(home, (age, age))
         (self.seed() / "modules-2").mkdir(parents=True)
-        box = self.start("a", "help", GRADLE_BOX_CACHE_BYTES="12000")
+        def allocated(path):
+            return sum(p.lstat().st_blocks * 512 for p in path.rglob("*"))
+
+        # Leave room for queue and lock metadata on filesystems with different block sizes.
+        limit = allocated(state) - allocated(state / "gradle-2") // 2
+        box = self.start("a", "help", GRADLE_BOX_CACHE_BYTES=str(limit))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertFalse((state / "gradle-2").exists())
         self.assertTrue((state / "gradle-3" / "data").exists())
         self.assertTrue(self.seed().exists())
         self.assertIn("gradle-2", output)
+
+    def test_seed_and_old_style_locked_home_are_kept_until_all_slots_are_free(self):
+        import fcntl
+        state = self.dir / "state"
+        home = state / "gradle-2"
+        home.mkdir(parents=True)
+        (home / "data").write_bytes(b"x" * 8192)
+        (self.seed() / "modules-2").mkdir(parents=True)
+        (self.seed() / "modules-2" / "data").write_bytes(b"x" * 8192)
+        with (state / "slot-2.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            box = self.start("first", "help", GRADLE_BOX_CACHE_BYTES="1")
+            output, _ = box.communicate(timeout=20)
+            self.assertEqual(box.returncode, 0, output)
+            self.assertTrue((home / "data").exists())
+            self.assertTrue((self.seed() / "modules-2" / "data").exists())
+            self.assertIn("above", output)
+        box = self.start("second", "help", GRADLE_BOX_CACHE_BYTES="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertFalse(home.exists())
+        self.assertFalse(self.seed().exists())
+        self.assertIn("seed", output)
 
     def test_cleanup_leaves_cache_under_limit(self):
         home = self.dir / "state" / "gradle-2"
