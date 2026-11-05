@@ -1521,6 +1521,7 @@ class MainViewModelTest {
             model.onUrlChange(link)
             model.resolveTypedInput()
             until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
+            until("destination prepared") { model.uiState.destinationUrls[model.uiState.resultDestination] != null }
             // A previous handoff must lose its retry even when this one is another app or a search.
             numbers.opened(MusicMetadata("Previous", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/99")
             asked = 0

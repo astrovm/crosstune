@@ -201,6 +201,29 @@ class QobuzNumbersTest {
     }
 
     @Test
+    fun theExistingOtherPlayerStartingAgainCancelsTheRetry() {
+        val before = Heard.Song(MusicMetadata("Before", "Someone"), null, app = "other.app")
+        phone.onThePhone = before
+        numbers.opened(song, qobuz, link)
+        passes(1_000)
+        phone.onThePhone = null
+        passes(1_000)
+        phone.onThePhone = before
+        passes(QobuzNumbers.WAIT_MS)
+        assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
+    fun theExistingOtherPlayerChangingSongsCancelsTheRetry() {
+        phone.onThePhone = Heard.Song(MusicMetadata("Before", "Someone"), null, app = "other.app")
+        numbers.opened(song, qobuz, link)
+        passes(1_000)
+        phone.onThePhone = Heard.Song(MusicMetadata("Next", "Someone"), null, app = "other.app")
+        passes(QobuzNumbers.WAIT_MS)
+        assertTrue(phone.opened.isEmpty())
+    }
+
+    @Test
     fun switchingAppsWhileTheStoreIsStillAnsweringCancelsItToo() {
         val slow = QobuzNumbers(phone, { _, _ -> delay(QobuzNumbers.WAIT_MS * 2); other }, { true }, scope)
         slow.opened(song, qobuz, link)
