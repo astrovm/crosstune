@@ -1590,4 +1590,74 @@ class MainViewModelTest {
         assertTrue(model.uiState.resultMissing)
         assertTrue(playback.opened.isEmpty())
     }
+
+    @Test
+    fun aSongOfAListOpenedInQobuzsAppIsWatchedOnlyWhenOpenedByItsNumber() {
+        val song = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Thriller">Thriller</a>
+                <p class="ListItem__artists">Michael Jackson • Thriller</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;625089"></button>
+            </div></li>"""
+        var found = true
+        fake.handler = { request -> FakeSpotify.html(request, if (found) song else "") }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.QOBUZ.packageName, "Qobuz"))
+        prefs().edit().putString("default_target", MusicService.QOBUZ.name).commit()
+        val playback = FakePlayback().apply { access = true }
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
+        var asked = 0
+        val numbers = QobuzNumbers(playback, { _, _ -> asked++; null }, app::hasApp, scope)
+        val model = model(playback = playback, qobuzNumbers = numbers)
+        model.refreshSystemState()
+        idle()
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.selectNotFoundAction(NotFoundAction.SEARCH)
+        try {
+            model.openTrack(MusicMetadata("Thriller", "Michael Jackson"))
+            until("opened on its number") { effects.size == 1 }
+            assertTrue((effects[0] as Effect.Open).url.endsWith("/track/625089"))
+            assertEquals(1, asked)
+            // A search has no number to swap.
+            found = false
+            model.openTrack(MusicMetadata("Song Not There", "Band"))
+            until("searched") { effects.size == 2 }
+            assertTrue("search" in (effects[1] as Effect.Open).url)
+            assertEquals(1, asked)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun anAppSeenToHaveTheSongIsntTakenForACoverWhateverItCallsTheArtist() {
+        fake.handler = { request ->
+            when {
+                request.url.host == "www.qobuz.com" -> FakeSpotify.html(request, """
+                    <li><div class="ListItem">
+                        <a href="/x/album/slug/a1" class="ListItem__title" title="Despacito">Despacito</a>
+                        <p class="ListItem__artists">Luis Fonsi • Vida</p>
+                        <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;39267477"></button>
+                    </div></li>""")
+                else -> FakeSpotify.html(request, """{"title":"Despacito","author_name":"Luis Fonsi"}""")
+            }
+        }
+        val qobuz = MusicService.QOBUZ.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(qobuz, "Qobuz"))
+        prefs().edit().putString("default_target", MusicService.QOBUZ.name).commit()
+        // What the phone says it plays names someone else, and it was already on that as it's asked.
+        val playback = FakePlayback().apply { access = true; onThePhone = Heard.Song(MusicMetadata("Despacito", "Fonsi Family"), null, app = qobuz) }
+        val model = model(playback = playback)
+        model.refreshSystemState()
+        idle()
+        model.onUrlChange(ytLink)
+        model.resolveTypedInput()
+        until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
+        model.playResult()
+        until("asked by name") { playback.songsAsked.isNotEmpty() }
+        playback.playing.value = following(app = qobuz)
+        until("done playing it") { !model.uiState.playingResult }
+        assertTrue(playback.opened.isEmpty())
+        assertTrue(playback.plays.isEmpty())
+    }
 }

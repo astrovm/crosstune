@@ -1026,6 +1026,36 @@ class PlaybackTest {
     }
 
     @Test
+    fun qobuzOpensThroughAScreenThatLeavesTimeToOpenItAgainAndOtherAppsDirectly() {
+        val qobuz = MusicService.QOBUZ.packageName
+        val link = "https://play.qobuz.com/track/1"
+        // With nothing to open it, that's said, and nothing's started.
+        assertFalse(playback.openSong(qobuz, link))
+        assertNull(shadowOf(app).nextStartedActivity)
+        val opens = ComponentName(qobuz, "$qobuz.DeepLink")
+        shadowOf(app.packageManager).addActivityIfNotPresent(opens)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            opens, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
+        )
+        assertTrue(playback.openSong(qobuz, link))
+        val through = shadowOf(app).nextStartedActivity
+        assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+        assertTrue(through.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        // It opens the song there, the way the app's own link does, and closes.
+        val screen = org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, through).create().get()
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, opened.action)
+        assertEquals(qobuz, opened.`package`)
+        assertEquals("https://open.qobuz.com/track/1", opened.dataString)
+        assertTrue(screen.isFinishing)
+        // Any other app, with nothing to open again, is opened as it was.
+        assertTrue(playback.openSong("com.spotify.music", "https://open.spotify.com/track/1"))
+        val direct = shadowOf(app).nextStartedActivity
+        assertEquals("com.spotify.music", direct.`package`)
+        assertEquals("https://open.spotify.com/track/1", direct.dataString)
+    }
+
+    @Test
     fun onATvAYouTubeMusicSongOpensInYouTubesTvApp() {
         // YouTube Music's TV app opens its home for a song's link; YouTube's plays it, as YouTube's.
         shadowOf(app).checkActivities(true)
@@ -1584,6 +1614,30 @@ class PlaybackTest {
         shadowOf(music).setPlaybackState(at(2, PlaybackState.STATE_PAUSED))
         playback.playQueued(song, 3)
         playback.playQueued(MusicMetadata("Other", "Band"), 3)
+    }
+
+    /** What an app is asked for by name, which Robolectric doesn't pass on to it. */
+    @Implements(MediaController.TransportControls::class)
+    class AskedByName {
+        @Implementation
+        fun playFromSearch(query: String?, extras: android.os.Bundle?) {
+            asked += query to extras?.getString(android.provider.MediaStore.EXTRA_MEDIA_TITLE)
+        }
+
+        companion object {
+            val asked = mutableListOf<Pair<String?, String?>>()
+        }
+    }
+
+    @Test
+    @Config(shadows = [AskedByName::class])
+    fun anAppIsAskedForASongByTheNameItsStoreKnowsIt() = runBlocking {
+        AskedByName.asked.clear()
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band"))
+        // Searched as a video calls it, Qobuz lists only tributes (Issue #673).
+        assertTrue(playback.playSong(MusicMetadata("Despacito ft. Daddy Yankee", "Luis Fonsi"), "com.spotify.music"))
+        assertEquals(listOf("Despacito Luis Fonsi" to "Despacito ft. Daddy Yankee"), AskedByName.asked)
     }
 
     @Test

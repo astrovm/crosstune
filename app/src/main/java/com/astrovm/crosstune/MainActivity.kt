@@ -1078,9 +1078,11 @@ class MainActivity : ComponentActivity() {
         val apps = effect.packageName?.let { MusicService.appLinksIn(it, effect.url) }.orEmpty()
         // An app that opens no page of its website's is asked for the song by search instead.
         val search = effect.packageName?.let { MusicService.searchIn(it, effect.url, effect.asking) }
-        val opened = search?.let { tryStartActivityTwice(it.addFlags(flags)) } == true ||
-            apps.any { (app, link) -> tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags)) } ||
-            openOutsideCrosstune(uri, flags)
+        val opened = search?.let { tryStartActivityTwice(it.addFlags(flags)) } == true || apps.any { (app, link) ->
+            // Closing as it opens it gives Crosstune the time to open it again; a screen that stays doesn't.
+            if (!effect.finishAfterOpen && MusicService.ofOwnApp(app) == MusicService.QOBUZ) openLeavingTimeToOpenAgain(app, link.toUri())
+            else tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags))
+        } || openOutsideCrosstune(uri, flags)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
             floatOn -> floatOn()

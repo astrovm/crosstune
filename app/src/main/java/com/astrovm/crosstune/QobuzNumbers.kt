@@ -65,7 +65,7 @@ internal class QobuzNumbers(
     }
 
     companion object {
-        /** Android lets Crosstune open an app only for 10 s after its screen closed (measured: blocked at 10.0 s, allowed at 9.6 s). */
+        /** Android lets Crosstune open an app only for 10 s after one of its screens started or closed, see [OpenSongActivity] (measured: blocked at 10.0 s, allowed at 9.9 s). */
         const val WAIT_MS = 8_000L
     }
 }
