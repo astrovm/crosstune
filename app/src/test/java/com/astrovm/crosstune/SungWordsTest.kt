@@ -292,6 +292,64 @@ class SungWordsTest {
         assertNull(SungAlignment.shiftMs(heard(lines.take(2), 10_800), fromTheStart, lines))
     }
 
+    /** Three lines timed a line at a time from [startMs], twelve words in all, none of them in the song twice. */
+    private fun verse(startMs: Long) = timed("Sing to me tonight", "Under yellow moon above", "Morning light dancing water", startMs = startMs)
+
+    /** The [verse] heard sung [shiftMs] later than timed, in a song that has [others] too. */
+    private fun farShift(startMs: Long, shiftMs: Long, vararg others: LyricLine): Long? {
+        val lines = (verse(startMs) + others).sortedBy { it.timeMs }
+        return SungAlignment.shiftMs(heard(verse(startMs), shiftMs), fromTheStart, lines)
+    }
+
+    /** A line of the verse's words, as many as [count], timed to be sung at [atMs]. */
+    private fun echo(atMs: Long, count: Int, from: Int = 0) =
+        LyricLine(atMs, "Sing to me tonight under yellow moon above morning light dancing water".split(' ').drop(from).take(count).joinToString(" "))
+
+    // Heard 23.6 s late, from 24.0 s to 30.75 s, the words of the verse timed 0 to 6 s. Filler at 9 s keeps the verse's last line out of what's sung while it's heard.
+    private val filler = LyricLine(9_000, "Ooh ooh")
+
+    @Test
+    fun linesFarOffStayWhereTheyAreOnlyWhenHalfTheWordsHeardAreSungThereToo() {
+        // Five of the twelve words heard match where lines are timed at the time: less than half.
+        assertEquals(23_600L, farShift(0, 23_600, filler, echo(25_000, 5)))
+        // Six are exactly half: as sung there as anywhere.
+        assertNull(farShift(0, 23_600, filler, echo(25_000, 6)))
+    }
+
+    @Test
+    fun linesTimedExactlyTenSecondsOffAreToldEvenWhenSungAsWellWhereTheyAre() {
+        // Not further off than near looks; heard from 30.4 s, the verse timed 20 s on, a line of it too early for near to see.
+        assertEquals(10_000L, farShift(20_000, 10_000, LyricLine(28_000, "Ooh ooh"), echo(31_000, 6)))
+        // A little further off, they are not.
+        assertNull(farShift(20_000, 10_800, LyricLine(28_000, "Ooh ooh"), echo(31_000, 6)))
+    }
+
+    @Test
+    fun aLineTimedWhenTheLastWordIsHeardIsSungThenButOneTimedAfterIsNot() {
+        assertEquals(23_600L, farShift(0, 23_600, filler, echo(25_000, 5)))
+        // One more word of the verse, timed as the last word heard is: six words of twelve are sung where the lines are.
+        assertNull(farShift(0, 23_600, filler, echo(25_000, 5), echo(30_750, 1, from = 5)))
+        // A moment after the last word, it's not.
+        assertEquals(23_600L, farShift(0, 23_600, filler, echo(25_000, 5), echo(30_751, 1, from = 5)))
+    }
+
+    @Test
+    fun aLineEndingAsTheFirstWordIsHeardWasNotSungThen() {
+        // The line before is over by then, though it has a word of the verse.
+        assertEquals(23_600L, farShift(0, 23_600, echo(9_000, 1), echo(24_000, 5, from = 1)))
+        // A moment later it's still going, and six of twelve are sung there.
+        assertNull(farShift(0, 23_600, echo(9_000, 1), echo(24_001, 5, from = 1)))
+    }
+
+    @Test
+    fun linesTimedFarOffAreOnlyToldWhenSungByFarMoreThanAnywhereElse() {
+        fun elsewhere(lastLine: String) = listOf(LyricLine(100_000, "Sing to him later"), LyricLine(103_000, "Under yellow rain again"), LyricLine(106_000, lastLine))
+        // Another place in the song with five of the twelve words heard, over three lines: less than half.
+        assertEquals(23_600L, farShift(0, 23_600, filler, *elsewhere("Morning song for you").toTypedArray()))
+        // Six are exactly half, and not by far.
+        assertNull(farShift(0, 23_600, filler, *elsewhere("Morning light again today").toTypedArray()))
+    }
+
     @Test
     fun aSongsWordsAreHeardOnceForTheSameWordsOnly() {
         val store = SungStore(prefs)

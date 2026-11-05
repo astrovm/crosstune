@@ -24,7 +24,7 @@ class SyncSetTest {
         val dir = listOf(File("../build/syncreplay"), File("build/syncreplay")).firstOrNull { File(it, "set.asked").exists() }
         assumeTrue("Only when scripts/syncreplay asks", dir != null)
         if (dir == null) return
-        val songs = File(dir.parentFile.parentFile, "scripts/syncreplay/songs.tsv").readLines()
+        val songs = File(dir, "../../scripts/syncreplay/songs.tsv").readLines()
             .filter { it.isNotBlank() && !it.startsWith("#") }
             .map { it.split("\t") }
         val client = httpClient()

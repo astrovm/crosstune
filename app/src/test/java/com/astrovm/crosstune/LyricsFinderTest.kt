@@ -2195,6 +2195,25 @@ class LyricsFinderTest {
         assertEquals(13_000L, times().first())
     }
 
+    @Test
+    fun sixLinesInCommonAreEnoughToTellWhereARushedLineBelongs() {
+        // Five aren't (above); one more is.
+        rushedSheets(evenSheet(6), netEaseSheet(6, rushed = arrayOf(Triple(0, 13_000L, 160L))))
+        assertEquals(listOf(10_200L) + (1..5).map { 10_200L + it * 4_000L }, (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs })
+    }
+
+    @Test
+    fun aLineIsOnlyRushedWhenItsWordsGoByFasterThanTwoHundredMillisecondsEach() {
+        fun times() = (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs }
+        val others = sungWords.indices.drop(1).map { 10_200L + it * 4_000L }
+        // Exactly that is sung quickly, not hurried.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 13_000L, 200L))))
+        assertEquals(listOf(13_000L) + others, times())
+        // A little faster is.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 13_000L, 199L))))
+        assertEquals(listOf(10_200L) + others, times())
+    }
+
     /** LRCLIB with [lrclib], timed for a recording 6 seconds shorter than [anotherTake]'s, and NetEase with [netEase], as long as it. */
     private fun twoSheets(lrclib: List<Pair<Long, String>>, netEase: List<Pair<Long, String>>) {
         fun sheet(lines: List<Pair<Long, String>>) = lines.joinToString("\n") { (ms, text) -> "[%02d:%02d.%02d]%s".format(ms / 60_000, ms / 1_000 % 60, ms % 1_000 / 10, text) }
