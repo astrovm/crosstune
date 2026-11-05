@@ -229,7 +229,7 @@ internal object SungAlignment {
      * moment of [sung], by the clock the words follow.
      */
     fun shiftMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>): Long? {
-        val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) } }
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) } }
         if (heard.isEmpty()) return null
         return near(heard, lines)?.first ?: far(heard, lines)
     }
@@ -243,7 +243,7 @@ internal object SungAlignment {
      * told where it starts, stays [shiftMs] off.
      */
     fun linesMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>, shiftMs: Long): Map<Int, Long> {
-        val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
         if (heard.isEmpty()) return emptyMap()
         val from = heard.first().second - LINE_OFF_MS
         val to = heard.last().second + LINE_OFF_MS
@@ -335,7 +335,7 @@ internal object SungAlignment {
      */
     private fun wordsOf(line: LyricLine, nextMs: Long?, index: Int): List<Word> {
         val words = line.words.ifEmpty { listOf(TimedWord(line.timeMs, line.text)) }.flatMap { word ->
-            word.text.split(' ').map(::plain).filter { it.isNotEmpty() }.mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
+            pieces(word.text).mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
         }
         val letters = words.sumOf { it.first.length }
         val sungFor = (nextMs ?: (line.timeMs + LAST_LINE_MS)) - line.timeMs
@@ -344,6 +344,11 @@ internal object SungAlignment {
             Word(text, ms, ms ?: (line.timeMs + sungFor * before * 4 / 5 / letters), index).also { before += text.length }
         }
     }
+
+    /** Match unspaced writing by letters, as the model can split the same phrase anywhere. */
+    private fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.findAll(plain(word)).map { it.value }.toList() }
+
+    private val writing = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+")
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
     private fun plain(word: String): String =
