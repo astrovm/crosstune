@@ -1489,6 +1489,72 @@ class MainViewModelTest {
         assertEquals(MusicService.TIDAL.packageName, (effects.single() as Effect.Open).packageName)
     }
 
+    /** The old watch must stop even when the chosen app keeps playing the same song. */
+    private fun pendingQobuzAction(action: (MainViewModel, FakePlayback, MutableList<Effect>) -> Unit) {
+        val playback = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null, app = "com.spotify")
+            playing.value = following()
+        }
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
+        var looked = 0
+        val numbers = QobuzNumbers(playback, { _, _ -> looked++; "https://play.qobuz.com/track/2" }, { true }, scope)
+        val model = model(playback = playback, qobuzNumbers = numbers)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        model.peekPlayingNow()
+        idle()
+        numbers.opened(MusicMetadata("Pending", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/1")
+        assertEquals(1, looked)
+        try {
+            action(model, playback, effects)
+            pass(QobuzNumbers.WAIT_MS * 2)
+            assertTrue(playback.opened.isEmpty())
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun askingThePlayersAppAgainCancelsThePendingQobuzRetry() = pendingQobuzAction { model, playback, _ ->
+        playback.playing.value = null
+        until("the app let go") { model.uiState.player?.following == null }
+        model.playerPlayPause()
+        idle()
+        assertEquals(1, playback.songsAsked.size)
+    }
+
+    @Test
+    fun pausingThePlayerCancelsThePendingQobuzRetry() = pendingQobuzAction { model, playback, _ ->
+        model.playerPlayPause()
+        assertEquals(listOf(false), playback.plays.toList())
+    }
+
+    @Test
+    fun bringingThePlayersAppForwardCancelsThePendingQobuzRetry() = pendingQobuzAction { model, _, effects ->
+        model.openPlayerApp()
+        idle()
+        assertEquals(Effect.Show("com.spotify", finishAfterOpen = false, saysWhenItFails = false), effects.single())
+    }
+
+    @Test
+    fun clearingTheSongCancelsThePendingQobuzRetry() = pendingQobuzAction { model, _, _ ->
+        model.clear()
+        assertNull(model.uiState.result)
+    }
+
+    @Test
+    fun aNonMusicVideoCancelsThePendingQobuzRetryBeforeBeingHandedOn() = pendingQobuzAction { model, _, effects ->
+        fake.handler = { request -> FakeSpotify.html(request, """{"x":{"musicVideoType":"MUSIC_VIDEO_TYPE_UGC"}}""") }
+        val video = "https://www.youtube.com/watch?v=aaaaaaaaaaa"
+        model.setOnlyMusicVideos(true)
+        model.resolveIncoming(video)
+        until("video handed on") { effects.any { it is Effect.Open } }
+        assertEquals(video, (effects.last() as Effect.Open).url)
+    }
+
     @Test
     fun onlyASongOpenedInQobuzsAppByItsNumberIsWatched() {
         val song = """

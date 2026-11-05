@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -127,6 +128,7 @@ class QobuzNumbersTest {
         phone.onThePhone = Heard.Song(song, null, app = qobuz)
         passes(1)
         assertEquals(false, waited)
+        assertEquals(0, scope.coroutineContext[Job]?.children?.count())
     }
 
     @Test
