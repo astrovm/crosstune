@@ -2140,10 +2140,13 @@ internal class MainViewModel(
             }
             // Only to learn Shazam's gap, nobody asked to listen, so never with the microphone.
             val quietly = autoCalibrating && appFollowing?.let(::learnsGap) == true
+            // Shazam measures against wall time, so its speed already includes the player's rate.
+            // Keep that rate before capture: the player can change it while Shazam answers.
+            val playerSpeed = appFollowing?.clock?.speed ?: 1f
             when (val heard = if (lining) listener.listenToPlaying(byMicrophone = !quietly) else listener.listen()) {
                 is Heard.Song -> {
                     quiet = 0
-                    heardAlong(heard)
+                    heardAlong(heard, playerSpeed)
                     delay(listenAlongPauseMs)
                 }
                 // Nothing heard, the music has most likely stopped, so the words stop where they are,
@@ -2177,7 +2180,7 @@ internal class MainViewModel(
      * The song heard: the one shown keeps in time with it; another one takes over the words, once
      * the one shown was heard playing, as the next song. A song picked to read stays.
      */
-    private fun heardAlong(hearing: Heard.Song) {
+    private fun heardAlong(hearing: Heard.Song, playerSpeed: Float) {
         if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "fingerprint ${hearing.offsetMs} at ${hearing.startedAtMs} match ${hearing.matchId} received ${now()} speed ${hearing.speed} length ${hearing.metadata.lengthMs} app ${appFollowing?.clock} video ${appFollowing?.video} duration ${appFollowing?.durationMs} lead $appLeadMs guessed $guessedLeadMs")
         val song = hearing.metadata
         val shown = uiState.lyricsFor ?: return
@@ -2188,11 +2191,11 @@ internal class MainViewModel(
         if (hearing.clock != null) {
             heardAtMs = now()
             val pacedBefore = pace
-            leadSpeeds += hearing.speed
+            leadSpeeds += hearing.speed / playerSpeed
             if (pace != pacedBefore) showPoints()
         }
         appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
-        appFollowing?.let { learnPace(it, shown, hearing) }
+        appFollowing?.let { learnPace(it, shown, hearing, playerSpeed) }
         val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
         val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
         appFollowing?.takeIf { needsLead(it) && shownPoints.isEmpty() }?.let { app ->
@@ -2272,10 +2275,11 @@ internal class MainViewModel(
      * the recording it matched Shazam [heard] it: words timed for a release play that much sooner or
      * later as it goes on. Words that say they're timed for one as long as this keep its pace.
      */
-    private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song) {
+    private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song, playerSpeed: Float) {
         if (heard.clock == null || !sameSong(heard.metadata, shown)) return
         if (found?.lengthMs != null && app.durationMs != null && found?.timedFor(app.durationMs) == true) return
-        val heardPace = if (abs(heard.speed - 1) >= MIN_SKEW) 1.0 / heard.speed else 1.0
+        val speed = heard.speed / playerSpeed
+        val heardPace = if (abs(speed - 1) >= MIN_SKEW) 1.0 / speed else 1.0
         if (heardPace == wordsPace) return
         wordsPace = heardPace
         syncStore.save(shown, foundLines, withGuess(syncPoints), heardPace)

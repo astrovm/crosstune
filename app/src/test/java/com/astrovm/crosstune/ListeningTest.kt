@@ -2295,6 +2295,23 @@ class ListeningTest {
     }
 
     @Test
+    fun thePlayersSpeedAtCaptureIsUsedWhenItChangesBeforeTheAnswer() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing, playerSpeed = 1.05f)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        repeat(2) { hearsAt(hearing, 200_000, 1.05f) }
+        // The third capture is already waiting for its answer at 1.05, then the player changes rate.
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(12_000, SystemClock.elapsedRealtime(), speed = 1.25f))
+        }
+        hearsAt(hearing, 200_000, 1.05f)
+        composeRule.runOnIdle {
+            assertEquals(1.25f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
+    }
+
+    @Test
     fun aMusicAppsLeadTakesTheRecordingsSpeedOffItsClockOnlyOnce() {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing, video = false)
