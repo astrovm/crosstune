@@ -684,6 +684,13 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun oneCopysCompoundWordPreferenceDoesNotOverrideTheChosenWords() {
+        val text = "We wait in the staffroom\nWe lay out the tablecloth"
+        val copy = Lyrics.Found("We wait in the staff room\nWe lay out the table cloth")
+        assertEquals(text, LyricsFinder.cleaned(Lyrics.Found(text), song, listOf(copy, copy)).words)
+    }
+
+    @Test
     fun spelledOutAcronymsKeepTheirCapitalsBesideACapitalPhrase() {
         val text = "We stay at the Y M C A\nWe meet NASA tonight\nWe meet Mira AND WALK HOME"
         assertEquals("We stay at the Y M C A\nWe meet NASA tonight\nWe meet Mira and walk home",
@@ -700,7 +707,7 @@ class LyricsFinderTest {
     @Test
     fun newSpacesDoNotSeparatePunctuationFromItsWord() {
         val text = "Blast off, we stay here\nRadio what is new?"
-        val copy = Lyrics.Found("Blast off , we stay here\nRadio what is new ?")
+        val copy = Lyrics.Found(List(2) { "Blast off , we stay here\nRadio what is new ?" }.joinToString("\n"))
         assertEquals(text, LyricsFinder.cleaned(Lyrics.Found(text), song, listOf(copy)).words)
     }
 
@@ -762,12 +769,13 @@ class LyricsFinderTest {
     @Test
     fun spacingNeverChangesLettersPunctuationOrExistingWordBreaks() {
         fun clean(text: String, copy: String) = LyricsFinder.cleaned(Lyrics.Found(text), song, listOf(Lyrics.Found(copy))).words
-        assertEquals("Send me a letter", clean("Sendme a letter", "Send me a letter"))
+        assertEquals("Send me a letter", clean("Sendme a letter", "Send me a letter\nSend me a letter"))
         assertEquals("Send me a letter", clean("Send me a letter", "Sendme a letter"))
         assertEquals("Sendme a letter", clean("Sendme a letter", "Send me a letter!"))
         assertEquals("Sendme a letter", clean("Sendme a letter", "Send me another letter"))
         assertEquals("", clean("", ""))
         assertEquals("五月雨は緑色", clean("五月雨は緑色", "五月雨は緑色"))
+        assertEquals("Sendm e a letter", clean("Sendm e a letter", "Send me a le tter\nSend me a le tter"))
         assertEquals("Send\tme a letter", clean("Send\tme a letter", "Send me a letter"))
         assertEquals("Sendme a letter", clean("Sendme a letter", "Send me\na letter"))
     }
@@ -787,7 +795,7 @@ class LyricsFinderTest {
     fun missingSpacesComeFromACopyWithTheSameLettersAndKeepWordTimes() {
         val line = LyricLine(1000, "SENDME A LETTER", listOf(TimedWord(1000, "SEND"), TimedWord(2000, "ME A LETTER")))
         val found = Lyrics.Found(line.text, listOf(line))
-        val copy = Lyrics.Found("Send me a letter")
+        val copy = Lyrics.Found("Send me a letter\nSend me a letter")
         val result = LyricsFinder.cleaned(found, song, listOf(copy))
         assertEquals("Send me a letter", result.words)
         assertEquals("Send me a letter", result.lines.single().text)
