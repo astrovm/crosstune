@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -88,8 +89,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         MainActivity.lookAheadLyrics = true
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.quietPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
-        MainActivity.singingFactory = realSinging
         MainActivity.hearingFactory = null
+        MainActivity.singingFactory = realSinging
         MainActivity.lyricsLanguageFactory = null
     }
 
@@ -101,6 +102,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val asked = JSONObject(File(dir, "replay.json").readText()).let { it.optJSONArray("songs")?.getJSONObject(index) ?: it }
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
+        val fingerprints = asked.optJSONObject("fingerprints")
         workMs = asked.optLong("work", WORK_MS)
         workedOut = asked.optJSONArray("works")?.let { works -> (0 until works.length()).map { works.getLong(it) } }.orEmpty()
         whilesFrom = asked.optJSONArray("whiles")?.let { whiles -> (0 until whiles.length()).map { whiles.getLong(it) } }.orEmpty()
@@ -119,7 +121,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         MainActivity.singingFactory = { _, _ -> Replayed(heard) }
         if (asked.has("skew")) MainActivity.hearingFactory = { Shazam(asked.getDouble("skew"), asked.optLong("shazamAhead")) }
         // The words may be timed for another release, as long as LRCLIB says, or it may not say.
-        val wordsMs = asked.optLong("wordsLength", lengthMs)
+        val wordsMs = (fingerprints ?: asked).optLong("wordsLength", lengthMs)
         video = asked.optBoolean("video")
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear()
             .putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
@@ -144,12 +146,20 @@ class SyncReplayTest(private val name: String, private val index: Int) {
                 }
             )
         }
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        val intent = if (fingerprints == null) {
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/watch?v=sPmul8b17AU")).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        } else {
+            replayFingerprints(fingerprints, fromMs, lengthMs)
+            Intent(Intent.ACTION_MAIN)
+        }.setClass(app, MainActivity::class.java)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
-        val button = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
-        composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.onAllNodes(button)[0].performScrollTo().performClick()
+        if (fingerprints != null) composeRule.runOnIdle { model().listen(lyrics = true) }
+        else {
+            val button = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
+            composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); composeRule.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+            composeRule.onAllNodes(button)[0].performScrollTo().performClick()
+        }
         // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } }
         behind.forEachIndexed { time, behindMs ->
@@ -159,6 +169,26 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             playback.playing.value = Following(PlaybackClock(lengthMs, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(AGAIN_MS))
         }
+    }
+
+    /** The phone's recognition answers, including false occurrences, on its continuous player clock. */
+    private var fingerprintStartedAt: Long? = null
+
+    private fun replayFingerprints(recorded: JSONObject, fromMs: Long, lengthMs: Long) {
+        val startedAt = SystemClock.elapsedRealtime()
+        fingerprintStartedAt = startedAt
+        val song = MusicMetadata("Demo", "Band", lengthMs = recorded.optLong("wordsLength", lengthMs))
+        playback.onThePhone = Heard.Song(song.copy(lengthMs = null, recordingId = "video:replay"), null)
+        playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, video = true, durationMs = recorded.optLong("videoLength", lengthMs))
+        val initial = recorded.getJSONObject("initial")
+        val events = recorded.getJSONArray("events")
+        var next = -1
+        MainActivity.hearingFactory = { SongHearing {
+            val event = if (next < 0) initial else events.optJSONObject(next) ?: awaitCancellation()
+            next++
+            delay(maxOf(0L, startedAt + event.getLong("receivedAt") - fromMs - SystemClock.elapsedRealtime()))
+            Heard.Song(song, null, event.getLong("songMs"), startedAt + event.getLong("at") - fromMs, event.optString("matchId").ifEmpty { null }, speed = event.optDouble("speed", 1.0).toFloat())
+        } }
     }
 
     /**
@@ -185,8 +215,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
     private fun play(fromMs: Long, lengthMs: Long, behindMs: Long): JSONObject {
         this.behindMs = behindMs
         heardLog = JSONArray()
-        val startedAt = SystemClock.elapsedRealtime()
-        playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
+        val startedAt = fingerprintStartedAt ?: SystemClock.elapsedRealtime()
+        if (fingerprintStartedAt == null) playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
         composeRule.waitForIdle()
         // Each line, by its text and the time it's shown first after the one before, where the song is then.
         val shown = JSONArray()
@@ -207,8 +237,10 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             val following = state.following?.takeIf { it.timingKnown } ?: continue
             val now = SystemClock.elapsedRealtime()
             // In the song, by the music app's own clock: the lines as shown, less how far the app's clock is put right.
-            val off = playback.playing.value!!.clock.positionAt(now) - following.clock.positionAt(now)
-            val times = state.lyricLines.map { it.timeMs + off + behindMs }
+            val appAt = playback.playing.value!!.clock.positionAt(now)
+            val heardAt = following.clock.positionAt(now)
+            // A video slower than its song has each line where it gets to at that speed, so they stay put as it plays.
+            val times = state.lyricLines.map { (appAt + behindMs + (it.timeMs - heardAt) / following.clock.speed).toLong() / STEP_MS * STEP_MS }
             if (times != lastPlaced) placed.put(JSONObject().put("at", atMs + behindMs).put("times", JSONArray(times)))
             lastPlaced = times
             // Lit as the screen lights it: a moment early, so the eye is there first.

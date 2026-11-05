@@ -286,3 +286,17 @@ The phone check, `phone ZnrSNEah_20 --seconds 200 --app app.morphe.android.apps.
 Samsung at media volume 1, on the APK built from bc4e6088: 12/23 within 0.5 s, 16/23 within 1 s, median 0.47 s,
 1 never lit. On b0bbbe44 it was 10/22, 17/22, median 0.54 s, 2 never lit. The Google YouTube Music build on that
 phone pauses whenever another app is in front, so Crosstune hears nothing and the check can't run with it.
+
+### Together with PR #717 (hearing speeds of a video's lead)
+
+A video's speed was counted twice: PR #717 takes it off the video's clock once three hearings agree, and the
+pace of the words took it again. The pace now only applies while the clock isn't taking the speed.
+`run ZnrSNEah_20 --video --skew 0.0349 --shazam-ahead 45467 --words-length 0`:
+
+| Merged code | Within 0.5 s | Median absolute error | Worst error | Shown early | Never shown |
+|---|---:|---:|---:|---:|---:|
+| Speed counted twice | 7/13 | 0.33 s | -1.0 s | 7/18 | 6 |
+| Counted once | 8/13 | 0.31 s | +1.4 s | 1/18 | 6 |
+
+`all` on the same code: 1223 lines, 299 within 0.3 s, 620 within 0.5 s, 117 dark (PR #717 alone: 302, 618, 113).
+The 4 extra dark lines are all in `ZnrSNEah_20`, lines that were lit up to 24 s off before and now stay dark.

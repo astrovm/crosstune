@@ -96,6 +96,17 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun ofTimedCopiesOfDifferentLengthsTheOneAsLongAsItWasHeardIsTaken() {
+        fun copy(words: String, seconds: Int) =
+            """{"trackName":"Song","artistName":"Band","duration":$seconds,"plainLyrics":"$words","syncedLyrics":"[00:01.00] $words\n[00:05.00] $words again"}"""
+        fake.handler = { request -> FakeSpotify.html(request, "[${copy("Live", 312)},${copy("Studio", 245)}]") }
+        assertEquals("Studio", words(MusicMetadata("Song", "Band", heardLengthMs = 245_300)))
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com" in it })
+        // The app playing it knows its own recording better than a hearing does.
+        assertEquals("Live", words(MusicMetadata("Song", "Band", lengthMs = 311_000, heardLengthMs = 245_300)))
+    }
+
+    @Test
     fun ofTimedCopiesOfDifferentLengthsTheOneAsLongAsTheSongIsTaken() {
         fun copy(words: String, seconds: Int) =
             """{"trackName":"Song","artistName":"Band","duration":$seconds,"plainLyrics":"$words","syncedLyrics":"[00:01.00] $words\n[00:05.00] $words again"}"""
@@ -2193,6 +2204,25 @@ class LyricsFinderTest {
         val jumbled = listOf(0L, 6_500L, 200L, 7_000L, 600L, 6_500L, 100L, 8_000L, 300L)
         rushedSheets(evenSheet(), sungWords.indices.map { Triple(if (it == 0) 13_000L else 10_000L + it * 4_000L + jumbled[it], if (it == 0) 160L else 400L, sungWords[it]) })
         assertEquals(13_000L, times().first())
+    }
+
+    @Test
+    fun sixLinesInCommonAreEnoughToTellWhereARushedLineBelongs() {
+        // Five aren't (above); one more is.
+        rushedSheets(evenSheet(6), netEaseSheet(6, rushed = arrayOf(Triple(0, 13_000L, 160L))))
+        assertEquals(listOf(10_200L) + (1..5).map { 10_200L + it * 4_000L }, (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs })
+    }
+
+    @Test
+    fun aLineIsOnlyRushedWhenItsWordsGoByFasterThanTwoHundredMillisecondsEach() {
+        fun times() = (found(rushedSong) as Lyrics.Found).lines.map { it.timeMs }
+        val others = sungWords.indices.drop(1).map { 10_200L + it * 4_000L }
+        // Exactly that is sung quickly, not hurried.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 13_000L, 200L))))
+        assertEquals(listOf(13_000L) + others, times())
+        // A little faster is.
+        rushedSheets(evenSheet(), netEaseSheet(rushed = arrayOf(Triple(0, 13_000L, 199L))))
+        assertEquals(listOf(10_200L) + others, times())
     }
 
     /** LRCLIB with [lrclib], timed for a recording 6 seconds shorter than [anotherTake]'s, and NetEase with [netEase], as long as it. */
