@@ -96,6 +96,17 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun ofTimedCopiesOfDifferentLengthsTheOneAsLongAsItWasHeardIsTaken() {
+        fun copy(words: String, seconds: Int) =
+            """{"trackName":"Song","artistName":"Band","duration":$seconds,"plainLyrics":"$words","syncedLyrics":"[00:01.00] $words\n[00:05.00] $words again"}"""
+        fake.handler = { request -> FakeSpotify.html(request, "[${copy("Live", 312)},${copy("Studio", 245)}]") }
+        assertEquals("Studio", words(MusicMetadata("Song", "Band", heardLengthMs = 245_300)))
+        assertTrue(fake.requestedUrls.none { "itunes.apple.com" in it })
+        // The app playing it knows its own recording better than a hearing does.
+        assertEquals("Live", words(MusicMetadata("Song", "Band", lengthMs = 311_000, heardLengthMs = 245_300)))
+    }
+
+    @Test
     fun ofTimedCopiesOfDifferentLengthsTheOneAsLongAsTheSongIsTaken() {
         fun copy(words: String, seconds: Int) =
             """{"trackName":"Song","artistName":"Band","duration":$seconds,"plainLyrics":"$words","syncedLyrics":"[00:01.00] $words\n[00:05.00] $words again"}"""

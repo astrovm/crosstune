@@ -257,6 +257,48 @@ class HeardWhenAskedTest(unittest.TestCase):
     def test_one_song_on_another_model_hears_nothing(self):
         self.assertEqual(self.replays(r.run, self.run_args(model='base-q5_1'), []), (1, 0))
 
+    def test_a_phone_checks_answers_are_placed_on_the_players_clock(self):
+        log = "\n".join((
+            "11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 23891 at 2341106216 playing true, kept 23891 at 2341106216",
+            "11-04 17:57:55.088 7559 7559 D CrosstuneTiming: recognized 177000 at 2341106000 match 40 received 2341106417 speed 0.5 length 294000",
+            "11-04 17:57:58.048 7559 7559 D CrosstuneTiming: fingerprint 50155 at 2341105307 match 40 app Following(clock=x) lead null guessed null",
+            "11-04 17:58:11.108 7559 7559 D CrosstuneTiming: fingerprint 23906 at 2341118482 match 31 received 2341122437 speed 0.997 length null app x",
+        ))
+        answers = r.phone_answers(log, 294000, 309000)
+        zero = 2341106216 - 23891
+        self.assertEqual(dict(at=2341106000 - zero, receivedAt=24092, songMs=177000, matchId='40', speed=0.5), answers['initial'])
+        self.assertEqual([
+            dict(at=2341105307 - zero, receivedAt=27052, songMs=50155, matchId='40', speed=1.0),
+            dict(at=2341118482 - zero, receivedAt=40112, songMs=23906, matchId='31', speed=0.997),
+        ], answers['events'])
+        self.assertEqual((294000, 309000), (answers['wordsLength'], answers['videoLength']))
+
+    def test_an_older_phone_check_starts_from_the_first_line_lit(self):
+        log = "\n".join((
+            "11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 23891 at 2341106216 playing true, kept 23891 at 2341106216",
+            "11-04 17:57:55.088 7559 7559 D CrosstuneTiming: lit 11 at 2341106423 pos 177755",
+            "11-04 17:57:58.048 7559 7559 D CrosstuneTiming: fingerprint 50155 at 2341105307 match 40 app x",
+        ))
+        answers = r.phone_answers(log, 294000, 309000)
+        self.assertEqual(dict(at=24098, receivedAt=24098, songMs=177755, matchId='40', speed=1.0), answers['initial'])
+
+    def test_a_phone_check_without_a_clock_or_an_answer_says_so(self):
+        with self.assertRaisesRegex(SystemExit, 'no clock'):
+            r.phone_answers("11-04 17:57:55.088 7559 7559 D CrosstuneTiming: lit 11 at 2341106423 pos 177755", 1, 1)
+        with self.assertRaisesRegex(SystemExit, 'no answer'):
+            r.phone_answers("11-04 17:57:54.887 7559 7559 D CrosstuneTiming: said 1 at 2 playing true, kept 1 at 2", 1, 1)
+
+    def test_recorded_fingerprints_are_given_to_the_app_replay(self):
+        with patch.object(r, 'hear_asked', return_value=0), patch.object(r, 'score'), \
+                tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            fingerprints = r.OUT / 'fingerprints.json'
+            fingerprints.write_text(json.dumps(dict(initial=dict(at=20000, songMs=10000, receivedAt=20000), events=[])))
+            def replay(*args, **kwargs):
+                self.assertEqual(json.loads(fingerprints.read_text()), json.loads((r.OUT / 'replay.json').read_text()).get('fingerprints'))
+                return argparse.Namespace(returncode=0)
+            with patch.object(r.subprocess, 'run', side_effect=replay):
+                r.run(self.run_args(fingerprints=str(fingerprints)))
+
     def test_a_replay_held_to_the_phone_takes_each_while_as_long_as_the_phone_did(self):
         asked = []
         def replay(*_, **__):
@@ -456,7 +498,68 @@ class WordsShownTest(unittest.TestCase):
         self.assertEqual('One two three', r.found_words('song', kept)['lines'][0][1])
 
 
+class FoundWordsTest(unittest.TestCase):
+    def found(self, *kept):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'song.lyrics.json').write_text(json.dumps([[0, 'One two three'], [1, 'Four five six']]))
+            (r.OUT / 'lyrics.json').write_text(json.dumps([['key', json.dumps(words)] for words in kept]))
+            return r.found_words('song', r.OUT)
+
+    def test_the_words_it_settled_on_over_those_it_first_found(self):
+        first = dict(lines=[[0, 'One two three'], [1, 'Four five six']], provisional=True, source='first')
+        settled = dict(lines=[[0, 'One two three Four five six']], source='settled')
+        self.assertEqual('settled', self.found(first, settled)['source'])
+
+    def test_the_last_of_those_still_to_settle(self):
+        first = dict(lines=[[0, 'One two three']], provisional=True, source='first')
+        last = dict(lines=[[0, 'One two three']], provisional=True, source='last')
+        self.assertEqual('last', self.found(first, last)['source'])
+
+    def test_not_the_next_songs(self):
+        next_song = dict(lines=[[0, 'Seven eight nine']], source='next')
+        ours = dict(lines=[[0, 'One two three']], provisional=True, source='ours')
+        self.assertEqual('ours', self.found(ours, next_song)['source'])
+
+
+class LearntTest(unittest.TestCase):
+    def test_how_far_a_video_is_ahead_is_forgotten_too(self):
+        self.assertIn('video_timing', r.LEARNT)
+
+
+class AdbTest(unittest.TestCase):
+    def test_goes_to_the_phone_named_and_no_other(self):
+        with patch.dict(r.os.environ, {'ANDROID_SERIAL': 'phone', 'ADB': 'adb-tool'}), patch.object(r.subprocess, 'run') as run:
+            r.adb('logcat', '-c')
+        self.assertEqual(['adb-tool', '-s', 'phone', 'logcat', '-c'], run.call_args.args[0])
+
+    def test_with_no_phone_named_nothing_runs(self):
+        for serial in ({}, {'ANDROID_SERIAL': ''}):
+            with patch.dict(r.os.environ, serial, clear=True), patch.object(r.subprocess, 'run') as run:
+                with self.assertRaises(SystemExit):
+                    r.adb('logcat', '-c')
+            run.assert_not_called()
+
+
 class PhoneTest(unittest.TestCase):
+    def test_line_times_use_the_player_even_when_the_following_clock_jumps(self):
+        log = ('said 24000 at 100000 playing true, kept 24000 at 100000\n'
+               'lit 0 at 116000 pos 30000\n'
+               'lit 6 at 142000 pos 93000\n')
+        self.assertEqual([(0, 116000, 40000), (6, 142000, 66000)], r.phone_lines(log))
+
+    def test_line_times_without_player_log_keep_the_old_clock(self):
+        self.assertEqual([(0, 100, 1000)], r.phone_lines('lit 0 at 100 pos 1000\n'))
+
+    def test_phone_waits_for_the_requested_song_before_opening_lyrics(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'shell', return_value=''), patch.object(r, 'adb'), \
+                patch.object(r.time, 'sleep'), patch.object(r, 'tap', return_value=False), \
+                patch.object(r, 'playing', side_effect=[('Previous song', 100), ('Song requested', 200)]) as playing:
+            (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', title='Song requested')]))
+            with self.assertRaisesRegex(SystemExit, "Couldn't open"):
+                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150))
+            self.assertEqual(2, playing.call_count)
+
     def test_a_title_keeps_its_commas(self):
         session = 'package=app\nstate=PlaybackState {state=PLAYING(3), position=2041, buffered position=0, speed=1.0, updated=5000, actions=1}\nmetadata: size=9, description=Police, The   Magic Audio Flac, uploader, uploader\n'
         with patch.object(r, 'shell', return_value=session):

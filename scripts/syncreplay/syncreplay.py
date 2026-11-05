@@ -8,7 +8,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
-  python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
+  ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
@@ -30,6 +30,13 @@ behind what it plays, by more or less each time. It forgets what was learnt firs
 A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
+`run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
+open. The JSON has `wordsLength`, `videoLength`, `initial` and `events`: each answer has `at`,
+`receivedAt`, `songMs`, `matchId` and optional `speed`. `at` and `receivedAt` are milliseconds on the
+unadjusted player clock; `songMs` is the position Shazam returned for audio starting at `at`.
+Use `--from` for the player position when the initial answer opened the words. Keep recordings
+and these answers under build/, with the exact lyric sheet in ID.found.json.
+`fingerprints ID [--kept DIR]` makes that JSON from what a `phone` check kept, and says the `--from`.
 `run --like-phone` replays it as the last `phone` check went, from what it kept: where the app picked
 the song up, how far its clock was behind, how long the phone took to work out each while, the words it
 showed, and whether it heard the sound played itself, with Shizuku, or through the visualizer (`hear --clean`
@@ -48,6 +55,7 @@ Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the P
 import argparse
 import html
 import json
+from datetime import datetime
 import os
 import shutil
 import re
@@ -84,7 +92,7 @@ ON_TIME_S = 0.5
 TIMING_LOG = "CrosstuneTiming"
 DEV_APP = "com.astrovm.crosstune.dev"
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
-LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps")
+LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps", "video_timing")
 # Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
 MIN_NAME = 8
 
@@ -350,6 +358,8 @@ def run(args):
         replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
         replay["behindAgain"] = args.behind_again
+    if getattr(args, "fingerprints", None):
+        replay["fingerprints"] = json.loads(Path(args.fingerprints).read_text())
     plays = ([f"{args.id}.from{args.start}.first.shown.json"] if args.behind_again is not None else []) + [f"{args.id}.from{args.start}.shown.json"]
     while True:
         asked.write_text(json.dumps(replay))
@@ -497,12 +507,20 @@ def found_words(song, kept):
     too, so it's those most like the words given to prep."""
     given = [line for _, line in json.loads((OUT / f"{song}.lyrics.json").read_text())]
     found = [json.loads(entry[1]) for entry in json.loads((kept / "lyrics.json").read_text())]
-    return max(found, key=lambda words: len(lined_up(given, [line[1] for line in words["lines"]])))
+    same = [len(lined_up(given, [line[1] for line in words["lines"]])) for words in found]
+    # The song's own may be kept twice, first as they were found and then as they were settled on, and
+    # those may break their lines otherwise: the settled ones are the lines it lit.
+    ours = [words for words, lines in zip(found, same) if lines * 2 >= max(same)]
+    return next((words for words in reversed(ours) if not words.get("provisional")), ours[-1])
 
 
 def adb(*command):
+    # With the phone gone, adb on its own goes to whatever else is connected, like someone's emulator.
+    serial = os.environ.get("ANDROID_SERIAL")
+    if not serial:
+        sys.exit("Say which phone in ANDROID_SERIAL")
     tool = os.environ.get("ADB", str(Path.home() / "Android" / "Sdk" / "platform-tools" / "adb"))
-    return subprocess.run([tool, *command], capture_output=True, check=True).stdout
+    return subprocess.run([tool, "-s", serial, *command], capture_output=True, check=True).stdout
 
 
 def shell(*command):
@@ -601,9 +619,13 @@ def watch(args):
         width, height = map(int, re.search(r"(\d+)x(\d+)", shell("wm", "size")).groups())
         shell("input", "swipe", str(width // 2), str(height * 9 // 10), str(width // 2), str(height * 3 // 10), "200")
     shell("am", "start", "-a", "android.intent.action.VIEW", "-d", f"https://music.youtube.com/watch?v={args.id}", "-p", args.app)
+    song_set = OUT / "set.json"
+    songs = json.loads(song_set.read_text()) if song_set.exists() else []
+    wanted = next((song["title"] for song in songs if song.get("id") == args.id), None)
     for _ in range(60):
         song = playing(args.app)
-        if song:
+        # A restarted player may still publish the previous song while the requested link opens.
+        if song and (wanted is None or "".join(pieces(wanted)) in "".join(pieces(song[0]))):
             break
         time.sleep(0.5)
     else:
@@ -664,8 +686,76 @@ def behind(song, kept, lit):
     return statistics.median(offs)
 
 
+def phone_lines(log):
+    """Each line lit on the player's clock, before fingerprint calibration moves it."""
+    player = None
+    lit = []
+    for row in log.splitlines():
+        said = re.search(r"said -?\d+ at \d+ playing (true|false), kept (-?\d+) at (\d+)", row)
+        if said:
+            player = (int(said[2]), int(said[3]), said[1] == "true")
+        shown = re.search(r"lit (-?\d+) at (\d+) pos (-?\d+)", row)
+        if shown:
+            line, at, pos = map(int, shown.groups())
+            if player is not None:
+                pos = player[0] + (at - player[1] if player[2] else 0)
+            lit.append((line, at, pos))
+    return lit
+
+
+def phone_answers(log, words_length, video_length):
+    """What Shazam told the app in a `phone` check, on the player's clock, as `run --fingerprints` replays it.
+    The log's own time says when each answer came, as its first lines don't. The first answer's `recognized`
+    row is from a later app: before it, it's where the first line lit was."""
+    rows = log.splitlines()
+    def wall(row):
+        day, clock = row.split()[:2]
+        when = datetime.strptime(f"2026-{day} {clock}", "%Y-%m-%d %H:%M:%S.%f")
+        return round(when.timestamp() * 1000)
+    said = [re.search(r"said -?\d+ at \d+ playing true, kept (-?\d+) at (\d+)", row) for row in rows]
+    said = [(row, match) for row, match in zip(rows, said) if match]
+    if not said:
+        raise SystemExit("The phone's log has no clock from the music app, so its answers can't be placed.")
+    row, last = said[-1]
+    zero = int(last[2]) - int(last[1])
+    to_elapsed = int(last[2]) - wall(row)
+    def answer(row, song, at, match, speed):
+        return dict(at=at - zero, receivedAt=wall(row) + to_elapsed - zero, songMs=song, matchId=match, speed=speed)
+    events, initial = [], None
+    for row in rows:
+        heard = re.search(r"(fingerprint|recognized) (\d+) at (\d+) match (\S+)(?: received \d+ speed ([\d.]+))?", row)
+        if not heard:
+            continue
+        told = answer(row, int(heard[2]), int(heard[3]), heard[4], float(heard[5] or 1))
+        if heard[1] == "fingerprint":
+            events.append(told)
+        elif initial is None:
+            initial = told
+    if initial is None:
+        lit = next((m for m in map(re.compile(r"lit -?\d+ at (\d+) pos (-?\d+)").search, rows) if m), None)
+        if lit is None or not events:
+            raise SystemExit("The phone's log has no answer to start from.")
+        initial = dict(at=int(lit[1]) - zero, receivedAt=int(lit[1]) - zero, songMs=int(lit[2]), matchId=events[0]["matchId"], speed=1.0)
+    return dict(wordsLength=words_length, videoLength=video_length, initial=initial, events=events)
+
+
+def fingerprints(args):
+    kept = Path(args.kept) if args.kept else OUT / "phone" / args.id
+    log = (kept / "log.txt").read_text()
+    lyrics = (kept / "lyrics.json").read_text()
+    words = OUT / f"{args.id}.found.json"
+    length = json.loads(words.read_text())["length"] if words.exists() else found_words(args.id, kept)["length"]
+    video = re.search(r"duration:(\d+)", lyrics)
+    if not video:
+        raise SystemExit("The phone's cache doesn't say how long the video is.")
+    answers = phone_answers(log, length, int(video[1]))
+    out = Path(args.out) if args.out else OUT / f"{args.id}.fingerprints.json"
+    atomic_text(out, json.dumps(answers))
+    print(f"{out}: {len(answers['events'])} answers. Replay it with `run {args.id} --from {answers['initial']['receivedAt']} --fingerprints {out}`")
+
+
 def score_phone(song_id, kept):
-    lit = [(int(i), int(at), int(pos)) for i, at, pos in re.findall(r"lit (-?\d+) at (\d+) pos (-?\d+)", (kept / "log.txt").read_text())]
+    lit = phone_lines((kept / "log.txt").read_text())
     if not lit:
         sys.exit("No lines lit in the log: was the dev app reinstalled after the log was added, and the words open?")
     lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit)
@@ -841,7 +931,13 @@ def main():
             p.add_argument("--behind", type=int, default=0, help="ms the music app's clock is behind what it plays")
             p.add_argument("--model", default=APP_MODEL, help="whose hearing to play, made first with `hear --model`")
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
+            p.add_argument("--fingerprints", help="JSON recording of the initial recognition and later answers on the player clock")
             p.add_argument("--like-phone", action="store_true", help="as the last `phone` check of it went, held to the lines it lit; sets --from, --behind, --work and --model")
+    p = steps.add_parser("fingerprints")
+    p.add_argument("id")
+    p.add_argument("--kept", help="the folder a `phone` check kept, when not its own")
+    p.add_argument("--out", help="where to write them, when not ID.fingerprints.json")
+    p.set_defaults(go=fingerprints)
     p = steps.add_parser("set")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--find-only", action="store_true", help="find the songs and their words, without prepping them")
