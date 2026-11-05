@@ -8015,7 +8015,10 @@ class MainActivityTest {
         shadowOf(app.packageManager).installPackage(installedApp(MusicService.QOBUZ.packageName, "Qobuz"))
         qobuzSongOpened(phone)
         waitUntil { phone.opened.isNotEmpty() }
-        val first = nextStartedActivity()!!.dataString!!
+        // Crosstune closes as it opens it, which already gives it the time to open it again.
+        val opening = nextStartedActivity()!!
+        assertEquals(MusicService.QOBUZ.packageName, opening.`package`)
+        val first = opening.dataString!!
         val numbers = setOf("https://play.qobuz.com/track/1", "https://play.qobuz.com/track/2")
         assertEquals(numbers.single { it.substringAfterLast("/") == first.substringAfterLast("/") }.let { numbers - it }.single(), phone.opened.single().second)
     }
@@ -8026,5 +8029,41 @@ class MainActivityTest {
         qobuzSongOpened(phone)
         assertTrue(phone.opened.isEmpty())
         assertEquals(1, fake.requestedUrls.count { "www.qobuz.com" in it })
+    }
+
+    @Test
+    fun qobuzOpenedFromASongsCardGoesThroughAScreenThatLeavesTimeToOpenItAgain() {
+        val qobuz = MusicService.QOBUZ.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(qobuz, "Qobuz"))
+        val opens = ComponentName(qobuz, "$qobuz.DeepLink")
+        shadowOf(app.packageManager).addActivityIfNotPresent(opens)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            opens, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
+        )
+        fake.handler = { request ->
+            when (request.url.host) {
+                "www.qobuz.com" -> FakeSpotify.html(request, """
+                    <li><div class="ListItem">
+                        <a href="/x/album/slug/a1" class="ListItem__title" title="Song">Song</a>
+                        <p class="ListItem__artists">Band • Album</p>
+                        <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;7"></button>
+                    </div></li>""")
+                else -> FakeSpotify.html(request, """{"title":"Song","author_name":"Band"}""")
+            }
+        }
+        prefs().edit().putString("default_target", "QOBUZ").putBoolean("links_in_crosstune", true).commit()
+        launch(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=aaaaaaaaaaa")
+        })
+        waitUntil { fake.requestedUrls.any { "www.qobuz.com" in it } }
+        val open = string(MusicService.QOBUZ.openLabelRes)
+        waitUntil { composeRule.onAllNodes(hasText(open) or hasContentDescription(open)).fetchSemanticsNodes().isNotEmpty() }
+        click(open)
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val started = nextStartedActivity()!!
+        assertEquals(OpenSongActivity::class.java.name, started.component?.className)
+        assertEquals("https://open.qobuz.com/track/7", started.dataString)
+        assertEquals(qobuz, started.getStringExtra(OpenSongActivity.EXTRA_APP))
     }
 }

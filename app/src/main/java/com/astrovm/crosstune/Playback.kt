@@ -504,9 +504,14 @@ internal class MediaSessionPlayback(
     // The app may be installed as a build patched from it, under a name of its own, or as its TV app.
     override fun openSong(app: String, link: String): Boolean = MusicService.appLinksIn(app, link).any { (packageName, its) ->
         runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            opened = packageName
-            true
+            // Qobuz may have to be opened again if the song doesn't start, see [QobuzNumbers].
+            if (MusicService.ofOwnApp(packageName) == MusicService.QOBUZ) {
+                context.openLeavingTimeToOpenAgain(packageName, Uri.parse(its)).also { if (it) opened = packageName }
+            } else {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                opened = packageName
+                true
+            }
         }.getOrDefault(false)
     }
 

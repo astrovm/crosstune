@@ -1076,8 +1076,11 @@ class MainActivity : ComponentActivity() {
         val flags = if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0
         // A service's own app stands in for the builds patched from it and its TV app, whichever is installed; a build chosen by name is only itself.
         val apps = effect.packageName?.let { MusicService.appLinksIn(it, effect.url) }.orEmpty()
-        val opened = apps.any { (app, link) -> tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags)) } ||
-            openOutsideCrosstune(uri, flags)
+        val opened = apps.any { (app, link) ->
+            // Closing as it opens it gives Crosstune the time to open it again; a screen that stays doesn't.
+            if (!effect.finishAfterOpen && MusicService.ofOwnApp(app) == MusicService.QOBUZ) openLeavingTimeToOpenAgain(app, link.toUri())
+            else tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags))
+        } || openOutsideCrosstune(uri, flags)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
             floatOn -> floatOn()

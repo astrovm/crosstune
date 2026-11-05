@@ -1024,6 +1024,36 @@ class PlaybackTest {
     }
 
     @Test
+    fun qobuzOpensThroughAScreenThatLeavesTimeToOpenItAgainAndOtherAppsDirectly() {
+        val qobuz = MusicService.QOBUZ.packageName
+        val link = "https://play.qobuz.com/track/1"
+        // With nothing to open it, that's said, and nothing's started.
+        assertFalse(playback.openSong(qobuz, link))
+        assertNull(shadowOf(app).nextStartedActivity)
+        val opens = ComponentName(qobuz, "$qobuz.DeepLink")
+        shadowOf(app.packageManager).addActivityIfNotPresent(opens)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            opens, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
+        )
+        assertTrue(playback.openSong(qobuz, link))
+        val through = shadowOf(app).nextStartedActivity
+        assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+        assertTrue(through.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        // It opens the song there, the way the app's own link does, and closes.
+        val screen = org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, through).create().get()
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, opened.action)
+        assertEquals(qobuz, opened.`package`)
+        assertEquals("https://open.qobuz.com/track/1", opened.dataString)
+        assertTrue(screen.isFinishing)
+        // Any other app, with nothing to open again, is opened as it was.
+        assertTrue(playback.openSong("com.spotify.music", "https://open.spotify.com/track/1"))
+        val direct = shadowOf(app).nextStartedActivity
+        assertEquals("com.spotify.music", direct.`package`)
+        assertEquals("https://open.spotify.com/track/1", direct.dataString)
+    }
+
+    @Test
     fun onATvAYouTubeMusicSongOpensInYouTubesTvApp() {
         // YouTube Music's TV app opens its home for a song's link; YouTube's plays it, as YouTube's.
         shadowOf(app).checkActivities(true)
