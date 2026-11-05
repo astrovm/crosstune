@@ -282,7 +282,7 @@ Both cases still never light 8 lines. All 41 songs, `syncreplay.py all`, this br
 same base: identical per song and overall, 1223 lines, 301 within 0.3 s, 619 within 0.5 s, 113 dark,
 415 shown early. The 41 songs don't pass `--skew`, so they show nothing worse, not an improvement.
 
-The phone check (`phone ZnrSNEah_20 --seconds 200`) did not run on this head. The Samsung's YouTube Music
-pauses the moment it leaves the foreground, with Crosstune or with Settings in front, so there is no
-sound for Crosstune to hear. The 10/22 within 0.5 s, 17/22 within 1 s and median 0.54 s on b0bbbe44 are
-the last phone numbers.
+The phone check, `phone ZnrSNEah_20 --seconds 200 --app app.morphe.android.apps.youtube.music`, one run on the
+Samsung at media volume 1, on the APK built from bc4e6088: 12/23 within 0.5 s, 16/23 within 1 s, median 0.47 s,
+1 never lit. On b0bbbe44 it was 10/22, 17/22, median 0.54 s, 2 never lit. The Google YouTube Music build on that
+phone pauses whenever another app is in front, so Crosstune hears nothing and the check can't run with it.
