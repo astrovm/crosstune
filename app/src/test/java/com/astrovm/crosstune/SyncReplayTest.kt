@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -122,7 +123,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         MainActivity.singingFactory = { _, _ -> Replayed(heard) }
         if (asked.has("skew")) MainActivity.hearingFactory = { Shazam(asked.getDouble("skew"), asked.optLong("shazamAhead")) }
         // The words may be timed for another release, as long as LRCLIB says, or it may not say.
-        val wordsMs = (fingerprints ?: asked).optLong("wordsLength", lengthMs)
+        val wordsMs = (fingerprints ?: asked).optLong("wordsLength", kept?.optLong("length", lengthMs) ?: lengthMs)
         video = asked.optBoolean("video")
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear()
             .putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
@@ -134,7 +135,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         if (wordsMs > 0) words.put("duration", wordsMs / 1000)
         val found = JSONArray().put(words).toString()
         // Words timed word by word, as the app found them, only come from NetEase.
-        val byWord = kept?.let { foundByWord(it, lengthMs) }
+        val byWord = kept?.let { foundByWord(it, wordsMs) }
         fake.handler = { request ->
             FakeSpotify.html(
                 request,
@@ -163,6 +164,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         }
         // The lookup over, not lines found: words without timing have none, and words timed past the recording's end aren't taken.
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); model().uiState.run { lyricsFor != null && !isLoadingLyrics } }
+        assertTrue("Cached timed words must load: sheet $wordsMs ms, recording $lengthMs ms",
+            lyrics.none { it.first >= 0 } || model().uiState.lyricLines.isNotEmpty())
         behind.forEachIndexed { time, behindMs ->
             val played = play(fromMs, lengthMs, behindMs)
             File(dir, "$song.from$fromMs${if (time < behind.lastIndex) ".first" else ""}.shown.json").writeText(played.toString())
