@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
                     playQueue = queue,
                     queueOrder = order,
                     sleepTimer = sleepTimer(applicationContext),
+                    qobuzNumbers = qobuzNumbers(applicationContext, matcher),
                     offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher)
                 )
             }
@@ -381,6 +382,18 @@ class MainActivity : ComponentActivity() {
             // One made for another app, as each test makes, is done with.
             sleepTimer?.second?.off()
             return SleepTimer(playbackFactory(app), CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)).also { sleepTimer = app to it }
+        }
+
+        private var qobuzNumbers: Pair<Context, QobuzNumbers>? = null
+
+        /** What tries Qobuz's other number, the app's rather than a screen's, as the screen closes as it opens a song. */
+        internal fun qobuzNumbers(context: Context, matcher: ExactMatcher): QobuzNumbers {
+            val app = context.applicationContext
+            qobuzNumbers?.takeIf { it.first === app }?.let { return it.second }
+            // One made for another app, as each test makes, is done with.
+            qobuzNumbers?.second?.off()
+            return QobuzNumbers(playbackFactory(app), matcher::otherQobuzLink, app::hasApp, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate))
+                .also { qobuzNumbers = app to it }
         }
 
         /** Whether a song's lyrics are looked up as its card shows; off where a test counts what's asked. */
@@ -1063,8 +1076,13 @@ class MainActivity : ComponentActivity() {
         val flags = if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0
         // A service's own app stands in for the builds patched from it and its TV app, whichever is installed; a build chosen by name is only itself.
         val apps = effect.packageName?.let { MusicService.appLinksIn(it, effect.url) }.orEmpty()
-        val opened = apps.any { (app, link) -> tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags)) } ||
-            openOutsideCrosstune(uri, flags)
+        // An app that opens no page of its website's is asked for the song by search instead.
+        val search = effect.packageName?.let { MusicService.searchIn(it, effect.url, effect.asking) }
+        val opened = search?.let { tryStartActivityTwice(it.addFlags(flags)) } == true || apps.any { (app, link) ->
+            // Closing as it opens it gives Crosstune the time to open it again; a screen that stays doesn't.
+            if (!effect.finishAfterOpen && MusicService.ofOwnApp(app) == MusicService.QOBUZ) openLeavingTimeToOpenAgain(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app))
+            else tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags))
+        } || openOutsideCrosstune(uri, flags)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
             floatOn -> floatOn()

@@ -55,7 +55,10 @@ internal class FakePlayback : PlaybackSource {
 
     override fun follow(song: MusicMetadata): Flow<Following?> = playing.also { followed += song }
 
-    override fun nowPlaying() = onThePhone
+    /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
+    var quietYet = false
+
+    override fun nowPlaying() = onThePhone.takeUnless { quietYet }
 
     override fun recording(song: MusicMetadata) = onThePhone?.metadata
 

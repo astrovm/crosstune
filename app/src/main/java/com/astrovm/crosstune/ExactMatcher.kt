@@ -27,9 +27,10 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
 /**
  * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
- * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was.
+ * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
+ * 4, as Qobuz's songs are found in the phone's own store, whose numbers open where the US store's may not.
  */
-internal const val MATCH_VERSION = 3
+internal const val MATCH_VERSION = 4
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -365,7 +366,6 @@ internal class ExactMatcher(
 
     private suspend fun itunesCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
-        val artists = SongNames.artists(metadata.artist)
         val url = "https://itunes.apple.com/search".toHttpUrl().newBuilder()
             .addQueryParameter("term", searchQuery(metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)))
             .addQueryParameter("entity", "song")
@@ -374,22 +374,20 @@ internal class ExactMatcher(
             .build()
         return fetchJson(url.toString()).optJSONArray("results")?.objects()?.firstOrNull { result ->
             val name = SongNames.normalize(SongNames.withoutEditionTag(result.optString("trackName")))
-            val credit = SongNames.normalize(result.optString("artistName"))
-            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
+            title.isNotEmpty() && name.startsWith(title) && sameArtist(metadata, result.optString("artistName"))
         }?.let { it.optString("artworkUrl100").ifBlank { null }?.replace("100x100bb", "600x600bb") }
     }
 
     private suspend fun deezerCoverNamed(metadata: MusicMetadata): String? {
         val title = SongNames.normalize(SongNames.withoutEditionTag(metadata.title))
-        // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do.
-        val artists = SongNames.artists(metadata.artist)
         // Searched for without its edition tag too: Deezer finds nothing for "Song (2018 Remix) (2024
         // Remaster)", though it has "Song (2018 Remix)", whose cover is the same.
         val searched = metadata.copy(title = SongNames.withoutEditionTag(metadata.title), type = ItemType.TRACK)
         return searchDeezer(searched).firstOrNull { result ->
             val name = SongNames.normalize(SongNames.withoutEditionTag(MetadataParsers.deezerTitle(result)))
-            val credit = SongNames.normalize(result.optJSONObject("artist")?.optString("name").orEmpty())
-            title.isNotEmpty() && name.startsWith(title) && artists.any { it in credit }
+            // "Song" by "A, B" is credited to just "A" on Deezer, so any one of the names will do. Being
+            // inside a longer name won't: Adele Harley isn't Adele, and has a Hello of their own.
+            title.isNotEmpty() && name.startsWith(title) && sameArtist(metadata, result.optJSONObject("artist")?.optString("name").orEmpty())
         }?.optJSONObject("album")?.let { it.optString("cover_big").ifBlank { null } }
     }
 
@@ -477,11 +475,31 @@ internal class ExactMatcher(
     /**
      * Qobuz's API needs an account, but its store's search page lists each song with its album:
      * enough for songs and albums. Its artists aren't told apart there, so they're left to the search.
+     * It answers only a phone's browser: anything else, a desktop browser too, gets a 403.
+     * A song's number can differ between its stores, and Qobuz's app shows only a loading page for one
+     * the account can't play, so [QobuzNumbers] tries another. The US has its own; the rest share the
+     * UK's, but Japan's store names songs in Japanese, so they'd never match, and Latin America's stores
+     * and Portugal's list none.
      */
-    private suspend fun findOnQobuz(metadata: MusicMetadata): String? {
-        if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) return null
-        val url = "https://www.qobuz.com/us-en/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
-        val page = client.newCall(Request.Builder().url(url).get().build()).answer(ioDispatcher) { response ->
+    private suspend fun findOnQobuz(metadata: MusicMetadata): String? =
+        if (metadata.type != ItemType.TRACK && metadata.type != ItemType.ALBUM) null else findOnQobuzStore(qobuzStore, metadata)
+
+    /** The store [findOnQobuz] asks. */
+    private val qobuzStore = if (country == "US") "us-en" else "gb-en"
+
+    /**
+     * The number of [song] in the store [findOnQobuz] doesn't ask, when it isn't [link]'s: stores differ on about one song
+     * in four, and which one an account follows can't be told. Null with no other, or no answer.
+     */
+    suspend fun otherQobuzLink(song: MusicMetadata, link: String): String? = try {
+        findOnQobuzStore(if (qobuzStore == "us-en") "gb-en" else "us-en", song)?.takeIf { it != link }
+    } catch (_: IOException) {
+        null
+    }
+
+    private suspend fun findOnQobuzStore(store: String, metadata: MusicMetadata): String? {
+        val url = "https://www.qobuz.com/$store/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
+        val page = client.newCall(Request.Builder().url(url).asPhoneBrowser().get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
             response.body.stringAtMost()
         }

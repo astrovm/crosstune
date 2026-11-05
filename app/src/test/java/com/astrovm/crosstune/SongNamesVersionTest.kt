@@ -62,6 +62,29 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun aGuestWrittenOutInTheTitleIsLeftOutLikeOneInBrackets() {
+        // Searched with its guest, Qobuz lists only tribute albums for Despacito, and says it hasn't the song.
+        assertEquals("Despacito", SongNames.withoutEditionTag("Despacito ft. Daddy Yankee"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song feat Someone"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song FEATURING Someone & Other"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song (feat. Someone)"))
+        // The recording's other marks stay, and a length isn't a guest, nor is a word that starts the same.
+        assertEquals("Song (Live)", SongNames.withoutEditionTag("Song ft. Someone (Live)"))
+        assertEquals("6 ft. Under", SongNames.withoutEditionTag("6 ft. Under"))
+        assertEquals("Feats of Strength", SongNames.withoutEditionTag("Feats of Strength"))
+        assertEquals("Despacito Luis Fonsi", searchQuery(MusicMetadata("Despacito ft. Daddy Yankee", "Luis Fonsi")))
+    }
+
+    @Test
+    fun aVideosMarkIsLeftOutSoASearchFindsTheSong() {
+        // With it, Qobuz's store lists nothing at all for Gangnam Style, and 60 without.
+        assertEquals("GANGNAM STYLE(강남스타일)", SongNames.withoutEditionTag("GANGNAM STYLE(강남스타일) M/V"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song (M/V)"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song [m/v]"))
+        assertEquals("M/V", SongNames.withoutEditionTag("M/V"))
+    }
+
+    @Test
     fun whatFilmOrShowASongIsOfNamesNoOtherRecording() {
         assertEquals("小幸運", SongNames.withoutEditionTag("小幸運 (電影《我的少女時代》主題曲)"))
         assertEquals("光年之外", SongNames.withoutEditionTag("光年之外 (电影《Passengers》中国区主题曲)"))
