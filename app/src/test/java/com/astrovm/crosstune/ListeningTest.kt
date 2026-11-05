@@ -2378,6 +2378,8 @@ class ListeningTest {
 
     /** Heard while the video, 4 seconds ahead, can't be told from its 10 seconds of extra yet; then [laterMs] on, the player says where it is. */
     private fun heardBeforeItMayHaveStarted(laterMs: Long): FakePlayback {
+        // A phone's been on a while, so how long ago it was heard isn't told by the clock's own reading.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(2))
         val phone = heardVideo(FakeHearing(), heardSeconds = 1.0, playerMs = 5_000)
         assertLinedUp(false)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(laterMs))
