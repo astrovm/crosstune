@@ -35,19 +35,21 @@ internal class QobuzNumbers(
         job = scope.launch { tryOther(song, app, link, over) }
     }
 
-    private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?) = coroutineScope {
-        // Asked now, not once the wait is over: 8 s and then a store that took 2 s came just past what Android allows [WAIT_MS].
-        val other = async { otherLink(song, link) }
-        val started = withTimeoutOrNull(WAIT_MS) {
-            playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title && isTheSong(it.metadata, song) }
+    private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?) {
+        coroutineScope {
+            // Asked now, not once the wait is over: 8 s and then a store that took 2 s came just past what Android allows [WAIT_MS].
+            val other = async { otherLink(song, link) }
+            val started = withTimeoutOrNull(WAIT_MS) {
+                playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title && isTheSong(it.metadata, song) }
+            }
+            val next = when {
+                started != null -> null
+                over == null && playsElse(app) -> link
+                else -> other.await()
+            }
+            other.cancel()
+            next?.let { playback.openSong(app, it) }
         }
-        val next = when {
-            started != null -> null
-            over == null && playsElse(app) -> link
-            else -> other.await()
-        }
-        other.cancel()
-        next?.let { playback.openSong(app, it) }
     }
 
     /**

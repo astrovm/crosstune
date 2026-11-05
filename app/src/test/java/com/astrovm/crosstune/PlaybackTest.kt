@@ -1086,6 +1086,7 @@ class PlaybackTest {
             qobuz, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
         )
         assertTrue(playback.openSong(MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/12"))
+        org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, shadowOf(app).nextStartedActivity).create()
         assertEquals("https://open.qobuz.com/track/12", shadowOf(app).nextStartedActivity.dataString)
     }
 
