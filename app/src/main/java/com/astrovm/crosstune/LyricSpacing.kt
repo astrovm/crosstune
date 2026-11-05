@@ -5,11 +5,11 @@ internal class LyricSpacing(copies: List<String>) {
     private val lines = copies.flatMap { it.lines() }.groupBy(::compact)
 
     /** Each part keeps its letters and its timing, including a part ending halfway through a word. */
-    fun apply(parts: List<String>): List<String> {
+    fun apply(parts: List<String>, line: String = parts.joinToString("")): List<String> {
         val text = parts.joinToString("")
-        val existing = breaks(text)
-        val additions = lines[compact(text)].orEmpty().map(::breaks)
-            .filter { it.size > existing.size && it.containsAll(existing) }.distinct().singleOrNull().orEmpty() - existing
+        val existing = breaks(line)
+        val additions = if (compact(text) == compact(line)) lines[compact(line)].orEmpty().map(::breaks)
+            .filter { it.size > existing.size && it.containsAll(existing) }.distinct().singleOrNull().orEmpty() - existing else emptySet()
         var at = 0
         var previous: Char? = null
         return parts.map { part ->

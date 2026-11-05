@@ -1416,12 +1416,12 @@ internal class LyricsFinder(
         fun cleaned(found: Lyrics.Found, song: MusicMetadata, copies: List<Lyrics.Found> = emptyList()): Lyrics.Found {
             val spacing = LyricSpacing(copies.map { it.words } + found.words)
             val spaced = found.copy(words = spacing.apply(found.words), lines = found.lines.map { line ->
-                line.copy(text = spacing.apply(line.text), words = line.words.zip(spacing.apply(line.words.map { it.text })) { word, text -> word.copy(text = text) })
+                line.copy(text = spacing.apply(line.text), words = line.words.zip(spacing.apply(line.words.map { it.text }, line.text)) { word, text -> word.copy(text = text) })
             })
             val netEase = spaced.source?.startsWith(NETEASE) == true
             // A whole song in capitals, as some sites keep it, reads as it's written elsewhere: in sentences.
             val shouting = needsSentenceCase(spaced.words.ifBlank { spaced.lines.joinToString("\n") { it.text } })
-            if (!netEase && !shouting && !hasAdOrBreak(spaced)) return spaced
+            if (!netEase && !shouting && !hasAdOrBreak(spaced)) return if (spaced == found) found else spaced
             // Where NetEase's contributors wrote apostrophes escaped, their commas are apostrophes: "friend' and he\'s back".
             val commas = netEase && "\\'" in spaced.words
             fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
