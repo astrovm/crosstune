@@ -71,6 +71,29 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aCoverIsNeverAnotherArtistsWhoseNameStartsTheSame() {
+        // Deezer's answer for Hello by Adele has this before any of hers.
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                if (request.url.host == "itunes.apple.com") {
+                    """{"results":[{"trackName":"Hello (Dub up Mix)","artistName":"Adele Harley","artworkUrl100":"https://harley/100x100bb.jpg"},{"trackName":"Hello","artistName":"Adele","artworkUrl100":"https://adele/100x100bb.jpg"}]}"""
+                } else {
+                    """{"data":[{"title":"Hello (Dub up Mix)","artist":{"name":"Adele Harley"},"album":{"cover_big":"https://harley.jpg"}}]}"""
+                }
+            )
+        }
+        assertEquals("https://adele/600x600bb.jpg", runBlocking { matcher().cover(MusicMetadata("Hello", "Adele")) })
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                """{"data":[{"title":"Hello (Dub up Mix)","artist":{"name":"Adele Harley"},"album":{"cover_big":"https://harley.jpg"}},{"title":"Hello","artist":{"name":"Adele"},"album":{"cover_big":"https://adele.jpg"}}]}"""
+            )
+        }
+        assertEquals("https://adele.jpg", runBlocking { matcher().cover(MusicMetadata("Hello", "Adele")) })
+    }
+
+    @Test
     fun aSongDeezerDoesntHaveGetsApplesCover() {
         val cover = "https://is1-ssl.mzstatic.com/image/thumb/Music/100x100bb.jpg"
         fake.handler = { request ->
