@@ -16,6 +16,9 @@
 # between Gradle, the Kotlin compiler and, from 12 GiB, two test processes side by side, and at 8 or 12
 # one of them gets killed. GRADLE_BOX_SLOTS is how many run at once, by default as many as fit in
 # three quarters of the RAM, and at least one.
+#
+# Idle slot homes are evicted oldest first above 10 GiB (GRADLE_BOX_CACHE_BYTES overrides it).
+# Running slots and the shared seed stay intact, even if they alone exceed the target.
 set -euo pipefail
 
 image=docker.io/library/eclipse-temurin:25-jdk
@@ -82,6 +85,7 @@ while :; do
     sleep 1
 done
 
+python3 "$(dirname "${BASH_SOURCE[0]}")/clean-cache.py" "$state" "$slot"
 home=$state/gradle-$slot
 seed=$state/seed
 mkdir -p "$home"
@@ -97,11 +101,19 @@ box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
 
-[[ -d $seed/modules-2 ]] && box+=(-v "$seed:$seed:ro" -e "GRADLE_RO_DEP_CACHE=$seed")
+if [[ -d $seed/modules-2 ]]; then
+    touch "$seed"
+    box+=(-v "$seed:$seed:ro" -e "GRADLE_RO_DEP_CACHE=$seed")
+fi
 
 # Made apart and moved in whole, so no build reads half of it. A build holds this slot until it's done.
 keep_downloads() {
     [[ -d $home/caches/modules-2 && ! -e $seed ]] || return 0
+    local limit=${GRADLE_BOX_CACHE_BYTES:-10737418240} used downloads
+    used=$(du -sB1 "$state" | cut -f1)
+    downloads=$(du -sB1 "$home/caches/modules-2" | cut -f1)
+    [[ ! -d $home/wrapper ]] || downloads=$((downloads + $(du -sB1 "$home/wrapper" | cut -f1)))
+    ((used + downloads <= limit)) || return 0
     local new=$state/seed.$$
     mkdir -p "$new"
     cp -a --reflink=auto "$home/caches/modules-2" "$new/"
@@ -120,4 +132,5 @@ while kill -0 "$child" 2>/dev/null; do
     wait "$child" || status=$?
 done
 ((status != 0)) || keep_downloads
+touch "$home"
 exit "$status"

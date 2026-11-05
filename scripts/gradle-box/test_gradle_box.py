@@ -206,6 +206,45 @@ class GradleBoxTest(unittest.TestCase):
         box.communicate(timeout=20)
         self.assertNotIn("GRADLE_RO_DEP_CACHE", self.asked()[0])
 
+    def test_cleanup_removes_oldest_idle_home_only_when_over_limit(self):
+        state = self.dir / "state"
+        for slot, age in ((2, 100), (3, 200)):
+            home = state / f"gradle-{slot}"
+            home.mkdir(parents=True)
+            (home / "data").write_bytes(b"x" * 8192)
+            os.utime(home, (age, age))
+        (self.seed() / "modules-2").mkdir(parents=True)
+        box = self.start("a", "help", GRADLE_BOX_CACHE_BYTES="12000")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertFalse((state / "gradle-2").exists())
+        self.assertTrue((state / "gradle-3" / "data").exists())
+        self.assertTrue(self.seed().exists())
+        self.assertIn("gradle-2", output)
+
+    def test_cleanup_leaves_cache_under_limit(self):
+        home = self.dir / "state" / "gradle-2"
+        home.mkdir(parents=True)
+        (home / "data").write_bytes(b"x" * 8192)
+        box = self.start("a", "help", GRADLE_BOX_CACHE_BYTES="1000000")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertTrue((home / "data").exists())
+        self.assertNotIn("deleted", output)
+
+    def test_cleanup_never_removes_a_running_slots_home(self):
+        self.hold("first")
+        first = self.start("first", "help", slots="2")
+        self.wait_for("started.first")
+        home = self.dir / "state" / "gradle-1"
+        (home / "data").write_bytes(b"x" * 8192)
+        second = self.start("second", "help", slots="2", GRADLE_BOX_CACHE_BYTES="1")
+        output, _ = second.communicate(timeout=20)
+        self.assertEqual(second.returncode, 0, output)
+        self.assertTrue((home / "data").exists())
+        self.release("first")
+        first.communicate(timeout=20)
+
     def test_stopping_it_stops_the_build(self):
         self.hold("first")
         first = self.start("first", "help")
