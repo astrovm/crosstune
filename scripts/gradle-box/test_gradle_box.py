@@ -16,7 +16,8 @@ if [ -n "$FAKE_DOWNLOADS" ]; then
         case "$arg" in GRADLE_USER_HOME=*)
             home="${arg#GRADLE_USER_HOME=}"
             mkdir -p "$home/caches/modules-2/files-2.1" "$home/wrapper/dists"
-            touch "$home/caches/modules-2/files-2.1/some.jar" "$home/caches/modules-2/modules-2.lock" "$home/caches/modules-2/gc.properties" "$home/wrapper/dists/gradle.zip"
+            printf data > "$home/caches/modules-2/files-2.1/some.jar"
+            touch "$home/caches/modules-2/modules-2.lock" "$home/caches/modules-2/gc.properties" "$home/wrapper/dists/gradle.zip"
         esac
     done
 fi
@@ -201,10 +202,84 @@ class GradleBoxTest(unittest.TestCase):
         box.communicate(timeout=20)
         self.assertEqual(list((self.seed() / "modules-2").iterdir()), [])
 
+    def test_does_not_create_a_seed_over_the_limit(self):
+        box = self.start("a", "help", FAKE_DOWNLOADS="1", GRADLE_BOX_CACHE_BYTES="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertTrue((self.dir / "state" / "gradle-1" / "caches" / "modules-2").exists())
+        self.assertFalse(self.seed().exists())
+
     def test_without_kept_downloads_there_is_nothing_to_read(self):
         box = self.start("a", "help")
         box.communicate(timeout=20)
         self.assertNotIn("GRADLE_RO_DEP_CACHE", self.asked()[0])
+
+    def test_cleanup_removes_oldest_idle_home_only_when_over_limit(self):
+        state = self.dir / "state"
+        for slot, age in ((2, 100), (3, 200)):
+            home = state / f"gradle-{slot}"
+            home.mkdir(parents=True)
+            (home / "data").write_bytes(b"x" * 1048576)
+            os.utime(home, (age, age))
+        (self.seed() / "modules-2").mkdir(parents=True)
+        def allocated(path):
+            return sum(p.lstat().st_blocks * 512 for p in path.rglob("*"))
+
+        # Leave room for queue and lock metadata on filesystems with different block sizes.
+        limit = allocated(state) - allocated(state / "gradle-2") // 2
+        box = self.start("a", "help", GRADLE_BOX_CACHE_BYTES=str(limit))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertFalse((state / "gradle-2").exists())
+        self.assertTrue((state / "gradle-3" / "data").exists())
+        self.assertTrue(self.seed().exists())
+        self.assertIn("gradle-2", output)
+
+    def test_seed_and_old_style_locked_home_are_kept_until_all_slots_are_free(self):
+        import fcntl
+        state = self.dir / "state"
+        home = state / "gradle-2"
+        home.mkdir(parents=True)
+        (home / "data").write_bytes(b"x" * 8192)
+        (self.seed() / "modules-2").mkdir(parents=True)
+        (self.seed() / "modules-2" / "data").write_bytes(b"x" * 8192)
+        with (state / "slot-2.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            box = self.start("first", "help", GRADLE_BOX_CACHE_BYTES="1")
+            output, _ = box.communicate(timeout=20)
+            self.assertEqual(box.returncode, 0, output)
+            self.assertTrue((home / "data").exists())
+            self.assertTrue((self.seed() / "modules-2" / "data").exists())
+            self.assertIn("above", output)
+        box = self.start("second", "help", GRADLE_BOX_CACHE_BYTES="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertFalse(home.exists())
+        self.assertTrue((self.seed() / "modules-2" / "data").exists())
+        self.assertIn("above", output)
+
+    def test_cleanup_leaves_cache_under_limit(self):
+        home = self.dir / "state" / "gradle-2"
+        home.mkdir(parents=True)
+        (home / "data").write_bytes(b"x" * 8192)
+        box = self.start("a", "help", GRADLE_BOX_CACHE_BYTES="1000000")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertTrue((home / "data").exists())
+        self.assertNotIn("deleted", output)
+
+    def test_cleanup_never_removes_a_running_slots_home(self):
+        self.hold("first")
+        first = self.start("first", "help", slots="2")
+        self.wait_for("started.first")
+        home = self.dir / "state" / "gradle-1"
+        (home / "data").write_bytes(b"x" * 8192)
+        second = self.start("second", "help", slots="2", GRADLE_BOX_CACHE_BYTES="1")
+        output, _ = second.communicate(timeout=20)
+        self.assertEqual(second.returncode, 0, output)
+        self.assertTrue((home / "data").exists())
+        self.release("first")
+        first.communicate(timeout=20)
 
     def test_stopping_it_stops_the_build(self):
         self.hold("first")
