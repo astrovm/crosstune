@@ -352,7 +352,9 @@ internal object SungAlignment {
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
     private fun plain(word: String): String =
-        Normalizer.normalize(word.lowercase(), Normalizer.Form.NFKD).filter { it.isLetterOrDigit() }
+        Normalizer.normalize(word.lowercase(), Normalizer.Form.NFKC).flatMap { letter ->
+            if (letter < '\u0250') Normalizer.normalize(letter.toString(), Normalizer.Form.NFKD).toList() else listOf(letter)
+        }.filter { it.isLetterOrDigit() }.joinToString("")
 
     /** Which of [heard] match which of [timed], in order, as many as can: index pairs. */
     private fun matched(heard: List<String>, timed: List<String>): List<Pair<Int, Int>> {
