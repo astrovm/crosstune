@@ -4442,7 +4442,7 @@ internal class MainViewModel(
 
         /** Hearings of a video it takes to say how fast it goes, and the speeds it could go at, as by [AudioTiming]. */
         const val LEAD_SPEED_HEARINGS = 3
-        val LEAD_SPEEDS = 0.9f..1.1f
+        private val LEAD_SPEEDS = 0.9f..1.1f
         /** Lines sung in what's heard, at least, so enough words to match are heard. */
         const val SINGING_LINES = 3
         /** How many of a while's first seconds heard as music alone doubt the words' timing: the speech model often misses a voice once. */
