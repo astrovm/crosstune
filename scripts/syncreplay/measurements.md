@@ -267,3 +267,22 @@ No second cached recording is identified as sped up or slowed down in `songs.tsv
 or `set.json`. Faster and slower synthetic timing were considered, but this is
 only one real recording with measured Shazam skew. The earlier 15/19 experiment
 used a different path and scoring population; it is not evidence of 13/13 on this path.
+
+### Re-measured on the merged head
+
+Measured on 2026-11-04 on bc4e6088 (main at dd8bfa7b merged in), the replay set up as above.
+The owner took the 7/13 as better, not fixed: the 0.5 s target stays unmet.
+
+| Measured case | Within 0.5 s | Median absolute error | Worst error | Shown early |
+|---|---:|---:|---:|---:|
+| `--skew 0` | 6/13 | 0.78 s | +2.0 s | 0/16 |
+| `--skew 0.0349` | 7/13 | 0.33 s | -1.0 s | 2/16 |
+
+Both cases still never light 8 lines. All 41 songs, `syncreplay.py all`, this branch against main at the
+same base: identical per song and overall, 1223 lines, 301 within 0.3 s, 619 within 0.5 s, 113 dark,
+415 shown early. The 41 songs don't pass `--skew`, so they show nothing worse, not an improvement.
+
+The phone check (`phone ZnrSNEah_20 --seconds 200`) did not run on this head. The Samsung's YouTube Music
+pauses the moment it leaves the foreground, with Crosstune or with Settings in front, so there is no
+sound for Crosstune to hear. The 10/22 within 0.5 s, 17/22 within 1 s and median 0.54 s on b0bbbe44 are
+the last phone numbers.
