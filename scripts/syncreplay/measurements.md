@@ -289,14 +289,17 @@ phone pauses whenever another app is in front, so Crosstune hears nothing and th
 
 ### Together with PR #717 (hearing speeds of a video's lead)
 
-A video's speed was counted twice: PR #717 takes it off the video's clock once three hearings agree, and the
-pace of the words took it again. The pace now only applies while the clock isn't taking the speed.
-`run ZnrSNEah_20 --video --skew 0.0349 --shazam-ahead 45467 --words-length 0`:
+A video's speed could be counted twice: PR #717 takes it off the video's clock once three hearings agree, and the
+pace of the words took it again. The pace now only applies while the clock isn't taking the speed
+(`MainViewModel.leadSpeedTaken`).
 
-| Merged code | Within 0.5 s | Median absolute error | Worst error | Shown early | Never shown |
-|---|---:|---:|---:|---:|---:|
-| Speed counted twice | 7/13 | 0.33 s | -1.0 s | 7/18 | 6 |
-| Counted once | 8/13 | 0.31 s | +1.4 s | 1/18 | 6 |
+The replay can't show this. `run ZnrSNEah_20 --video --skew 0.0349 --shazam-ahead 45467 --words-length 0`, run
+on c5a96476, on b2449bdc, and on b2449bdc with the fix switched off (`pace = wordsPace`), gives the same each time:
+7/13 within 0.5 s, median 0.33 s, worst -1.0 s, 7/18 shown early, 6 never shown. The replay never reaches the
+fix, so what pins it is the two tests in `ListeningTest` (`aVideosSpeedIsntCountedTwiceOnceItIsTakenOffItsClock`,
+`aVideoTooFarOffItsSongsSpeedToTakeItOffItsClockKeepsThePaceOfItsWords`), watched failing without it.
+An earlier version of this section said 8/13 and 1/18 shown early for the fixed code. That didn't reproduce
+on any commit above, so it is dropped.
 
-`all` on the same code: 1223 lines, 299 within 0.3 s, 620 within 0.5 s, 117 dark (PR #717 alone: 302, 618, 113).
-The 4 extra dark lines are all in `ZnrSNEah_20`, lines that were lit up to 24 s off before and now stay dark.
+`all` on b2449bdc: 1223 lines, 301 within 0.3 s, 619 within 0.5 s, 113 dark, 415 shown early. The same as
+this branch before the merge (the 41 songs don't pass `--skew`, so this shows nothing got worse).
