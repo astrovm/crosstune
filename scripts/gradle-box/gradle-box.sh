@@ -98,6 +98,11 @@ fi
 box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
     -v "$root:$root" -v "$sdk:$sdk:ro" -v "$home:$home"
     -w "$root" -e "ANDROID_HOME=$sdk" -e "GRADLE_USER_HOME=$home")
+# Replay recordings can outlive a checkout in the agent cache. Keep the symlink usable in the box.
+if [[ -L $root/build/syncreplay ]]; then
+    replay=$(cd "$root/build/syncreplay" && pwd -P)
+    [[ $replay == "$root"/* ]] || box+=(-v "$replay:$replay")
+fi
 # A worktree keeps its Git data in the main checkout, which may be somewhere else.
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
 # The same key as builds outside the box, so its APKs install over theirs.
