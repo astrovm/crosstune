@@ -16,7 +16,8 @@ if [ -n "$FAKE_DOWNLOADS" ]; then
         case "$arg" in GRADLE_USER_HOME=*)
             home="${arg#GRADLE_USER_HOME=}"
             mkdir -p "$home/caches/modules-2/files-2.1" "$home/wrapper/dists"
-            touch "$home/caches/modules-2/files-2.1/some.jar" "$home/caches/modules-2/modules-2.lock" "$home/caches/modules-2/gc.properties" "$home/wrapper/dists/gradle.zip"
+            printf data > "$home/caches/modules-2/files-2.1/some.jar"
+            touch "$home/caches/modules-2/modules-2.lock" "$home/caches/modules-2/gc.properties" "$home/wrapper/dists/gradle.zip"
         esac
     done
 fi
@@ -201,6 +202,13 @@ class GradleBoxTest(unittest.TestCase):
         box.communicate(timeout=20)
         self.assertEqual(list((self.seed() / "modules-2").iterdir()), [])
 
+    def test_does_not_create_a_seed_over_the_limit(self):
+        box = self.start("a", "help", FAKE_DOWNLOADS="1", GRADLE_BOX_CACHE_BYTES="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertTrue((self.dir / "state" / "gradle-1" / "caches" / "modules-2").exists())
+        self.assertFalse(self.seed().exists())
+
     def test_without_kept_downloads_there_is_nothing_to_read(self):
         box = self.start("a", "help")
         box.communicate(timeout=20)
@@ -247,8 +255,8 @@ class GradleBoxTest(unittest.TestCase):
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertFalse(home.exists())
-        self.assertFalse(self.seed().exists())
-        self.assertIn("seed", output)
+        self.assertTrue((self.seed() / "modules-2" / "data").exists())
+        self.assertIn("above", output)
 
     def test_cleanup_leaves_cache_under_limit(self):
         home = self.dir / "state" / "gradle-2"

@@ -19,6 +19,8 @@
 #
 # Idle slot homes are evicted oldest first above 10 GiB (GRADLE_BOX_CACHE_BYTES overrides it).
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
+# A new seed is made only when the cache and its copy fit; its contents are then read-only.
+# An older seed or a lowered limit can still leave the cache over target.
 set -euo pipefail
 
 image=docker.io/library/eclipse-temurin:25-jdk
