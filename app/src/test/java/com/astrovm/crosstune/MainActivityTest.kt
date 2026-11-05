@@ -417,7 +417,7 @@ class MainActivityTest {
 
     @Test
     fun aSongFoundOnBandcampIsAskedForInItsAppBySearchTwiceNotOpenedByItsPage() {
-        prefs().edit().putString("default_target", "BANDCAMP").commit()
+        prefs().edit().putString("default_target", "BANDCAMP").putBoolean("play_right_away", true).commit()
         fake.handler = { request ->
             FakeSpotify.html(request, """{"auto":{"results":[{"type":"t","name":"A Song","band_name":"Example Band","item_url_root":"https://exampleband.bandcamp.com","item_url_path":"https://exampleband.bandcamp.com/track/a-song"}]}}""")
         }

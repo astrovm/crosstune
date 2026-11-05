@@ -1131,6 +1131,24 @@ class PlaybackTest {
     }
 
     @Test
+    fun bandcampAskedBySearchIsLeftInFrontWhenItOnlyPlaysThere() = runBlocking {
+        allow()
+        val bandcamp = MusicService.BANDCAMP.packageName
+        val session = player(bandcamp, "Bandcamp", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(session)
+        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) }
+        shadowOf(session).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(fails.await())
+        assertTrue(playback.playsOnlyInFront(bandcamp))
+        assertTrue(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
+        assertEquals(bandcamp, shadowOf(app).nextStartedActivity.component?.packageName)
+        // Behind Crosstune it would stop, and the search that opened it counts as opening it.
+        playback.comesBack()
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+
+    @Test
     fun aSpotifyPagePlayingInABrowserIsItsSong() {
         allow()
         sounding()
