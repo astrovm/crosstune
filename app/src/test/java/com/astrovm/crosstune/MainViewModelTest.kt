@@ -1508,7 +1508,7 @@ class MainViewModelTest {
         val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
         var asked = 0
         val numbers = QobuzNumbers(playback, { _, _ -> asked++; "https://play.qobuz.com/track/2" }, app::hasApp, scope)
-        fun opened(service: MusicService?, link: String = ytLink): Int {
+        fun opened(service: MusicService?, link: String = ytLink, action: (MainViewModel) -> Unit = { it.openResult() }): Int {
             asked = 0
             playback.opened.clear()
             service?.let { shadowOf(app.packageManager).installPackage(installedApp(it.packageName, "Music")) }
@@ -1525,7 +1525,7 @@ class MainViewModelTest {
             numbers.opened(MusicMetadata("Previous", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/99")
             asked = 0
             playback.opened.clear()
-            model.openResult()
+            action(model)
             until("opened") { effects.isNotEmpty() || model.uiState.resultMissing }
             shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(QobuzNumbers.WAIT_MS))
             idle()
@@ -1538,9 +1538,15 @@ class MainViewModelTest {
             assertEquals(1, opened(MusicService.QOBUZ))
             // Any other app's left alone, and a search has no number to swap.
             assertEquals(0, opened(MusicService.DEEZER))
+            assertEquals(0, opened(MusicService.DEEZER, action = { it.searchAnyway() }))
+            assertEquals(0, opened(MusicService.DEEZER, action = { it.openOriginal() }))
+            assertEquals(0, opened(MusicService.DEEZER, action = {
+                it.openTrack(MusicMetadata("Next", "Artist", url = "https://www.deezer.com/track/42"))
+            }))
             // Another song, as one looked up before is opened on the number kept with it.
             found = false
             assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=aaaaaaaaaaa"))
+            assertEquals(0, opened(MusicService.QOBUZ, "https://music.youtube.com/watch?v=bbbbbbbbbbb", action = { it.searchAnyway() }))
         } finally {
             scope.cancel()
         }

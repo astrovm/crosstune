@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -158,6 +159,7 @@ internal class MainViewModel(
 
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
             override fun playPause(song: MusicMetadata, play: Boolean) {
+                qobuzNumbers?.off()
                 leftJob?.cancel()
                 if (!play) return source.playPause(song, false)
                 viewModelScope.launch {
@@ -1608,6 +1610,7 @@ internal class MainViewModel(
     fun openPlayerApp() {
         val player = uiState.player ?: return
         val app = player.following?.appPackage ?: player.app ?: return
+        qobuzNumbers?.off()
         effectChannel.trySend(Effect.Show(app, finishAfterOpen = false, saysWhenItFails = false))
     }
 
@@ -1733,7 +1736,7 @@ internal class MainViewModel(
     /** Opens [url] in [packageName], with [song] named for an app that takes a search, not its page. */
     private fun opening(url: String, packageName: String?, finishAfterOpen: Boolean, song: MusicMetadata? = uiState.result): Effect.Open {
         qobuzNumbers?.off()
-        if (song != null && packageName == MusicService.QOBUZ.packageName && MusicLinks.linkFor(url)?.type == ItemType.TRACK) {
+        if (song?.type == ItemType.TRACK && packageName == MusicService.QOBUZ.packageName && url.toHttpUrlOrNull()?.pathSegments?.firstOrNull() == "track") {
             qobuzNumbers?.opened(song, packageName, url)
         }
         return Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery))

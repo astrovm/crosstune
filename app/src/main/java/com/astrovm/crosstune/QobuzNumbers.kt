@@ -34,9 +34,15 @@ internal class QobuzNumbers(
         // Already on it, it's brought forward, and there's no start to see.
         if (over != null && SongNames.same(over.title, song.title) && SongNames.sameArtist(over.artist, song.artist)) return
         job = scope.launch {
-            // The first value is what was playing before this open, possibly in another app.
+            // Position updates from the player already active before this open aren't a new choice.
+            var before = playback.nowPlaying()
             val moved = launch {
-                playback.nowPlayingUpdates().drop(1).first { it != null && !sameApp(app, it.app, installed) }
+                playback.nowPlayingUpdates().drop(1).first { playing ->
+                    val changed = playing != null && !sameApp(app, playing.app, installed) &&
+                        (playing.app != before?.app || playing.metadata.title != before?.metadata?.title)
+                    before = playing
+                    changed
+                }
                 off()
             }
             try {

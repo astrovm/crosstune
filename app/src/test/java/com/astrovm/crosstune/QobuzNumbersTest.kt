@@ -194,6 +194,8 @@ class QobuzNumbersTest {
     fun anExistingOtherPlayerDoesntCancelUntilItChanges() {
         phone.onThePhone = Heard.Song(MusicMetadata("Before", "Someone"), null, app = "other.app")
         numbers.opened(song, qobuz, link)
+        passes(1_000)
+        phone.onThePhone = phone.onThePhone?.copy(offsetMs = 1_000)
         passes(QobuzNumbers.WAIT_MS)
         assertEquals(listOf(qobuz to "https://play.qobuz.com/track/2"), phone.opened.toList())
     }
