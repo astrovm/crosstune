@@ -684,6 +684,97 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun savedSentenceCaseIsStillReadableOfflineDuringTheRefresh() {
+        val file = File.createTempFile("lyrics-old-offline", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        runBlocking { cache.put("15\u0000${RecordingKey.of(song)}", """{"words":"We walk with mira through the night","lines":[],"provisional":false}""") }
+        fake.handler = { throw IOException("offline") }
+        val result = runBlocking { LyricsFinder(fake.client(), "test", cache = cache, busyPauseMs = 0).lyricsOf(song) } as Lyrics.Found
+        assertEquals("We walk with mira through the night", result.words)
+        file.delete()
+    }
+
+    @Test
+    fun savedSentenceCaseFromBeforeNameRestorationIsRefreshed() {
+        val file = File.createTempFile("lyrics-old-case", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        runBlocking {
+            cache.put("15\u0000${RecordingKey.of(song)}", """{"words":"We walk with mira through the night","lines":[],"provisional":false}""")
+            cache.save()
+        }
+        respond("[${answer("Song", "Band", "We walk with Mira through the night")}]")
+        val finder = LyricsFinder(fake.client(), "test", cache = LookupCache(file, Dispatchers.Unconfined), busyPauseMs = 0)
+        assertEquals("We walk with Mira through the night", (runBlocking { finder.lyricsOf(song) } as Lyrics.Found).words)
+        file.delete()
+    }
+
+    @Test
+    fun ownCapitalWordsWaitForLateCopiesWithoutLosingTheirTimings() {
+        val named = "We walk with Mira through the night"
+        everywhere("[${answer("Song", "Band", named)}]", youTubeMusicPage(named.uppercase() to 1000L))
+        val others = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "lrclib.net") Thread.sleep(100)
+            others(request)
+        }
+        val video = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        val result = runBlocking { withYouTubeMusic().firstLook(video) }
+        assertTrue(result.final)
+        assertEquals(named, (result.lyrics as Lyrics.Found).words)
+        assertEquals(1000L, result.lyrics.lines.single().timeMs)
+    }
+
+    @Test
+    fun aCapitalLineReadsLikeItsNeighborsAndKeepsTheirNames() {
+        val text = "We walk with Mira through the night\nWE WALK WITH MIRA THROUGH THE NIGHT\nWe send NASA a message tonight"
+        val found = Lyrics.Found(text, text.lines().mapIndexed { i, line ->
+            LyricLine(i * 1000L, line, listOf(TimedWord(i * 1000L, line)))
+        })
+        val result = LyricsFinder.cleaned(found, song)
+        val expected = "We walk with Mira through the night\nWe walk with Mira through the night\nWe send NASA a message tonight"
+        assertEquals(expected, result.words)
+        assertEquals(expected.lines(), result.lines.map { it.text })
+        assertEquals(expected.lines(), result.lines.map { it.words.single().text })
+        assertEquals(result, LyricsFinder.cleaned(result, song))
+    }
+
+    @Test
+    fun spacingNeverChangesLettersPunctuationOrExistingWordBreaks() {
+        fun clean(text: String, copy: String) = LyricsFinder.cleaned(Lyrics.Found(text), song, listOf(Lyrics.Found(copy))).words
+        assertEquals("Send me a letter", clean("Sendme a letter", "Send me a letter"))
+        assertEquals("Send me a letter", clean("Send me a letter", "Sendme a letter"))
+        assertEquals("Sendme a letter", clean("Sendme a letter", "Send me a letter!"))
+        assertEquals("Sendme a letter", clean("Sendme a letter", "Send me another letter"))
+        assertEquals("", clean("", ""))
+        assertEquals("五月雨は緑色", clean("五月雨は緑色", "五月雨は緑色"))
+        assertEquals("Send\tme a letter", clean("Send\tme a letter", "Send me a letter"))
+        assertEquals("Sendme a letter", clean("Sendme a letter", "Send me\na letter"))
+    }
+
+    @Test
+    fun timedTextCanLearnItsSpacesFromItsOwnPlainWords() {
+        assertEquals("Mira put on the red light", LyricsFinder.cleaned(Lyrics.Found("Mira PUT ON THE RED LIGHT"), song).words)
+        val plain = "Send me a letter"
+        val line = LyricLine(1000, "Sendme a letter", listOf(TimedWord(1000, "Sendme "), TimedWord(2000, "a letter")))
+        val result = LyricsFinder.cleaned(Lyrics.Found(plain, listOf(line)), song)
+        assertEquals(plain, result.lines.single().text)
+        assertEquals(listOf(TimedWord(1000, "Send me "), TimedWord(2000, "a letter")), result.lines.single().words)
+        assertEquals(plain, result.words)
+    }
+
+    @Test
+    fun missingSpacesComeFromACopyWithTheSameLettersAndKeepWordTimes() {
+        val line = LyricLine(1000, "SENDME A LETTER", listOf(TimedWord(1000, "SEND"), TimedWord(2000, "ME A LETTER")))
+        val found = Lyrics.Found(line.text, listOf(line))
+        val copy = Lyrics.Found("Send me a letter")
+        val result = LyricsFinder.cleaned(found, song, listOf(copy))
+        assertEquals("Send me a letter", result.words)
+        assertEquals("Send me a letter", result.lines.single().text)
+        assertEquals(listOf(TimedWord(1000, "Send"), TimedWord(2000, " me a letter")), result.lines.single().words)
+        assertEquals(result, LyricsFinder.cleaned(result, song))
+    }
+
+    @Test
     fun restoredCapitalsKeepSplitWordTimingsAndSurviveCleaningAgain() {
         val text = "WE MEET MIRA BESIDE THE RIVER TONIGHT"
         val line = LyricLine(1000, text, listOf(TimedWord(1000, "WE MEET MI"), TimedWord(2000, "RA BESIDE THE RIVER TONIGHT")))
