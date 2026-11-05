@@ -3,8 +3,8 @@ package com.astrovm.crosstune
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import androidx.core.content.IntentCompat
 
 /**
  * Opens a song in its app, unseen, then closes. Android lets Crosstune open an app from behind only for 10 s after one of
@@ -14,16 +14,17 @@ import android.os.Bundle
 class OpenSongActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        tryStartActivity(Intent(Intent.ACTION_VIEW, intent.data).setPackage(intent.getStringExtra(EXTRA_APP)))
+        IntentCompat.getParcelableExtra(intent, EXTRA_OPEN, Intent::class.java)?.let { if (intent.getBooleanExtra(EXTRA_TWICE, false)) startTwice(it) else tryStartActivity(it) }
         finish()
     }
 
     companion object {
-        const val EXTRA_APP = "app"
+        const val EXTRA_OPEN = "open"
+        const val EXTRA_TWICE = "twice"
     }
 }
 
-/** [app] opened on [link] through [OpenSongActivity]; false, as with opening it directly, when [app] doesn't open that link. */
-internal fun Context.openLeavingTimeToOpenAgain(app: String, link: Uri): Boolean =
-    Intent(Intent.ACTION_VIEW, link).setPackage(app).resolveActivity(packageManager) != null &&
-        tryStartActivity(Intent(this, OpenSongActivity::class.java).setData(link).putExtra(OpenSongActivity.EXTRA_APP, app).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+/** [open] started through [OpenSongActivity], [twice] if the app needs it, see [startTwice]; false, as when started directly, if no app takes it. */
+internal fun Context.openLeavingTimeToOpenAgain(open: Intent, twice: Boolean = false): Boolean =
+    open.resolveActivityInfo(packageManager, 0) != null &&
+        tryStartActivity(Intent(this, OpenSongActivity::class.java).putExtra(OpenSongActivity.EXTRA_OPEN, open).putExtra(OpenSongActivity.EXTRA_TWICE, twice).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

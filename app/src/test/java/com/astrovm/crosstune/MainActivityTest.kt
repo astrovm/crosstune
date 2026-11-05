@@ -415,8 +415,16 @@ class MainActivityTest {
         assertOnlyCoverSearches()
     }
 
+    /** Bandcamp's app, with the search page it's asked through. */
+    private fun bandcampsApp() {
+        val search = ComponentName(MusicService.BANDCAMP.packageName, MusicService.BANDCAMP_SEARCH_ACTIVITY)
+        shadowOf(app.packageManager).addActivityIfNotPresent(search)
+        shadowOf(app.packageManager).addIntentFilterForActivity(search, IntentFilter(Intent.ACTION_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
+    }
+
     @Test
     fun aSongFoundOnBandcampIsAskedForInItsAppBySearchTwiceNotOpenedByItsPage() {
+        bandcampsApp()
         prefs().edit().putString("default_target", "BANDCAMP").putBoolean("play_right_away", true).commit()
         fake.handler = { request ->
             FakeSpotify.html(request, """{"auto":{"results":[{"type":"t","name":"A Song","band_name":"Example Band","item_url_root":"https://exampleband.bandcamp.com","item_url_path":"https://exampleband.bandcamp.com/track/a-song"}]}}""")
@@ -426,6 +434,10 @@ class MainActivityTest {
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        // Through a screen of its own, which leaves time for the second however long Crosstune's been up.
+        val through = nextStartedActivity()!!
+        assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+        Robolectric.buildActivity(OpenSongActivity::class.java, through).create()
         val first = nextStartedActivity()!!
         // The second goes a moment after the first, once the app has started.
         assertNull(nextStartedActivity())
@@ -443,12 +455,14 @@ class MainActivityTest {
 
     @Test
     fun aSongNotFoundOnBandcampIsSearchedForInItsAppToo() {
+        bandcampsApp()
         prefs().edit().putString("default_target", "BANDCAMP").commit()
         launch(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, NOW_PLAYING_SHARE)
         })
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        Robolectric.buildActivity(OpenSongActivity::class.java, nextStartedActivity()!!).create()
         assertEquals("A Song Example Band", nextStartedActivity()!!.getStringExtra(SearchManager.QUERY))
     }
 
@@ -8101,7 +8115,9 @@ class MainActivityTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         val started = nextStartedActivity()!!
         assertEquals(OpenSongActivity::class.java.name, started.component?.className)
-        assertEquals("https://open.qobuz.com/track/7", started.dataString)
-        assertEquals(qobuz, started.getStringExtra(OpenSongActivity.EXTRA_APP))
+        Robolectric.buildActivity(OpenSongActivity::class.java, started).create()
+        val opened = nextStartedActivity()!!
+        assertEquals("https://open.qobuz.com/track/7", opened.dataString)
+        assertEquals(qobuz, opened.`package`)
     }
 }

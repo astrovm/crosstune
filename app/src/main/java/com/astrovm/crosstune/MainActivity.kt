@@ -1080,7 +1080,7 @@ class MainActivity : ComponentActivity() {
         val search = effect.packageName?.let { MusicService.searchIn(it, effect.url, effect.asking) }
         val opened = search?.let { tryStartActivityTwice(it.addFlags(flags)) } == true || apps.any { (app, link) ->
             // Closing as it opens it gives Crosstune the time to open it again; a screen that stays doesn't.
-            if (!effect.finishAfterOpen && MusicService.ofOwnApp(app) == MusicService.QOBUZ) openLeavingTimeToOpenAgain(app, link.toUri())
+            if (!effect.finishAfterOpen && MusicService.ofOwnApp(app) == MusicService.QOBUZ) openLeavingTimeToOpenAgain(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app))
             else tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags))
         } || openOutsideCrosstune(uri, flags)
         when {

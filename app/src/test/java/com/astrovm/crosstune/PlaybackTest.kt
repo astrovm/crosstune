@@ -1147,6 +1147,10 @@ class PlaybackTest {
         shadowOf(app.packageManager).addActivityIfNotPresent(component)
         shadowOf(app.packageManager).addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
         assertTrue(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
+        // Through a screen of its own, which leaves time for the second however long Crosstune's been up.
+        val through = shadowOf(app).nextStartedActivity
+        assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+        assertTrue(org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, through).create().get().isFinishing)
         // The second goes a moment after the first, once the app has started.
         val first = shadowOf(app).nextStartedActivity
         assertNull(shadowOf(app).nextStartedActivity)
@@ -1171,8 +1175,14 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertFalse(fails.await())
         assertTrue(playback.playsOnlyInFront(bandcamp))
+        val component = ComponentName(bandcamp, MusicService.BANDCAMP_SEARCH_ACTIVITY)
+        shadowOf(app.packageManager).addActivityIfNotPresent(component)
+        shadowOf(app.packageManager).addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
         assertTrue(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
+        org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, shadowOf(app).nextStartedActivity).create()
         assertEquals(bandcamp, shadowOf(app).nextStartedActivity.component?.packageName)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SECOND_START_MS))
+        shadowOf(app).nextStartedActivity
         // Behind Crosstune it would stop, and the search that opened it counts as opening it.
         playback.comesBack()
         assertNull(shadowOf(app).nextStartedActivity)

@@ -19,19 +19,21 @@ internal fun Context.tryStartActivity(intent: Intent): Boolean = try {
 }
 
 /**
+ * Starts [intent] twice, see [startTwice], from a screen of its own: without it, a second start from a song's card was blocked
+ * once the app had come to the front, 0.7 s in with an app already up. Both go in a task of the app's own: in Crosstune's, the
+ * task keeps the link that began it, so that link again only brings back whatever the app last searched.
+ */
+internal fun Context.tryStartActivityTwice(intent: Intent): Boolean =
+    openLeavingTimeToOpenAgain(Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), twice = true)
+
+/**
  * Starts [intent], then again after [SECOND_START_MS]. Bandcamp's app loses the first search it's sent while it starts,
  * and takes the one sent once it is up; sent back to back, both land in its start and are lost. Already up, it takes either.
- * The second may be refused from the background, and the first is then all there is. Both go in a task of the app's own:
- * in Crosstune's, the task keeps the link that began it, so that link again only brings back whatever the app last searched.
  */
-internal fun Context.tryStartActivityTwice(intent: Intent): Boolean {
-    val own = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    val opened = tryStartActivity(own)
-    if (opened) {
-        val app = applicationContext
-        Handler(Looper.getMainLooper()).postDelayed({ runCatching { app.startActivity(own) } }, SECOND_START_MS)
-    }
-    return opened
+internal fun Context.startTwice(intent: Intent) {
+    tryStartActivity(intent)
+    val app = applicationContext
+    Handler(Looper.getMainLooper()).postDelayed({ runCatching { app.startActivity(intent) } }, SECOND_START_MS)
 }
 
 internal const val SECOND_START_MS = 700L
