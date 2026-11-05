@@ -417,6 +417,12 @@ class MainActivityTest {
 
     @Test
     fun consecutiveSongsOpenOutsideCrosstunesTaskFromCardsAndDirectly() {
+        val qobuz = MusicService.QOBUZ.packageName
+        installActivity(ComponentName(qobuz, "$qobuz.DeepLink"), IntentFilter(Intent.ACTION_VIEW).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addDataScheme("https")
+            addDataAuthority("play.qobuz.com", null)
+        })
         for (card in listOf(true, false)) {
             for (service in MusicService.entries.filter { it != MusicService.BANDCAMP }) {
                 prefs().edit().putString("default_target", service.name)
@@ -428,12 +434,17 @@ class MainActivityTest {
                     })
                     if (card) {
                         waitForText(title)
-                        val action = string(R.string.search_in_destination, string(service.labelRes))
-                        waitUntil { composeRule.onAllNodes(hasContentDescription(action) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+                        val action = string(service.openLabelRes)
+                        val search = string(R.string.search_in_destination, string(service.labelRes))
+                        waitUntil { composeRule.onAllNodes((hasContentDescription(action) or hasContentDescription(search)) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
                         click(action)
                     }
                     waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-                    val sent = requireNotNull(nextStartedActivity())
+                    val request = requireNotNull(nextStartedActivity())
+                    val sent = if (request.component?.className == OpenSongActivity::class.java.name) {
+                        Robolectric.buildActivity(OpenSongActivity::class.java, request).create()
+                        requireNotNull(nextStartedActivity())
+                    } else request
                     assertEquals(service.packageName, sent.`package`)
                     assertTrue("${service.name}, card=$card, $title: ${sent.toUri(0)}", sent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
                     assertTrue(sent.dataString.orEmpty().contains(title.replace(" ", "%20")))

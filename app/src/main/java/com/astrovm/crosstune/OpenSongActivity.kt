@@ -14,7 +14,14 @@ import androidx.core.content.IntentCompat
 class OpenSongActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        IntentCompat.getParcelableExtra(intent, EXTRA_OPEN, Intent::class.java)?.let { if (intent.getBooleanExtra(EXTRA_TWICE, false)) startTwice(it) else tryStartActivity(it) }
+        cancelPendingMusicOpen()
+        IntentCompat.getParcelableExtra(intent, EXTRA_OPEN, Intent::class.java)?.let {
+            when {
+                intent.getBooleanExtra(EXTRA_TWICE, false) -> startTwice(it)
+                it.isTidalSearch() -> startTidalSearch(it)
+                else -> tryStartActivity(it)
+            }
+        }
         finish()
     }
 

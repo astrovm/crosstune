@@ -1057,6 +1057,34 @@ class PlaybackTest {
     }
 
     @Test
+    fun tidalSearchReplacesThePreviousQueryAndCancelsAnOlderPendingSearch() {
+        shadowOf(app).checkActivities(true)
+        val tidal = MusicService.TIDAL.packageName
+        val target = ComponentName(tidal, "$tidal.DeepLink")
+        shadowOf(app.packageManager).addActivityIfNotPresent(target)
+        shadowOf(app.packageManager).addIntentFilterForActivity(target, IntentFilter(Intent.ACTION_VIEW).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addDataScheme("tidal")
+        })
+        for (query in listOf("First", "Second")) {
+            assertTrue(playback.openSong(tidal, MusicService.TIDAL.searchUrl(query)))
+            val through = requireNotNull(shadowOf(app).nextStartedActivity)
+            assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+            org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, through).create()
+            val before = requireNotNull(shadowOf(app).nextStartedActivity)
+            assertEquals("tidal://my-collection", before.dataString)
+            assertTrue(before.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        }
+        // A second request replaces the pending first search instead of reopening the old one later.
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        val second = requireNotNull(shadowOf(app).nextStartedActivity)
+        assertEquals("tidal://search?q=Second", second.dataString)
+        assertEquals(tidal, second.`package`)
+        assertTrue(second.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        assertNull(shadowOf(app).nextStartedActivity)
+    }
+
+    @Test
     fun onATvAYouTubeMusicSongOpensInYouTubesTvApp() {
         // YouTube Music's TV app opens its home for a song's link; YouTube's plays it, as YouTube's.
         shadowOf(app).checkActivities(true)
