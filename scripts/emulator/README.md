@@ -52,3 +52,13 @@ ffmpeg -nostats -ss 4 -i /tmp/mic.mka -af volumedetect -f null - 2>&1 | grep max
 Silence can start later, so check again right after a run you want to rely on.
 
 Needs real speakers, a real room, or an account the emulator doesn't have? Use a phone.
+
+## Trying Qobuz
+
+`qobuz_try.py` is one try of a song link handed to Crosstune with Qobuz chosen, on an emulator with Qobuz logged in and the dev app installed: what Qobuz's media session plays, what Android started and blocked, by the second. A try that hits Qobuz's server errors says so, and doesn't count.
+
+```bash
+python3 scripts/emulator/qobuz_try.py emulator-5580 'https://www.deezer.com/track/2425603' 'Expresso Love' --pre other --path straight
+```
+
+`--path` is how it's opened: `straight` from the link, or `open` and `play` on the song's card, which tap the card's buttons where they are on a 1080 x 2400 screen. `--pre other` leaves Qobuz closed on another song first, as it can wake on that. It overwrites the dev app's settings.

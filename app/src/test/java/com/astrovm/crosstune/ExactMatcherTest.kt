@@ -94,6 +94,22 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aTitleOfNoLettersOrDigitsGetsNoCover() {
+        // Such a title starts any name, so any song of the artist's would do, with the wrong cover.
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                if (request.url.host == "itunes.apple.com") {
+                    """{"results":[{"trackName":"Hello","artistName":"Adele","artworkUrl100":"https://adele/100x100bb.jpg"}]}"""
+                } else {
+                    """{"data":[{"title":"Hello","artist":{"name":"Adele"},"album":{"cover_big":"https://adele.jpg"}}]}"""
+                }
+            )
+        }
+        assertNull(runBlocking { matcher().cover(MusicMetadata("!!!", "Adele")) })
+    }
+
+    @Test
     fun aSongDeezerDoesntHaveGetsApplesCover() {
         val cover = "https://is1-ssl.mzstatic.com/image/thumb/Music/100x100bb.jpg"
         fake.handler = { request ->

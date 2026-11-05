@@ -539,7 +539,7 @@ internal class MediaSessionPlayback(
     // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
     // Behind it too when the app opened wouldn't play in the background, as it would stop as soon as it's left.
     override fun comesBack() {
-        if (opened in onlyInFront) return
+        if (opened?.let(onlyInFront::contains) == true) return
         runCatching { context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
     }
 
