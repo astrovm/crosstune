@@ -1072,8 +1072,8 @@ class MainActivity : ComponentActivity() {
     private fun open(effect: Effect.Open) {
         val uri = effect.url.toUri()
         val floatOn = floatsOnAfter(effect.finishAfterOpen)
-        // Floating on, Crosstune steps back rather than closing, so the app opens in a task of its own, not under it.
-        val flags = if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0
+        // In Crosstune's task, an old link can bring back the app's last screen instead of opening the song.
+        val flags = Intent.FLAG_ACTIVITY_NEW_TASK
         // A service's own app stands in for the builds patched from it and its TV app, whichever is installed; a build chosen by name is only itself.
         val apps = effect.packageName?.let { MusicService.appLinksIn(it, effect.url) }.orEmpty()
         // An app that opens no page of its website's is asked for the song by search instead.
@@ -1094,7 +1094,7 @@ class MainActivity : ComponentActivity() {
         val launch = packageManager.getLaunchIntentForPackage(effect.packageName)
         val floatOn = floatsOnAfter(effect.finishAfterOpen)
         when {
-            launch == null || !tryStartActivity(launch.addFlags(if (floatOn) Intent.FLAG_ACTIVITY_NEW_TASK else 0)) -> if (effect.saysWhenItFails) viewModel.showError(AppError.NO_APP_TO_OPEN)
+            launch == null || !tryStartActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) -> if (effect.saysWhenItFails) viewModel.showError(AppError.NO_APP_TO_OPEN)
             floatOn -> floatOn()
             effect.finishAfterOpen -> finish()
         }

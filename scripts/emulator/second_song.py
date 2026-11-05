@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Record two songs per launch route on the shared Samsung, restoring prefs and keeping the phone silent.
+
+Pass the device-bound CLI returned by T3 device_open as --device-cli. Evidence stays
+under build/, including screenshots, visible nodes and Android task dumps. No login
+or subscription prompts are accepted. Review the evidence before calling a row right.
+"""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import time
+import xml.etree.ElementTree as ET
+
+APP = 'com.astrovm.crosstune.dev'
+SERVICES = {
+    'TIDAL': 'TIDAL', 'DEEZER': 'Deezer', 'APPLE_MUSIC': 'Apple Music',
+    'AMAZON_MUSIC': 'Amazon Music', 'QOBUZ': 'Qobuz', 'AUDIOMACK': 'Audiomack',
+    'SPOTIFY': 'Spotify', 'BANDCAMP': 'Bandcamp', 'SOUNDCLOUD': 'SoundCloud',
+    'YOUTUBE': 'YouTube',
+    'YOUTUBE_MUSIC@com.google.android.apps.youtube.music': 'YouTube Music',
+    'YOUTUBE_MUSIC@app.morphe.android.apps.youtube.music': 'YouTube Music',
+}
+SEARCHES = [('Crosstune Unreleased First', 'Test Band'), ('Crosstune Unreleased Second', 'Test Band')]
+TEST_APPS = {'com.aspiro.tidal', 'deezer.android.app', 'com.apple.android.music', 'com.amazon.mp3', 'com.qobuz.music', 'com.audiomack', 'com.spotify.music', 'com.bandcamp.android', 'com.soundcloud.android', 'com.google.android.youtube', 'com.google.android.apps.youtube.music', 'app.morphe.android.apps.youtube.music'}
+LINKS = ['https://www.deezer.com/track/3135556', 'https://www.deezer.com/track/908604612']
+
+
+def run(command, **kwargs):
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60, **kwargs)
+    if result.returncode:
+        raise RuntimeError(result.stdout + result.stderr)
+    return result.stdout
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('phase', choices=['before', 'after'])
+    parser.add_argument('--device-cli', required=True)
+    parser.add_argument('--service', choices=SERVICES)
+    parser.add_argument('--output', type=Path, default=Path('build/second-song'))
+    args = parser.parse_args()
+    args.output.mkdir(parents=True, exist_ok=True)
+    adb_cli = str(Path(os.environ.get('ANDROID_HOME', Path.home() / 'Android/Sdk')) / 'platform-tools/adb')
+    devices = run(['timeout', '10', adb_cli, 'devices', '-l'])
+    serial = next((row.split()[0] for row in devices.splitlines() if 'SM_S908E' in row and row.split()[1] == 'device'), None)
+    if not serial:
+        raise SystemExit('Samsung is not attached; refusing to touch another device')
+
+    def adb(*command, **kwargs):
+        return run(['timeout', '25', adb_cli, '-s', serial, *command], **kwargs)
+
+    def device(*command):
+        return run([args.device_cli, *command])
+
+    def quiet():
+        volume = adb('shell', 'cmd', 'media_session', 'volume', '--stream', '3', '--get')
+        if not re.search(r'volume is 0\b', volume):
+            raise RuntimeError('Refusing to open an app with nonzero media volume: ' + volume)
+
+    def stop_playing():
+        sessions = adb('shell', 'dumpsys', 'media_session')
+        for block in re.split(r'(?=package=)', sessions):
+            package = re.match(r'package=([^\s]+)', block)
+            if package and re.search(r'state=PlaybackState \{state=PLAYING', block):
+                # The untitled YouTube session belongs to the owner's TV.
+                if 'youtube' in package.group(1) and not re.search(r'description=\S', block):
+                    continue
+                if package.group(1) in TEST_APPS:
+                    adb('shell', 'am', 'force-stop', package.group(1))
+                    print('Stopped playback:', package.group(1), flush=True)
+
+    def start(extra):
+        quiet()
+        # Each launch argument is its own token, including text containing spaces.
+        device('open', APP, *[token for item in extra for token in ['--launch-args', item]])
+
+    lock_path = Path('/tmp') / ('claude-' + str(os.getuid())) / 'samsung.lock'
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    for target, label in SERVICES.items():
+        if args.service and target != args.service:
+            continue
+        for kind in ['search', 'link']:
+            for card in [True, False]:
+                prefix = f'{args.phase}-{target}-{kind}-{card}'
+                if (args.output / (prefix + '-1.png')).exists():
+                    continue
+                # Release between pairs, so other agents can use the shared phone.
+                with lock_path.open('w') as lock:
+                    fcntl.flock(lock, fcntl.LOCK_EX)
+                    saved = adb('shell', 'run-as', APP, 'cat', 'shared_prefs/crosstune_preferences.xml')
+                    quiet()
+                    try:
+                        adb('shell', 'am', 'force-stop', APP)
+                        prefs = ET.fromstring(saved)
+                        for key, value in [('default_target', target), ('links_in_crosstune', str(card).lower()), ('play_right_away', str(not card).lower())]:
+                            entry = prefs.find("*[@name='%s']" % key)
+                            if entry is None:
+                                entry = ET.SubElement(prefs, 'string' if key == 'default_target' else 'boolean', name=key)
+                            if key == 'default_target':
+                                entry.text = value
+                            else:
+                                entry.set('value', value)
+                        adb('shell', 'run-as', APP, 'sh', '-c', "'cat > shared_prefs/crosstune_preferences.xml'", input=ET.tostring(prefs, encoding='unicode'))
+                        for index, (title, artist) in enumerate(SEARCHES):
+                            name = prefix + '-' + str(index)
+                            adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
+                            adb('shell', 'wm', 'dismiss-keyguard')
+                            if kind == 'search':
+                                share = f'{title} by {artist}\nhttps://www.google.com/search?q={title.replace(" ", "+")}+by+{artist.replace(" ", "+")}'
+                                start(['-a', 'android.intent.action.SEND', '-t', 'text/plain', '--es', 'android.intent.extra.TEXT', share])
+                            else:
+                                start(['-a', 'android.intent.action.SEND', '-t', 'text/plain', '--es', 'android.intent.extra.TEXT', LINKS[index]])
+                            stop_playing()
+                            time.sleep(8)
+                            stop_playing()
+                            tree = device('snapshot', '-i')
+                            if card or kind == 'search':
+                                action = next((text for text in [f'Search in {label}', f'Open in {label}'] if '"' + text + '"' in tree), None)
+                                if action:
+                                    quiet()
+                                    device('press', 'label=' + json.dumps(action))
+                                    stop_playing()
+                                else:
+                                    print('No card action:', name, flush=True)
+                            time.sleep(12)
+                            stop_playing()
+                            (args.output / (name + '.tasks.txt')).write_text(adb('shell', 'dumpsys', 'activity', 'activities'))
+                            (args.output / (name + '.tree.txt')).write_text(device('snapshot', '-i'))
+                            device('screenshot', str((args.output / (name + '.png')).resolve()))
+                            print('Captured', name, flush=True)
+                    finally:
+                        adb('shell', 'am', 'force-stop', APP)
+                        adb('shell', 'run-as', APP, 'sh', '-c', "'cat > shared_prefs/crosstune_preferences.xml'", input=saved)
+                        stop_playing()
+                        quiet()
+
+
+if __name__ == '__main__':
+    main()

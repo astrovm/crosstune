@@ -1047,6 +1047,7 @@ class PlaybackTest {
         assertEquals(Intent.ACTION_VIEW, opened.action)
         assertEquals(qobuz, opened.`package`)
         assertEquals("https://open.qobuz.com/track/1", opened.dataString)
+        assertTrue(opened.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertTrue(screen.isFinishing)
         // Any other app, with nothing to open again, is opened as it was.
         assertTrue(playback.openSong("com.spotify.music", "https://open.spotify.com/track/1"))
