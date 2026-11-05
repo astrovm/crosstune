@@ -684,6 +684,29 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun repeatedOtherWordsCannotSupplySpacesForThisLine() {
+        val text = "Birdsong"
+        val copy = Lyrics.Found("Bird wing\nBird wing")
+        assertEquals(text, LyricsFinder.cleaned(Lyrics.Found(text), song, listOf(copy)).words)
+    }
+
+    @Test
+    fun aWholeCapitalSongAlsoNormalizesItsSingleWordLines() {
+        val text = "WE WALK THROUGH THE NIGHT TOGETHER\nHELLO"
+        val lines = text.lines().mapIndexed { index, line -> LyricLine(index * 1000L, line) }
+        val result = LyricsFinder.cleaned(Lyrics.Found(text, lines), song)
+        assertEquals("We walk through the night together\nHello", result.words)
+        assertEquals(result.words.lines(), result.lines.map { it.text })
+    }
+
+    @Test
+    fun capitalTimingLinesAreCleanedEvenWithoutPlainWords() {
+        val result = LyricsFinder.cleaned(Lyrics.Found("", listOf(LyricLine(1000, "WE WALK THROUGH THE NIGHT"))), song)
+        assertEquals("", result.words)
+        assertEquals(listOf(LyricLine(1000, "We walk through the night")), result.lines)
+    }
+
+    @Test
     fun oneCopysCompoundWordPreferenceDoesNotOverrideTheChosenWords() {
         val text = "We wait in the staffroom\nWe lay out the tablecloth"
         val copy = Lyrics.Found("We wait in the staff room\nWe lay out the table cloth")
