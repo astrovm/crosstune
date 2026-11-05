@@ -136,7 +136,9 @@ def main():
                             stop_playing()
                             tree = device('snapshot', '-i')
                             if card or kind == 'search':
-                                action = next((text for text in [f'Search in {label}', f'Open in {label}'] if '"' + text + '"' in tree), None)
+                                chosen = re.search(r'\[group\] "([^"]+), Choose app"', tree)
+                                actual_label = chosen.group(1) if chosen else label
+                                action = next((text for text in [f'Search in {actual_label}', f'Open in {actual_label}'] if '"' + text + '"' in tree), None)
                                 if action:
                                     quiet()
                                     device('press', 'label=' + json.dumps(action))
