@@ -83,6 +83,21 @@ class SungWordsTest {
     }
 
     @Test
+    fun unspacedLyricsMatchSingingSplitElsewhere() {
+        val lines = timed("夜の海を歩く", "朝の光が見える", "君の声を探す")
+        val sung = Sung(0, listOf(
+            HeardWord("夜の", 1_000 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("海を歩く", 1_600 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("朝の光が", 4_000 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("見える", 4_800 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("君の声", 7_000 + SungAlignment.HEARD_LATE_MS),
+            HeardWord("を探す", 7_600 + SungAlignment.HEARD_LATE_MS)
+        ))
+        assertEquals(1_000L, SungAlignment.shiftMs(sung, fromTheStart, lines))
+        assertEquals(mapOf(0 to 1_000L, 1 to 4_000L, 2 to 7_000L), SungAlignment.linesMs(sung, fromTheStart, lines, 1_000))
+    }
+
+    @Test
     fun aLineOpeningWithSomethingNotSungIsTimedByItsFirstWordSung() {
         val written = song.map { it.copy(text = "♪ - " + it.text) }
         assertEquals(-400L, SungAlignment.shiftMs(heard(song, -400), fromTheStart, written))

@@ -22,7 +22,8 @@ work out the words each time; try a few, as where each later stretch is heard mo
 has the music app's clock that far behind what it plays, and `--behind-again MS` plays it a second
 time, keeping what was learnt, to score that. `--skew X` has Shazam hear it X faster than the recording
 it matches, `--words-length MS` the words timed for another release, and `--video` a video playing,
-as for a sped-up upload. `--gradle "podman exec box ./gradlew"` runs
+as for a sped-up upload. `--player-speed RATE` plays cached recognition at a player rate,
+including it in Shazam's reported speed. This tests the clock math, not recognition on stretched audio. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
 `phone` checks the same on a real phone over adb, with the dev app installed and the phone unlocked:
 it plays the recording in YouTube Music (--app for another build of it) from the start, opens the
@@ -355,7 +356,7 @@ def run(args):
     phone_lit = like_phone(args) if args.like_phone else None
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = OUT / "replay.json"
-    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
+    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}", "playerSpeed": args.player_speed}
     if args.like_phone:
         replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
@@ -942,6 +943,7 @@ def main():
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
             # ZnrSNEah_20 as on the phone: --video --skew 0.0349 --shazam-ahead 45467 --words-length 0, as Shazam
             # heard it (app/src/test/resources/shazam/faster.jsonl), with words that don't say how long they're timed for.
+            p.add_argument("--player-speed", type=float, default=1.0, help="player rate; replay cached words at that rate and include it in Shazam answers")
             p.add_argument("--skew", type=float, help="Shazam hears it, this much faster than the recording it matches (its timeskew)")
             p.add_argument("--shazam-ahead", type=int, default=0, help="ms further on Shazam's place is at the song's start")
             p.add_argument("--words-length", type=int, help="ms long the recording the words are timed for is, if not the one playing; 0 doesn't say")

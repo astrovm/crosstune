@@ -2215,13 +2215,13 @@ class ListeningTest {
     }
 
     /** A video first named by its fingerprint, as opening lyrics of what is playing does. */
-    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0, playerMs: Long = 12_000): FakePlayback {
+    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0, playerMs: Long = 12_000, playerSpeed: Float = 1f): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val phone = FakePlayback().apply {
             access = true
             onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "video:demo"), null)
-            playing.value = Following(PlaybackClock(playerMs, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
+            playing.value = Following(PlaybackClock(playerMs, SystemClock.elapsedRealtime(), speed = playerSpeed), "YouTube", canSeek = true, video = true, durationMs = 62_000)
         }
         MainActivity.playbackFactory = { phone }
         allowMicrophone()
@@ -2278,6 +2278,40 @@ class ListeningTest {
         // Each impossible as a place in it, as a part played again is.
         speeds.forEach { hearsAt(hearing, 200_000, it) }
         return phone
+    }
+
+    @Test
+    fun thePlayersSpeedIsNotCountedAgainAsTheRecordingsSpeed() {
+        val hearing = FakeHearing()
+        heardVideo(hearing, playerSpeed = 1.05f)
+        composeRule.runOnIdle {
+            controllerModel().syncLine(0)
+        }
+        repeat(3) { hearsAt(hearing, 200_000, 1.05f) }
+        composeRule.runOnIdle {
+            assertEquals(1.05f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
+    }
+
+    @Test
+    fun aMusicAppsLeadTakesTheRecordingsSpeedOffItsClockOnlyOnce() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, video = false)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // Avoid the app's immediate answer being fed back into automatic calibration after each reply.
+        composeRule.runOnIdle { phone.onThePhone = null }
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        composeRule.runOnIdle {
+            controllerModel().listenAlong()
+            controllerModel().syncLine(0)
+        }
+        repeat(4) { hearsAt(hearing, 200_000, 0.9f) }
+        composeRule.runOnIdle {
+            assertEquals(0.9f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
     }
 
     @Test
