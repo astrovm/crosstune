@@ -356,10 +356,10 @@ internal fun inSentenceCase(line: String): String {
 }
 
 /** Consecutive capital words are a phrase; spelled-out letters such as Y M C A aren't words. */
-private fun capitalWord(word: String) = word.count(Char::isLetter) > 1 && word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
+private fun capitalWord(word: String) = word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
 
 private fun capitalLetters(line: String): Set<Int> =
-    Regex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } }
+    Regex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } && pair.any { it.value.count(Char::isLetter) > 1 } }
         .flatten().flatMap { it.range }.toSet()
 
 private fun capitalLine(line: String) = capitalLetters(line).isNotEmpty()
@@ -369,7 +369,7 @@ private fun needsSentenceCase(words: String) = inCapitals(words) || words.lines(
 /** Nearly all-capital sheets cannot supply names, even when a contributor missed a letter. */
 private fun caseEvidence(copy: String) = if (inCapitals(copy)) "" else copy.lines().joinToString("\n") { line ->
     val capitals = capitalLetters(line)
-    line.mapIndexed { at, letter -> if (at in capitals) letter.lowercaseChar() else letter }.joinToString("")
+    if (line.none(Char::isLowerCase)) "" else line.mapIndexed { at, letter -> if (at in capitals) letter.lowercaseChar() else letter }.joinToString("")
 }
 
 /** Words timed one by one, [texts], in sentence case as the line they make up. */
