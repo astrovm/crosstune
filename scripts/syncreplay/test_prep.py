@@ -249,7 +249,7 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
 
     def run_args(self, **changed):
-        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, skew=None, shazam_ahead=0, words_length=None, video=False, gradle='fake-gradle'), **changed})
+        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, skew=None, shazam_ahead=0, words_length=None, video=False, player_speed=1.0, gradle='fake-gradle'), **changed})
 
     def test_one_song_replays_until_nothing_new_is_asked(self):
         self.assertEqual(self.replays(r.run, self.run_args(), [1, 0]), (2, 2))
@@ -294,10 +294,12 @@ class HeardWhenAskedTest(unittest.TestCase):
             fingerprints = r.OUT / 'fingerprints.json'
             fingerprints.write_text(json.dumps(dict(initial=dict(at=20000, songMs=10000, receivedAt=20000), events=[])))
             def replay(*args, **kwargs):
-                self.assertEqual(json.loads(fingerprints.read_text()), json.loads((r.OUT / 'replay.json').read_text()).get('fingerprints'))
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(json.loads(fingerprints.read_text()), asked.get('fingerprints'))
+                self.assertEqual(1.05, asked['playerSpeed'])
                 return argparse.Namespace(returncode=0)
             with patch.object(r.subprocess, 'run', side_effect=replay):
-                r.run(self.run_args(fingerprints=str(fingerprints)))
+                r.run(self.run_args(fingerprints=str(fingerprints), player_speed=1.05))
 
     def test_a_replay_held_to_the_phone_takes_each_while_as_long_as_the_phone_did(self):
         asked = []
