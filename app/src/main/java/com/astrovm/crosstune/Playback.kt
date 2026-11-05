@@ -498,16 +498,27 @@ internal class MediaSessionPlayback(
         }
         // YouTube Music says it plays what's asked for by name, but doesn't; a link of its own it plays.
         if (link != null && MusicService.ofPackage(asked.packageName) == MusicService.YOUTUBE_MUSIC) asked.transportControls.playFromUri(Uri.parse(link), Bundle())
-        else asked.transportControls.playFromSearch("${song.title} ${song.artist}", wanted)
+        else asked.transportControls.playFromSearch(searchQuery(song), wanted)
     }
 
     // The app may be installed as a build patched from it, under a name of its own, or as its TV app.
-    override fun openSong(app: String, link: String): Boolean = MusicService.appLinksIn(app, link).any { (packageName, its) ->
+    override fun openSong(app: String, link: String): Boolean = openSearch(app, link) || MusicService.appLinksIn(app, link).any { (packageName, its) ->
         runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            opened = packageName
-            true
+            // Qobuz may have to be opened again if the song doesn't start, see [QobuzNumbers].
+            if (MusicService.ofOwnApp(packageName) == MusicService.QOBUZ) {
+                context.openLeavingTimeToOpenAgain(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName)).also { if (it) opened = packageName }
+            } else {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                opened = packageName
+                true
+            }
         }.getOrDefault(false)
+    }
+
+    // An app that opens no page of its website's is asked for the search in the link, if it holds one.
+    private fun openSearch(app: String, link: String): Boolean {
+        val search = MusicService.searchIn(app, link, asking = null)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return false
+        return context.tryStartActivityTwice(search).also { if (it) opened = app }
     }
 
     override fun playsOnlyInFront(app: String) = onlyInFront.any { sameApp(app, it, context::hasApp) }

@@ -71,6 +71,29 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aCoverIsNeverAnotherArtistsWhoseNameStartsTheSame() {
+        // Deezer's answer for Hello by Adele has this before any of hers.
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                if (request.url.host == "itunes.apple.com") {
+                    """{"results":[{"trackName":"Hello (Dub up Mix)","artistName":"Adele Harley","artworkUrl100":"https://harley/100x100bb.jpg"},{"trackName":"Hello","artistName":"Adele","artworkUrl100":"https://adele/100x100bb.jpg"}]}"""
+                } else {
+                    """{"data":[{"title":"Hello (Dub up Mix)","artist":{"name":"Adele Harley"},"album":{"cover_big":"https://harley.jpg"}}]}"""
+                }
+            )
+        }
+        assertEquals("https://adele/600x600bb.jpg", runBlocking { matcher().cover(MusicMetadata("Hello", "Adele")) })
+        fake.handler = { request ->
+            FakeSpotify.html(
+                request,
+                """{"data":[{"title":"Hello (Dub up Mix)","artist":{"name":"Adele Harley"},"album":{"cover_big":"https://harley.jpg"}},{"title":"Hello","artist":{"name":"Adele"},"album":{"cover_big":"https://adele.jpg"}}]}"""
+            )
+        }
+        assertEquals("https://adele.jpg", runBlocking { matcher().cover(MusicMetadata("Hello", "Adele")) })
+    }
+
+    @Test
     fun aSongDeezerDoesntHaveGetsApplesCover() {
         val cover = "https://is1-ssl.mzstatic.com/image/thumb/Music/100x100bb.jpg"
         fake.handler = { request ->
@@ -1568,6 +1591,48 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun qobuzIsAskedInTheStoreWhoseNumbersOpenOnThisPhone() {
+        // A song's number differs between Qobuz's stores, and the app shows only a loading page for one
+        // that isn't its country's: Expresso Love is 45242130 in the US store and 625089 in the others (#673).
+        fake.handler = { request -> FakeSpotify.html(request, "") }
+        fun asks(country: String): String {
+            runBlocking { matcher(country).find(MusicService.QOBUZ, MusicMetadata("Song", "Band")) }
+            return fake.requestedUrls.last().substringAfter("qobuz.com/").substringBefore("/")
+        }
+        assertEquals("us-en", asks("US"))
+        // The rest share the UK's numbers, but Japan's store names songs in Japanese, so they'd never match,
+        // and Latin America's stores and Portugal's list no numbers.
+        listOf("GB", "IE", "DE", "AU", "JP", "AR", "BR", "PT", "").forEach { assertEquals(it, "gb-en", asks(it)) }
+    }
+
+    @Test
+    fun qobuzsOtherStoreGivesTheNumberThisPhonesStoreDoesnt() {
+        fun item(track: String) = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Song">Song</a>
+                <p class="ListItem__artists">Band • Album</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$track"></button>
+            </div></li>"""
+        val song = MusicMetadata("Song", "Band")
+        fake.handler = { request ->
+            when {
+                "/us-en/" in request.url.toString() -> FakeSpotify.html(request, item("45242130"))
+                else -> FakeSpotify.html(request, item("625089"))
+            }
+        }
+        fun other(country: String, link: String) = runBlocking { matcher(country).otherQobuzLink(song, link) }
+        assertEquals("https://play.qobuz.com/track/625089", other("US", "https://play.qobuz.com/track/45242130"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/gb-en/search/tracks/"))
+        assertEquals("https://play.qobuz.com/track/45242130", other("IE", "https://play.qobuz.com/track/625089"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/"))
+        // The same number there, there's nothing else to try.
+        assertNull(other("IE", "https://play.qobuz.com/track/45242130"))
+        // No answer from the store is no other number, not a failure to show.
+        fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
+        assertNull(other("US", "https://play.qobuz.com/track/45242130"))
+    }
+
+    @Test
     fun qobuzFindsSongsAndAlbumsOnItsStoresSearchPage() {
         fun item(title: String, credit: String, track: String, album: String) = """
             <li><div class="ListItem">
@@ -1584,9 +1649,12 @@ class ExactMatcherTest {
             </div></li>"""
         val page = "<ul class=\"ListContainer\">" + item("Song (Live)", "Band • Live Record", "11", "live1") +
             item("Song", "Band\n •\n Studio &amp; Co", "12", "studio2") + item("Broken", "", "", "") + "</ul>"
-        fake.handler = { request -> FakeSpotify.html(request, page) }
+        // Qobuz's store answers only a phone's browser, as measured: a desktop browser's name, or OkHttp's, gets a 403 (#673).
+        fake.handler = { request ->
+            if (request.header("User-Agent").orEmpty().contains("Mobile")) FakeSpotify.html(request, page) else FakeSpotify.html(request, "Access Denied", code = 403)
+        }
         assertEquals("https://play.qobuz.com/track/12", find(MusicService.QOBUZ, MusicMetadata("Song", "Band")))
-        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/us-en/search/tracks/Song%20Band"))
+        assertTrue(fake.requestedUrls.last().startsWith("https://www.qobuz.com/gb-en/search/tracks/Song%20Band"))
         assertEquals("https://play.qobuz.com/album/studio2", find(MusicService.QOBUZ, MusicMetadata("Studio & Co", "Band", ItemType.ALBUM)))
         // Qobuz's artists aren't told apart, so there's nothing to look up, and the search stands in.
         val asked = fake.requestedUrls.size

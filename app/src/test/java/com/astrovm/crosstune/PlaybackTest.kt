@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.KeyguardManager
 import android.content.ActivityNotFoundException
 import android.content.ContextWrapper
+import android.app.SearchManager
 import android.content.ComponentName
 import android.content.IntentFilter
 import android.content.Intent
@@ -41,6 +42,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import java.time.Duration
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -1024,6 +1026,36 @@ class PlaybackTest {
     }
 
     @Test
+    fun qobuzOpensThroughAScreenThatLeavesTimeToOpenItAgainAndOtherAppsDirectly() {
+        val qobuz = MusicService.QOBUZ.packageName
+        val link = "https://play.qobuz.com/track/1"
+        // With nothing to open it, that's said, and nothing's started.
+        assertFalse(playback.openSong(qobuz, link))
+        assertNull(shadowOf(app).nextStartedActivity)
+        val opens = ComponentName(qobuz, "$qobuz.DeepLink")
+        shadowOf(app.packageManager).addActivityIfNotPresent(opens)
+        shadowOf(app.packageManager).addIntentFilterForActivity(
+            opens, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
+        )
+        assertTrue(playback.openSong(qobuz, link))
+        val through = shadowOf(app).nextStartedActivity
+        assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+        assertTrue(through.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        // It opens the song there, the way the app's own link does, and closes.
+        val screen = org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, through).create().get()
+        val opened = shadowOf(app).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, opened.action)
+        assertEquals(qobuz, opened.`package`)
+        assertEquals("https://open.qobuz.com/track/1", opened.dataString)
+        assertTrue(screen.isFinishing)
+        // Any other app, with nothing to open again, is opened as it was.
+        assertTrue(playback.openSong("com.spotify.music", "https://open.spotify.com/track/1"))
+        val direct = shadowOf(app).nextStartedActivity
+        assertEquals("com.spotify.music", direct.`package`)
+        assertEquals("https://open.spotify.com/track/1", direct.dataString)
+    }
+
+    @Test
     fun onATvAYouTubeMusicSongOpensInYouTubesTvApp() {
         // YouTube Music's TV app opens its home for a song's link; YouTube's plays it, as YouTube's.
         shadowOf(app).checkActivities(true)
@@ -1054,14 +1086,16 @@ class PlaybackTest {
             qobuz, IntentFilter(Intent.ACTION_VIEW).apply { addCategory(Intent.CATEGORY_DEFAULT); addDataScheme("https"); addDataAuthority("open.qobuz.com", null) }
         )
         assertTrue(playback.openSong(MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/12"))
+        org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, shadowOf(app).nextStartedActivity).create()
         assertEquals("https://open.qobuz.com/track/12", shadowOf(app).nextStartedActivity.dataString)
     }
 
     @Test
     fun linksAnAppDoesntOpenAreTriedAfterInTheFormItDoes() {
         val qobuz = MusicService.QOBUZ.packageName
+        // Qobuz's app has no link to a search for something: a path after /search opens its home, and it ignores a query (#673).
         assertEquals(
-            listOf(qobuz to "https://play.qobuz.com/search?q=Song%20Band", qobuz to "https://open.qobuz.com/search/Song%20Band"),
+            listOf(qobuz to "https://play.qobuz.com/search?q=Song%20Band", qobuz to "https://open.qobuz.com/search"),
             MusicService.QOBUZ.appLinks("https://play.qobuz.com/search?q=Song%20Band")
         )
         assertEquals("https://open.qobuz.com/album/studio2", MusicService.QOBUZ.appLinks("https://play.qobuz.com/album/studio2?ref=x").last().second)
@@ -1082,6 +1116,77 @@ class PlaybackTest {
         assertEquals(listOf(qobuz to "https://open.qobuz.com/track/12"), MusicService.QOBUZ.appLinks("https://open.qobuz.com/track/12"))
         assertEquals(listOf(MusicService.SPOTIFY.packageName to "https://play.qobuz.com/track/12"), MusicService.SPOTIFY.appLinks("https://play.qobuz.com/track/12"))
         assertEquals(listOf(MusicService.DEEZER.packageName to "https://listen.tidal.com/search?q=x"), MusicService.DEEZER.appLinks("https://listen.tidal.com/search?q=x"))
+    }
+
+    @Test
+    fun bandcampsAppIsAskedForASongBySearchAsItOpensNoPageOfItsWebsite() {
+        val bandcamp = MusicService.BANDCAMP.packageName
+        // A search link holds what to ask; a song's page doesn't, so it's asked for by the name it's given.
+        val search = MusicService.BANDCAMP.searchUrl("Song Band & Co")
+        assertEquals("Song Band & Co", MusicService.BANDCAMP.appSearch(search, asking = null))
+        assertEquals("Song Band & Co", MusicService.BANDCAMP.appSearch(search, asking = "Other"))
+        assertEquals("Song Band", MusicService.BANDCAMP.appSearch("https://band.bandcamp.com/track/song", asking = "Song Band"))
+        assertNull(MusicService.BANDCAMP.appSearch("https://band.bandcamp.com/track/song", asking = null))
+        assertNull(MusicService.BANDCAMP.appSearch("https://band.bandcamp.com/track/song", asking = " "))
+        assertNull(MusicService.BANDCAMP.appSearch("https://bandcamp.com/search", asking = null))
+        assertNull(MusicService.BANDCAMP.appSearch("not a link", asking = "Song Band"))
+        // Other apps open their links, or are asked another way.
+        assertNull(MusicService.QOBUZ.appSearch(MusicService.QOBUZ.searchUrl("Song"), asking = "Song"))
+        assertNull(MusicService.searchIn(MusicService.SPOTIFY.packageName, "https://open.spotify.com/track/x", "Song"))
+        assertNull(MusicService.searchIn(bandcamp, "https://band.bandcamp.com/track/song", null))
+        val intent = MusicService.searchIn(bandcamp, "https://band.bandcamp.com/track/song", "Song Band")!!
+        assertEquals(Intent.ACTION_SEARCH, intent.action)
+        assertEquals(ComponentName(bandcamp, MusicService.BANDCAMP_SEARCH_ACTIVITY), intent.component)
+        assertEquals("Song Band", intent.getStringExtra(SearchManager.QUERY))
+    }
+
+    @Test
+    fun aSearchIsSentToBandcampsAppTwiceAndAnAppThatIsGoneIsLeftToTheBrowser() {
+        shadowOf(app).checkActivities(true)
+        val bandcamp = MusicService.BANDCAMP.packageName
+        val component = ComponentName(bandcamp, MusicService.BANDCAMP_SEARCH_ACTIVITY)
+        shadowOf(app.packageManager).addActivityIfNotPresent(component)
+        shadowOf(app.packageManager).addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
+        assertTrue(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
+        // Through a screen of its own, which leaves time for the second however long Crosstune's been up.
+        val through = shadowOf(app).nextStartedActivity
+        assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+        assertTrue(org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, through).create().get().isFinishing)
+        // The second goes a moment after the first, once the app has started.
+        val first = shadowOf(app).nextStartedActivity
+        assertNull(shadowOf(app).nextStartedActivity)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SECOND_START_MS))
+        val sent = listOf(first, shadowOf(app).nextStartedActivity)
+        assertTrue(sent.all { it.action == Intent.ACTION_SEARCH && it.getStringExtra(SearchManager.QUERY) == "Song Band" && it.component == component })
+        assertNull(shadowOf(app).nextStartedActivity)
+        // A song's page holds no words to ask for, and an app that isn't there takes nothing.
+        assertFalse(playback.openSong(bandcamp, "https://band.bandcamp.com/track/song"))
+        shadowOf(app.packageManager).removeActivity(component)
+        assertFalse(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
+    }
+
+    @Test
+    fun bandcampAskedBySearchIsLeftInFrontWhenItOnlyPlaysThere() = runBlocking {
+        allow()
+        val bandcamp = MusicService.BANDCAMP.packageName
+        val session = player(bandcamp, "Bandcamp", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED)
+        shadowOf(sessions).addController(session)
+        val fails = CoroutineScope(Dispatchers.Unconfined).async { playback.resume(song) }
+        shadowOf(session).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_ERROR, 0, 1f, PLAYED_AT).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(fails.await())
+        assertTrue(playback.playsOnlyInFront(bandcamp))
+        val component = ComponentName(bandcamp, MusicService.BANDCAMP_SEARCH_ACTIVITY)
+        shadowOf(app.packageManager).addActivityIfNotPresent(component)
+        shadowOf(app.packageManager).addIntentFilterForActivity(component, IntentFilter(Intent.ACTION_SEARCH).apply { addCategory(Intent.CATEGORY_DEFAULT) })
+        assertTrue(playback.openSong(bandcamp, MusicService.BANDCAMP.searchUrl("Song Band")))
+        org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, shadowOf(app).nextStartedActivity).create()
+        assertEquals(bandcamp, shadowOf(app).nextStartedActivity.component?.packageName)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SECOND_START_MS))
+        shadowOf(app).nextStartedActivity
+        // Behind Crosstune it would stop, and the search that opened it counts as opening it.
+        playback.comesBack()
+        assertNull(shadowOf(app).nextStartedActivity)
     }
 
     @Test
@@ -1520,6 +1625,30 @@ class PlaybackTest {
         shadowOf(music).setPlaybackState(at(2, PlaybackState.STATE_PAUSED))
         playback.playQueued(song, 3)
         playback.playQueued(MusicMetadata("Other", "Band"), 3)
+    }
+
+    /** What an app is asked for by name, which Robolectric doesn't pass on to it. */
+    @Implements(MediaController.TransportControls::class)
+    class AskedByName {
+        @Implementation
+        fun playFromSearch(query: String?, extras: android.os.Bundle?) {
+            asked += query to extras?.getString(android.provider.MediaStore.EXTRA_MEDIA_TITLE)
+        }
+
+        companion object {
+            val asked = mutableListOf<Pair<String?, String?>>()
+        }
+    }
+
+    @Test
+    @Config(shadows = [AskedByName::class])
+    fun anAppIsAskedForASongByTheNameItsStoreKnowsIt() = runBlocking {
+        AskedByName.asked.clear()
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band"))
+        // Searched as a video calls it, Qobuz lists only tributes (Issue #673).
+        assertTrue(playback.playSong(MusicMetadata("Despacito ft. Daddy Yankee", "Luis Fonsi"), "com.spotify.music"))
+        assertEquals(listOf("Despacito Luis Fonsi" to "Despacito ft. Daddy Yankee"), AskedByName.asked)
     }
 
     @Test
