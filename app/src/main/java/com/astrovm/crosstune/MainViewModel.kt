@@ -801,7 +801,7 @@ internal class MainViewModel(
             // Intercepted services' links include pages Crosstune can't convert, such as a
             // SoundCloud feed; hand those straight to the service's app.
             val service = MusicLinks.serviceFor(incoming) ?: return rejectInput()
-            effectChannel.trySend(opening(incoming, service.packageName, finishAfterOpen = true, song = null))
+            effectChannel.trySend(Effect.Open(incoming, service.packageName, finishAfterOpen = true))
             return
         }
         if (input is LinkInput.Link) uiState = uiState.copy(linkText = input.link.url)
@@ -1467,7 +1467,6 @@ internal class MainViewModel(
 
     /** [app] opened on [song]'s [link], watched from before that if Qobuz's, as it can stay on a loading page there. */
     private fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
-        qobuzNumbers?.off()
         if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.opened(song, app, link)
         return source.openSong(app, link)
     }
@@ -4263,7 +4262,7 @@ internal class MainViewModel(
     private suspend fun openAsIs(video: MusicLink) {
         pendingOpen = false
         val packageName = if (video.frontendUrl == null) MusicService.YOUTUBE.packageName else null
-        effectChannel.send(opening(video.frontendUrl ?: video.url, packageName, finishAfterOpen = true, song = null))
+        effectChannel.send(Effect.Open(video.frontendUrl ?: video.url, packageName, finishAfterOpen = true))
     }
 
     fun setOnlyMusicVideos(enabled: Boolean) {
