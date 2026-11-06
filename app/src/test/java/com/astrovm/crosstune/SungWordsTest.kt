@@ -100,6 +100,62 @@ class SungWordsTest {
         assertNull(SungAlignment.shiftMs(clipped, fromTheStart, written))
     }
 
+    private val SPARSE_SHIFT_MS = 1_000L
+
+    /** Three lines no word of which is in another, ten seconds apart, the second with the [second] words given. */
+    private fun sparse(second: List<TimedWord> = emptyList()) = listOf(
+        LyricLine(20_000, "november oscar papa quebec romeo"),
+        LyricLine(30_000, "alpha bravo charlie delta echo foxtrot golf".takeIf { second.isEmpty() } ?: second.joinToString(" ") { it.text }, second),
+        LyricLine(40_000, "hotel india juliet kilo lima"),
+    )
+
+    private fun sparseHeard(vararg words: Pair<String, Long>) = Sung(0, words.map { (text, at) -> HeardWord(text, at) })
+
+    /** When a word's heard if the line at 30 seconds is sung [SPARSE_SHIFT_MS] late, as it's heard a little late. */
+    private fun sparseAt(ms: Long) = ms + SPARSE_SHIFT_MS + SungAlignment.HEARD_LATE_MS
+
+    @Test
+    fun aDistinctLineWellIntoTheSongIsPlacedByTheWordsHeardInPlaceOfItsFirst() {
+        // Two words misheard, as many as may be: where they're heard is where the line starts.
+        val misheard = sparseHeard("xray yankee" to sparseAt(30_000), "charlie delta echo foxtrot golf" to sparseAt(30_400))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(misheard, fromTheStart, sparse()))
+    }
+
+    @Test
+    fun aDistinctLinesFirstWordsHeardASecondApartArentOneAfterTheOther() {
+        fun heardApart(ms: Long) = sparseHeard("xray" to sparseAt(30_000), "bravo" to sparseAt(30_100), "charlie delta echo foxtrot golf" to sparseAt(30_100 + ms))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(heardApart(999), fromTheStart, sparse()))
+        assertNull(SungAlignment.shiftMs(heardApart(1_000), fromTheStart, sparse()))
+    }
+
+    @Test
+    fun aDistinctLineTimedWordByWordIsPlacedByTheWordsThatAgree() {
+        val words = sparse(listOf(TimedWord(30_000, "alpha bravo charlie"), TimedWord(31_500, "delta echo")))
+        // Its words too far apart for the first two to say where it starts, so the times of its words are all there is.
+        fun heardWith(lastLateMs: Long) = sparseHeard("alpha" to sparseAt(30_000), "bravo charlie" to sparseAt(31_100), "delta echo" to sparseAt(31_500 + lastLateMs))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(heardWith(0), fromTheStart, words))
+        // One word says one thing and the other another: no most of them agree.
+        assertNull(SungAlignment.shiftMs(heardWith(1_500), fromTheStart, words))
+    }
+
+    @Test
+    fun twoDistinctLinesPlaceTheSongOnlyWhenTheyAgree() {
+        val two = listOf(LyricLine(30_000, "alpha bravo charlie delta echo"), LyricLine(40_000, "foxtrot golf hotel india juliet"))
+        fun heardWith(secondLateMs: Long) = sparseHeard("alpha bravo charlie delta echo" to sparseAt(30_000), "foxtrot golf hotel india juliet" to sparseAt(40_000 + secondLateMs))
+        assertEquals(SPARSE_SHIFT_MS, SungAlignment.shiftMs(heardWith(0), fromTheStart, two))
+        assertNull(SungAlignment.shiftMs(heardWith(1_600), fromTheStart, two))
+    }
+
+    @Test
+    fun aLineCanBePlacedAloneWithEnoughWordsThatArentMostlyInAnother() {
+        fun alone(line: String, other: String) = LyricLine(0, line).let { SungAlignment.canPlaceAlone(it, listOf(it, LyricLine(9_000, other))) }
+        assertTrue(alone("alpha bravo charlie delta echo", "foxtrot golf"))
+        assertFalse(alone("alpha bravo charlie delta", "foxtrot golf"))
+        // Half of its words in another line is too many, and less isn't.
+        assertFalse(alone("alpha bravo charlie delta echo foxtrot", "alpha bravo charlie golf"))
+        assertTrue(alone("alpha bravo charlie delta echo foxtrot", "alpha bravo golf hotel"))
+    }
+
     @Test
     fun unspacedLyricsMatchSingingSplitElsewhere() {
         val lines = timed("夜の海を歩く", "朝の光が見える", "君の声を探す")

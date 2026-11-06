@@ -686,6 +686,15 @@ class SingingTest {
     }
 
     @Test
+    fun aLineThatSaysWhichItIsIsHeardAloneFromItsVeryStart() {
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
+        openLyrics()
+        plays(positionMs = 40_000)
+        passes(1)
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
     fun aSongMovedALittleWhileHeardIsStillPlaced() {
         val heard = CompletableDeferred<Sung?>()
         singing.answer = { heard.await() }
