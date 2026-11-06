@@ -33,9 +33,9 @@ Nothing plays out loud: the emulator's speaker and mic both go through a private
 python3 scripts/emulator/emulator.py start crosstune-phone   # then it's emulator-5580
 ```
 
-5. `-gpu host`: draws on the real GPU. `-gpu auto` picks software here.
-6. `-qt-hide-window`: no window, sound still works. `-no-window` runs a build that logs `Could not init 'pa' audio driver`.
-7. T3's Device panel boots emulators with no sound and `-gpu auto`. To get both, start it here first. The panel attaches to it.
+1. `-gpu host`: draws on the real GPU. `-gpu auto` picks software here.
+2. `-qt-hide-window`: no window, sound still works. `-no-window` runs a build that logs `Could not init 'pa' audio driver`.
+3. T3's Device panel boots emulators with no sound and `-gpu auto`. To get both, start it here first. The panel attaches to it.
 
 Same swipe test on the same AVD, from `dumpsys gfxinfo`:
 
@@ -53,6 +53,8 @@ The mic works, but in 4 of 11 runs it got about 1 s of sound, then digital silen
 So a bad song match doesn't prove the app is wrong, and it doesn't prove the mic is dead. Play a known tone first and look at the end of the capture:
 
 ```bash
+SINK=crosstune_quiet
+SERIAL=emulator-5580
 ffmpeg -loglevel error -re -f lavfi -i sine=440:duration=9 -f pulse -device "$SINK" tone &
 timeout 20 scrcpy -s "$SERIAL" --no-video --no-playback --no-window \
   --audio-source=mic --record=/tmp/mic.mka --time-limit=6
