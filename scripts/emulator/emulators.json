@@ -1,0 +1,49 @@
+{
+  "crosstune-phone": {
+    "image": "system-images;android-37.0;google_apis_playstore;{abi}",
+    "device": "pixel_8",
+    "port": 5580,
+    "config": {
+      "hw.ramSize": "4096",
+      "hw.cpu.ncore": "6",
+      "disk.dataPartition.size": "12G"
+    },
+    "play_apps": {
+      "Spotify": "com.spotify.music",
+      "YouTube Music": "com.google.android.apps.youtube.music",
+      "YouTube": "com.google.android.youtube",
+      "Apple Music": "com.apple.android.music",
+      "Deezer": "deezer.android.app",
+      "TIDAL": "com.aspiro.tidal",
+      "SoundCloud": "com.soundcloud.android",
+      "Bandcamp": "com.bandcamp.android",
+      "Audiomack": "com.audiomack",
+      "Amazon Music": "com.amazon.mp3",
+      "Qobuz": "com.qobuz.music",
+      "Shizuku": "moe.shizuku.privileged.api"
+    },
+    "optional_apps": {
+      "YouTube Music patched with Morphe": "app.morphe.android.apps.youtube.music"
+    },
+    "sign_in": true,
+    "by_hand": [
+      "Log in to Qobuz"
+    ]
+  },
+  "crosstune-tv": {
+    "image": "system-images;android-36;google-tv;{abi}",
+    "device": "tv_1080p",
+    "port": 5582,
+    "config": {
+      "hw.ramSize": "2048",
+      "hw.cpu.ncore": "4",
+      "disk.dataPartition.size": "10G"
+    },
+    "play_apps": {
+      "YouTube on TV": "com.google.android.youtube.tv"
+    },
+    "optional_apps": {},
+    "sign_in": false,
+    "by_hand": []
+  }
+}

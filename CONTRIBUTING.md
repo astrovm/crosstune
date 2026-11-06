@@ -100,9 +100,10 @@ It runs the `:app:shots` Gradle task, which draws the app's real screens with Ro
 
 ## Recording the app
 
-Screen recordings for promos come out steadier with [`scripts/record`](scripts/record) than with `adb screenrecord`, which drops frames. Start the emulator with `-gpu host -cores 6 -memory 4096`, then:
+Screen recordings for promos come out steadier with [`scripts/record`](scripts/record) than with `adb screenrecord`, which drops frames. They run on `crosstune-phone` ([`scripts/emulator`](scripts/emulator/README.md)) and need no root:
 
 ```bash
+python3 scripts/emulator/emulator.py start crosstune-phone
 scripts/record/emulator.sh setup es-AR 01:46   # dark, clean status bar, clock and language
 scripts/record/record.sh playlist.mp4 sh -c 'adb shell input tap 400 1005; sleep 7'
 scripts/record/emulator.sh restore

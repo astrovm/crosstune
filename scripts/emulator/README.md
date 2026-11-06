@@ -1,4 +1,25 @@
-# Emulator with sound and hardware graphics
+# Emulators
+
+Two, declared in [`emulators.json`](emulators.json), so a wiped machine gets them back with one command. Nothing else needs an emulator, and a phone one always has the Play Store.
+
+| Emulator | Image | For | By hand |
+|---|---|---|---|
+| `crosstune-phone` | Android 17, Play Store | Music apps, Qobuz tries, sound and mic checks, promo recordings | Google test account, Qobuz login |
+| `crosstune-tv` | Google TV, Android 16, the newest TV image there is | TV screens, remote focus, Cast checks | Nothing |
+
+```bash
+python3 scripts/emulator/emulator.py create                         # both, safe to run twice
+python3 scripts/emulator/emulator.py start crosstune-phone --window # to sign in, then:
+python3 scripts/emulator/emulator.py apps crosstune-phone           # opens each missing app's Play page: tap Install
+python3 scripts/emulator/emulator.py check                          # what's still missing
+```
+
+1. **Accounts:** this repo is public, so no address or password goes in it. `check` can tell whether a Google account is signed in, but not whether Qobuz is logged in, so it only reminds you.
+2. **Not from the Play Store:** YouTube Music patched with Morphe is optional. Patch it on a computer or phone, then `adb install` it.
+3. **On a Mac:** the same images in arm64. `start` runs with no sound there, as there's no private sink. On a machine with no SDK, like the pi, it says so.
+4. **Adding one:** add it to `emulators.json`. A test fails if the app gains a music service this list doesn't have.
+
+# Sound and hardware graphics
 
 Lets more mic and playback tests run on an emulator instead of waiting for a phone.
 
@@ -9,19 +30,12 @@ Measured on Linux with an RX 6800, on Android 16 and 17 images.
 Nothing plays out loud: the emulator's speaker and mic both go through a private null sink.
 
 ```bash
-AVD=crosstune-play    # any AVD
-SINK=crosstune_quiet
-SERIAL=emulator-5580
-pactl list short sinks | grep -q "$SINK" || pactl load-module module-null-sink sink_name="$SINK"
-PULSE_SINK=$SINK PULSE_SOURCE=$SINK.monitor \
-  "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -port 5580 -gpu host \
-  -qt-hide-window -audio pa -allow-host-audio &
-adb -s "$SERIAL" wait-for-device
+python3 scripts/emulator/emulator.py start crosstune-phone   # then it's emulator-5580
 ```
 
-1. `-gpu host`: draws on the real GPU. `-gpu auto` picks software here.
-2. `-qt-hide-window`: no window, sound still works. `-no-window` runs a build that logs `Could not init 'pa' audio driver`.
-3. T3's Device panel boots emulators with no sound and `-gpu auto`. To get both, start it here first. The panel attaches to it.
+5. `-gpu host`: draws on the real GPU. `-gpu auto` picks software here.
+6. `-qt-hide-window`: no window, sound still works. `-no-window` runs a build that logs `Could not init 'pa' audio driver`.
+7. T3's Device panel boots emulators with no sound and `-gpu auto`. To get both, start it here first. The panel attaches to it.
 
 Same swipe test on the same AVD, from `dumpsys gfxinfo`:
 
