@@ -25,6 +25,10 @@ case "$*" in
   *"cat /data/local/tmp/record-before"*) cat "$FAKE/before" 2>/dev/null ;;
   *"> /data/local/tmp/record-before"*) printf '%s %s\n' "$(cat "$FAKE/locale")" "$(cut -d' ' -f3 "$FAKE/night")" > "$FAKE/before" ;;
   *"rm -f /data/local/tmp/record-before"*) rm -f "$FAKE/before" ;;
+  *"cmd notification list"*) printf '0|android|1001|TimeZoneDetector|1000\r\n0|com.example|7|null|10123\r\n' ;;
+  *"cat /data/local/tmp/record-snoozed"*) cat "$FAKE/snoozed" 2>/dev/null ;;
+  *">> /data/local/tmp/record-snoozed"*) echo "$*" | sed "s/.*echo '\([^']*\)'.*/\1/" >> "$FAKE/snoozed" ;;
+  *"rm -f /data/local/tmp/record-snoozed"*) rm -f "$FAKE/snoozed" ;;
 esac
 exit 0
 """
@@ -74,6 +78,22 @@ class RecordingSetupTest(unittest.TestCase):
         self.run_script("setup", "es-AR", "01:46")
         millis = int([a for a in self.asked() if "cmd alarm set-time" in a][0].split()[-1])
         self.assertEqual(millis % 86_400_000, (4 * 3600 + 46 * 60) * 1000)
+
+    def test_setup_takes_every_notification_off_the_status_bar(self):
+        self.run_script("setup", "es-AR", "01:46")
+        snoozed = [a for a in self.asked() if "notification snooze" in a]
+        self.assertEqual(len(snoozed), 2, snoozed)
+        # Quoted, as a key has | in it, which the device's shell would take as a pipe.
+        self.assertIn("'0|android|1001|TimeZoneDetector|1000'", snoozed[0])
+        self.assertIn("'0|com.example|7|null|10123'", snoozed[1])
+
+    def test_restore_gives_the_notifications_back(self):
+        self.run_script("setup", "es-AR", "01:46")
+        self.run_script("restore")
+        back = [a for a in self.asked() if "notification unsnooze" in a]
+        self.assertEqual(len(back), 2, back)
+        self.assertIn("'0|android|1001|TimeZoneDetector|1000'", back[0])
+        self.assertFalse((self.fake / "snoozed").exists())
 
     def test_restore_brings_back_the_language_and_the_mode_it_found(self):
         self.run_script("setup", "es-AR", "01:46")

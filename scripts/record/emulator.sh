@@ -15,7 +15,8 @@ set -euo pipefail
 
 serial=${ANDROID_SERIAL:-emulator-5580}
 before=/data/local/tmp/record-before
-shell() { timeout 20 adb -s "$serial" shell "$@"; }
+snoozed=/data/local/tmp/record-snoozed
+shell() { timeout 20 adb -s "$serial" shell "$@" </dev/null; }
 demo() { shell am broadcast -a com.android.systemui.demo -e command "$@" >/dev/null; }
 
 case ${1:-} in
@@ -50,12 +51,23 @@ setup)
     demo network --es airplane hide --es nosim hide
     demo status --es alarm_clock hide --es alarm hide --es sync hide --es volume hide --es bluetooth hide --es location hide
     demo notifications --es visible false
+    # Android 17 still shows their icons through that, like the clock of "Your time zone changed", so they
+    # go out of the way for an hour. A key has | in it, so it's quoted for the device's shell.
+    while read -r key; do
+        [[ -n $key ]] || continue
+        shell "cmd notification snooze --for 3600000 '$key'" >/dev/null 2>&1 || continue
+        shell "echo '$key' >> $snoozed"
+    done < <(shell cmd notification list | tr -d '\r')
     echo "Ready: $locale, dark, $clock"
     ;;
 restore)
     demo exit
     shell settings put global sysui_demo_allowed 0
     shell settings put global auto_time 1
+    while read -r key; do
+        [[ -n $key ]] && shell "cmd notification unsnooze '$key'" >/dev/null 2>&1 || true
+    done < <(shell "cat $snoozed 2>/dev/null || true" | tr -d '\r')
+    shell rm -f "$snoozed"
     found=$(shell "cat $before 2>/dev/null || true" | tr -d '\r')
     if [[ -n $found ]]; then
         shell cmd locale set-device-locale "${found%% *}"
