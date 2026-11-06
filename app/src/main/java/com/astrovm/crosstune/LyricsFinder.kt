@@ -355,9 +355,26 @@ internal fun inSentenceCase(line: String): String {
     return String(letters)
 }
 
+/** Consecutive capital words are a phrase; spelled-out letters such as Y M C A aren't words. */
+private fun capitalWord(word: String) = word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
+
+private fun capitalLetters(line: String): Set<Int> =
+    Regex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } && pair.any { it.value.count(Char::isLetter) > 1 } }
+        .flatten().flatMap { it.range }.toSet()
+
+private fun capitalLine(line: String) = capitalLetters(line).isNotEmpty()
+
+private fun needsSentenceCase(words: String) = inCapitals(words) || words.lines().any(::capitalLine)
+
+/** Nearly all-capital sheets cannot supply names, even when a contributor missed a letter. */
+private fun caseEvidence(copy: String) = if (inCapitals(copy)) "" else copy.lines().joinToString("\n") { line ->
+    val capitals = capitalLetters(line)
+    if (line.none(Char::isLowerCase)) "" else line.mapIndexed { at, letter -> if (at in capitals) letter.lowercaseChar() else letter }.joinToString("")
+}
+
 /** Words timed one by one, [texts], in sentence case as the line they make up. */
-private fun inSentenceCase(texts: List<String>): List<String> {
-    val line = inSentenceCase(texts.joinToString(""))
+private fun inSentenceCase(texts: List<String>, sentence: (String) -> String): List<String> {
+    val line = sentence(texts.joinToString(""))
     var at = 0
     return texts.map { text -> line.substring(at, at + text.length).also { at += text.length } }
 }
@@ -511,8 +528,8 @@ internal class LyricsFinder(
      * song kept offline, played from an app that names its recording otherwise, still has its words.
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
-        val name = "$CACHE_VERSION\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}"
-        return cache?.entries()?.lastOrNull { (key) -> key == name || key.startsWith("$name\u0000") }?.let { (_, kept) -> fromCache(kept)?.first }
+        val names = listOf(CACHE_VERSION, 15).map { version -> "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}" }
+        return cache?.entries()?.lastOrNull { (key) -> names.any { name -> key == name || key.startsWith("$name\u0000") } }?.let { (_, kept) -> fromCache(kept)?.first }
     }
 
     /**
@@ -627,9 +644,16 @@ internal class LyricsFinder(
         val byWord = async { (fromNetEase(metadata, null, timeoutMs).seen() as? Lyrics.Found)?.takeIf { timing(it) == WORD_TIMED } }
         val elsewhere = async { anywhere(metadata, timeoutMs) }
         val own = official.await()
-        // A word-timed search result isn't better evidence than this recording's own timed lyrics, so
-        // nothing else is worth waiting for: NetEase alone takes a few seconds.
+        // Other copies cannot improve this recording's own times. Only capitalized words need
+        // their case evidence before those copies are cancelled.
         if (own != null && RecordingKey.youTubeId(metadata) != null && timing(own) >= WELL_TIMED) {
+            if (needsSentenceCase(own.words)) {
+                // Keep this recording's times, but let the copies already requested supply names.
+                withTimeoutOrNull(timeoutMs) {
+                    elsewhere.await()
+                    byWord.await()
+                }
+            }
             byWord.cancel()
             elsewhere.cancel()
             return@coroutineScope Best(own, own = true)
@@ -1385,9 +1409,9 @@ internal class LyricsFinder(
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
          * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment;
-         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed.
+         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed; 16 for spaces and name capitals in saved words.
          */
-        const val CACHE_VERSION = 15
+        const val CACHE_VERSION = 16
 
         /**
          * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what
@@ -1395,21 +1419,25 @@ internal class LyricsFinder(
          * them up again.
          */
         fun cleaned(found: Lyrics.Found, song: MusicMetadata, copies: List<Lyrics.Found> = emptyList()): Lyrics.Found {
-            val netEase = found.source?.startsWith(NETEASE) == true
+            val spacing = LyricSpacing(copies.map { it.words } + found.words)
+            val spaced = found.copy(words = spacing.apply(found.words), lines = found.lines.map { line ->
+                line.copy(text = spacing.apply(line.text), words = line.words.zip(spacing.apply(line.words.map { it.text }, line.text)) { word, text -> word.copy(text = text) })
+            })
+            val netEase = spaced.source?.startsWith(NETEASE) == true
             // A whole song in capitals, as some sites keep it, reads as it's written elsewhere: in sentences.
-            val shouting = inCapitals(found.words.ifBlank { found.lines.joinToString("\n") { it.text } })
-            if (!netEase && !shouting && !hasAdOrBreak(found)) return found
+            val shouting = needsSentenceCase(spaced.words.ifBlank { spaced.lines.joinToString("\n") { it.text } })
+            if (!netEase && !shouting && !hasAdOrBreak(spaced)) return if (spaced == found) found else spaced
             // Where NetEase's contributors wrote apostrophes escaped, their commas are apostrophes: "friend' and he\'s back".
-            val commas = netEase && "\\'" in found.words
+            val commas = netEase && "\\'" in spaced.words
             fun mend(text: String) = mended(if (commas) text.replace(apostropheForComma, ",") else text)
             fun <T> List<T>.clean(text: (T) -> String) = filterNot { webAddress.containsMatchIn(text(it)) }.let { if (netEase) it.withoutNetEaseExtras(song, text) else it }
-            val words = found.words.lines().map(::mend).mapNotNull { line -> withoutPerformanceNotes(line).takeUnless { it.isBlank() && line.isNotBlank() } }
+            val words = spaced.words.lines().map(::mend).mapNotNull { line -> withoutPerformanceNotes(line).takeUnless { it.isBlank() && line.isNotBlank() } }
                 .clean { it }.joinToString("\n").trim()
-            val lines = found.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
+            val lines = spaced.lines.map { line -> line.copy(text = mend(line.text), words = line.words.map { it.copy(text = mend(it.text)) }) }
                 .mapNotNull { withoutPerformanceNotes(it) }
                 .clean { it.text }
-            val kept = found.copy(words = words, lines = SyncedLyrics.withPauses(lines))
-            return if (shouting) restoredCase(inSentenceCase(kept), copies.map { it.words }) else kept
+            val kept = spaced.copy(words = words, lines = SyncedLyrics.withPauses(lines))
+            return if (shouting) restoredCase(inSentenceCase(kept), (copies.map { it.words } + spaced.words).map(::caseEvidence)) else kept
         }
 
         /** Names' capitals from [copies] of the words, in the words and each timed line alike. */
@@ -1427,12 +1455,20 @@ internal class LyricsFinder(
 
         private fun hasAdOrBreak(found: Lyrics.Found) = (found.words.lines() + found.lines.map { it.text }).any { webAddress.containsMatchIn(it) || mended(it) != it || withoutPerformanceNotes(it) != it }
 
-        private fun inSentenceCase(found: Lyrics.Found) = found.copy(
-            words = found.words.lines().joinToString("\n", transform = ::inSentenceCase),
-            lines = found.lines.map { line ->
-                line.copy(text = inSentenceCase(line.text), words = line.words.zip(inSentenceCase(line.words.map { it.text })) { word, text -> word.copy(text = text) })
+        private fun inSentenceCase(found: Lyrics.Found): Lyrics.Found {
+            val whole = inCapitals(found.words)
+            fun sentence(line: String): String {
+                val normal = inSentenceCase(line)
+                val capitals = capitalLetters(line)
+                return if (whole) normal else line.mapIndexed { at, letter -> if (at in capitals) normal[at] else letter }.joinToString("")
             }
-        )
+            return found.copy(
+                words = found.words.lines().joinToString("\n", transform = ::sentence),
+                lines = found.lines.map { line ->
+                    if (whole || capitalLine(line.text)) line.copy(text = sentence(line.text), words = line.words.zip(inSentenceCase(line.words.map { it.text }, ::sentence)) { word, text -> word.copy(text = text) }) else line
+                }
+            )
+        }
 
         /** How long looking for a well-timed copy of badly timed words can take. */
         const val BORROW_TIMEOUT_MS = 15_000L
