@@ -8035,14 +8035,16 @@ class MainActivityTest {
     }
 
     /** A song handed to Crosstune with Qobuz chosen, whose stores number it differently, and the time it's given to start. */
-    private fun qobuzSongOpened(phone: FakePlayback) {
+    private fun qobuzSongOpened(phone: FakePlayback, answeringOther: () -> Unit = {}, beforeFirstOpen: () -> Unit = {}) {
         fun page(number: Int) = """
             <li><div class="ListItem">
                 <a href="/x/album/slug/a1" class="ListItem__title" title="Song">Song</a>
                 <p class="ListItem__artists">Band • Album</p>
                 <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$number"></button>
             </div></li>"""
+        val requests = java.util.concurrent.atomic.AtomicInteger()
         fake.handler = { request ->
+            if (request.url.host == "www.qobuz.com" && requests.incrementAndGet() == 2) answeringOther()
             when {
                 request.url.host != "www.qobuz.com" -> FakeSpotify.html(request, """{"title":"Song","author_name":"Band"}""")
                 "/us-en/" in request.url.encodedPath -> FakeSpotify.html(request, page(1))
@@ -8056,9 +8058,31 @@ class MainActivityTest {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=aaaaaaaaaaa")
         })
+        beforeFirstOpen()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(QobuzNumbers.WAIT_MS))
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun qobuzIsntOpenedUntilItsAlternateLookupHasFinished() {
+        val phone = FakePlayback().apply { access = true }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.QOBUZ.packageName, "Music"))
+        val fetching = java.util.concurrent.atomic.AtomicBoolean()
+        val answer = java.util.concurrent.CountDownLatch(1)
+        try {
+            qobuzSongOpened(phone, answeringOther = {
+                fetching.set(true)
+                check(answer.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            }, beforeFirstOpen = {
+                waitUntil { fetching.get() }
+                assertNull(shadowOf(app).peekNextStartedActivity())
+                answer.countDown()
+            })
+        } finally {
+            answer.countDown()
+        }
+        assertTrue(phone.opened.isNotEmpty())
     }
 
     @Test
