@@ -94,6 +94,8 @@ jobs:
           python3 -m unittest discover -s scripts/syncreplay -p "test_*.py"
           python3 -m unittest discover -s scripts/contrast -p "test_*.py"
           python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
+          python3 -m unittest discover -s scripts/emulator -p "test_*.py"
+          python3 -m unittest discover -s scripts/record -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
