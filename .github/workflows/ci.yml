@@ -39,7 +39,7 @@ jobs:
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
           printf '%s\n' "$files"
           # Any file outside these makes it the app's change.
-          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/))' <<< "$files" > /dev/null; then
+          if grep -vE '^(README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|LICENSE$|docs/|fastlane/|screenshots/|site/|report/|extension/|scripts/(build-site\.py$|test-site-[^/]*\.cjs$|shots/|milkdrop-render/|record/|gradle-box/|reports/))' <<< "$files" > /dev/null; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
@@ -96,6 +96,7 @@ jobs:
           python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
           python3 -m unittest discover -s scripts/emulator -p "test_*.py"
           python3 -m unittest discover -s scripts/record -p "test_*.py"
+          python3 -m unittest discover -s scripts/reports -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
