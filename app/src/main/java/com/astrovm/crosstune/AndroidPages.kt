@@ -18,6 +18,40 @@ internal fun Context.tryStartActivity(intent: Intent): Boolean = try {
     false
 }
 
+/** A song gets its own task; TIDAL must leave its old search before it will take a new query. */
+internal fun Context.tryStartMusicActivity(intent: Intent): Boolean {
+    cancelPendingMusicOpen()
+    val song = Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    return if (song.isTidalSearch()) openLeavingTimeToOpenAgain(song) else tryStartActivity(song)
+}
+
+internal fun Intent.isTidalSearch(): Boolean =
+    `package` == MusicService.TIDAL.packageName && data?.scheme == "tidal" && data?.host == "search"
+
+private val musicStarts = Handler(Looper.getMainLooper())
+private var pendingMusicOpen: Runnable? = null
+
+/** A newer song replaces a search still waiting for TIDAL to leave its previous screen. */
+internal fun cancelPendingMusicOpen() {
+    pendingMusicOpen?.let { musicStarts.removeCallbacks(it) }
+    pendingMusicOpen = null
+}
+
+/** TIDAL deduplicates search screens without comparing their queries, so leave that screen first. */
+internal fun Context.startTidalSearch(intent: Intent) {
+    tryStartActivity(Intent(intent).setData("tidal://my-collection".toUri()))
+    val app = applicationContext
+    val later = Runnable {
+        pendingMusicOpen = null
+        app.tryStartActivity(intent)
+    }
+    pendingMusicOpen = later
+    // Both links navigate inside TIDAL after its activity opens. Back to back, the old search still wins.
+    musicStarts.postDelayed(later, TIDAL_SEARCH_MS)
+}
+
+internal const val TIDAL_SEARCH_MS = 3_000L
+
 /**
  * Starts [intent] twice, see [startTwice], from a screen of its own: without it, a second start from a song's card was blocked
  * once the app had come to the front, 0.7 s in with an app already up. Both go in a task of the app's own: in Crosstune's, the
