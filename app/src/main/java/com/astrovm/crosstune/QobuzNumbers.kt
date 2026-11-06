@@ -81,7 +81,7 @@ internal class QobuzNumbers(
                 moved.cancel()
             }
         }
-        work.invokeOnCompletion { ready.cancel(); launched.cancel() }
+        work.invokeOnCompletion { ready.cancel() }
         job = work
         work.start()
         return Opening(ready, launched, work)
