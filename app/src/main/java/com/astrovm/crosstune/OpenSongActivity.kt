@@ -14,7 +14,14 @@ import androidx.core.content.IntentCompat
 class OpenSongActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        IntentCompat.getParcelableExtra(intent, EXTRA_OPEN, Intent::class.java)?.let { if (intent.getBooleanExtra(EXTRA_TWICE, false)) startTwice(it) else tryStartActivity(it) }
+        cancelPendingMusicOpen()
+        IntentCompat.getParcelableExtra(intent, EXTRA_OPEN, Intent::class.java)?.let {
+            when {
+                intent.getBooleanExtra(EXTRA_TWICE, false) -> startTwice(it)
+                it.isTidalSearch() -> startTidalSearch(it)
+                else -> tryStartActivity(it)
+            }
+        }
         finish()
     }
 
@@ -27,4 +34,4 @@ class OpenSongActivity : Activity() {
 /** [open] started through [OpenSongActivity], [twice] if the app needs it, see [startTwice]; false, as when started directly, if no app takes it. */
 internal fun Context.openLeavingTimeToOpenAgain(open: Intent, twice: Boolean = false): Boolean =
     open.resolveActivityInfo(packageManager, 0) != null &&
-        tryStartActivity(Intent(this, OpenSongActivity::class.java).putExtra(OpenSongActivity.EXTRA_OPEN, open).putExtra(OpenSongActivity.EXTRA_TWICE, twice).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        tryStartActivity(Intent(this, OpenSongActivity::class.java).putExtra(OpenSongActivity.EXTRA_OPEN, Intent(open).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)).putExtra(OpenSongActivity.EXTRA_TWICE, twice).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

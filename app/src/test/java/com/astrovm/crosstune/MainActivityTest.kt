@@ -415,6 +415,83 @@ class MainActivityTest {
         assertOnlyCoverSearches()
     }
 
+    @Test
+    fun consecutiveSongsOpenOutsideCrosstunesTaskFromCardsAndDirectly() {
+        val qobuz = MusicService.QOBUZ.packageName
+        installActivity(ComponentName(qobuz, "$qobuz.DeepLink"), IntentFilter(Intent.ACTION_VIEW).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addDataScheme("https")
+            addDataAuthority("play.qobuz.com", null)
+        })
+        for (card in listOf(true, false)) {
+            for (service in MusicService.entries.filter { it != MusicService.BANDCAMP }) {
+                prefs().edit().putString("default_target", service.name)
+                    .putBoolean("links_in_crosstune", card).putBoolean("play_right_away", false).commit()
+                for (title in listOf("First Song", "Second Song")) {
+                    launch(Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, "$title by Test Band\nhttps://www.google.com/search?q=${title.replace(" ", "+")}+by+Test+Band")
+                    })
+                    if (card) {
+                        waitForText(title)
+                        val action = string(service.openLabelRes)
+                        val search = string(R.string.search_in_destination, string(service.labelRes))
+                        waitUntil { composeRule.onAllNodes((hasContentDescription(action) or hasContentDescription(search)) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+                        click(action)
+                    }
+                    waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+                    val request = requireNotNull(nextStartedActivity())
+                    val sent = if (request.component?.className == OpenSongActivity::class.java.name) {
+                        Robolectric.buildActivity(OpenSongActivity::class.java, request).create()
+                        requireNotNull(nextStartedActivity())
+                    } else request
+                    assertEquals(service.packageName, sent.`package`)
+                    assertTrue("${service.name}, card=$card, $title: ${sent.toUri(0)}", sent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+                    assertTrue(sent.dataString.orEmpty().contains(title.replace(" ", "%20")))
+                    controller!!.pause().stop().destroy()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun tidalSearchLeavesItsOldSearchBeforeAskingForTheNextSong() {
+        shadowOf(app).checkActivities(true)
+        val tidal = MusicService.TIDAL.packageName
+        installActivity(ComponentName(tidal, "$tidal.DeepLink"), IntentFilter(Intent.ACTION_VIEW).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+            addDataScheme("tidal")
+        })
+        prefs().edit().putString("default_target", "TIDAL").commit()
+        linksShowHere()
+        for (title in listOf("First Song", "Second Song")) {
+            launch(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "$title by Test Band\nhttps://www.google.com/search?q=${title.replace(" ", "+")}+by+Test+Band")
+            })
+            val action = string(R.string.search_in_destination, "TIDAL")
+            waitUntil { composeRule.onAllNodes(hasContentDescription(action) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+            click(action)
+            waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+            val through = requireNotNull(nextStartedActivity())
+            assertEquals(OpenSongActivity::class.java.name, through.component?.className)
+            Robolectric.buildActivity(OpenSongActivity::class.java, through).create()
+            val before = requireNotNull(nextStartedActivity())
+            assertEquals("tidal://my-collection", before.dataString)
+            assertEquals(tidal, before.`package`)
+            assertTrue(before.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+            assertEquals(0, before.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            assertNull(nextStartedActivity())
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+            val search = requireNotNull(nextStartedActivity())
+            assertEquals("tidal://search?q=${title.replace(" ", "%20")}%20Test%20Band", search.dataString)
+            assertEquals(tidal, search.`package`)
+            assertTrue(search.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+            assertEquals(0, search.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            controller!!.pause().stop().destroy()
+        }
+    }
+
     /** Bandcamp's app, with the search page it's asked through. */
     private fun bandcampsApp() {
         val search = ComponentName(MusicService.BANDCAMP.packageName, MusicService.BANDCAMP_SEARCH_ACTIVITY)
@@ -809,6 +886,7 @@ class MainActivityTest {
         val started = nextStartedActivity()
         assertNotNull(started)
         assertEquals("com.google.android.youtube", started!!.`package`)
+        assertTrue(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         assertEquals(
             "https://www.youtube.com/results?search_query=Song%20%26%20Dance%20The%20Band",
             started.dataString
@@ -3969,6 +4047,9 @@ class MainActivityTest {
         tapOpen()
         waitForText(string(R.string.error_no_app_to_open))
 
+        // A fresh card separates a successful launch from the earlier missing-app error.
+        typeUrl("")
+        resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
         installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         tapOpen()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
@@ -3976,6 +4057,7 @@ class MainActivityTest {
         assertEquals(Intent.ACTION_MAIN, shown.action)
         assertNull(shown.data)
         assertEquals(youTubeMusic, shown.component?.packageName ?: shown.`package`)
+        assertTextAbsent(string(R.string.error_no_app_to_open))
     }
 
     @Test
@@ -4011,6 +4093,8 @@ class MainActivityTest {
         // Its app's icon brings that app forward as it is; with nothing to open it with, nothing happens.
         click(playingIn)
         assertNull(nextStartedActivity())
+        composeRule.waitForIdle()
+        assertTextAbsent(string(R.string.error_no_app_to_open))
         installActivity(ComponentName(youTubeMusic, "Main"), IntentFilter(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) })
         click(playingIn)
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }

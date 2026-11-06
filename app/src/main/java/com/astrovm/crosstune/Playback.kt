@@ -508,9 +508,7 @@ internal class MediaSessionPlayback(
             if (MusicService.ofOwnApp(packageName) == MusicService.QOBUZ) {
                 context.openLeavingTimeToOpenAgain(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName)).also { if (it) opened = packageName }
             } else {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                opened = packageName
-                true
+                context.tryStartMusicActivity(Intent(Intent.ACTION_VIEW, Uri.parse(its)).setPackage(packageName)).also { if (it) opened = packageName }
             }
         }.getOrDefault(false)
     }
