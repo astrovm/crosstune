@@ -63,7 +63,7 @@ try:
             shown = json.loads(file.read_text())
             truth, first = r.sung_lines(song, shown['lines']), r.lit_first(shown)
             lags = [first[k] - truth[k] for k in truth if k in first]
-            rows.append(dict(song=song, start=start, lines=len(truth), within03=sum(abs(x) <= .3 for x in lags), within05=sum(abs(x) <= .5 for x in lags), dark=sum(k not in first for k in truth), median=statistics.median(map(abs, lags)) if lags else None, worst=max(lags, key=abs) if lags else None, lyricsSpeed=shown.get('lyricsSpeed')))
+            rows.append(dict(song=song, start=start, lines=len(truth), within03=sum(abs(x) <= .3 for x in lags), within05=sum(abs(x) <= .5 for x in lags), dark=sum(k not in first for k in truth), median=statistics.median(map(abs, lags)) if lags else None, worst=max(lags, key=abs) if lags else None, lyricsSpeed=shown.get('lyricsSpeed'), hearings=len(shown['heard'])))
             print(phase, rows[-1], flush=True)
             r.score(SimpleNamespace(id=song, start=start, placed=False))
         results[phase] = rows

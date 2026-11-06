@@ -71,6 +71,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         MainActivity.lookAheadLyrics = false
         MainActivity.listenAlongPauseMs = 0
         MainActivity.quietPauseMs = 0
+        // No recorded fingerprint answers means no match, on the replay clock, not real microphone I/O.
+        MainActivity.hearingFactory = { SongHearing { delay(SHAZAM_MS); Heard.Nothing } }
         MainActivity.lyricsLanguageFactory = { LyricsLanguage { "en" } }
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
     }
