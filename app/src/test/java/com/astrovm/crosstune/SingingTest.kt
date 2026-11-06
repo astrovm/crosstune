@@ -673,6 +673,19 @@ class SingingTest {
     }
 
     @Test
+    fun aLineThatSaysWhichItIsIsHeardAloneWithNoLinesNearIt() {
+        // Every line is too far from the next to hear three, but the third has five words no other line shares:
+        // heard from a second and a half before its 40 seconds, which at double speed is 15.75 seconds away.
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 70, 100, 130))
+        openLyrics()
+        plays(positionMs = 7_000, speed = 2f)
+        passes(15_650)
+        assertEquals(0, singing.hears)
+        passes(200)
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
     fun aSongMovedALittleWhileHeardIsStillPlaced() {
         val heard = CompletableDeferred<Sung?>()
         singing.answer = { heard.await() }

@@ -2632,8 +2632,9 @@ internal class MainViewModel(
         val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }
         // Heard from just before a line starts, or now, as one just has: a while opening on music alone, the model may hear only that.
         // Less just before, when that's what lets enough lines after it be heard too, so the line isn't left to the next while.
+        // A line alone only when it's heard from its start: its words are all that tell it apart, so one already begun may not be placed.
         val from = if (straightOn) at else starts.withIndex().firstNotNullOfOrNull { (index, line) ->
-            val last = if (SungAlignment.canPlaceAlone(line, lines)) line.timeMs else starts.getOrNull(index + SINGING_LINES - 1)?.timeMs
+            val last = if (line.timeMs >= at && SungAlignment.canPlaceAlone(line, lines)) line.timeMs else starts.getOrNull(index + SINGING_LINES - 1)?.timeMs
             last?.let { maxOf(at, line.timeMs - SINGING_LEAD_MS, it - heardMs + 1).takeIf { from -> from <= maxOf(at, line.timeMs) } }
         } ?: return null
         return ((from - here) / clock.speed).toLong()
