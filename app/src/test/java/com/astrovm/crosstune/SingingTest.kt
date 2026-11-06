@@ -676,7 +676,7 @@ class SingingTest {
     fun aLineThatSaysWhichItIsIsHeardAloneWithNoLinesNearIt() {
         // Every line is too far from the next to hear three, but the third has five words no other line shares:
         // heard from a second and a half before its 40 seconds, which at double speed is 15.75 seconds away.
-        lyricsTimedFor(null, times = listOf(0, 3, 40, 70, 100, 130))
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
         openLyrics()
         plays(positionMs = 7_000, speed = 2f)
         passes(15_650)
