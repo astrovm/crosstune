@@ -1069,7 +1069,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun open(effect: Effect.Open) {
+    private suspend fun open(effect: Effect.Open) {
+        if (effect.qobuz?.ready() == false) return
         val uri = effect.url.toUri()
         val floatOn = floatsOnAfter(effect.finishAfterOpen)
         // Floating on, Crosstune steps back rather than closing, so the app opens in a task of its own, not under it.
@@ -1083,6 +1084,7 @@ class MainActivity : ComponentActivity() {
             if (!effect.finishAfterOpen && MusicService.ofOwnApp(app) == MusicService.QOBUZ) openLeavingTimeToOpenAgain(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app))
             else tryStartActivity(Intent(Intent.ACTION_VIEW, link.toUri()).setPackage(app).addFlags(flags))
         } || openOutsideCrosstune(uri, flags)
+        effect.qobuz?.started(opened)
         when {
             !opened -> viewModel.showError(AppError.NO_APP_TO_OPEN)
             floatOn -> floatOn()

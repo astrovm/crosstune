@@ -52,7 +52,8 @@ internal sealed interface Effect {
         val packageName: String?,
         val finishAfterOpen: Boolean,
         val atMs: Long = SystemClock.elapsedRealtime(),
-        val asking: String? = null
+        val asking: String? = null,
+        val qobuz: QobuzNumbers.Opening? = null
     ) : Effect
     data class Share(val url: String) : Effect
 
@@ -1466,9 +1467,10 @@ internal class MainViewModel(
     }
 
     /** [app] opened on [song]'s [link], watched from before that if Qobuz's, as it can stay on a loading page there. */
-    private fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
-        if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.opened(song, app, link)
-        return source.openSong(app, link)
+    private suspend fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
+        val pending = if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.prepare(song, app, link) else null
+        if (pending?.ready() == false) throw kotlinx.coroutines.CancellationException("Song open superseded")
+        return source.openSong(app, link).also { pending?.started(it) }
     }
 
     /**
@@ -1735,10 +1737,10 @@ internal class MainViewModel(
     /** Opens [url] in [packageName], with [song] named for an app that takes a search, not its page. */
     private fun opening(url: String, packageName: String?, finishAfterOpen: Boolean, song: MusicMetadata? = uiState.result): Effect.Open {
         qobuzNumbers?.off()
-        if (song?.type == ItemType.TRACK && packageName == MusicService.QOBUZ.packageName && url.toHttpUrlOrNull()?.pathSegments?.firstOrNull() == "track") {
-            qobuzNumbers?.opened(song, packageName, url)
-        }
-        return Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery))
+        val pending = if (song?.type == ItemType.TRACK && packageName == MusicService.QOBUZ.packageName && url.toHttpUrlOrNull()?.pathSegments?.firstOrNull() == "track") {
+            qobuzNumbers?.prepare(song, packageName, url)
+        } else null
+        return Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery), qobuz = pending)
     }
 
     /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */

@@ -1,19 +1,22 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Qobuz's app shows a loading page, for good, for a song's number that its account can't play, and which number that is
- * can't be told from the phone's country: on one account, of seven songs its UK and US stores number differently, the
- * UK's number played three. So a song opened there by its number is watched, and if it hasn't started in a while, it's
- * opened on the number of the other store. Asking for it by name, tried after that, doesn't get Qobuz off that page.
+ * Qobuz can leave a store's unplayable number loading forever. Resolve the other store before opening, while Crosstune
+ * is still foreground: a slow lookup after leaving can outlast Android's permission to open the app again.
  * Kept by the app rather than a screen, as the screen closes as it opens a song.
  */
 internal class QobuzNumbers(
@@ -24,56 +27,79 @@ internal class QobuzNumbers(
 ) {
     private var job: Job? = null
 
-    /** Watches [app], about to open on [song] at [link]. */
-    fun opened(song: MusicMetadata, app: String, link: String) {
+    /** An open waits for its store lookup, then starts the playback wait only after the first launch was sent. */
+    class Opening internal constructor(
+        private val ready: Deferred<Unit>,
+        private val launched: CompletableDeferred<Unit>?,
+        private val work: Job?
+    ) {
+        suspend fun ready(): Boolean = try {
+            ready.await()
+            work?.isActive != false
+        } catch (_: CancellationException) {
+            // Superseding this open must not cancel the activity's collector of later opens.
+            val caller = currentCoroutineContext()
+            if (!caller.isActive) work?.cancel()
+            caller.ensureActive()
+            false
+        }
+
+        fun started(opened: Boolean) {
+            if (opened) launched?.complete(Unit) else work?.cancel()
+        }
+    }
+
+    fun prepare(song: MusicMetadata, app: String, link: String): Opening {
         off()
-        // Asked here, as a link can open before the screen's look at what's installed is done. Not installed, it opens on
-        // the web, where nothing's seen to play.
-        if (!playback.hasAccess() || !installed(app)) return
+        if (!playback.hasAccess() || !installed(app)) return Opening(CompletableDeferred(Unit), null, null)
         val over = playback.nowPlaying()?.takeIf { sameApp(app, it.app, installed) }?.metadata
-        // Already on it, it's brought forward, and there's no start to see.
-        if (over != null && SongNames.same(over.title, song.title) && SongNames.sameArtist(over.artist, song.artist)) return
-        job = scope.launch {
-            // Position updates from the player already active before this open aren't a new choice.
+        if (over != null && SongNames.same(over.title, song.title) && SongNames.sameArtist(over.artist, song.artist)) {
+            return Opening(CompletableDeferred(Unit), null, null)
+        }
+        val ready = CompletableDeferred<Unit>()
+        val launched = CompletableDeferred<Unit>()
+        val work = scope.launch(start = CoroutineStart.LAZY) {
             var before = playback.nowPlaying()
+            var sent = false
             val moved = launch {
                 playback.nowPlayingUpdates().drop(1).first { playing ->
                     val changed = playing != null && !sameApp(app, playing.app, installed) &&
                         (playing.app != before?.app || playing.metadata.title != before?.metadata?.title)
+                    val alreadyPlaying = !sent && playing != null && sameApp(app, playing.app, installed) && isTheSong(playing.metadata, song)
                     before = playing
-                    changed
+                    changed || alreadyPlaying
                 }
                 off()
             }
             try {
-                tryOther(song, app, link, over)
+                val other = otherLink(song, link)
+                ready.complete(Unit)
+                launched.await()
+                sent = true
+                tryOther(song, app, link, over, other)
             } finally {
                 moved.cancel()
             }
         }
+        work.invokeOnCompletion { ready.cancel(); launched.cancel() }
+        job = work
+        work.start()
+        return Opening(ready, launched, work)
     }
 
-    private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?) {
-        coroutineScope {
-            // Asked now, not once the wait is over: 8 s and then a store that took 2 s came just past what Android allows [WAIT_MS].
-            val other = async { otherLink(song, link) }
-            val started = withTimeoutOrNull(WAIT_MS) {
-                playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title && isTheSong(it.metadata, song) }
-            }
-            val next = when {
-                started != null -> null
-                over == null && playsElse(app) -> link
-                else -> other.await()
-            }
-            other.cancel()
-            next?.let { playback.openSong(app, it) }
+    private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?, other: String?) {
+        val started = withTimeoutOrNull(WAIT_MS) {
+            playback.nowPlayingUpdates().first { it != null && sameApp(app, it.app, installed) && it.metadata.title != over?.title && isTheSong(it.metadata, song) }
         }
+        val next = when {
+            started != null -> null
+            over == null && playsElse(app) -> link
+            else -> other
+        }
+        next?.let { playback.openSong(app, it) }
     }
 
-    /**
-     * Woken from closed and playing what it was left on, which it does now and then, Qobuz lost the link rather than got stuck
-     * on its number: the same number sent again played, where the other store's didn't.
-     */
+    /** Waking on its old queue loses the link; sending the same number again gets it off that queue. */
     private fun playsElse(app: String) = playback.nowPlaying()?.let { sameApp(app, it.app, installed) } == true
 
     /** A title or an explicit translated name, including edition tags. An artist alone also names its old queue. */
@@ -87,7 +113,7 @@ internal class QobuzNumbers(
     }
 
     companion object {
-        /** Android lets Crosstune open an app only for 10 s after one of its screens started or closed, see [OpenSongActivity] (measured: blocked at 10.0 s, allowed at 9.9 s). */
+        /** Playback has this long after the first launch, with no remaining store lookup to delay its retry. */
         const val WAIT_MS = 8_000L
     }
 }

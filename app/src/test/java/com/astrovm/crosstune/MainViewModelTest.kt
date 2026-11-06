@@ -1506,7 +1506,7 @@ class MainViewModelTest {
         idle()
         model.peekPlayingNow()
         idle()
-        numbers.opened(MusicMetadata("Pending", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/1")
+        scope.launch { val opening = numbers.prepare(MusicMetadata("Pending", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/1"); if (opening.ready()) opening.started(true) }
         assertEquals(1, looked)
         try {
             action(model, playback, effects)
@@ -1556,6 +1556,40 @@ class MainViewModelTest {
     }
 
     @Test
+    fun aSupersededBackgroundOpenDoesntFallBackToTheSameSong() {
+        fake.handler = { request -> FakeSpotify.html(request, """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Hush">Hush</a>
+                <p class="ListItem__artists">Band • Album</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;1"></button>
+            </div></li>""") }
+        val qobuz = MusicService.QOBUZ.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(qobuz, "Music"))
+        prefs().edit().putString("default_target", MusicService.QOBUZ.name).commit()
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
+        var looked = 0
+        val numbers = QobuzNumbers(playback, { _, _ -> looked++; kotlinx.coroutines.awaitCancellation() }, { true }, scope)
+        val model = model(playback = playback, qobuzNumbers = numbers)
+        model.refreshSystemState()
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        try {
+            model.openNamedSong(song.title, song.artist)
+            until("song ready") { model.uiState.destinationUrls.isNotEmpty() }
+            model.playResult()
+            until("store preparing") { looked == 1 }
+            model.openPlayerApp()
+            idle()
+            assertTrue(effects.any { it is Effect.Show })
+            assertTrue(effects.none { it is Effect.Open })
+            assertEquals(1, looked)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun onlyASongOpenedInQobuzsAppByItsNumberIsWatched() {
         val song = """
             <li><div class="ListItem">
@@ -1589,7 +1623,7 @@ class MainViewModelTest {
             until("looked the song up") { model.uiState.result != null && !model.uiState.isLoading }
             until("destination prepared") { model.uiState.destinationUrls[model.uiState.resultDestination] != null }
             // A previous handoff must lose its retry even when this one is another app or a search.
-            numbers.opened(MusicMetadata("Previous", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/99")
+            scope.launch { val opening = numbers.prepare(MusicMetadata("Previous", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/99"); if (opening.ready()) opening.started(true) }
             asked = 0
             playback.opened.clear()
             action(model)
