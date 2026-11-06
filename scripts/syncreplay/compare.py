@@ -22,6 +22,8 @@ parser.add_argument('songs', nargs='+')
 parser.add_argument('--before', default='origin/main')
 parser.add_argument('--gradle', default='scripts/gradle-box/gradle-box.sh')
 parser.add_argument('--rate-song', help='also replay this song at 1.05x with Shazam reporting that rate')
+parser.add_argument('--fingerprint-song')
+parser.add_argument('--fingerprints', type=Path)
 args = parser.parse_args()
 
 def git(*parts):
@@ -38,6 +40,9 @@ baseline = {name: subprocess.check_output(['git', 'show', f'{before}:{name}'], c
 cases = [dict(song=song, **{'from': 0}, work=4500, behind=0, heard='') for song in args.songs]
 if args.rate_song:
     cases.append(dict(song=args.rate_song, **{'from': 1}, work=4500, behind=0, heard='', playerSpeed=1.05, skew=0, shazamAhead=0, wordsLength=0, video=True))
+if args.fingerprints:
+    recorded = json.loads(args.fingerprints.read_text())
+    cases.append(dict(song=args.fingerprint_song, **{'from': recorded['initial']['receivedAt']}, work=4500, behind=0, heard='', fingerprints=recorded))
 results = dict(before=before, after=head, cases=cases)
 try:
     for phase, sources in [('before', baseline), ('after', originals)]:

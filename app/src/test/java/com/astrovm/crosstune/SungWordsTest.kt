@@ -90,6 +90,17 @@ class SungWordsTest {
     }
 
     @Test
+    fun aDistinctLongPhraseCanPlaceASparseLineWithoutWaitingForThreeLines() {
+        val written = timed("夜空の星を数える", "明るい朝が来た", "静かな川を渡る", gapMs = 10_000)
+        val sung = Sung(0, listOf(HeardWord("夜空の", 1_000 + SungAlignment.HEARD_LATE_MS), HeardWord("星を数える", 1_400 + SungAlignment.HEARD_LATE_MS)))
+        assertEquals(1_000L, SungAlignment.shiftMs(sung, fromTheStart, written))
+        val misheard = sung.copy(words = sung.words.mapIndexed { index, word -> if (index == 0) word.copy(text = "朝空の") else word })
+        assertEquals(1_000L, SungAlignment.shiftMs(misheard, fromTheStart, written))
+        val clipped = sung.copy(words = sung.words.mapIndexed { index, word -> if (index == 0) word.copy(text = "空の") else word })
+        assertNull(SungAlignment.shiftMs(clipped, fromTheStart, written))
+    }
+
+    @Test
     fun unspacedLyricsMatchSingingSplitElsewhere() {
         val lines = timed("夜の海を歩く", "朝の光が見える", "君の声を探す")
         val sung = Sung(0, listOf(
