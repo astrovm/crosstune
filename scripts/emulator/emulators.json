@@ -44,7 +44,7 @@
       "YouTube on TV": "com.google.android.youtube.tv"
     },
     "optional_apps": {},
-    "sign_in": false,
+    "sign_in": true,
     "by_hand": []
   }
 }

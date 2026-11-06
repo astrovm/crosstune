@@ -5,7 +5,7 @@ Two, declared in [`emulators.json`](emulators.json), so a wiped machine gets the
 | Emulator | Image | For | By hand |
 |---|---|---|---|
 | `crosstune-phone` | Android 17, Play Store | Music apps, Qobuz tries, sound and mic checks, promo recordings | Google test account, Qobuz login |
-| `crosstune-tv` | Google TV, Android 16, the newest TV image there is | TV screens, remote focus, Cast checks | Nothing |
+| `crosstune-tv` | Google TV, Android 16, the newest TV image there is | TV screens, remote focus, Cast checks | Google test account |
 
 ```bash
 python3 scripts/emulator/emulator.py create                         # both, safe to run twice
