@@ -97,7 +97,8 @@ def installed(name, package):
 
 def signed_in(name):
     # Only whether there's an account: what dumpsys prints has the address, which never goes on screen or in a log.
-    return re.search(r"type=com\.google\b", shell(name, "dumpsys", "account")) is not None
+    # "type=com.google" alone also matches the list of account types Android knows, signed in or not.
+    return re.search(r"Account \{name=[^,]*, type=com\.google\}", shell(name, "dumpsys", "account")) is not None
 
 
 def missing_apps(name):
@@ -187,7 +188,7 @@ def apps(name):
     if DECLARED[name]["sign_in"] and not signed_in(name):
         die(f"Sign in to the Google test account on {name} first: the Play Store needs it.")
     for label, package in missing_apps(name):
-        print(f"{label}: tap Install on its Play page")
+        print(f"{label}: tap Install on its Play page", flush=True)
         shell(name, "am", "start", "-a", "android.intent.action.VIEW", "-p", "com.android.vending",
               "-d", f"market://details?id={package}")
         deadline = time.monotonic() + APP_SECONDS

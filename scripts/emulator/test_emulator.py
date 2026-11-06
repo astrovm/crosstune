@@ -33,7 +33,7 @@ case "$*" in
   devices) echo "List of devices attached"; for f in "$FAKE"/booted.*; do [ -e "$f" ] && printf 'emulator-%s\tdevice\n' "${f##*.}"; done ;;
   *"getprop sys.boot_completed"*) echo 1 ;;
   *"pm path "*) pkg="${*##* }"; grep -qx "$pkg" "$FAKE/installed" 2>/dev/null && echo "package:/data/app/$pkg/base.apk" ;;
-  *"dumpsys account"*) cat "$FAKE/accounts" 2>/dev/null ;;
+  *"dumpsys account"*) echo "  Accounts: 0"; cat "$FAKE/accounts" 2>/dev/null; echo "    ServiceInfo: AuthenticatorDescription {type=com.google}, ComponentInfo{gms}" ;;
   *"am start"*) pkg="${*##*id=}"; [ -e "$FAKE/installs_when_opened" ] && echo "$pkg" >> "$FAKE/installed" ;;
 esac
 exit 0
@@ -286,6 +286,8 @@ class DeclarationTest(unittest.TestCase):
         for name, emulator in DECLARED.items():
             if "tv" not in name:
                 self.assertIn("playstore", emulator["image"], name)
+                # avdmanager writes "no" even on a Play image.
+                self.assertEqual(emulator["config"].get("PlayStore.enabled"), "yes", name)
 
     def test_no_two_emulators_share_a_port(self):
         ports = [e["port"] for e in DECLARED.values()]

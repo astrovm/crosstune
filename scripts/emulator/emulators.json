@@ -4,6 +4,7 @@
     "device": "pixel_8",
     "port": 5580,
     "config": {
+      "PlayStore.enabled": "yes",
       "hw.ramSize": "4096",
       "hw.cpu.ncore": "6",
       "disk.dataPartition.size": "12G"
