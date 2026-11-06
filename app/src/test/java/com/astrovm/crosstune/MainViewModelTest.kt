@@ -1590,6 +1590,68 @@ class MainViewModelTest {
     }
 
     @Test
+    fun playingAnAlreadyPlayingSongCancelsThePendingQobuzWatch() {
+        val spotify = MusicService.SPOTIFY.packageName
+        prefs().edit().putString("default_target", MusicService.SPOTIFY.name).commit()
+        val playback = FakePlayback().apply {
+            access = true
+            onThePhone = Heard.Song(song, null, app = spotify)
+            playing.value = following(app = spotify)
+        }
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
+        val numbers = QobuzNumbers(playback, { _, _ -> "https://play.qobuz.com/track/2" }, { true }, scope)
+        val model = model(playback = playback, qobuzNumbers = numbers)
+        model.refreshSystemState()
+        try {
+            model.openNamedSong(song.title, song.artist)
+            until("song ready") { model.uiState.destinationUrls.isNotEmpty() }
+            scope.launch {
+                val pending = numbers.prepare(MusicMetadata("Pending", "Artist"), MusicService.QOBUZ.packageName, "https://play.qobuz.com/track/1")
+                if (pending.ready()) pending.started(true)
+            }
+            model.playResult()
+            pass(QobuzNumbers.WAIT_MS * 2)
+            assertTrue(playback.songsAsked.isEmpty())
+            assertTrue(playback.plays.isEmpty())
+            assertTrue(playback.opened.isEmpty())
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aBackgroundQobuzOpenStartsItsPlaybackWatch() {
+        fake.handler = { request -> FakeSpotify.html(request, """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="Hush">Hush</a>
+                <p class="ListItem__artists">Band • Album</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;1"></button>
+            </div></li>""") }
+        val qobuz = MusicService.QOBUZ.packageName
+        shadowOf(app.packageManager).installPackage(installedApp(qobuz, "Music"))
+        prefs().edit().putString("default_target", MusicService.QOBUZ.name).commit()
+        val playback = FakePlayback().apply { access = true; canPlaySongs = false }
+        val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.Main.immediate)
+        var looked = 0
+        val numbers = QobuzNumbers(playback, { _, _ -> looked++; "https://play.qobuz.com/track/2" }, { true }, scope)
+        val model = model(playback = playback, qobuzNumbers = numbers)
+        model.refreshSystemState()
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        try {
+            model.openNamedSong(song.title, song.artist)
+            until("song ready") { model.uiState.destinationUrls.isNotEmpty() }
+            model.playResult()
+            until("first open") { playback.opened.isNotEmpty() }
+            pass(QobuzNumbers.WAIT_MS)
+            assertEquals(listOf(qobuz to "https://play.qobuz.com/track/1", qobuz to "https://play.qobuz.com/track/2"), playback.opened.toList())
+            assertEquals(1, looked)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun onlyASongOpenedInQobuzsAppByItsNumberIsWatched() {
         val song = """
             <li><div class="ListItem">

@@ -98,6 +98,7 @@ class QobuzNumbersTest {
         phone.onThePhone = Heard.Song(MusicMetadata("Song (Remastered)", "Band"), null, app = qobuz)
         passes(QobuzNumbers.WAIT_MS * 2)
         assertTrue(phone.opened.isEmpty())
+        assertEquals(0, scope.coroutineContext[Job]?.children?.count())
     }
 
     @Test
@@ -297,10 +298,12 @@ class QobuzNumbersTest {
         var waiting = true
         val slow = QobuzNumbers(phone, { _, _ -> try { awaitCancellation() } finally { waiting = false } }, { true }, scope)
         val pending = slow.prepare(song, qobuz, link)
-        val caller = scope.launch { pending.ready() }
+        var continued = false
+        val caller = scope.launch { pending.ready(); continued = true }
         caller.cancel()
         passes(1)
         assertEquals(false, waiting)
+        assertEquals(false, continued)
         assertEquals(0, scope.coroutineContext[Job]?.children?.count())
     }
 
