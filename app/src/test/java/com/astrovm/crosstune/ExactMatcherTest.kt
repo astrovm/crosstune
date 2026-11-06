@@ -1646,6 +1646,14 @@ class ExactMatcherTest {
         // No answer from the store is no other number, not a failure to show.
         fake.handler = { request -> FakeSpotify.html(request, "busy", code = 503) }
         assertNull(other("US", "https://play.qobuz.com/track/45242130"))
+        var attempts = 0
+        fake.handler = { request ->
+            attempts++
+            if (attempts == 1) throw java.net.SocketTimeoutException("slow store")
+            FakeSpotify.html(request, item("625089"))
+        }
+        assertEquals("https://play.qobuz.com/track/625089", other("US", "https://play.qobuz.com/track/45242130"))
+        assertEquals(2, attempts)
     }
 
     @Test

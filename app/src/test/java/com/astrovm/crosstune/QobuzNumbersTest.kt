@@ -254,6 +254,26 @@ class QobuzNumbersTest {
     }
 
     @Test
+    fun aSlowStoreDoesntSpendAndroidsWindowBeforeTheRetry() {
+        var firstOpenAt = android.os.SystemClock.elapsedRealtime()
+        var blocked = 0
+        val guarded = object : PlaybackSource by phone {
+            override fun openSong(app: String, link: String): Boolean {
+                if (android.os.SystemClock.elapsedRealtime() - firstOpenAt >= 10_000) {
+                    blocked++
+                    return false
+                }
+                return phone.openSong(app, link)
+            }
+        }
+        val slow = QobuzNumbers(guarded, { _, _ -> delay(11_000); other }, { true }, scope)
+        slow.opened(song, qobuz, link)
+        passes(20_000)
+        assertEquals(0, blocked)
+        assertEquals(listOf(qobuz to "https://play.qobuz.com/track/2"), phone.opened.toList())
+    }
+
+    @Test
     fun withNoOtherNumberItStays() {
         other = null
         numbers.opened(song, qobuz, link)
