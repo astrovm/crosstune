@@ -169,6 +169,15 @@ class QobuzNumbersTest {
     }
 
     @Test
+    fun wakingPausedOnTheOldQueueWithNoOtherNumberRetriesTheSameLink() {
+        other = null
+        scope.launch { val opening = numbers.prepare(song, qobuz, link); if (opening.ready()) opening.started(true) }
+        phone.inApp(qobuz).value = AppPlays(MusicMetadata("Left On", "Someone Else"), null)
+        passes(QobuzNumbers.WAIT_MS)
+        assertEquals(listOf(qobuz to link), phone.opened.toList())
+    }
+
+    @Test
     fun theSameTitleUnderAnotherNameForTheArtistCounts() {
         scope.launch { val opening = numbers.prepare(song, qobuz, link); if (opening.ready()) opening.started(true) }
         phone.onThePhone = Heard.Song(MusicMetadata("Song", "Another Name"), null, app = qobuz)

@@ -100,7 +100,8 @@ internal class QobuzNumbers(
     }
 
     /** Waking on its old queue loses the link; sending the same number again gets it off that queue. */
-    private fun playsElse(app: String) = playback.nowPlaying()?.let { sameApp(app, it.app, installed) } == true
+    private suspend fun playsElse(app: String) =
+        playback.nowPlaying()?.let { sameApp(app, it.app, installed) } == true || playback.plays(app).first() != null
 
     /** A title or an explicit translated name, including edition tags. An artist alone also names its old queue. */
     private fun isTheSong(playing: MusicMetadata, song: MusicMetadata) =
