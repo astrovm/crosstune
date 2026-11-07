@@ -23,8 +23,23 @@ class ResumeTest(unittest.TestCase):
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
             (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
             with patch.object(r, 'prep') as prep, patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
-                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle="fake-gradle"))
+                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle="fake-gradle", at_once=1))
             prep.assert_called_once()
+
+    def test_songs_can_be_prepped_at_once_and_each_failure_is_named(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'set.json').write_text(json.dumps([dict(id=name, lines=1, title='Song', artist='Artist') for name in ('one', 'two', 'three')]))
+            both = threading.Barrier(2, timeout=5)
+
+            def prep(args):
+                if args.id == 'three':
+                    raise OSError('nope')
+                both.wait()
+
+            with patch.object(r, 'prep', side_effect=prep), patch('sys.stdout'), patch('sys.stderr'), self.assertRaises(SystemExit) as stopped:
+                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle='fake-gradle', at_once=2))
+            self.assertIn('three', str(stopped.exception))
+            self.assertNotIn('one', str(stopped.exception))
 
     def test_hearing_alone_does_not_make_song_prepped(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):

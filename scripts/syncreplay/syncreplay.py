@@ -831,14 +831,17 @@ def find_set(args):
     if args.find_only:
         return
     failures = []
-    for song in found:
-        if song.get("id") and song.get("lines") and not complete(song["id"]):
-            print(f"Prepping {song['id']}: {song['title']} - {song['artist']}", flush=True)
-            try:
-                prep(argparse.Namespace(id=song["id"], lyrics=str(OUT / f"{song['id']}.lyrics.json")))
-            except (subprocess.CalledProcessError, OSError) as error:
-                failures.append(song["id"])
-                print(f"Failed {song['id']}: {error}", file=sys.stderr, flush=True)
+
+    def prepped_one(song):
+        print(f"Prepping {song['id']}: {song['title']} - {song['artist']}", flush=True)
+        try:
+            prep(argparse.Namespace(id=song["id"], lyrics=str(OUT / f"{song['id']}.lyrics.json")))
+        except (subprocess.CalledProcessError, OSError) as error:
+            failures.append(song["id"])
+            print(f"Failed {song['id']}: {error}", file=sys.stderr, flush=True)
+
+    with ThreadPoolExecutor(args.at_once) as pool:
+        list(pool.map(prepped_one, [song for song in found if song.get("id") and song.get("lines") and not complete(song["id"])]))
     if failures:
         sys.exit(f"Prep failed for {len(failures)} songs: {', '.join(failures)}. Rerun set --cached to resume.")
 
@@ -975,6 +978,8 @@ def main():
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--find-only", action="store_true", help="find the songs and their words, without prepping them")
     p.add_argument("--cached", action="store_true", help="resume the songs already found in set.json without finding them again")
+    # Each song's truth leaves the GPU mostly waiting on the CPU work around it, so a few at once take less time (measurements.md).
+    p.add_argument("--at-once", type=int, default=1, help="songs to prep at once")
     p.set_defaults(go=find_set)
     p = steps.add_parser("all")
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
