@@ -1931,6 +1931,7 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun aListIsAskedOfTheAppOrTheAppWokenForIt() = runBlocking {
         val music = MusicService.YOUTUBE_MUSIC.packageName
         val list = "https://music.youtube.com/watch?v=first000000&list=TLGG"
@@ -1938,13 +1939,17 @@ class PlaybackTest {
         assertFalse(playback.playList(music, list))
         assertEquals(MusicService.YOUTUBE_MUSIC.packageNames, woken.single())
         // Woken, it's asked.
+        assertEquals(emptyList<String>(), asked())
         wakes = player(music, "YouTube Music", "Other", "Band")
         assertTrue(playback.playList(music, list))
+        // The list's own link, as a list is only played by its link.
+        assertEquals(listOf("playFromUri $list"), asked())
         // Running, it's asked as it is.
         woken.clear()
         allow()
         shadowOf(sessions).addController(player(music, "YouTube Music", "Other", "Band"))
         assertTrue(playback.playList(music, list))
+        assertEquals(listOf("playFromUri $list"), asked())
         assertTrue(woken.isEmpty())
     }
 
@@ -2023,25 +2028,38 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun anAppNotRunningIsWokenInTheBackgroundToBeAsked() = runBlocking {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         val link = "https://music.youtube.com/watch?v=other000000"
+        val byName = "playFromSearch Blinding Lights The Weeknd | Blinding Lights | The Weeknd | vnd.android.cursor.item/audio"
         // Even without access, as itself or a build patched from it, whichever is installed.
         wakes = player(youTubeMusic, "YouTube Music", "Other", "Band")
         assertTrue(playback.playSong(song, youTubeMusic, link))
         assertEquals(MusicService.YOUTUBE_MUSIC.packageNames, woken.single())
+        // YouTube Music says it plays what's asked for by name, but doesn't: it's given the song's link.
+        assertEquals(listOf("playFromUri $link"), asked())
         assertTrue(playback.playSong(song, "com.example.player"))
         assertEquals(listOf("com.example.player"), woken.last())
+        // With no link to give, it's asked by name, as YouTube Music is too.
+        assertEquals(listOf(byName), asked())
+        assertTrue(playback.playSong(song, youTubeMusic))
+        assertEquals(listOf(byName), asked())
         // It can't be: with the song's link there, no other app is asked; without, the one that played last.
         wakes = null
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band"))
         assertFalse(playback.playSong(song, youTubeMusic, link))
+        assertEquals(emptyList<String>(), asked())
         assertTrue(playback.playSong(song, youTubeMusic))
+        assertEquals(listOf(byName), asked())
         // An app running isn't woken; with no app given, none is.
         woken.clear()
+        // Another app than YouTube Music has no use for the link, so it's asked by name.
         assertTrue(playback.playSong(song, "com.spotify.music", link))
+        assertEquals(listOf(byName), asked())
         assertTrue(playback.playSong(song, null))
+        assertEquals(listOf(byName), asked())
         assertTrue(woken.isEmpty())
     }
 
