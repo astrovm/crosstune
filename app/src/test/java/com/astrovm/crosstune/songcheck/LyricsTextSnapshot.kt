@@ -15,7 +15,7 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class LyricsTextSnapshot {
     @Test fun snapshots() = runBlocking {
-        val directory = File(System.getProperty("songcheck.dir")).apply { mkdirs() }
+        val directory = File(System.getProperty("songcheck.dir") ?: "build/songcheck").apply { mkdirs() }
         val client = OkHttpClient()
         val songs = listOf(
             "Message in a Bottle" to "The Police", "Roxanne" to "The Police",

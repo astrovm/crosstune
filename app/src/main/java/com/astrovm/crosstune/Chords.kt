@@ -150,7 +150,7 @@ internal object ChordSheets {
     }
 
     /** How wide [text] is in a font where all but Latin letters and half-width kana take two columns. */
-    private fun columns(text: String) = text.sumOf { if (it.code > 0xFF && it !in '\uFF61'..'\uFF9F') 2 else 1 as Int }
+    private fun columns(text: String) = text.length + text.count { it.code > 0xFF && it !in '\uFF61'..'\uFF9F' }
 
     /** The first letter of [words] that starts at or after [column]. */
     private fun letterAt(words: String, column: Int): Int =
