@@ -9,8 +9,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+LOST_32 = '**No results from part 32, so its mutants are not listed.** Rerun the failed jobs of the run.'
+
+
 class WeeklyReport(unittest.TestCase):
-    def run_report(self, present, contents="", jobs="success"):
+    def run_report(self, present, contents="", jobs="success", parts=(32,)):
         workflow = (ROOT / '.github/workflows/mutants-weekly.yml').read_text()
         step = workflow.split('      - name: List what lived in the open issue\n', 1)[1]
         script = step.split('        run: |\n', 1)[1]
@@ -28,40 +31,69 @@ print("\\n".join(map(str, parts)) if sys.argv[-1] == ".[]" else ", ".join(map(st
 ''')
             jq.chmod(0o755)
             gh = root / 'bin/gh'
-            gh.write_text('#!/bin/sh\n[ "$1 $2" != "issue create" ] || echo https://example.invalid/issues/1\nexit 0\n')
+            gh.write_text('''#!/usr/bin/env python3
+import sys
+args = sys.argv[1:]
+if args[:2] == ["issue", "create"]:
+    print("https://example.invalid/issues/1")
+if args[:2] in (["issue", "create"], ["issue", "comment"]):
+    with open(args[args.index("--body-file") + 1]) as body, open("posted.md", "a") as posted:
+        posted.write(body.read())
+''')
             gh.chmod(0o755)
-            if present:
-                file = root / 'results/mutants-part-32/_temp/lived.txt'
+            for part in parts:
+                if not present or part not in present:
+                    continue
+                file = root / f'results/mutants-part-{part}/_temp/lived.txt'
                 file.parent.mkdir(parents=True)
                 file.write_text(contents)
             env = {**os.environ, 'PATH': f"{root / 'bin'}:{os.environ['PATH']}",
-                   'PARTS': json.dumps([32]), 'JOBS': jobs, 'RUN': 'https://example.invalid/run',
+                   'PARTS': json.dumps(list(parts)), 'JOBS': jobs, 'RUN': 'https://example.invalid/run',
                    'GITHUB_STEP_SUMMARY': str(root / 'summary'), 'GH_REPO': 'example/repo'}
             result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=root, env=env, capture_output=True, text=True)
+            self.posted = (root / 'posted.md').read_text() if (root / 'posted.md').exists() else ''
             return result, (root / 'summary').read_text() if (root / 'summary').exists() else ''
 
     def test_nested_empty_lived_file_is_a_clean_part(self):
-        result, summary = self.run_report(True)
+        result, summary = self.run_report((32,))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Every change in these parts was caught', summary)
 
     def test_nested_lived_rows_appear_in_the_report(self):
-        result, summary = self.run_report(True, 'Example.kt:3  survived: boundary\n')
+        result, summary = self.run_report((32,), 'Example.kt:3  survived: boundary\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('### Lived (1)', summary)
         self.assertIn('Example.kt:3  survived: boundary', summary)
 
     def test_missing_file_still_fails_when_another_part_failed(self):
-        result, summary = self.run_report(False, jobs='failure')
+        result, summary = self.run_report((), jobs='failure')
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('Missing results for parts: 32.', summary)
+        self.assertIn(LOST_32, summary)
         self.assertNotIn('Every change in these parts was caught', summary)
 
     def test_missing_lived_file_cannot_report_a_clean_part(self):
-        result, summary = self.run_report(False)
+        result, summary = self.run_report(())
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('expected one', result.stderr)
         self.assertNotIn('Every change in these parts was caught', summary)
+
+    def test_lost_part_reaches_the_issue_even_with_no_rows(self):
+        result, summary = self.run_report((), jobs='failure')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(LOST_32, summary)
+        self.assertIn(LOST_32, self.posted)
+
+    def test_only_the_lost_part_is_named_next_to_other_parts_rows(self):
+        result, summary = self.run_report((33,), 'Example.kt:3  survived: boundary\n', parts=(32, 33))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.posted.count('No results from part'), 1)
+        self.assertIn(LOST_32, self.posted)
+        self.assertIn('Example.kt:3  survived: boundary', self.posted)
+
+    def test_a_clean_run_posts_nothing(self):
+        result, _ = self.run_report((32,))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.posted, '')
 
 
 if __name__ == '__main__':
