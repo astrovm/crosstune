@@ -64,6 +64,11 @@ jobs:
             if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$old"; fi
             exit 0
           fi
+          truncated=''
+          if [ "$(printf '%s' "$lived" | wc -c)" -gt 58000 ]; then
+            lived=$(printf '%s\n' "$lived" | head -c 58000 | sed '$d')
+            truncated='Results truncated. See the run artifact for the full report.'
+          fi
           body="$marker
           **Mutation testing:** $(tail -n 1 "$RUNNER_TEMP/mutants.txt")
 
@@ -71,6 +76,7 @@ jobs:
           $lived
           \`\`\`
 
+          $truncated
           Each one is a change to the code no test noticed. Not a blocker: real gaps get their own PR. [Full report]($RUN)"
           printf '%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$old" ]; then
