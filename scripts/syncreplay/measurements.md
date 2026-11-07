@@ -413,6 +413,64 @@ Run it again with: `scripts/syncreplay/setup.sh` (`REPLAY_CACHE=FOLDER REPLAY_RO
 
 Measured on 2026-11-07, with the set above, never looked up again. Main at 57bd6bfc gave the same as that section, line for line in the totals: 1179, 317, 616, 112, 410, so PR #742 moved nothing here.
 
+### The baseline from here on: the sheet's own length
+
+The replay now tells the app how long the sheet it found is (`length` in `ID.found.json`), as the phone does, and no longer that every sheet is as long as the recording (Issue #689). The app's own hearing stays unset: a stand-in Shazam put the Police's first while at 22.8 s, where the phone puts it at 11.4 to 11.6 s and the replay without it at 11 s. Measured on main 7e8e88f7 and this branch merged on it (ea572d9c), both with this harness.
+
+| `all` | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|---:|
+| Main, old harness | 1179 | 317 | 616 | 112 | 410 |
+| Main, sheet's own length | 1168 | 314 | 612 | 85 | 417 |
+| This branch, sheet's own length | 1168 | 311 | 624 | 85 | 407 |
+
+Main, old harness to the sheet's own length, the songs that moved:
+
+| Song | Recording | Lines | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 二人だけのセレモニー | SaeY5sxStGM | 25 → 14 | 0 → 0 | 0 → 0 | 25 → 1 | 0 → 0 | none → +11.1 |
+| It's My Life | yWQezjGjiqs | 23 | 1 → 1 | 1 → 1 | 3 → 0 | 18 → 22 | +5.8 → -2.7 |
+| Otro Como Tú | 2V2nqZjRELg | 38 | 16 → 16 | 24 → 23 | 0 → 0 | 14 → 15 | -1.6 → -1.6 |
+| Every Little Thing She Does Is Magic | 5WEjz2YoH80 | 24 | 8 → 7 | 19 → 18 | 0 → 0 | 5 → 5 | -0.7 → -0.7 |
+| Easy Love | VK4PJfTMawc | 7 | 1 → 1 | 4 → 3 | 0 → 0 | 3 → 4 | -0.7 → -0.7 |
+| Bad Guy | ZD6rXLXZOEI | 34 | 23 → 22 | 33 → 33 | 0 → 0 | 0 → 0 | +0.5 → +0.5 |
+| Shape of You | xTvyyoF_LZY | 36 | 7 → 6 | 25 → 24 | 0 → 0 | 11 → 12 | -0.9 → -0.9 |
+
+- The 11 lines no longer scored are all 二人だけのセレモニー's. Told the sheet is as long as the 178.2 s recording, its last two lines, at up to 184.5 s, run past that end, so the app didn't take it (the 212.6 s sheet is from a longer release). It showed no lines, and the scoring fell back to prep's 38 lines, all dark. Told the sheet's own length, it shows the sheet's 24 lines, which join 11 pairs of prep's lines into one ("ねぇ 3本きりの花束でも ときめいてる"). The second of each pair has no line of its own to light, so it has no time to score. The phone scores the same way, by the lines the app shows.
+- It's My Life loses its 3 dark lines on main and on this branch, so its +14.4 s regression below is gone with this harness: -2.7 s on both.
+
+This branch against main, both with the sheet's own length, the songs that moved:
+
+| Song | Recording | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---|---:|---:|---:|---:|---:|
+| Otro Como Tú | 2V2nqZjRELg | 16 → 16 | 23 → 24 | 0 → 0 | 15 → 14 | -1.6 → -1.6 |
+| Every Little Thing She Does Is Magic | 5WEjz2YoH80 | 7 → 8 | 18 → 19 | 0 → 0 | 5 → 5 | -0.7 → -0.7 |
+| 99 Luftballons | AT_0zXw2rRo | 10 → 6 | 13 → 18 | 0 → 0 | 12 → 7 | -1.3 → -1.3 |
+| Hotel California | BciS5krYL80 | 11 → 11 | 36 → 35 | 0 → 0 | 13 → 14 | +1.3 → +1.3 |
+| Despacito | FXovf5dsRTw | 11 → 14 | 26 → 29 | 0 → 0 | 30 → 27 | +6.2 → +6.2 |
+| Dynamite | HaEYUJ2aRHs | 12 → 10 | 20 → 19 | 0 → 0 | 3 → 4 | -0.6 → -0.9 |
+| Tell It to My Heart | OtXIsUjDOk8 | 10 → 11 | 24 → 24 | 0 → 0 | 7 → 7 | -2.1 → -2.1 |
+| Plastic Love | T_lC2O1oIew | 0 → 0 | 0 → 1 | 0 → 0 | 14 → 13 | -11.6 → -11.1 |
+| Easy Love | VK4PJfTMawc | 1 → 0 | 3 → 6 | 0 → 0 | 4 → 1 | -0.7 → -0.5 |
+| Time to Pretend | XUKyV49P8F0 | 11 → 11 | 15 → 15 | 0 → 0 | 0 → 0 | +1.0 → +1.1 |
+| Bizarre Love Triangle | ZnrSNEah_20 | 6 → 3 | 10 → 8 | 2 → 2 | 5 → 7 | -24.1 → -24.1 |
+| Nel blu dipinto di blu | dXN0jpUUmOw | 0 → 2 | 1 → 3 | 0 → 0 | 12 → 10 | -1.2 → -1.0 |
+| Hips Don't Lie | nOj6d-HOw2w | 7 → 7 | 23 → 24 | 0 → 0 | 33 → 33 | -1.0 → -1.1 |
+| Shape of You | xTvyyoF_LZY | 6 → 6 | 24 → 23 | 0 → 0 | 12 → 13 | -0.9 → -0.9 |
+
+Worse here: 99 Luftballons, Bizarre Love Triangle, Dynamite, Hotel California and Shape of You, for the reasons below, which this harness doesn't change. It's My Life no longer is.
+
+`run ID --like-phone` again, now told the sheet's own length too, against the same phone runs:
+
+| Phone run | Median apart, before | Median apart, now | Worst, before | Worst, now |
+|---|---:|---:|---:|---:|
+| Police run 1 | 0.57 s | 0.79 s | 1.2 s | 1.5 s |
+| Police run 2 | 0.49 s | 0.47 s | 2.4 s | 2.4 s |
+| Expresso Love run 2 | 0.03 s | 0.03 s | 2.0 s | 2.0 s |
+
+Not closer. `--like-phone` already took the sheet's length from the phone's log, so only the length NetEase's word-by-word answer gives changed. What keeps Police run 1 apart is a drift: the phone lit each line a little later than the replay, 0.2 s at 12 s and 1.5 s at 142 s (1.2 s before this change). Its hearings put Shazam's speed at 0.96 to 1.01, about the 0.985 a 261 s sheet on a 265 s video means. Why the phone's words go slower than the replay's isn't known yet (Issue #722).
+
+### Before: main's harness, as it was
+
 | `all` | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
 |---|---:|---:|---:|---:|---:|
 | Main | 1179 | 317 | 616 | 112 | 410 |
@@ -473,7 +531,7 @@ Better, not fixed. On main no while heard is ever matched, as the words have no 
 
 ### What the replay gets told
 
-The replay tells the app a sheet is as long as the recording, and leaves the app's own hearing unset. With the sheet's own length and a stand-in Shazam, main gives 1168 lines, 311, 614, 90 dark, 407: 二人だけのセレモニー has 1 dark line of 14 scored instead of 25 of 25, as its words are taken, and hearing starts later on some songs, as on XB7AmIsxzfI, from 22.8 s instead of 11 s. That changes the baseline, so this branch keeps main's inputs, and it's measured on its own: this branch on those inputs gives 306, 619, 87, 406. My guess, not measured: the sheet's own length is what's nearer a phone.
+This branch first replayed with main's harness, which told the app a sheet is as long as the recording. With the sheet's own length and a stand-in Shazam together, main gave 1168 lines, 311, 614, 90 dark, 407, and this branch 306, 619, 87, 406. Hearing then started later on some songs, as on XB7AmIsxzfI, from 22.8 s instead of 11 s, so the stand-in moved the replay away from the phone. The sheet's own length alone is the baseline now, at the top of this section.
 
 ### On the phone
 

@@ -123,8 +123,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val lengthMs = heard.getValue(SingingListener.SECONDS).keys.max() + SingingListener.SECONDS * 1000L
         MainActivity.singingFactory = { _, _ -> Replayed(heard) }
         if (asked.has("skew")) MainActivity.hearingFactory = { Shazam(asked.getDouble("skew"), asked.optLong("shazamAhead")) }
-        // The words may be timed for another release, as long as LRCLIB says, or it may not say.
-        val wordsMs = (fingerprints ?: asked).optLong("wordsLength", lengthMs)
+        // The words may be timed for another release, as long as LRCLIB says, or it may not say. Kept as the
+        // app found them, they say how long their own sheet is, as they do on the phone.
+        val wordsMs = (fingerprints ?: asked).optLong("wordsLength", kept?.optLong("length", lengthMs) ?: lengthMs)
         video = asked.optBoolean("video")
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().clear()
             .putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
@@ -136,7 +137,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         if (wordsMs > 0) words.put("duration", wordsMs / 1000)
         val found = JSONArray().put(words).toString()
         // Words timed word by word, as the app found them, only come from NetEase.
-        val byWord = kept?.let { foundByWord(it, lengthMs) }
+        val byWord = kept?.let { foundByWord(it, wordsMs) }
         fake.handler = { request ->
             FakeSpotify.html(
                 request,
