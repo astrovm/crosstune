@@ -5,7 +5,7 @@
 import { HOST_PERMISSIONS } from "./hosts.ts";
 import { realFetcher } from "./http.ts";
 import { findLyrics, type Lyrics } from "./lyrics.ts";
-import { activeLine, follows, viewOf, type View } from "./panelview.ts";
+import { activeLine, fitsLength, follows, viewOf, type View } from "./panelview.ts";
 import { POSITION_MESSAGE, currentSong, songsIn, type Position, type TabSong } from "./song.ts";
 
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -15,10 +15,16 @@ const SCROLL_PAUSE_MS = 5_000;
 /** The words of songs heard lately, so going back to one doesn't ask again. */
 const REMEMBERED_SONGS = 30;
 
-function element<T extends HTMLElement>(id: string): T {
+function element(id: string): HTMLElement {
   const found = document.getElementById(id);
   if (found === null) throw new Error(`Missing #${id}`);
-  return found as T;
+  return found;
+}
+
+function icon(id: string): SVGElement {
+  const found = document.querySelector<SVGElement>(`svg#${id}`);
+  if (found === null) throw new Error(`Missing #${id}`);
+  return found;
 }
 
 const say = (key: string) => chrome.i18n.getMessage(key);
@@ -40,16 +46,16 @@ const nodes = {
   scroller: element("scroller"),
   skeleton: element("skeleton"),
   message: element("message"),
-  action: element<HTMLButtonElement>("action"),
+  action: element("action"),
 };
 
-const icons: Partial<Record<View, HTMLElement>> = {
-  access: element("icon-problem"),
-  noSong: element("icon-note"),
-  instrumental: element("icon-note"),
-  none: element("icon-none"),
-  offline: element("icon-offline"),
-  unavailable: element("icon-problem"),
+const icons: Partial<Record<View, SVGElement>> = {
+  access: icon("icon-problem"),
+  noSong: icon("icon-note"),
+  instrumental: icon("icon-note"),
+  none: icon("icon-none"),
+  offline: icon("icon-offline"),
+  unavailable: icon("icon-problem"),
 };
 
 const messages: Partial<Record<View, string>> = {
@@ -103,9 +109,8 @@ function draw(): void {
   nodes.state.hidden = view === "words";
   nodes.state.setAttribute("aria-busy", String(view === "loading"));
   nodes.skeleton.hidden = view !== "loading";
-  for (const icon of Object.values(icons)) icon.hidden = true;
-  const icon = icons[view];
-  if (icon !== undefined) icon.hidden = false;
+  // An <svg> has no .hidden of its own, only the attribute.
+  for (const shape of Object.values(icons)) shape.toggleAttribute("hidden", shape !== icons[view]);
   const message = view === "loading" ? "" : say(messages[view] ?? "");
   nodes.message.textContent = message;
   nodes.message.hidden = message === "";
@@ -151,12 +156,15 @@ function retry(): void {
 async function readSong(): Promise<void> {
   const next = currentSong(songsIn(await chrome.storage.session.get(null)));
   const sameSong = next !== null && song !== null && songKey(next) === songKey(song);
+  // A player slow to load said how long the recording is only now, and the words were picked without it.
+  const lengthCameLate = sameSong && song?.lengthMs === undefined && next?.lengthMs !== undefined && lyrics?.kind === "found" && !fitsLength(lyrics.lengthMs, next.lengthMs);
   song = next;
+  if (lengthCameLate) remembered.delete(songKey(next));
   if (next === null) {
     looking?.abort();
     lyrics = null;
     draw();
-  } else if (!sameSong) void look(next);
+  } else if (!sameSong || lengthCameLate) void look(next);
   else draw();
 }
 

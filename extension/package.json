@@ -11,6 +11,7 @@
     "try": "node scripts/try.mjs",
     "e2e": "node scripts/e2e.mjs",
     "e2e:firefox": "node scripts/e2e-firefox.mjs",
+    "e2e:panel": "node scripts/e2e-panel.mjs",
     "icons": "sh scripts/icons.sh",
     "package": "node scripts/build.mjs && node scripts/package.mjs",
     "screenshots": "node scripts/build.mjs && node scripts/screenshot.mjs",

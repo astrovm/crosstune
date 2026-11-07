@@ -7,6 +7,8 @@ import { POSITION_MESSAGE, SONG_MESSAGE, songFrom, type Position, type SongMessa
 const CHECK_MS = 1_000;
 /** A new song waits a check more, for the player to hold its length rather than the last song's. */
 const SETTLED_CHECKS = 2;
+/** A player still loading gets this many checks to say how long the recording is, which picks its timed words. */
+const PLAYER_LOADING_CHECKS = 8;
 
 function isAdShowing(): boolean {
   // YouTube's two sites name an ad in the Media Session as they would a song, and mark the player.
@@ -57,7 +59,8 @@ function check(): void {
   const name = JSON.stringify([song?.title, song?.artist]);
   seenFor = name === seen ? seenFor + 1 : 1;
   seen = name;
-  if (text === told || seenFor < SETTLED_CHECKS) return;
+  const playerLoading = song !== null && song.lengthMs === undefined && document.querySelector("video, audio") !== null && seenFor < PLAYER_LOADING_CHECKS;
+  if (text === told || seenFor < SETTLED_CHECKS || playerLoading) return;
   told = text;
   const message: SongMessage = { type: SONG_MESSAGE, song };
   try {

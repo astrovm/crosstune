@@ -63,6 +63,14 @@ test("a line that's a web address is an ad, not the song's", async () => {
   assert.equal(found(await find(AFRICA, net)).words, FIRST_LINE);
 });
 
+test("a contributor's mark for the music is a pause, not words", async () => {
+  const row = { trackName: "Africa", artistName: "Toto", duration: 295, syncedLyrics: `[00:00.32] ♪♪𝓜𝓾𝓼𝓲𝓬♪♪\n[00:10.00] ${FIRST_LINE}\n[00:15.00] ♫\n[00:20.00] Music` };
+  const net = internet([[LRCLIB, JSON.stringify([row])]]);
+  const lyrics = found(await find(AFRICA, net));
+  assert.deepEqual(lyrics.lines.map((line) => line.text), ["", FIRST_LINE, "", "Music"]);
+  assert.equal(lyrics.words, `${FIRST_LINE}\nMusic`);
+});
+
 test("YouTube Music's words are asked next, for the video playing, and its timing is kept", async () => {
   const net = internet([
     [LRCLIB, "[]"],

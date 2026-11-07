@@ -101,8 +101,16 @@ function withoutAds(text: string): string[] {
   return text.split("\n").filter((line) => !webAddress.test(line));
 }
 
+/** A contributor's mark for an instrumental stretch, in any lettering: "♪♪𝓜𝓾𝓼𝓲𝓬♪♪". Nothing is sung then. */
+function isMusicMark(text: string): boolean {
+  const letters = text.normalize("NFKC").toLowerCase().replace(/[♪♫♬♩\s]/gu, "");
+  return letters === "" || (letters === "music" && text !== "Music" && /[♪♫♬♩]/u.test(text));
+}
+
 function timedLines(sheet: string): Line[] {
-  return parseLrc(sheet).filter((line) => !webAddress.test(line.text));
+  return parseLrc(sheet)
+    .filter((line) => !webAddress.test(line.text))
+    .map((line) => (isMusicMark(line.text) ? { ...line, text: "" } : line));
 }
 
 function isTimed(lines: readonly Line[]): boolean {
