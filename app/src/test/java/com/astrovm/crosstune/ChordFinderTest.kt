@@ -259,6 +259,36 @@ Singing to the morning light</div>"""
         assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
     }
 
+    private val jTotalSheet = jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている")
+
+    @Test
+    fun anotherSongOnJTotalIsNeverRead() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/003", "別の歌")), mapOf("/data/kawa/003.html" to jTotalSheet))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertFalse(fake.requestedUrls.any { it.endsWith("kawa/003.html") })
+    }
+
+    @Test
+    fun jTotalsSheetByTheArtistComesFirstAndItsOwnBeforeItsEasierVersion() {
+        // Each of them would fit, so only the order says which is taken.
+        val pages = listOf("other/001", "kawa/001", "kawa/002").associate { "/data/$it.html" to jTotalSheet }
+        val other = jTotalResult("other/001", "川の道", "別の人")
+        val own = jTotalResult("kawa/001", "川の道")
+        val easier = jTotalResult("kawa/002", "川の道〜初心者向け簡単コードVer.〜")
+        jTotal(mapOf("川の道" to other + easier + own), pages)
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+        jTotal(mapOf("川の道" to other + easier), pages)
+        assertEquals("https://music.j-total.net/data/kawa/002.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun aJTotalSheetThatWontAnswerIsUnavailableNotNoChords() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")))
+        val site = fake.handler
+        fake.handler = { request -> if (request.url.encodedPath == "/data/kawa/001.html") FakeSpotify.html(request, "", code = 500) else site(request) }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese))
+    }
+
     @Test
     fun aSongNamedInJapaneseAlreadyIsNeverLookedUpByOtherNamesForJTotal() {
         jTotal(emptyMap())

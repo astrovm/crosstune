@@ -351,6 +351,19 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalsWideLettersStartRightPastLatinAndOnEitherSideOfHalfWidthKana() {
+        // What comes before the chord is what's measured; words in Latin letters say how many columns it took.
+        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 2, '\uFF60' to 2, '\uFF61' to 1, '\uFF9F' to 1, '\uFFA0' to 2)
+        for ((letter, columns) in columnsOf) {
+            assertEquals(
+                "U+%04X".format(letter.code),
+                listOf(SheetLine("abcd", listOf(Chord(columns, "C")))),
+                ChordSheets.fromJTotal("$letter${jTotal("C")}<br>abcd")
+            )
+        }
+    }
+
+    @Test
     fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
         assertEquals(
             listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),
