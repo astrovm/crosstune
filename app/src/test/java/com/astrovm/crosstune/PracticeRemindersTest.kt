@@ -111,6 +111,47 @@ class PracticeRemindersTest {
         assertFalse(practisedLately(at(1, 20, 10), at(2, 20), zone))
         // Never.
         assertFalse(practisedLately(0, at(2, 20), zone))
+        // Six hours ago to the minute, over midnight, is no longer lately; a minute short of it still is.
+        assertFalse(practisedLately(at(1, 18), at(2, 0), zone))
+        assertTrue(practisedLately(at(1, 18, 1), at(2, 0), zone))
+    }
+
+    @Test
+    fun aSessionDoneTakesBackAReminderAndStartsTheCountOverToo() {
+        setUpWith(line("One"))
+        prefs().edit().remove("practice_reminder_done_at").commit()
+        firesOn(3)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        reminders.sessionDone()
+        assertTrue(shown.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", -1))
+        assertNotNull(alarms.peekNextScheduledAlarm())
+    }
+
+    @Test
+    fun theTimeIsWrittenTheWayThePhoneWritesIt() {
+        assertTrue(reminderTime(app, 20 * 60 + 5).startsWith("8:05"))
+        assertTrue(reminderTime(app, 0).startsWith("12:00"))
+        assertTrue(reminderTime(app, 9 * 60 + 30).startsWith("9:30"))
+    }
+
+    @Test
+    fun midnightIsATimeLikeAnyOther() {
+        reminders.sessionDone()
+        reminders.turn(true)
+        reminders.at(0)
+        assertEquals(0, reminders.state.minute)
+        assertEquals(at(3, 0), alarms.peekNextScheduledAlarm()?.triggerAtMs)
+    }
+
+    @Test
+    fun theAlarmMakesTheChannelItShowsInWhenAndroidHasNone() {
+        setUpWith(line("One"))
+        manager.deleteNotificationChannel(PracticeReminders.CHANNEL)
+        assertNull(manager.getNotificationChannel(PracticeReminders.CHANNEL))
+        firesOn(3)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(PracticeReminders.CHANNEL)?.importance)
     }
 
     @Test

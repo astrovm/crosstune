@@ -387,6 +387,47 @@ class ReminderBellTest {
     }
 
     @Test
+    fun openingTheAppSetsTheAlarmAgainAfterAForceStopTookIt() {
+        val reminders = MainActivity.remindersFactory(app)
+        reminders.sessionDone()
+        reminders.turn(true)
+        // What a force stop does to it.
+        val alarm = android.app.PendingIntent.getBroadcast(
+            app, 0, Intent(PracticeReminders.ACTION_REMIND).setClass(app, PracticeReminderReceiver::class.java), android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        app.getSystemService(AlarmManager::class.java).cancel(alarm)
+        assertNull(alarms.peekNextScheduledAlarm())
+        launch()
+        assertNotNull(alarms.peekNextScheduledAlarm())
+    }
+
+    @Test
+    fun aCardPractisedInTheMiddleOfASessionTakesBackTheReminderButDoesntAnswerTheDay() {
+        saved(
+            """{"text":"Stars","translation":"Meaning","title":"Demo","artist":"Band"},{"text":"Moon","translation":"Meaning","title":"Demo","artist":"Band"}"""
+        )
+        val reminders = MainActivity.remindersFactory(app)
+        reminders.sessionDone()
+        reminders.turn(true)
+        clock += 24 * 60 * 60_000L
+        reminders.remind()
+        assertEquals(1, shadowOf(manager).allNotifications.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        val doneAt = prefs().getLong("practice_reminder_done_at", 0)
+        launch()
+        click("${app.getString(R.string.saved_practice)}, ${app.getString(R.string.practice_due, 2)}")
+        click(app.getString(R.string.practice_all_songs))
+        waitUntil { shown(app.getString(R.string.practice_show)) }
+        click(app.getString(R.string.practice_show))
+        click(app.getString(R.string.practice_easy))
+        waitUntil { model().uiState.practice?.done == 1 }
+        // One card in, with another to go: the reminder is out of date and the count starts over, but the day isn't answered until the session ends.
+        assertTrue(shadowOf(manager).allNotifications.isEmpty())
+        assertEquals(0, prefs().getInt("practice_reminder_ignored", -1))
+        assertEquals(doneAt, prefs().getLong("practice_reminder_done_at", 0))
+    }
+
+    @Test
     fun aReminderTappedOverSettingsLeavesThemAndKeepsASessionGoing() {
         launch()
         finishASession()
