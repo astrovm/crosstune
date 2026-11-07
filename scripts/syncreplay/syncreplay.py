@@ -100,6 +100,8 @@ ON_TIME_S = 0.5
 # The app's logcat tag for this, off unless set to DEBUG (TIMING_LOG in SungWords.kt).
 TIMING_LOG = "CrosstuneTiming"
 DEV_APP = "com.astrovm.crosstune.dev"
+# How well a while heard may fit elsewhere, against its best fit, and still say where it is: false fits measured 0.91 to 0.95, true ones up to 0.85.
+ONE_PLACE = 0.8
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
 LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps", "video_timing")
 # Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
@@ -711,9 +713,19 @@ def behind(song, kept, lit):
         # A running sum, as sliding one while over a whole song took minutes for each heard.
         energy = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
         loud = np.sqrt(np.maximum(energy[len(heard):] - energy[:-len(heard)], 0))[:len(match)] + 1e-9
-        at = int(np.argmax(match / loud)) / 16
+        fits = match / loud
+        best = int(np.argmax(fits))
+        at = best / 16
+        # A riff played again fits there nearly as well, wherever the clock is: 54 s off on a song whose clock was right.
+        others = np.concatenate((fits[:max(0, best - 16000)], fits[best + 16000:]))
+        if len(others) and others.max() >= fits[best] * ONE_PLACE:
+            print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: it fits more than one place, so it doesn't say")
+            continue
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
+    if not offs:
+        print("Nothing heard fits one place only, so the app's clock is taken as right.")
+        return 0
     return statistics.median(offs)
 
 

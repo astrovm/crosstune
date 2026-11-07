@@ -755,6 +755,23 @@ class PhoneTest(unittest.TestCase):
             self.assertEqual(0, r.behind(MagicMock(), Path(directory), [(0, 100, 1000)]))
         self.assertIn('heard nothing', said.call_args_list[-1].args[0])
 
+    def test_a_while_that_fits_two_places_doesnt_say_where_the_clock_is(self):
+        # A riff played twice: heard in it, the match is as good far from the app's clock as near it. Police, run 3: "54 s behind".
+        import numpy as np
+        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
+        noise[16000 * 40:16000 * 48] = noise[16000 * 10:16000 * 18]
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print') as said:
+            noise[16000 * 10:16000 * 18].astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
+            self.assertEqual(0, r.behind(noise, Path(directory), [(0, 5000, 10000)]))
+        self.assertIn('fits more than one place', said.call_args_list[0].args[0])
+
+    def test_a_while_that_fits_one_place_says_how_far_behind_the_clock_is(self):
+        import numpy as np
+        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
+            noise[16000 * 10:16000 * 18].astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
+            self.assertEqual(500, r.behind(noise, Path(directory), [(0, 5000, 9500)]))
+
     def test_no_line_with_truth_lit_still_scores(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
                 patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
