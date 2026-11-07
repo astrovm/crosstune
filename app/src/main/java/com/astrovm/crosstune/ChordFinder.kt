@@ -12,6 +12,8 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
+import java.nio.charset.Charset
+import java.net.URLEncoder
 
 /** A song in U-FRET's results: whether it's the easier version, its number, title and artist. */
 private val uFretResult = Regex(
@@ -40,10 +42,22 @@ private val cifraClubTabs = Regex("""<div class="tabs">.*?</div>""", RegexOption
 private val cifraClubChord = Regex("""<b[^>]*>([^<]*)</b>""")
 private val cifraClubCapo = Regex("""\\"capo\\":(\d+)""")
 
+/** A song in J-Total's results: its page, its name, and who sings it. */
+private val jTotalResult = Regex(
+    """<a href="(?:https:)?//music\.j-total\.net/data/([^"]+\.html)" target=""><font size="3"><b>([^<]*)</b></font></a>.*?歌：([^/<]*)""",
+    RegexOption.DOT_MATCHES_ALL
+)
+
+/** What J-Total adds to the name of its easier versions: "〜初心者向け簡単コードVer.〜". */
+private val jTotalVersion = Regex("""〜[^〜]*Ver\.〜""")
+private val jTotalSheet = Regex("""<!--HPSTART-->(.*?)<!--HPEND-->""", RegexOption.DOT_MATCHES_ALL)
+private val J_TOTAL_CHARSET = Charset.forName("Shift_JIS")
+
 /**
  * A song's chords, from the sites guitarists share them on: U-FRET, which has most Japanese songs,
- * Ultimate Guitar, which has most others, Cifra Club, which has the Portuguese ones, and LaCuerda,
- * which has the Spanish ones. A sheet only counts when its words are the song's.
+ * J-Total, which has the older ones, Ultimate Guitar, which has most others, Cifra Club, which has
+ * the Portuguese ones, and LaCuerda, which has the Spanish ones. A sheet only counts when its words
+ * are the song's.
  */
 internal class ChordFinder(
     private val client: OkHttpClient,
@@ -69,7 +83,7 @@ internal class ChordFinder(
         cache?.get(key)?.let { kept -> fromCache(kept)?.takeIf { ChordSheets.place(it, texts) != null }?.let { return@withContext Chords.Found(it) } }
         // Japanese words are likelier on U-FRET; any song may be on either.
         val sites = if (texts.any(::japanese)) {
-            listOf(::fromUFret, ::fromUltimateGuitar)
+            listOf(::fromUFret, ::fromUltimateGuitar, ::fromJTotal)
         } else {
             listOf(::fromUltimateGuitar, ::fromCifraClub, ::fromLaCuerda, ::fromUFret)
         }
@@ -288,6 +302,32 @@ internal class ChordFinder(
         return found.sortedBy { it.first }.map { it.second }
     }
 
+    /** J-Total's first sheet for the song that [fits], by the names it's given, then, unless those are in Japanese already, by those it has there. */
+    private suspend fun fromJTotal(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        searchJTotal(song, listOf(song.title) + titleParts(song.title), fits)
+            ?: if (japanese(song.title) && japanese(song.artist)) null else searchJTotal(song, otherNames(song).titles, fits)
+
+    private suspend fun searchJTotal(song: MusicMetadata, names: List<String>, fits: (ChordSheet) -> Boolean): ChordSheet? =
+        firstSheet(names, { name -> jTotalSheets(song, name) }, fits) { url ->
+            val sheet = jTotalSheet.firstGroup(fetch(url, charset = J_TOTAL_CHARSET) { code, _ -> code == 404 }) ?: return@firstSheet null
+            ChordSheet(ChordSheets.fromJTotal(unescape(sheet)), site = ChordSite.J_TOTAL, url = url)
+        }
+
+    /** The pages of J-Total's sheets of [name]: by the artist first, and its easier versions after its own. */
+    private suspend fun jTotalSheets(song: MusicMetadata, name: String): List<String> {
+        // It reads a search in Shift_JIS, as all it has is. A name with a letter that has no place there would go as a "?", and find nothing.
+        if (!J_TOTAL_CHARSET.newEncoder().canEncode(name)) return emptyList()
+        val search = J_TOTAL_SEARCH_URL.toHttpUrl().newBuilder()
+            .addEncodedQueryParameter("word", URLEncoder.encode(name, J_TOTAL_CHARSET.name()))
+            .addQueryParameter("method", "and")
+            .build()
+        return jTotalResult.findAll(fetch(search.toString(), charset = J_TOTAL_CHARSET)).map { it.destructured }
+            .filter { (_, title, artist) -> named(title.replace(jTotalVersion, ""), name, byArtist(artist, song)) }
+            .sortedWith(compareBy({ (_, _, artist) -> !byArtist(artist, song) }, { (_, title) -> jTotalVersion.containsMatchIn(title) }))
+            .map { (path) -> "$J_TOTAL_URL$path" }
+            .toList()
+    }
+
     /** Cifra Club's first sheet of words and chords for the song that [fits], by any of its [searchTitles]. */
     private suspend fun fromCifraClub(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
         for (title in searchTitles(song)) searchCifraClub(song, title, fits)?.let { return it }
@@ -384,7 +424,7 @@ internal class ChordFinder(
             .build()
         val list = JSONObject(fetch(search.toString(), NETEASE_REFERER)).optJSONObject("result")?.optJSONArray("songs")
         val songs = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
-        val titles = songs.map { it.optString("name") }.filter(::japanese).distinct().take(MAX_NAMES)
+        val titles = songs.map { SongNames.bareTitle(it.optString("name")) }.filter(::japanese).distinct().take(MAX_NAMES)
         val names = listOf(song.title) + titleParts(song.title)
         val artists = songs.filter { found -> names.any { SongNames.same(found.optString("name"), it) } }.flatMap { found ->
             found.optJSONArray("artists")?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) }.map { it.optString("name") } }.orEmpty()
@@ -406,14 +446,14 @@ internal class ChordFinder(
     private suspend fun sheetPage(url: String, asPhone: Boolean = false) = fetch(url, asPhone = asPhone) { code, _ -> code == 404 }
 
     /** [found] tells a failed answer that's still the site's own, e.g. a search that found nothing, from a site that wouldn't answer. */
-    private suspend fun fetch(url: String, referer: String? = null, asPhone: Boolean = false, found: (Int, String) -> Boolean = { _, _ -> false }): String {
+    private suspend fun fetch(url: String, referer: String? = null, asPhone: Boolean = false, charset: Charset? = null, found: (Int, String) -> Boolean = { _, _ -> false }): String {
         // Ultimate Guitar shows its search results only to a computer's browser, and Cifra Club its pages only to a phone's.
         val request = Request.Builder().url(url).apply {
             if (asPhone) asPhoneBrowser() else header("User-Agent", BROWSER)
             referer?.let { header("Referer", it) }
         }.get().build()
         return client.newCall(request).answer(ioDispatcher) { response ->
-            val body = response.body.stringAtMost()
+            val body = charset?.let { String(response.body.bytesAtMost(), it) } ?: response.body.stringAtMost()
             if (!response.isSuccessful && !found(response.code, body)) throw IOException("Chord site returned ${response.code}")
             body
         }
@@ -469,6 +509,8 @@ internal class ChordFinder(
         const val U_FRET_SONG_URL = "https://www.ufret.jp/song.php?data="
         const val UG_SEARCH_URL = "https://www.ultimate-guitar.com/search.php"
         const val LA_CUERDA_URL = "https://acordes.lacuerda.net/"
+        const val J_TOTAL_URL = "https://music.j-total.net/data/"
+        const val J_TOTAL_SEARCH_URL = "https://music.j-total.net/db/search.cgi?mode=search"
         const val LA_CUERDA_SEARCH_URL = "${LA_CUERDA_URL}busca.php"
         const val CIFRA_CLUB_URL = "https://www.cifraclub.com.br/"
         const val CIFRA_CLUB_SEARCH_URL = "https://solr.sscdn.co/cc/h2/"

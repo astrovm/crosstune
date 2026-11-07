@@ -311,4 +311,63 @@ class ChordSheetsTest {
         )
         assertEquals(listOf(0), ChordSheets.onto(LineChords(over = listOf(Chord(3, "C"))), "abcd", "", null).over.map { it.at })
     }
+
+    /** A chord as J-Total's page links it, to the picture of how it's played. */
+    private fun jTotal(name: String) = """<a href="JavaScript:jump_1('../../../cd/$name.html');">$name</a>"""
+
+    @Test
+    fun jTotalsChordsLandOnTheLetterAtTheirColumnInAFontWhereJapaneseTakesTwo() {
+        // E, six wide spaces and a space put Am 14 columns in: letter 7 of the words, as each of theirs takes two.
+        val sheet = "${jTotal("E")}\u3000\u3000\u3000\u3000\u3000\u3000 ${jTotal("Am")}<br>\n  川の道を歩いていく"
+        assertEquals(
+            listOf(SheetLine("川の道を歩いていく", listOf(Chord(0, "E"), Chord(7, "Am")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalsBassIsWrittenAfterItsLinkAsOn() {
+        assertEquals(
+            listOf(SheetLine("川の道", listOf(Chord(0, "E/G#"), Chord(3, "Am")))),
+            ChordSheets.fromJTotal("${jTotal("E")}onG#\u3000 ${jTotal("Am")}<br>川の道")
+        )
+    }
+
+    @Test
+    fun jTotalsPagesWrapChordsAcrossLinesOfTheirSourceWithoutEndingALine() {
+        // Its source wraps anywhere, as a browser takes that for one space; only <br> ends a line.
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "E"), Chord(0, "G#m"), Chord(0, "Am")))),
+            ChordSheets.fromJTotal("${jTotal("E")} \n  / ${jTotal("G#m")}\n  / ${jTotal("Am")} /<BR>\n")
+        )
+    }
+
+    @Test
+    fun jTotalsChordsPastTheWordsEndLandAtTheEndAndWordsWithNoChordsStay() {
+        assertEquals(
+            listOf(SheetLine("川の道", listOf(Chord(3, "Am"))), SheetLine("朝の光 2", emptyList())),
+            ChordSheets.fromJTotal("\u3000\u3000\u3000\u3000\u3000${jTotal("Am")}<br>川の道<br>\n<br>朝の光 2<br />")
+        )
+    }
+
+    @Test
+    fun jTotalsWideLettersStartRightPastLatinAndOnEitherSideOfHalfWidthKana() {
+        // What comes before the chord is what's measured; words in Latin letters say how many columns it took.
+        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 2, '\uFF60' to 2, '\uFF61' to 1, '\uFF9F' to 1, '\uFFA0' to 2)
+        for ((letter, columns) in columnsOf) {
+            assertEquals(
+                "U+%04X".format(letter.code),
+                listOf(SheetLine("abcd", listOf(Chord(columns, "C")))),
+                ChordSheets.fromJTotal("$letter${jTotal("C")}<br>abcd")
+            )
+        }
+    }
+
+    @Test
+    fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>\u3000 ${jTotal("G")}<br>ab川ｶ道")
+        )
+    }
 }
