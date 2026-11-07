@@ -57,13 +57,13 @@ export function currentSong(songs: readonly TabSong[]): TabSong | null {
 
 const TAB_KEY = "tab:";
 
-/** Where in the browser's session storage a tab's song is kept: one key each, so tabs can't overwrite one another. */
 /** The video a YouTube address is showing, which is what its words are looked up by. */
 export function videoIdOf(host: string, search: string): string | undefined {
   if (!isOn(host, "youtube.com")) return undefined;
   return new URLSearchParams(search).get("v") ?? undefined;
 }
 
+/** Where in the browser's session storage a tab's song is kept: one key each, so tabs can't overwrite one another. */
 export function tabKey(tabId: number): string {
   return `${TAB_KEY}${tabId}`;
 }

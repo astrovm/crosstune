@@ -75,7 +75,7 @@ npm run e2e         # headless Chromium with the built extension: a click on a S
 npm run e2e:firefox # the same in headless Firefox, through geckodriver
 npm run e2e:panel   # every state of the lyrics panel in Chromium, no network: a page playing silence and recorded answers; screenshots in dist/panel-shots/
 npm run package     # the stores' zips in dist/: Chrome and Edge, Firefox, and the source Firefox's reviewers build from
-npm run screenshots # the stores' 1280×800 screenshot in each language, in dist/screenshots/
+npm run screenshots # the stores' 1280×800 screenshots in each language, in dist/screenshots/
 npm run icons       # the icons again from the app's store icon, when it changes
 ```
 
