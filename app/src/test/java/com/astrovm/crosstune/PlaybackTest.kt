@@ -37,6 +37,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.net.URI
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -69,6 +70,11 @@ class PlaybackTest {
     private val playback = MediaSessionPlayback(app, now = { NOW }, waker = { woken += it; wakes }, startMs = 200, modes = modes, queueOf = { queues[it.packageName] })
     private val song = MusicMetadata("Blinding Lights", "The Weeknd")
     private val collecting = mutableListOf<Job>()
+
+    @Before
+    fun nothingAskedYet() {
+        AppAsked.calls.clear()
+    }
 
     @After
     fun tearDown() {
@@ -1385,13 +1391,16 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun aLineTappedMovesTheAppThere() {
         allow()
         val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
         shadowOf(sessions).addController(spotify)
         playback.seekTo(song, 61_000)
+        assertEquals(listOf("seekTo 61000"), asked())
         // Nothing playing it, nothing to move.
         playback.seekTo(MusicMetadata("Other", "Band"), 1_000)
+        assertEquals(emptyList<String>(), asked())
     }
 
     @Test
@@ -1406,16 +1415,22 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun theAppPlayingItIsAskedToPlayOrPause() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
         playback.playPause(song, play = false)
+        assertEquals(listOf("pause"), asked())
         playback.playPause(song, play = true)
+        assertEquals(listOf("play"), asked())
         // Nothing playing it, nothing to ask.
         playback.playPause(MusicMetadata("Other", "Band"), play = true)
+        playback.playPause(MusicMetadata("Other", "Band"), play = false)
+        assertEquals(emptyList<String>(), asked())
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun aSongPausedPlaysOnFromBehindOrInFrontWhereItWas() = runBlocking {
         val music = MusicService.YOUTUBE_MUSIC.packageName
         allow()
@@ -1427,17 +1442,20 @@ class PlaybackTest {
         val plays = resumes()
         says(PlaybackState.STATE_PLAYING)
         assertTrue(plays.await())
+        assertEquals(listOf("play"), asked())
         assertFalse(playback.playsOnlyInFront(music))
         // Failing to, as YouTube Music without Premium does from behind, it only plays in front.
         shadowOf(youTubeMusic).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 0, 1f, PLAYED_AT).build())
         val fails = resumes()
         says(PlaybackState.STATE_ERROR)
         assertFalse(fails.await())
+        assertEquals(listOf("play"), asked())
         assertTrue(playback.playsOnlyInFront(music))
         // Known to now, it isn't asked from behind again, nor waited on.
         val known = resumes()
         assertTrue(known.isCompleted)
         assertFalse(known.await())
+        assertEquals(emptyList<String>(), asked())
         // Brought to the front as from its icon, on the screen it was on, not its link; and left there.
         assertFalse(playback.bringToFront(song))
         val icon = ComponentName(music, "$music.MusicActivity")
@@ -1453,9 +1471,11 @@ class PlaybackTest {
         says(PlaybackState.STATE_STOPPED)
         says(PlaybackState.STATE_BUFFERING)
         assertFalse(brought.isCompleted)
+        assertEquals(emptyList<String>(), asked())
         says(PlaybackState.STATE_PAUSED)
         assertTrue(brought.isCompleted)
         assertTrue(brought.await())
+        assertEquals(listOf("play"), asked())
         assertTrue(shadowOf(youTubeMusic).getCallbacks().isEmpty())
         playback.comesBack()
         assertNull(shadowOf(app).nextStartedActivity)
@@ -1463,8 +1483,10 @@ class PlaybackTest {
         val playing = CoroutineScope(Dispatchers.Unconfined).async { playback.bringToFront(song) }
         says(PlaybackState.STATE_PLAYING)
         assertTrue(playing.isCompleted)
+        assertEquals(listOf("play"), asked())
         // Saying nothing, it's asked anyway, a moment later.
         assertTrue(playback.bringToFront(song))
+        assertEquals(listOf("play"), asked())
         // Gone by the time it's opened, it can't be.
         val gone = object : ContextWrapper(app) {
             override fun startActivity(intent: Intent) = throw ActivityNotFoundException()
@@ -1475,6 +1497,7 @@ class PlaybackTest {
         val other = MusicMetadata("Other", "Band")
         assertFalse(playback.resume(other))
         assertFalse(playback.bringToFront(other))
+        assertEquals(emptyList<String>(), asked())
     }
 
     @Test
@@ -1507,17 +1530,30 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun theAppPlayingItIsAskedToGoOnToTheNextSongOrBack() {
         allow()
-        // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe; the phone shows the rest.
         val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
         shadowOf(sessions).addController(spotify)
+        // Playing, it goes on playing.
         playback.skip(song, next = true)
+        assertEquals(listOf("skipToNext"), asked())
         playback.skip(song, next = false)
+        assertEquals(listOf("skipToPrevious"), asked())
+        playback.playQueued(song, 3)
+        assertEquals(listOf("skipToQueueItem 3"), asked())
+        // Paused, the song moved on to is played, or it would wait unheard.
         shadowOf(spotify).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PAUSED, 1_000, 0f, PLAYED_AT).build())
         playback.skip(song, next = true)
+        assertEquals(listOf("skipToNext", "play"), asked())
+        playback.skip(song, next = false)
+        assertEquals(listOf("skipToPrevious", "play"), asked())
+        playback.playQueued(song, 3)
+        assertEquals(listOf("skipToQueueItem 3", "play"), asked())
         // Nothing playing it, nothing to ask.
         playback.skip(MusicMetadata("Other", "Band"), next = true)
+        playback.playQueued(MusicMetadata("Other", "Band"), 3)
+        assertEquals(emptyList<String>(), asked())
     }
 
     /** A music app's shuffle and repeat as the app has them, what it's told, and who's watching them. */
@@ -1581,6 +1617,7 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun theAppPlayingItSaysHowItRepeatsAndIsToldTo() {
         allow()
         val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd")
@@ -1594,6 +1631,7 @@ class PlaybackTest {
 
         playback.repeat(song, Repeat.ALL)
         assertEquals(listOf("com.spotify.music" to Repeat.ALL), modes.toldRepeat)
+        assertEquals(emptyList<String>(), asked())
         // Nothing playing it, nothing to tell.
         playback.repeat(MusicMetadata("Other", "Band"), Repeat.OFF)
         assertEquals(1, modes.toldRepeat.size)
@@ -1604,6 +1642,7 @@ class PlaybackTest {
         )
         playback.repeat(song, Repeat.ALL)
         assertEquals(1, modes.toldRepeat.size)
+        assertEquals(listOf("sendCustomAction loop_mode_action"), asked())
     }
 
     @Test
@@ -1641,6 +1680,7 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
     fun theAppsOwnLikeIsFollowedAsItShowsIt() {
         allow()
         val like = { name: String, icon: Int -> PlaybackState.CustomAction.Builder("thumbs_up_action", name, icon).build() }
@@ -1675,11 +1715,17 @@ class PlaybackTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(AppAction("CHECK_FILL", "Remove from collection", 7, liked = true), seen.last()?.like)
 
-        // Robolectric doesn't pass what's asked on to the app, so this only checks asking is safe; the phone shows the rest.
+        // The like it shows now is the one pressed.
+        shadowOf(music).setPlaybackState(state(PlaybackState.CustomAction.Builder("shuffle_action", "Shuffle off", 3).build(), like("Like", 1)))
+        playback.like(song)
+        assertEquals(listOf("sendCustomAction thumbs_up_action"), asked())
+        // With none, or no app playing it, nothing is pressed, and no other button is.
+        shadowOf(music).setPlaybackState(state(PlaybackState.CustomAction.Builder("shuffle_action", "Shuffle off", 3).build()))
         playback.like(song)
         shadowOf(music).setPlaybackState(state())
         playback.like(song)
         playback.like(MusicMetadata("Other", "Band"))
+        assertEquals(emptyList<String>(), asked())
     }
 
     @Test
@@ -1728,28 +1774,74 @@ class PlaybackTest {
         playback.playQueued(MusicMetadata("Other", "Band"), 3)
     }
 
-    /** What an app is asked for by name, which Robolectric doesn't pass on to it. */
+    /**
+     * What an app is asked, which Robolectric doesn't pass on to it: every call on its transport controls, in
+     * order, with what it was asked. A test that needs them says `@Config(shadows = [AppAsked::class])`.
+     */
     @Implements(MediaController.TransportControls::class)
-    class AskedByName {
+    class AppAsked {
+        @Implementation
+        fun seekTo(pos: Long) {
+            calls += "seekTo $pos"
+        }
+
+        @Implementation
+        fun play() {
+            calls += "play"
+        }
+
+        @Implementation
+        fun pause() {
+            calls += "pause"
+        }
+
+        @Implementation
+        fun skipToNext() {
+            calls += "skipToNext"
+        }
+
+        @Implementation
+        fun skipToPrevious() {
+            calls += "skipToPrevious"
+        }
+
+        @Implementation
+        fun skipToQueueItem(id: Long) {
+            calls += "skipToQueueItem $id"
+        }
+
+        @Implementation
+        fun sendCustomAction(action: PlaybackState.CustomAction, args: android.os.Bundle?) {
+            calls += "sendCustomAction ${action.action}"
+        }
+
+        @Implementation
+        fun playFromUri(uri: android.net.Uri?, extras: android.os.Bundle?) {
+            calls += "playFromUri $uri"
+        }
+
         @Implementation
         fun playFromSearch(query: String?, extras: android.os.Bundle?) {
-            asked += query to extras?.getString(android.provider.MediaStore.EXTRA_MEDIA_TITLE)
+            val of = { key: String -> extras?.getString(key) }
+            calls += "playFromSearch $query | ${of(android.provider.MediaStore.EXTRA_MEDIA_TITLE)} | ${of(android.provider.MediaStore.EXTRA_MEDIA_ARTIST)} | ${of(android.provider.MediaStore.EXTRA_MEDIA_FOCUS)}"
         }
 
         companion object {
-            val asked = mutableListOf<Pair<String?, String?>>()
+            val calls = mutableListOf<String>()
         }
     }
 
+    /** What the apps were asked since last looked, in order. */
+    private fun asked() = AppAsked.calls.toList().also { AppAsked.calls.clear() }
+
     @Test
-    @Config(shadows = [AskedByName::class])
+    @Config(shadows = [AppAsked::class])
     fun anAppIsAskedForASongByTheNameItsStoreKnowsIt() = runBlocking {
-        AskedByName.asked.clear()
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Other", "Band"))
         // Searched as a video calls it, Qobuz lists only tributes (Issue #673).
         assertTrue(playback.playSong(MusicMetadata("Despacito ft. Daddy Yankee", "Luis Fonsi"), "com.spotify.music"))
-        assertEquals(listOf("Despacito Luis Fonsi" to "Despacito ft. Daddy Yankee"), AskedByName.asked)
+        assertEquals(listOf("playFromSearch Despacito Luis Fonsi | Despacito ft. Daddy Yankee | Luis Fonsi | vnd.android.cursor.item/audio"), asked())
     }
 
     @Test
