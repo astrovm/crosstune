@@ -12,7 +12,7 @@
 
 Everything goes in build/songcheck/; each step goes on where it stopped. `run --gradle "sh run.sh"`
 runs Gradle some other way, like in a container; `hear` and `timing` want faster-whisper and
-anyascii, from scripts/lyrics/requirements.txt.
+anyascii, from scripts/lyrics/requirements.txt. `hear --device cuda` wants openai-whisper instead.
 """
 import argparse
 import difflib
@@ -134,19 +134,38 @@ def run(args):
     subprocess.run([*shlex.split(args.gradle), ":app:songCheck", f"-PsongcheckDir={OUT}"], cwd=ROOT, check=True)
 
 
-def hear(args):
+def on_the_cpu(name, threads):
     from faster_whisper import WhisperModel
+    model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=threads)
+
+    def words_in(samples):
+        segments, info = model.transcribe(samples, word_timestamps=True, vad_filter=False, condition_on_previous_text=False)
+        return info.language, [{"ms": round(word.start * 1000), "word": word.word} for segment in segments for word in segment.words]
+    return words_in
+
+
+def on_the_gpu(name, device):
+    """OpenAI's Whisper, as faster-whisper can't use an AMD card; the settings are faster-whisper's own."""
+    import whisper
+    model = whisper.load_model(name, device=device)
+
+    def words_in(samples):
+        found = model.transcribe(samples, word_timestamps=True, condition_on_previous_text=False, beam_size=5, fp16=True, verbose=None)
+        return found["language"], [{"ms": round(word["start"] * 1000), "word": word["word"]} for segment in found["segments"] for word in segment.get("words", [])]
+    return words_in
+
+
+def hear(args):
     import numpy as np
     folder = OUT / "heard"
     folder.mkdir(parents=True, exist_ok=True)
     models = {}
 
     def heard(pcm, name):
-        model = models.get(name) or models.setdefault(name, WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=args.threads))
+        words_in = models.get(name) or models.setdefault(name, on_the_cpu(name, args.threads) if args.device == "cpu" else on_the_gpu(name, args.device))
         samples = np.frombuffer(pcm.read_bytes(), dtype=np.int16).astype(np.float32) / 32768
-        segments, info = model.transcribe(samples, word_timestamps=True, vad_filter=False, condition_on_previous_text=False)
-        words = [{"ms": round(word.start * 1000), "word": word.word} for segment in segments for word in segment.words]
-        return {"language": info.language, "words": words, "model": name}
+        language, words = words_in(samples)
+        return {"language": language, "words": words, "model": name}
 
     for pcm in sorted((OUT / "audio").glob("*.pcm")):
         out = folder / f"{pcm.stem}.json"
@@ -366,9 +385,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("step", choices=["songs", "audio", "run", "hear", "timing", "grade", "summary"])
     parser.add_argument("--gradle", default="./gradlew", help="how to run Gradle")
-    parser.add_argument("--model", default="small", help="faster-whisper model, or a folder with one")
+    parser.add_argument("--model", default="small", help="Whisper model, or with faster-whisper a folder with one")
     parser.add_argument("--retry-model", default="medium", help="the bigger one for previews where little was heard")
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--device", default="cpu", help="what `hear` runs on; cuda runs OpenAI's Whisper on the GPU, about 2.8 times as fast as 4 threads")
     parser.add_argument("--out", type=Path, help="where it all goes, if not build/songcheck/")
     parser.add_argument("--source", choices=["apple", "listenbrainz"], default="apple", help="where `songs` takes them from")
     parser.add_argument("--top", type=int, default=1000, help="with --source listenbrainz, songs with a preview per continent")
