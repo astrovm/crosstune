@@ -70,6 +70,7 @@ npm run build       # dist/chrome and dist/firefox
 npm run typecheck
 npm test            # unit tests on recorded answers in test/fixtures/, no network
 node scripts/try.mjs 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT' youtubemusic   # the real logic on live services
+node scripts/try-lyrics.mjs 'Africa' 'Toto' 272000   # the lyrics finder on live sites, what it found and where
 npm run e2e         # headless Chromium with the built extension: a click on a Spotify link ends on YouTube Music
 npm run e2e:firefox # the same in headless Firefox, through geckodriver
 npm run e2e:panel   # every state of the lyrics panel in Chromium, no network: a page playing silence and recorded answers; screenshots in dist/panel-shots/

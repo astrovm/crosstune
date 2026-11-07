@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/*.test.ts\"",
     "try": "node scripts/try.mjs",
+    "try:lyrics": "node scripts/try-lyrics.mjs",
     "e2e": "node scripts/e2e.mjs",
     "e2e:firefox": "node scripts/e2e-firefox.mjs",
     "e2e:panel": "node scripts/e2e-panel.mjs",

@@ -2,7 +2,7 @@
 // the browser's own media controls, and the position of their <video> or <audio>, for the sites that
 // keep one in the page. It reads and tells the extension; it never changes the page, and sends nothing out.
 
-import { POSITION_MESSAGE, SONG_MESSAGE, songFrom, type Position, type SongMessage } from "./song.ts";
+import { POSITION_MESSAGE, SONG_MESSAGE, songFrom, videoIdOf, type Position, type SongMessage } from "./song.ts";
 
 const CHECK_MS = 1_000;
 /** A new song waits a check more, for the player to hold its length rather than the last song's. */
@@ -27,18 +27,13 @@ function isPlaying(media: HTMLMediaElement | null): boolean {
   return navigator.mediaSession.playbackState === "playing";
 }
 
-function videoId(): string | undefined {
-  if (!location.hostname.endsWith("youtube.com")) return undefined;
-  return new URLSearchParams(location.search).get("v") ?? undefined;
-}
-
 function report(): SongMessage["song"] {
   const metadata = navigator.mediaSession.metadata;
   if (metadata === null) return null;
   const named = songFrom(location.hostname, { title: metadata.title, artist: metadata.artist, album: metadata.album });
   if (named === null) return null;
   const media = mediaElement();
-  const id = videoId();
+  const id = videoIdOf(location.hostname, location.search);
   return {
     ...named,
     playing: isPlaying(media),

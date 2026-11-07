@@ -109,12 +109,33 @@ async function shot(panel, name) {
   await panel.screenshot({ path: join(shots, `${name}.png`) });
 }
 
+/** The narrowest side panel with the largest text a browser offers: nothing runs off the side, and the tools stay big enough to tap. */
+async function fitsLargest(panel, name) {
+  const before = panel.viewportSize();
+  await panel.setViewportSize({ width: 320, height: 568 });
+  await panel.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  const look = await panel.evaluate(() => {
+    const size = (node) => node.getBoundingClientRect();
+    const seen = [...document.querySelectorAll("#settings, #action, #message, #title, #artist, #words p")].filter((node) => !node.closest("[hidden]") && !node.hidden);
+    return {
+      sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      past: seen.filter((node) => size(node).right > innerWidth + 0.5 || size(node).left < -0.5).map((node) => node.id || node.textContent),
+      small: [...document.querySelectorAll("#settings, #action")].filter((node) => !node.hidden && size(node).height < 48).map((node) => node.id),
+    };
+  });
+  await shot(panel, `${name}-largest`);
+  await panel.evaluate(() => { document.documentElement.style.fontSize = ""; });
+  await panel.setViewportSize(before);
+  assert.deepEqual(look, { sideways: 0, past: [], small: [] }, `${name} at the largest text`);
+}
+
 async function both(panel, name) {
   await panel.emulateMedia({ colorScheme: "light" });
   await shot(panel, `${name}-light`);
   await panel.emulateMedia({ colorScheme: "dark" });
   await shot(panel, `${name}-dark`);
   await panel.emulateMedia({ colorScheme: "light" });
+  await fitsLargest(panel, name);
 }
 
 const steps = [];
@@ -159,7 +180,7 @@ try {
   await step("words: they come, and follow the music", async () => {
     await waitForWords(panel, FIRST_LINE);
     assert.ok(asked.some((url) => url.includes("track_name=Africa&artist_name=Toto")));
-    assert.ok(!asked.some((url) => url.includes("music.163.com")), "timed words for this recording need no one else");
+    assert.ok(!asked.some((url) => new URL(url).hostname === "music.163.com"), "timed words for this recording need no one else");
     await music.evaluate(() => window.go(15.4));
     await panel.bringToFront();
     await panel.waitForFunction((line) => document.querySelector("#words p.now")?.textContent === line, SECOND_LINE, { timeout: 5_000 });
@@ -277,6 +298,23 @@ try {
     await waitForMessage(spanish, "Poné una canción en un sitio de música");
     assert.equal(await spanish.locator("#settings").getAttribute("aria-label"), "Ajustes");
     await shot(spanish, "no-song-es");
+  });
+
+  await context.close();
+  context = await launch("de");
+  await context.route(/^https?:/, answer);
+  await step("a long language: German, every message at the largest text", async () => {
+    const german = await openPanel(context);
+    await waitForMessage(german, "Spiel einen Song auf einer Musikseite ab");
+    for (const [key, action] of [["lyricsNoSong"], ["lyricsNone"], ["lyricsInstrumental"], ["lyricsOffline"], ["lyricsUnavailable", "lyricsRetry"], ["optionsAccess", "optionsAllow"]]) {
+      await german.evaluate(([messageKey, actionKey]) => {
+        document.getElementById("message").textContent = chrome.i18n.getMessage(messageKey);
+        const button = document.getElementById("action");
+        button.hidden = actionKey === undefined;
+        if (actionKey !== undefined) button.textContent = chrome.i18n.getMessage(actionKey);
+      }, [key, action]);
+      await fitsLargest(german, `${key}-de`);
+    }
   });
 
   await context.close();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { currentSong, songFrom, type TabSong } from "../src/song.ts";
+import { currentSong, songFrom, videoIdOf, type TabSong } from "../src/song.ts";
 
 const named = (host: string, title: string, artist: string, album = "") => songFrom(host, { title, artist, album });
 
@@ -51,4 +51,12 @@ test("the current song is the one playing, whichever tab said so last", () => {
 test("with nothing playing, the last one heard stays", () => {
   assert.equal(currentSong([song("Older", 1, 100, false), song("Newer", 2, 200, false)])?.title, "Newer");
   assert.equal(currentSong([]), null);
+});
+
+test("only YouTube's own addresses say which video it is", () => {
+  assert.equal(videoIdOf("music.youtube.com", "?v=abc&list=x"), "abc");
+  assert.equal(videoIdOf("www.youtube.com", "?v=abc"), "abc");
+  assert.equal(videoIdOf("www.youtube.com", "?list=x"), undefined);
+  assert.equal(videoIdOf("notyoutube.com", "?v=abc"), undefined);
+  assert.equal(videoIdOf("open.spotify.com", "?v=abc"), undefined);
 });

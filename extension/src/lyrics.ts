@@ -74,7 +74,8 @@ const letrasPagePatterns = [
 ];
 const letrasStanza = /(?:<br\s*\/?>\s*)?<\/p>\s*<p>/g;
 const letrasBreak = /<br\s*\/?>/g;
-const letrasTag = /<[^>]+>/g;
+/** A tag, or what's left of one where the words stop. */
+const letrasTag = /<[^>]*(?:>|$)/g;
 const letrasBox = /<div\b|<\/div>/g;
 
 /** The lines of an LRC sheet, in order; a line sung more than once has a stamp for each time. */

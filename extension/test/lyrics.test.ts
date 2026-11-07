@@ -149,6 +149,18 @@ test("Letras's words come from the page its search points to, untimed and withou
   assert.equal(lyrics.words, "Paper boats along the river\nWe sang until the morning's came\n\nEvery window holds a lantern\nAnd the night forgets its name");
 });
 
+test("Letras's page cut off in the middle of a tag leaves none of it in the words", async () => {
+  const net = internet([
+    [LRCLIB, "[]"],
+    [YTM_SEARCH, "{}"],
+    [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
+    [LETRAS_SEARCH, fixture("letras-search.txt")],
+    [LETRAS_PAGE, '<div class="lyric-original"><p>Paper boats<br/>Along the river<script src="x"</div>'],
+  ]);
+  const lyrics = found(await find({ title: "Gracias a la vida", artist: "Mercedes Sosa" }, net));
+  assert.equal(lyrics.words, "Paper boats\nAlong the river");
+});
+
 test("untimed words give way to timed ones elsewhere, and are kept when there are none", async () => {
   const row = { trackName: "Africa", artistName: "Toto", plainLyrics: "Untimed words" };
   const timed = internet([
