@@ -19,6 +19,8 @@
     <!-- The screen turned on for a moment at a list song's end, so Spotify plays the next, when set to. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+    <!-- A practice reminder's alarm, which Android forgets on a reboot, is set again after one. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Phones without a microphone can still install Crosstune; they just can't listen. -->
     <uses-feature
         android:name="android.hardware.microphone"
@@ -292,6 +294,23 @@
             android:name=".PasteFromClipboard"
             android:exported="false"
             android:targetActivity=".MainActivity" />
+
+        <!-- Practises what's due, from a reminder; not exported, so no other app can start a session. -->
+        <activity-alias
+            android:name=".PractiseDue"
+            android:exported="false"
+            android:targetActivity=".MainActivity" />
+
+        <!-- The day's practice reminder, set again whenever Android forgets it or its hour moves. -->
+        <receiver
+            android:name=".PracticeReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Starts listening for a song; not exported, so no other app can make Crosstune listen. -->
         <activity-alias

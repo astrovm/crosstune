@@ -368,6 +368,10 @@ internal data class ScreenActions(
     val onDismissNotFoundOffer: () -> Unit = {},
     val onPaletteChange: (Palette) -> Unit = {},
     val onPureBlackChange: (Boolean) -> Unit = {},
+    /** Due cards asked back once a day, or not, Android asked first if need be. */
+    val onReminderChange: (Boolean) -> Unit = {},
+    /** The time of day they're asked back, in minutes from midnight. */
+    val onReminderTimeChange: (Int) -> Unit = {},
     val onPlayingBarChange: (Boolean) -> Unit = {},
     /** How far ahead of the voice a line lights, one of [LINES_EARLY_STEPS]. */
     val onLinesEarlyChange: (Long) -> Unit = {},

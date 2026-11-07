@@ -57,7 +57,7 @@ Where each feature starts:
 - Naming a song: `SongListener.kt`, `ShazamSignature.kt`, `SongRecognizers.kt`.
 - Lyrics: `LyricsFinder.kt` finds them, `LyricsScreen.kt` shows them, `TimingEvidence.kt` and `LyricsSync.kt` put them in time, `SungWords.kt` lines them up to the singing.
 - Chords: `ChordFinder.kt`, `Chords.kt`. Translations and readings: `Translator.kt`, `Readings.kt`. ChatGPT: `ChatGpt*.kt`.
-- Practice cards: `Practice*.kt`, `SavedLines.kt`.
+- Practice cards: `Practice*.kt`, `SavedLines.kt`. Reminders of what's due: `PracticeReminders.kt`, `ReminderBell.kt`.
 - Access and setup: `FixCenter.kt`, `OneTapSetup.kt` (Shizuku and root).
 - Reports: `Feedback.kt` and `AutoReports.kt` in the app, `report/` on Cloudflare.
 - TV: `UiState.phone` is `Phone.TV` (`FixCenter.kt`), and the screens check it. Tests in `TvTest` and `TvPlayTest`.

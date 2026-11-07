@@ -209,6 +209,23 @@ private fun SettingsList(
             NextLineAheadRow(state.nextLineAheadMs, actions.onNextLineAheadChange)
         }
 
+        // Once there's been a session to take the time from; the time is set from the bell on the practice list.
+        state.reminderMinute?.let { minute ->
+            SectionHeader(stringResource(R.string.saved_practice))
+            Group {
+                SettingSwitch(
+                    label = stringResource(R.string.practice_reminders),
+                    description = when {
+                        state.reminder.blocked -> stringResource(R.string.practice_reminder_blocked)
+                        state.reminder.on -> reminderTime(LocalContext.current, minute)
+                        else -> null
+                    },
+                    checked = state.reminder.working,
+                    onCheckedChange = actions.onReminderChange
+                )
+            }
+        }
+
         // The AI features run on the user's ChatGPT plan, once signed in.
         SectionHeader(stringResource(R.string.settings_chatgpt_title))
         Group {

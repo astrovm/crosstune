@@ -131,6 +131,8 @@ internal data class UiState(
     val sleep: Sleep? = null,
     /** The kinds of practice card, each with what it shows on either side. */
     val cardTypes: List<CardType> = DEFAULT_CARD_TYPES,
+    /** Whether due cards are asked back once a day, and when. */
+    val reminder: Reminder = Reminder(),
     /** The ChatGPT account whose plan the AI features run on. */
     val chatGpt: ChatGptState = ChatGptState(),
     /** The line the music app keeps going back to, while it does. */

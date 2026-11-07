@@ -393,6 +393,17 @@
     <string name="practice_done">Повторено: %1$d</string>
     <string name="practice_back_to">Вернуться к %1$s</string>
     <string name="practice_progress">%1$d из %2$d</string>
+    <string name="practice_reminders">Напоминания о практике</string>
+    <string name="practice_remind_me">Напоминать</string>
+    <string name="practice_reminder_at">Напоминание в %1$s</string>
+    <string name="practice_reminder_blocked">Уведомления выключены</string>
+    <string name="practice_reminder_songs">%1$s и ещё %2$d</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="one">%1$d карточка для практики</item>
+        <item quantity="few">%1$d карточки для практики</item>
+        <item quantity="many">%1$d карточек для практики</item>
+        <item quantity="other">%1$d карточки для практики</item>
+    </plurals>
     <string name="song_tab_meaning">Смысл</string>
     <string name="song_tab_words">Слова</string>
     <string name="song_tab_artist">Исполнитель</string>
