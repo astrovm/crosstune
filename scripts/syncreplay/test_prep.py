@@ -768,5 +768,25 @@ class PhoneTest(unittest.TestCase):
         self.assertIn('never lit 1', said.call_args_list[-1].args[0])
 
 
+class PhoneVolumeTest(unittest.TestCase):
+    def volumes_with_the_phone_at(self, level):
+        """The phone's media volume while the song plays, and after."""
+        volume = [level]
+        heard = []
+        def shell(*parts):
+            if '--set' in parts:
+                volume[0] = int(parts[parts.index('--set') + 1])
+            return f'[V] volume is {volume[0]} in range [0..15]'
+        with patch.object(r, 'shell', side_effect=shell), patch.object(r, 'watch', side_effect=lambda args: heard.append(volume[0])):
+            r.phone(argparse.Namespace())
+        return heard[0], volume[0]
+
+    def test_plays_at_one_from_silence_and_puts_it_back(self):
+        self.assertEqual(self.volumes_with_the_phone_at(0), (1, 0))
+
+    def test_plays_at_one_from_louder_and_puts_it_back(self):
+        self.assertEqual(self.volumes_with_the_phone_at(9), (1, 9))
+
+
 if __name__ == '__main__':
     unittest.main()

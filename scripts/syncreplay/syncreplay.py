@@ -33,7 +33,7 @@ it plays the recording in YouTube Music (--app for another build of it) from the
 words in Crosstune for S seconds, and times each line lit from the app's own log. Where the song
 really is comes from lining up what the app heard with the recording, as a music app's clock runs
 behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
-A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
+The media volume is 1 while it plays, as at 0 the app hears only silence, and at 1 it already hears the music at full level.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -621,10 +621,10 @@ def media_volume(level=None):
 
 def phone(args):
     # At volume 0 what the app hears of the music is silence, so there'd be no singing to place lines by.
-    # 1 is enough: the app hears the music at full level from there on. The volume is put back after.
+    # 1 is enough: the app hears the music at full level from there on, so never louder, for whoever's
+    # near the phone. The volume is put back after.
     volume = media_volume()
-    if volume == 0:
-        media_volume(1)
+    media_volume(1)
     try:
         watch(args)
     finally:
