@@ -358,7 +358,7 @@ so `set` skips it. The More I See You and it are new since Issue #671.
 | Bizarre Love Triangle | LhLmgg_u29k | 20 | 7 | 10 | 0 | 8 | -1.5 |
 | **All** | | **1179** | **317** | **616** | **112** | **410** | -24.1 |
 
-Scored: 1179 of 1780 lines with words. A second `all` on the same inputs: 315 within 0.3 s, 617 within 0.5 s, 112 dark, 409 early. So the noise between two runs is about 2 lines, and at most 1 on any one song.
+Scored: 1179 of 1780 lines with words. A second `all` on the same inputs: 315 within 0.3 s, 617 within 0.5 s, 112 dark, 409 early. So the noise between two runs is about 2 lines, and at most 2 on any one song (Otro Como Tú).
 
 Against the last full set (`all` on b2449bdc):
 
@@ -379,7 +379,7 @@ Of the 112 dark, 78 are the 4 songs whose words have no times (`hearSinging` nee
 
 ### Keeping the numbers comparable
 
-Sources answer differently from one lookup to the next: between two `set` runs minutes apart, Bohemian Rhapsody went from 38 scored lines to 45, with 21 within 0.5 s to 30, and nothing else moved beyond the noise.
+Sources answer differently from one lookup to the next: between two `set` runs minutes apart, Bohemian Rhapsody went from 38 scored lines to 45, with 21 within 0.5 s to 30, and no other song moved by more than the noise.
 So `set` without `--cached` changes the baseline. Compare with `all` on the words kept, and take a new baseline whenever they're found again.
 
 ### Words looked for without the recording's length
