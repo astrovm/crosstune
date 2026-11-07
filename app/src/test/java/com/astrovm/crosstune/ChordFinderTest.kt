@@ -661,6 +661,7 @@ Singing to the morning light</div>"""
                 request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
                 request.url.encodedPath == "/search.php" && request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, uFretResult(2, "川の道", "歩く人"))
                 request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 900)))
+                request.url.encodedPath == "/db/search.cgi" -> jTotalPage(request, jTotalResult("gone/001", "川の道"))
                 request.url.host == "music.163.com" -> FakeSpotify.html(request, "{}")
                 request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> FakeSpotify.html(request, "", code = 404)
@@ -674,6 +675,7 @@ Singing to the morning light</div>"""
         )))
         assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
         assertTrue("https://www.ufret.jp/song.php?data=2" in fake.requestedUrls)
+        assertTrue("https://music.j-total.net/data/gone/001.html" in fake.requestedUrls)
     }
 
     @Test
