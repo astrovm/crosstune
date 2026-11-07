@@ -130,9 +130,10 @@ Singing to the morning light</div>"""
 
     private fun answer(request: Request, pages: Map<String, String>) =
         pages.entries.firstOrNull { request.url.toString().startsWith(it.key) }?.let { FakeSpotify.html(request, it.value) }
-            // Cifra Club's search and Apple's, where a test doesn't say, find nothing.
+            // Cifra Club's search, Apple's and J-Total's, where a test doesn't say, find nothing.
             ?: when (request.url.host) {
                 "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch())
+                "music.j-total.net" -> FakeSpotify.html(request, "")
                 "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> FakeSpotify.html(request, "", code = 404)
             }
@@ -199,6 +200,7 @@ Singing to the morning light</div>"""
         fake.handler = { request ->
             val path = request.url.encodedPath
             when {
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch())
                 request.url.host != "music.j-total.net" -> FakeSpotify.html(request, "")
                 path == "/db/search.cgi" -> jTotalPage(request, searches.entries.firstOrNull { "word=${java.net.URLEncoder.encode(it.key, "Shift_JIS")}&" in request.url.encodedQuery.orEmpty() }?.value.orEmpty())
                 else -> jTotalPage(request, pages[path].orEmpty())
