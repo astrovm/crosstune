@@ -16,7 +16,28 @@ export const API_HOSTS = [
   "api.deezer.com", "api.tidal.com", "api-v2.soundcloud.com", "a-v2.sndcdn.com", "labs.api.listenbrainz.org",
 ] as const;
 
+/**
+ * Lyrics sites a browser may only read with leave. LRCLIB and Letras's search answer any web page
+ * (they send "access-control-allow-origin: *"), so they need none, and aren't asked for it.
+ */
+export const LYRICS_HOSTS = ["music.163.com", "www.letras.com"] as const;
+
 /** Spotify's short links come from subdomains such as "abc.spotify.link". */
 export const WILDCARD_HOSTS = ["*.spotify.link"] as const;
 
-export const HOST_PERMISSIONS: string[] = [...WATCHED_HOSTS, ...API_HOSTS, ...WILDCARD_HOSTS].map((host) => `https://${host}/*`);
+export const HOST_PERMISSIONS: string[] = [...WATCHED_HOSTS, ...API_HOSTS, ...LYRICS_HOSTS, ...WILDCARD_HOSTS].map((host) => `https://${host}/*`);
+
+/**
+ * Sites whose pages play music, which the content script reads what's playing from. All are among
+ * [WATCHED_HOSTS], so reading them asks for no more than opening their links does.
+ */
+export const PLAYER_HOSTS = [
+  "music.youtube.com", "www.youtube.com", "m.youtube.com",
+  "open.spotify.com",
+  "music.apple.com",
+  "www.deezer.com",
+  "tidal.com", "listen.tidal.com",
+  "soundcloud.com", "m.soundcloud.com",
+] as const;
+
+export const PLAYER_MATCHES: string[] = PLAYER_HOSTS.map((host) => `https://${host}/*`);

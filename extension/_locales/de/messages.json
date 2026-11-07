@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Öffnet Musik-Links im Dienst deiner Wahl."
-  },
-  "actionTitle": {
-    "message": "Crosstune-Einstellungen"
-  },
-  "optionsEnabled": {
-    "message": "Musik-Links im Dienst unten öffnen"
-  },
-  "optionsService": {
-    "message": "Öffnen in"
-  },
-  "optionsAccess": {
-    "message": "Crosstune braucht Zugriff auf die Musikseiten, um Links für dich zu öffnen."
-  },
-  "optionsAllow": {
-    "message": "Erlauben"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Öffnet Musik-Links im Dienst deiner Wahl und zeigt den Songtext zu dem, was gerade läuft." },
+  "actionTitle": { "message": "Crosstune-Songtexte" },
+  "optionsEnabled": { "message": "Musik-Links im Dienst unten öffnen" },
+  "optionsService": { "message": "Öffnen in" },
+  "optionsAccess": { "message": "Crosstune braucht Zugriff auf die Musikseiten, um Links zu öffnen und Songtexte zu zeigen." },
+  "optionsAllow": { "message": "Erlauben" },
+  "lyricsNoSong": { "message": "Spiel einen Song auf einer Musikseite ab" },
+  "lyricsLoading": { "message": "Songtext wird gesucht" },
+  "lyricsNone": { "message": "Kein Songtext für diesen Song" },
+  "lyricsInstrumental": { "message": "Instrumental" },
+  "lyricsOffline": { "message": "Du bist offline" },
+  "lyricsUnavailable": { "message": "Songtext-Seiten nicht erreichbar" },
+  "lyricsRetry": { "message": "Nochmal" },
+  "lyricsSettings": { "message": "Einstellungen" }
 }

@@ -69,7 +69,7 @@
   "privacy_link": "Privacybeleid",
   "language_label": "Taal",
   "privacy_title": "Privacybeleid van Crosstune",
-  "updated": "Laatst bijgewerkt: 1 november 2026",
+  "updated": "Laatst bijgewerkt: 6 november 2026",
   "short_h2": "In het kort",
   "short_items": [
     "Geen account, advertenties of analyse.",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "De browserextensie van Crosstune, voor Chrome, Edge, Brave en Firefox, opent muzieklinks waarop je klikt in de dienst die je in de opties kiest. Ze kijkt alleen naar pagina's van de muzieksites die ze ondersteunt. Om het nummer, album of de artiest van een link te kennen, vraagt ze de openbare pagina of openbare API van de bron op. Om het item zelf te openen, stuurt ze titel en artiest naar de zoekfunctie van de bestemming, of naar ListenBrainz voor Spotify, net als de app. Haar instellingen blijven in de browser op je computer. Ze heeft geen account, advertenties of analyse en stuurt niets naar de ontwikkelaar."
+      "De browserextensie van Crosstune, voor Chrome, Edge, Brave en Firefox, opent muzieklinks waarop je klikt in de dienst die je in de opties kiest. Ze kijkt alleen naar pagina's van de muzieksites die ze ondersteunt. Om het nummer, album of de artiest van een link te kennen, vraagt ze de openbare pagina of openbare API van de bron op. Om het item zelf te openen, stuurt ze titel en artiest naar de zoekfunctie van de bestemming, of naar ListenBrainz voor Spotify, net als de app. Ze toont ook de songtekst van wat er speelt in een zijpaneel, en leest daarvoor titel en artiest van de pagina van de muzieksite. Alleen zolang dat paneel open is, stuurt ze die naar LRCLIB, YouTube Music, NetEase Cloud Music en Letras om de tekst te vinden, net als de app. Een video die niet zegt dat hij muziek is, wordt niet opgezocht. Haar instellingen blijven in de browser op je computer. Ze heeft geen account, advertenties of analyse en stuurt niets naar de ontwikkelaar."
     ],
     [
       "h2",

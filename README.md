@@ -53,6 +53,7 @@ Once you've opened something, anything left or broken later shows as **Things to
 - **Shortcuts.** One-tap paste, home screen widgets, Quick Settings tiles and a long-press shortcut on the app icon.
 - **No tracking.** Drops tracking bits like `?si=` from links.
 - **16 languages.** Follows your phone, or pick one in Settings.
+- **On your computer.** The [browser extension](extension), for Chrome, Edge, Brave and Firefox, opens music links in the service you pick, and shows the lyrics of what's playing on a music site in its side panel, in time where the site says how far in the song is.
 
 ## Supported links
 
@@ -92,7 +93,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 - Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. Offline, the sound heard waits in the app's memory, never saved, until the phone is back online. Apple is then asked how long the recording Shazam named is, so its lyrics are timed for it. The visuals use it to move to your music, and record and send nothing. Lining the words up to the singing hears it on your phone and sends nothing. Its speech model is downloaded once from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp).
 - **Report a problem** in the lyrics sends the song, its timing and what you write to Crosstune's only server, on Cloudflare, when you tap **Send**. It keeps no IP address, only the developer reads reports, and each is deleted after 180 days. With **Report song problems automatically** on, problems Crosstune finds go too, once per song.
 - Shizuku or root is used only to change Android's link, microphone, lyrics and floating settings for Crosstune, and to let lyrics hear what music apps play without Android asking each time. That sound stays on your phone, while a notification shows it.
-- The [browser extension](extension) asks a link's service for its title and artist, and the search of the service it opens in, or ListenBrainz for Spotify, as the app does. Its settings stay in your browser, and it sends nothing to the developer.
+- The [browser extension](extension) asks a link's service for its title and artist, and the search of the service it opens in, or ListenBrainz for Spotify, as the app does. Its lyrics panel reads the song's title and artist from the music site's page. Only while the panel is open, it asks LRCLIB, YouTube Music, NetEase Cloud Music and Letras for the words by title and artist, and a video that doesn't say it's music isn't looked up. Its settings stay in your browser, and it sends nothing to the developer.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 

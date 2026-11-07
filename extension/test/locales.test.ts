@@ -21,3 +21,9 @@ for (const locale of locales) {
     assert.ok((own["extDescription"]?.message ?? "").length <= 132);
   });
 }
+
+const panelWords = ["lyricsNoSong", "lyricsLoading", "lyricsNone", "lyricsInstrumental", "lyricsOffline", "lyricsUnavailable", "lyricsRetry", "lyricsSettings"];
+
+test("the lyrics panel's words are all there", () => {
+  for (const key of panelWords) assert.ok(english.includes(key), key);
+});
