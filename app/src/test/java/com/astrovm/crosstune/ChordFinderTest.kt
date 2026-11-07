@@ -259,6 +259,20 @@ Singing to the morning light</div>"""
         assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
     }
 
+    @Test
+    fun aNameNetEaseGivesWithItsVersionAndOneJTotalCantReadAreNotWhatJTotalIsAskedFor() {
+        val named = MusicMetadata("Kawa no Michi", "Aruku Hito")
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSheet))
+        val pages = fake.handler
+        // A Chinese song first, with a kanji Shift_JIS has no place for, then the song's own name with its version after it.
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, netEase("另一半" to listOf("別の人"), "川の道(Single Version)(オリジナルカラオケ)" to listOf("歩く人"))) else pages(request)
+        }
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
+        // The name Shift_JIS can't write is never sent as a mangled "?".
+        assertFalse(fake.requestedUrls.any { it.startsWith("https://music.j-total.net/db/search.cgi") && "%3F" in it })
+    }
+
     private val jTotalSheet = jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている")
 
     @Test

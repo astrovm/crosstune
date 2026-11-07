@@ -315,7 +315,8 @@ internal class ChordFinder(
 
     /** The pages of J-Total's sheets of [name]: by the artist first, and its easier versions after its own. */
     private suspend fun jTotalSheets(song: MusicMetadata, name: String): List<String> {
-        // It reads a search in Shift_JIS, as all it has is.
+        // It reads a search in Shift_JIS, as all it has is. A name with a letter that has no place there would go as a "?", and find nothing.
+        if (!J_TOTAL_CHARSET.newEncoder().canEncode(name)) return emptyList()
         val search = J_TOTAL_SEARCH_URL.toHttpUrl().newBuilder()
             .addEncodedQueryParameter("word", URLEncoder.encode(name, J_TOTAL_CHARSET.name()))
             .addQueryParameter("method", "and")
@@ -423,7 +424,7 @@ internal class ChordFinder(
             .build()
         val list = JSONObject(fetch(search.toString(), NETEASE_REFERER)).optJSONObject("result")?.optJSONArray("songs")
         val songs = list?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) } }.orEmpty()
-        val titles = songs.map { it.optString("name") }.filter(::japanese).distinct().take(MAX_NAMES)
+        val titles = songs.map { SongNames.bareTitle(it.optString("name")) }.filter(::japanese).distinct().take(MAX_NAMES)
         val names = listOf(song.title) + titleParts(song.title)
         val artists = songs.filter { found -> names.any { SongNames.same(found.optString("name"), it) } }.flatMap { found ->
             found.optJSONArray("artists")?.let { all -> (0 until all.length()).mapNotNull { all.optJSONObject(it) }.map { it.optString("name") } }.orEmpty()
