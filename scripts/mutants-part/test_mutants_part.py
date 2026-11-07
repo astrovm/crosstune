@@ -38,6 +38,18 @@ class Parts(unittest.TestCase):
 
 
 class Lived(unittest.TestCase):
+    def test_same_line_mutants_remain_distinct(self):
+        report = """<mutations>
+          <mutation status="SURVIVED"><sourceFile>A.kt</sourceFile><mutatedClass>pkg.A</mutatedClass><mutatedMethod>read</mutatedMethod><methodDescription>()V</methodDescription><lineNumber>10</lineNumber><indexes><index>2</index></indexes><blocks><block>0</block></blocks><description>changed boundary</description></mutation>
+          <mutation status="SURVIVED"><sourceFile>A.kt</sourceFile><mutatedClass>pkg.A</mutatedClass><mutatedMethod>read</mutatedMethod><methodDescription>()V</methodDescription><lineNumber>10</lineNumber><indexes><index>4</index></indexes><blocks><block>0</block></blocks><description>changed boundary</description></mutation>
+        </mutations>"""
+        with tempfile.NamedTemporaryFile("w", suffix=".xml") as file:
+            file.write(report)
+            file.flush()
+            rows, total = mutants_part.lived(Path(file.name))
+        self.assertEqual(total, 2)
+        self.assertEqual(len(set(rows)), 2)
+
     def test_what_no_test_caught_is_listed_by_file_and_line(self):
         report = """<mutations>
           <mutation status='KILLED'><sourceFile>A.kt</sourceFile><lineNumber>3</lineNumber><description>killed</description></mutation>
@@ -53,9 +65,9 @@ class Lived(unittest.TestCase):
         self.assertEqual(
             rows,
             [
-                "A.kt:2  timed out: loop",
-                "A.kt:12  no coverage: removed call",
-                "B.kt:10  survived: negated conditional",
+                "A.kt:2  timed out: loop [class=None method=NoneNone mutator=None index= block=]",
+                "A.kt:12  no coverage: removed call [class=None method=NoneNone mutator=None index= block=]",
+                "B.kt:10  survived: negated conditional [class=None method=NoneNone mutator=None index= block=]",
             ],
         )
 

@@ -45,7 +45,7 @@ def lived(report):
     left = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE", "TIMED_OUT")]
     left.sort(key=lambda m: (m.findtext("sourceFile"), int(m.findtext("lineNumber"))))
     rows = [
-        f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')}"
+        f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')} [class={m.findtext('mutatedClass')} method={m.findtext('mutatedMethod')}{m.findtext('methodDescription')} mutator={m.findtext('mutator')} index={','.join(e.text for e in m.findall('indexes/index'))} block={','.join(e.text for e in m.findall('blocks/block'))}]"
         for m in left
     ]
     return rows, len(mutations)

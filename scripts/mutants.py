@@ -59,7 +59,7 @@ def main():
     mutations = ET.parse(REPORT).getroot()
     lived = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE")]
     for m in sorted(lived, key=lambda m: (m.findtext("sourceFile"), int(m.findtext("lineNumber")))):
-        print(f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')}")
+        print(f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')} [class={m.findtext('mutatedClass')} method={m.findtext('mutatedMethod')}{m.findtext('methodDescription')} mutator={m.findtext('mutator')} index={','.join(e.text for e in m.findall('indexes/index'))} block={','.join(e.text for e in m.findall('blocks/block'))}]")
     print(f"{len(mutations) - len(lived)} of {len(mutations)} changes caught by a test.")
     return 1 if lived else 0
 
