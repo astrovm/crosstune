@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -51,7 +52,8 @@ internal sealed interface Effect {
         val packageName: String?,
         val finishAfterOpen: Boolean,
         val atMs: Long = SystemClock.elapsedRealtime(),
-        val asking: String? = null
+        val asking: String? = null,
+        val qobuz: QobuzNumbers.Opening? = null
     ) : Effect
     data class Share(val url: String) : Effect
 
@@ -151,8 +153,14 @@ internal class MainViewModel(
                 return source.openSong(app, link).also { if (!it) uncover() }
             }
 
+            override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
+                qobuzNumbers?.off()
+                return source.playSong(song, app, link, mustStart)
+            }
+
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
             override fun playPause(song: MusicMetadata, play: Boolean) {
+                qobuzNumbers?.off()
                 leftJob?.cancel()
                 if (!play) return source.playPause(song, false)
                 viewModelScope.launch {
@@ -1373,13 +1381,13 @@ internal class MainViewModel(
             if (match == ExactMatcher.Match.Missing && service != null && canBeMissing(service, track)) {
                 return@launch openMissing(track, track.url?.let(MusicLinks::linkFor), destination, url, finishAfterOpen = false)
             }
-            watchNumber(track, destination, url, exactUrl != null)
             effectChannel.send(opening(url.forSharing(), destination.packageName, finishAfterOpen = false, song = track))
         }
     }
 
     /** Opens the result from a button tap; the picker passes the destination chosen for this link. */
     fun openResult(destination: Destination? = null, finishAfterOpen: Boolean = false) {
+        qobuzNumbers?.off()
         val chosen = destination ?: uiState.resultDestination
         adoptDefault(chosen)
         pendingOpen = false
@@ -1396,6 +1404,7 @@ internal class MainViewModel(
      * when it can't be asked, or, for YouTube Music, has only a search for it.
      */
     fun playResult() {
+        qobuzNumbers?.off()
         val destination = uiState.resultDestination as? Destination.Service ?: return
         adoptDefault(destination)
         val song = uiState.result ?: return
@@ -1459,8 +1468,8 @@ internal class MainViewModel(
 
     /** [app] opened on [song]'s [link], watched from before that if Qobuz's, as it can stay on a loading page there. */
     private fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
-        if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.opened(song, app, link)
-        return source.openSong(app, link)
+        val pending = if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.prepare(song, app, link) else null
+        return source.openSong(app, link).also { pending?.started(it) }
     }
 
     /**
@@ -1601,6 +1610,7 @@ internal class MainViewModel(
     fun openPlayerApp() {
         val player = uiState.player ?: return
         val app = player.following?.appPackage ?: player.app ?: return
+        qobuzNumbers?.off()
         effectChannel.trySend(Effect.Show(app, finishAfterOpen = false, saysWhenItFails = false))
     }
 
@@ -1724,8 +1734,13 @@ internal class MainViewModel(
     }
 
     /** Opens [url] in [packageName], with [song] named for an app that takes a search, not its page. */
-    private fun opening(url: String, packageName: String?, finishAfterOpen: Boolean, song: MusicMetadata? = uiState.result) =
-        Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery))
+    private fun opening(url: String, packageName: String?, finishAfterOpen: Boolean, song: MusicMetadata? = uiState.result): Effect.Open {
+        qobuzNumbers?.off()
+        val pending = if (song?.type == ItemType.TRACK && packageName == MusicService.QOBUZ.packageName && url.toHttpUrlOrNull()?.pathSegments?.firstOrNull() == "track") {
+            qobuzNumbers?.prepare(song, packageName, url)
+        } else null
+        return Effect.Open(url, packageName, finishAfterOpen, asking = song?.let(::searchQuery), qobuz = pending)
+    }
 
     /** [tapped] is a tap on its button or in the picker, rather than a link that came in opening on its own. */
     private suspend fun open(destination: Destination, finishAfterOpen: Boolean, tapped: Boolean = false) {
@@ -1754,14 +1769,7 @@ internal class MainViewModel(
             playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.takeIf { sameApp(destination.packageName, it.appPackage, interception::isInstalled) }
         }
         if (there?.appPackage != null) return effectChannel.send(Effect.Show(there.appPackage, finishAfterOpen))
-        uiState.result?.let { watchNumber(it, destination, url, uiState.destinationUrls[destination]?.exact != false) }
         effectChannel.send(opening(url, destination.packageName, finishAfterOpen))
-    }
-
-    /** A song opened in Qobuz's app by its [exact] number at [link] is watched from before it's opened, so what played until then is known. */
-    private fun watchNumber(song: MusicMetadata, destination: Destination, link: String, exact: Boolean) {
-        val app = (destination as? Destination.Service)?.takeIf { it.service == MusicService.QOBUZ } ?: return
-        if (exact && song.type == ItemType.TRACK) qobuzNumbers?.opened(song, app.packageName, link)
     }
 
     /** Searches where the result goes, though it wasn't found there, e.g. under another name. */
@@ -4166,6 +4174,7 @@ internal class MainViewModel(
     }
 
     private fun cancelTrackWork() {
+        qobuzNumbers?.off()
         trackJob?.cancel()
         trackJob = null
         uiState = uiState.copy(queueProgress = null, isMatching = false)

@@ -64,6 +64,9 @@ internal class FakePlayback : PlaybackSource {
 
     override fun nowPlayingUpdates(): Flow<Heard.Song?> = songs
 
+    /** How many are listening for what's on the phone. */
+    val nowPlayingWatchers get() = songs.subscriptionCount.value
+
     override fun seekTo(song: MusicMetadata, positionMs: Long) {
         seeks += positionMs
     }
