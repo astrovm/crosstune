@@ -260,6 +260,26 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aSongNamedInJapaneseAlreadyIsNeverLookedUpByOtherNamesForJTotal() {
+        jTotal(emptyMap())
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertFalse(fake.requestedUrls.any { "music.163.com" in it })
+    }
+
+    @Test
+    fun aJapaneseTitleOrArtistAloneStillLooksUpTheOtherNameForJTotal() {
+        val pages = mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        for (song in listOf(MusicMetadata("川の歌", "Aruku Hito"), MusicMetadata("Kawa no Michi", "歩く人"))) {
+            jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), pages)
+            val site = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else site(request)
+            }
+            assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
+        }
+    }
+
+    @Test
     fun wordsInOtherLettersNeverAskJTotal() {
         jTotal(emptyMap())
         chords(river, english)

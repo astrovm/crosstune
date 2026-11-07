@@ -302,9 +302,10 @@ internal class ChordFinder(
         return found.sortedBy { it.first }.map { it.second }
     }
 
-    /** J-Total's first sheet for the song that [fits], by the names it's given, then by those it has in Japanese. */
+    /** J-Total's first sheet for the song that [fits], by the names it's given, then, unless those are in Japanese already, by those it has there. */
     private suspend fun fromJTotal(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? =
-        searchJTotal(song, listOf(song.title) + titleParts(song.title), fits) ?: searchJTotal(song, otherNames(song).titles, fits)
+        searchJTotal(song, listOf(song.title) + titleParts(song.title), fits)
+            ?: if (japanese(song.title) && japanese(song.artist)) null else searchJTotal(song, otherNames(song).titles, fits)
 
     private suspend fun searchJTotal(song: MusicMetadata, names: List<String>, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(names, { name -> jTotalSheets(song, name) }, fits) { url ->
