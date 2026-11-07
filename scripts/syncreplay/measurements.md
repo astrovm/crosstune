@@ -306,18 +306,18 @@ this branch before the merge (the 41 songs don't pass `--skew`, so this shows no
 
 ## The whole set, rebuilt
 
-Measured on 2026-11-07 on 12e05079: `origin/main` at 2505ebcf, whose app code it doesn't change, plus the replay tooling in PR #734.
+Measured on 2026-11-07 on 77bc5168: `origin/main` at a3bbf54f, whose app code it doesn't change, plus the replay tooling in PR #734.
 The agent cache was emptied and every input lost, so all of it is new: recordings, voices, truth, what's heard, and the words found.
 
-`set` then `all`, with truth from two GPU hearings and hearing on the CPU. A second `all` on the same inputs differs by at most 2 lines
-on any song and overall: 304 within 0.3 s, 607 within 0.5 s, 104 dark, 411 early. So 2 lines is the noise between two runs.
+`set` then `all`, with truth from two GPU hearings and hearing on the CPU. 43 songs are in `songs.tsv`, and 42 are scored: Bring Me To Life (Cyberpunk Shamisen Cover) has no words to find,
+so `set` skips it. The More I See You and it are new since Issue #671.
 
 | Song | Recording | Lines | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Bizarre Love Triangle | ZnrSNEah_20 | 24 | 6 | 10 | 2 | 5 | -24.1 |
 | Every Little Thing She Does Is Magic | 5WEjz2YoH80 | 24 | 8 | 19 | 0 | 5 | -0.7 |
 | Expresso Love | 0_RLLNRWur4 | 26 | 6 | 10 | 3 | 13 | -0.9 |
-| Otro Como Tú | 2V2nqZjRELg | 38 | 14 | 22 | 0 | 15 | -1.5 |
+| Otro Como Tú | 2V2nqZjRELg | 38 | 16 | 24 | 0 | 14 | -1.6 |
 | Tell It to My Heart | OtXIsUjDOk8 | 32 | 10 | 24 | 0 | 7 | -2.1 |
 | Time to Pretend | XUKyV49P8F0 | 16 | 11 | 15 | 0 | 0 | +1.0 |
 | Have In Mind (Kalimba Mix) | CH6t8l-jGYI | 17 | 0 | 0 | 17 | 0 | - |
@@ -325,6 +325,7 @@ on any song and overall: 304 within 0.3 s, 607 within 0.5 s, 104 dark, 411 early
 | Nada Más Que Hablar (En Vivo) | iH8To-d2pX0 | 14 | 0 | 0 | 14 | 0 | - |
 | 二人だけのセレモニー | SaeY5sxStGM | 25 | 0 | 0 | 25 | 0 | - |
 | Ciclos Banais | 4PgA9No82ik | 39 | 0 | 0 | 39 | 0 | - |
+| The More I See You | 8rXamE-pYw0 | 8 | 0 | 0 | 8 | 0 | - |
 | Stay With Me | ZS6p32gX_yk | 34 | 2 | 13 | 0 | 21 | -1.0 |
 | Blue Monday | R1MBI2tSHe0 | 24 | 0 | 0 | 0 | 24 | -1.7 |
 | It's My Life | yWQezjGjiqs | 23 | 1 | 1 | 3 | 18 | +5.8 |
@@ -336,7 +337,7 @@ on any song and overall: 304 within 0.3 s, 607 within 0.5 s, 104 dark, 411 early
 | Lose Yourself | 4wOLVrGHiIU | 71 | 18 | 53 | 0 | 18 | -1.1 |
 | Bad Guy | ZD6rXLXZOEI | 34 | 23 | 33 | 0 | 0 | +0.5 |
 | Smells Like Teen Spirit | ljUtuoFt-8c | 8 | 0 | 0 | 0 | 8 | -2.1 |
-| Bohemian Rhapsody | BSTsnWoslP4 | 38 | 11 | 21 | 0 | 12 | +3.4 |
+| Bohemian Rhapsody | BSTsnWoslP4 | 45 | 23 | 30 | 0 | 11 | +3.0 |
 | Hotel California | BciS5krYL80 | 56 | 11 | 36 | 0 | 13 | +1.3 |
 | Shape of You | xTvyyoF_LZY | 36 | 7 | 25 | 0 | 11 | -0.9 |
 | Blinding Lights | J7p4bzqLvCw | 21 | 11 | 18 | 0 | 2 | +0.7 |
@@ -344,7 +345,7 @@ on any song and overall: 304 within 0.3 s, 607 within 0.5 s, 104 dark, 411 early
 | Dancing Queen | YkLLcIKhJ64 | 25 | 11 | 18 | 0 | 4 | +1.3 |
 | Despacito | FXovf5dsRTw | 57 | 11 | 26 | 0 | 30 | +6.2 |
 | De Música Ligera | sWft4cMiwXQ | 19 | 2 | 10 | 0 | 6 | +1.9 |
-| Flaca | uEV4RqqnlSE | 42 | 8 | 16 | 0 | 24 | +2.5 |
+| Flaca | uEV4RqqnlSE | 42 | 9 | 16 | 0 | 24 | +2.5 |
 | Águas de Março | WEuDVcXnElc | 49 | 12 | 23 | 0 | 26 | -1.2 |
 | Dynamite | HaEYUJ2aRHs | 24 | 12 | 20 | 0 | 3 | -0.6 |
 | Gee | qizghQs4K6E | 23 | 0 | 5 | 1 | 17 | -1.1 |
@@ -355,25 +356,31 @@ on any song and overall: 304 within 0.3 s, 607 within 0.5 s, 104 dark, 411 early
 | Hips Don't Lie | nOj6d-HOw2w | 57 | 7 | 23 | 0 | 33 | -1.0 |
 | Every Little Thing She Does Is Magic | XB7AmIsxzfI | 22 | 17 | 21 | 0 | 1 | -0.6 |
 | Bizarre Love Triangle | LhLmgg_u29k | 20 | 7 | 10 | 0 | 8 | -1.5 |
-| **All** | | **1164** | **302** | **605** | **104** | **412** | -24.1 |
+| **All** | | **1179** | **317** | **616** | **112** | **410** | -24.1 |
 
-Scored: 1164 of 1779 lines with words.
+Scored: 1179 of 1780 lines with words. A second `all` on the same inputs: 315 within 0.3 s, 617 within 0.5 s, 112 dark, 409 early. So the noise between two runs is about 2 lines, and at most 1 on any one song.
 
 Against the last full set (`all` on b2449bdc):
 
 | Set | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
 |---|---:|---:|---:|---:|---:|
 | Before, Issue #671 | 1223 | 301 (25%) | 619 (51%) | 113 (9%) | 415 |
-| Rebuilt | 1164 | 302 (26%) | 605 (52%) | 104 (9%) | 412 |
+| Rebuilt, the same 41 songs | 1171 | 317 (27%) | 616 (53%) | 104 (9%) | 410 |
+| Rebuilt, with The More I See You | 1179 | 317 (27%) | 616 (52%) | 112 (10%) | 410 |
 
-Close, but not the same set, so a song's change isn't a change in the app. With the old inputs gone, this can't be split further:
+Close, but not the same inputs, so a song's change isn't a change in the app. With the old inputs gone, this can't be split further:
 
-- Measured: 59 fewer lines are scored: 22 songs have 93 fewer, 13 have 34 more, 6 are the same.
+- Measured: on the 41, 52 fewer lines are scored: 22 songs have 86 fewer, 13 have 34 more, 6 are the same.
 - Measured: main gained `LyricSpacing.kt` and changes to `LyricsFinder.kt` since aab38b93, so the same lookup can find other words.
 - My guess, not measured: the rest is sources answering differently than on 2026-11-03, and Whisper's two hearings agreeing on other lines.
 
-Of the 104 dark, 70 are the 3 songs whose words have no times (`hearSinging` needs lines): Ciclos Banais 39, Have In Mind 17, Nada Más Que Hablar 14.
+Of the 112 dark, 78 are the 4 songs whose words have no times (`hearSinging` needs lines): Ciclos Banais 39, Have In Mind 17, Nada Más Que Hablar 14, The More I See You 8.
 25 are 二人だけのセレモニー, whose words run 212 s on a 178 s recording, so none are taken: both sheets found for it, LRCLIB's and NetEase's, are that long. It was all dark before too (28 of 28).
+
+### Keeping the numbers comparable
+
+Sources answer differently from one lookup to the next: between two `set` runs minutes apart, Bohemian Rhapsody went from 38 scored lines to 45, with 21 within 0.5 s to 30, and nothing else moved beyond the noise.
+So `set` without `--cached` changes the baseline. Compare with `all` on the words kept, and take a new baseline whenever they're found again.
 
 ### Words looked for without the recording's length
 
@@ -387,7 +394,7 @@ Plastic Love is back to where it was lit: 14 of 14 early, worst -11.6 s, against
 
 | Stage, one song at a time, 30 songs | Median seconds |
 |---|---:|
-| Demucs on the GPU | 14 |
+| Demucs on the GPU | 13 |
 | Truth, two hearings on the GPU | 143 |
 | Hearing 20 s and 8 s stretches, CPU | 36 |
 | Whole song | 182 |
