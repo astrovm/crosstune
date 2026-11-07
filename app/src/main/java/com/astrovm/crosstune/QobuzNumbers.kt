@@ -94,14 +94,15 @@ internal class QobuzNumbers(
         val next = when {
             started != null -> null
             over == null && playsElse(app) -> link
-            else -> other
+            other != null -> other
+            over == null && playback.plays(app).first() != null -> link
+            else -> null
         }
         next?.let { playback.openSong(app, it) }
     }
 
     /** Waking on its old queue loses the link; sending the same number again gets it off that queue. */
-    private suspend fun playsElse(app: String) =
-        playback.nowPlaying()?.let { sameApp(app, it.app, installed) } == true || playback.plays(app).first() != null
+    private fun playsElse(app: String) = playback.nowPlaying()?.let { sameApp(app, it.app, installed) } == true
 
     /** A title or an explicit translated name, including edition tags. An artist alone also names its old queue. */
     private fun isTheSong(playing: MusicMetadata, song: MusicMetadata) =
