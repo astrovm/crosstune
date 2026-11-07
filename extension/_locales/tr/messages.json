@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Müzik bağlantılarını tercih ettiğin serviste açar."
-  },
-  "actionTitle": {
-    "message": "Crosstune ayarları"
-  },
-  "optionsEnabled": {
-    "message": "Müzik bağlantılarını aşağıdaki serviste aç"
-  },
-  "optionsService": {
-    "message": "Şurada aç"
-  },
-  "optionsAccess": {
-    "message": "Crosstune'un bağlantıları senin için açabilmesi için müzik sitelerine erişmesi gerekiyor."
-  },
-  "optionsAllow": {
-    "message": "İzin ver"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Müzik bağlantılarını tercih ettiğin hizmette açar ve çalan şarkının sözlerini gösterir." },
+  "actionTitle": { "message": "Crosstune sözleri" },
+  "optionsEnabled": { "message": "Müzik bağlantılarını aşağıdaki serviste aç" },
+  "optionsService": { "message": "Şurada aç" },
+  "optionsAccess": { "message": "Crosstune, bağlantıları açmak ve sözleri göstermek için müzik sitelerine erişmeli." },
+  "optionsAllow": { "message": "İzin ver" },
+  "lyricsNoSong": { "message": "Bir müzik sitesinde şarkı çal" },
+  "lyricsLoading": { "message": "Sözler aranıyor" },
+  "lyricsNone": { "message": "Bu şarkının sözleri yok" },
+  "lyricsInstrumental": { "message": "Enstrümantal" },
+  "lyricsOffline": { "message": "Çevrimdışısın" },
+  "lyricsUnavailable": { "message": "Söz sitelerine ulaşılamadı" },
+  "lyricsRetry": { "message": "Yeniden dene" },
+  "lyricsSettings": { "message": "Ayarlar" }
 }

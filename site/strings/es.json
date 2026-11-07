@@ -69,7 +69,7 @@
   "privacy_link": "Política de privacidad",
   "language_label": "Idioma",
   "privacy_title": "Política de privacidad de Crosstune",
-  "updated": "Última actualización: 1 de noviembre de 2026",
+  "updated": "Última actualización: 6 de noviembre de 2026",
   "short_h2": "En resumen",
   "short_items": [
     "Sin cuenta, publicidad ni analíticas.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "Cuando escribís el nombre de una canción en lugar de un link, Crosstune envía ese nombre a las búsquedas públicas de canciones de Deezer y Apple, y muestra las canciones que encuentra, así podés abrir la canción que buscabas sin su link. Cuando pedís la letra o los acordes de una canción, la app envía el título y el artista a servicios que no necesitan cuenta ni clave: LRCLIB, YouTube Music, NetEase Cloud Music y Letras para las letras, Ultimate Guitar, Cifra Club, LaCuerda y U-FRET para los acordes, y la búsqueda y las páginas de canciones de Apple para encontrar el nombre original de la canción, o quién cantó primero y quién escribió la canción de un cover. Cuando activás la traducción en la letra, la app envía sus líneas a Google Translate, o a MyMemory cuando Google Translate no puede traducirlas, servicios de traducción que no piden cuenta, salvo que las traduzca ChatGPT, como se explica más abajo. Android detecta en tu celular el idioma de la canción, y las letras que ya están en el idioma al que traducís, o en uno que elegiste no traducir, no se envían. Las lecturas, como el kana sobre los kanji, se calculan en tu teléfono y no se envían a ningún lado. Una palabra que tocás para ver su significado se envía de la misma forma. Si la app está en inglés, una palabra en inglés se busca en el diccionario de Wiktionary. Las líneas que guardás quedan en tu teléfono. Para el japonés, un diccionario más grande, UniDic, se descarga una vez de Maven Central, solo con Wi-Fi u otra red que no sea medida, lo que, como cualquier solicitud, expone tu dirección IP a Maven Central."
+      "Cuando escribís el nombre de una canción en lugar de un link, Crosstune envía ese nombre a las búsquedas públicas de canciones de Deezer y Apple, y muestra las canciones que encuentra, así podés abrir la canción que buscabas sin su link. Cuando pedís la letra o los acordes de una canción, la app envía el título y el artista a servicios que no necesitan cuenta ni clave: LRCLIB, YouTube Music, NetEase Cloud Music y Letras para las letras, Ultimate Guitar, Cifra Club, LaCuerda, U-FRET y J-Total para los acordes, y la búsqueda y las páginas de canciones de Apple para encontrar el nombre original de la canción, o quién cantó primero y quién escribió la canción de un cover. Cuando activás la traducción en la letra, la app envía sus líneas a Google Translate, o a MyMemory cuando Google Translate no puede traducirlas, servicios de traducción que no piden cuenta, salvo que las traduzca ChatGPT, como se explica más abajo. Android detecta en tu celular el idioma de la canción, y las letras que ya están en el idioma al que traducís, o en uno que elegiste no traducir, no se envían. Las lecturas, como el kana sobre los kanji, se calculan en tu teléfono y no se envían a ningún lado. Una palabra que tocás para ver su significado se envía de la misma forma. Si la app está en inglés, una palabra en inglés se busca en el diccionario de Wiktionary. Las líneas que guardás quedan en tu teléfono. Para el japonés, un diccionario más grande, UniDic, se descarga una vez de Maven Central, solo con Wi-Fi u otra red que no sea medida, lo que, como cualquier solicitud, expone tu dirección IP a Maven Central."
     ],
     [
       "p",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "La extensión de Crosstune para Chrome, Edge, Brave y Firefox abre los links de música en los que hacés clic en el servicio que elijas en sus opciones. Solo mira páginas de los sitios de música que soporta. Para saber qué canción, álbum o artista es un link, pide la página pública o la API pública del servicio de origen. Para abrir el elemento mismo, manda el título y el artista a la búsqueda del destino, o a ListenBrainz para Spotify, como la app. Sus ajustes quedan en el navegador de tu computadora. No tiene cuenta, publicidad ni analíticas, y no le manda nada al desarrollador."
+      "La extensión de Crosstune para Chrome, Edge, Brave y Firefox abre los links de música en los que hacés clic en el servicio que elijas en sus opciones. Solo mira páginas de los sitios de música que soporta. Para saber qué canción, álbum o artista es un link, pide la página pública o la API pública del servicio de origen. Para abrir el elemento mismo, manda el título y el artista a la búsqueda del destino, o a ListenBrainz para Spotify, como la app. También muestra la letra de lo que suena en un panel lateral, y para eso lee el título y el artista de la página del sitio de música. Solo mientras ese panel está abierto, los manda a LRCLIB, YouTube Music, NetEase Cloud Music y Letras para encontrar la letra, como la app. Un video que no dice que es música no se busca. Sus ajustes quedan en el navegador de tu computadora. No tiene cuenta, publicidad ni analíticas, y no le manda nada al desarrollador."
     ],
     [
       "h2",

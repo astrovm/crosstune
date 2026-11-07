@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Abre los links de música en el servicio que preferís."
-  },
-  "actionTitle": {
-    "message": "Ajustes de Crosstune"
-  },
-  "optionsEnabled": {
-    "message": "Abrir los links de música en el servicio de abajo"
-  },
-  "optionsService": {
-    "message": "Abrir en"
-  },
-  "optionsAccess": {
-    "message": "Crosstune necesita acceso a los sitios de música para abrirte los links."
-  },
-  "optionsAllow": {
-    "message": "Permitir"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Abre los links de música en el servicio que preferís y muestra la letra de lo que suena." },
+  "actionTitle": { "message": "Letras de Crosstune" },
+  "optionsEnabled": { "message": "Abrir los links de música en el servicio de abajo" },
+  "optionsService": { "message": "Abrir en" },
+  "optionsAccess": { "message": "Crosstune necesita acceso a los sitios de música para abrir links y mostrar letras." },
+  "optionsAllow": { "message": "Permitir" },
+  "lyricsNoSong": { "message": "Poné una canción en un sitio de música" },
+  "lyricsLoading": { "message": "Buscando la letra" },
+  "lyricsNone": { "message": "No hay letra para esta canción" },
+  "lyricsInstrumental": { "message": "Instrumental" },
+  "lyricsOffline": { "message": "Estás sin conexión" },
+  "lyricsUnavailable": { "message": "No se pudo llegar a los sitios de letras" },
+  "lyricsRetry": { "message": "Reintentar" },
+  "lyricsSettings": { "message": "Ajustes" }
 }

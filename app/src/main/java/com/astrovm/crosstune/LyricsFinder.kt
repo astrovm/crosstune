@@ -718,13 +718,16 @@ internal class LyricsFinder(
      * Who first sang the song [cover] covers: named in its title, or the first singer of a song of
      * its name. A title that doesn't say it's a cover, as Marc Strain's "Smalltown Boy", may be the
      * singer's own song of a famous name, as Haley Reinhart's "Creep" is next to Stone Temple
-     * Pilots': it's a cover only when Apple credits the first singer's song to a writer of this one.
+     * Pilots': it's a cover only when that singer is far ahead and Apple credits their song to a
+     * writer of this one. One that says it is takes either: covers of a famous song can come close
+     * to its singer's own count, and the writers still tell.
      */
     private suspend fun coveredArtist(cover: MusicMetadata): String? {
         val covered = SongNames.coverOf(cover.title)
         covered?.artist?.let { return it }
         val first = firstSinger(covered?.title ?: cover.title, cover.artist) ?: return null
-        return first.artist.takeIf { covered != null || writtenBySame(cover, first.id) }
+        val saysSo = covered != null
+        return first.artist.takeIf { (saysSo && first.farAhead) || ((saysSo || first.farAhead) && writtenBySame(cover, first.id)) }
     }
 
     /** Whether Apple credits [cover], as the iTunes Store has it, and the store's song [id] to a writer in common. */
@@ -742,9 +745,9 @@ internal class LyricsFinder(
     }
 
     /**
-     * Who first sang [song], as most of the iTunes Store's songs of that name are theirs, many times
-     * more than anyone else's: a famous song's covers are many, but by as many singers. A name many
-     * songs share, as "Hello", has no one far ahead, so it's not known whose a cover of it is.
+     * Who most likely first sang [song], as the iTunes Store has the most songs of that name by them.
+     * Being many times more than anyone else's says it's theirs by itself: a famous song's covers are
+     * many, but by as many singers. A name many songs share, as "Hello", has no one [FirstSinger.farAhead].
      */
     private suspend fun firstSinger(song: String, cover: String): FirstSinger? = try {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
@@ -757,7 +760,7 @@ internal class LyricsFinder(
             .filter { SongNames.same(SongNames.bareTitle(it.optString("trackName")), song) && it.optString("artistName").let { artist -> artist.isNotBlank() && !SongNames.sameArtist(artist, cover) } }
         val singers = songs.groupBy { it.optString("artistName") }.entries.sortedByDescending { it.value.size }
         val next = singers.getOrNull(1)?.value?.size ?: 0
-        singers.firstOrNull()?.takeIf { it.value.size >= MIN_FIRST_SINGER_SONGS && it.value.size >= FIRST_SINGER_LEAD * next }?.let { FirstSinger(it.key, it.value.first().optLong("trackId")) }
+        singers.firstOrNull()?.takeIf { it.value.size >= MIN_FIRST_SINGER_SONGS }?.let { FirstSinger(it.key, it.value.first().optLong("trackId"), it.value.size >= FIRST_SINGER_LEAD * next) }
     } catch (_: IOException) {
         null
     } catch (_: JSONException) {
@@ -765,7 +768,7 @@ internal class LyricsFinder(
     }
 
     /** Who first sang a song, and one of their recordings of it in the iTunes Store, by its [id]. */
-    private data class FirstSinger(val artist: String, val id: Long)
+    private data class FirstSinger(val artist: String, val id: Long, val farAhead: Boolean)
 
     /** What [best] found, and whether it's the recording's own words, timed for it. */
     private data class Best(val lyrics: Lyrics, val own: Boolean = false)

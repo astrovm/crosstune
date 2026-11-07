@@ -53,6 +53,7 @@ Once you've opened something, anything left or broken later shows as **Things to
 - **Shortcuts.** One-tap paste, home screen widgets, Quick Settings tiles and a long-press shortcut on the app icon.
 - **No tracking.** Drops tracking bits like `?si=` from links.
 - **16 languages.** Follows your phone, or pick one in Settings.
+- **On your computer.** The [browser extension](extension), for Chrome, Edge, Brave and Firefox, opens music links in the service you pick, and shows the lyrics of what's playing on a music site in its side panel, in time where the site says how far in the song is.
 
 ## Supported links
 
@@ -72,7 +73,7 @@ Once you've opened something, anything left or broken later shows as **Things to
 
 Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist.
 
-Bandcamp's app opens no song page, only searches. In it Crosstune opens a search for the song, and the song is one tap away. This needs you logged in to Bandcamp's app: logged out, it shows its home. In the browser, the song's page opens.
+Bandcamp's app opens no song page and plays nothing it's asked for, only searches. In it Crosstune opens a search for the song, so there's no **Play**, and the song is one tap away. Logged out of Bandcamp's app, a search can be lost if the app wasn't already open, and it shows its home. In the browser, the song's page opens.
 
 ## 🛠️ Troubleshooting
 
@@ -86,13 +87,13 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 
 - No account, analytics or ads. History stays on your device.
 - A link's service is asked only for its title, artist and cover. To open the song itself, the title and artist also go to the search of the app it opens in. For Spotify, whose search needs an account, they go to [ListenBrainz](https://listenbrainz.org) instead, which knows Spotify's songs by name, and Spotify's public song pages are read. A song ListenBrainz doesn't know yet is looked for among its artist's most played: the artist's name goes to [MusicBrainz](https://musicbrainz.org), and Spotify's public page for the artist is read. Going straight to the app with **Play right away** off, a search opens there instead, and nothing is sent.
-- Lyrics, chords and translations are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music, [Letras](https://www.letras.com), Apple's song search and song pages, which also say who first sang and wrote a cover's song, [Ultimate Guitar](https://www.ultimate-guitar.com), [Cifra Club](https://www.cifraclub.com.br), [LaCuerda](https://acordes.lacuerda.net), [U-FRET](https://www.ufret.jp), [Google Translate](https://translate.google.com), [MyMemory](https://mymemory.translated.net) and [Wiktionary](https://en.wiktionary.org). Readings are worked out on your phone. For Japanese, a bigger dictionary, UniDic, is downloaded once from [Maven Central](https://central.sonatype.com/artifact/com.atilika.kuromoji/kuromoji-unidic), on Wi-Fi.
+- Lyrics, chords and translations are looked up by title and artist on [LRCLIB](https://lrclib.net), YouTube Music, NetEase Cloud Music, [Letras](https://www.letras.com), Apple's song search and song pages, which also say who first sang and wrote a cover's song, [Ultimate Guitar](https://www.ultimate-guitar.com), [Cifra Club](https://www.cifraclub.com.br), [LaCuerda](https://acordes.lacuerda.net), [U-FRET](https://www.ufret.jp), [J-Total Music](https://music.j-total.net), [Google Translate](https://translate.google.com), [MyMemory](https://mymemory.translated.net) and [Wiktionary](https://en.wiktionary.org). Readings are worked out on your phone. For Japanese, a bigger dictionary, UniDic, is downloaded once from [Maven Central](https://central.sonatype.com/artifact/com.atilika.kuromoji/kuromoji-unidic), on Wi-Fi.
 - Signed in with ChatGPT, the AI features send OpenAI the song, its lyrics and what you ask. Your sign-in stays on your phone.
 - A song's meaning also asks [MusicBrainz](https://musicbrainz.org), by MetaBrainz, for the year it came out and its album, by title and artist, so ChatGPT is told them instead of searching for them. What it answers is kept on your phone.
 - Naming a song uses the microphone only while listening, and only a fingerprint goes to Shazam, never the audio. Offline, the sound heard waits in the app's memory, never saved, until the phone is back online. Apple is then asked how long the recording Shazam named is, so its lyrics are timed for it. The visuals use it to move to your music, and record and send nothing. Lining the words up to the singing hears it on your phone and sends nothing. Its speech model is downloaded once from [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp).
 - **Report a problem** in the lyrics sends the song, its timing and what you write to Crosstune's only server, on Cloudflare, when you tap **Send**. It keeps no IP address, only the developer reads reports, and each is deleted after 180 days. With **Report song problems automatically** on, problems Crosstune finds go too, once per song.
 - Shizuku or root is used only to change Android's link, microphone, lyrics and floating settings for Crosstune, and to let lyrics hear what music apps play without Android asking each time. That sound stays on your phone, while a notification shows it.
-- The [browser extension](extension) asks a link's service for its title and artist, and the search of the service it opens in, or ListenBrainz for Spotify, as the app does. Its settings stay in your browser, and it sends nothing to the developer.
+- The [browser extension](extension) asks a link's service for its title and artist, and the search of the service it opens in, or ListenBrainz for Spotify, as the app does. Its lyrics panel reads the song's title and artist from the music site's page. Only while the panel is open, it asks LRCLIB, YouTube Music, NetEase Cloud Music and Letras for the words by title and artist, and a video that doesn't say it's music isn't looked up. Its settings stay in your browser, and it sends nothing to the developer.
 
 Full [privacy policy](https://crosstune.4st.li/privacy/).
 

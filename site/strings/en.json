@@ -69,7 +69,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: November 1, 2026",
+  "updated": "Last updated: November 6, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -119,7 +119,7 @@
     ],
     [
       "p",
-      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics or chords, the app sends the song's title and artist to services that need no account or key: LRCLIB, YouTube Music, NetEase Cloud Music and Letras for lyrics, Ultimate Guitar, Cifra Club, LaCuerda and U-FRET for chords, and Apple's song search and song pages to find the song's original name, or who first sang and wrote a cover's song. When you turn on Translation in the lyrics, the app sends their lines to Google Translate, or to MyMemory when Google Translate can't translate them, translation services that need no account, unless ChatGPT translates them, as described below. Android tells which language a song is in on your phone, and lyrics already in the language you translate into, or in one you chose not to translate, aren't sent. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. If the app is in English, an English word is looked up in Wiktionary's dictionary instead. Lines you save stay on your phone. For Japanese, a bigger dictionary, UniDic, is downloaded once from Maven Central, only on Wi-Fi or another network that isn't metered, which, like any request, exposes your IP address to Maven Central."
+      "When you type a song's name instead of a link, Crosstune sends the name to Deezer's and Apple's public song searches, and shows the songs they find, so you can open the song you meant without its link. When you ask for a song's lyrics or chords, the app sends the song's title and artist to services that need no account or key: LRCLIB, YouTube Music, NetEase Cloud Music and Letras for lyrics, Ultimate Guitar, Cifra Club, LaCuerda, U-FRET and J-Total for chords, and Apple's song search and song pages to find the song's original name, or who first sang and wrote a cover's song. When you turn on Translation in the lyrics, the app sends their lines to Google Translate, or to MyMemory when Google Translate can't translate them, translation services that need no account, unless ChatGPT translates them, as described below. Android tells which language a song is in on your phone, and lyrics already in the language you translate into, or in one you chose not to translate, aren't sent. Readings, like kana over kanji, are worked out on your phone and sent nowhere. A word you tap for its meaning is sent the same way. If the app is in English, an English word is looked up in Wiktionary's dictionary instead. Lines you save stay on your phone. For Japanese, a bigger dictionary, UniDic, is downloaded once from Maven Central, only on Wi-Fi or another network that isn't metered, which, like any request, exposes your IP address to Maven Central."
     ],
     [
       "p",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "Crosstune's browser extension, for Chrome, Edge, Brave and Firefox, opens the music links you click in the service you pick in its options. It looks only at pages on the music sites it supports. To name a link's song, album or artist, it requests the source service's public page or public API. To open the item itself, it sends the title and artist to the destination's search, or to ListenBrainz for Spotify, as the app does. Its settings stay in the browser on your computer. It has no account, advertising or analytics, and sends nothing to the developer."
+      "Crosstune's browser extension, for Chrome, Edge, Brave and Firefox, opens the music links you click in the service you pick in its options. It looks only at pages on the music sites it supports. To name a link's song, album or artist, it requests the source service's public page or public API. To open the item itself, it sends the title and artist to the destination's search, or to ListenBrainz for Spotify, as the app does. It also shows the lyrics of what's playing in a side panel, reading the song's title and artist from the music site's page. Only while that panel is open, it sends them to LRCLIB, YouTube Music, NetEase Cloud Music and Letras to find the words, as the app does. A video that doesn't say it's music isn't looked up. Its settings stay in the browser on your computer. It has no account, advertising or analytics, and sends nothing to the developer."
     ],
     [
       "h2",

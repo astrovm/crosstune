@@ -4,7 +4,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -128,9 +130,10 @@ Singing to the morning light</div>"""
 
     private fun answer(request: Request, pages: Map<String, String>) =
         pages.entries.firstOrNull { request.url.toString().startsWith(it.key) }?.let { FakeSpotify.html(request, it.value) }
-            // Cifra Club's search and Apple's, where a test doesn't say, find nothing.
+            // Cifra Club's search, Apple's and J-Total's, where a test doesn't say, find nothing.
             ?: when (request.url.host) {
                 "solr.sscdn.co" -> FakeSpotify.html(request, cifraClubSearch())
+                "music.j-total.net" -> FakeSpotify.html(request, "")
                 "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> FakeSpotify.html(request, "", code = 404)
             }
@@ -177,6 +180,160 @@ Singing to the morning light</div>"""
             )
         }
         assertEquals(0, (chords(river, english) as ChordFinder.Chords.Found).sheet.capo)
+    }
+
+    /** J-Total's page, in Shift_JIS as it serves them, saying nothing of that. */
+    private fun jTotalPage(request: Request, page: String) = okhttp3.Response.Builder()
+        .request(request).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+        .body(page.toByteArray(java.nio.charset.Charset.forName("Shift_JIS")).toResponseBody("text/html".toMediaType()))
+        .build()
+
+    /** A song in J-Total's results. */
+    private fun jTotalResult(path: String, title: String, artist: String = "歩く人") =
+        """<td><a href="//music.j-total.net/data/$path.html" target="_blank"><li></a> <a href="https://music.j-total.net/data/$path.html" target=""><font size="3"><b>$title</b></font></a>
+        <tr><td>\u3000\u3000歌：$artist/詞：誰か/曲：誰か</td></tr>"""
+
+    private fun jTotalSong(vararg lines: String) = "<tt><!--HPSTART-->${lines.joinToString("<br>\n")}<!--HPEND--></tt>"
+
+    /** J-Total answering what's searched for with [searches], and each sheet's page from [pages], neither of the other sites having anything. */
+    private fun jTotal(searches: Map<String, String>, pages: Map<String, String> = emptyMap()) {
+        fake.handler = { request ->
+            val path = request.url.encodedPath
+            when {
+                request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch())
+                request.url.host != "music.j-total.net" -> FakeSpotify.html(request, "")
+                path == "/db/search.cgi" -> jTotalPage(request, searches.entries.firstOrNull { "word=${java.net.URLEncoder.encode(it.key, "Shift_JIS")}&" in request.url.encodedQuery.orEmpty() }?.value.orEmpty())
+                else -> jTotalPage(request, pages[path].orEmpty())
+            }
+        }
+    }
+
+    private val jTotalChord = """<a href="JavaScript:jump_1('../../../cd/Am.html');">Am</a>"""
+
+    @Test
+    fun japaneseWordsOnNoOtherSiteAreFoundOnJTotalByTheSongsJapaneseName() {
+        jTotal(
+            mapOf("川の道" to jTotalResult("kawa/002", "川の道〜初心者向け簡単コードVer.〜") + jTotalResult("kawa/001", "川の道") + jTotalResult("kawa/003", "別の歌")),
+            mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        )
+        val found = chords(kawa, japanese) as ChordFinder.Chords.Found
+        assertEquals(ChordSite.J_TOTAL, found.sheet.site)
+        assertEquals("https://music.j-total.net/data/kawa/001.html", found.sheet.url)
+        assertEquals(listOf(SheetLine("川の道を歩いていく", listOf(Chord(0, "Am"))), SheetLine("朝の光に歌っている", listOf(Chord(0, "Am")))), found.sheet.lines)
+        // Asked in Shift_JIS, as it reads its searches.
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://music.j-total.net/db/search.cgi") && "word=%90%EC%82%CC%93%B9" in it })
+        // Its easier version comes after, and another song is never read.
+        assertFalse(fake.requestedUrls.any { it.endsWith("kawa/003.html") })
+    }
+
+    @Test
+    fun jTotalsSongOfTheSameNameBySomeoneElseWaitsForTheArtists() {
+        jTotal(
+            mapOf("川の道" to jTotalResult("other/001", "川の道", "別の人") + jTotalResult("kawa/001", "川の道")),
+            mapOf(
+                "/data/other/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく"),
+                "/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている")
+            )
+        )
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun jTotalsEasierVersionIsReadWhenItsOwnWontDo() {
+        jTotal(
+            mapOf("川の道" to jTotalResult("kawa/002", "川の道〜初心者向け簡単コードVer.〜") + jTotalResult("kawa/001", "川の道")),
+            mapOf("/data/kawa/001.html" to "<html>no sheet here</html>", "/data/kawa/002.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        )
+        assertEquals("https://music.j-total.net/data/kawa/002.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun aSongNamedInLatinLettersIsLookedUpOnJTotalByItsNameInJapan() {
+        val named = MusicMetadata("Kawa no Michi", "Aruku Hito")
+        val jTotalPages = mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), jTotalPages)
+        val pages = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else pages(request)
+        }
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun aNameNetEaseGivesWithItsVersionAndOneJTotalCantReadAreNotWhatJTotalIsAskedFor() {
+        val named = MusicMetadata("Kawa no Michi", "Aruku Hito")
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSheet))
+        val pages = fake.handler
+        // A Chinese song first, with a kanji Shift_JIS has no place for, then the song's own name with its version after it.
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, netEase("另一半" to listOf("別の人"), "川の道(Single Version)(オリジナルカラオケ)" to listOf("歩く人"))) else pages(request)
+        }
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(named, japanese) as ChordFinder.Chords.Found).sheet.url)
+        // The name Shift_JIS can't write is never sent as a mangled "?".
+        assertFalse(fake.requestedUrls.any { it.startsWith("https://music.j-total.net/db/search.cgi") && "%3F" in it })
+    }
+
+    private val jTotalSheet = jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている")
+
+    @Test
+    fun anotherSongOnJTotalIsNeverRead() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/003", "別の歌")), mapOf("/data/kawa/003.html" to jTotalSheet))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertFalse(fake.requestedUrls.any { it.endsWith("kawa/003.html") })
+    }
+
+    @Test
+    fun jTotalsSheetByTheArtistComesFirstAndItsOwnBeforeItsEasierVersion() {
+        // Each of them would fit, so only the order says which is taken.
+        val pages = listOf("other/001", "kawa/001", "kawa/002").associate { "/data/$it.html" to jTotalSheet }
+        val other = jTotalResult("other/001", "川の道", "別の人")
+        val own = jTotalResult("kawa/001", "川の道")
+        val easier = jTotalResult("kawa/002", "川の道〜初心者向け簡単コードVer.〜")
+        jTotal(mapOf("川の道" to other + easier + own), pages)
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+        jTotal(mapOf("川の道" to other + easier), pages)
+        assertEquals("https://music.j-total.net/data/kawa/002.html", (chords(kawa, japanese) as ChordFinder.Chords.Found).sheet.url)
+    }
+
+    @Test
+    fun aJTotalSheetThatWontAnswerIsUnavailableNotNoChords() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")))
+        val site = fake.handler
+        fake.handler = { request -> if (request.url.encodedPath == "/data/kawa/001.html") FakeSpotify.html(request, "", code = 500) else site(request) }
+        assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese))
+    }
+
+    @Test
+    fun aSongNamedInJapaneseAlreadyIsNeverLookedUpByOtherNamesForJTotal() {
+        jTotal(emptyMap())
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertFalse(fake.requestedUrls.any { "music.163.com" in it })
+    }
+
+    @Test
+    fun aJapaneseTitleOrArtistAloneStillLooksUpTheOtherNameForJTotal() {
+        val pages = mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "川の道を歩いていく", jTotalChord, "朝の光に歌っている"))
+        for (song in listOf(MusicMetadata("川の歌", "Aruku Hito"), MusicMetadata("Kawa no Michi", "歩く人"))) {
+            jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), pages)
+            val site = fake.handler
+            fake.handler = { request ->
+                if (request.url.host == "music.163.com") FakeSpotify.html(request, """{"result":{"songs":[{"name":"川の道","artists":[{"name":"歩く人"}]}]}}""") else site(request)
+            }
+            assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
+        }
+    }
+
+    @Test
+    fun wordsInOtherLettersNeverAskJTotal() {
+        jTotal(emptyMap())
+        chords(river, english)
+        assertFalse(fake.requestedUrls.any { "j-total" in it })
+    }
+
+    @Test
+    fun aSheetOfOtherWordsOnJTotalIsNoSheet() {
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSong(jTotalChord, "まるで違う歌の言葉です", jTotalChord, "それも別の話になります")))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
     }
 
     @Test
@@ -548,6 +705,7 @@ Singing to the morning light</div>"""
                 request.url.encodedPath == "/busca.php" -> FakeSpotify.html(request, laCuerdaSearch(Triple("walkers", "The Walkers", listOf(LaCuerdaSong("River Road", "R-1", "river_road")))))
                 request.url.encodedPath == "/search.php" && request.url.host == "www.ufret.jp" -> FakeSpotify.html(request, uFretResult(2, "川の道", "歩く人"))
                 request.url.encodedPath == "/search.php" -> FakeSpotify.html(request, ugSearch(ugResult("https://tabs.ultimate-guitar.com/tab/gone-1", "River Road", "The Walkers", 900)))
+                request.url.encodedPath == "/db/search.cgi" -> jTotalPage(request, jTotalResult("gone/001", "川の道"))
                 request.url.host == "music.163.com" -> FakeSpotify.html(request, "{}")
                 request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 else -> FakeSpotify.html(request, "", code = 404)
@@ -561,6 +719,7 @@ Singing to the morning light</div>"""
         )))
         assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
         assertTrue("https://www.ufret.jp/song.php?data=2" in fake.requestedUrls)
+        assertTrue("https://music.j-total.net/data/gone/001.html" in fake.requestedUrls)
     }
 
     @Test

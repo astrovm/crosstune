@@ -10,7 +10,7 @@ internal data class Chord(val at: Int, val name: String)
 internal data class SheetLine(val text: String, val chords: List<Chord>)
 
 /** Where a song's chords were found. */
-internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA, CIFRA_CLUB }
+internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA, CIFRA_CLUB, J_TOTAL }
 
 /** A song's chords as a sheet has them, with the fret a capo goes on to play them, and where it's from. */
 internal data class ChordSheet(val lines: List<SheetLine>, val capo: Int = 0, val site: ChordSite, val url: String)
@@ -81,6 +81,13 @@ internal object ChordSheets {
     private val ugTab = Regex("""\[/?tab]""")
     private val section = Regex("""^\s*\[[^\]]*]\s*$""")
     private val solfege = mapOf("DO" to "C", "RE" to "D", "MI" to "E", "FA" to "F", "SOL" to "G", "LA" to "A", "SI" to "B")
+    private val jTotalLineEnd = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
+
+    /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
+    private val jTotalChord = Regex("""<a [^>]*>([^<]+)</a>(?:on([A-G][#b]?))?""")
+    private val markup = Regex("""<[^>]+>""")
+    private val sourceSpace = Regex("""[ \t\r\n]+""")
+
     private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
     /** U-FRET's sheet: each line its words with each chord in brackets where it's played, "[Am]五月[Em]雨". */
@@ -109,6 +116,45 @@ internal object ChordSheets {
         if (bass.isNotEmpty()) letters.append('/').append(solfege.getValue(bass)).append(bassAccidental)
         return letters.toString()
     }
+
+    /**
+     * J-Total's sheet, as written into its page: a line of chords over the line of words they're
+     * played on, each over its letter in a font where Japanese takes two columns. Only a <br> ends
+     * a line, and spaces count as a browser counts them, as its source wraps anywhere.
+     */
+    fun fromJTotal(sheet: String): List<SheetLine> {
+        val lines = sheet.split(jTotalLineEnd).map { it.replace(sourceSpace, " ").trim(' ') }.filter { it.isNotEmpty() }
+        val result = mutableListOf<SheetLine>()
+        var index = 0
+        while (index < lines.size) {
+            val line = lines[index++]
+            if (!jTotalChord.containsMatchIn(line)) {
+                result += SheetLine(line, emptyList())
+                continue
+            }
+            val chords = mutableListOf<Pair<Int, String>>()
+            var column = 0
+            var from = 0
+            jTotalChord.findAll(line).forEach { match ->
+                val (name, bass) = match.destructured
+                column += columns(line.substring(from, match.range.first))
+                chords += column to if (bass.isEmpty()) name else "$name/$bass"
+                column += columns(match.value.replace(markup, ""))
+                from = match.range.last + 1
+            }
+            val words = lines.getOrNull(index)?.takeUnless { jTotalChord.containsMatchIn(it) }
+            if (words != null) index++
+            result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at), name) })
+        }
+        return result
+    }
+
+    /** How wide [text] is in a font where all but Latin letters and half-width kana take two columns. */
+    private fun columns(text: String) = text.sumOf { if (it.code > 0xFF && it !in '\uFF61'..'\uFF9F') 2 else 1 as Int }
+
+    /** The first letter of [words] that starts at or after [column]. */
+    private fun letterAt(words: String, column: Int): Int =
+        (0..words.length).first { it == words.length || columns(words.substring(0, it)) >= column }
 
     /**
      * Ultimate Guitar's sheet: a line of chords over the line of words they're played on, each over

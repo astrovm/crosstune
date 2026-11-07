@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Opent muzieklinks in de dienst die jij kiest."
-  },
-  "actionTitle": {
-    "message": "Crosstune-instellingen"
-  },
-  "optionsEnabled": {
-    "message": "Muzieklinks openen in de dienst hieronder"
-  },
-  "optionsService": {
-    "message": "Openen in"
-  },
-  "optionsAccess": {
-    "message": "Crosstune heeft toegang tot de muzieksites nodig om links voor je te openen."
-  },
-  "optionsAllow": {
-    "message": "Toestaan"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Opent muzieklinks in de dienst van je keuze en toont de songtekst van wat er speelt." },
+  "actionTitle": { "message": "Crosstune-songteksten" },
+  "optionsEnabled": { "message": "Muzieklinks openen in de dienst hieronder" },
+  "optionsService": { "message": "Openen in" },
+  "optionsAccess": { "message": "Crosstune heeft toegang tot de muzieksites nodig om links te openen en songteksten te tonen." },
+  "optionsAllow": { "message": "Toestaan" },
+  "lyricsNoSong": { "message": "Speel een nummer af op een muzieksite" },
+  "lyricsLoading": { "message": "Songtekst zoeken" },
+  "lyricsNone": { "message": "Geen songtekst voor dit nummer" },
+  "lyricsInstrumental": { "message": "Instrumentaal" },
+  "lyricsOffline": { "message": "Je bent offline" },
+  "lyricsUnavailable": { "message": "Kan de songtekstsites niet bereiken" },
+  "lyricsRetry": { "message": "Opnieuw" },
+  "lyricsSettings": { "message": "Instellingen" }
 }
