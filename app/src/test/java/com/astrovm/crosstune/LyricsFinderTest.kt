@@ -1356,6 +1356,18 @@ class LyricsFinderTest {
         assertEquals(Lyrics.Instrumental, found(hatsukoi))
         japaneseSong(netEase = { ownSong }, lyric = "[00:00.000] 作词 : Someone")
         assertEquals(Lyrics.None, found(hatsukoi))
+        // Crediting a composer and no lyricist, with no words, is how it keeps a recording no one sings on.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作曲 : Someone")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        // With a lyricist too, someone wrote words it just doesn't have.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作词 : Someone\n[00:00.00-1] 作曲 : Someone")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // Words under a composer's credit are words, even when they're kept garbled and so don't count.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00] 作曲 : Someone\n[00:05.00] Sung line")
+        assertEquals("Sung line", (found(hatsukoi) as Lyrics.Found).words)
+        val garbled = String("나는 너를 사랑해 나는 너를 사랑해".toByteArray(Charsets.UTF_8), charset("GBK"))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00] 作曲 : Someone\n[00:05.00] $garbled")
+        assertEquals(Lyrics.None, found(hatsukoi))
         japaneseSong(netEase = { """{"result":{"songs":[{"id":9,"name":"Another Song","artists":[{"name":"三田寛子"}]}]}}""" })
         assertEquals(Lyrics.None, found(hatsukoi))
     }
