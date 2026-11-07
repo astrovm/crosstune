@@ -1235,6 +1235,35 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aLookupAsksNetEaseAndAppleForASongsOtherNamesOnceWhicheverStepsNeedThem() {
+        val song = MusicMetadata("The River Song", "Taro Yamada")
+        val namesAsked = { fake.requestedUrls.count { "music.163.com" in it } to fake.requestedUrls.count { "itunes.apple.com" in it } }
+        // U-FRET and J-Total both want them, and nowhere has a sheet.
+        fake.handler = uFret(emptyMap(), mapOf("https://music.163.com/api/search/get" to "{}", "https://www.ultimate-guitar.com/search.php" to ugSearch()))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+        assertEquals(1 to 1, namesAsked())
+        // J-Total reads the names U-FRET was given, and finds the sheet by one of them.
+        fake.requestedUrls.clear()
+        jTotal(mapOf("川の歌" to jTotalResult("kawa/001", "川の歌")), mapOf("/data/kawa/001.html" to jTotalSheet))
+        val pages = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") FakeSpotify.html(request, netEase("川の歌" to listOf("山田太郎"))) else pages(request)
+        }
+        assertEquals("https://music.j-total.net/data/kawa/001.html", (chords(song, japanese) as ChordFinder.Chords.Found).sheet.url)
+        assertEquals(1 to 0, namesAsked())
+        // A song named in Japanese needs no other names at all.
+        fake.requestedUrls.clear()
+        fake.handler = uFret(emptyMap(), mapOf("https://www.ultimate-guitar.com/search.php" to ugSearch()))
+        assertEquals(ChordFinder.Chords.None, chords(kawa, japanese))
+        assertEquals(0 to 0, namesAsked())
+        // Each lookup asks once for itself: nothing is kept from one to the next.
+        fake.handler = uFret(emptyMap(), mapOf("https://music.163.com/api/search/get" to "{}", "https://www.ultimate-guitar.com/search.php" to ugSearch()))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+        assertEquals(ChordFinder.Chords.None, chords(song, japanese))
+        assertEquals(2 to 2, namesAsked())
+    }
+
+    @Test
     fun aSongUFretHasOnlyInKatakanaIsFoundAmongTheArtistsSongsByHowItSounds() {
         // No search finds "Plastic Love": U-FRET lists it as "プラスティック・ラブ", on the second page of the singer's.
         val plastic = MusicMetadata("Plastic Love", "Mariya Takeuchi")
