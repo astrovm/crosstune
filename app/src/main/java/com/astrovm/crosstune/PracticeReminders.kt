@@ -108,7 +108,7 @@ internal class PracticeReminders(
             // Turned on again, it starts afresh, whatever was ignored before.
             putInt(KEY_IGNORED, 0)
         }
-        if (on) makeChannel(AppLanguage.wrap(context)) else clear()
+        if (on) makeChannel(AppLanguage.words(context)) else clear()
         arm()
     }
 
@@ -160,8 +160,8 @@ internal class PracticeReminders(
     private fun mayAsk(at: Long) = on && allowed && !practisedLately(preferences.getLong(KEY_DONE_AT, 0), at, zone())
 
     private fun post(due: List<SavedLine>) {
-        // What Android doesn't keep the language of, on versions it doesn't.
-        val words = AppLanguage.wrap(context)
+        // The alarm has no screen, so Android hasn't put the app's language on it.
+        val words = AppLanguage.words(context)
         makeChannel(words)
         val title = words.resources.getQuantityString(R.plurals.practice_reminder_title, due.size, due.size)
         val songs = reminderSongs(due) { first, others -> words.getString(R.string.practice_reminder_songs, first, others) }

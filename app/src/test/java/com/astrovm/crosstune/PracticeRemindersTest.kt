@@ -307,6 +307,21 @@ class PracticeRemindersTest {
     }
 
     @Test
+    fun theAlarmWordsItInTheLanguagePickedEvenWhereAndroidLeavesItToTheScreens() {
+        // The alarm starts the app with no screen, and a process Android hasn't set the app's language on.
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        AppLanguage.set(activity, "de")
+        try {
+            setUpWith(line("One"), line("Two"))
+            firesOn(3)
+            assertEquals("2 Karten zum Üben", shown.single().title())
+            assertEquals("Übungserinnerungen", manager.getNotificationChannel("practice_reminders").name.toString())
+        } finally {
+            AppLanguage.set(activity, null)
+        }
+    }
+
+    @Test
     fun theReceiverTakesTheAlarmAndSetsItAgainAfterWhatLosesIt() {
         // With the phone's own clock, as Android starts it.
         val phone = PracticeReminders(app)
