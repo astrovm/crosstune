@@ -50,9 +50,32 @@ class TriesTest(unittest.TestCase):
         tries = [dict(arm="base", right_at=4.0, blocked=0), dict(arm="head", right_at=2.0, blocked=1), dict(arm="head", right_at=None, blocked=0), dict(arm="head", error="timeout")]
         report = compare.summary(tries)
         self.assertEqual(report["uncounted"], 1)
-        self.assertEqual(report["base"], dict(tries=1, reached=1, blocked=0, median_s=4.0))
-        self.assertEqual(report["head"], dict(tries=2, reached=1, blocked=1, median_s=2.0))
+        self.assertEqual({k: report["base"][k] for k in ("tries", "reached", "blocked", "median_s")}, dict(tries=1, reached=1, blocked=0, median_s=4.0))
+        self.assertEqual({k: report["head"][k] for k in ("tries", "reached", "blocked", "median_s")}, dict(tries=2, reached=1, blocked=1, median_s=2.0))
         self.assertEqual(report["head_first_20"], dict(tries=2, reached=1, blocked=1))
+
+    def test_the_first_launch_is_the_first_qobuz_start_not_crosstunes_own(self):
+        crosstune = [0.0, "START", "", "com.astrovm.crosstune.dev/com.astrovm.crosstune.MainActivity"]
+        self.assertEqual(compare.first_launch(dict(events=[crosstune, [1.0, "START", "https://play.qobuz.com/...", ""], [9.0, "START", "https://play.qobuz.com/...", ""]])), 1.0)
+        self.assertIsNone(compare.first_launch(dict(events=[crosstune, [2.0, "BLOCKED", "qobuz"]])))
+        self.assertIsNone(compare.first_launch({}))
+
+    def test_a_gap_is_taken_pair_by_pair_and_a_pair_missing_a_time_is_left_out(self):
+        def tried(pair, base, head):
+            return [dict(arm="base", index=pair * 2, right_at=base), dict(arm="head", index=pair * 2 + 1, right_at=head)]
+        tries = tried(0, 10.0, 11.0) + tried(1, 20.0, 21.5) + tried(2, 30.0, 30.5) + tried(3, 10.0, None)
+        gap = compare.paired(tries, lambda t: t["right_at"])
+        self.assertEqual((gap["pairs"], gap["median"], gap["mean"]), (3, 1.0, 1.0))
+        self.assertIsNone(compare.paired(tried(0, 1.0, 2.0), lambda t: t["right_at"]))
+
+    def test_a_large_paired_gap_has_a_tight_interval(self):
+        tries = []
+        for pair in range(40):
+            tries += [dict(arm="base", index=pair * 2, right_at=10.0), dict(arm="head", index=pair * 2 + 1, right_at=11.0 + (pair % 2) / 10)]
+        gap = compare.paired(tries, lambda t: t["right_at"])
+        # t at 39 degrees of freedom is 2.0227; the gaps' spread is 0.05064.
+        self.assertAlmostEqual(gap["high"] - gap["mean"], 2.0227 * 0.05064 / 40 ** 0.5, places=3)
+        self.assertGreater(gap["low"], 1.0)
 
 
 if __name__ == "__main__":

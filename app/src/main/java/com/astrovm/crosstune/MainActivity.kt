@@ -534,7 +534,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect { effect ->
                     when (effect) {
                         // Asked long ago, e.g. before Crosstune was left, it's no longer what the user is after.
-                        is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect)
+                        is Effect.Open -> if (SystemClock.elapsedRealtime() - effect.atMs <= STALE_OPEN_MS) open(effect) else effect.qobuz?.started(false)
                         is Effect.Show -> show(effect)
                         Effect.RecognizeElsewhere -> recognizers.firstOrNull { !it.listensHere }?.let { tryStartActivity(it.intent) }
                         is Effect.Share -> {
@@ -1069,8 +1069,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun open(effect: Effect.Open) {
-        if (effect.qobuz?.ready() == false) return
+    private fun open(effect: Effect.Open) {
+        if (effect.qobuz?.superseded == true) return
         val uri = effect.url.toUri()
         val floatOn = floatsOnAfter(effect.finishAfterOpen)
         // In Crosstune's task, an old link can bring back the app's last screen instead of opening the song.

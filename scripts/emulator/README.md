@@ -79,7 +79,7 @@ python3 scripts/emulator/qobuz_try.py emulator-5580 'https://www.deezer.com/trac
 
 `--path` is how it's opened: `straight` from the link, or `open` and `play` on the song's card, which tap the card's buttons where they are on a 1080 x 2400 screen. `--pre other` leaves Qobuz closed on another song first, as it can wake on that. It overwrites the dev app's settings.
 
-`qobuz_compare.py` tries two dev builds in turn on one device, with `qobuz_try.py`, and gives the difference with its 95% interval. It stops at 40 pairs if the second build is no more than 5 points worse, or else goes on to 80. Run it again to pick up from `--out`. It installs each build, so it replaces the dev app, and puts the volume back when done.
+`qobuz_compare.py` tries two dev builds in turn on one device, with `qobuz_try.py`, and gives the difference with its 95% interval. It stops at 40 pairs if the second build is no more than 5 points worse, or else goes on to 80. Run it again to pick up from `--out`. It installs each build, so it replaces the dev app, and puts the volume back when done. It also says, pair by pair with a 95% interval, how much later the second build starts the song and first launches Qobuz: an equal start rate can hide every song starting late.
 
 ```bash
 python3 scripts/emulator/qobuz_compare.py SERIAL main.apk fix.apk 'https://www.deezer.com/track/2425603' 'Expresso Love' --out tries.jsonl

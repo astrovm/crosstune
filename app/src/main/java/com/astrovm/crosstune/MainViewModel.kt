@@ -1467,9 +1467,8 @@ internal class MainViewModel(
     }
 
     /** [app] opened on [song]'s [link], watched from before that if Qobuz's, as it can stay on a loading page there. */
-    private suspend fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
+    private fun openWatched(source: PlaybackSource, song: MusicMetadata, app: String, link: String): Boolean {
         val pending = if (MusicService.ofOwnApp(app) == MusicService.QOBUZ) qobuzNumbers?.prepare(song, app, link) else null
-        if (pending?.ready() == false) throw kotlinx.coroutines.CancellationException("Song open superseded")
         return source.openSong(app, link).also { pending?.started(it) }
     }
 

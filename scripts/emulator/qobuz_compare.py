@@ -3,9 +3,10 @@
 Pairs go base-head, head-base, so neither build always follows the same one, and every other swap needs no install.
 A try that hits Qobuz's server errors, or can't set itself up, is kept in the raw log and doesn't count.
 Stops at --pairs if head is no more than --margin worse, or else goes on to --max-pairs. Picks up from --out when run again.
+Says too how much later head starts and first launches Qobuz than base, pair by pair, with a 95% interval, as an equal rate can hide every song starting late.
 usage: qobuz_compare.py SERIAL BASE_APK HEAD_APK LINK WANT_TITLE --out FILE [--pairs 40] [--max-pairs 80] [--margin 0.05] [--then LINK --then-want TITLE]
 """
-import argparse, hashlib, json, math, subprocess, sys
+import argparse, hashlib, json, math, statistics, subprocess, sys
 from pathlib import Path
 
 APP = "com.astrovm.crosstune.dev"
@@ -52,13 +53,36 @@ def reached(result):
     return result.get("right_at") is not None
 
 
+def first_launch(result):
+    """When Qobuz was first asked to open a song, by the log's clock."""
+    return next((event[0] for event in result.get("events", []) if event[1] == "START" and "qobuz" in event[2]), None)
+
+
+def paired(tries, seconds):
+    """head minus base of seconds(try), pair by pair: the median, the mean, and the mean's 95% interval, with Student's t by its Cornish-Fisher expansion."""
+    pairs = {}
+    for t in tries:
+        if "index" in t:
+            pairs.setdefault(t["index"] // 2, {})[t["arm"]] = seconds(t)
+    gaps = [p["head"] - p["base"] for p in pairs.values() if p.get("head") is not None and p.get("base") is not None]
+    if len(gaps) < 2:
+        return None
+    mean = statistics.fmean(gaps)
+    half = (Z + (Z ** 3 + Z) / (4 * (len(gaps) - 1))) * statistics.stdev(gaps) / math.sqrt(len(gaps))
+    return dict(pairs=len(gaps), median=round(statistics.median(gaps), 3), mean=round(mean, 3), low=round(mean - half, 3), high=round(mean + half, 3))
+
+
 def summary(tries):
     kept = [t for t in tries if counted(t)]
     arms = {name: [t for t in kept if t["arm"] == name] for name in ("base", "head")}
     report = {"uncounted": len(tries) - len(kept)}
     for name, its in arms.items():
-        times = sorted(t["right_at"] for t in its if t.get("right_at") is not None)
-        report[name] = dict(tries=len(its), reached=sum(reached(t) for t in its), blocked=sum(t.get("blocked", 0) for t in its), median_s=times[len(times) // 2] if times else None)
+        times = [t["right_at"] for t in its if t.get("right_at") is not None]
+        launches = [at for at in map(first_launch, its) if at is not None]
+        report[name] = dict(tries=len(its), reached=sum(reached(t) for t in its), blocked=sum(t.get("blocked", 0) for t in its), median_s=statistics.median(times) if times else None,
+                            first_launch_median_s=statistics.median(launches) if launches else None, first_launch_range_s=[min(launches), max(launches)] if launches else None)
+    report["start_gap_s"] = paired(kept, lambda t: t.get("right_at"))
+    report["first_launch_gap_s"] = paired(kept, first_launch)
     first = arms["head"][:20]
     report["head_first_20"] = dict(tries=len(first), reached=sum(reached(t) for t in first), blocked=sum(t.get("blocked", 0) for t in first))
     if arms["base"] and arms["head"]:
