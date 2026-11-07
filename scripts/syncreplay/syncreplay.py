@@ -816,18 +816,23 @@ def score_phone(song_id, kept):
     return first, lag
 
 
+def find_words(gradle):
+    """Each song's recording and words, as the app finds them, for as long as its recording is if that's in by now."""
+    asked = own() / "set.asked"
+    asked.write_text("")
+    try:
+        done = subprocess.run(shlex.split(gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
+    finally:
+        asked.unlink()
+    if done.returncode:
+        sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+
+
 def find_set(args):
     """Finds the songs of songs.tsv as the app does (SyncSetTest), then preps each not prepped yet."""
     OUT.mkdir(parents=True, exist_ok=True)
     if not args.cached:
-        asked = own() / "set.asked"
-        asked.write_text("")
-        try:
-            done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
-        finally:
-            asked.unlink()
-        if done.returncode:
-            sys.exit(done.stdout[-3000:] + done.stderr[-3000:])
+        find_words(args.gradle)
     found = json.loads((OUT / "set.json").read_text())
     for song in found:
         print(f"{song.get('id') or 'not on YouTube Music':12} {song.get('source') or 'no words':14} {'timed' if song.get('timed') else 'untimed':8} {song['title']} - {song['artist']}")
@@ -843,10 +848,14 @@ def find_set(args):
             failures.append(song["id"])
             print(f"Failed {song['id']}: {error}", file=sys.stderr, flush=True)
 
+    waiting = [song for song in found if song.get("id") and song.get("lines") and not complete(song["id"])]
     with ThreadPoolExecutor(args.at_once) as pool:
-        list(pool.map(prepped_one, [song for song in found if song.get("id") and song.get("lines") and not complete(song["id"])]))
+        list(pool.map(prepped_one, waiting))
     if failures:
         sys.exit(f"Prep failed for {len(failures)} songs: {', '.join(failures)}. Rerun set --cached to resume.")
+    # A phone knows how long what it plays is, and passes over words timed for a much longer take: only now can these.
+    if waiting:
+        find_words(args.gradle)
 
 
 def complete(song):

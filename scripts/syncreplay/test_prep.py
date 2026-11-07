@@ -47,6 +47,34 @@ class ResumeTest(unittest.TestCase):
             (r.OUT / 'fake.heard20.json').write_text('{}')
             self.assertEqual([], r.prepped())
 
+class WordsForTheRecordingTest(unittest.TestCase):
+    """Words are found again once the recordings are in, as a phone knows how long what it plays is."""
+
+    def found(self, cached, prepped):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            def gradle(*_, **__):
+                (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
+                return argparse.Namespace(returncode=0)
+
+            if cached:
+                gradle()
+            with patch.object(r.subprocess, 'run', side_effect=gradle) as finding, patch.object(r, 'prep'), patch.object(r, 'complete', return_value=not prepped), patch('sys.stdout'):
+                r.find_set(argparse.Namespace(cached=cached, find_only=False, gradle='fake-gradle', at_once=1))
+            return finding.call_count
+
+    def test_a_song_just_prepped_has_its_words_found_again(self):
+        self.assertEqual(self.found(cached=False, prepped=True), 2)
+
+    def test_with_nothing_new_they_are_found_once(self):
+        self.assertEqual(self.found(cached=False, prepped=False), 1)
+
+    def test_resuming_what_was_found_finds_them_once_it_is_all_in(self):
+        self.assertEqual(self.found(cached=True, prepped=True), 1)
+
+    def test_resuming_with_nothing_left_finds_nothing(self):
+        self.assertEqual(self.found(cached=True, prepped=False), 0)
+
+
 class SharedFolderTest(unittest.TestCase):
     """SYNCREPLAY_DIR keeps the inputs for every checkout, while what one checkout asks and gets stays its own."""
 

@@ -8,6 +8,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * The songs of scripts/syncreplay/songs.tsv, found as the app finds them: each one's recording on
@@ -16,6 +18,7 @@ import java.io.File
  * SYNCREPLAY_DIR when set, and each song's words as ID.lyrics.json: [ms, line] each, or -1 for ms when
  * the words came without timing, and as ID.found.json, as the app keeps them: each line's words too,
  * when it's timed word by word. A row naming a recording, in a fourth column, is held to that one.
+ * Its words are looked for knowing how long its recording is, once that's been fetched, as on a phone.
  */
 @RunWith(RobolectricTestRunner::class)
 class SyncSetTest {
@@ -41,7 +44,8 @@ class SyncSetTest {
             val (title, artist, why) = row
             val song = MusicMetadata(title, artist)
             val id = row.getOrNull(3) ?: runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, song) }?.substringAfter("watch?v=", "")?.substringBefore("&")?.ifEmpty { null }
-            val found = runBlocking { lyrics.lyricsOf(song) } as? LyricsFinder.Lyrics.Found
+            val playing = song.copy(lengthMs = id?.let { recordingMs(File(dir, "$it.wav")) })
+            val found = runBlocking { lyrics.lyricsOf(playing) } as? LyricsFinder.Lyrics.Found
             val entry = JSONObject().put("title", title).put("artist", artist).put("why", why).put("id", id)
             if (id != null && found != null) {
                 val lines = found.lines.map { it.timeMs to it.text }.ifEmpty { found.words.lines().filter { it.isNotBlank() }.map { -1L to it.trim() } }
@@ -58,5 +62,17 @@ class SyncSetTest {
             println("${id ?: "not on YouTube Music"}\t${found?.source ?: "no words"}\t$title\t$artist")
         }
         File(dir, "set.json").writeText(set.toString(1))
+    }
+
+    /** How long a fetched WAV plays, by its size and the bytes a second its header says; null till it's fetched. */
+    private fun recordingMs(wav: File): Long? {
+        if (!wav.exists()) return null
+        val header = ByteArray(WAV_HEADER).also { bytes -> wav.inputStream().use { it.read(bytes) } }
+        return (wav.length() - WAV_HEADER) * 1000 / ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN).getInt(WAV_BYTES_A_SECOND)
+    }
+
+    private companion object {
+        const val WAV_HEADER = 44
+        const val WAV_BYTES_A_SECOND = 28
     }
 }
