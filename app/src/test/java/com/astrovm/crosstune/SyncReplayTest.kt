@@ -174,8 +174,10 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         }
     }
 
-    /** The phone's recognition answers, including false occurrences, on its continuous player clock. */
+    /** The player's rate, which Shazam hears too, so what it says includes it. */
     private var playerSpeed = 1f
+
+    /** The phone's recognition answers, including false occurrences, on its continuous player clock. */
     private var fingerprintStartedAt: Long? = null
 
     private fun replayFingerprints(recorded: JSONObject, fromMs: Long, lengthMs: Long) {

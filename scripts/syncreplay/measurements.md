@@ -408,3 +408,71 @@ out-of-memory kill was logged, so what brought it down isn't known. Hearing also
 
 Run it again with: `scripts/syncreplay/setup.sh` (`REPLAY_CACHE=FOLDER REPLAY_ROCM=1`), then with `SYNCREPLAY_DIR`, `DEMUCS_PYTHON`, `DEMUCS_DEVICE=cuda` and `WHISPER_PYTHON` set,
 `syncreplay.py set --at-once 1 --gradle scripts/gradle-box/gradle-box.sh`, then `all` with the same `--gradle`. Point `HF_HOME`, `TORCH_HOME` and `XDG_CACHE_HOME` at the same folder for the models.
+
+## Counting player speed once, and singing without spaces (PR #728)
+
+Measured on 2026-11-07, with the set above, never looked up again. Main at 57bd6bfc gave the same as that section, line for line in the totals: 1179, 317, 616, 112, 410, so PR #742 moved nothing here.
+
+| `all` | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|---:|
+| Main | 1179 | 317 | 616 | 112 | 410 |
+| This branch | 1179 | 311 | 623 | 111 | 405 |
+| This branch again | 1179 | 312 | 624 | 111 | 404 |
+
+The songs that moved, of 42. The repeat moved at most 1 line on a song.
+
+| Song | Recording | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---|---:|---:|---:|---:|---:|
+| 99 Luftballons | AT_0zXw2rRo | 10 → 6 | 13 → 18 | 0 → 0 | 12 → 7 | -1.3 → -1.3 |
+| Hotel California | BciS5krYL80 | 11 → 11 | 36 → 35 | 0 → 0 | 13 → 14 | +1.3 → +1.3 |
+| Despacito | FXovf5dsRTw | 11 → 14 | 26 → 29 | 0 → 0 | 30 → 27 | +6.2 → +6.2 |
+| Dynamite | HaEYUJ2aRHs | 12 → 10 | 20 → 18 | 0 → 0 | 3 → 5 | -0.6 → -0.9 |
+| Take On Me | HzdD8kbDzZA | 11 → 10 | 15 → 15 | 0 → 0 | 5 → 5 | -4.5 → -4.5 |
+| Tell It to My Heart | OtXIsUjDOk8 | 10 → 11 | 24 → 24 | 0 → 0 | 7 → 7 | -2.1 → -2.1 |
+| Plastic Love | T_lC2O1oIew | 0 → 0 | 0 → 1 | 0 → 0 | 14 → 13 | -11.6 → -11.1 |
+| Easy Love | VK4PJfTMawc | 1 → 0 | 4 → 6 | 0 → 0 | 3 → 1 | -0.7 → -0.5 |
+| Time to Pretend | XUKyV49P8F0 | 11 → 11 | 15 → 15 | 0 → 0 | 0 → 0 | +1.0 → +1.1 |
+| Bizarre Love Triangle | ZnrSNEah_20 | 6 → 3 | 10 → 8 | 2 → 2 | 5 → 7 | -24.1 → -24.1 |
+| Nel blu dipinto di blu | dXN0jpUUmOw | 0 → 2 | 1 → 3 | 0 → 0 | 12 → 10 | -1.2 → -1.0 |
+| Hips Don't Lie | nOj6d-HOw2w | 7 → 7 | 23 → 24 | 0 → 0 | 33 → 33 | -1.0 → -1.1 |
+| Gee | qizghQs4K6E | 0 → 0 | 5 → 5 | 1 → 1 | 17 → 17 | -1.1 → -1.0 |
+| Shape of You | xTvyyoF_LZY | 7 → 6 | 25 → 23 | 0 → 0 | 11 → 13 | -0.9 → -0.9 |
+| It's My Life | yWQezjGjiqs | 1 → 1 | 1 → 1 | 3 → 2 | 18 → 19 | +5.8 → +14.4 |
+
+Each part off, to see which moved what, all else as this branch:
+
+| `all` | Within 0.3 s | Within 0.5 s | Dark | Early | Moved most |
+|---|---:|---:|---:|---:|---|
+| No line heard alone (`canPlaceAlone` in `untilSung`) | 316 | 621 | 112 | 406 | Easy Love 4 → 1 within 0.5 s, worst -10.1 s, against 6 with it |
+| No shift from a distinct line (`distinctLineShift`) | 320 | 619 | 111 | 408 | 99 Luftballons 16 within 0.3 s, against 6 with it |
+
+Worse, and why:
+
+- 99 Luftballons, 10 → 6 within 0.3 s, but 13 → 18 within 0.5 s. A distinct line puts the words right 12 s sooner, and they end up nearer the singing than on main: a mean of about 0.16 s off, against 0.2 s. Lines light 0.3 s early on purpose, so nearer the truth reads as further within 0.3 s.
+- Bizarre Love Triangle (ZnrSNEah_20), 6 → 3 and 10 → 8. A line heard alone moves every later while: it hears from 57.7 s where main hears from 79.3 s, and the whiles that follow catch lines 14 to 19 less well, +1.5 s against +0.6 s.
+- It's My Life, worst +5.8 → +14.4 s, with one dark line fewer. Also from a line heard alone: the first seconds of a while at 65 s are heard as music, so the words stop being shown for 24.5 s, against 20.5 s from 60 s on main. One line then lights as they come back. That stop is main's, on any while opening without words.
+- Dynamite (20 → 18, 19 on the repeat) and Shape of You (25 → 23) are at the edge of the noise.
+
+### Plastic Love
+
+| T_lC2O1oIew | Within 0.5 s | Early | Median off, once put right | Put right at |
+|---|---:|---:|---:|---:|
+| Main | 0 of 14 | 14 | 10.86 s | never |
+| This branch | 1 of 14 | 13 | 0.98 s | 78.1 s |
+
+Better, not fixed. On main no while heard is ever matched, as the words have no spaces and the singing is split elsewhere. Here the third while is, and the whole sheet moves 10.4 s. Lines 0 to 5 are lit before that, so they stay about 11 s early. After it, the sheet is within 0.5 s for 9 of its 14 lines and within 1.1 s for all, and the later lines drift to about -1 s. Nothing here corrects that drift, so the line-by-line target stays open.
+
+### A player rate of 1.05x
+
+`run XB7AmIsxzfI --from 1 --player-speed 1.05 --skew 0 --shazam-ahead 0 --words-length 0 --video`, the same harness on both. This tests the clock's sums on cached hearing, not hearing stretched audio.
+
+| | Lyrics clock | Within 0.3 s | Within 0.5 s | Worst |
+|---|---:|---:|---:|---:|
+| Main | 1.1024998x | 0 of 22 | 1 of 22 | -6.6 s |
+| This branch | 1.05x | 21 of 22 | 22 of 22 | -0.5 s |
+
+### What the replay gets told
+
+The replay tells the app a sheet is as long as the recording, and leaves the app's own hearing unset. With the sheet's own length and a stand-in Shazam, main gives 1168 lines, 311, 614, 90 dark, 407: 二人だけのセレモニー stops being dark for 25 lines, as its words are taken, and hearing starts later on some songs. That changes the baseline, so this branch keeps main's inputs, and it's measured on its own: this branch on those inputs gives 306, 619, 87, 406. My guess, not measured: the sheet's own length is what's nearer a phone.
+
+Earlier phone recordings were lost, so nothing here replays them: `--like-phone` needs a new `phone` run first.
