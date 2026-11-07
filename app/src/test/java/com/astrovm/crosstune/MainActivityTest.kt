@@ -8119,14 +8119,16 @@ class MainActivityTest {
     }
 
     /** A song handed to Crosstune with Qobuz chosen, whose stores number it differently, and the time it's given to start. */
-    private fun qobuzSongOpened(phone: FakePlayback) {
+    private fun qobuzSongOpened(phone: FakePlayback, answeringOther: () -> Unit = {}) {
         fun page(number: Int) = """
             <li><div class="ListItem">
                 <a href="/x/album/slug/a1" class="ListItem__title" title="Song">Song</a>
                 <p class="ListItem__artists">Band • Album</p>
                 <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$number"></button>
             </div></li>"""
+        val requests = java.util.concurrent.atomic.AtomicInteger()
         fake.handler = { request ->
+            if (request.url.host == "www.qobuz.com" && requests.incrementAndGet() >= 2) answeringOther()
             when {
                 request.url.host != "www.qobuz.com" -> FakeSpotify.html(request, """{"title":"Song","author_name":"Band"}""")
                 "/us-en/" in request.url.encodedPath -> FakeSpotify.html(request, page(1))
@@ -8143,6 +8145,96 @@ class MainActivityTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(QobuzNumbers.WAIT_MS))
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun qobuzOpensWithoutWaitingForItsAlternateLookupWhichStillGetsItsRetry() {
+        val phone = FakePlayback().apply { access = true }
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.QOBUZ.packageName, "Music"))
+        val answer = java.util.concurrent.CountDownLatch(1)
+        try {
+            // Unanswered for as long as it takes the song to open, and for its whole wait after that.
+            qobuzSongOpened(phone, answeringOther = { check(answer.await(10, java.util.concurrent.TimeUnit.SECONDS)) })
+            assertEquals(MusicService.QOBUZ.packageName, nextStartedActivity()!!.`package`)
+            assertTrue(phone.opened.isEmpty())
+            answer.countDown()
+            waitUntil { phone.opened.isNotEmpty() }
+            assertEquals("https://play.qobuz.com/track/2", phone.opened.single().second)
+        } finally {
+            answer.countDown()
+        }
+    }
+
+    /** A Qobuz song handed to Crosstune as it's left, so that opening it waits for Crosstune to come back. */
+    private fun qobuzSongWaitingForCrosstune(phone: FakePlayback): Intent {
+        fun page(title: String, number: Int) = """
+            <li><div class="ListItem">
+                <a href="/x/album/slug/a1" class="ListItem__title" title="$title">$title</a>
+                <p class="ListItem__artists">Band • Album</p>
+                <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$number"></button>
+            </div></li>"""
+        val named = java.util.concurrent.CountDownLatch(1)
+        fake.handler = { request ->
+            val newer = "bbbbbbbbbbb" in request.url.toString() || "Newer" in request.url.toString()
+            when {
+                request.url.host != "www.qobuz.com" -> {
+                    named.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    FakeSpotify.html(request, """{"title":"${if (newer) "Newer" else "Song"}","author_name":"Band"}""")
+                }
+                newer -> FakeSpotify.html(request, page("Newer", 3))
+                else -> FakeSpotify.html(request, page("Song", 1))
+            }
+        }
+        MainActivity.playbackFactory = { phone }
+        prefs().edit().putString("default_target", "QOBUZ").putBoolean("play_right_away", true).commit()
+        shadowOf(app.packageManager).installPackage(installedApp(MusicService.QOBUZ.packageName, "Qobuz"))
+        fun sharing(video: String) = Intent(Intent.ACTION_SEND).setClass(app, MainActivity::class.java).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "https://music.youtube.com/watch?v=$video")
+        }
+        launch(sharing("aaaaaaaaaaa"))
+        controller!!.pause().stop()
+        named.countDown()
+        waitUntil { fake.requestedUrls.count { "www.qobuz.com" in it } >= 2 }
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        return sharing("bbbbbbbbbbb")
+    }
+
+    @Test
+    fun aQobuzOpenOvertakenWhileCrosstuneWasAwayNeverOpens() {
+        val phone = FakePlayback().apply { access = true }
+        val newer = qobuzSongWaitingForCrosstune(phone)
+        controller!!.newIntent(newer)
+        controller!!.start().resume()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        val opened = generateSequence { nextStartedActivity() }.map { it.getParcelableExtra<Intent>(OpenSongActivity.EXTRA_OPEN) ?: it }.mapNotNull { it.dataString }.toList()
+        assertEquals(listOf("https://play.qobuz.com/track/3"), opened)
+    }
+
+    @Test
+    fun aQobuzOpenLeftExactlyTheLimitStillOpens() {
+        val phone = FakePlayback().apply { access = true }
+        qobuzSongWaitingForCrosstune(phone)
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(1))
+        controller!!.start()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(1, generateSequence { nextStartedActivity() }.count())
+    }
+
+    @Test
+    fun aQobuzOpenLeftTooLongEndsItsWatch() {
+        val phone = FakePlayback().apply { access = true }
+        qobuzSongWaitingForCrosstune(phone)
+        assertTrue(phone.nowPlayingWatchers > 0)
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(2))
+        controller!!.start()
+        composeRule.waitForIdle()
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        // The screen doesn't watch once it's gone, and nothing else should be left doing it.
+        controller!!.stop()
+        composeRule.waitForIdle()
+        assertEquals(0, phone.nowPlayingWatchers)
     }
 
     @Test

@@ -1,0 +1,33 @@
+{
+ "result": {
+  "songs": [
+   {
+    "id": 2016009,
+    "name": "Africa",
+    "duration": 295000,
+    "artists": [
+     {
+      "name": "TOTO"
+     }
+    ],
+    "album": {
+     "name": "Africa"
+    }
+   },
+   {
+    "id": 999,
+    "name": "Africa",
+    "duration": 200000,
+    "artists": [
+     {
+      "name": "Someone Else"
+     }
+    ],
+    "album": {
+     "name": "Other"
+    }
+   }
+  ]
+ },
+ "code": 200
+}

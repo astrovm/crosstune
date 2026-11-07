@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "Apre i link musicali nel servizio che preferisci."
-  },
-  "actionTitle": {
-    "message": "Impostazioni di Crosstune"
-  },
-  "optionsEnabled": {
-    "message": "Apri i link musicali nel servizio qui sotto"
-  },
-  "optionsService": {
-    "message": "Apri in"
-  },
-  "optionsAccess": {
-    "message": "Crosstune ha bisogno di accedere ai siti musicali per aprire i link al posto tuo."
-  },
-  "optionsAllow": {
-    "message": "Consenti"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "Apre i link musicali nel servizio che preferisci e mostra il testo di ciò che sta suonando." },
+  "actionTitle": { "message": "Testi di Crosstune" },
+  "optionsEnabled": { "message": "Apri i link musicali nel servizio qui sotto" },
+  "optionsService": { "message": "Apri in" },
+  "optionsAccess": { "message": "Crosstune ha bisogno di accedere ai siti di musica per aprire i link e mostrare i testi." },
+  "optionsAllow": { "message": "Consenti" },
+  "lyricsNoSong": { "message": "Riproduci un brano su un sito di musica" },
+  "lyricsLoading": { "message": "Ricerca del testo" },
+  "lyricsNone": { "message": "Nessun testo per questo brano" },
+  "lyricsInstrumental": { "message": "Strumentale" },
+  "lyricsOffline": { "message": "Sei offline" },
+  "lyricsUnavailable": { "message": "Impossibile raggiungere i siti dei testi" },
+  "lyricsRetry": { "message": "Riprova" },
+  "lyricsSettings": { "message": "Impostazioni" }
 }

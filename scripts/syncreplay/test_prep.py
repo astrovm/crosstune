@@ -23,14 +23,139 @@ class ResumeTest(unittest.TestCase):
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
             (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
             with patch.object(r, 'prep') as prep, patch.object(r.subprocess, 'run', return_value=argparse.Namespace(returncode=0)):
-                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle="fake-gradle"))
+                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle="fake-gradle", at_once=1))
             prep.assert_called_once()
+
+    def test_songs_can_be_prepped_at_once_and_each_failure_is_named(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            (r.OUT / 'set.json').write_text(json.dumps([dict(id=name, lines=1, title='Song', artist='Artist') for name in ('one', 'two', 'three')]))
+            both = threading.Barrier(2, timeout=5)
+
+            def prep(args):
+                if args.id == 'three':
+                    raise OSError('nope')
+                both.wait()
+
+            with patch.object(r, 'prep', side_effect=prep), patch('sys.stdout'), patch('sys.stderr'), self.assertRaises(SystemExit) as stopped:
+                r.find_set(argparse.Namespace(cached=True, find_only=False, gradle='fake-gradle', at_once=2))
+            self.assertIn('three', str(stopped.exception))
+            self.assertNotIn('one', str(stopped.exception))
 
     def test_hearing_alone_does_not_make_song_prepped(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
             (r.OUT / 'fake.truth.jsonl').write_text('{}\n')
             (r.OUT / 'fake.heard20.json').write_text('{}')
             self.assertEqual([], r.prepped())
+
+class WordsForTheRecordingTest(unittest.TestCase):
+    """Words are found again once the recordings are in, as a phone knows how long what it plays is."""
+
+    def found(self, cached, prepped):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            def gradle(*_, **__):
+                (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', lines=1, title='Song', artist='Artist')]))
+                return argparse.Namespace(returncode=0)
+
+            if cached:
+                gradle()
+            with patch.object(r.subprocess, 'run', side_effect=gradle) as finding, patch.object(r, 'prep'), patch.object(r, 'complete', return_value=not prepped), patch('sys.stdout'):
+                r.find_set(argparse.Namespace(cached=cached, find_only=False, gradle='fake-gradle', at_once=1))
+            return finding.call_count
+
+    def test_a_song_just_prepped_has_its_words_found_again(self):
+        self.assertEqual(self.found(cached=False, prepped=True), 2)
+
+    def test_with_nothing_new_they_are_found_once(self):
+        self.assertEqual(self.found(cached=False, prepped=False), 1)
+
+    def test_resuming_what_was_found_finds_them_once_it_is_all_in(self):
+        self.assertEqual(self.found(cached=True, prepped=True), 1)
+
+    def test_resuming_with_nothing_left_finds_nothing(self):
+        self.assertEqual(self.found(cached=True, prepped=False), 0)
+
+
+class SharedFolderTest(unittest.TestCase):
+    """SYNCREPLAY_DIR keeps the inputs for every checkout, while what one checkout asks and gets stays its own."""
+
+    def loaded(self, **env):
+        with patch.dict(os.environ, env):
+            if not env:
+                os.environ.pop('SYNCREPLAY_DIR', None)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        return module
+
+    def test_by_default_everything_is_in_the_checkout(self):
+        module = self.loaded()
+        self.assertEqual(module.OUT, module.ROOT / 'build' / 'syncreplay')
+        with patch.dict(os.environ):
+            os.environ.pop('SYNCREPLAY_DIR', None)
+            self.assertEqual(module.own(), module.OUT)
+
+    def test_the_folder_can_be_chosen(self):
+        module = self.loaded(SYNCREPLAY_DIR='/somewhere/kept')
+        self.assertEqual(module.OUT, Path('/somewhere/kept'))
+        self.assertEqual(module.HEARD, Path('/somewhere/kept/heard'))
+        with patch.dict(os.environ, SYNCREPLAY_DIR='/somewhere/kept'):
+            self.assertEqual(module.own(), module.ROOT / 'build' / 'syncreplay')
+
+    def test_replays_of_two_checkouts_ask_apart_and_read_their_own_results(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, SYNCREPLAY_DIR=directory):
+            kept, mine = Path(directory) / 'kept', Path(directory) / 'mine'
+            kept.mkdir()
+            mine.mkdir()
+            seen = []
+
+            def gradle(*_, **__):
+                seen.append((sorted(f.name for f in mine.iterdir() if f.name.startswith('replay')), (kept / 'replay.json').exists()))
+                (mine / 'fake.from0.shown.json').write_text(json.dumps(dict(lines=['One'], shown=[dict(line=0, at=1000)], heard=[])))
+                return argparse.Namespace(returncode=0)
+
+            (kept / 'fake.lyrics.json').write_text(json.dumps([[0, 'One']]))
+            (kept / 'fake.truth.jsonl').write_text(json.dumps(dict(line=0, start=1.0)) + '\n')
+            with patch.object(r, 'OUT', kept), patch.object(r, 'own', return_value=mine), patch.object(r, 'prepped', return_value=['fake']), \
+                    patch.object(r.subprocess, 'run', side_effect=gradle), patch('sys.stdout', io.StringIO()) as table:
+                r.run_all(argparse.Namespace(gradle='fake-gradle', work=4500, behind=0, heard='.other'))
+            self.assertEqual(seen, [(['replay.json', 'replay.songs'], False)])
+            self.assertRegex(table.getvalue(), r'all +1 +1 +1 +0 +0')
+            self.assertFalse((kept / 'fake.from0.shown.json').exists())
+
+    def test_finding_the_set_asks_in_the_checkout_and_its_words_are_kept_in_the_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            kept, mine = Path(directory) / 'kept', Path(directory) / 'mine'
+            kept.mkdir()
+            mine.mkdir()
+            asked = []
+
+            def gradle(*_, **__):
+                asked.append((mine / 'set.asked').exists())
+                (kept / 'set.json').write_text('[]')
+                return argparse.Namespace(returncode=0)
+
+            with patch.object(r, 'OUT', kept), patch.object(r, 'own', return_value=mine), patch.object(r.subprocess, 'run', side_effect=gradle):
+                r.find_set(argparse.Namespace(cached=False, find_only=True, gradle='fake-gradle'))
+            self.assertEqual(asked, [True])
+            self.assertFalse((mine / 'set.asked').exists())
+
+    def test_what_was_heard_by_another_checkout_meanwhile_is_kept(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            out = r.heard_file('fake', r.LENGTHS[0], r.APP_MODEL)
+            out.write_text(json.dumps({'0': []}))
+            r.keep_heard(out, {'1000': [[0, 'mine']]})
+            # Another checkout heard this stretch after this one read the file.
+            out.write_text(json.dumps({**json.loads(out.read_text()), '2000': [[0, 'theirs']]}))
+            r.keep_heard(out, {'3000': [[0, 'mine again']]})
+            self.assertEqual(sorted(json.loads(out.read_text()), key=int), ['0', '1000', '2000', '3000'])
+
+    def test_two_checkouts_hearing_at_once_lose_nothing(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            out = r.heard_file('fake', r.LENGTHS[0], r.APP_MODEL)
+            out.write_text('{}')
+            with ThreadPoolExecutor(8) as pool:
+                list(pool.map(lambda n: r.keep_heard(out, {str(n): []}), range(64)))
+            self.assertEqual(len(json.loads(out.read_text())), 64)
+
 
 class HeardBinaryTest(unittest.TestCase):
     def test_songs_heard_at_once_build_the_hearing_program_once(self):
@@ -48,6 +173,43 @@ class HeardBinaryTest(unittest.TestCase):
                 found = list(pool.map(lambda _: r.heard_binary(), range(4)))
         self.assertEqual([program] * 4, found)
         self.assertEqual(2, len(builds))  # Set up and built, once.
+
+
+class HearingLoadTest(unittest.TestCase):
+    def test_songs_heard_at_once_share_one_limit_on_how_many_stretches_are_heard(self):
+        class Samples:
+            def __len__(self):
+                return 60000 * 16
+
+            def __getitem__(self, key):
+                return self
+
+            def tobytes(self):
+                return b"fake audio"
+
+        lock, running, peak = threading.Lock(), [0], [0]
+
+        def heard(*_, **__):
+            with lock:
+                running[0] += 1
+                peak[0] = max(peak[0], running[0])
+            threading.Event().wait(0.01)
+            with lock:
+                running[0] -= 1
+            return argparse.Namespace(stdout=b'0\t word\n')
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'as_the_phone_hears', return_value=Samples()), \
+                patch.object(r, 'heard_binary', return_value=Path('heard')), \
+                patch.object(r, 'model_file', return_value=Path('model')), \
+                patch.object(r, 'sung_language', return_value='en'), \
+                patch.object(r.subprocess, 'run', side_effect=heard), ThreadPoolExecutor(r.SONGS_HEARD_AT_ONCE) as pool:
+            list(pool.map(lambda song: r.windows(song, Path('fake.wav'), 20000), [f'song{n}' for n in range(r.SONGS_HEARD_AT_ONCE)]))
+        self.assertLessEqual(peak[0], r.HEARD_AT_ONCE)
+        self.assertGreater(peak[0], 1)
+
+    def test_hearing_leaves_most_of_the_machine_for_who_is_using_it(self):
+        self.assertLessEqual(r.HEARD_AT_ONCE, 4)
 
 
 class CheckpointTest(unittest.TestCase):

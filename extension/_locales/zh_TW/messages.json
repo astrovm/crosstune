@@ -1,23 +1,17 @@
 {
-  "extName": {
-    "message": "Crosstune"
-  },
-  "extDescription": {
-    "message": "在你偏好的服務中開啟音樂連結。"
-  },
-  "actionTitle": {
-    "message": "Crosstune 設定"
-  },
-  "optionsEnabled": {
-    "message": "在下方的服務中開啟音樂連結"
-  },
-  "optionsService": {
-    "message": "開啟方式"
-  },
-  "optionsAccess": {
-    "message": "Crosstune 需要存取音樂網站，才能為你開啟連結。"
-  },
-  "optionsAllow": {
-    "message": "允許"
-  }
+  "extName": { "message": "Crosstune" },
+  "extDescription": { "message": "在你喜歡的服務中開啟音樂連結，並顯示正在播放的歌詞。" },
+  "actionTitle": { "message": "Crosstune 歌詞" },
+  "optionsEnabled": { "message": "在下方的服務中開啟音樂連結" },
+  "optionsService": { "message": "開啟方式" },
+  "optionsAccess": { "message": "Crosstune 需要存取音樂網站才能開啟連結並顯示歌詞。" },
+  "optionsAllow": { "message": "允許" },
+  "lyricsNoSong": { "message": "在音樂網站上播放一首歌" },
+  "lyricsLoading": { "message": "正在尋找歌詞" },
+  "lyricsNone": { "message": "這首歌沒有歌詞" },
+  "lyricsInstrumental": { "message": "純音樂" },
+  "lyricsOffline": { "message": "你已離線" },
+  "lyricsUnavailable": { "message": "無法連線到歌詞網站" },
+  "lyricsRetry": { "message": "重試" },
+  "lyricsSettings": { "message": "設定" }
 }

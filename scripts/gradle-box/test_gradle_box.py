@@ -1,13 +1,11 @@
 """Runs gradle-box.sh for real, with a stand-in podman that says what it was asked and waits when told."""
 import os
-import shutil
 import stat
 import subprocess
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 BOX = Path(__file__).with_name("gradle-box.sh")
 ROOT = Path(__file__).resolve().parents[2]
@@ -77,22 +75,20 @@ class GradleBoxTest(unittest.TestCase):
     def release(self, run):
         (self.dir / f"hold.{run}").unlink()
 
-    def test_an_external_replay_cache_is_mounted_at_its_resolved_path(self):
-        checkout = self.dir / "checkout"
-        script = checkout / "scripts/gradle-box/gradle-box.sh"
-        script.parent.mkdir(parents=True)
-        shutil.copy2(BOX, script)
-        shutil.copy2(BOX.with_name("clean-cache.py"), script.with_name("clean-cache.py"))
-        subprocess.run(["git", "init", "-q", str(checkout)], check=True)
-        cache = self.dir / "replay-cache"
-        cache.mkdir()
-        (checkout / "build").mkdir()
-        (checkout / "build/syncreplay").symlink_to(cache)
-        with patch(__name__ + ".BOX", script):
-            box = self.start("replay", ":app:testDebugUnitTest")
-            output, _ = box.communicate(timeout=20)
+    def test_a_chosen_replay_folder_is_mounted_and_named_in_the_box(self):
+        kept = self.dir / "replay-cache"
+        kept.mkdir()
+        box = self.start("replay", ":app:testDebugUnitTest", SYNCREPLAY_DIR=str(kept))
+        output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
-        self.assertIn(f"-v {cache}:{cache}", self.asked()[0])
+        self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
+        self.assertIn(f"-e SYNCREPLAY_DIR={kept}", self.asked()[0])
+
+    def test_no_replay_folder_is_mounted_unless_chosen(self):
+        box = self.start("plain", ":app:assembleDebug")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertNotIn("SYNCREPLAY_DIR", self.asked()[0])
 
     def test_runs_gradle_in_the_container_with_only_what_it_needs(self):
         box = self.start("a", ":app:assembleDebug", "--stacktrace")

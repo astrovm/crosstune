@@ -103,6 +103,8 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         assumeTrue("$name: only when scripts/syncreplay asks", dir != null && index >= 0)
         if (dir == null) return
         val asked = JSONObject(File(dir, "replay.json").readText()).let { it.optJSONArray("songs")?.getJSONObject(index) ?: it }
+        // The song's recording and what was heard in it may be kept apart from this checkout, for all of them.
+        val inputs = System.getenv("SYNCREPLAY_DIR")?.let(::File) ?: dir
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
         playerSpeed = asked.optDouble("playerSpeed", 1.0).toFloat()
@@ -112,12 +114,12 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         whilesFrom = asked.optJSONArray("whiles")?.let { whiles -> (0 until whiles.length()).map { whiles.getLong(it) } }.orEmpty()
         val behind = listOf(asked.optLong("behind", 0L)) + (if (asked.has("behindAgain")) listOf(asked.getLong("behindAgain")) else emptyList())
         // The words as the app really found them, when kept, over those prep was given.
-        val kept = File(dir, "$song.found.json").takeIf { it.exists() }?.let { JSONObject(it.readText()) }
+        val kept = listOf(dir, inputs).map { File(it, "$song.found.json") }.firstOrNull { it.exists() }?.let { JSONObject(it.readText()) }
         val lyrics = kept?.getJSONArray("lines")?.takeIf { it.length() > 0 }?.let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
-            ?: JSONArray(File(dir, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
+            ?: JSONArray(File(inputs, "$song.lyrics.json").readText()).let { list -> (0 until list.length()).map { list.getJSONArray(it).let { line -> line.getLong(0) to line.getString(1) } } }
         // What was heard in each stretch, by how long it is in seconds and where it starts.
         val heard = listOf(SingingListener.SECONDS, SingingListener.FIRST_SECONDS).associateWith { seconds ->
-            JSONObject(File(dir, "$song.heard$seconds${asked.optString("heard")}.json").readText()).let { windows ->
+            JSONObject(File(inputs, "$song.heard$seconds${asked.optString("heard")}.json").readText()).let { windows ->
                 windows.keys().asSequence().associate { start -> start.toLong() to windows.getJSONArray(start).let { words -> (0 until words.length()).map { words.getJSONArray(it).let { word -> word.getLong(0) to word.getString(1) } } } }
             }
         }

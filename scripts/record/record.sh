@@ -14,13 +14,13 @@
 #     adb shell input tap 400 1005; sleep 7
 #     adb shell input swipe 540 1900 540 900 1800; sleep 4'
 #
-# Start the emulator with the host GPU and room to spare, or it drops frames before scrcpy sees them:
-#   emulator -avd <name> -gpu host -cores 6 -memory 4096
-# Needs scrcpy and ffmpeg. Uses ANDROID_SERIAL, or emulator-5554. MAX_SIZE sets the longer side
+# Start crosstune-phone first, as it has the host GPU and room to spare, or frames drop before scrcpy sees them:
+#   python3 scripts/emulator/emulator.py start crosstune-phone
+# Needs scrcpy and ffmpeg. Uses ANDROID_SERIAL, or emulator-5580. MAX_SIZE sets the longer side
 # of the recording (default 1280; bigger records fewer frames).
 set -euo pipefail
 
-serial=${ANDROID_SERIAL:-emulator-5554}
+serial=${ANDROID_SERIAL:-emulator-5580}
 export ANDROID_SERIAL=$serial
 
 check() {
@@ -44,7 +44,7 @@ fi
 
 out=$1
 shift
-take=$(mktemp --suffix=.mkv)
+take=$(mktemp)
 scales="window_animation_scale transition_animation_scale animator_duration_scale"
 normal() {
     for scale in $scales; do adb shell settings put global "$scale" 1; done

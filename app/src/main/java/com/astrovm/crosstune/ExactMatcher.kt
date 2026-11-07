@@ -491,10 +491,19 @@ internal class ExactMatcher(
      * The number of [song] in the store [findOnQobuz] doesn't ask, when it isn't [link]'s: stores differ on about one song
      * in four, and which one an account follows can't be told. Null with no other, or no answer.
      */
-    suspend fun otherQobuzLink(song: MusicMetadata, link: String): String? = try {
-        findOnQobuzStore(if (qobuzStore == "us-en") "gb-en" else "us-en", song)?.takeIf { it != link }
-    } catch (_: IOException) {
-        null
+    suspend fun otherQobuzLink(song: MusicMetadata, link: String): String? {
+        // As for queues, one transient network failure isn't evidence that the store has no song.
+        repeat(2) {
+            val answer = withTimeoutOrNull(timeoutMs) {
+                try {
+                    Answer(findOnQobuzStore(if (qobuzStore == "us-en") "gb-en" else "us-en", song))
+                } catch (_: IOException) {
+                    null
+                }
+            }
+            if (answer != null) return answer.url?.takeIf { it != link }
+        }
+        return null
     }
 
     private suspend fun findOnQobuzStore(store: String, metadata: MusicMetadata): String? {

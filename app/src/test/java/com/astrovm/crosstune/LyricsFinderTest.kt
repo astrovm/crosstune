@@ -233,6 +233,30 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aCoverSayingSoHasTheWordsOfASingerNotFarAheadWhenWrittenBySame() {
+        // A store's count can come too close to tell by itself, here five to two, as it has for a reported song.
+        val cover = MusicMetadata("Song (Shamisen Cover)", "Trio")
+        onlyBy("Band", "Song", answer("Song", "Band", "La la la"))
+        val lrclib = fake.handler
+        val songs = (List(5) { """{"trackId":${100 + it},"trackName":"Song","artistName":"Band"}""" } + List(2) { """{"trackId":${200 + it},"trackName":"Song","artistName":"Other"}""" }).joinToString(",")
+        var ownCredits = """{"name":"First Writer","roleNames":["Songwriter"]}"""
+        fake.handler = { request ->
+            val own = """{"results":[{"trackId":300,"trackName":"Song (Shamisen Cover)","artistName":"Trio"}]}"""
+            when {
+                request.url.queryParameter("term") == "Song (Shamisen Cover) Trio" -> FakeSpotify.html(request, own)
+                request.url.queryParameter("term") == "Song" -> FakeSpotify.html(request, """{"results":[$songs]}""")
+                request.url.toString() == "${LyricsFinder.APPLE_MUSIC_SONG_URL}300" -> FakeSpotify.html(request, ownCredits)
+                request.url.toString() == "${LyricsFinder.APPLE_MUSIC_SONG_URL}100" -> FakeSpotify.html(request, """{"name":"First Writer","roleNames":["Songwriter"]}""")
+                else -> lrclib(request)
+            }
+        }
+        assertEquals(Lyrics.Found("La la la", source = "lrclib, the original's"), found(cover))
+        // Written by others, it covers someone else's song of that name.
+        ownCredits = """{"name":"Another Writer","roleNames":["Songwriter"]}"""
+        assertEquals(Lyrics.None, found(cover))
+    }
+
+    @Test
     fun aCoverOfANameManySongsShareHasNoOnesWords() {
         // The store's songs named "Hello" are by many, none far ahead, Lionel Richie's 4 to Aqyila's 3: it's not known whose this covers.
         onlyBy("Adele", "Hello", answer("Hello", "Adele", "Hello, it's me"))
