@@ -808,6 +808,16 @@ class PlaybackTest {
     }
 
     @Test
+    fun aSongNamedByItsPlayerKeepsItsPlaybackRate() {
+        allow()
+        sounding()
+        val music = player("com.music", "Music", "Blinding Lights", "The Weeknd", album = "After Hours", at = NOW)
+        shadowOf(music).setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 42_000, 1.05f, NOW).build())
+        shadowOf(sessions).addController(music)
+        assertEquals(1.05f, playback.nowPlaying()?.clock?.speed)
+    }
+
+    @Test
     fun aSongAComputerPlaysIsFollowedWhenThePhonePlaysNothing() {
         allow()
         fun computer(title: String, artist: String, album: String? = null) = player("org.kde.kdeconnect_tp", "KDE Connect", title, artist, album = album, at = NOW).also {

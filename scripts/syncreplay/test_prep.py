@@ -411,7 +411,7 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
 
     def run_args(self, **changed):
-        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, skew=None, shazam_ahead=0, words_length=None, video=False, gradle='fake-gradle'), **changed})
+        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, skew=None, shazam_ahead=0, words_length=None, video=False, player_speed=1.0, gradle='fake-gradle'), **changed})
 
     def test_one_song_replays_until_nothing_new_is_asked(self):
         self.assertEqual(self.replays(r.run, self.run_args(), [1, 0]), (2, 2))
@@ -456,10 +456,12 @@ class HeardWhenAskedTest(unittest.TestCase):
             fingerprints = r.OUT / 'fingerprints.json'
             fingerprints.write_text(json.dumps(dict(initial=dict(at=20000, songMs=10000, receivedAt=20000), events=[])))
             def replay(*args, **kwargs):
-                self.assertEqual(json.loads(fingerprints.read_text()), json.loads((r.OUT / 'replay.json').read_text()).get('fingerprints'))
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(json.loads(fingerprints.read_text()), asked.get('fingerprints'))
+                self.assertEqual(1.05, asked['playerSpeed'])
                 return argparse.Namespace(returncode=0)
             with patch.object(r.subprocess, 'run', side_effect=replay):
-                r.run(self.run_args(fingerprints=str(fingerprints)))
+                r.run(self.run_args(fingerprints=str(fingerprints), player_speed=1.05))
 
     def test_a_replay_held_to_the_phone_takes_each_while_as_long_as_the_phone_did(self):
         asked = []
@@ -764,6 +766,26 @@ class PhoneTest(unittest.TestCase):
             (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\nlit -1 at 200 pos 3000\n')
             r.score_phone('song', kept)
         self.assertIn('never lit 1', said.call_args_list[-1].args[0])
+
+
+class PhoneVolumeTest(unittest.TestCase):
+    def volumes_with_the_phone_at(self, level):
+        """The phone's media volume while the song plays, and after."""
+        volume = [level]
+        heard = []
+        def shell(*parts):
+            if '--set' in parts:
+                volume[0] = int(parts[parts.index('--set') + 1])
+            return f'[V] volume is {volume[0]} in range [0..15]'
+        with patch.object(r, 'shell', side_effect=shell), patch.object(r, 'watch', side_effect=lambda args: heard.append(volume[0])):
+            r.phone(argparse.Namespace())
+        return heard[0], volume[0]
+
+    def test_plays_at_one_from_silence_and_puts_it_back(self):
+        self.assertEqual(self.volumes_with_the_phone_at(0), (1, 0))
+
+    def test_plays_at_one_from_louder_and_puts_it_back(self):
+        self.assertEqual(self.volumes_with_the_phone_at(9), (1, 9))
 
 
 if __name__ == '__main__':

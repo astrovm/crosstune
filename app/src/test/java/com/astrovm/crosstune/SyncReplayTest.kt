@@ -104,6 +104,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         val inputs = System.getenv("SYNCREPLAY_DIR")?.let(::File) ?: dir
         val song = asked.getString("song")
         val fromMs = asked.getLong("from")
+        playerSpeed = asked.optDouble("playerSpeed", 1.0).toFloat()
         val fingerprints = asked.optJSONObject("fingerprints")
         workMs = asked.optLong("work", WORK_MS)
         workedOut = asked.optJSONArray("works")?.let { works -> (0 until works.length()).map { works.getLong(it) } }.orEmpty()
@@ -173,6 +174,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         }
     }
 
+    /** The player's rate, which Shazam hears too, so what it says includes it. */
+    private var playerSpeed = 1f
+
     /** The phone's recognition answers, including false occurrences, on its continuous player clock. */
     private var fingerprintStartedAt: Long? = null
 
@@ -181,15 +185,15 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         fingerprintStartedAt = startedAt
         val song = MusicMetadata("Demo", "Band", lengthMs = recorded.optLong("wordsLength", lengthMs))
         playback.onThePhone = Heard.Song(song.copy(lengthMs = null, recordingId = "video:replay"), null)
-        playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, video = true, durationMs = recorded.optLong("videoLength", lengthMs))
+        playback.playing.value = Following(PlaybackClock(fromMs, startedAt, speed = playerSpeed), "YouTube Music", canSeek = true, video = true, durationMs = recorded.optLong("videoLength", lengthMs))
         val initial = recorded.getJSONObject("initial")
         val events = recorded.getJSONArray("events")
         var next = -1
         MainActivity.hearingFactory = { SongHearing {
             val event = if (next < 0) initial else events.optJSONObject(next) ?: awaitCancellation()
             next++
-            delay(maxOf(0L, startedAt + event.getLong("receivedAt") - fromMs - SystemClock.elapsedRealtime()))
-            Heard.Song(song, null, event.getLong("songMs"), startedAt + event.getLong("at") - fromMs, event.optString("matchId").ifEmpty { null }, speed = event.optDouble("speed", 1.0).toFloat())
+            delay(maxOf(0L, startedAt + ((event.getLong("receivedAt") - fromMs) / playerSpeed).toLong() - SystemClock.elapsedRealtime()))
+            Heard.Song(song, null, event.getLong("songMs"), startedAt + ((event.getLong("at") - fromMs) / playerSpeed).toLong(), event.optString("matchId").ifEmpty { null }, speed = event.optDouble("speed", 1.0).toFloat() * playerSpeed)
         } }
     }
 
@@ -218,7 +222,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         this.behindMs = behindMs
         heardLog = JSONArray()
         val startedAt = fingerprintStartedAt ?: SystemClock.elapsedRealtime()
-        if (fingerprintStartedAt == null) playback.playing.value = Following(PlaybackClock(fromMs, startedAt), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
+        if (fingerprintStartedAt == null) playback.playing.value = Following(PlaybackClock(fromMs, startedAt, speed = playerSpeed), "YouTube Music", canSeek = true, video = video, durationMs = lengthMs)
         composeRule.waitForIdle()
         // Each line, by its text and the time it's shown first after the one before, where the song is then.
         val shown = JSONArray()
@@ -232,7 +236,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         var atMs = fromMs
         while (atMs < lengthMs) {
             shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(STEP_MS))
-            atMs = fromMs + SystemClock.elapsedRealtime() - startedAt
+            atMs = fromMs + ((SystemClock.elapsedRealtime() - startedAt) * playerSpeed).toLong()
             val state = model().uiState
             if (state.following?.timingKnown != lastKnown) known.put(JSONObject().put("at", atMs + behindMs).put("known", state.following?.timingKnown))
             lastKnown = state.following?.timingKnown
@@ -242,7 +246,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             val appAt = playback.playing.value!!.clock.positionAt(now)
             val heardAt = following.clock.positionAt(now)
             // A video slower than its song has each line where it gets to at that speed, so they stay put as it plays.
-            val times = state.lyricLines.map { (appAt + behindMs + (it.timeMs - heardAt) / following.clock.speed).toLong() / STEP_MS * STEP_MS }
+            val times = state.lyricLines.map { (appAt + behindMs + (it.timeMs - heardAt) * playerSpeed / following.clock.speed).toLong() / STEP_MS * STEP_MS }
             if (times != lastPlaced) placed.put(JSONObject().put("at", atMs + behindMs).put("times", JSONArray(times)))
             lastPlaced = times
             // Lit as the screen lights it: a moment early, so the eye is there first.
@@ -251,7 +255,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             last = index
         }
         val lines = JSONArray(model().uiState.lyricLines.map { it.text })
-        return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog)
+        return JSONObject().put("lines", lines).put("shown", shown).put("placed", placed).put("known", known).put("heard", heardLog).put("lyricsSpeed", model().uiState.following?.clock?.speed)
     }
 
     private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
@@ -287,12 +291,12 @@ class SyncReplayTest(private val name: String, private val index: Int) {
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? = coroutineScope {
             // What's heard is where the song really is, ahead of the app's clock.
             fun position() = playback.playing.value!!.clock.positionAt(SystemClock.elapsedRealtime()) + behindMs
-            whilesFrom.getOrNull(whiles)?.let { delay(maxOf(0L, it - position())) }
+            whilesFrom.getOrNull(whiles)?.let { delay(maxOf(0L, ((it - position()) / playerSpeed).toLong())) }
             val at = SystemClock.elapsedRealtime()
             val from = position()
             if (first != null) launch {
                 val again = SingingListener.AGAIN_SECONDS * 1000L
-                if (first(heard(SingingListener.FIRST_SECONDS, at, from))) first(heard(SingingListener.FIRST_SECONDS, at + again, from + again))
+                if (first(heard(SingingListener.FIRST_SECONDS, at, from))) first(heard(SingingListener.FIRST_SECONDS, at + again, from + (again * playerSpeed).toLong()))
             }
             // A while waits for what's still being worked out from before it, so the phone took 3.8 s over one and 27 s over the next.
             heard(SingingListener.SECONDS, at, from, workedOut.getOrElse(whiles++) { workMs })
@@ -303,9 +307,9 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             val stretches = heard.getValue(seconds)
             val start = stretches.keys.minBy { kotlin.math.abs(it - from) }
             // Worked out once it's all in: working out the words takes as long however much there is, as the model always works on 30 seconds.
-            delay(maxOf(0L, at + seconds * 1000L + work - SystemClock.elapsedRealtime()))
+            delay(maxOf(0L, at + (seconds * 1000L / playerSpeed).toLong() + work - SystemClock.elapsedRealtime()))
             heardLog.put(JSONObject().put("from", from).put("start", start).put("seconds", seconds).put("words", stretches.getValue(start).joinToString(" ") { it.second.trim() }))
-            return Sung(at, stretches.getValue(start).filter { it.first >= 0 }.map { (ms, text) -> HeardWord(text.trim(), ms + start - from) }.filter { it.text.isNotEmpty() })
+            return Sung(at, stretches.getValue(start).filter { it.first >= 0 }.map { (ms, text) -> HeardWord(text.trim(), ((ms + start - from) / playerSpeed).toLong()) }.filter { it.text.isNotEmpty() })
         }
     }
 
@@ -318,7 +322,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             delay(SHAZAM_MS)
             val at = SystemClock.elapsedRealtime()
             val playing = playback.playing.value!!.clock.positionAt(at) + behindMs
-            return Heard.Song(MusicMetadata("Demo", "Band"), null, aheadMs + (playing * (1 + skew)).toLong(), at, matchId = "replayed", speed = (1 + skew).toFloat())
+            return Heard.Song(MusicMetadata("Demo", "Band"), null, aheadMs + (playing * (1 + skew)).toLong(), at, matchId = "replayed", speed = (1 + skew).toFloat() * playerSpeed)
         }
     }
 

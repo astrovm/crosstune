@@ -22,7 +22,8 @@ work out the words each time; try a few, as where each later stretch is heard mo
 has the music app's clock that far behind what it plays, and `--behind-again MS` plays it a second
 time, keeping what was learnt, to score that. `--skew X` has Shazam hear it X faster than the recording
 it matches, `--words-length MS` the words timed for another release, and `--video` a video playing,
-as for a sped-up upload. `--gradle "podman exec box ./gradlew"` runs
+as for a sped-up upload. `--player-speed RATE` plays cached recognition at a player rate,
+including it in Shazam's reported speed. This tests the clock math, not recognition on stretched audio. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
 `SYNCREPLAY_DIR=FOLDER` keeps what takes hours to make (recordings, voices, truth, what's heard) there
 instead, for every checkout, and gradle-box.sh mounts it. What one checkout asks and gets back stays in
@@ -32,7 +33,7 @@ it plays the recording in YouTube Music (--app for another build of it) from the
 words in Crosstune for S seconds, and times each line lit from the app's own log. Where the song
 really is comes from lining up what the app heard with the recording, as a music app's clock runs
 behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
-A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
+The media volume is 1 while it plays, as at 0 the app hears only silence, and at 1 it already hears the music at full level.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -376,7 +377,7 @@ def run(args):
     phone_lit = like_phone(args) if args.like_phone else None
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = own() / "replay.json"
-    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
+    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}", "playerSpeed": args.player_speed}
     if args.like_phone:
         replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
@@ -620,10 +621,10 @@ def media_volume(level=None):
 
 def phone(args):
     # At volume 0 what the app hears of the music is silence, so there'd be no singing to place lines by.
-    # 1 is enough: the app hears the music at full level from there on. The volume is put back after.
+    # 1 is enough: the app hears the music at full level from there on, so never louder, for whoever's
+    # near the phone. The volume is put back after.
     volume = media_volume()
-    if volume == 0:
-        media_volume(1)
+    media_volume(1)
     try:
         watch(args)
     finally:
@@ -975,6 +976,7 @@ def main():
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
             # ZnrSNEah_20 as on the phone: --video --skew 0.0349 --shazam-ahead 45467 --words-length 0, as Shazam
             # heard it (app/src/test/resources/shazam/faster.jsonl), with words that don't say how long they're timed for.
+            p.add_argument("--player-speed", type=float, default=1.0, help="player rate; replay cached words at that rate and include it in Shazam answers")
             p.add_argument("--skew", type=float, help="Shazam hears it, this much faster than the recording it matches (its timeskew)")
             p.add_argument("--shazam-ahead", type=int, default=0, help="ms further on Shazam's place is at the song's start")
             p.add_argument("--words-length", type=int, help="ms long the recording the words are timed for is, if not the one playing; 0 doesn't say")
