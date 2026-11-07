@@ -522,7 +522,7 @@ Better, not fixed. On main no while heard is ever matched, as the words have no 
 
 ### A player rate of 1.05x
 
-`run XB7AmIsxzfI --from 1 --player-speed 1.05 --skew 0 --shazam-ahead 0 --words-length 0 --video`, the same harness on both. This tests the clock's sums on cached hearing, not hearing stretched audio.
+`run XB7AmIsxzfI --from 1 --player-speed 1.05 --skew 0 --shazam-ahead 0 --words-length 0 --video`, the same harness on both. This tests the clock's sums on cached hearing, not hearing stretched audio. Told the sheet's own length, both give exactly the same lines.
 
 | | Lyrics clock | Within 0.3 s | Within 0.5 s | Worst |
 |---|---:|---:|---:|---:|
