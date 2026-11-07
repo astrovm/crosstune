@@ -24,7 +24,11 @@ internal object SyncedLyrics {
     private val syllable = Regex("[\\u3040-\\u30FF\\u4E00-\\u9FFF\\uAC00-\\uD7AF]")
     private val latinWord = Regex("[A-Za-z\\u00C0-\\u024F']+")
 
-    private val stamp = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
+    /**
+     * A line's time: "[01:02.34]". NetEase ends the stamp of a line it has no time for with "-1", as in
+     * "[00:00.00-1]", which is no part of the time.
+     */
+    private val stamp = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?(?:-\d+)?]""")
 
     /** A word's time in a line, as enhanced LRC writes it: "<01:02.34>". */
     private val wordStamp = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
