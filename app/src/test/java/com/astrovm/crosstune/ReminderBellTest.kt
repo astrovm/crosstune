@@ -111,6 +111,13 @@ class ReminderBellTest {
     private fun waitUntil(condition: () -> Boolean) =
         composeRule.waitUntil(5_000) { shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50)); condition() }
 
+    /** Forgets the screens started so far, so the next one started is the one a tap opened. */
+    private fun drainStartedActivities() {
+        do {
+            val started = shadowOf(activity).nextStartedActivity
+        } while (started != null)
+    }
+
     private fun shown(text: String) = composeRule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
 
     private fun described(label: String) = composeRule.onAllNodes(hasContentDescription(label)).fetchSemanticsNodes().isNotEmpty()
@@ -215,9 +222,9 @@ class ReminderBellTest {
         activity.answer(shadowOf(activity).lastRequestedPermission, PackageManager.PERMISSION_DENIED)
         waitUntil { shown(remindMe) }
         // So a tap goes to where it can be allowed, asking nothing more.
-        while (shadowOf(activity).nextStartedActivity != null) Unit
+        drainStartedActivities()
         click(remindMe)
-        val page = shadowOf(activity).nextStartedActivity
+        val page = requireNotNull(shadowOf(activity).nextStartedActivity) { "No settings page was opened by the tap" }
         assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, page.action)
         assertEquals(app.packageName, page.getStringExtra(Settings.EXTRA_APP_PACKAGE))
         // Back without allowing it, it's still off.
@@ -226,7 +233,7 @@ class ReminderBellTest {
         assertTrue(shown(remindMe))
         // Off to allow it, and back, it's on.
         click(remindMe)
-        shadowOf(activity).nextStartedActivity
+        assertNotNull(shadowOf(activity).nextStartedActivity)
         allowed(true)
         controller?.pause()?.resume()
         waitUntil { shown(reminderAt) }
@@ -253,7 +260,7 @@ class ReminderBellTest {
         val asked = shadowOf(activity).lastRequestedPermission
         activity.answer(asked, PackageManager.PERMISSION_DENIED)
         composeRule.waitForIdle()
-        while (shadowOf(activity).nextStartedActivity != null) Unit
+        drainStartedActivities()
         click(blocked)
         assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, shadowOf(activity).nextStartedActivity.action)
         // The list and settings say the same.
@@ -299,7 +306,7 @@ class ReminderBellTest {
         )
         // Put away, nothing changes.
         click(app.getString(R.string.practice_reminder_at, reminderTime(app, 21 * 60 + 5)))
-        org.robolectric.shadows.ShadowDialog.getLatestDialog().onBackPressed()
+        (org.robolectric.shadows.ShadowDialog.getLatestDialog() as androidx.activity.ComponentDialog).onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         assertFalse(shown(app.getString(R.string.save_button)))
         assertTrue(model().uiState.reminder.working)
@@ -432,7 +439,12 @@ class ReminderBellTest {
         assertEquals(1, shadowOf(manager).allNotifications.size)
         click(app.getString(R.string.floating_close))
         waitUntil { shown(app.getString(R.string.practice_all_songs)) || model().uiState.practice == null }
-        model().chooseLines(emptyList(), model().uiState.savedLines, false)
-        waitUntil { shadowOf(manager).allNotifications.isEmpty() }
+        val kept = model().uiState.savedLines
+        assertEquals("the list holds the line that was practised", 1, kept.size)
+        model().chooseLines(emptyList(), kept, false)
+        assertTrue("the line is let go", model().uiState.savedLines.isEmpty())
+        composeRule.waitForIdle()
+        val takenBack = runCatching { waitUntil { shadowOf(manager).allNotifications.isEmpty() } }.isSuccess
+        assertTrue("still showing: ${shadowOf(manager).allNotifications.map { it.notification.extras.getString(android.app.Notification.EXTRA_TITLE) }}", takenBack)
     }
 }

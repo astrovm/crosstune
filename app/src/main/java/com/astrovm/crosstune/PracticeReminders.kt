@@ -146,12 +146,15 @@ internal class PracticeReminders(
         val at = now()
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
-        if (on && allowed && due.isNotEmpty() && !practisedLately(preferences.getLong(KEY_DONE_AT, 0), at, zone())) {
+        if (due.isNotEmpty() && mayAsk(at)) {
             post(due)
             preferences.edit { putInt(KEY_IGNORED, ignored + 1) }
         }
         arm()
     }
+
+    /** Wanted, shown by Android, and not already answered for today by a session. */
+    private fun mayAsk(at: Long) = on && allowed && !practisedLately(preferences.getLong(KEY_DONE_AT, 0), at, zone())
 
     private fun post(due: List<SavedLine>) {
         // What Android doesn't keep the language of, on versions it doesn't.
@@ -191,7 +194,8 @@ internal class PracticeReminders(
         const val IGNORED_ENOUGH = 3
 
         const val CHANNEL = "practice_reminders"
-        const val NOTIFICATION = 4
+        // Its own number: 1, 3 and 4 are the lyrics, sign-in and capture services' foreground notifications.
+        const val NOTIFICATION = 5
 
         private const val KEY_ON = "practice_reminder_on"
         private const val KEY_MINUTE = "practice_reminder_minute"

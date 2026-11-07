@@ -1042,12 +1042,7 @@ class MainActivity : ComponentActivity() {
         when (intent.action) {
             // The widget's songs ask to be shown here rather than opened. Back from signing in with
             // ChatGPT, it's all done by then.
-            // A test link Crosstune sent itself says its links reach it, and is nothing to look up.
-            Intent.ACTION_VIEW -> if (intent.data?.fragment == TEST_LINK) viewModel.linkTested(intent.data?.host) else if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
-                intent.dataString,
-                show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false),
-                keepWords = floatedWhenBack
-            )
+            Intent.ACTION_VIEW -> handleLink(intent)
             ACTION_OPEN_RECENT -> viewModel.openRecent(intent.dataString)
             ACTION_PRACTISE -> if (intent.component?.className == PRACTISE_ALIAS) viewModel.practiseDue()
             Intent.ACTION_SEND -> {
@@ -1062,6 +1057,16 @@ class MainActivity : ComponentActivity() {
                 withMicrophone(if (intent.getBooleanExtra(EXTRA_LYRICS, false)) MicrophoneFor.LISTEN_FOR_LYRICS else MicrophoneFor.LISTEN)
             }
         }
+    }
+
+    /** A link opened here: a test link Crosstune sent itself says its links reach it, and is nothing to look up. */
+    private fun handleLink(intent: Intent) {
+        if (intent.data?.fragment == TEST_LINK) return viewModel.linkTested(intent.data?.host)
+        if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
+            intent.dataString,
+            show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false),
+            keepWords = floatedWhenBack
+        )
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

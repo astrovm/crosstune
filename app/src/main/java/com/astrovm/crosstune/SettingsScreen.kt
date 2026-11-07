@@ -136,6 +136,25 @@ private fun depth(key: String?) = when (key) {
     else -> 2
 }
 
+/** Once there's been a session to take the time from; the time is set from the bell on the practice list. */
+@Composable
+private fun ReminderSetting(state: UiState, actions: ScreenActions) {
+    val minute = state.reminderMinute ?: return
+    SectionHeader(stringResource(R.string.saved_practice))
+    Group {
+        SettingSwitch(
+            label = stringResource(R.string.practice_reminders),
+            description = when {
+                state.reminder.blocked -> stringResource(R.string.practice_reminder_blocked)
+                state.reminder.on -> reminderTime(LocalContext.current, minute)
+                else -> null
+            },
+            checked = state.reminder.working,
+            onCheckedChange = actions.onReminderChange
+        )
+    }
+}
+
 @Composable
 private fun SettingsList(
     state: UiState,
@@ -209,22 +228,7 @@ private fun SettingsList(
             NextLineAheadRow(state.nextLineAheadMs, actions.onNextLineAheadChange)
         }
 
-        // Once there's been a session to take the time from; the time is set from the bell on the practice list.
-        state.reminderMinute?.let { minute ->
-            SectionHeader(stringResource(R.string.saved_practice))
-            Group {
-                SettingSwitch(
-                    label = stringResource(R.string.practice_reminders),
-                    description = when {
-                        state.reminder.blocked -> stringResource(R.string.practice_reminder_blocked)
-                        state.reminder.on -> reminderTime(LocalContext.current, minute)
-                        else -> null
-                    },
-                    checked = state.reminder.working,
-                    onCheckedChange = actions.onReminderChange
-                )
-            }
-        }
+        ReminderSetting(state, actions)
 
         // The AI features run on the user's ChatGPT plan, once signed in.
         SectionHeader(stringResource(R.string.settings_chatgpt_title))

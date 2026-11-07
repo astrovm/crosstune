@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -38,6 +39,10 @@ class PracticeRemindersTest {
     private val reminders by lazy { PracticeReminders(app, now = { clock }, zone = { zone }) }
 
     private fun at(day: Int, hour: Int, minute: Int = 0, zone: ZoneId = this.zone) = LocalDateTime.of(2026, 3, day, hour, minute).atZone(zone).toInstant().toEpochMilli()
+
+    /** The day's alarm as the app asks Android for it: it's the same one that's found, set or cancelled. */
+    private fun alarmIntent(flag: Int): PendingIntent? =
+        PendingIntent.getBroadcast(app, 0, Intent(PracticeReminders.ACTION_REMIND).setClass(app, PracticeReminderReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or flag)
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
 
@@ -140,11 +145,11 @@ class PracticeRemindersTest {
         val alarm = alarms.peekNextScheduledAlarm()
         assertNotNull(alarm)
         assertEquals(at(3, 20, 5), alarm?.triggerAtMs)
-        assertEquals(AlarmManager.RTC_WAKEUP, alarm?.type)
+        assertEquals(AlarmManager.RTC_WAKEUP, alarm?.getType())
         assertEquals(true, alarm?.isAllowWhileIdle)
         // Inexact, so it asks no special permission.
         assertTrue(requireNotNull(alarm).windowLengthMs != 0L)
-        assertEquals(PracticeReminders.ACTION_REMIND, shadowOf(alarm.operation).savedIntent.action)
+        assertNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))
         reminders.turn(false)
         assertNull(alarms.peekNextScheduledAlarm())
     }
@@ -306,7 +311,7 @@ class PracticeRemindersTest {
         saved(line("One"))
         phone.sessionDone()
         phone.turn(true)
-        alarms.scheduledAlarms.toList().forEach { app.getSystemService(AlarmManager::class.java).cancel(requireNotNull(it.operation)) }
+        app.getSystemService(AlarmManager::class.java).cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_UPDATE_CURRENT)))
         assertNull(alarms.peekNextScheduledAlarm())
         PracticeReminderReceiver().onReceive(app, Intent(Intent.ACTION_BOOT_COMPLETED))
         assertNotNull(alarms.peekNextScheduledAlarm())
