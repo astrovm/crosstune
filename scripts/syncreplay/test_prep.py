@@ -1,4 +1,5 @@
 import argparse
+from array import array
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import contextlib
@@ -6,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import random
 import subprocess
 import tempfile
 import threading
@@ -767,16 +769,6 @@ class PhoneTest(unittest.TestCase):
             self.assertEqual(0, r.behind(MagicMock(), Path(directory), [(0, 100, 1000)]))
         self.assertIn('heard nothing', said.call_args_list[-1].args[0])
 
-    def test_a_while_that_fits_two_places_doesnt_say_where_the_clock_is(self):
-        # A riff played twice: heard in it, the match is as good far from the app's clock as near it. Police, run 3: "54 s behind".
-        import numpy as np
-        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
-        noise[16000 * 40:16000 * 48] = noise[16000 * 10:16000 * 18]
-        with tempfile.TemporaryDirectory() as directory, patch('builtins.print') as said:
-            noise[16000 * 10:16000 * 18].astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
-            self.assertEqual(0, r.behind(noise, Path(directory), [(0, 5000, 10000)]))
-        self.assertIn('fits more than one place', said.call_args_list[0].args[0])
-
     def test_line_times_go_at_the_players_rate(self):
         log = ('said 24000 at 100000 playing true, kept 24000 at 100000\n'
                'lit 0 at 116000 pos 30000\n'
@@ -807,39 +799,6 @@ class PhoneTest(unittest.TestCase):
                 r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri='file:///sdcard/Music/song.m4a'))
         self.assertIn(('am', 'start', '-a', 'android.intent.action.VIEW', '-d', 'file:///sdcard/Music/song.m4a', '-t', 'audio/*', '-p', 'player'), [c.args for c in shell.call_args_list])
 
-    def test_a_while_heard_at_another_rate_says_how_far_behind_the_clock_is(self):
-        import numpy as np
-        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
-        # As a player keeping the pitch does it: bits of the recording as they are, and every so often one left out.
-        kept = np.concatenate([noise[at:at + 1600] for at in range(16000 * 10, 16000 * 18, 1680)])
-        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
-            kept.astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
-            self.assertAlmostEqual(500, r.behind(noise, Path(directory), [(0, 5000, 9500)], 1.05), delta=15)
-
-    def test_a_while_heard_at_another_rate_goes_by_the_rate_since_the_line_lit(self):
-        import numpy as np
-        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
-        kept = np.concatenate([noise[at:at + 1600] for at in range(16000 * 10, 16000 * 18, 1680)])
-        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
-            kept.astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
-            # Lit 2 s before the while started: the clock says 8000 + 2000 x 1.05 = 10100, so it's right to 100 ms.
-            self.assertAlmostEqual(-100, r.behind(noise, Path(directory), [(0, 3000, 8000)], 1.05), delta=15)
-
-    def test_a_while_at_another_rate_that_fits_nowhere_doesnt_say(self):
-        import numpy as np
-        rng = np.random.default_rng(1)
-        noise = rng.normal(0, 3000, 16000 * 60).astype(np.float32)
-        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
-            rng.normal(0, 3000, 16000 * 8).astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
-            self.assertEqual(0, r.behind(noise, Path(directory), [(0, 5000, 9500)], 1.05))
-
-    def test_a_while_that_fits_one_place_says_how_far_behind_the_clock_is(self):
-        import numpy as np
-        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
-        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
-            noise[16000 * 10:16000 * 18].astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
-            self.assertEqual(500, r.behind(noise, Path(directory), [(0, 5000, 9500)]))
-
     def test_no_line_with_truth_lit_still_scores(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
                 patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
@@ -851,6 +810,85 @@ class PhoneTest(unittest.TestCase):
             (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\nlit -1 at 200 pos 3000\n')
             r.score_phone('song', kept)
         self.assertIn('never lit 1', said.call_args_list[-1].args[0])
+
+
+class WhereTheWhileWasHeardTest(unittest.TestCase):
+    """What's made of how well a while fits, on what CI's `site` job has: finding how well takes numpy, which it hasn't, so it's stood in for here."""
+    def samples(self, seconds=60):
+        rng = random.Random(1)
+        return array('h', (rng.randrange(-30000, 30000) for _ in range(16000 * seconds)))
+
+    def fits_only_where_its_samples_are(self, near, piece):
+        rng = random.Random(piece[0])
+        fits = [rng.random() for _ in range(len(near) - len(piece) + 1)]
+        for at in range(len(fits)):
+            if near[at] == piece[0] and near[at:at + 8] == piece[:8]:
+                fits[at] = 2.0
+                break
+        return fits
+
+    def behind_with(self, song, heard, lit, rate=1.0, fits=None):
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print') as said, \
+                patch.object(r, 'fits_along', fits or self.fits_only_where_its_samples_are):
+            (Path(directory) / 'heard-5000.pcm').write_bytes(heard.tobytes())
+            return r.behind(song, Path(directory), lit, rate), [call.args[0] for call in said.call_args_list]
+
+    def stretched(self, song):
+        # As a player keeping the pitch does it: bits of the recording as they are, and every so often one left out.
+        return array('h', (sample for at in range(16000 * 10, 16000 * 18, 1680) for sample in song[at:at + 1600]))
+
+    def test_a_while_that_fits_two_places_doesnt_say_where_the_clock_is(self):
+        # A riff played twice: heard in it, the match is as good far from the app's clock as near it. Police, run 3: "54 s behind".
+        fits = [0.0] * (16000 * 60)
+        fits[16000 * 10], fits[16000 * 40] = 1.0, 0.93
+        lag, said = self.behind_with(array('h'), array('h', [1]), [(0, 5000, 10000)], fits=lambda *_: fits)
+        self.assertEqual(0, lag)
+        self.assertIn('fits more than one place', said[0])
+
+    def test_a_while_that_fits_one_place_says_how_far_behind_the_clock_is(self):
+        # True fits measured up to 0.85 of the best, near it: those aren't another place.
+        fits = [0.0] * (16000 * 60)
+        fits[16000 * 10], fits[16000 * 10 + 8000], fits[16000 * 40] = 1.0, 0.85, 0.7
+        lag, _ = self.behind_with(array('h'), array('h', [1]), [(0, 5000, 9500)], fits=lambda *_: fits)
+        self.assertEqual(500, lag)
+
+    def test_a_while_heard_at_another_rate_says_how_far_behind_the_clock_is(self):
+        song = self.samples()
+        lag, _ = self.behind_with(song, self.stretched(song), [(0, 5000, 9500)], 1.05)
+        self.assertAlmostEqual(500, lag, delta=15)
+
+    def test_a_while_heard_at_another_rate_goes_by_the_rate_since_the_line_lit(self):
+        song = self.samples()
+        # Lit 2 s before the while started: the clock says 8000 + 2000 x 1.05 = 10100, so it's 100 ms ahead.
+        lag, _ = self.behind_with(song, self.stretched(song), [(0, 3000, 8000)], 1.05)
+        self.assertAlmostEqual(-100, lag, delta=15)
+
+    def test_a_while_at_another_rate_that_fits_nowhere_doesnt_say(self):
+        song = self.samples()
+        rng = random.Random(2)
+        lag, said = self.behind_with(song, array('h', (rng.randrange(-30000, 30000) for _ in range(16000 * 8))), [(0, 5000, 9500)], 1.05)
+        self.assertEqual(0, lag)
+        self.assertIn("doesn't say", said[0])
+
+    def test_silence_at_another_rate_says_nothing(self):
+        song = self.samples(20)
+        self.assertIsNone(r.found_at_rate(song, array('h', [0] * 16000), 5000, 1.05))
+
+
+@unittest.skipUnless(importlib.util.find_spec('numpy'), "CI's site job has no numpy; the replay's own Python has it")
+class FitsAlongTest(unittest.TestCase):
+    def test_a_while_fits_where_it_was_taken_from_even_next_to_something_louder(self):
+        import numpy as np
+        song = np.random.default_rng(1).normal(0, 3000, 16000 * 20).astype(np.float32)
+        song[16000 * 15:] *= 5
+        fits = r.fits_along(song, song[16000 * 5:16000 * 8])
+        self.assertEqual(16000 * 5, r.found_in_one_place(fits))
+
+    def test_bits_of_a_while_played_faster_still_find_it(self):
+        import numpy as np
+        song = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
+        heard = array('h', np.concatenate([song[at:at + 1600] for at in range(16000 * 10, 16000 * 18, 1680)]).astype(np.int16).tobytes())
+        self.assertAlmostEqual(10000, r.found_at_rate(song, heard, 9500, 1.05), delta=15)
 
 
 class PhoneVolumeTest(unittest.TestCase):

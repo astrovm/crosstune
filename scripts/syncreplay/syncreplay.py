@@ -61,6 +61,7 @@ and a replay hears the rest it asks for, keeping it, so a change to the app's ti
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
+from array import array
 import fcntl
 import html
 import json
@@ -700,10 +701,29 @@ def watch(args):
     score_phone(args.id, kept)
 
 
+def fits_along(song, heard):
+    """How well [heard] fits at each place in [song], a loud place no better for being loud."""
+    import numpy as np
+    song, heard = np.asarray(song, np.float32), np.asarray(heard, np.float32)
+    n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
+    match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard) + 1]
+    # A running sum, as sliding one while over a whole song took minutes for each heard.
+    energy = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
+    loud = np.sqrt(np.maximum(energy[len(heard):] - energy[:-len(heard)], 0)) + 1e-9
+    return (match / loud).tolist()
+
+
+def found_in_one_place(fits):
+    """The place that fits best, unless another more than 1 s from it fits nearly as well."""
+    best = fits.index(max(fits))
+    # A riff played again fits there nearly as well, wherever the clock is: 54 s off on a song whose clock was right.
+    others = fits[:max(0, best - 16000)] + fits[best + 16000:]
+    return None if others and max(others) >= fits[best] * ONE_PLACE else best
+
+
 def found_at_rate(song, heard, app, rate):
     """Where in [song] a while [heard] at [rate] starts, in ms, near where the [app] said; None if it doesn't say.
     A player keeping the pitch plays bits of the recording as they are, so short bits still fit where the while as a whole doesn't."""
-    import numpy as np
     bit, reach = 3200, 16 * STRETCH_REACH_MS
     votes = []
     for start in range(0, len(heard) - bit, 8000):
@@ -711,13 +731,10 @@ def found_at_rate(song, heard, app, rate):
         expected = round(app * 16 + start * rate)
         low = max(0, expected - reach)
         near = song[low:expected + reach + bit]
-        if len(near) < bit or not piece.any():
+        if len(near) < bit or not any(piece):
             continue
-        n = 1 << int(np.ceil(np.log2(len(near) + bit)))
-        match = np.fft.irfft(np.fft.rfft(near, n) * np.conj(np.fft.rfft(piece, n)), n)[:len(near) - bit + 1]
-        energy = np.concatenate(([0.0], np.cumsum(near.astype(np.float64) ** 2)))
-        loud = np.sqrt(np.maximum(energy[bit:] - energy[:-bit], 0))[:len(match)] + 1e-9
-        votes.append(low + int(np.argmax(match / loud)) - start * rate)
+        fits = fits_along(near, piece)
+        votes.append(low + fits.index(max(fits)) - start * rate)
     if not votes:
         return None
     middle = statistics.median(votes)
@@ -731,36 +748,25 @@ def behind(song, kept, lit, rate=1.0):
     if not files:
         print("The app heard nothing to check its clock by, so it's taken as right.")
         return 0
-    import numpy as np
     offs = []
     for f in files:
         started = int(re.search(r"heard-(\d+)", f.name).group(1))
         clock = min(lit, key=lambda e: abs(e[1] - started))
         app = clock[2] + (started - clock[1]) * rate
-        heard = np.frombuffer(f.read_bytes(), np.int16).astype(np.float32)[:16000 * 8]
-        if not heard.any():
+        heard = array("h", f.read_bytes())[:16000 * 8]
+        if not any(heard):
             sys.exit(f"{f.name} is silent: the app heard nothing of the music. Was the media volume 0?")
         if rate != 1:
             at = found_at_rate(song, heard, app, rate)
             if at is None:
                 print(f"the app said {app / 1000:6.1f} s, and what it heard doesn't say")
                 continue
-            offs.append(at - app)
-            print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
-            continue
-        n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
-        match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
-        # A running sum, as sliding one while over a whole song took minutes for each heard.
-        energy = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
-        loud = np.sqrt(np.maximum(energy[len(heard):] - energy[:-len(heard)], 0))[:len(match)] + 1e-9
-        fits = match / loud
-        best = int(np.argmax(fits))
-        at = best / 16
-        # A riff played again fits there nearly as well, wherever the clock is: 54 s off on a song whose clock was right.
-        others = np.concatenate((fits[:max(0, best - 16000)], fits[best + 16000:]))
-        if len(others) and others.max() >= fits[best] * ONE_PLACE:
-            print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: it fits more than one place, so it doesn't say")
-            continue
+        else:
+            best = found_in_one_place(fits_along(song, heard))
+            if best is None:
+                print(f"the app said {app / 1000:6.1f} s: what it heard fits more than one place, so it doesn't say")
+                continue
+            at = best / 16
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
     if not offs:
