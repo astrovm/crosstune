@@ -8,11 +8,11 @@ av==19.0.2
     # via faster-whisper
 click==8.5.0
     # via huggingface-hub
-ctranslate2==4.8.4
+ctranslate2==4.8.5
     # via faster-whisper
 faster-whisper==1.2.1
     # via -r /tmp/crosstune-smart/requirements.txt
-filelock==4.2.6
+filelock==4.2.7
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime

@@ -15,6 +15,7 @@ python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed o
 ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
 python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines
 node --test report/*.test.mjs             # the report Worker's tests
+python3 scripts/reports/reports.py triage --since ID   # the reports in D1, grouped; `pull` first, read-only, and they stay out of git
 ```
 
 Results land in `app/build/test-results/testDebugUnitTest/*.xml`, coverage in `app/build/reports/kover/reportDebug.xml`. Every new line needs a test that runs it: Kover requires 100% line coverage.
