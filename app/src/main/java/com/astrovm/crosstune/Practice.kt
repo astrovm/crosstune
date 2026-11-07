@@ -168,16 +168,10 @@ internal class PracticeCards(
             val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
             var opened = false
             val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null else {
-                // Kept from no app in particular, or one that plays nothing asked of it, a song YouTube
-                // Music has is asked of YouTube Music, not of whatever played last, e.g. a video, which
-                // wouldn't play it.
-                val from = app?.takeIf { MusicService.ofPackage(it)?.playsAskedSongs != false }
-                val link = youTubeMusicLink(song, from)
-                val asking = from ?: MusicService.YOUTUBE_MUSIC.packageName.takeIf { link != null }
-                // An app that can't be woken in the background is opened on the song, as it is with no
-                // app to ask at all, and left again once it has it, unless it only plays in front.
-                val asked = source.playSong(song, asking, link, mustStart = true)
-                opened = !asked && link != null && source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link)
+                // Spotify plays nothing asked of it by name, but its own link it starts at once, and it can
+                // be moved around in from there, on its free plan too.
+                opened = openedOnOwnLink(source, song, app)
+                val asked = !opened && asked(source, song, app) { link -> opened = source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link) }
                 (asked || opened) && withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) { ready() } != null
             }
             if (opened) source.comesBack()
@@ -185,6 +179,25 @@ internal class PracticeCards(
         } finally {
             following.cancel()
         }
+    }
+
+    /** Whether [app], one that plays nothing asked of it but each song's own link, was opened on [song]'s. */
+    private suspend fun openedOnOwnLink(source: PlaybackSource, song: MusicMetadata, app: String?): Boolean {
+        val service = app?.let(MusicService::ofPackage)?.takeIf { !it.playsAskedSongs && it.playsSongBySong } ?: return false
+        return matcher.find(service, song)?.let { source.openSong(app, it) } == true
+    }
+
+    /**
+     * Whether [song] was asked for and is starting. Kept from no app in particular, or one that plays nothing
+     * asked of it, a song YouTube Music has is asked of YouTube Music, not of whatever played last, e.g. a video,
+     * which wouldn't play it. An app that can't be woken in the background is left to [open] on the song, as it
+     * is with no app to ask at all, and left again once it has it, unless it only plays in front.
+     */
+    private suspend fun asked(source: PlaybackSource, song: MusicMetadata, app: String?, open: (String) -> Unit): Boolean {
+        val from = app?.takeIf { MusicService.ofPackage(it)?.playsAskedSongs != false }
+        val link = youTubeMusicLink(song, from)
+        val asking = from ?: MusicService.YOUTUBE_MUSIC.packageName.takeIf { link != null }
+        return source.playSong(song, asking, link, mustStart = true).also { if (!it && link != null) open(link) }
     }
 
     /** [song]'s link on YouTube Music when that's the app to ask, or may be; null when it isn't, or isn't there. */

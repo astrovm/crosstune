@@ -22,6 +22,12 @@ class SyncedLyricsTest {
     }
 
     @Test
+    fun aStampNetEaseEndsWithMinusOneIsReadAndNeverPartOfTheWords() {
+        // Its lines with no time of their own, such as a credit, come with one.
+        assertEquals(listOf(LyricLine(0, "作曲 : Someone")), SyncedLyrics.parse("[00:00.00-1] 作曲 : Someone"))
+    }
+
+    @Test
     fun aLineSungTwiceIsInPlaceBothTimes() {
         // A chorus written once with both its times, the later one first.
         val lines = SyncedLyrics.parse("[00:20.00][00:05.00] Chorus\n[00:10.00] Verse")

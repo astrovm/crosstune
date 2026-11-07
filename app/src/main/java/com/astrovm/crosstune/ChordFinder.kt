@@ -81,17 +81,19 @@ internal class ChordFinder(
         val key = "$CACHE_VERSION\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
         // One kept before a page of the words alone stopped counting as chords is looked up again.
         cache?.get(key)?.let { kept -> fromCache(kept)?.takeIf { ChordSheets.place(it, texts) != null }?.let { return@withContext Chords.Found(it) } }
+        // U-FRET and J-Total both want the song's other names, so this lookup asks for them once, and only if a step does.
+        val otherNames = askedOnce { otherNames(song) }
         // Japanese words are likelier on U-FRET; any song may be on either.
-        val sites = if (texts.any(::japanese)) {
-            listOf(::fromUFret, ::fromUltimateGuitar, ::fromJTotal)
+        val sites: List<suspend ((ChordSheet) -> Boolean) -> ChordSheet?> = if (texts.any(::japanese)) {
+            listOf({ fromUFret(song, otherNames, it) }, { fromUltimateGuitar(song, it) }, { fromJTotal(song, otherNames, it) })
         } else {
-            listOf(::fromUltimateGuitar, ::fromCifraClub, ::fromLaCuerda, ::fromUFret)
+            listOf({ fromUltimateGuitar(song, it) }, { fromCifraClub(song, it) }, { fromLaCuerda(song, it) }, { fromUFret(song, otherNames, it) })
         }
         var unavailable = false
         for (site in sites) {
             val sheet = withTimeoutOrNull(timeoutMs) {
                 try {
-                    Result.success(site(song) { ChordSheets.place(it, texts) != null })
+                    Result.success(site { ChordSheets.place(it, texts) != null })
                 } catch (e: IOException) {
                     Result.failure(e)
                 } catch (e: JSONException) {
@@ -119,9 +121,7 @@ internal class ChordFinder(
      * song named in Latin letters by the names NetEase knows it by: "君は1000%" for "Kimi ha 1000%",
      * "Lemon" by "米津玄師" for Kenshi Yonezu.
      */
-    private suspend fun fromUFret(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? {
-        var netEase: OtherNames? = null
-        val otherNames = suspend { netEase ?: otherNames(song).also { netEase = it } }
+    private suspend fun fromUFret(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val parts = titleParts(song.title).filter(::japanese)
         searchUFret(song, "${song.title} ${song.artist}", song.title, otherNames, fits)?.let { return it }
         for (name in parts) searchUFret(song, name, name, otherNames, fits)?.let { return it }
@@ -303,9 +303,9 @@ internal class ChordFinder(
     }
 
     /** J-Total's first sheet for the song that [fits], by the names it's given, then, unless those are in Japanese already, by those it has there. */
-    private suspend fun fromJTotal(song: MusicMetadata, fits: (ChordSheet) -> Boolean): ChordSheet? =
+    private suspend fun fromJTotal(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? =
         searchJTotal(song, listOf(song.title) + titleParts(song.title), fits)
-            ?: if (japanese(song.title) && japanese(song.artist)) null else searchJTotal(song, otherNames(song).titles, fits)
+            ?: if (japanese(song.title) && japanese(song.artist)) null else searchJTotal(song, otherNames().titles, fits)
 
     private suspend fun searchJTotal(song: MusicMetadata, names: List<String>, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(names, { name -> jTotalSheets(song, name) }, fits) { url ->
@@ -385,6 +385,12 @@ internal class ChordFinder(
 
     /** A song's names in Japanese, and its artists' names, as NetEase or Japan's Apple Music store has them. */
     private class OtherNames(val titles: List<String>, val artists: List<String>)
+
+    /** [ask]'s answer, asked for the first time it's wanted and kept for the rest. One that failed isn't kept, so the next step asks again. */
+    private fun <T> askedOnce(ask: suspend () -> T): suspend () -> T {
+        var kept: T? = null
+        return { kept ?: ask().also { kept = it } }
+    }
 
     /**
      * The names NetEase has [song] by: in Japanese, "君は1000%" for "Kimi ha 1000%", and of the
