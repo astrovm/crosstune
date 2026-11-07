@@ -393,6 +393,17 @@
     <string name="practice_done">Przećwiczono %1$d</string>
     <string name="practice_back_to">Wróć do %1$s</string>
     <string name="practice_progress">%1$d z %2$d</string>
+    <string name="practice_reminders">Przypomnienia o ćwiczeniach</string>
+    <string name="practice_remind_me">Przypominaj</string>
+    <string name="practice_reminder_at">Przypomnienie o %1$s</string>
+    <string name="practice_reminder_blocked">Powiadomienia są wyłączone</string>
+    <string name="practice_reminder_songs">%1$s i jeszcze %2$d</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="one">%1$d fiszka do ćwiczenia</item>
+        <item quantity="few">%1$d fiszki do ćwiczenia</item>
+        <item quantity="many">%1$d fiszek do ćwiczenia</item>
+        <item quantity="other">%1$d fiszki do ćwiczenia</item>
+    </plurals>
     <string name="song_tab_meaning">Znaczenie</string>
     <string name="song_tab_words">Słowa</string>
     <string name="song_tab_artist">Wykonawca</string>

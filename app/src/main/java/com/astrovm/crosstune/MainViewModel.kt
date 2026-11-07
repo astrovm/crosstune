@@ -104,6 +104,8 @@ internal class MainViewModel(
     private val tutor: ChatGptTutor? = null,
     /** The time of day, for when saved lines are next practised. */
     private val wallClock: () -> Long = System::currentTimeMillis,
+    /** Asks cards due back once a day; nullable so tests need none. */
+    private val reminders: PracticeReminders? = null,
     /** Where a song's chords come from; nullable so tests need no chord sites. */
     private val chordFinder: ChordFinder? = null,
     /** Which language a song's words are in; nullable so tests need none. */
@@ -284,6 +286,7 @@ internal class MainViewModel(
             dismissedNotices = preferences.getStringSet(KEY_DISMISSED_NOTICES, null).orEmpty().toSet(),
             history = historyStore.load(),
             savedLines = savedLinesStore.load(),
+            reminder = reminders?.state ?: Reminder(),
             systemStateKnown = false,
             phone = phone,
             microphone = microphoneAccess()
@@ -293,13 +296,15 @@ internal class MainViewModel(
     init {
         // The timer is the app's, so one set from another screen, or before Crosstune was closed, shows too.
         sleepTimer?.let { timer -> viewModelScope.launch { timer.set.collect { uiState = uiState.copy(sleep = it) } } }
+        // A force stop takes the alarm with it, until now.
+        reminders?.arm()
     }
 
     var uiState by screen
         private set
 
     /** Kept lines practised as cards. */
-    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, wallClock, now)
+    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, wallClock, now, reminders)
 
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.withOneTap() }
@@ -3428,6 +3433,35 @@ internal class MainViewModel(
     fun gradePractice(grade: Grade) = cards.grade(grade)
 
     fun stopPractice() = cards.stop()
+
+    /** Due cards asked back once a day, or not. */
+    fun setReminder(on: Boolean) {
+        reminders?.turn(on)
+        refreshReminder()
+    }
+
+    /** The time of day they're asked back, from now on, in minutes from midnight. */
+    fun setReminderTime(minute: Int) {
+        reminders?.at(minute)
+        refreshReminder()
+    }
+
+    /** What may have changed in Android's settings, whether it lets them show. */
+    fun refreshReminder() {
+        uiState = uiState.copy(reminder = reminders?.state ?: uiState.reminder)
+    }
+
+    /** With no card left due, a reminder showing is out of date. */
+    fun clearReminderIfNoneDue() {
+        if (uiState.savedLines.cardsDueCount(wallClock(), uiState.cardTypes) == 0) reminders?.clear()
+    }
+
+    /** A reminder tapped: what's due, unless a session's going, over whatever's open, settings too. */
+    fun practiseDue() {
+        reminders?.practised()
+        uiState = uiState.copy(leaveSettings = true)
+        if (uiState.practice?.line == null) startPractice()
+    }
 
     fun backToBefore() = cards.backToBefore()
 
