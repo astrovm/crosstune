@@ -445,6 +445,6 @@ class ReminderBellTest {
         assertTrue("the line is let go", model().uiState.savedLines.isEmpty())
         composeRule.waitForIdle()
         val takenBack = runCatching { waitUntil { shadowOf(manager).allNotifications.isEmpty() } }.isSuccess
-        assertTrue("still showing: ${shadowOf(manager).allNotifications.map { it.notification.extras.getString(android.app.Notification.EXTRA_TITLE) }}", takenBack)
+        assertTrue("still showing: ${shadowOf(manager).allNotifications.map { it.extras.getString(android.app.Notification.EXTRA_TITLE) }}", takenBack)
     }
 }
