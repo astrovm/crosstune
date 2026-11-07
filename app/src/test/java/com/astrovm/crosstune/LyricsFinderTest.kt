@@ -1237,6 +1237,16 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun withOwnNamesNetEasesUntimedWordsUnderTheGivenOnesDontBetterLrclibsUntimedOnes() {
+        japaneseSong(
+            lrclib = { title -> if (title == "Hatsukoi") """[${answer("Hatsukoi", "Hiroko Mita", "LRCLIB's plain words")}]""" else "[]" },
+            netEase = { query -> if (query == "Hatsukoi Hiroko Mita") """{"result":{"songs":[{"id":3,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" else """{"result":{}}""" },
+            lyric = "Plain words, no timings"
+        )
+        assertEquals(Lyrics.Found("LRCLIB's plain words", source = LyricsFinder.LRCLIB), found(hatsukoi))
+    }
+
+    @Test
     fun ownNamesThatAreTheGivenOnesArentAskedAgain() {
         fake.handler = { request ->
             val url = request.url
