@@ -42,6 +42,42 @@ class LetrasLyricsTest {
         LyricsFinder(fake.client(), "test", busyPauseMs = 0).firstLook(song, timeoutMs).lyrics
     }
 
+    /** NetEase having the song with [lyric], and Letras answering with [results]. */
+    private fun netEaseHas(lyric: String, results: String = search(doc())) {
+        respond(results)
+        val others = fake.handler
+        fake.handler = { request ->
+            when {
+                request.url.host != "music.163.com" -> others(request)
+                request.url.encodedPath == "/api/song/lyric" -> FakeSpotify.html(request, JSONObject().put("lrc", JSONObject().put("lyric", lyric)).toString())
+                else -> FakeSpotify.html(request, """{"result":{"songs":[{"id":2,"name":"River Road","artists":[{"name":"The Walkers"}]}]}}""")
+            }
+        }
+    }
+
+    private val netEasesCopy = "Walkin down the rivr road\nSinging"
+
+    @Test
+    fun netEasesUntimedCopyGivesWayToLetras() {
+        netEaseHas(netEasesCopy)
+        assertEquals(Lyrics.Found("Walking down the river road\nSinging to the morning light", source = LyricsFinder.LETRAS), lookup())
+    }
+
+    @Test
+    fun netEasesUntimedCopyStandsInWhenLetrasHasNone() {
+        netEaseHas(netEasesCopy, search())
+        assertEquals(Lyrics.Found(netEasesCopy, source = LyricsFinder.NETEASE), lookup())
+    }
+
+    @Test
+    fun netEasesTimedCopyBeatsLetrasWithoutAskingIt() {
+        netEaseHas("[00:05.00] Walkin down the rivr road\n[00:10.00] Singing\n[00:15.00] To the morning light")
+        val found = lookup() as Lyrics.Found
+        assertEquals(LyricsFinder.NETEASE, found.source)
+        assertEquals(3, found.lines.size)
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://solr.sscdn.co/") })
+    }
+
     @Test
     fun aMatchingSearchResultSuppliesItsOwnPageAndPreservesLinesAndEntities() {
         respond(

@@ -877,6 +877,9 @@ internal class LyricsFinder(
             it is Lyrics.Found && (romanized == null || it.words.isIn(romanized)) && (!untimed || timing(it) >= WELL_TIMED) &&
                 (otherTake == null || (it.lengthMs != null && fits(it, metadata) && !timedApart(otherTake, it)))
         }
+        // NetEase's words are often someone's own copy, with typos and lines missing, so untimed ones only
+        // stand in for those Letras keeps, when it hasn't any. Better than what LRCLIB gave, they still win.
+        suspend fun triedNetEase(answer: Lyrics) = tried(answer) && (first is Lyrics.Found || timing(answer) > 0)
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         // A song given in its own script is often kept under the store's names in Latin letters, ILLIT's
         // Magnetic for 아일릿's; one given in Latin letters, under the names its own country gives it.
@@ -886,8 +889,8 @@ internal class LyricsFinder(
         val lengthMs = metadata.lengthMs ?: recording?.lengthMs
         // Under its own names the artist may still be credited as the music app names them, as
         // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
-        if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
-        if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
+        if (triedNetEase(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
+        if (own != null && triedNetEase(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
         // Letras's words are untimed, so they can't better untimed ones.
         if (!untimed && tried(fromLetras(metadata, timeoutMs))) return answers.last()
         // None better: the best timed of what was found, the first among equals, e.g. words timed
