@@ -19,6 +19,7 @@ on:
   pull_request:
     paths:
       - scripts/mutants-part/**
+      - scripts/mutants.py
       - scripts/mutants-post.sh
       - scripts/mutants-post.test.sh
       - .github/workflows/mutants-weekly.yml

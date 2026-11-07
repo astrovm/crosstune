@@ -7,6 +7,7 @@ on:
     paths:
       - app/src/main/java/**
       - scripts/mutants.py
+      - scripts/mutants-part/**
       - tools/pitest-changed-lines/**
       - .github/workflows/mutants.yml
 
@@ -57,7 +58,7 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           marker='<!-- mutants -->'
-          lived=$(grep -E '  (survived|no coverage): ' "$RUNNER_TEMP/mutants.txt" || true)
+          lived=$(grep -E '^[^ ]+\.kt:[0-9]+  [a-z ]+: ' "$RUNNER_TEMP/mutants.txt" || true)
           old=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
           if [ -z "$lived" ]; then
