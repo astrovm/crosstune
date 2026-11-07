@@ -184,6 +184,18 @@ class ReminderBellTest {
         assertTrue(model().uiState.reminder.working)
     }
 
+    /** Android 13 is the first to have the notification permission, and the first to ask for it. */
+    @Test
+    @Config(sdk = [33])
+    fun androidThirteenAsksToo() {
+        allowed(false)
+        launch()
+        finishASession()
+        click(remindMe)
+        val asked = shadowOf(activity).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.POST_NOTIFICATIONS), asked.requestedPermissions.toList())
+    }
+
     @Test
     fun androidAsksOnTheTapNeverBefore() {
         allowed(false)
