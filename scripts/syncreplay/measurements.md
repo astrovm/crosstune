@@ -303,3 +303,101 @@ on any commit above, so it is dropped.
 
 `all` on b2449bdc: 1223 lines, 301 within 0.3 s, 619 within 0.5 s, 113 dark, 415 shown early. The same as
 this branch before the merge (the 41 songs don't pass `--skew`, so this shows nothing got worse).
+
+## The whole set, rebuilt
+
+Measured on 2026-11-07 on 12e05079: `origin/main` at 2505ebcf, whose app code it doesn't change, plus the replay tooling in PR #734.
+The agent cache was emptied and every input lost, so all of it is new: recordings, voices, truth, what's heard, and the words found.
+
+`set` then `all`, with truth from two GPU hearings and hearing on the CPU. A second `all` on the same inputs differs by at most 2 lines
+on any song and overall: 304 within 0.3 s, 607 within 0.5 s, 104 dark, 411 early. So 2 lines is the noise between two runs.
+
+| Song | Recording | Lines | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Bizarre Love Triangle | ZnrSNEah_20 | 24 | 6 | 10 | 2 | 5 | -24.1 |
+| Every Little Thing She Does Is Magic | 5WEjz2YoH80 | 24 | 8 | 19 | 0 | 5 | -0.7 |
+| Expresso Love | 0_RLLNRWur4 | 26 | 6 | 10 | 3 | 13 | -0.9 |
+| Otro Como Tú | 2V2nqZjRELg | 38 | 14 | 22 | 0 | 15 | -1.5 |
+| Tell It to My Heart | OtXIsUjDOk8 | 32 | 10 | 24 | 0 | 7 | -2.1 |
+| Time to Pretend | XUKyV49P8F0 | 16 | 11 | 15 | 0 | 0 | +1.0 |
+| Have In Mind (Kalimba Mix) | CH6t8l-jGYI | 17 | 0 | 0 | 17 | 0 | - |
+| Francesita | SGnbgk-ZHKU | 1 | 0 | 0 | 0 | 1 | -7.8 |
+| Nada Más Que Hablar (En Vivo) | iH8To-d2pX0 | 14 | 0 | 0 | 14 | 0 | - |
+| 二人だけのセレモニー | SaeY5sxStGM | 25 | 0 | 0 | 25 | 0 | - |
+| Ciclos Banais | 4PgA9No82ik | 39 | 0 | 0 | 39 | 0 | - |
+| Stay With Me | ZS6p32gX_yk | 34 | 2 | 13 | 0 | 21 | -1.0 |
+| Blue Monday | R1MBI2tSHe0 | 24 | 0 | 0 | 0 | 24 | -1.7 |
+| It's My Life | yWQezjGjiqs | 23 | 1 | 1 | 3 | 18 | +5.8 |
+| Into the Groove | HjOlnZ8aPdg | 64 | 33 | 53 | 0 | 7 | -0.7 |
+| Don't Go | Wg6VS3OL06Q | 11 | 1 | 5 | 0 | 6 | -0.9 |
+| Radio Ga Ga | g9L-hOwKcHQ | 37 | 11 | 23 | 0 | 14 | -1.2 |
+| Easy Love | VK4PJfTMawc | 7 | 1 | 4 | 0 | 3 | -0.7 |
+| カシミヤのほほえみ | K0sXE5_JhMg | 10 | 2 | 3 | 0 | 6 | +1.3 |
+| Lose Yourself | 4wOLVrGHiIU | 71 | 18 | 53 | 0 | 18 | -1.1 |
+| Bad Guy | ZD6rXLXZOEI | 34 | 23 | 33 | 0 | 0 | +0.5 |
+| Smells Like Teen Spirit | ljUtuoFt-8c | 8 | 0 | 0 | 0 | 8 | -2.1 |
+| Bohemian Rhapsody | BSTsnWoslP4 | 38 | 11 | 21 | 0 | 12 | +3.4 |
+| Hotel California | BciS5krYL80 | 56 | 11 | 36 | 0 | 13 | +1.3 |
+| Shape of You | xTvyyoF_LZY | 36 | 7 | 25 | 0 | 11 | -0.9 |
+| Blinding Lights | J7p4bzqLvCw | 21 | 11 | 18 | 0 | 2 | +0.7 |
+| Take On Me | HzdD8kbDzZA | 20 | 11 | 15 | 0 | 5 | -4.5 |
+| Dancing Queen | YkLLcIKhJ64 | 25 | 11 | 18 | 0 | 4 | +1.3 |
+| Despacito | FXovf5dsRTw | 57 | 11 | 26 | 0 | 30 | +6.2 |
+| De Música Ligera | sWft4cMiwXQ | 19 | 2 | 10 | 0 | 6 | +1.9 |
+| Flaca | uEV4RqqnlSE | 42 | 8 | 16 | 0 | 24 | +2.5 |
+| Águas de Março | WEuDVcXnElc | 49 | 12 | 23 | 0 | 26 | -1.2 |
+| Dynamite | HaEYUJ2aRHs | 24 | 12 | 20 | 0 | 3 | -0.6 |
+| Gee | qizghQs4K6E | 23 | 0 | 5 | 1 | 17 | -1.1 |
+| Plastic Love | T_lC2O1oIew | 14 | 0 | 0 | 0 | 14 | -11.6 |
+| La Vie en rose | qPU8mENUBXk | 24 | 7 | 16 | 0 | 8 | -1.0 |
+| 99 Luftballons | AT_0zXw2rRo | 25 | 10 | 13 | 0 | 12 | -1.3 |
+| Nel blu dipinto di blu | dXN0jpUUmOw | 13 | 0 | 1 | 0 | 12 | -1.2 |
+| Hips Don't Lie | nOj6d-HOw2w | 57 | 7 | 23 | 0 | 33 | -1.0 |
+| Every Little Thing She Does Is Magic | XB7AmIsxzfI | 22 | 17 | 21 | 0 | 1 | -0.6 |
+| Bizarre Love Triangle | LhLmgg_u29k | 20 | 7 | 10 | 0 | 8 | -1.5 |
+| **All** | | **1164** | **302** | **605** | **104** | **412** | -24.1 |
+
+Scored: 1164 of 1779 lines with words.
+
+Against the last full set (`all` on b2449bdc):
+
+| Set | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|---:|
+| Before, Issue #671 | 1223 | 301 (25%) | 619 (51%) | 113 (9%) | 415 |
+| Rebuilt | 1164 | 302 (26%) | 605 (52%) | 104 (9%) | 412 |
+
+Close, but not the same set, so a song's change isn't a change in the app. With the old inputs gone, this can't be split further:
+
+- Measured: 59 fewer lines are scored: 22 songs have 93 fewer, 13 have 34 more, 6 are the same.
+- Measured: main gained `LyricSpacing.kt` and changes to `LyricsFinder.kt` since aab38b93, so the same lookup can find other words.
+- My guess, not measured: the rest is sources answering differently than on 2026-11-03, and Whisper's two hearings agreeing on other lines.
+
+Of the 104 dark, 70 are the 3 songs whose words have no times (`hearSinging` needs lines): Ciclos Banais 39, Have In Mind 17, Nada Más Que Hablar 14.
+25 are 二人だけのセレモニー, whose words run 212 s on a 178 s recording, so none are taken: both sheets found for it, LRCLIB's and NetEase's, are that long. It was all dark before too (28 of 28).
+
+### Words looked for without the recording's length
+
+`SyncSetTest` looked words up knowing only the title and artist, while a phone also knows how long what it plays is. Plastic Love got a 477 s sheet on its 308 s recording,
+and its 14 lines all went dark, with its truth still scored. Now `set` looks again once the recordings are in. 7 of the 41 songs got other words; Plastic Love got 309 s.
+The numbers before that fix, on the same recordings: 1186 lines, 317 within 0.3 s, 615 within 0.5 s, 118 dark, 389 early.
+
+Plastic Love is back to where it was lit: 14 of 14 early, worst -11.6 s, against 15 of 15 and -11.3 s before.
+
+### What it took
+
+| Stage, one song at a time, 30 songs | Median seconds |
+|---|---:|
+| Demucs on the GPU | 14 |
+| Truth, two hearings on the GPU | 143 |
+| Hearing 20 s and 8 s stretches, CPU | 36 |
+| Whole song | 182 |
+
+`set --at-once 1` kept the load at a median of 3.2 and at most 10.5, with nothing logged about the desktop stalling. Whole set: about 2 hours, and `all` 30 minutes on its first run, 100 s after that.
+That first `all` had a median load of 10 and at most 19, with two `cargo` builds from other sessions running at the same time.
+CPU times weren't taken again: Demucs at 18 s against 125 s is at the top of this file.
+
+`set --at-once 3` with other agents building took truth from 2 to 16 minutes a song, ROCm warned its queues were oversubscribed, memory ran short, and mr went down at 22:05. No GPU fault or
+out-of-memory kill was logged, so what brought it down isn't known. Hearing also ran up to 40 processes in `all` (10 for each of 4 songs); it's now at most 4 for all of them.
+
+Run it again with: `scripts/syncreplay/setup.sh` (`REPLAY_CACHE=FOLDER REPLAY_ROCM=1`), then with `SYNCREPLAY_DIR`, `DEMUCS_PYTHON`, `DEMUCS_DEVICE=cuda` and `WHISPER_PYTHON` set,
+`syncreplay.py set --at-once 1 --gradle scripts/gradle-box/gradle-box.sh`, then `all` with the same `--gradle`. Point `HF_HOME`, `TORCH_HOME` and `XDG_CACHE_HOME` at the same folder for the models.
