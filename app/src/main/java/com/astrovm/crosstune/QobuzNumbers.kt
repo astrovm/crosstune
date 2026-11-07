@@ -6,6 +6,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -56,29 +57,38 @@ internal class QobuzNumbers(
     private suspend fun tryOther(song: MusicMetadata, app: String, link: String, over: MusicMetadata?, launched: CompletableDeferred<Unit>) = coroutineScope {
         val other = async { otherLink(song, link) }
         val watching = launch {
-            var before = playback.nowPlaying()
-            playback.nowPlayingUpdates().first { playing ->
-                val inTheApp = playing != null && sameApp(app, playing.app, installed)
-                val elsewhere = playing != null && !inTheApp && (playing.app != before?.app || playing.metadata.title != before?.metadata?.title)
-                before = playing
-                elsewhere || inTheApp && playing.metadata.title != over?.title && isTheSong(playing.metadata, song)
-            }
-            // The song started, or the user went on to another app's: either way, there's nothing to try any more.
+            playback.nowPlayingUpdates().first(endsTheWatch(song, app, over))
             this@coroutineScope.cancel()
         }
         launched.await()
         delay(WAIT_MS)
+        val next = linkToTry(app, link, over, other)
+        other.cancel()
+        watching.cancel()
+        next?.let { playback.openSong(app, it) }
+    }
+
+    /** Whether what plays leaves nothing to try: the song started, whenever that is, or the user went on to another app's. */
+    private fun endsTheWatch(song: MusicMetadata, app: String, over: MusicMetadata?): suspend (Heard.Song?) -> Boolean {
+        var before = playback.nowPlaying()
+        return { playing ->
+            val inTheApp = playing != null && sameApp(app, playing.app, installed)
+            val elsewhere = playing != null && !inTheApp && (playing.app != before?.app || playing.metadata.title != before?.metadata?.title)
+            before = playing
+            elsewhere || inTheApp && playing.metadata.title != over?.title && isTheSong(playing.metadata, song)
+        }
+    }
+
+    /** What to send once the wait is over, with a store yet to answer given only what's left of Android's window. */
+    private suspend fun linkToTry(app: String, link: String, over: MusicMetadata?, other: Deferred<String?>): String? {
         val woke = { over == null && playsElse(app) }
         val alternate = if (woke()) null else withTimeoutOrNull(LAST_RETRY_MS - WAIT_MS) { other.await() }
-        val next = when {
+        return when {
             woke() -> link
             alternate != null -> alternate
             over == null && playback.plays(app).first() != null -> link
             else -> null
         }
-        other.cancel()
-        watching.cancel()
-        next?.let { playback.openSong(app, it) }
     }
 
     /**
