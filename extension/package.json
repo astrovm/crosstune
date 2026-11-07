@@ -1,9 +1,9 @@
 {
   "name": "crosstune-extension",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Opens music links in the service you prefer.",
+  "description": "Opens music links in the service you prefer, and shows the lyrics of what's playing.",
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",

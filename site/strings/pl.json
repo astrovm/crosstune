@@ -69,7 +69,7 @@
   "privacy_link": "Polityka prywatności",
   "language_label": "Język",
   "privacy_title": "Polityka prywatności Crosstune",
-  "updated": "Ostatnia aktualizacja: 1 listopada 2026",
+  "updated": "Ostatnia aktualizacja: 6 listopada 2026",
   "short_h2": "W skrócie",
   "short_items": [
     "Bez konta, reklam i analityki.",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "Rozszerzenie Crosstune do Chrome, Edge, Brave i Firefoksa otwiera klikane linki do muzyki w serwisie wybranym w jego opcjach. Patrzy tylko na strony obsługiwanych serwisów muzycznych. Żeby rozpoznać utwór, album lub wykonawcę z linku, pobiera publiczną stronę lub publiczne API serwisu źródłowego. Żeby otworzyć sam element, wysyła tytuł i wykonawcę do wyszukiwarki serwisu docelowego, a dla Spotify do ListenBrainz, tak jak aplikacja. Jego ustawienia zostają w przeglądarce na Twoim komputerze. Nie ma konta, reklam ani analityki i nic nie wysyła deweloperowi."
+      "Rozszerzenie Crosstune do Chrome, Edge, Brave i Firefoksa otwiera klikane linki do muzyki w serwisie wybranym w jego opcjach. Patrzy tylko na strony obsługiwanych serwisów muzycznych. Żeby rozpoznać utwór, album lub wykonawcę z linku, pobiera publiczną stronę lub publiczne API serwisu źródłowego. Żeby otworzyć sam element, wysyła tytuł i wykonawcę do wyszukiwarki serwisu docelowego, a dla Spotify do ListenBrainz, tak jak aplikacja. Pokazuje też w panelu bocznym tekst tego, co gra, odczytując tytuł i wykonawcę ze strony serwisu muzycznego. Tylko gdy ten panel jest otwarty, wysyła je do LRCLIB, YouTube Music, NetEase Cloud Music i Letras, żeby znaleźć tekst, tak jak aplikacja. Film, który nie mówi, że jest muzyką, nie jest wyszukiwany. Jego ustawienia zostają w przeglądarce na Twoim komputerze. Nie ma konta, reklam ani analityki i nic nie wysyła deweloperowi."
     ],
     [
       "h2",

@@ -11,18 +11,20 @@ What the Chrome Web Store, Firefox Add-ons and Edge Add-ons ask for, ready to pa
 
 ## Chrome's privacy tab
 
-**Single purpose:** Opens music links in the music service the user picked: a click on a Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL or SoundCloud link opens the same song, album or artist in the chosen service.
+**Single purpose:** A companion for listening to music on the web: a click on a Spotify, YouTube Music, YouTube, Apple Music, Deezer, TIDAL or SoundCloud link opens the same song, album or artist in the chosen service, and a side panel shows the lyrics of what's playing on those sites.
 
 **Permission justifications:**
 
 - `webNavigation`: sees when a tab is about to open a music link, so it can open the same item in the chosen service instead.
-- `storage`: keeps the two settings, on or off and the chosen service, in the browser.
+- `storage`: keeps the two settings, on or off and the chosen service, in the browser, and for the session only, what each music tab says it plays.
+- `sidePanel`: shows the lyrics in the browser's side panel. Chrome and Edge only; Firefox has its sidebar.
+- `scripting`: reaches the music tabs already open when the extension is installed or updated, so the lyrics work without reloading them. It runs only the extension's own script, on the music sites. Chrome and Edge only.
 - `declarativeNetRequestWithHostAccess`: YouTube Music's and YouTube's search answers only requests that come from their own site, so the extension's searches to them say they come from it. Nothing else is changed.
-- Host permissions: the music sites whose links it opens, and their public endpoints it asks for a link's title and artist and to find the same item elsewhere. ListenBrainz finds a song on Spotify, whose search needs an account.
+- Host permissions: the music sites whose links it opens and whose pages say what's playing, and their public endpoints it asks for a link's title and artist and to find the same item elsewhere. ListenBrainz finds a song on Spotify, whose search needs an account. NetEase Cloud Music and Letras give a song's lyrics; LRCLIB does too and needs no permission.
 
 **Remote code:** No. All code is in the package.
 
-**Data usage:** It handles **Website content** only: the title and artist of the link opened, sent to the music services named above to find the same item. Nothing is sold, used for anything else, or sent to the developer. Tick the three disclosures.
+**Data usage:** It handles **Website content** only: the title and artist of the link opened, sent to the music services named above to find the same item, and the title and artist of the song playing, sent while the lyrics panel is open to LRCLIB, YouTube Music, NetEase Cloud Music and Letras to find its lyrics. Nothing is sold, used for anything else, or sent to the developer. Tick the three disclosures.
 
 ## The first version, by hand
 
