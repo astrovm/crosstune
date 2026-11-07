@@ -8213,6 +8213,16 @@ class MainActivityTest {
     }
 
     @Test
+    fun aQobuzOpenLeftExactlyTheLimitStillOpens() {
+        val phone = FakePlayback().apply { access = true }
+        qobuzSongWaitingForCrosstune(phone)
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMinutes(1))
+        controller!!.start()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        assertEquals(1, generateSequence { nextStartedActivity() }.count())
+    }
+
+    @Test
     fun aQobuzOpenLeftTooLongEndsItsWatch() {
         val phone = FakePlayback().apply { access = true }
         qobuzSongWaitingForCrosstune(phone)
