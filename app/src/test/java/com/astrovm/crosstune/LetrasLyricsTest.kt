@@ -78,6 +78,35 @@ class LetrasLyricsTest {
         assertTrue(fake.requestedUrls.none { it.startsWith("https://solr.sscdn.co/") })
     }
 
+    /** The Japanese store naming the song in its own script, which NetEase doesn't have it under. */
+    private fun storeHasOwnNames() {
+        val others = fake.handler
+        fake.handler = { request ->
+            when {
+                request.url.host != "itunes.apple.com" && request.url.queryParameter("s")?.contains("川の道") == true -> FakeSpotify.html(request, """{"result":{}}""")
+                request.url.encodedPath == "/search" && request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[{"trackId":42,"trackName":"River Road","artistName":"The Walkers"}]}""")
+                request.url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[{"trackName":"川の道","artistName":"歩く人"}]}""")
+                else -> others(request)
+            }
+        }
+    }
+
+    @Test
+    fun netEasesUntimedCopyUnderTheGivenNamesGivesWayToLetrasToo() {
+        netEaseHas(netEasesCopy)
+        storeHasOwnNames()
+        assertEquals(Lyrics.Found("Walking down the river road\nSinging to the morning light", source = LyricsFinder.LETRAS), lookup())
+        assertTrue(fake.requestedUrls.any { "川の道" in java.net.URLDecoder.decode(it, "UTF-8") && "163.com" in it })
+    }
+
+    @Test
+    fun netEasesTimedCopyUnderTheGivenNamesBeatsLetrasWithoutAskingIt() {
+        netEaseHas("[00:05.00] Walkin down the rivr road\n[00:10.00] Singing\n[00:15.00] To the morning light")
+        storeHasOwnNames()
+        assertEquals(LyricsFinder.NETEASE, (lookup() as Lyrics.Found).source)
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://solr.sscdn.co/") })
+    }
+
     @Test
     fun aMatchingSearchResultSuppliesItsOwnPageAndPreservesLinesAndEntities() {
         respond(
