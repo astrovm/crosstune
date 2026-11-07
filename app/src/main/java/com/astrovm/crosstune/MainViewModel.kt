@@ -1844,6 +1844,9 @@ internal class MainViewModel(
     /** Where the app playing the song says it is, before taking off how far its video is ahead. */
     private var appFollowing: Following? = null
 
+    /** The name of the app last seen playing the song shown, kept once it stops or goes on, which is often when a report goes. */
+    private var playedIn: String? = null
+
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
     private var appLeadMs: Long? = null
     /**
@@ -2717,6 +2720,7 @@ internal class MainViewModel(
                 val left = inSong(appFollowing)?.clock?.takeIf { playing == null }?.let { PlaybackClock(it.positionAt(now()), now(), playing = false) }
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) hear(left)
                 appFollowing = playing
+                playing?.app?.let { playedIn = it }
                 playing?.clock?.let(::noteClock)
                 // Listening by itself only lines up what the app plays: once it plays this no more, there's
                 // nothing for it, and the microphone would hear the room, as between two songs.
@@ -2806,6 +2810,7 @@ internal class MainViewModel(
         heardThisTime = false
         liningUp = false
         appFollowing = null
+        playedIn = null
         appLeadMs = null
         guessedLeadMs = null
         leadMatch = null
@@ -3006,7 +3011,7 @@ internal class MainViewModel(
 
     /** A report on the words shown, [song]'s: how they're timed, and each line put in time by hand. */
     private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null) = Report(
-        sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = uiState.following?.app, comment = comment,
+        sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = playedIn, comment = comment,
         sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = handTiming(), problem = problem, source = found?.source
     )
 
@@ -3051,8 +3056,12 @@ internal class MainViewModel(
         val sender = reports ?: return
         if (autoReports.reported(song, problem)) return
         val report = reportOn(sender, song, problem = problem)
-        // One that didn't get there goes the next time it's found.
-        viewModelScope.launch { if (sender.send(report)) autoReports.remember(song, problem) }
+        viewModelScope.launch {
+            // Found before it's followed, or before following it said anything, as a song with no words always is.
+            val app = report.app ?: playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.app
+            // One that didn't get there goes the next time it's found.
+            if (sender.send(report.copy(app = app))) autoReports.remember(song, problem)
+        }
     }
 
     /**

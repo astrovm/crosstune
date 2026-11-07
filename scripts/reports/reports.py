@@ -10,6 +10,9 @@
 Reports go in build/, which git ignores, and never into the repo: it's public. `pull` only ever asks D1
 to read, and goes through `cf`, in Node, as Wrangler's login may have expired. It needs Cloudflare's
 login, which `cf` keeps. The others need no network.
+
+A pull that can't read the whole table saves nothing, says why and exits non-zero, and the last pull's table is
+removed first, so an old table never passes for a new one.
 """
 import argparse
 import json
@@ -29,6 +32,8 @@ WRANGLER = ROOT / "report" / "wrangler.jsonc"
 COLUMNS = "id, at, version, android, title, artist, app, timed, synced, sung, length_ms, source, problem, comment"
 # Every column but `timing`, which is long and only says where lines were moved.
 READ = f"select {COLUMNS} from reports order by id"
+# Asked in the same batch, so it counts the table the rows were read from.
+COUNT = "select count(*) as n from reports"
 
 
 def wrangler_config(text):
@@ -37,22 +42,40 @@ def wrangler_config(text):
     return config["d1_databases"][0]["database_id"], config["account_id"]
 
 
-def rows_in(answer):
-    """The rows in what `cf d1 query` prints, a list with one result per statement."""
-    return [row for result in json.loads(answer) for row in result["results"]]
+def whole_table(answer):
+    """The rows in what `cf d1 query` prints for COUNT then READ, if that's every row the table has. Raises ValueError saying why not."""
+    try:
+        counted, read = json.loads(answer)
+        if not (counted["success"] and read["success"]):
+            raise ValueError("D1 says a statement failed")
+        total, rows = counted["results"][0]["n"], read["results"]
+    except (TypeError, KeyError, IndexError) as error:
+        raise ValueError(f"D1's answer isn't the count and the rows asked for ({type(error).__name__})") from error
+    if len(rows) != total:
+        raise ValueError(f"D1 counts {total} reports and gave {len(rows)}")
+    return rows
 
 
 def pull(run=subprocess.run):
+    """Saves every report in the table, or saves nothing and exits with why: the last pull's table goes first, as it would pass for this one's."""
+    SAVED.unlink(missing_ok=True)
     database, account = wrangler_config(WRANGLER.read_text())
     done = run(
-        ["npx", "--yes", "cf@latest", "d1", "query", database, "--sql", READ],
+        ["npx", "--yes", "cf@latest", "d1", "query", database, "--sql", f"{COUNT}; {READ}"],
         cwd=WRANGLER.parent, env={**os.environ, "CLOUDFLARE_ACCOUNT_ID": account}, capture_output=True, text=True,
     )
     if done.returncode != 0:
-        sys.exit(f"cf failed: {done.stderr.strip()[-500:]}")
-    rows = rows_in(done.stdout)
+        # cf uses a token in its environment over its login, and a helper's may be for other things.
+        token = "\nCLOUDFLARE_API_TOKEN is set here, and cf uses it instead of its login: unset it, or let it read D1." if "CLOUDFLARE_API_TOKEN" in os.environ and re.search(r"\b40[13]\b", done.stderr) else ""
+        sys.exit(f"cf failed, so no reports were pulled: {done.stderr.strip()[-500:]}{token}")
+    try:
+        rows = whole_table(done.stdout)
+    except ValueError as error:
+        sys.exit(f"cf answered, but not with the whole table, so no reports were pulled: {error}")
     OUT.mkdir(parents=True, exist_ok=True)
-    SAVED.write_text(json.dumps(rows, ensure_ascii=False, indent=1))
+    kept = SAVED.with_suffix(".part")
+    kept.write_text(json.dumps(rows, ensure_ascii=False, indent=1))
+    kept.replace(SAVED)
     print(f"{len(rows)} reports in {SAVED}")
 
 

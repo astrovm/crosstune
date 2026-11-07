@@ -14,10 +14,11 @@ import re
 import shlex
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent / "mutants-part"))
+from mutants_part import lived  # noqa: E402  the weekly run lists changes the same way
 SOURCES = "app/src/main/java/"
 LINES = ROOT / "app/build/mutants/changed-lines.txt"
 REPORT = ROOT / "app/build/reports/pitest/debug/mutations.xml"
@@ -56,12 +57,11 @@ def main():
     # test and nothing else, and a test that fails once in a while can't be looked into.
     subprocess.run([*shlex.split(args.gradle), ":app:pitestDebug", f"-PmutateLines={LINES}", "-PmutateVerbose=true"], cwd=ROOT, check=True)
 
-    mutations = ET.parse(REPORT).getroot()
-    lived = [m for m in mutations if m.get("status") in ("SURVIVED", "NO_COVERAGE")]
-    for m in sorted(lived, key=lambda m: (m.findtext("sourceFile"), int(m.findtext("lineNumber")))):
-        print(f"{m.findtext('sourceFile')}:{m.findtext('lineNumber')}  {m.get('status').lower().replace('_', ' ')}: {m.findtext('description')}")
-    print(f"{len(mutations) - len(lived)} of {len(mutations)} changes caught by a test.")
-    return 1 if lived else 0
+    rows, total = lived(REPORT)
+    for row in rows:
+        print(row)
+    print(f"{total - len(rows)} of {total} changes caught by a test.")
+    return 1 if rows else 0
 
 
 if __name__ == "__main__":

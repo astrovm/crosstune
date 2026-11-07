@@ -7,6 +7,7 @@ on:
     paths:
       - app/src/main/java/**
       - scripts/mutants.py
+      - scripts/mutants-part/**
       - tools/pitest-changed-lines/**
       - .github/workflows/mutants.yml
 
@@ -57,12 +58,17 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           marker='<!-- mutants -->'
-          lived=$(grep -E '  (survived|no coverage): ' "$RUNNER_TEMP/mutants.txt" || true)
+          lived=$(grep -E '^[^ ]+\.kt:[0-9]+  [a-z ]+: ' "$RUNNER_TEMP/mutants.txt" || true)
           old=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
           if [ -z "$lived" ]; then
             if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$old"; fi
             exit 0
+          fi
+          truncated=''
+          if [ "$(printf '%s' "$lived" | wc -c)" -gt 58000 ]; then
+            lived=$(printf '%s\n' "$lived" | LC_ALL=C awk '{ if (size + length($0) + 1 <= 58000 && !full) { print; size += length($0) + 1 } else full = 1 }')
+            truncated='Results truncated. See the run artifact for the full report.'
           fi
           body="$marker
           **Mutation testing:** $(tail -n 1 "$RUNNER_TEMP/mutants.txt")
@@ -71,6 +77,7 @@ jobs:
           $lived
           \`\`\`
 
+          $truncated
           Each one is a change to the code no test noticed. Not a blocker: real gaps get their own PR. [Full report]($RUN)"
           printf '%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$old" ]; then

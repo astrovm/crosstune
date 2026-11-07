@@ -14,35 +14,108 @@ def row(id, problem="no_lyrics", title="Made Up Song", artist="Some Band", versi
     return {"id": id, "problem": problem, "title": title, "artist": artist, "version": version, "android": android, "app": app, "comment": comment, "length_ms": length_ms}
 
 
+def d1_answer(rows, counted=None, success=True):
+    """What `cf d1 query` prints for COUNT then READ, with the rows of the second."""
+    return json.dumps([
+        {"results": [{"n": len(rows) if counted is None else counted}], "success": success},
+        {"results": rows, "success": success},
+    ])
+
+
 class ReadTest(unittest.TestCase):
     def test_it_only_ever_asks_d1_to_read(self):
-        self.assertRegex(reports.READ, r"^select\b[^;]*$")
+        for statement in (reports.READ, reports.COUNT):
+            self.assertRegex(statement, r"^select\b[^;]*$")
 
     def test_the_config_is_read_past_its_comments(self):
         text = '// the Worker\n{\n  // the account\n  "account_id": "acc",\n  "d1_databases": [{ "database_id": "db" }]\n}'
         self.assertEqual(reports.wrangler_config(text), ("db", "acc"))
 
-    def test_the_rows_of_each_statement_come_out_as_one_list(self):
-        self.assertEqual(reports.rows_in('[{"results": [{"id": 1}]}, {"results": [{"id": 2}]}]'), [{"id": 1}, {"id": 2}])
+    def test_the_table_is_the_rows_when_they_are_as_many_as_it_counts(self):
+        self.assertEqual(reports.whole_table(d1_answer([row(1), row(2)])), [row(1), row(2)])
+        self.assertEqual(reports.whole_table(d1_answer([])), [])
 
-    def test_pull_saves_only_under_build_and_tells_cf_the_account(self):
-        answer = mock.Mock(returncode=0, stdout=json.dumps([{"results": [row(1)]}]))
-        run = mock.Mock(return_value=answer)
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(reports, "OUT", Path(folder)), mock.patch.object(reports, "SAVED", Path(folder) / "reports.json"), mock.patch("builtins.print"):
-            reports.pull(run)
-            self.assertEqual(json.loads((Path(folder) / "reports.json").read_text()), [row(1)])
-        command, kwargs = run.call_args
-        self.assertEqual(command[0][3:5], ["d1", "query"])
-        self.assertIn("CLOUDFLARE_ACCOUNT_ID", kwargs["env"])
+    def test_fewer_rows_than_the_table_counts_is_not_the_table(self):
+        with self.assertRaisesRegex(ValueError, "counts 3 reports and gave 2"):
+            reports.whole_table(d1_answer([row(1), row(2)], counted=3))
 
-    def test_a_failed_pull_stops_and_says_why(self):
-        run = mock.Mock(return_value=mock.Mock(returncode=1, stderr="login expired"))
-        with self.assertRaisesRegex(SystemExit, "login expired"):
-            reports.pull(run)
+    def test_a_statement_d1_says_failed_is_not_the_table(self):
+        with self.assertRaisesRegex(ValueError, "statement failed"):
+            reports.whole_table(d1_answer([row(1)], success=False))
+
+    def test_an_answer_of_another_shape_is_not_the_table(self):
+        for answer in ('[{"results": [{"id": 1}], "success": true}]', '{"errors": []}', '[{"success": true}, {"success": true}]', "[]", "nothing"):
+            with self.assertRaises(ValueError, msg=answer):
+                reports.whole_table(answer)
 
     def test_the_saved_reports_are_ignored_by_git(self):
         self.assertEqual(reports.OUT.relative_to(reports.ROOT).parts[0], "build")
         self.assertIn("build/", (reports.ROOT / ".gitignore").read_text().splitlines())
+
+
+class PullTest(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.saved = Path(folder.name) / "reports.json"
+        for name, value in {"OUT": Path(folder.name), "SAVED": self.saved}.items():
+            patch = mock.patch.object(reports, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def pull(self, answer, env=None):
+        with mock.patch.dict(reports.os.environ, env or {}), mock.patch("builtins.print"):
+            reports.pull(mock.Mock(return_value=answer))
+
+    def test_pull_saves_the_rows_and_tells_cf_the_account(self):
+        run = mock.Mock(return_value=mock.Mock(returncode=0, stdout=d1_answer([row(1)])))
+        with mock.patch("builtins.print"):
+            reports.pull(run)
+        self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
+        self.assertEqual([path.name for path in self.saved.parent.iterdir()], ["reports.json"])
+        command, kwargs = run.call_args
+        self.assertEqual(command[0][3:5], ["d1", "query"])
+        self.assertEqual(command[0][-1], f"{reports.COUNT}; {reports.READ}")
+        self.assertIn("CLOUDFLARE_ACCOUNT_ID", kwargs["env"])
+
+    def test_a_pull_replaces_the_last_ones_table(self):
+        self.saved.write_text(json.dumps([row(1)]))
+        self.pull(mock.Mock(returncode=0, stdout=d1_answer([row(1), row(2)])))
+        self.assertEqual(json.loads(self.saved.read_text()), [row(1), row(2)])
+
+    def test_a_failed_pull_stops_says_why_and_leaves_no_table(self):
+        self.saved.write_text(json.dumps([row(1)]))
+        with self.assertRaisesRegex(SystemExit, "login expired") as stopped:
+            self.pull(mock.Mock(returncode=1, stderr="login expired"))
+        self.assertIn("no reports were pulled", str(stopped.exception))
+        self.assertEqual(list(self.saved.parent.iterdir()), [])
+
+    def test_a_failed_pull_exits_non_zero(self):
+        with self.assertRaises(SystemExit) as stopped:
+            self.pull(mock.Mock(returncode=1, stderr="403 Forbidden"))
+        self.assertNotIn(stopped.exception.code, (0, None))
+
+    def test_a_token_in_the_environment_is_named_when_cf_is_refused(self):
+        refused = mock.Mock(returncode=1, stderr="[10000] Authentication error\n403 Forbidden")
+        with self.assertRaisesRegex(SystemExit, "CLOUDFLARE_API_TOKEN is set here"):
+            self.pull(refused, {"CLOUDFLARE_API_TOKEN": "not-a-real-token"})
+        # Not named when there is none, or when the refusal is something else.
+        with self.assertRaises(SystemExit) as stopped:
+            with mock.patch.dict(reports.os.environ, clear=True):
+                self.pull(refused)
+        self.assertNotIn("CLOUDFLARE_API_TOKEN", str(stopped.exception))
+        with self.assertRaises(SystemExit) as stopped:
+            self.pull(mock.Mock(returncode=1, stderr="429 Too Many Requests"), {"CLOUDFLARE_API_TOKEN": "not-a-real-token"})
+        self.assertNotIn("CLOUDFLARE_API_TOKEN", str(stopped.exception))
+
+    def test_an_answer_that_is_not_the_whole_table_leaves_no_table(self):
+        self.saved.write_text(json.dumps([row(1)]))
+        with self.assertRaisesRegex(SystemExit, "not with the whole table.*counts 5 reports and gave 1"):
+            self.pull(mock.Mock(returncode=0, stdout=d1_answer([row(1)], counted=5)))
+        self.assertEqual(list(self.saved.parent.iterdir()), [])
+        with self.assertRaisesRegex(SystemExit, "not with the whole table"):
+            self.pull(mock.Mock(returncode=0, stdout=""))
+        self.assertEqual(list(self.saved.parent.iterdir()), [])
 
 
 class TriageTest(unittest.TestCase):

@@ -235,6 +235,63 @@ class LyricsReportTest {
     }
 
     @Test
+    fun aSongWithNoWordsSaysWhichAppPlaysIt() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        lyricsAre("[]")
+        // Playing from the start: it's found to have no words before it's followed.
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true)
+        openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertEquals("YouTube Music", sentReport().getJSONObject("song").getString("app"))
+    }
+
+    @Test
+    fun aSongNoAppPlaysNamesNone() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        lyricsAre("[]")
+        openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertFalse(sentReport().getJSONObject("song").has("app"))
+    }
+
+    @Test
+    fun withoutNotificationAccessNoAppIsAskedAfter() {
+        playback.access = false
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        lyricsAre("[]")
+        playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true)
+        openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertFalse(sentReport().getJSONObject("song").has("app"))
+    }
+
+    @Test
+    fun wordsLeftAfterTheAppWentOnStillSayWhichItWas() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        // On to the next song, which is why the words are left: it no longer plays this one.
+        playback.playing.value = null
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        assertEquals("YouTube Music", sentReport().getJSONObject("song").getString("app"))
+    }
+
+    @Test
+    fun theAppOfTheWordsLeftIsNotNamedForTheNextOnes() {
+        openLyrics()
+        playback.playing.value = null
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText(string(R.string.lyrics_button)) or hasContentDescription(string(R.string.lyrics_button)))[0].performScrollTo().performClick()
+        waitUntil { shown("Demo one") }
+        composeRule.runOnIdle { model().sendReport("") }
+        waitUntil { sentReports().isNotEmpty() }
+        assertFalse(sentReport().getJSONObject("song").has("app"))
+    }
+
+    @Test
     fun anInstrumentalHasNoWordsToReport() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","instrumental":true}]""")

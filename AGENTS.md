@@ -27,6 +27,7 @@ The most common defect here is a change that works where you tested it and is mi
 - **Strings.** Spanish uses Argentine voseo.
 - **Docs.** README's feature list, `site/strings/` and the store text in `fastlane/` describe what the app does. Keep them matching, in every language.
 - **Privacy.** Anything that changes what leaves the phone, or where it goes, changes README's Privacy section and the privacy page (`privacy_body` in every `site/strings/` file) too.
+- **Known issues.** A bug, limit or unchecked case you know of and aren't fixing in this PR gets a GitHub issue, linked from the PR. A note in a PR body or a comment alone gets lost.
 
 ## Design
 

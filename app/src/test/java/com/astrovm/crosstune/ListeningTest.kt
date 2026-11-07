@@ -4367,6 +4367,19 @@ class ListeningTest {
     }
 
     @Test
+    fun aLineKeptKeepsItsTranslationWhenTheWordsChangeAndNothingIsTranslatedNow() {
+        // Kept from the words as another site wrote them, and translated then; translation is off now.
+        val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5}]"""
+        prefs().edit().putString("saved_lines", saved).putBoolean("lyrics_translation", false).commit()
+        wordsOf(null, "Night sky")
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "Night sky" }
+        val kept = SavedLinesStore(prefs()).load().single()
+        // The practice and the translation it had go with the line to its new words.
+        assertEquals(3, kept.interval)
+        assertEquals("Cielo", kept.translation)
+    }
+
+    @Test
     fun aTimedLineKeptInRomajiFollowsItOnceWrittenInJapanese() {
         prefs().edit().putString("saved_lines", """[{"text":"hoshi ga hikaru","title":"Demo","artist":"Band","box":2,"start":1000,"end":30000}]""").commit()
         val openAi = signedInWithChatGpt()

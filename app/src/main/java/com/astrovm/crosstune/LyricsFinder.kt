@@ -877,6 +877,9 @@ internal class LyricsFinder(
             it is Lyrics.Found && (romanized == null || it.words.isIn(romanized)) && (!untimed || timing(it) >= WELL_TIMED) &&
                 (otherTake == null || (it.lengthMs != null && fits(it, metadata) && !timedApart(otherTake, it)))
         }
+        // NetEase's words are often someone's own copy, with typos and lines missing, so untimed ones only
+        // stand in for those Letras keeps, when it hasn't any. Better than what LRCLIB gave, they still win.
+        suspend fun triedNetEase(answer: Lyrics) = tried(answer) && (first is Lyrics.Found || timing(answer) > 0)
         val recording = withTimeoutOrNull(timeoutMs) { inStore(metadata) }
         // A song given in its own script is often kept under the store's names in Latin letters, ILLIT's
         // Magnetic for 아일릿's; one given in Latin letters, under the names its own country gives it.
@@ -886,8 +889,8 @@ internal class LyricsFinder(
         val lengthMs = metadata.lengthMs ?: recording?.lengthMs
         // Under its own names the artist may still be credited as the music app names them, as
         // "I Re'in For Re'in" is, rather than "アイリーン・フォーリーン".
-        if (tried(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
-        if (own != null && tried(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
+        if (triedNetEase(fromNetEase(own ?: metadata, lengthMs, timeoutMs, alsoBy = metadata.artist))) return answers.last()
+        if (own != null && triedNetEase(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
         // Letras's words are untimed, so they can't better untimed ones.
         if (!untimed && tried(fromLetras(metadata, timeoutMs))) return answers.last()
         // None better: the best timed of what was found, the first among equals, e.g. words timed
@@ -1138,15 +1141,18 @@ internal class LyricsFinder(
             val recordingMs = chosen.optLong("duration").takeIf { it > 0 }
             val lyric = NETEASE_LYRIC_URL.toHttpUrl().newBuilder()
                 .addQueryParameter("id", id.toString())
-                .addQueryParameter("lv", "1")
+                // The newest version, "-1". "1" says the app has version 1 already, so NetEase answers with
+                // nothing for every song whose words are still at version 1.
+                .addQueryParameter("lv", "-1")
                 // Timed word by word as well, for the songs it has so.
-                .addQueryParameter("yv", "1")
+                .addQueryParameter("yv", "-1")
                 .build()
             val answer = fromNetEaseOnce(lyric.toString()) as? JSONObject
             val byWord = answer?.optJSONObject("yrc")?.optString("lyric").orEmpty()
             val lrc = answer?.optJSONObject("lrc")?.optString("lyric").orEmpty()
-            // Its note for an instrumental, "Pure music, please enjoy", takes the words' place.
-            if (lrc.contains(NETEASE_INSTRUMENTAL)) return@withTimeoutOrNull Lyrics.Instrumental
+            // It flags an instrumental itself, and its note, "Pure music, please enjoy", takes the words' place. Its
+            // credits go on to name the players, so they're not looked at once it says so.
+            if (answer?.optBoolean("pureMusic") == true || lrc.contains(NETEASE_INSTRUMENTAL)) return@withTimeoutOrNull Lyrics.Instrumental
             // Words it keeps garbled are none, so another site's are looked for.
             (netEaseWordByWord(byWord, metadata) ?: netEaseWords(lrc, metadata))?.takeUnless { readAsGbk(it.words) }?.copy(lengthMs = recordingMs) ?: Lyrics.None
         } catch (_: IOException) {
