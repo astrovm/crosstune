@@ -561,21 +561,31 @@ def shell(*command):
     return adb("shell", " ".join(shlex.quote(part) for part in command)).decode("utf-8", "replace")
 
 
-def tap(text, tries=20):
-    """Taps the first thing on screen showing [text], or saying it to TalkBack; whether there was one."""
+def screens(tries):
+    """What's on screen, half a second apart, up to [tries] times. It can't always be read, as while it moves, so
+    it's read again. Never read at all, something else holds the screen, which only one thing at a time may read."""
+    read = False
     for _ in range(tries):
-        # The screen can't always be read, as while it moves: it's read again.
         try:
             shell("uiautomator", "dump", "/sdcard/window.xml")
             screen = shell("cat", "/sdcard/window.xml")
+            read = True
+            yield screen
         except subprocess.CalledProcessError:
-            screen = ""
+            pass
+        time.sleep(0.5)
+    if not read:
+        sys.exit("uiautomator can't read the phone's screen: something holds the screen, like a T3 device session (com.callstack.agentdevice.snapshothelper).")
+
+
+def tap(text, tries=20):
+    """Taps the first thing on screen showing [text], or saying it to TalkBack; whether there was one."""
+    for screen in screens(tries):
         for node in re.findall(r"<node [^>]*>", screen):
             if f'text="{text}"' in node or f'content-desc="{text}"' in node:
                 x1, y1, x2, y2 = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node).groups())
                 shell("input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
                 return True
-        time.sleep(0.5)
     return False
 
 
@@ -592,15 +602,7 @@ def names(screen, title):
 
 def shows(title, tries=40):
     """Whether something on screen names the song [title], soon: a recording named badly is heard first, which takes a while."""
-    for _ in range(tries):
-        try:
-            shell("uiautomator", "dump", "/sdcard/window.xml")
-            if names(shell("cat", "/sdcard/window.xml"), title):
-                return True
-        except subprocess.CalledProcessError:
-            pass
-        time.sleep(0.5)
-    return False
+    return any(names(screen, title) for screen in screens(tries))
 
 
 def playing(app):

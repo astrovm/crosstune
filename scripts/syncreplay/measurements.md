@@ -475,4 +475,24 @@ Better, not fixed. On main no while heard is ever matched, as the words have no 
 
 The replay tells the app a sheet is as long as the recording, and leaves the app's own hearing unset. With the sheet's own length and a stand-in Shazam, main gives 1168 lines, 311, 614, 90 dark, 407: 二人だけのセレモニー has 1 dark line of 14 scored instead of 25 of 25, as its words are taken, and hearing starts later on some songs, as on XB7AmIsxzfI, from 22.8 s instead of 11 s. That changes the baseline, so this branch keeps main's inputs, and it's measured on its own: this branch on those inputs gives 306, 619, 87, 406. My guess, not measured: the sheet's own length is what's nearer a phone.
 
-Earlier phone recordings were lost, so nothing here replays them: `--like-phone` needs a new `phone` run first.
+### On the phone
+
+The Samsung at media volume 1, put back to 0 after each run, on the APK from this branch, `phone ID --seconds 150 --app app.morphe.android.apps.youtube.music`. The earlier phone recordings were lost, and main wasn't run on the phone, so these have nothing to compare with yet.
+
+| Song | Run | Within 0.5 s | Within 1 s | Median off | Never lit | Clock behind |
+|---|---:|---:|---:|---:|---:|---:|
+| Every Little Thing She Does Is Magic, XB7AmIsxzfI | 1 | 13/22 | 22/22 | 0.41 s | 0 | -0.20 s |
+| | 2 | 6/21 | 12/21 | 0.97 s | 0 | -0.04 s |
+| | 3 | 20/22 | 22/22 | 0.23 s | 0 | taken as 0 |
+| Expresso Love, 0_RLLNRWur4 | 1 | 12/17 | 14/17 | 0.18 s | 0 | +0.26 s |
+| | 2 | 16/18 | 18/18 | 0.33 s | 0 | -0.12 s |
+| | 3 | 12/17 | 17/17 | 0.38 s | 0 | -0.03 s |
+
+- Measured: no sung line goes dark on either song, in any run. Expresso Love's run 1 has three lines at +5.2 s, and the Police's run 2 has lines 5 to 19 up to +2.1 s late until the words are put right at about 105 s. Why run 2 differs isn't known.
+- Run 3 of the Police first read 54 s behind: it kept one while, in an intro riff that fits two places almost equally. `behind` now leaves out a while that fits elsewhere at 0.8 of its best fit or more. False fits measured 0.91 to 0.95 of the best, true ones up to 0.85.
+- `run ID --like-phone`, replay against phone: the Police run 1 median 0.57 s apart, worst 1.2 s. Run 2 median 0.49 s, worst 2.4 s. Expresso Love run 2 median 0.03 s, worst 2.0 s.
+- On the phone the Police's first while starts at 11.4 s to 11.6 s, as the replay's does at 11 s. With the stand-in Shazam above it starts at 22.8 s, so the stand-in is further from the phone on this song.
+
+A faster player wasn't run on the phone. Neither YouTube Music build shows a speed in its menu, and its session doesn't offer one (`actions=2600887`, no `ACTION_SET_PLAYBACK_SPEED`). The YouTube app has one, but stops as soon as Crosstune comes to the front. The 1.05x table above is the only measure of it.
+
+`phone` reads the screen with uiautomator, and only one thing may read it at a time: with a T3 device session holding it, `uiautomator dump` exits 137, and `phone` now says so instead of asking whether the phone is unlocked.

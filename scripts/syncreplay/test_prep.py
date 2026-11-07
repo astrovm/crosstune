@@ -724,6 +724,18 @@ class PhoneTest(unittest.TestCase):
                 r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150))
             self.assertEqual(2, playing.call_count)
 
+    def test_a_screen_nothing_can_read_says_so_instead_of_blaming_the_lock_screen(self):
+        # Only one thing at a time may read the screen, and a T3 device session may be it: uiautomator then dies with exit 137.
+        with patch.object(r, 'shell', side_effect=subprocess.CalledProcessError(137, 'uiautomator')), patch.object(r.time, 'sleep'):
+            for look in (lambda: r.tap('Words'), lambda: r.shows('Song')):
+                with self.assertRaisesRegex(SystemExit, 'holds the screen'):
+                    look()
+
+    def test_a_screen_without_it_is_only_not_there(self):
+        with patch.object(r, 'shell', return_value='<node text="Other" />'), patch.object(r.time, 'sleep'):
+            self.assertFalse(r.tap('Words', tries=2))
+            self.assertFalse(r.shows('Song', tries=2))
+
     def test_a_title_keeps_its_commas(self):
         session = 'package=app\nstate=PlaybackState {state=PLAYING(3), position=2041, buffered position=0, speed=1.0, updated=5000, actions=1}\nmetadata: size=9, description=Police, The   Magic Audio Flac, uploader, uploader\n'
         with patch.object(r, 'shell', return_value=session):
