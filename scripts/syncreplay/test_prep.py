@@ -147,6 +147,43 @@ class HeardBinaryTest(unittest.TestCase):
         self.assertEqual(2, len(builds))  # Set up and built, once.
 
 
+class HearingLoadTest(unittest.TestCase):
+    def test_songs_heard_at_once_share_one_limit_on_how_many_stretches_are_heard(self):
+        class Samples:
+            def __len__(self):
+                return 60000 * 16
+
+            def __getitem__(self, key):
+                return self
+
+            def tobytes(self):
+                return b"fake audio"
+
+        lock, running, peak = threading.Lock(), [0], [0]
+
+        def heard(*_, **__):
+            with lock:
+                running[0] += 1
+                peak[0] = max(peak[0], running[0])
+            threading.Event().wait(0.01)
+            with lock:
+                running[0] -= 1
+            return argparse.Namespace(stdout=b'0\t word\n')
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'as_the_phone_hears', return_value=Samples()), \
+                patch.object(r, 'heard_binary', return_value=Path('heard')), \
+                patch.object(r, 'model_file', return_value=Path('model')), \
+                patch.object(r, 'sung_language', return_value='en'), \
+                patch.object(r.subprocess, 'run', side_effect=heard), ThreadPoolExecutor(r.SONGS_HEARD_AT_ONCE) as pool:
+            list(pool.map(lambda song: r.windows(song, Path('fake.wav'), 20000), [f'song{n}' for n in range(r.SONGS_HEARD_AT_ONCE)]))
+        self.assertLessEqual(peak[0], r.HEARD_AT_ONCE)
+        self.assertGreater(peak[0], 1)
+
+    def test_hearing_leaves_most_of_the_machine_for_who_is_using_it(self):
+        self.assertLessEqual(r.HEARD_AT_ONCE, 4)
+
+
 class CheckpointTest(unittest.TestCase):
     def test_interrupted_hearing_keeps_and_resumes_completed_window(self):
         class Samples:

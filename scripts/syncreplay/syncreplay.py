@@ -82,7 +82,9 @@ HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
 APP_MODEL = "tiny-q5_1"
 # Each while is heard on its own, on one thread, so how many at once only changes how long it takes.
-HEARD_AT_ONCE = max(1, (os.cpu_count() or 4) - 2)
+# However many songs are being heard: at 10 for each of 4 songs, a machine someone's using is left with nothing.
+HEARD_AT_ONCE = 4
+HEARING = threading.BoundedSemaphore(HEARD_AT_ONCE)
 # Songs at once when a replay asks for more, as each has only a few stretches to hear.
 SONGS_HEARD_AT_ONCE = 4
 SEED_EVERY = 20
@@ -187,7 +189,8 @@ def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
     def hear(start):
         seg = a[start * 16:(start + length) * 16]
         # A model that can't run hears nothing, so it fails here rather than passing for silence.
-        text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
+        with HEARING:
+            text = subprocess.run([str(binary), str(weights), language, ""], input=seg.tobytes(), capture_output=True, check=True, env={**os.environ, "HEARD_THREADS": "1"}).stdout.decode("utf-8", "replace")
         return start, [[int(ms), w] for ms, w in (x.split("\t", 1) for x in text.splitlines() if "\t" in x)]
 
     with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
@@ -978,7 +981,7 @@ def main():
     p.add_argument("--gradle", default="./gradlew --max-workers=4")
     p.add_argument("--find-only", action="store_true", help="find the songs and their words, without prepping them")
     p.add_argument("--cached", action="store_true", help="resume the songs already found in set.json without finding them again")
-    # Each song's truth leaves the GPU mostly waiting on the CPU work around it, so a few at once take less time (measurements.md).
+    # One at a time keeps a machine someone's using usable: with 3 at once, ROCm warned its queues were oversubscribed.
     p.add_argument("--at-once", type=int, default=1, help="songs to prep at once")
     p.set_defaults(go=find_set)
     p = steps.add_parser("all")
