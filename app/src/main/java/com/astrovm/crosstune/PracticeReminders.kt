@@ -94,9 +94,12 @@ internal class PracticeReminders(
 
     /** Android's page where they're allowed: the channel's, when it's only that that's off. */
     val settingsPage: Intent
-        get() = Intent(if (notifications.areNotificationsEnabled()) Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS else Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            .putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL)
+        get() = if (notifications.areNotificationsEnabled()) {
+            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL)
+        } else {
+            // Naming the channel here too opens its page, where the switch can't undo the app's being off.
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        }
 
     fun turn(on: Boolean) {
         preferences.edit {

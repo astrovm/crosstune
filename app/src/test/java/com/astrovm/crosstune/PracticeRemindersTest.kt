@@ -268,6 +268,8 @@ class PracticeRemindersTest {
         assertFalse(reminders.state.working)
         assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, reminders.settingsPage.action)
         assertEquals(app.packageName, reminders.settingsPage.getStringExtra(Settings.EXTRA_APP_PACKAGE))
+        // With the channel named too, Android shows that channel's page, whose switch can't undo the app's being off.
+        assertNull(reminders.settingsPage.getStringExtra(Settings.EXTRA_CHANNEL_ID))
         repeat(5) { firesOn(3 + it) }
         assertTrue(shown.isEmpty())
         // Still set, for when they're allowed again.
