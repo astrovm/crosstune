@@ -101,7 +101,7 @@ jobs:
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
 
-  # The browser extension in extension/, built and tested only when its files change. Its browser test needs the network and a downloaded Chromium, so it runs by hand (see CONTRIBUTING.md).
+  # The browser extension in extension/, built and tested only when its files change. Its lyrics panel's browser test answers everything itself; the two that follow real links need the network, so they run by hand (see CONTRIBUTING.md).
   extension:
     needs: changes
     if: needs.changes.outputs.extension == 'true'
@@ -125,6 +125,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run package
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e:panel
 
   # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.
   test:

@@ -111,3 +111,41 @@ export function sameVersion(title: string, candidate: string, album = ""): boole
   return [...version].every((word) => said.has(word));
 }
 
+
+/** How much of a name has to be there for it to count as inside another: "Randy" in "Randy Nota Loca". */
+const MIN_PARTIAL_ARTIST = 5;
+
+/** Whether one credit names someone the other does, whole or, when long enough, as part of a name. */
+function shareAnArtist(one: Set<string>, other: Set<string>): boolean {
+  return [...one].some((candidate) =>
+    [...other].some((wanted) => wanted === candidate || (Math.min(candidate.length, wanted.length) >= MIN_PARTIAL_ARTIST && (candidate.includes(wanted) || wanted.includes(candidate)))),
+  );
+}
+
+/** Whether [name] is among [credit], where a credit that names no one counts for anyone. */
+export function artistInside(name: string, credit: string): boolean {
+  const theirs = artists(name);
+  if (theirs.size === 0) return false;
+  const ours = artists(credit);
+  return ours.size === 0 || shareAnArtist(theirs, ours);
+}
+
+const guestCredit = /[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]/gi;
+
+/** [artist], and whoever [title] credits as a guest: LRCLIB may list the song under them. */
+export function withGuests(artist: string, title: string): string {
+  return [artist, ...[...title.matchAll(guestCredit)].map((guest) => (guest[1] ?? "").trim())].join(" feat. ");
+}
+
+/**
+ * One holds every word of the other, so "Love Me Do" is never "Love Me Tender". A single word has to
+ * be the whole of the other: on its own it says too little.
+ */
+export function wordsMatch(one: string, other: string): boolean {
+  if (normalize(one) !== "" && same(one, other)) return true;
+  const ours = words(withoutEditionTag(one));
+  const theirs = words(withoutEditionTag(other));
+  const [shorter, longer] = ours.size <= theirs.size ? [ours, theirs] : [theirs, ours];
+  if (shorter.size === 0 || (shorter.size < 2 && shorter.size !== longer.size)) return false;
+  return [...shorter].every((word) => longer.has(word));
+}

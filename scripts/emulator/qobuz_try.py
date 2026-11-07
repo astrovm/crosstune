@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One try of a song link handed to Crosstune with Qobuz chosen: what Qobuz's media session plays, what Android started and blocked, by the log's clock.
-usage: qobuz_try.py SERIAL LINK WANT_TITLE [--pre closed|other|none] [--pre-number N] [--path straight|open|play] [--seconds 35] [--log FILE]
+usage: qobuz_try.py SERIAL LINK WANT_TITLE [--pre closed|other|none] [--pre-number N] [--path straight|open|play] [--seconds 35] [--log FILE] [--then LINK --then-want TITLE --then-after S]
+With --then, a newer song is asked for S seconds after the first, and the older one back after it counts as reopened.
 """
 import argparse, json, re, subprocess, sys, time
 p = argparse.ArgumentParser()
@@ -8,6 +9,7 @@ p.add_argument("serial"); p.add_argument("link"); p.add_argument("want")
 p.add_argument("--pre", default="closed"); p.add_argument("--pre-number", default="338184944")
 p.add_argument("--seconds", type=float, default=35); p.add_argument("--log", default=None)
 p.add_argument("--path", default="straight", choices=["straight","open","play"])
+p.add_argument("--then"); p.add_argument("--then-want"); p.add_argument("--then-after", type=float, default=3)
 a = p.parse_args()
 if not a.serial.strip():
     sys.exit("no serial: refusing to run adb without an explicit device")
@@ -51,7 +53,7 @@ def playing_wait(want=None, secs=25):
 # Quiet, and nothing in front.
 prefs = PREFS.format(right_away="true" if a.path == "straight" else "false", in_crosstune="false" if a.path == "straight" else "true")
 adb("shell", "am", "force-stop", APP)
-subprocess.run(["adb", "-s", a.serial, "shell", "run-as", APP, "sh", "-c", "'cat > shared_prefs/crosstune_preferences.xml'"], input=prefs, text=True, capture_output=True, timeout=20)
+subprocess.run(["adb", "-s", a.serial, "shell", "run-as", APP, "sh", "-c", "'mkdir -p shared_prefs; cat > shared_prefs/crosstune_preferences.xml'"], input=prefs, text=True, capture_output=True, timeout=20)
 adb("shell", "cmd", "audio", "set-volume", "3", "0")
 adb("shell", "am", "force-stop", APP)
 if a.pre == "other":
@@ -81,17 +83,25 @@ else:
     adb("shell", "input", "tap", "797" if a.path == "open" else "283", "1660")
 trace, last = [], None
 right = None
+then_sent, then_right, reopened = False, None, False
 while True:
     now = float(adb("shell", "date", "+%s.%N").strip()) - t0
     if now > a.seconds: break
     if sum("session/start, code=500" in l for l in lines) >= 2: break
-    if right is not None and now > right + 3: break
+    if right is not None and now > right + 3 and not a.then: break
+    if a.then and not then_sent and now >= a.then_after:
+        adb("shell", "am", "start", "-a", "android.intent.action.SEND", "-t", "text/plain", "--es", "android.intent.extra.TEXT", a.then, "-n", f"{APP}/com.astrovm.crosstune.MainActivity")
+        then_sent = True
     s = session()
     key = (s or {}).get("state"), (s or {}).get("song")
     if key != last:
         trace.append((round(now, 1), *key)); last = key
     if right is None and key[0] == "PLAYING" and a.want.lower() in (key[1] or "").lower():
         right = round(now, 1)
+    if then_sent and then_right is None and key[0] == "PLAYING" and a.then_want.lower() in (key[1] or "").lower():
+        then_right = round(now, 1)
+    if then_right is not None and key[0] in ("PLAYING", "BUFFERING") and a.want.lower() in (key[1] or "").lower():
+        reopened = True
     time.sleep(.3)
 adb("shell", "am", "force-stop", QOBUZ) if sum("session/start, code=500" in l for l in lines) >= 2 else None
 time.sleep(.5); log.terminate()
@@ -109,4 +119,5 @@ for l in lines:
 if a.log:
     open(a.log, "a").write("\n".join(lines) + "\n")
 final = session()
-print(json.dumps(dict(server_500=server_500, right_at=right, blocked=sum(1 for e in events if e[1] == "BLOCKED"), trace=trace, events=events, final=final, shows=adb("shell", "dumpsys activity activities").split("topResumedActivity=")[-1].split("\n")[0][:80])))
+newer = dict(then_right_at=then_right, reopened=reopened) if a.then else {}
+print(json.dumps(dict(**newer, server_500=server_500, right_at=right, blocked=sum(1 for e in events if e[1] == "BLOCKED"), trace=trace, events=events, final=final, shows=adb("shell", "dumpsys activity activities").split("topResumedActivity=")[-1].split("\n")[0][:80])))
