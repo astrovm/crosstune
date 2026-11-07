@@ -149,6 +149,31 @@ export function youtubeVideo(title: string, channel: string): Metadata | null {
   return { title: removeSurrounding(song.replace(paddedTrackRegex, ""), '"').trim(), artist: left, type: "track" };
 }
 
+const musicTagRegex = new RegExp(String.raw`\s*[(\[][^)\]]*(?:${MUSIC_TAG_WORDS})[^)\]]*[)\]]`, "i");
+const musicVideoSign = /\b(official|lyrics?|visuali[sz]er|mv|m\/v|audio|music\s+video|remaster(ed)?|remix|feat\.|ft\.)(\b|\s|$)/i;
+
+/**
+ * A video that says it's music, read as its song: "Artist - Song", "Artist「Song」", a tag like
+ * "(Official Video)", or a "- Topic" or VEVO channel. Any other video, e.g. "A New Approach To
+ * An Ancient Linux Terminal Problem" by "Brodie Robertson", is no song.
+ */
+export function musicVideo(title: string, channel: string): Metadata | null {
+  const song = youtubeVideo(title, channel);
+  if (song === null) return null;
+  const says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.test(title) || bracketedSongRegex.test(title) ||
+    artistSeparator(title) > 0 || musicTagRegex.test(title) || trailingVideoNoiseRegex.test(title);
+  return says ? song : null;
+}
+
+/** No artist, or a compilation's many, as music stores and taggers name them in the app's languages. */
+const noOneArtist = /^(?:<unknown>|various(?: artists?)?|v\.?\s?a\.?|v\/a|varios(?: artistas)?|vários artistas|verschiedene(?: interpreten| künstler)?|artistes (?:divers|variés)|artisti vari|diverse artiesten|różni wykonawcy|çeşitli sanatçılar|разные исполнители|विभिन्न कलाकार|berbagai artis|ヴァリアス・アーティスト|여러 아티스트|群星|羣星)$/i;
+
+/** What a music player names as playing, as a song; when its artist names no one, the title may. */
+export function playerSong(title: string, artist: string): Metadata | null {
+  const song = noOneArtist.test(artist.trim()) ? youtubeVideo(title, "") : { title, artist, type: "track" as const };
+  return song !== null && song.title.trim() !== "" && song.artist.trim() !== "" ? song : null;
+}
+
 /** YouTube oEmbed: "Artist - Song (Official Video)" by "ArtistVEVO", or "Song" by "Artist - Topic". */
 export function youtube(answer: unknown): Metadata | null {
   const json = obj(answer);

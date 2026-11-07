@@ -1,0 +1,212 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { findLyrics, parseLrc, type Lyrics, type Song } from "../src/lyrics.ts";
+import { fixture, internet, type Answer, type Internet } from "./support.ts";
+
+const LRCLIB = "https://lrclib.net/api/search";
+const YTM_NEXT = "https://music.youtube.com/youtubei/v1/next";
+const YTM_BROWSE = "https://music.youtube.com/youtubei/v1/browse";
+const YTM_SEARCH = "https://music.youtube.com/youtubei/v1/search";
+const NETEASE_SEARCH = "https://music.163.com/api/search/get";
+const NETEASE_LYRIC = "https://music.163.com/api/song/lyric";
+const LETRAS_SEARCH = "https://solr.sscdn.co/letras/m1/";
+const LETRAS_PAGE = "https://www.letras.com/mercedes-sosa/37544/";
+
+const AFRICA: Song = { title: "Africa", artist: "Toto", lengthMs: 295_000 };
+const FIRST_LINE = "Paper boats along the river";
+
+/** Every source, each answering that it has nothing, unless a route before it says otherwise. */
+const nothing: [string, Answer][] = [
+  [LRCLIB, "[]"],
+  [YTM_SEARCH, "{}"],
+  [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
+  [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+];
+
+const find = (song: Song, net: Internet): Promise<Lyrics> => findLyrics(song, net.fetch, { pause: async () => {} });
+
+function found(lyrics: Lyrics): Extract<Lyrics, { kind: "found" }> {
+  assert.equal(lyrics.kind, "found");
+  return lyrics as Extract<Lyrics, { kind: "found" }>;
+}
+
+test("LRCLIB's words timed for this recording are the answer, and no one else is asked", async () => {
+  const net = internet([[LRCLIB, fixture("lrclib-search.json")]]);
+  const lyrics = found(await find(AFRICA, net));
+  assert.equal(lyrics.source, "lrclib");
+  assert.deepEqual(lyrics.lines[0], { timeMs: 10_500, text: FIRST_LINE });
+  assert.equal(lyrics.lengthMs, 295_000);
+  assert.equal(net.asked.length, 1);
+  assert.match(net.asked[0] ?? "", /track_name=Africa&artist_name=Toto/);
+});
+
+test("of two timed copies, the one as long as the song playing wins", async () => {
+  const net = internet([[LRCLIB, fixture("lrclib-search.json")]]);
+  assert.equal(found(await find({ ...AFRICA, lengthMs: 340_000 }, net)).lines[0]?.timeMs, 40_500);
+});
+
+test("another artist's song of the same name, or another version, is not this one", async () => {
+  const net = internet([[LRCLIB, fixture("lrclib-search.json")], ...nothing]);
+  const lyrics = await find({ title: "Africa", artist: "Weezer", lengthMs: 280_000 }, net);
+  assert.deepEqual(lyrics, { kind: "none" });
+});
+
+test("LRCLIB's name header on plain words is left out", async () => {
+  const row = { trackName: "Africa", artistName: "Toto", plainLyrics: `Artist: Toto\nTitle: Africa\n${FIRST_LINE}` };
+  const net = internet([[LRCLIB, JSON.stringify([row])], ...nothing.slice(1)]);
+  assert.equal(found(await find(AFRICA, net)).words, FIRST_LINE);
+});
+
+test("a line that's a web address is an ad, not the song's", async () => {
+  const row = { trackName: "Africa", artistName: "Toto", plainLyrics: `${FIRST_LINE}\nGet more at www.example.com` };
+  const net = internet([[LRCLIB, JSON.stringify([row])], ...nothing.slice(1)]);
+  assert.equal(found(await find(AFRICA, net)).words, FIRST_LINE);
+});
+
+test("YouTube Music's words are asked next, for the video playing, and its timing is kept", async () => {
+  const net = internet([
+    [LRCLIB, "[]"],
+    [YTM_NEXT, fixture("ytm-next-lyrics.json")],
+    [YTM_BROWSE, (_url, init) => {
+      assert.match(init?.body ?? "", /ANDROID_MUSIC/);
+      assert.match(init?.body ?? "", /MPLYt_OmZ6OuUbt2B/);
+      return fixture("ytm-browse-lyrics-timed.json");
+    }],
+  ]);
+  const lyrics = found(await find({ ...AFRICA, lengthMs: 272_000, videoId: "FTQbiNvZqaY" }, net));
+  assert.equal(lyrics.source, "youtube_music");
+  assert.equal(lyrics.lines[0]?.text, FIRST_LINE);
+  assert.equal(lyrics.lines[0]?.timeMs, 10_500);
+  // Where nothing is sung it says so with a note, which is a pause.
+  assert.equal(lyrics.lines.at(-1)?.text, "");
+  assert.equal(lyrics.lengthMs, 272_000);
+  assert.ok(!lyrics.words.includes("♪"));
+});
+
+test("with no video to go by, YouTube Music's search finds it", async () => {
+  const row = {
+    musicResponsiveListItemRenderer: {
+      playlistItemData: { videoId: "FTQbiNvZqaY" },
+      flexColumns: [
+        { musicResponsiveListItemFlexColumnRenderer: { text: { runs: [{ text: "Africa" }] } } },
+        { musicResponsiveListItemFlexColumnRenderer: { text: { runs: [{ text: "Toto" }, { text: " • " }, { text: "Toto IV" }, { text: " • " }, { text: "4:32" }] } } },
+      ],
+    },
+  };
+  const net = internet([
+    [LRCLIB, "[]"],
+    [YTM_SEARCH, JSON.stringify({ contents: [row] })],
+    [YTM_NEXT, fixture("ytm-next-lyrics.json")],
+    [YTM_BROWSE, fixture("ytm-browse-lyrics-timed.json")],
+  ]);
+  assert.equal(found(await find({ title: "Africa", artist: "Toto" }, net)).source, "youtube_music");
+});
+
+test("NetEase's words come without its credits, timed", async () => {
+  const net = internet([
+    [LRCLIB, "[]"],
+    [YTM_SEARCH, "{}"],
+    [NETEASE_SEARCH, fixture("netease-search.json")],
+    [NETEASE_LYRIC, fixture("netease-lyric.json")],
+  ]);
+  const lyrics = found(await find(AFRICA, net));
+  assert.equal(lyrics.source, "netease");
+  assert.deepEqual(lyrics.lines[0], { timeMs: 10_500, text: FIRST_LINE });
+  assert.ok(!lyrics.words.includes("作词"));
+  assert.ok(net.asked.some((url) => url.includes("id=2016009")));
+});
+
+test("NetEase's own note for an instrumental says it has no words", async () => {
+  const net = internet([
+    [LRCLIB, "[]"],
+    [YTM_SEARCH, "{}"],
+    [NETEASE_SEARCH, fixture("netease-search.json")],
+    [NETEASE_LYRIC, JSON.stringify({ lrc: { lyric: "[00:01.00]纯音乐，请欣赏" }, code: 200 })],
+    [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+  ]);
+  assert.deepEqual(await find(AFRICA, net), { kind: "instrumental" });
+});
+
+test("Letras's words come from the page its search points to, untimed and without its ads", async () => {
+  const net = internet([
+    [LRCLIB, "[]"],
+    [YTM_SEARCH, "{}"],
+    [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
+    [LETRAS_SEARCH, fixture("letras-search.txt")],
+    [LETRAS_PAGE, fixture("letras-song.html")],
+  ]);
+  const lyrics = found(await find({ title: "Gracias a la vida", artist: "Mercedes Sosa" }, net));
+  assert.equal(lyrics.source, "letras");
+  assert.deepEqual(lyrics.lines, []);
+  assert.equal(lyrics.words, "Paper boats along the river\nWe sang until the morning's came\n\nEvery window holds a lantern\nAnd the night forgets its name");
+});
+
+test("untimed words give way to timed ones elsewhere, and are kept when there are none", async () => {
+  const row = { trackName: "Africa", artistName: "Toto", plainLyrics: "Untimed words" };
+  const timed = internet([
+    [LRCLIB, JSON.stringify([row])],
+    [YTM_SEARCH, "{}"],
+    [NETEASE_SEARCH, fixture("netease-search.json")],
+    [NETEASE_LYRIC, fixture("netease-lyric.json")],
+  ]);
+  assert.equal(found(await find(AFRICA, timed)).source, "netease");
+  // Letras's are untimed too, so they can't better them, and it isn't asked.
+  const none = internet([[LRCLIB, JSON.stringify([row])], [YTM_SEARCH, "{}"], [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}']]);
+  assert.equal(found(await find(AFRICA, none)).words, "Untimed words");
+});
+
+test("words timed for another take stay, when no one has them for this one", async () => {
+  const net = internet([[LRCLIB, fixture("lrclib-search.json")], ...nothing.slice(1)]);
+  const lyrics = found(await find({ ...AFRICA, lengthMs: 200_000 }, net));
+  assert.equal(lyrics.source, "lrclib");
+  assert.ok(lyrics.lines.length > 0);
+});
+
+test("a title with a tag is looked for again without it", async () => {
+  const row = { trackName: "Africa", artistName: "Toto", plainLyrics: "The words" };
+  const net = internet([
+    [(/track_name=Africa&/), JSON.stringify([row])],
+    [LRCLIB, "[]"],
+    [YTM_SEARCH, "{}"],
+    [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
+    [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+  ]);
+  assert.equal(found(await find({ title: "Africa (Radio Session)", artist: "Toto" }, net)).words, "The words");
+});
+
+test("LRCLIB saying it's an instrumental is believed when no one has words", async () => {
+  const net = internet([[LRCLIB, JSON.stringify([{ trackName: "Africa", artistName: "Toto", instrumental: true, plainLyrics: null, syncedLyrics: null }])], ...nothing.slice(1)]);
+  assert.deepEqual(await find(AFRICA, net), { kind: "instrumental" });
+});
+
+test("LRCLIB busy is asked again, as it asks, and then answers", async () => {
+  let tries = 0;
+  const net = internet([[LRCLIB, () => (++tries < 3 ? { status: 429, text: "{}" } : fixture("lrclib-search.json"))]]);
+  assert.equal(found(await find(AFRICA, net)).source, "lrclib");
+  assert.equal(tries, 3);
+});
+
+test("no one reachable is not the same as no lyrics", async () => {
+  const net = internet([[/./, "unreachable"]]);
+  assert.deepEqual(await find(AFRICA, net), { kind: "unavailable" });
+});
+
+test("LRCLIB, which has most songs, busy all along while the others have none: it isn't known", async () => {
+  const net = internet([[LRCLIB, { status: 503, text: "busy" }], ...nothing.slice(1)]);
+  assert.deepEqual(await find(AFRICA, net), { kind: "unavailable" });
+});
+
+test("LRCLIB answers, and one other is down: the song has no lyrics", async () => {
+  const net = internet([[LRCLIB, "[]"], [YTM_SEARCH, "unreachable"], ...nothing.slice(2)]);
+  assert.deepEqual(await find(AFRICA, net), { kind: "none" });
+});
+
+test("timed lines: several stamps, an offset, and word stamps", () => {
+  assert.deepEqual(parseLrc("[offset:+500]\n[00:01.50][00:03.00]Twice <00:03.20>over\n[01:02.5]Later\n[ti:Not a line]\n[00:02.000]\n[01:30.00]Words [in brackets] stay"), [
+    { timeMs: 1_000, text: "Twice over" },
+    { timeMs: 1_500, text: "" },
+    { timeMs: 2_500, text: "Twice over" },
+    { timeMs: 62_000, text: "Later" },
+    { timeMs: 89_500, text: "Words [in brackets] stay" },
+  ]);
+});

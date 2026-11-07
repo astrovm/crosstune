@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="extName">Crosstune</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff; --text: #1a1a1f; --dim: #6b6b76; --faint: #e7e7ec; --accent: #4f2bd9; --on-accent: #ffffff;
+      font: 16px/1.4 system-ui, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121216; --text: #f2f2f5; --dim: #a4a4b0; --faint: #2a2a31; --accent: #c6ff3d; --on-accent: #121216; }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); }
+    body { display: flex; flex-direction: column; }
+    [hidden] { display: none !important; }
+    header { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 16px; min-height: 56px; flex: none; }
+    #song { flex: 1; min-width: 0; }
+    #title { font-weight: 600; overflow-wrap: anywhere; }
+    #artist { font-size: 0.875rem; color: var(--dim); overflow-wrap: anywhere; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #settings { width: 48px; height: 48px; flex: none; margin-left: auto; color: var(--dim); border-radius: 50%; display: grid; place-items: center; }
+    #settings:hover { color: var(--text); background: var(--faint); }
+    svg { fill: currentColor; display: block; }
+    main { flex: 1; min-height: 0; overflow-y: auto; }
+    #words { padding: 8px 16px 40vh; font-size: 1.25rem; line-height: 1.45; overflow-wrap: anywhere; }
+    #words p { margin: 0 0 0.6em; white-space: pre-wrap; }
+    #words p.gap { min-height: 0.8em; }
+    #words.following p { color: var(--dim); transition: color 120ms; }
+    #words.following p.now { color: var(--text); font-weight: 600; }
+    #state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 100%; padding: 24px; text-align: center; }
+    #state svg { color: var(--dim); }
+    #state .action { min-height: 48px; padding: 0 24px; border-radius: 24px; background: var(--accent); color: var(--on-accent); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    #skeleton { width: 100%; padding: 8px 16px; display: grid; gap: 14px; }
+    #skeleton i { display: block; height: 1.25rem; border-radius: 6px; background: var(--faint); animation: pulse 1.4s ease-in-out infinite; }
+    #skeleton i:nth-child(1) { width: 72%; } #skeleton i:nth-child(2) { width: 88%; } #skeleton i:nth-child(3) { width: 60%; } #skeleton i:nth-child(4) { width: 80%; }
+    @keyframes pulse { 50% { opacity: 0.45; } }
+    @media (prefers-reduced-motion: reduce) { #skeleton i { animation: none; } #words.following p { transition: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div id="song" hidden><div id="title"></div><div id="artist"></div></div>
+    <button id="settings" type="button" data-i18n-label="lyricsSettings">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6a.5.5 0 0 0 .1-.6l-1.9-3.3a.5.5 0 0 0-.6-.2l-2.4 1a7.3 7.3 0 0 0-1.7-1l-.4-2.5a.5.5 0 0 0-.5-.4h-3.8a.5.5 0 0 0-.5.4l-.4 2.5a7.3 7.3 0 0 0-1.7 1l-2.4-1a.5.5 0 0 0-.6.2L2.7 8.8a.5.5 0 0 0 .1.6L4.8 11a7.6 7.6 0 0 0 0 2l-2 1.6a.5.5 0 0 0-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1a7.3 7.3 0 0 0 1.7 1l.4 2.5c0 .2.2.4.5.4h3.8c.2 0 .5-.2.5-.4l.4-2.5a7.3 7.3 0 0 0 1.7-1l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 0 0-.1-.6L19.4 13ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+    </button>
+  </header>
+  <main id="scroller">
+    <div id="words" hidden></div>
+    <div id="state" role="status" hidden>
+      <div id="skeleton" hidden><i></i><i></i><i></i><i></i></div>
+      <svg id="icon-note" width="48" height="48" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M12 3v10.6A4 4 0 1 0 14 17V7h4V3h-6Z"/></svg>
+      <svg id="icon-none" width="48" height="48" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M3 5h12v2H3V5Zm0 4h12v2H3V9Zm0 4h8v2H3v-2Zm13.4 1 2.1 2.1 2.1-2.1 1.4 1.4-2.1 2.1 2.1 2.1-1.4 1.4-2.1-2.1-2.1 2.1-1.4-1.4 2.1-2.1-2.1-2.1 1.4-1.4Z"/></svg>
+      <svg id="icon-offline" width="48" height="48" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M2.8 2.8 1.4 4.2l3.1 3.1A17 17 0 0 0 1 10l2 2a14 14 0 0 1 3.2-2.5l2.2 2.2A10 10 0 0 0 5 14l2 2a7 7 0 0 1 3.7-2l2.6 2.6A4 4 0 0 0 9 18l3 3 2.8-2.8 5 5 1.4-1.4L2.8 2.8ZM23 10a16 16 0 0 0-13-4.4l2.6 2.6A13 13 0 0 1 21 12l2-2Zm-4 4a10 10 0 0 0-3-2l3.1 3.1L19 14Z"/></svg>
+      <svg id="icon-problem" width="48" height="48" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M12 2 1 21h22L12 2Zm1 16h-2v-2h2v2Zm0-4h-2V9h2v5Z"/></svg>
+      <div id="message"></div>
+      <button id="action" class="action" type="button" hidden></button>
+    </div>
+  </main>
+  <script src="panel.js"></script>
+</body>
+</html>
