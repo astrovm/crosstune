@@ -59,6 +59,8 @@ The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site
 
 **Report a problem** and **Report song problems automatically** send to a Cloudflare Worker in [`report/`](report), at `report.crosstune.4st.li`. It keeps reports in the D1 database `crosstune-reports` (table in `schema.sql`), at most 5 a minute from one address, and a daily cron deletes those older than 180 days. Test it with `node --test report/*.test.mjs`, and deploy with `cf deploy` from that folder.
 
+[`scripts/reports/reports.py`](scripts/reports/reports.py) goes through them: it reads the table, only ever reads it, into `build/`, groups the reports by problem, version and song, and runs their songs through the app's real finders with `SongCheck`. Its top says how. They're people's songs, so they stay out of the repo, which is public. A pull request that only changes this script skips the app's CI jobs too, and its tests run either way.
+
 ## Browser extension
 
 [`extension/`](extension) opens a music link in the service picked in its options, in Chrome, Edge, Brave and Firefox. TypeScript, esbuild and no framework; it needs Node 24 or newer.
