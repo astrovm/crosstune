@@ -120,11 +120,12 @@ jobs:
           JOBS: ${{ needs.part.result }}
         run: |
           : > all-lived.txt
+          missing_parts=""
           for part in $(jq -r '.[]' <<< "$PARTS"); do
             mapfile -t files < <(find "results/mutants-part-$part" -type f -name lived.txt 2>/dev/null)
             if [ "${#files[@]}" -ne 1 ]; then
               echo "Part $part has ${#files[@]} lived files, expected one." >&2
-              [ "$JOBS" != success ] || exit 1
+              missing_parts="$missing_parts $part"
               continue
             fi
             cat "${files[0]}" >> all-lived.txt
@@ -134,10 +135,13 @@ jobs:
           {
             echo "Parts $parts of 64: [run]($RUN), jobs $JOBS."
             echo
+            if [ -n "$missing_parts" ]; then
+              echo "Missing results for parts:$missing_parts."
+            fi
             if [ "$JOBS" != success ]; then
               echo 'At least one part failed. Its results may be missing; see the run.'
             fi
-            if [ -z "$lived" ] && [ "$JOBS" = success ]; then
+            if [ -z "$lived" ] && [ "$JOBS" = success ] && [ -z "$missing_parts" ]; then
               echo 'Every change in these parts was caught by a test.'
             elif [ -z "$lived" ]; then
               echo 'No findings were recovered from the completed parts.'
@@ -154,3 +158,4 @@ jobs:
             printf '\nReport truncated. See the run artifacts for full results.\n' >> "$GITHUB_STEP_SUMMARY"
           fi
           scripts/mutants-post.sh report.md "$([ -n "$lived" ] && echo true || echo false)"
+          [ -z "$missing_parts" ]

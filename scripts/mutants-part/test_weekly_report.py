@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class WeeklyReport(unittest.TestCase):
-    def run_report(self, present, contents=""):
+    def run_report(self, present, contents="", jobs="success"):
         workflow = (ROOT / '.github/workflows/mutants-weekly.yml').read_text()
         step = workflow.split('      - name: List what lived in the open issue\n', 1)[1]
         script = step.split('        run: |\n', 1)[1]
@@ -35,7 +35,7 @@ print("\\n".join(map(str, parts)) if sys.argv[-1] == ".[]" else ", ".join(map(st
                 file.parent.mkdir(parents=True)
                 file.write_text(contents)
             env = {**os.environ, 'PATH': f"{root / 'bin'}:{os.environ['PATH']}",
-                   'PARTS': json.dumps([32]), 'JOBS': 'success', 'RUN': 'https://example.invalid/run',
+                   'PARTS': json.dumps([32]), 'JOBS': jobs, 'RUN': 'https://example.invalid/run',
                    'GITHUB_STEP_SUMMARY': str(root / 'summary'), 'GH_REPO': 'example/repo'}
             result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=root, env=env, capture_output=True, text=True)
             return result, (root / 'summary').read_text() if (root / 'summary').exists() else ''
@@ -50,6 +50,12 @@ print("\\n".join(map(str, parts)) if sys.argv[-1] == ".[]" else ", ".join(map(st
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('### Lived (1)', summary)
         self.assertIn('Example.kt:3  survived: boundary', summary)
+
+    def test_missing_file_still_fails_when_another_part_failed(self):
+        result, summary = self.run_report(False, jobs='failure')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Missing results for parts: 32.', summary)
+        self.assertNotIn('Every change in these parts was caught', summary)
 
     def test_missing_lived_file_cannot_report_a_clean_part(self):
         result, summary = self.run_report(False)
