@@ -8,7 +8,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
-  ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
+  ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE] [--uri URI]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
@@ -29,11 +29,13 @@ Gradle some other way, like in a container. Everything goes in build/syncreplay/
 instead, for every checkout, and gradle-box.sh mounts it. What one checkout asks and gets back stays in
 its own build/syncreplay/, so replays of different checkouts don't read each other's.
 `phone` checks the same on a real phone over adb, with the dev app installed and the phone unlocked:
-it plays the recording in YouTube Music (--app for another build of it) from the start, opens the
+it plays the recording in YouTube Music (--app for another music app, --uri for a tagged file on the phone) from the start, opens the
 words in Crosstune for S seconds, and times each line lit from the app's own log. Where the song
 really is comes from lining up what the app heard with the recording, as a music app's clock runs
 behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
 The media volume is 1 while it plays, as at 0 the app hears only silence, and at 1 it already hears the music at full level.
+A player that isn't at 1x, as the app's log says, is followed at its rate: the words' clock is printed next to it, and what's
+heard is found near where the app says, by bits short enough to still fit a recording played faster with its pitch kept.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -102,6 +104,8 @@ TIMING_LOG = "CrosstuneTiming"
 DEV_APP = "com.astrovm.crosstune.dev"
 # How well a while heard may fit elsewhere, against its best fit, and still say where it is: false fits measured 0.91 to 0.95, true ones up to 0.85.
 ONE_PLACE = 0.8
+# How far from where the app says a while heard at another rate is looked for: a riff played again is further off.
+STRETCH_REACH_MS = 1500
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
 LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps", "video_timing")
 # Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
@@ -653,7 +657,8 @@ def watch(args):
     if "NotificationShade" in shell("dumpsys", "window", "windows").split("mCurrentFocus", 1)[-1][:200]:
         width, height = map(int, re.search(r"(\d+)x(\d+)", shell("wm", "size")).groups())
         shell("input", "swipe", str(width // 2), str(height * 9 // 10), str(width // 2), str(height * 3 // 10), "200")
-    shell("am", "start", "-a", "android.intent.action.VIEW", "-d", f"https://music.youtube.com/watch?v={args.id}", "-p", args.app)
+    what = ("-d", args.uri, "-t", "audio/*") if args.uri else ("-d", f"https://music.youtube.com/watch?v={args.id}")
+    shell("am", "start", "-a", "android.intent.action.VIEW", *what, "-p", args.app)
     song_set = OUT / "set.json"
     songs = json.loads(song_set.read_text()) if song_set.exists() else []
     wanted = next((song["title"] for song in songs if song.get("id") == args.id), None)
@@ -695,7 +700,32 @@ def watch(args):
     score_phone(args.id, kept)
 
 
-def behind(song, kept, lit):
+def found_at_rate(song, heard, app, rate):
+    """Where in [song] a while [heard] at [rate] starts, in ms, near where the [app] said; None if it doesn't say.
+    A player keeping the pitch plays bits of the recording as they are, so short bits still fit where the while as a whole doesn't."""
+    import numpy as np
+    bit, reach = 3200, 16 * STRETCH_REACH_MS
+    votes = []
+    for start in range(0, len(heard) - bit, 8000):
+        piece = heard[start:start + bit]
+        expected = round(app * 16 + start * rate)
+        low = max(0, expected - reach)
+        near = song[low:expected + reach + bit]
+        if len(near) < bit or not piece.any():
+            continue
+        n = 1 << int(np.ceil(np.log2(len(near) + bit)))
+        match = np.fft.irfft(np.fft.rfft(near, n) * np.conj(np.fft.rfft(piece, n)), n)[:len(near) - bit + 1]
+        energy = np.concatenate(([0.0], np.cumsum(near.astype(np.float64) ** 2)))
+        loud = np.sqrt(np.maximum(energy[bit:] - energy[:-bit], 0))[:len(match)] + 1e-9
+        votes.append(low + int(np.argmax(match / loud)) - start * rate)
+    if not votes:
+        return None
+    middle = statistics.median(votes)
+    # Bits agreeing within 20 ms place it; one or two landing together by luck don't.
+    return middle / 16 if sum(abs(vote - middle) <= 320 for vote in votes) >= len(votes) / 2 else None
+
+
+def behind(song, kept, lit, rate=1.0):
     """How far behind what's heard the app's clock is: each while kept, found in the recording, against where the app said the song was."""
     files = sorted(kept.glob("heard-*.pcm"))
     if not files:
@@ -706,10 +736,18 @@ def behind(song, kept, lit):
     for f in files:
         started = int(re.search(r"heard-(\d+)", f.name).group(1))
         clock = min(lit, key=lambda e: abs(e[1] - started))
-        app = clock[2] + started - clock[1]
+        app = clock[2] + (started - clock[1]) * rate
         heard = np.frombuffer(f.read_bytes(), np.int16).astype(np.float32)[:16000 * 8]
         if not heard.any():
             sys.exit(f"{f.name} is silent: the app heard nothing of the music. Was the media volume 0?")
+        if rate != 1:
+            at = found_at_rate(song, heard, app, rate)
+            if at is None:
+                print(f"the app said {app / 1000:6.1f} s, and what it heard doesn't say")
+                continue
+            offs.append(at - app)
+            print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
+            continue
         n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
         match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
         # A running sum, as sliding one while over a whole song took minutes for each heard.
@@ -731,8 +769,24 @@ def behind(song, kept, lit):
     return statistics.median(offs)
 
 
+def player_rate(log):
+    """How fast the player goes, as the app last saw it."""
+    rates = re.findall(r"app PlaybackClock\(.*?speed=([\d.]+)", log)
+    return float(rates[-1]) if rates else 1.0
+
+
+def lit_pace(log):
+    """How fast the words' own clock goes once settled, by the lines lit: the middle of the steps between
+    them, as a step with a jump in it isn't a pace. None with too few lines to say."""
+    lit = [tuple(map(int, row)) for row in re.findall(r"lit -?\d+ at (\d+) pos (-?\d+)", log)]
+    settled = lit[len(lit) // 2:]
+    steps = [(pos - before) / (at - then) for (then, before), (at, pos) in zip(settled, settled[1:]) if at > then]
+    return statistics.median(steps) if steps else None
+
+
 def phone_lines(log):
     """Each line lit on the player's clock, before fingerprint calibration moves it."""
+    rate = player_rate(log)
     player = None
     lit = []
     for row in log.splitlines():
@@ -743,7 +797,7 @@ def phone_lines(log):
         if shown:
             line, at, pos = map(int, shown.groups())
             if player is not None:
-                pos = player[0] + (at - player[1] if player[2] else 0)
+                pos = player[0] + (round((at - player[1]) * rate) if player[2] else 0)
             lit.append((line, at, pos))
     return lit
 
@@ -801,10 +855,15 @@ def fingerprints(args):
 
 
 def score_phone(song_id, kept):
-    lit = phone_lines((kept / "log.txt").read_text())
+    log = (kept / "log.txt").read_text()
+    lit = phone_lines(log)
+    rate = player_rate(log)
     if not lit:
         sys.exit("No lines lit in the log: was the dev app reinstalled after the log was added, and the words open?")
-    lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit)
+    lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit, rate)
+    pace = lit_pace(log)
+    if rate != 1 and pace is not None:
+        print(f"The player went {rate:.3f}x and the words' clock {pace:.3f}x.")
     # The app's lines are the words it showed, kept from its cache; truth counts only those with words.
     words = [line[1] for line in found_words(song_id, kept)["lines"]] if (kept / "lyrics.json").exists() else [line for _, line in json.loads((OUT / f"{song_id}.lyrics.json").read_text())]
     sung = sung_lines(song_id, words)
@@ -1024,7 +1083,8 @@ def main():
     p.add_argument("id")
     p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
     p.add_argument("--again", action="store_true", help="keep what the app learnt of the song's timing")
-    p.add_argument("--app", default="com.google.android.apps.youtube.music", help="the YouTube Music build to play it in")
+    p.add_argument("--app", default="com.google.android.apps.youtube.music", help="the music app to play it in")
+    p.add_argument("--uri", help="what to open in that app instead of the song's link, like a tagged file on the phone")
     p.set_defaults(go=phone)
     args = parser.parse_args()
     args.go(args)

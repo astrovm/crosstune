@@ -721,7 +721,7 @@ class PhoneTest(unittest.TestCase):
                 patch.object(r, 'playing', side_effect=[('Previous song', 100), ('Song requested', 200)]) as playing:
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', title='Song requested')]))
             with self.assertRaisesRegex(SystemExit, "Couldn't open"):
-                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150))
+                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
             self.assertEqual(2, playing.call_count)
 
     def test_a_screen_nothing_can_read_says_so_instead_of_blaming_the_lock_screen(self):
@@ -776,6 +776,62 @@ class PhoneTest(unittest.TestCase):
             noise[16000 * 10:16000 * 18].astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
             self.assertEqual(0, r.behind(noise, Path(directory), [(0, 5000, 10000)]))
         self.assertIn('fits more than one place', said.call_args_list[0].args[0])
+
+    def test_line_times_go_at_the_players_rate(self):
+        log = ('said 24000 at 100000 playing true, kept 24000 at 100000\n'
+               'lit 0 at 116000 pos 30000\n'
+               'fingerprint 40000 at 110000 match 1 received 120000 speed 1.05 length null app PlaybackClock(positionMs=24000, atMs=100000, speed=1.05, playing=true) video false\n'
+               'lit 6 at 200000 pos 93000\n')
+        self.assertEqual([(0, 116000, 40800), (6, 200000, 129000)], r.phone_lines(log))
+
+    def test_how_fast_the_words_go_is_by_the_lines_lit_once_settled(self):
+        # On main, the words start at the player's rate and go faster once the third hearing is in; a jump isn't a pace.
+        log = ('lit 0 at 0 pos 0\nlit 1 at 10000 pos 10500\n'
+               'lit 2 at 20000 pos 21000\nlit 3 at 30000 pos 32025\nlit 4 at 40000 pos 43050\n'
+               'lit 5 at 50000 pos 60000\nlit 6 at 60000 pos 71025\nlit 7 at 70000 pos 82050\n')
+        self.assertAlmostEqual(1.1025, r.lit_pace(log), places=3)
+
+    def test_too_few_lines_lit_dont_say_how_fast_the_words_go(self):
+        self.assertIsNone(r.lit_pace('lit 0 at 0 pos 0\n'))
+
+    def test_the_player_rate_is_the_last_the_app_saw(self):
+        self.assertEqual(1.05, r.player_rate('app PlaybackClock(positionMs=1, atMs=2, speed=1.0, playing=true)\napp PlaybackClock(positionMs=1, atMs=2, speed=1.05, playing=true)\n'))
+        self.assertEqual(1.0, r.player_rate('app null\n'))
+
+    def test_a_file_on_the_phone_opens_instead_of_the_songs_link(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'shell', return_value='') as shell, patch.object(r, 'adb'), \
+                patch.object(r.time, 'sleep'), patch.object(r, 'tap', return_value=False), \
+                patch.object(r, 'playing', return_value=('Song', 100)):
+            with self.assertRaisesRegex(SystemExit, "Couldn't open"):
+                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri='file:///sdcard/Music/song.m4a'))
+        self.assertIn(('am', 'start', '-a', 'android.intent.action.VIEW', '-d', 'file:///sdcard/Music/song.m4a', '-t', 'audio/*', '-p', 'player'), [c.args for c in shell.call_args_list])
+
+    def test_a_while_heard_at_another_rate_says_how_far_behind_the_clock_is(self):
+        import numpy as np
+        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
+        # As a player keeping the pitch does it: bits of the recording as they are, and every so often one left out.
+        kept = np.concatenate([noise[at:at + 1600] for at in range(16000 * 10, 16000 * 18, 1680)])
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
+            kept.astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
+            self.assertAlmostEqual(500, r.behind(noise, Path(directory), [(0, 5000, 9500)], 1.05), delta=15)
+
+    def test_a_while_heard_at_another_rate_goes_by_the_rate_since_the_line_lit(self):
+        import numpy as np
+        noise = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
+        kept = np.concatenate([noise[at:at + 1600] for at in range(16000 * 10, 16000 * 18, 1680)])
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
+            kept.astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
+            # Lit 2 s before the while started: the clock says 8000 + 2000 x 1.05 = 10100, so it's right to 100 ms.
+            self.assertAlmostEqual(-100, r.behind(noise, Path(directory), [(0, 3000, 8000)], 1.05), delta=15)
+
+    def test_a_while_at_another_rate_that_fits_nowhere_doesnt_say(self):
+        import numpy as np
+        rng = np.random.default_rng(1)
+        noise = rng.normal(0, 3000, 16000 * 60).astype(np.float32)
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print'):
+            rng.normal(0, 3000, 16000 * 8).astype(np.int16).tofile(Path(directory) / 'heard-5000.pcm')
+            self.assertEqual(0, r.behind(noise, Path(directory), [(0, 5000, 9500)], 1.05))
 
     def test_a_while_that_fits_one_place_says_how_far_behind_the_clock_is(self):
         import numpy as np
