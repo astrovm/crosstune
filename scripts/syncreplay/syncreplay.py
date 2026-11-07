@@ -24,6 +24,9 @@ time, keeping what was learnt, to score that. `--skew X` has Shazam hear it X fa
 it matches, `--words-length MS` the words timed for another release, and `--video` a video playing,
 as for a sped-up upload. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
+`SYNCREPLAY_DIR=FOLDER` keeps what takes hours to make (recordings, voices, truth, what's heard) there
+instead, for every checkout, and gradle-box.sh mounts it. What one checkout asks and gets back stays in
+its own build/syncreplay/, so replays of different checkouts don't read each other's.
 `phone` checks the same on a real phone over adb, with the dev app installed and the phone unlocked:
 it plays the recording in YouTube Music (--app for another build of it) from the start, opens the
 words in Crosstune for S seconds, and times each line lit from the app's own log. Where the song
@@ -55,6 +58,7 @@ and a replay hears the rest it asks for, keeping it, so a change to the app's ti
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
+import fcntl
 import html
 import json
 from datetime import datetime
@@ -72,7 +76,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "build" / "syncreplay"
+OUT = Path(os.environ.get("SYNCREPLAY_DIR") or ROOT / "build" / "syncreplay")
 HEARD = OUT / "heard"
 HEARD_BUILT = threading.Lock()
 # The app's speech model; others can be tried with `hear --model` and `run --model`.
@@ -108,6 +112,14 @@ def pieces(word):
     word = unicodedata.normalize("NFKC", word.lower().replace("’", "'"))
     bare = "".join(c for ch in word for c in (unicodedata.normalize("NFKD", ch) if ch < "\u0250" else ch) if ch >= "\u0250" or not unicodedata.combining(c))
     return re.findall(f"[{UNSPACED}]|[^{UNSPACED}]+", re.sub(r"[^\w']|_", "", bare))
+
+
+def own():
+    """Where this checkout asks for a replay and gets it back: apart from a folder other checkouts share,
+    as their replays differ, and each runs at its own time."""
+    folder = ROOT / "build" / "syncreplay" if os.environ.get("SYNCREPLAY_DIR") else OUT
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
 
 
 def audio(path, kind="f32le"):
@@ -180,8 +192,14 @@ def windows(song, wav, length, model=APP_MODEL, clean=False, wanted=None):
 
     with ThreadPoolExecutor(HEARD_AT_ONCE) as pool:
         for start, words in pool.map(hear, starts):
-            done[str(start)] = words
-            atomic_text(out, json.dumps(done))
+            keep_heard(out, {str(start): words})
+
+
+def keep_heard(path, heard):
+    """Adds what was heard to the file as it is now, as another checkout may have heard more of the song meanwhile."""
+    with open(path.with_name(path.name + ".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        atomic_text(path, json.dumps({**(json.loads(path.read_text()) if path.exists() else {}), **heard}))
 
 
 def atomic_text(path, text):
@@ -336,7 +354,7 @@ def prep(args):
 def hear_asked(song, replays):
     """Hears each stretch these replays of the song asked for and got only something near to: how many new ones.
     What's heard in one decides what's asked next, so it takes a few replays to settle (measurements.md)."""
-    plays = [json.loads((OUT / name).read_text()) for name in replays if (OUT / name).exists()]
+    plays = [json.loads((own() / name).read_text()) for name in replays if (own() / name).exists()]
     new = 0
     for length in LENGTHS:
         asked = [h["from"] for play in plays for h in play.get("heard", []) if h["seconds"] * 1000 == length]
@@ -354,7 +372,7 @@ def hear_asked(song, replays):
 def run(args):
     phone_lit = like_phone(args) if args.like_phone else None
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
-    asked = OUT / "replay.json"
+    asked = own() / "replay.json"
     replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
     if args.like_phone:
         replay.update(works=args.works, whiles=args.whiles)
@@ -410,7 +428,7 @@ def like_phone(args):
     args.model = f"{APP_MODEL}.clean" if clean else APP_MODEL
     # The words the phone showed, not those prep was given.
     if (kept / "lyrics.json").exists():
-        atomic_text(OUT / f"{args.id}.found.json", json.dumps(found_words(args.id, kept)))
+        atomic_text(own() / f"{args.id}.found.json", json.dumps(found_words(args.id, kept)))
     if not heard_file(args.id, LENGTHS[0], args.model).exists():
         print(f"The phone heard the sound played itself, and the replay hears through the visualizer: for the same, first `hear {args.id} --clean`.")
         args.model = APP_MODEL
@@ -431,7 +449,7 @@ def compare(phone_lit, shown):
 
 
 def score(args):
-    shown = json.loads((OUT / f"{args.id}.from{args.start}.shown.json").read_text())
+    shown = json.loads((own() / f"{args.id}.from{args.start}.shown.json").read_text())
     sung = sung_lines(args.id, shown["lines"])
     # The app's line to the n-th line with words.
     nth = {}
@@ -752,7 +770,8 @@ def fingerprints(args):
     kept = Path(args.kept) if args.kept else OUT / "phone" / args.id
     log = (kept / "log.txt").read_text()
     lyrics = (kept / "lyrics.json").read_text()
-    words = OUT / f"{args.id}.found.json"
+    words = own() / f"{args.id}.found.json"
+    words = words if words.exists() else OUT / words.name
     length = json.loads(words.read_text())["length"] if words.exists() else found_words(args.id, kept)["length"]
     video = re.search(r"duration:(\d+)", lyrics)
     if not video:
@@ -798,8 +817,7 @@ def find_set(args):
     """Finds the songs of songs.tsv as the app does (SyncSetTest), then preps each not prepped yet."""
     OUT.mkdir(parents=True, exist_ok=True)
     if not args.cached:
-        asked = OUT / "set.asked"
-        OUT.mkdir(parents=True, exist_ok=True)
+        asked = own() / "set.asked"
         asked.write_text("")
         try:
             done = subprocess.run(shlex.split(args.gradle) + ["-q", ":app:testDebugUnitTest", "--tests", "*SyncSetTest*", "--rerun"], cwd=ROOT, capture_output=True, text=True)
@@ -854,10 +872,10 @@ def prepped():
 def run_all(args):
     """Every prepped song replayed from the start in one go, and how its lines came out against when they're sung."""
     songs = prepped()
-    asked = OUT / "replay.json"
+    asked = own() / "replay.json"
     asked.write_text(json.dumps({"songs": [{"song": song, "from": 0, "work": args.work, "behind": args.behind, "heard": args.heard} for song in songs]}))
     # Their names too, one a line, as SyncReplayTest reads them before it can read JSON.
-    names = OUT / "replay.songs"
+    names = own() / "replay.songs"
     wanted = asked.read_text()
     while True:
         asked.write_text(wanted)
@@ -880,7 +898,7 @@ def run_all(args):
     lyric_lines = 0
     print(f"{'song':12} {'lines':>5} {'0.3 s':>6} {'0.5 s':>6} {'dark':>5} {'early':>5} {'worst':>6}  title")
     for song in songs:
-        shown = json.loads((OUT / f"{song}.from0.shown.json").read_text())
+        shown = json.loads((own() / f"{song}.from0.shown.json").read_text())
         sung = sung_lines(song, shown["lines"])
         first = lit_first(shown)
         lags = [first[k] - sung[k] for k in sung if k in first]
