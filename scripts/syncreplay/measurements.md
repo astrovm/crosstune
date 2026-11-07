@@ -448,7 +448,7 @@ Each part off, to see which moved what, all else as this branch:
 
 Worse, and why:
 
-- 99 Luftballons, 10 → 6 within 0.3 s, but 13 → 18 within 0.5 s. A distinct line puts the words right 12 s sooner, and they end up nearer the singing than on main: a mean of about 0.16 s off, against 0.2 s. Lines light 0.3 s early on purpose, so nearer the truth reads as further within 0.3 s.
+- 99 Luftballons, 10 → 6 within 0.3 s, but 13 → 18 within 0.5 s. A distinct line puts the words right 12 s sooner. They end up as near the singing as with that part off, a mean of 0.18 s off against 0.20 s, but about 0.25 s earlier. Lines light 0.3 s early on purpose, so more of them land just past 0.3 s.
 - Bizarre Love Triangle (ZnrSNEah_20), 6 → 3 and 10 → 8. A line heard alone moves every later while: it hears from 57.7 s where main hears from 79.3 s, and the whiles that follow catch lines 14 to 19 less well, +1.5 s against +0.6 s.
 - It's My Life, worst +5.8 → +14.4 s, with one dark line fewer. Also from a line heard alone: the first seconds of a while at 65 s are heard as music, so the words stop being shown for 24.5 s, against 20.5 s from 60 s on main. One line then lights as they come back. That stop is main's, on any while opening without words.
 - Dynamite (20 → 18, 19 on the repeat) and Shape of You (25 → 23) are at the edge of the noise.
@@ -460,7 +460,7 @@ Worse, and why:
 | Main | 0 of 14 | 14 | 10.86 s | never |
 | This branch | 1 of 14 | 13 | 0.98 s | 78.1 s |
 
-Better, not fixed. On main no while heard is ever matched, as the words have no spaces and the singing is split elsewhere. Here the third while is, and the whole sheet moves 10.4 s. Lines 0 to 5 are lit before that, so they stay about 11 s early. After it, the sheet is within 0.5 s for 9 of its 14 lines and within 1.1 s for all, and the later lines drift to about -1 s. Nothing here corrects that drift, so the line-by-line target stays open.
+Better, not fixed. On main no while heard is ever matched, as the words have no spaces and the singing is split elsewhere. Here the second is, the one from 53.5 s, and the whole sheet moves about 10.4 s, at 78.1 s. Lines 0 to 5 are lit before that, so they stay about 11 s early. After it, the sheet is within 0.5 s for 9 of its 14 lines and within 1.1 s for all, and the later lines drift to about -1 s. Nothing here corrects that drift, so the line-by-line target stays open.
 
 ### A player rate of 1.05x
 
@@ -473,6 +473,6 @@ Better, not fixed. On main no while heard is ever matched, as the words have no 
 
 ### What the replay gets told
 
-The replay tells the app a sheet is as long as the recording, and leaves the app's own hearing unset. With the sheet's own length and a stand-in Shazam, main gives 1168 lines, 311, 614, 90 dark, 407: 二人だけのセレモニー stops being dark for 25 lines, as its words are taken, and hearing starts later on some songs. That changes the baseline, so this branch keeps main's inputs, and it's measured on its own: this branch on those inputs gives 306, 619, 87, 406. My guess, not measured: the sheet's own length is what's nearer a phone.
+The replay tells the app a sheet is as long as the recording, and leaves the app's own hearing unset. With the sheet's own length and a stand-in Shazam, main gives 1168 lines, 311, 614, 90 dark, 407: 二人だけのセレモニー has 1 dark line of 14 scored instead of 25 of 25, as its words are taken, and hearing starts later on some songs, as on XB7AmIsxzfI, from 22.8 s instead of 11 s. That changes the baseline, so this branch keeps main's inputs, and it's measured on its own: this branch on those inputs gives 306, 619, 87, 406. My guess, not measured: the sheet's own length is what's nearer a phone.
 
 Earlier phone recordings were lost, so nothing here replays them: `--like-phone` needs a new `phone` run first.
