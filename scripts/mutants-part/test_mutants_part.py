@@ -1,3 +1,7 @@
+import contextlib
+import io
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +74,43 @@ class Lived(unittest.TestCase):
                 "B.kt:10  survived: negated conditional [class=None method=NoneNone mutator=None index= block=]",
             ],
         )
+
+    def test_every_change_that_was_not_killed_is_listed(self):
+        # A change that ran out of memory or broke the run isn't killed either: it must not vanish.
+        statuses = ["MEMORY_ERROR", "RUN_ERROR", "NON_VIABLE", "NOT_STARTED", "STARTED"]
+        report = "<mutations><mutation status='KILLED'><sourceFile>A.kt</sourceFile><lineNumber>1</lineNumber><description>k</description></mutation>"
+        report += "".join(f"<mutation status='{s}'><sourceFile>B.kt</sourceFile><lineNumber>{i + 1}</lineNumber><description>d</description></mutation>" for i, s in enumerate(statuses))
+        with tempfile.NamedTemporaryFile("w", suffix=".xml") as file:
+            file.write(report + "</mutations>")
+            file.flush()
+            rows, total = mutants_part.lived(Path(file.name))
+        self.assertEqual(total, 6)
+        self.assertEqual([row.split(": ")[0] for row in rows], [f"B.kt:{i + 1}  {s.lower().replace('_', ' ')}" for i, s in enumerate(statuses)])
+
+
+class Branch(unittest.TestCase):
+    """scripts/mutants.py, for a pull request, lists the same changes the weekly run does."""
+
+    def test_a_memory_error_is_listed_and_fails_the_run(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(root)]))
+        (root / "gradle.sh").write_text(
+            f"mkdir -p {root}/r && cat > {root}/r/mutations.xml <<'EOF'\n"
+            "<mutations><mutation status='MEMORY_ERROR'><sourceFile>M.kt</sourceFile><lineNumber>741</lineNumber><description>oom</description></mutation></mutations>\nEOF\n"
+        )
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        import mutants
+
+        saved = (mutants.LINES, mutants.REPORT, mutants.changed_lines)
+        self.addCleanup(lambda: [setattr(mutants, name, value) for name, value in zip(("LINES", "REPORT", "changed_lines"), saved)])
+        mutants.LINES, mutants.REPORT, mutants.changed_lines = root / "lines.txt", root / "r/mutations.xml", lambda base: ["M.kt:741"]
+        out = io.StringIO()
+        sys.argv = ["mutants.py", "--gradle", f"sh {root}/gradle.sh"]
+        with contextlib.redirect_stdout(out):
+            status = mutants.main()
+        self.assertEqual(status, 1)
+        self.assertIn("M.kt:741  memory error: oom", out.getvalue())
+        self.assertIn("0 of 1 changes caught by a test.", out.getvalue())
 
 
 if __name__ == "__main__":
