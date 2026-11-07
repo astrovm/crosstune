@@ -72,7 +72,7 @@ Once you've opened something, anything left or broken later shows as **Things to
 
 Songs shared from Pixel **Now Playing**, **Shazam** links and songs shared from Google's search work too. "Search" means Crosstune opens a search for the title and artist.
 
-Bandcamp's app opens no song page, only searches. In it Crosstune opens a search for the song, and the song is one tap away. This needs you logged in to Bandcamp's app: logged out, it shows its home. In the browser, the song's page opens.
+Bandcamp's app opens no song page and plays nothing it's asked for, only searches. In it Crosstune opens a search for the song, so there's no **Play**, and the song is one tap away. Logged out of Bandcamp's app, a search can be lost if the app wasn't already open, and it shows its home. In the browser, the song's page opens.
 
 ## 🛠️ Troubleshooting
 
