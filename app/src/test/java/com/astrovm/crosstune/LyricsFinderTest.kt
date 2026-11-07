@@ -531,7 +531,7 @@ class LyricsFinderTest {
      * A Japanese song a music app names in Latin letters: LRCLIB and NetEase answer as given for each,
      * and iTunes knows it as 初恋 by 三田 寛子 when [ownNames].
      */
-    private fun japaneseSong(lrclib: (String) -> String = { "[]" }, ownNames: Boolean = true, netEase: (String) -> String = { """{"result":{}}""" }, lyric: String = "") {
+    private fun japaneseSong(lrclib: (String) -> String = { "[]" }, ownNames: Boolean = true, netEase: (String) -> String = { """{"result":{}}""" }, lyric: String = "", pureMusic: Boolean = false) {
         fake.handler = { request ->
             val url = request.url
             when {
@@ -542,7 +542,7 @@ class LyricsFinderTest {
                 )
                 url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[{"trackName":"初恋","artistName":"三田 寛子"}]}""")
                 url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, netEase(url.queryParameter("s").orEmpty()))
-                else -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(lyric)}}}""")
+                else -> FakeSpotify.html(request, """{"lrc":{"lyric":${quote(lyric)}},"pureMusic":$pureMusic}""")
             }
         }
     }
@@ -1203,7 +1203,7 @@ class LyricsFinderTest {
         fake.handler = { request -> FakeSpotify.html(request, "", code = 500) }
         assertEquals(first, runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).lyricsOf(hatsukoi) })
         fake.handler = handler
-        assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/song/lyric?id=2&") && "yv=1" in it })
+        assertEquals(true, fake.requestedUrls.any { it.startsWith("https://music.163.com/api/song/lyric?id=2&") && "lv=-1" in it && "yv=-1" in it })
         // Without them, the line-timed words from LRCLIB are the ones.
         val noWords = fake.handler
         fake.handler = { request -> if (request.url.encodedPath == "/api/song/lyric") FakeSpotify.html(request, """{"lrc":{"lyric":${quote(timed)}}}""") else noWords(request) }
@@ -1380,6 +1380,26 @@ class LyricsFinderTest {
         assertEquals(Lyrics.Instrumental, found(hatsukoi))
         japaneseSong(netEase = { ownSong }, lyric = "[00:00.000] 作词 : Someone")
         assertEquals(Lyrics.None, found(hatsukoi))
+        // A composer's credit and no lyricist's, with no words, is how it keeps many recordings no one sings on, and
+        // also some sung songs whose words it lacks: LRCLIB has the words of some. That says nothing, so it isn't instrumental.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作曲 : Someone")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作词 : Someone\n[00:00.00-1] 作曲 : Someone")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // It flags an instrumental itself, and then it credits its players, not only who wrote it.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00] 作曲 : Someone\n[00:01.00] 大提琴 : Another\n[00:02.00] 钢琴 : Another", pureMusic = true)
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        // Words under a composer's credit are words, even when they're kept garbled and so don't count.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00] 作曲 : Someone\n[00:05.00] Sung line")
+        assertEquals("Sung line", (found(hatsukoi) as Lyrics.Found).words)
+        val garbled = String("나는 너를 사랑해 나는 너를 사랑해".toByteArray(Charsets.UTF_8), charset("GBK"))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00] 作曲 : Someone\n[00:05.00] $garbled")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        // Credits of any kind are no words, whatever stamp they have, and a stamp is never part of the words.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 编曲 : Someone\n[00:00.00-1] 制作人 : Another")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作曲 : Someone\n[00:07.50-1] Sung line")
+        assertEquals("Sung line", (found(hatsukoi) as Lyrics.Found).words)
         japaneseSong(netEase = { """{"result":{"songs":[{"id":9,"name":"Another Song","artists":[{"name":"三田寛子"}]}]}}""" })
         assertEquals(Lyrics.None, found(hatsukoi))
     }
