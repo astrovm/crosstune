@@ -75,6 +75,21 @@ class GradleBoxTest(unittest.TestCase):
     def release(self, run):
         (self.dir / f"hold.{run}").unlink()
 
+    def test_a_chosen_replay_folder_is_mounted_and_named_in_the_box(self):
+        kept = self.dir / "replay-cache"
+        kept.mkdir()
+        box = self.start("replay", ":app:testDebugUnitTest", SYNCREPLAY_DIR=str(kept))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
+        self.assertIn(f"-e SYNCREPLAY_DIR={kept}", self.asked()[0])
+
+    def test_no_replay_folder_is_mounted_unless_chosen(self):
+        box = self.start("plain", ":app:assembleDebug")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertNotIn("SYNCREPLAY_DIR", self.asked()[0])
+
     def test_runs_gradle_in_the_container_with_only_what_it_needs(self):
         box = self.start("a", ":app:assembleDebug", "--stacktrace")
         output, _ = box.communicate(timeout=20)
