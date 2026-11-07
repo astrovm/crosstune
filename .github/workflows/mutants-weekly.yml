@@ -135,9 +135,10 @@ jobs:
           {
             echo "Parts $parts of 64: [run]($RUN), jobs $JOBS."
             echo
-            if [ -n "$missing_parts" ]; then
-              echo "Missing results for parts:$missing_parts."
-            fi
+            for part in $missing_parts; do
+              echo "**No results from part $part, so its mutants are not listed.** Rerun the failed jobs of the run."
+              echo
+            done
             if [ "$JOBS" != success ]; then
               echo 'At least one part failed. Its results may be missing; see the run.'
             fi
@@ -157,5 +158,8 @@ jobs:
           if [ "$(wc -c < report.md)" -gt 1000000 ]; then
             printf '\nReport truncated. See the run artifacts for full results.\n' >> "$GITHUB_STEP_SUMMARY"
           fi
-          scripts/mutants-post.sh report.md "$([ -n "$lived" ] && echo true || echo false)"
+          # A lost part is a finding too: it must reach the issue even when nothing lived.
+          has_findings=false
+          if [ -n "$lived" ] || [ -n "$missing_parts" ]; then has_findings=true; fi
+          scripts/mutants-post.sh report.md "$has_findings"
           [ -z "$missing_parts" ]
