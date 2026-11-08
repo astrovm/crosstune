@@ -180,7 +180,7 @@ internal class ChordFinder(
             }
         }
         if (looked == null || looked.isFailure) {
-            note("wiki ${if (looked == null) "timeout" else "error"}")
+            note("wiki ${if (looked == null) "timeout" else "error: ${looked.exceptionOrNull()?.message}"}")
             return Tried(null, true)
         }
         val found = looked.getOrNull()
