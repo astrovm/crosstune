@@ -633,6 +633,7 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
+        items.map(::row).firstOrNull { isTheSongInAnotherScript(it, names) }?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
@@ -811,6 +812,19 @@ internal class ExactMatcher(
     }
 
     /**
+     * A song result named in a script the song's known names aren't ("残酷な天使のテーゼ - Zankoku na Tenshi no
+     * Thesis" for "A Cruel Angel's Thesis"), which there are no words to compare. Its artist is the song's and
+     * it is as long as a known recording of it, to the second, which two songs of one artist hardly share.
+     */
+    private fun isTheSongInAnotherScript(row: Row, names: Names): Boolean {
+        val length = row.lengthMs ?: return false
+        if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
+        if (row.name.none { it.code > 0x7f && it.isLetter() }) return false
+        val wanted = names.artists.flatMap(SongNames::artists).toSet()
+        return SongNames.artists(row.details.first()).any(wanted::contains)
+    }
+
+    /**
      * A video result, "Title | Channel • 1.2M views • 3:45", that plays the song: one of its names in
      * the title, nothing in it saying it's another version, e.g. a cover or karaoke, and its artist
      * the one who put it up, or named in the title of one as long as the song, e.g. with its lyrics.
@@ -964,6 +978,7 @@ internal class ExactMatcher(
 
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
+        const val SAME_SONG_LENGTH_MS = 3_000L
 
         /** How far a video ChatGPT picks may be from the song's length, as a video may open or end with more. */
         const val PICKED_VIDEO_LENGTH_MS = 45_000L
