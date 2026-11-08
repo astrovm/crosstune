@@ -348,11 +348,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             TranslationStatus(state.learning, state.offline, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
-            // Timed words with nothing saying where the song is: on top, how they can follow a music app.
+            // Timed words with no music app to say where the song is: on top, how they can follow one. Even
+            // while they follow it by ear, as the microphone hears the room too, which may play another song.
             var followOffered by rememberSaveable { mutableStateOf(true) }
-            AnimatedVisibility(
-                visible = followOffered && state.lyricLines.isNotEmpty() && !state.canFollowApps && state.following == null && !state.listeningAlong
-            ) {
+            AnimatedVisibility(visible = followOffered && state.lyricLines.isNotEmpty() && !state.canFollowApps) {
                 FollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW, onDismiss = { followOffered = false })
             }
             AnimatedVisibility(visible = syncing, modifier = Modifier.goingAway(unsyncing, TransformOrigin(0.5f, 0f))) {

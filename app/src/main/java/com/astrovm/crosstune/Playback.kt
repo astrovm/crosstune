@@ -815,15 +815,7 @@ internal class MediaSessionPlayback(
     private fun MediaController.plays(song: MusicMetadata): Boolean {
         val playing = metadata ?: return false
         if (anotherRecording(playing, song)) return false
-        val title = playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
-        val artist = playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
-        if (title.isBlank()) return false
-        // A video's title, read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
-        val named = MetadataParsers.youtubeVideo(title, artist)?.title
-        if (!(SongNames.same(title, song.title) || SongNames.wordsMatch(title, song.title) || named?.let { SongNames.same(it, song.title) } == true)) return false
-        // A video's channel may be named "Artist - Topic", or not be the artist at all, when the title names them.
-        return artist.isBlank() || SongNames.artistInside(artist, song.artist) || SongNames.sameArtist(song.artist, artist) ||
-            SongNames.artistNames(song.artist).map(SongNames::words).any { it.isNotEmpty() && SongNames.words(title).containsAll(it) }
+        return SongNames.names(playing.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), playing.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), song)
     }
 }
 

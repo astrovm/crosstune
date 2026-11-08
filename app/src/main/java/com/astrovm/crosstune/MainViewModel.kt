@@ -2216,11 +2216,12 @@ internal class MainViewModel(
                 if (autoCalibrating) stopListeningAlong()
             }
         }
-        // Heard by another name right where the song shown is, well into it, it's the same recording
-        // on another release, as Shazam sometimes names it, not the next song, which starts over.
+        // Heard by another name of the song right where the song shown is, well into it, it's the same
+        // recording on another release, as Shazam sometimes names it, not the next song, which starts over.
+        // Another song heard there is still another song, e.g. one the phone plays, the room's named first.
         val clock = heardClock
         val at = heard.clock
-        if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
+        if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true && SongNames.releasesOfOneSong(song, shown) &&
             clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
         ) {
             heardClock = steadied(clock, at)
