@@ -903,13 +903,13 @@ class FlashcardsTest {
         waitUntil { phone.songsAsked.isNotEmpty() }
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         waitUntil { practice().sound == LineSound.NONE }
-        // There, but where the app can't move it, e.g. during an ad, it isn't asked for again, and it's read.
+        // Already this song, and it won't move. It isn't asked for again, and the card says it plays from the start.
         val asked = phone.songsAsked.size
         appHas(practice().line!!.title, canSeek = false)
         click(string(R.string.floating_close))
         waitUntil { model().uiState.practice == null }
         practiseAll(1)
-        waitUntil { model().uiState.practice?.sound == LineSound.NONE }
+        waitUntil { model().uiState.practice?.sound == LineSound.FROM_START }
         assertEquals(asked, phone.songsAsked.size)
         // Stopped while a line plays, the app pauses it.
         val playing = practice().line!!

@@ -63,9 +63,9 @@ class PracticeCardsTest {
     }
 
     /** The music app playing the demo song from just before the line, on a clock 20 times as fast, so the line is over in a moment. */
-    private fun playing(video: Boolean = false, canSeek: Boolean = true) {
+    private fun playing(video: Boolean = false, canSeek: Boolean = true, playing: Boolean = true) {
         playback.access = true
-        playback.playing.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 20f), "Spotify", canSeek = canSeek, video = video)
+        playback.playing.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 20f, playing = playing), "Spotify", canSeek = canSeek, video = video)
     }
 
     @Test
@@ -371,15 +371,39 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun aSongAlreadyOnThatCantMoveLeavesTheCardSilent() {
+    fun aSongAlreadyPlayingThatCantMoveSaysSoFromTheStart() {
         keep(line())
-        // Already on, and stuck, as during an ad. Asking again would start it over, and it isn't the song from the start.
+        // Already this song, and the session offers no seek, as Spotify's free plan. It isn't opened or asked for again.
         playing(canSeek = false)
-        cards().start(null, before = null)
-        waitFor("the card stays silent") { practice?.sound == LineSound.NONE }
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the card says the song is playing from the start") { practice?.sound == LineSound.FROM_START }
+        Thread.sleep(500)
+        assertEquals(LineSound.FROM_START, practice?.sound)
         assertTrue(playback.seeks.isEmpty())
         assertTrue(playback.opened.isEmpty())
         assertTrue(playback.songsAsked.isEmpty())
+        assertEquals(0, playback.cameBack)
+        cards.replay()
+        Thread.sleep(100)
+        assertEquals(LineSound.FROM_START, practice?.sound)
+        assertTrue(playback.opened.isEmpty())
+    }
+
+    @Test
+    fun aSongAlreadyOnThatIsntPlayingStaysQuiet() {
+        keep(line())
+        // Paused, or a YouTube Music ad kept under the song's name: the follow says the song isn't playing.
+        // "Playing from the start" would be false, and opening the link would start it over.
+        playing(canSeek = false, playing = false)
+        cards().start(null, before = null)
+        waitFor("the card stays silent") { practice?.sound == LineSound.NONE }
+        Thread.sleep(500)
+        assertEquals(LineSound.NONE, practice?.sound)
+        assertTrue(playback.seeks.isEmpty())
+        assertTrue(playback.opened.isEmpty())
+        assertTrue(playback.songsAsked.isEmpty())
+        assertEquals(0, playback.cameBack)
     }
 
     @Test
@@ -419,6 +443,19 @@ class PracticeCardsTest {
         playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), 20f), "Spotify", canSeek = true)
         waitFor("the line is reached") { practice?.sound == LineSound.PLAYED }
         assertEquals(listOf(10_000L), playback.seeks.toList())
+    }
+
+    @Test
+    fun aVideoOpenedOnItsLinkSeeksPastItsLead() {
+        spotifyHasTheSong()
+        // The line is 10 s into the song, and the video has 2 s before the song. The open path's follow is what says so.
+        keep(keptFromSpotify.copy(leadMs = 2_000))
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), 20f), "Spotify", canSeek = true, video = true)
+        waitFor("the line is reached") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(12_000L), playback.seeks.toList())
     }
 
     @Test

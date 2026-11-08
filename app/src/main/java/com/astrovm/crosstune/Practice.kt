@@ -162,20 +162,23 @@ internal class PracticeCards(
     /**
      * Follows [song] in the music app, asking [app] for it by name when no app has it, then does
      * [block] once it can be moved around in, with where it is as that changes. True when it could,
-     * or when an opened song is already playing and the app won't move, so it stays where it started.
+     * or when that song is already playing and the app won't move, so it stays where it started.
      */
     private suspend fun inApp(source: PlaybackSource, song: MusicMetadata, app: String?, fromStart: () -> Unit = {}, block: suspend (() -> Following?) -> Unit): Boolean = coroutineScope {
         var latest: Following? = null
         val following = launch { source.follow(song).collect { latest = it } }
         try {
             val ready: suspend () -> Unit = { while (latest?.canSeek != true) delay(SOUND_CHECK_MS) }
-            // Not already there, it's asked for by name, which takes the app a moment. There, but where
-            // it can't be moved, e.g. during an ad, asking again would only start it over.
+            // Not already there, it's asked for by name, which takes the app a moment.
             val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
             if (found) {
                 val there = withTimeoutOrNull(FIND_SONG_MS) { ready() } != null
                 if (there) block { latest }
-                return@coroutineScope there
+                // Already this song, and it won't move, as Spotify's free plan. Said only while the song
+                // itself plays. A pause, or an ad under the song's name, isn't that, and opening it again would start it over.
+                val fromTheStart = !there && latest?.clock?.playing == true
+                if (fromTheStart) fromStart()
+                return@coroutineScope there || fromTheStart
             }
             val opened = openUntilItCanMove(source, song, app, { latest }, fromStart)
             if (opened.canSeek) block { latest }
