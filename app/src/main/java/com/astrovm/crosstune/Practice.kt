@@ -170,8 +170,8 @@ internal class PracticeCards(
             var opened = false
             var cameBack = false
             val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null else {
-                // Spotify plays nothing asked of it by name, but its own link it starts at once, and it can
-                // be moved around in from there, on its free plan too.
+                // Spotify plays nothing asked of it by name, but its own link it starts at once. It may not
+                // let us move it to the line after that: on the Samsung's free plan it never offered a seek.
                 opened = openedOnOwnLink(source, song, app)
                 val asked = !opened && asked(source, song, app) { link -> opened = source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link) }
                 (asked || opened) && withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) {
