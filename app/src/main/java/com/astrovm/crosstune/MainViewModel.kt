@@ -2140,6 +2140,8 @@ internal class MainViewModel(
     /** Whether a music app plays a release the words aren't timed for, and how far off they are isn't known yet. */
     private val leading get() = appFollowing?.let { !it.video && it.clock.playing && needsLead(it) && appLeadMs == null } == true
 
+    private val playerSpeed get() = appFollowing?.clock?.speed ?: 1f
+
     private fun listeningAlong() = viewModelScope.launch {
         var quiet = 0
         var calibrationTries = 0
@@ -2151,10 +2153,13 @@ internal class MainViewModel(
             }
             // Only to learn Shazam's gap, nobody asked to listen, so never with the microphone.
             val quietly = autoCalibrating && appFollowing?.let(::learnsGap) == true
+            // Shazam measures against wall time, so its speed already includes the player's rate.
+            // Keep that rate before capture: the player can change it while Shazam answers.
+            val capturedSpeed = playerSpeed
             when (val heard = if (lining) listener.listenToPlaying(byMicrophone = !quietly) else listener.listen()) {
                 is Heard.Song -> {
                     quiet = 0
-                    heardAlong(heard)
+                    heardAlong(heard, capturedSpeed)
                     delay(listenAlongPauseMs)
                 }
                 // Nothing heard, the music has most likely stopped, so the words stop where they are,
@@ -2188,24 +2193,39 @@ internal class MainViewModel(
      * The song heard: the one shown keeps in time with it; another one takes over the words, once
      * the one shown was heard playing, as the next song. A song picked to read stays.
      */
-    private fun heardAlong(hearing: Heard.Song) {
+    private fun heardAlong(hearing: Heard.Song, playerSpeed: Float) {
         if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "fingerprint ${hearing.offsetMs} at ${hearing.startedAtMs} match ${hearing.matchId} received ${now()} speed ${hearing.speed} length ${hearing.metadata.lengthMs} app ${appFollowing?.clock} video ${appFollowing?.video} duration ${appFollowing?.durationMs} lead $appLeadMs guessed $guessedLeadMs")
         val song = hearing.metadata
         val shown = uiState.lyricsFor ?: return
-        if (!sameSong(song, shown) && heardSong?.let { sameSong(it, shown) } != true) return
-        // While a music app plays the song shown, it says exactly what plays: a hearing naming it
-        // otherwise, as Shazam calls "Song (2018 Remix)" just "Song (Remix)", is the same song.
-        if (!sameSong(song, shown) && appFollowing?.clock?.playing == true) return
+        if (!hearingFits(song, shown)) return
+        noteHeardSpeed(hearing, playerSpeed)
+        appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
+        appFollowing?.let { learnPace(it, shown, hearing, playerSpeed) }
+        val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
+        val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
+        learnLead(shown, hearing, heard)
+        if (keepsHeardRecording(heard, shown)) return
+        if (followHeardSong(heard, hearing, song, shown, gap)) return
+        guessHeardLead(song, shown, heard)
+        keepInTime()
+    }
+
+    /** Another name can take over only after this song was heard and its app no longer says it plays. */
+    private fun hearingFits(song: MusicMetadata, shown: MusicMetadata): Boolean {
+        if (sameSong(song, shown)) return true
+        return heardSong?.let { sameSong(it, shown) } == true && appFollowing?.clock?.playing != true
+    }
+
+    private fun noteHeardSpeed(hearing: Heard.Song, playerSpeed: Float) {
         if (hearing.clock != null) {
             heardAtMs = now()
             val pacedBefore = pace
-            leadSpeeds += hearing.speed
+            leadSpeeds += hearing.speed / playerSpeed
             if (pace != pacedBefore) showPoints()
         }
-        appFollowing?.takeIf(::learnsGap)?.let { learnGap(it, shown, hearing) }
-        appFollowing?.let { learnPace(it, shown, hearing) }
-        val gap = if (sameSong(song, shown)) gapOf(hearing) else 0L
-        val heard = hearing.copy(offsetMs = hearing.offsetMs?.plus(gap))
+    }
+
+    private fun learnLead(shown: MusicMetadata, hearing: Heard.Song, heard: Heard.Song) {
         appFollowing?.takeIf { needsLead(it) && shownPoints.isEmpty() }?.let { app ->
             heard.clock?.let { clock -> leadTiming.heard(app.clock, clock, extraIn(app)) }?.let { lead ->
                 appLeadMs = lead
@@ -2216,31 +2236,49 @@ internal class MainViewModel(
                 if (autoCalibrating) stopListeningAlong()
             }
         }
-        // Heard by another name right where the song shown is, well into it, it's the same recording
-        // on another release, as Shazam sometimes names it, not the next song, which starts over.
+    }
+
+    /**
+     * Heard by another name of the song right where the song shown is, well into it, it's the same
+     * recording on another release, as Shazam sometimes names it, not the next song, which starts over.
+     * Another song heard there is still another song, e.g. one the phone plays, the room's named first.
+     */
+    private fun keepsHeardRecording(heard: Heard.Song, shown: MusicMetadata): Boolean {
         val clock = heardClock
         val at = heard.clock
-        if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
-            clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
-        ) {
-            heardClock = steadied(clock, at)
-            return keepInTime()
-        }
+        if (at == null || clock == null || !sameRecordingThere(heard.metadata, shown, at, clock)) return false
+        heardClock = steadied(clock, at)
+        keepInTime()
+        return true
+    }
+
+    private fun sameRecordingThere(song: MusicMetadata, shown: MusicMetadata, at: PlaybackClock, clock: PlaybackClock): Boolean {
+        if (!clock.playing || heardSong?.let { sameSong(it, shown) } != true || !SongNames.releasesOfOneSong(song, shown)) return false
+        return sameRecordingPlace(clock.positionAt(now()), at.positionAt(now()))
+    }
+
+    /** Whether this hearing needs no further clock update. */
+    private fun followHeardSong(heard: Heard.Song, hearing: Heard.Song, song: MusicMetadata, shown: MusicMetadata, gap: Long): Boolean {
         if (heardSong?.let { sameSong(it, song) } != true || !sameSong(song, shown)) {
             heardSong = song
             hear(heard.clock, hearing.matchId, gap)
             unconfirmed = null
             if (!sameSong(song, shown)) {
                 remember(heard)
-                return showLyricsFor(song)
+                showLyricsFor(song)
+                return true
             }
         } else {
-            hear(steadied(heardClock, heard.clock ?: return), hearing.matchId, gap)
+            // Heard with no place in it, it stays where it was, and goes on as a first hearing with no place does.
+            heard.clock?.let { hear(steadied(heardClock, it), hearing.matchId, gap) }
         }
+        return false
+    }
+
+    private fun guessHeardLead(song: MusicMetadata, shown: MusicMetadata, heard: Heard.Song) {
         // A part played again is heard as its other time, again and again, so where the song is steadies on
         // that: with nothing to go by yet, the first answer the video could have is taken as soon as it's heard.
         appFollowing?.takeIf { mayGuessLead(it) && guessedLeadMs == null && sameSong(song, shown) }?.let { guessLead(it, heard.clock) }
-        keepInTime()
     }
 
     /** Whether the video playing may still be before its song: it isn't yet as far in as it's longer than the song. */
@@ -2283,10 +2321,11 @@ internal class MainViewModel(
      * the recording it matched Shazam [heard] it: words timed for a release play that much sooner or
      * later as it goes on. Words that say they're timed for one as long as this keep its pace.
      */
-    private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song) {
+    private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song, playerSpeed: Float) {
         if (heard.clock == null || !sameSong(heard.metadata, shown)) return
         if (found?.lengthMs != null && app.durationMs != null && found?.timedFor(app.durationMs) == true) return
-        val heardPace = if (abs(heard.speed - 1) >= MIN_SKEW) 1.0 / heard.speed else 1.0
+        val speed = heard.speed / playerSpeed
+        val heardPace = if (abs(speed - 1) >= MIN_SKEW) 1.0 / speed else 1.0
         if (heardPace == wordsPace) return
         wordsPace = heardPace
         syncStore.save(shown, foundLines, withGuess(syncPoints), heardPace)
@@ -2597,23 +2636,9 @@ internal class MainViewModel(
         uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
     }
 
-    /**
-     * How long until what's heard from then on has lines sung in it, by [clock]; null when no stretch
-     * of the song left has enough. Only from [after] on, when the song was heard up to there, and
-     * [straightOn] from there, wherever the lines are timed.
-     */
-    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?, straightOn: Boolean = false): Long? {
-        val here = clock.positionAt(now())
-        val at = maxOf(here, after ?: here)
-        val heardMs = SingingListener.SECONDS * 1000L - SINGING_TAIL_MS
-        val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }.map { it.timeMs }
-        // Heard from just before a line starts, or now, as one just has: a while opening on music alone, the model may hear only that.
-        // Less just before, when that's what lets enough lines after it be heard too, so the line isn't left to the next while.
-        val from = if (straightOn) at else starts.withIndex().firstNotNullOfOrNull { (index, line) ->
-            starts.getOrNull(index + SINGING_LINES - 1)?.let { last -> maxOf(at, line - SINGING_LEAD_MS, last - heardMs + 1).takeIf { it <= maxOf(at, line) } }
-        } ?: return null
-        return ((from - here) / clock.speed).toLong()
-    }
+    /** [untilSung] from where [clock] has the song now. */
+    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?, straightOn: Boolean = false): Long? =
+        untilSung(lines, clock.positionAt(now()), clock.speed, after, straightOn)
 
     /**
      * Whether what [app] plays may be ahead of, or behind, where the words are timed: a video, which
@@ -4535,6 +4560,30 @@ internal class MainViewModel(
 
         /** How far into the song shown that's believed: earlier, it may just as well be the next song. */
         const val SAME_RECORDING_AFTER_MS = 30_000L
+
+        /** Whether another name heard [heardMs] into its song is where the song shown is, [shownMs] into it: well into it, and close. */
+        internal fun sameRecordingPlace(shownMs: Long, heardMs: Long): Boolean =
+            shownMs >= SAME_RECORDING_AFTER_MS && abs(heardMs - shownMs) <= SAME_RECORDING_MS
+
+        /**
+         * How long until what's heard from [here] in the song on, going by at [speed], has lines sung in it;
+         * null when no stretch of the song left has enough. Only from [after] on, when the song was heard
+         * up to there, and [straightOn] from there, wherever the lines are timed.
+         */
+        internal fun untilSung(lines: List<LyricLine>, here: Long, speed: Float, after: Long?, straightOn: Boolean = false): Long? {
+            val at = maxOf(here, after ?: here)
+            val heardMs = SingingListener.SECONDS * 1000L - SINGING_TAIL_MS
+            val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }
+            // Heard from just before a line starts, or now, as one just has: a while opening on music alone, the model may hear only that.
+            // Less just before, when that's what lets enough lines after it be heard too, so the line isn't left to the next while.
+            // A line alone only when it's heard from its start: its words are all that tell it apart, so one already begun may not be placed.
+            val from = if (straightOn) at else starts.withIndex().firstNotNullOfOrNull { (index, line) ->
+                val last = if (line.timeMs >= at && SungAlignment.canPlaceAlone(line, lines)) line.timeMs else starts.getOrNull(index + SINGING_LINES - 1)?.timeMs
+                last?.let { maxOf(at, line.timeMs - SINGING_LEAD_MS, it - heardMs + 1).takeIf { from -> from <= maxOf(at, line.timeMs) } }
+            } ?: return null
+            return ((from - here) / speed).toLong()
+        }
+
         /** How long ago the song can have been heard and still line up a video with it. */
         const val HEARD_LATELY_MS = 60_000L
         /** How far Shazam's place in a song may be from where its words are timed. */

@@ -139,6 +139,15 @@ class EmulatorScriptTest(unittest.TestCase):
         self.assertIn("-gpu host", started[0])
         self.assertIn("emulator-5580", result.stdout)
 
+    def test_start_lets_the_mic_hear_the_host_even_when_it_runs_already(self):
+        # Without it the emulator's mic records silence, whatever the private sink plays.
+        self.run_script("create", PHONE)
+        self.run_script("start", PHONE)
+        self.assertIn("-s emulator-5580 emu avd hostmicon", " | ".join(self.asked()))
+        (self.fake / "asked").unlink()
+        self.run_script("start", PHONE)
+        self.assertIn("-s emulator-5580 emu avd hostmicon", " | ".join(self.asked()))
+
     def test_start_hides_the_window_unless_asked_for_it(self):
         self.run_script("create", PHONE)
         self.run_script("start", PHONE)

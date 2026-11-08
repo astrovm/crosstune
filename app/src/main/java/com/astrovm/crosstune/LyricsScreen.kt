@@ -297,7 +297,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         if (!toolsShown && barFocused) focusManager.moveFocus(FocusDirection.Up)
         if (!toolsShown && infoFocused) focusManager.moveFocus(FocusDirection.Down)
     }
-    // A touch on the words, when the tools were away, only brings them back.
+    // The remote's key on the words, when the tools were away, only brings them back: the words took its focus as the tools
+    // went, so it isn't aimed at a line. A tap is, so it does what a tap on that line does, and brings them back too.
     val toolsAway by rememberUpdatedState(!toolsShown)
     // Again once the words arrive, which put their own tools first on it; not while the bar is away, where it would only pull the remote back.
     if (tv) LaunchedEffect(state.lyrics.isEmpty()) { if (toolsShown) focusBar = true }
@@ -348,11 +349,10 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
             TranslationStatus(state.learning, state.offline, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
-            // Timed words with nothing saying where the song is: on top, how they can follow a music app.
+            // Timed words with no music app to say where the song is: on top, how they can follow one. Even
+            // while they follow it by ear, as the microphone hears the room too, which may play another song.
             var followOffered by rememberSaveable { mutableStateOf(true) }
-            AnimatedVisibility(
-                visible = followOffered && state.lyricLines.isNotEmpty() && !state.canFollowApps && state.following == null && !state.listeningAlong
-            ) {
+            AnimatedVisibility(visible = followOffered && state.lyricLines.isNotEmpty() && !state.canFollowApps) {
                 FollowOffer(actions, fixing = state.fixingInOneTap == OneTapFix.FOLLOW, onDismiss = { followOffered = false })
             }
             AnimatedVisibility(visible = syncing, modifier = Modifier.goingAway(unsyncing, TransformOrigin(0.5f, 0f))) {
@@ -364,17 +364,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     .fillMaxWidth()
                     // The bar and its menus come and go over the words, so they never move for them.
                     .padding(bottom = 16.dp)
-                    // The touch that brings the tools back isn't also a tap on a line.
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { if (toolsAway && it.changedToDown()) it.consume() }
-                            }
-                        }
-                    }
                     .onPreviewKeyEvent {
                         tv && it.type == KeyEventType.KeyDown && when {
-                            // Nor is the remote's key that does.
                             toolsAway && it.key in SELECT_KEYS -> true
                             it.key != Key.DirectionRight -> false
                             toolsAway -> { focusBar = true; true }
