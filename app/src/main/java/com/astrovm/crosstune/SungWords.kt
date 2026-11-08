@@ -229,7 +229,7 @@ internal object SungAlignment {
      * moment of [sung], by the clock the words follow.
      */
     fun shiftMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>): Long? {
-        val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) } }
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) } }
         if (heard.isEmpty()) return null
         return near(heard, lines)?.first ?: far(heard, lines)
     }
@@ -243,7 +243,7 @@ internal object SungAlignment {
      * told where it starts, stays [shiftMs] off.
      */
     fun linesMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>, shiftMs: Long): Map<Int, Long> {
-        val heard = sung.words.mapNotNull { word -> plain(word.text).takeIf { it.isNotEmpty() }?.let { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
         if (heard.isEmpty()) return emptyMap()
         val from = heard.first().second - LINE_OFF_MS
         val to = heard.last().second + LINE_OFF_MS
@@ -256,15 +256,39 @@ internal object SungAlignment {
                 val offs = its.mapNotNull { (h, t) -> timed[t].ms?.let { heard[h].second - it } }
                 offs.takeIf { it.size >= 2 }?.sorted()?.let { it[it.size / 2] + lines[line].timeMs }
             } else {
-                val (h, t) = its.first()
-                val before = t - timed.indexOfFirst { it.line == line }
-                // A pair: the next word of the line heard right after.
-                val pair = its.getOrNull(1) == (h + 1 to t + 1) && heard[h + 1].second - heard[h].second < PAIR_MS
-                heard.getOrNull(h - before)?.second?.takeIf { pair && before <= MAX_MISHEARD && (h - before until h).none { it in matchedHeard } }
+                prefixStart(its, timed, heard, matchedHeard)
             } ?: return@mapNotNull (line to lines[line].timeMs + shiftMs).takeIf { its.size >= 2 }
             val off = startMs - lines[line].timeMs - shiftMs
             if (abs(off) > LINE_OFF_MS) null else line to lines[line].timeMs + shiftMs + if (abs(off) >= OWN_LINE_MS) off else 0L
         }.toMap()
+    }
+
+    /** A distinct phrase supplies enough content without waiting for several sparse lines. */
+    fun canPlaceAlone(line: LyricLine, lines: List<LyricLine>) = distinctLine(pieces(line.text), line, lines)
+
+    private fun distinctLine(heard: List<String>, line: LyricLine, lines: List<LyricLine>): Boolean {
+        val support = matched(heard, pieces(line.text)).size
+        return support >= MIN_WORDS && lines.none { it !== line && matched(heard, pieces(it.text)).size * FAR_CLEARLY >= support }
+    }
+
+    private fun prefixStart(its: List<Pair<Int, Int>>, timed: List<Word>, heard: List<Pair<String, Long>>, matchedHeard: Set<Int>): Long? {
+        val (h, t) = its.first()
+        val before = t - timed.indexOfFirst { it.line == timed[t].line }
+        // A pair: the next word of the line heard right after.
+        val pair = its.getOrNull(1) == (h + 1 to t + 1) && heard[h + 1].second - heard[h].second < PAIR_MS
+        return heard.getOrNull(h - before)?.second?.takeIf { pair && before <= MAX_MISHEARD && (h - before until h).none { it in matchedHeard } }
+    }
+
+    private fun distinctLineShift(heard: List<Pair<String, Long>>, near: List<LyricLine>, timed: List<Word>, pairs: List<Pair<Int, Int>>, lines: List<LyricLine>): Long? {
+        val used = pairs.map { it.first }.toSet()
+        val shifts = pairs.groupBy { (_, t) -> timed[t].line }.mapNotNull { (line, its) ->
+            if (!distinctLine(its.map { (h) -> heard[h].first }, near[line], lines)) return@mapNotNull null
+            val known = its.mapNotNull { (h, t) -> timed[t].ms?.let { (heard[h].second - it) to line } }
+            val shift = agreed(known, AGREE_MS) { it.size * 2 > known.size }
+                ?: prefixStart(its, timed, heard, used)?.minus(near[line].timeMs)
+            shift?.let { it to line }
+        }
+        return agreed(shifts, AGREE_MS) { it.size * 2 > shifts.size }
     }
 
     /** How far off the lines timed near what was [heard] are, and how many words heard match them; null when too few. */
@@ -279,6 +303,7 @@ internal object SungAlignment {
         val told = agreed(pairs.mapNotNull { (h, t) -> timed[t].ms?.let { (heard[h].second - it) to timed[t].line } }, AGREE_MS) {
             it.size >= MIN_WORDS || it.distinctBy { (_, line) -> line }.size >= MIN_LINES
         }
+            ?: distinctLineShift(heard, near, timed, pairs, lines)
             // Or else when the rest of a line's words are sung by where they are in it: a guess, so it takes more of them.
             ?: agreed(pairs.map { (h, t) -> (heard[h].second - timed[t].guessMs) to timed[t].line }, GUESSED_AGREE_MS) {
                 it.size >= MIN_GUESSED && it.distinctBy { (_, line) -> line }.size >= MIN_LINES
@@ -335,7 +360,7 @@ internal object SungAlignment {
      */
     private fun wordsOf(line: LyricLine, nextMs: Long?, index: Int): List<Word> {
         val words = line.words.ifEmpty { listOf(TimedWord(line.timeMs, line.text)) }.flatMap { word ->
-            word.text.split(' ').map(::plain).filter { it.isNotEmpty() }.mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
+            pieces(word.text).mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
         }
         val letters = words.sumOf { it.first.length }
         val sungFor = (nextMs ?: (line.timeMs + LAST_LINE_MS)) - line.timeMs
@@ -345,9 +370,16 @@ internal object SungAlignment {
         }
     }
 
+    /** Match unspaced writing by letters, as the model can split the same phrase anywhere. */
+    private fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.findAll(plain(word)).map { it.value }.toList() }
+
+    private val writing = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+")
+
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
     private fun plain(word: String): String =
-        Normalizer.normalize(word.lowercase(), Normalizer.Form.NFKD).filter { it.isLetterOrDigit() }
+        Normalizer.normalize(word.lowercase(), Normalizer.Form.NFKC).flatMap { letter ->
+            if (letter < '\u0250') Normalizer.normalize(letter.toString(), Normalizer.Form.NFKD).toList() else listOf(letter)
+        }.filter { it.isLetterOrDigit() }.joinToString("")
 
     /** Which of [heard] match which of [timed], in order, as many as can: index pairs. */
     private fun matched(heard: List<String>, timed: List<String>): List<Pair<Int, Int>> {

@@ -1127,6 +1127,43 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aClosingCreditNeedsNoSpaceBeforeItsColonAndATimeIsStillSung() {
+        val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
+        val sung = "五月雨は緑色"
+        fun timed(lines: List<String>) = lines.mapIndexed { index, line -> "[00:${10 + index}.000]$line" }.joinToString("\n")
+        // A player and a name, with either colon and no space around it, is still a closing credit.
+        japaneseSong(netEase = netEase, lyric = timed(listOf(sung, "貝斯：Player One", "鼓:Player Two")))
+        assertEquals(Lyrics.Found(sung, listOf(LyricLine(10_000, sung)), source = LyricsFinder.NETEASE), found(hatsukoi))
+        // One such line can be sung, so it stays. The kanji is already the form Japan writes.
+        japaneseSong(netEase = netEase, lyric = timed(listOf(sung, "貝斯：Player One")))
+        assertEquals(
+            Lyrics.Found("$sung\n貝斯：Player One", listOf(LyricLine(10_000, sung), LyricLine(11_000, "貝斯：Player One")), source = LyricsFinder.NETEASE),
+            found(hatsukoi)
+        )
+        // A time is a number before the colon, even two of them at the end.
+        val times = listOf(sung, "7:30 in the night", "When it's 11:30 in the night")
+        japaneseSong(netEase = netEase, lyric = timed(times))
+        assertEquals(
+            Lyrics.Found(times.joinToString("\n"), times.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }, source = LyricsFinder.NETEASE),
+            found(hatsukoi)
+        )
+        // Punctuation isn't who played, and neither is a colon with no label.
+        val marks = listOf(sung, "???: still here", "!!!: still here")
+        japaneseSong(netEase = netEase, lyric = timed(marks))
+        assertEquals(
+            Lyrics.Found(marks.joinToString("\n"), marks.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }, source = LyricsFinder.NETEASE),
+            found(hatsukoi)
+        )
+        // The stamp's text is trimmed, so a colon with no label stays as a line.
+        val blank = listOf(sung, ": Someone", ": Else")
+        japaneseSong(netEase = netEase, lyric = timed(listOf(sung, " : Someone", "  : Else")))
+        assertEquals(
+            Lyrics.Found(blank.joinToString("\n"), blank.mapIndexed { index, line -> LyricLine(10_000L + index * 1_000, line) }, source = LyricsFinder.NETEASE),
+            found(hatsukoi)
+        )
+    }
+
+    @Test
     fun whatNetEaseOpensASongWithForAMomentIsntSung() {
         val netEase = { _: String -> """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}""" }
         japaneseSong(netEase = netEase)
@@ -1412,6 +1449,84 @@ class LyricsFinderTest {
         assertEquals("Sung line", (found(hatsukoi) as Lyrics.Found).words)
         japaneseSong(netEase = { """{"result":{"songs":[{"id":9,"name":"Another Song","artists":[{"name":"三田寛子"}]}]}}""" })
         assertEquals(Lyrics.None, found(hatsukoi))
+    }
+
+    @Test
+    fun aCreditLabelOutsideTheKnownListIsStillNoWords() {
+        val ownSong = """{"result":{"songs":[{"id":2,"name":"初恋","artists":[{"name":"三田寛子"}]}]}}"""
+        // The label isn't one of the usual few. The line is still a credit: a short label, a colon, a name, and nothing is sung.
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作词 : Ada Writer\n[00:00.00-1] 作曲 : Ada Writer\n[00:00.00-1] 制作人 : A Producer\n[00:01.000] 编程 : Player One")
+        assertEquals(Lyrics.None, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作词 : Ada Writer\n[00:00.00-1] 作曲 : Ada Writer\n[00:01.000] 人声 : Singer One/Singer Two")
+        assertEquals(Lyrics.None, found(hatsukoi))
+    }
+
+    @Test
+    fun anInstrumentalMarkWithNoSungLineIsInstrumental() {
+        val ownSong = """{"result":{"songs":[{"id":2,"name":"初恋","artists":[{"name":"三田寛子"}]}]}}"""
+        // Credits, then the mark and nothing sung. The word alone, or in the other brackets, is the same mark.
+        japaneseSong(netEase = { ownSong }, lyric = "作词 : Ada Writer\n作曲 : Ada Writer\n[Instrumental]")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00-1] 作词 : Ada Writer\n[00:01.000] [Instrumental]")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "（instrumental）")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "(Instrumental)")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "【instrumental】")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "INSTRUMENTAL")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        // A bracket that doesn't close is a line, not the mark.
+        japaneseSong(netEase = { ownSong }, lyric = "(Instrumental]")
+        assertEquals(Lyrics.Found("(Instrumental]", source = LyricsFinder.NETEASE), found(hatsukoi))
+        // Word by word, the mark and nothing sung. The search names it as the lookup does, so no other store has to.
+        val named = """{"result":{"songs":[{"id":2,"name":"Hatsukoi","artists":[{"name":"Hiroko Mita"}]}]}}"""
+        val byWord = "[0,1000](0,1000,0)[Instrumental]"
+        fake.handler = { request ->
+            when (request.url.encodedPath) {
+                "/api/search/get" -> FakeSpotify.html(request, named)
+                "/api/song/lyric" -> FakeSpotify.html(request, """{"lrc":{"lyric":""},"yrc":{"lyric":${quote(byWord)}}}""")
+                else -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[]" else """{"results":[]}""")
+            }
+        }
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        // Garbled words beside the mark are still words, so another site is tried. The mark doesn't decide it.
+        val garbled = String("나는 너를 사랑해 나는 너를 사랑해".toByteArray(Charsets.UTF_8), charset("GBK"))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:00.00] [Instrumental]\n[00:05.00] $garbled")
+        assertEquals(Lyrics.None, found(hatsukoi))
+    }
+
+    @Test
+    fun anInstrumentalMarkBetweenRealLinesIsOnlyABreak() {
+        val ownSong = """{"result":{"songs":[{"id":2,"name":"初恋","artists":[{"name":"三田寛子"}]}]}}"""
+        val sung = "First line of the song\nLove this instrumental part\nSecond line of the song"
+        japaneseSong(netEase = { ownSong }, lyric = "First line of the song\n[Instrumental]\nLove this instrumental part\nSecond line of the song")
+        assertEquals(Lyrics.Found(sung, source = LyricsFinder.NETEASE), found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "[00:10.00] First line of the song\n[00:20.00] [Instrumental]\n[00:30.00] Love this instrumental part\n[00:40.00] Second line of the song")
+        assertEquals(sung, (found(hatsukoi) as Lyrics.Found).words)
+    }
+
+    @Test
+    fun aKeptInstrumentalMarkWithNoSungLineIsInstrumental() {
+        val file = File.createTempFile("lyrics", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val song = MusicMetadata("Song", "Band")
+        val creditSong = MusicMetadata("Quiet", "Band")
+        fun keep(forSong: MusicMetadata, words: String) {
+            val lines = org.json.JSONArray(words.lines().mapIndexed { index, line -> listOf(index * 1_000, line) })
+            val kept = org.json.JSONObject().put("words", words).put("source", LyricsFinder.NETEASE).put("lines", lines)
+            runBlocking { cache.put("${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(forSong)}", kept.toString()) }
+        }
+        keep(song, "[Instrumental]")
+        keep(creditSong, "作词 : Someone")
+        fake.handler = { throw IOException("offline") }
+        val finder = LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = cache)
+        assertEquals(Lyrics.Instrumental, runBlocking { finder.lyricsOf(song) })
+        // A credit and nothing sung is still none of the mark, so it isn't instrumental.
+        val credit = runBlocking { finder.lyricsOf(creditSong) }
+        assertEquals(true, credit is Lyrics.Found && credit.words.isBlank())
+        assertEquals(emptyList<String>(), fake.requestedUrls)
     }
 
     @Test

@@ -8,7 +8,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py run ID [--from MS]     # the app on it, through Gradle
   python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # as the last `phone` check of it went
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
-  ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE]
+  ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE] [--uri URI]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
@@ -22,17 +22,20 @@ work out the words each time; try a few, as where each later stretch is heard mo
 has the music app's clock that far behind what it plays, and `--behind-again MS` plays it a second
 time, keeping what was learnt, to score that. `--skew X` has Shazam hear it X faster than the recording
 it matches, `--words-length MS` the words timed for another release, and `--video` a video playing,
-as for a sped-up upload. `--gradle "podman exec box ./gradlew"` runs
+as for a sped-up upload. `--player-speed RATE` plays cached recognition at a player rate,
+including it in Shazam's reported speed. This tests the clock math, not recognition on stretched audio. `--gradle "podman exec box ./gradlew"` runs
 Gradle some other way, like in a container. Everything goes in build/syncreplay/, never in git.
 `SYNCREPLAY_DIR=FOLDER` keeps what takes hours to make (recordings, voices, truth, what's heard) there
 instead, for every checkout, and gradle-box.sh mounts it. What one checkout asks and gets back stays in
 its own build/syncreplay/, so replays of different checkouts don't read each other's.
 `phone` checks the same on a real phone over adb, with the dev app installed and the phone unlocked:
-it plays the recording in YouTube Music (--app for another build of it) from the start, opens the
+it plays the recording in YouTube Music (--app for another music app, --uri for a tagged file on the phone) from the start, opens the
 words in Crosstune for S seconds, and times each line lit from the app's own log. Where the song
 really is comes from lining up what the app heard with the recording, as a music app's clock runs
 behind what it plays, by more or less each time. It forgets what was learnt first, unless --again.
-A media volume of 0 is raised to 1 while it plays, as at 0 the app hears only silence.
+The media volume is 1 while it plays, as at 0 the app hears only silence, and at 1 it already hears the music at full level.
+A player that isn't at 1x, as the app's log says, is followed at its rate: the words' clock is printed next to it, and what's
+heard is found near where the app says, by bits short enough to still fit a recording played faster with its pitch kept.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -58,6 +61,7 @@ and a replay hears the rest it asks for, keeping it, so a change to the app's ti
 Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the Python running it.
 """
 import argparse
+from array import array
 import fcntl
 import html
 import json
@@ -99,7 +103,12 @@ ON_TIME_S = 0.5
 # The app's logcat tag for this, off unless set to DEBUG (TIMING_LOG in SungWords.kt).
 TIMING_LOG = "CrosstuneTiming"
 DEV_APP = "com.astrovm.crosstune.dev"
+# How well a while heard may fit elsewhere, against its best fit, and still say where it is: false fits measured 0.91 to 0.95, true ones up to 0.85.
+ONE_PLACE = 0.8
+# How far from where the app says a while heard at another rate is looked for: a riff played again is further off.
+STRETCH_REACH_MS = 1500
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
+PREFS = "shared_prefs/crosstune_preferences.xml"
 LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps", "video_timing")
 # Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
 MIN_NAME = 8
@@ -376,7 +385,7 @@ def run(args):
     phone_lit = like_phone(args) if args.like_phone else None
     # What SyncReplayTest plays, read from here, so with no replay asked for, it's skipped.
     asked = own() / "replay.json"
-    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}"}
+    replay = {"song": args.id, "from": args.start, "work": args.work, "behind": args.behind, "heard": "" if args.model == APP_MODEL else f".{args.model}", "playerSpeed": args.player_speed}
     if args.like_phone:
         replay.update(works=args.works, whiles=args.whiles)
     if args.behind_again is not None:
@@ -558,21 +567,31 @@ def shell(*command):
     return adb("shell", " ".join(shlex.quote(part) for part in command)).decode("utf-8", "replace")
 
 
-def tap(text, tries=20):
-    """Taps the first thing on screen showing [text], or saying it to TalkBack; whether there was one."""
+def screens(tries):
+    """What's on screen, half a second apart, up to [tries] times. It can't always be read, as while it moves, so
+    it's read again. Never read at all, something else holds the screen, which only one thing at a time may read."""
+    read = False
     for _ in range(tries):
-        # The screen can't always be read, as while it moves: it's read again.
         try:
             shell("uiautomator", "dump", "/sdcard/window.xml")
             screen = shell("cat", "/sdcard/window.xml")
+            read = True
+            yield screen
         except subprocess.CalledProcessError:
-            screen = ""
+            pass
+        time.sleep(0.5)
+    if not read:
+        sys.exit("uiautomator can't read the phone's screen: something holds the screen, like a T3 device session (com.callstack.agentdevice.snapshothelper).")
+
+
+def tap(text, tries=20):
+    """Taps the first thing on screen showing [text], or saying it to TalkBack; whether there was one."""
+    for screen in screens(tries):
         for node in re.findall(r"<node [^>]*>", screen):
             if f'text="{text}"' in node or f'content-desc="{text}"' in node:
                 x1, y1, x2, y2 = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node).groups())
                 shell("input", "tap", str((x1 + x2) // 2), str((y1 + y2) // 2))
                 return True
-        time.sleep(0.5)
     return False
 
 
@@ -589,15 +608,7 @@ def names(screen, title):
 
 def shows(title, tries=40):
     """Whether something on screen names the song [title], soon: a recording named badly is heard first, which takes a while."""
-    for _ in range(tries):
-        try:
-            shell("uiautomator", "dump", "/sdcard/window.xml")
-            if names(shell("cat", "/sdcard/window.xml"), title):
-                return True
-        except subprocess.CalledProcessError:
-            pass
-        time.sleep(0.5)
-    return False
+    return any(names(screen, title) for screen in screens(tries))
 
 
 def playing(app):
@@ -620,25 +631,43 @@ def media_volume(level=None):
 
 def phone(args):
     # At volume 0 what the app hears of the music is silence, so there'd be no singing to place lines by.
-    # 1 is enough: the app hears the music at full level from there on. The volume is put back after.
+    # 1 is enough: the app hears the music at full level from there on, so never louder, for whoever's
+    # near the phone. The volume is put back after.
     volume = media_volume()
-    if volume == 0:
-        media_volume(1)
+    media_volume(1)
     try:
         watch(args)
     finally:
         media_volume(volume)
 
 
+def allow_listening():
+    """Gives the app its notification access back: its data cleared, it loses that too, and can't see the
+    player then, only hear the room, which may play another song. Only when it's missing, and before the
+    app is stopped: allowing it starts the app, which would write what it learnt back over the forgetting."""
+    listener = f"{DEV_APP}/com.astrovm.crosstune.NowPlayingListener"
+
+    def allowed():
+        return listener in shell("settings", "get", "secure", "enabled_notification_listeners").strip().split(":")
+    if allowed():
+        return
+    shell("cmd", "notification", "allow_listener", listener)
+    if not allowed():
+        sys.exit(f"{DEV_APP} has no notification access, so it can't see what plays")
+
+
 def watch(args):
     shell("setprop", f"log.tag.{TIMING_LOG}", "DEBUG")
+    allow_listening()
     # Started again, Crosstune reads the log level, and nothing's left from before.
     shell("am", "force-stop", DEV_APP)
     shell("am", "force-stop", args.app)
     shell("run-as", DEV_APP, "find", "cache", "-name", "heard-*.pcm", "-delete")
     if not args.again:
-        for key in LEARNT:
-            shell("run-as", DEV_APP, "sed", "-i", "-e", f"s#<string name=\"{key}\">[^<]*</string>##", "shared_prefs/crosstune_preferences.xml")
+        # With its data cleared the app has no settings yet, so there's nothing learnt to forget.
+        if shell("run-as", DEV_APP, "find", ".", "-path", f"./{PREFS}").strip():
+            for key in LEARNT:
+                shell("run-as", DEV_APP, "sed", "-i", "-e", f"s#<string name=\"{key}\">[^<]*</string>##", PREFS)
         shell("run-as", DEV_APP, "rm", "-f", "cache/kept_words.json", "cache/lyrics.json", "cache/sung_readings.json", "cache/lookups.json")
     adb("logcat", "-G", "16M")
     adb("logcat", "-c")
@@ -648,7 +677,8 @@ def watch(args):
     if "NotificationShade" in shell("dumpsys", "window", "windows").split("mCurrentFocus", 1)[-1][:200]:
         width, height = map(int, re.search(r"(\d+)x(\d+)", shell("wm", "size")).groups())
         shell("input", "swipe", str(width // 2), str(height * 9 // 10), str(width // 2), str(height * 3 // 10), "200")
-    shell("am", "start", "-a", "android.intent.action.VIEW", "-d", f"https://music.youtube.com/watch?v={args.id}", "-p", args.app)
+    what = ("-d", args.uri, "-t", "audio/*") if args.uri else ("-d", f"https://music.youtube.com/watch?v={args.id}")
+    shell("am", "start", "-a", "android.intent.action.VIEW", *what, "-p", args.app)
     song_set = OUT / "set.json"
     songs = json.loads(song_set.read_text()) if song_set.exists() else []
     wanted = next((song["title"] for song in songs if song.get("id") == args.id), None)
@@ -690,34 +720,98 @@ def watch(args):
     score_phone(args.id, kept)
 
 
-def behind(song, kept, lit):
+def fits_along(song, heard):
+    """How well [heard] fits at each place in [song], a loud place no better for being loud."""
+    import numpy as np
+    song, heard = np.asarray(song, np.float32), np.asarray(heard, np.float32)
+    n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
+    match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard) + 1]
+    # A running sum, as sliding one while over a whole song took minutes for each heard.
+    energy = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
+    loud = np.sqrt(np.maximum(energy[len(heard):] - energy[:-len(heard)], 0)) + 1e-9
+    return (match / loud).tolist()
+
+
+def found_in_one_place(fits):
+    """The place that fits best, unless another more than 1 s from it fits nearly as well."""
+    best = fits.index(max(fits))
+    # A riff played again fits there nearly as well, wherever the clock is: 54 s off on a song whose clock was right.
+    others = fits[:max(0, best - 16000)] + fits[best + 16000:]
+    return None if others and max(others) >= fits[best] * ONE_PLACE else best
+
+
+def found_at_rate(song, heard, app, rate):
+    """Where in [song] a while [heard] at [rate] starts, in ms, near where the [app] said; None if it doesn't say.
+    A player keeping the pitch plays bits of the recording as they are, so short bits still fit where the while as a whole doesn't."""
+    bit, reach = 3200, 16 * STRETCH_REACH_MS
+    votes = []
+    for start in range(0, len(heard) - bit, 8000):
+        piece = heard[start:start + bit]
+        expected = round(app * 16 + start * rate)
+        low = max(0, expected - reach)
+        near = song[low:expected + reach + bit]
+        if len(near) < bit or not any(piece):
+            continue
+        fits = fits_along(near, piece)
+        votes.append(low + fits.index(max(fits)) - start * rate)
+    if not votes:
+        return None
+    middle = statistics.median(votes)
+    # Bits agreeing within 20 ms place it; one or two landing together by luck don't.
+    return middle / 16 if sum(abs(vote - middle) <= 320 for vote in votes) >= len(votes) / 2 else None
+
+
+def behind(song, kept, lit, rate=1.0):
     """How far behind what's heard the app's clock is: each while kept, found in the recording, against where the app said the song was."""
     files = sorted(kept.glob("heard-*.pcm"))
     if not files:
         print("The app heard nothing to check its clock by, so it's taken as right.")
         return 0
-    import numpy as np
     offs = []
     for f in files:
         started = int(re.search(r"heard-(\d+)", f.name).group(1))
         clock = min(lit, key=lambda e: abs(e[1] - started))
-        app = clock[2] + started - clock[1]
-        heard = np.frombuffer(f.read_bytes(), np.int16).astype(np.float32)[:16000 * 8]
-        if not heard.any():
+        app = clock[2] + (started - clock[1]) * rate
+        heard = array("h", f.read_bytes())[:16000 * 8]
+        if not any(heard):
             sys.exit(f"{f.name} is silent: the app heard nothing of the music. Was the media volume 0?")
-        n = 1 << int(np.ceil(np.log2(len(song) + len(heard))))
-        match = np.fft.irfft(np.fft.rfft(song, n) * np.conj(np.fft.rfft(heard, n)), n)[:len(song) - len(heard)]
-        # A running sum, as sliding one while over a whole song took minutes for each heard.
-        energy = np.concatenate(([0.0], np.cumsum(song.astype(np.float64) ** 2)))
-        loud = np.sqrt(np.maximum(energy[len(heard):] - energy[:-len(heard)], 0))[:len(match)] + 1e-9
-        at = int(np.argmax(match / loud)) / 16
+        if rate != 1:
+            at = found_at_rate(song, heard, app, rate)
+            if at is None:
+                print(f"the app said {app / 1000:6.1f} s, and what it heard doesn't say")
+                continue
+        else:
+            best = found_in_one_place(fits_along(song, heard))
+            if best is None:
+                print(f"the app said {app / 1000:6.1f} s: what it heard fits more than one place, so it doesn't say")
+                continue
+            at = best / 16
         offs.append(at - app)
         print(f"heard from {at / 1000:6.1f} s, the app said {app / 1000:6.1f} s: {(at - app) / 1000:+.2f} s behind")
+    if not offs:
+        print("Nothing heard fits one place only, so the app's clock is taken as right.")
+        return 0
     return statistics.median(offs)
+
+
+def player_rate(log):
+    """How fast the player goes, as the app last saw it."""
+    rates = re.findall(r"app PlaybackClock\(.*?speed=([\d.]+)", log)
+    return float(rates[-1]) if rates else 1.0
+
+
+def lit_pace(log):
+    """How fast the words' own clock goes once settled, by the lines lit: the middle of the steps between
+    them, as a step with a jump in it isn't a pace. None with too few lines to say."""
+    lit = [tuple(map(int, row)) for row in re.findall(r"lit -?\d+ at (\d+) pos (-?\d+)", log)]
+    settled = lit[len(lit) // 2:]
+    steps = [(pos - before) / (at - then) for (then, before), (at, pos) in zip(settled, settled[1:]) if at > then]
+    return statistics.median(steps) if steps else None
 
 
 def phone_lines(log):
     """Each line lit on the player's clock, before fingerprint calibration moves it."""
+    rate = player_rate(log)
     player = None
     lit = []
     for row in log.splitlines():
@@ -728,7 +822,7 @@ def phone_lines(log):
         if shown:
             line, at, pos = map(int, shown.groups())
             if player is not None:
-                pos = player[0] + (at - player[1] if player[2] else 0)
+                pos = player[0] + (round((at - player[1]) * rate) if player[2] else 0)
             lit.append((line, at, pos))
     return lit
 
@@ -786,10 +880,15 @@ def fingerprints(args):
 
 
 def score_phone(song_id, kept):
-    lit = phone_lines((kept / "log.txt").read_text())
+    log = (kept / "log.txt").read_text()
+    lit = phone_lines(log)
+    rate = player_rate(log)
     if not lit:
         sys.exit("No lines lit in the log: was the dev app reinstalled after the log was added, and the words open?")
-    lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit)
+    lag = behind(audio(OUT / f"{song_id}.wav", "s16le") * 32768, kept, lit, rate)
+    pace = lit_pace(log)
+    if rate != 1 and pace is not None:
+        print(f"The player went {rate:.3f}x and the words' clock {pace:.3f}x.")
     # The app's lines are the words it showed, kept from its cache; truth counts only those with words.
     words = [line[1] for line in found_words(song_id, kept)["lines"]] if (kept / "lyrics.json").exists() else [line for _, line in json.loads((OUT / f"{song_id}.lyrics.json").read_text())]
     sung = sung_lines(song_id, words)
@@ -975,6 +1074,7 @@ def main():
             p.add_argument("--behind-again", type=int, help="play it a second time, keeping what was learnt, with the clock this far behind; scored is the second")
             # ZnrSNEah_20 as on the phone: --video --skew 0.0349 --shazam-ahead 45467 --words-length 0, as Shazam
             # heard it (app/src/test/resources/shazam/faster.jsonl), with words that don't say how long they're timed for.
+            p.add_argument("--player-speed", type=float, default=1.0, help="player rate; replay cached words at that rate and include it in Shazam answers")
             p.add_argument("--skew", type=float, help="Shazam hears it, this much faster than the recording it matches (its timeskew)")
             p.add_argument("--shazam-ahead", type=int, default=0, help="ms further on Shazam's place is at the song's start")
             p.add_argument("--words-length", type=int, help="ms long the recording the words are timed for is, if not the one playing; 0 doesn't say")
@@ -1008,7 +1108,8 @@ def main():
     p.add_argument("id")
     p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
     p.add_argument("--again", action="store_true", help="keep what the app learnt of the song's timing")
-    p.add_argument("--app", default="com.google.android.apps.youtube.music", help="the YouTube Music build to play it in")
+    p.add_argument("--app", default="com.google.android.apps.youtube.music", help="the music app to play it in")
+    p.add_argument("--uri", help="what to open in that app instead of the song's link, like a tagged file on the phone")
     p.set_defaults(go=phone)
     args = parser.parse_args()
     args.go(args)

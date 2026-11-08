@@ -36,6 +36,7 @@ python3 scripts/emulator/emulator.py start crosstune-phone   # then it's emulato
 1. `-gpu host`: draws on the real GPU. `-gpu auto` picks software here.
 2. `-qt-hide-window`: no window, sound still works. `-no-window` runs a build that logs `Could not init 'pa' audio driver`.
 3. T3's Device panel boots emulators with no sound and `-gpu auto`. To get both, start it here first. The panel attaches to it.
+4. `start` also runs `adb emu avd hostmicon`, even on one already running. Without it the mic records silence: -50 dB against -14 dB with it, on the tone check below.
 
 Same swipe test on the same AVD, from `dumpsys gfxinfo`:
 
