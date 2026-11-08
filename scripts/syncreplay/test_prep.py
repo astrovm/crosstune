@@ -1,4 +1,5 @@
 import argparse
+from array import array
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import contextlib
@@ -6,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import random
 import subprocess
 import tempfile
 import threading
@@ -13,6 +15,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
+# A shared folder set for real replays (SYNCREPLAY_DIR) would have the tests read and write the real ones.
+os.environ.pop('SYNCREPLAY_DIR', None)
 spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name('syncreplay.py'))
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)
@@ -411,7 +415,7 @@ class HeardWhenAskedTest(unittest.TestCase):
         self.assertEqual(self.replays(r.run_all, args, []), (1, 0))
 
     def run_args(self, **changed):
-        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, skew=None, shazam_ahead=0, words_length=None, video=False, gradle='fake-gradle'), **changed})
+        return argparse.Namespace(**{**dict(id='fake', start=0, work=4500, behind=0, model=r.APP_MODEL, like_phone=False, behind_again=None, skew=None, shazam_ahead=0, words_length=None, video=False, player_speed=1.0, gradle='fake-gradle'), **changed})
 
     def test_one_song_replays_until_nothing_new_is_asked(self):
         self.assertEqual(self.replays(r.run, self.run_args(), [1, 0]), (2, 2))
@@ -456,10 +460,12 @@ class HeardWhenAskedTest(unittest.TestCase):
             fingerprints = r.OUT / 'fingerprints.json'
             fingerprints.write_text(json.dumps(dict(initial=dict(at=20000, songMs=10000, receivedAt=20000), events=[])))
             def replay(*args, **kwargs):
-                self.assertEqual(json.loads(fingerprints.read_text()), json.loads((r.OUT / 'replay.json').read_text()).get('fingerprints'))
+                asked = json.loads((r.OUT / 'replay.json').read_text())
+                self.assertEqual(json.loads(fingerprints.read_text()), asked.get('fingerprints'))
+                self.assertEqual(1.05, asked['playerSpeed'])
                 return argparse.Namespace(returncode=0)
             with patch.object(r.subprocess, 'run', side_effect=replay):
-                r.run(self.run_args(fingerprints=str(fingerprints)))
+                r.run(self.run_args(fingerprints=str(fingerprints), player_speed=1.05))
 
     def test_a_replay_held_to_the_phone_takes_each_while_as_long_as_the_phone_did(self):
         asked = []
@@ -714,13 +720,61 @@ class PhoneTest(unittest.TestCase):
 
     def test_phone_waits_for_the_requested_song_before_opening_lyrics(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
-                patch.object(r, 'shell', return_value=''), patch.object(r, 'adb'), \
+                patch.object(r, 'shell', return_value=''), patch.object(r, 'adb'), patch.object(r, 'allow_listening'), \
                 patch.object(r.time, 'sleep'), patch.object(r, 'tap', return_value=False), \
                 patch.object(r, 'playing', side_effect=[('Previous song', 100), ('Song requested', 200)]) as playing:
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', title='Song requested')]))
             with self.assertRaisesRegex(SystemExit, "Couldn't open"):
-                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150))
+                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
             self.assertEqual(2, playing.call_count)
+
+    def test_learnt_timing_is_forgotten_only_where_the_app_has_settings(self):
+        for prefs, edits in (('', 0), ('./shared_prefs/crosstune_preferences.xml\n', len(r.LEARNT))):
+            said = []
+
+            def phone(*command):
+                said.append(command)
+                return prefs if 'find' in command and '-path' in command else ''
+            with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                    patch.object(r, 'shell', side_effect=phone), patch.object(r, 'adb'), patch.object(r.time, 'sleep'), patch.object(r, 'allow_listening'), \
+                    patch.object(r, 'playing', return_value=('Song', 100)), patch.object(r, 'tap', return_value=False):
+                with self.assertRaisesRegex(SystemExit, "Couldn't open"):
+                    r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
+            self.assertEqual(edits, sum('sed' in command for command in said))
+
+    def test_the_app_gets_notification_access_back_before_it_plays(self):
+        listener = f'{r.DEV_APP}/com.astrovm.crosstune.NowPlayingListener'
+        # Allowed already, by the phone's own say once allowed, or never.
+        for allowed, ends, asked in (([listener], "Couldn't open", False), (['', listener], "Couldn't open", True), ([''], 'no notification access', True)):
+            said = []
+            answers = iter(allowed)
+
+            def phone(*command):
+                said.append(command)
+                return 'other/Listener:' + next(answers, allowed[-1]) if command[:2] == ('settings', 'get') else ''
+            with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                    patch.object(r, 'shell', side_effect=phone), patch.object(r, 'adb'), patch.object(r.time, 'sleep'), \
+                    patch.object(r, 'playing', return_value=('Song', 100)), patch.object(r, 'tap', return_value=False):
+                with self.assertRaisesRegex(SystemExit, ends):
+                    r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
+            self.assertEqual(asked, ('cmd', 'notification', 'allow_listener', listener) in said)
+            self.assertEqual(ends == 'no notification access', not any(command[:2] == ('am', 'start') for command in said))
+            # Allowing it starts the app, so it comes before the app's stopped and its learning forgotten.
+            if ends != 'no notification access':
+                checked = max(i for i, command in enumerate(said) if command[:2] == ('settings', 'get'))
+                self.assertLess(checked, said.index(('am', 'force-stop', r.DEV_APP)))
+
+    def test_a_screen_nothing_can_read_says_so_instead_of_blaming_the_lock_screen(self):
+        # Only one thing at a time may read the screen, and a T3 device session may be it: uiautomator then dies with exit 137.
+        with patch.object(r, 'shell', side_effect=subprocess.CalledProcessError(137, 'uiautomator')), patch.object(r.time, 'sleep'):
+            for look in (lambda: r.tap('Words'), lambda: r.shows('Song')):
+                with self.assertRaisesRegex(SystemExit, 'holds the screen'):
+                    look()
+
+    def test_a_screen_without_it_is_only_not_there(self):
+        with patch.object(r, 'shell', return_value='<node text="Other" />'), patch.object(r.time, 'sleep'):
+            self.assertFalse(r.tap('Words', tries=2))
+            self.assertFalse(r.shows('Song', tries=2))
 
     def test_a_title_keeps_its_commas(self):
         session = 'package=app\nstate=PlaybackState {state=PLAYING(3), position=2041, buffered position=0, speed=1.0, updated=5000, actions=1}\nmetadata: size=9, description=Police, The   Magic Audio Flac, uploader, uploader\n'
@@ -753,6 +807,36 @@ class PhoneTest(unittest.TestCase):
             self.assertEqual(0, r.behind(MagicMock(), Path(directory), [(0, 100, 1000)]))
         self.assertIn('heard nothing', said.call_args_list[-1].args[0])
 
+    def test_line_times_go_at_the_players_rate(self):
+        log = ('said 24000 at 100000 playing true, kept 24000 at 100000\n'
+               'lit 0 at 116000 pos 30000\n'
+               'fingerprint 40000 at 110000 match 1 received 120000 speed 1.05 length null app PlaybackClock(positionMs=24000, atMs=100000, speed=1.05, playing=true) video false\n'
+               'lit 6 at 200000 pos 93000\n')
+        self.assertEqual([(0, 116000, 40800), (6, 200000, 129000)], r.phone_lines(log))
+
+    def test_how_fast_the_words_go_is_by_the_lines_lit_once_settled(self):
+        # On main, the words start at the player's rate and go faster once the third hearing is in; a jump isn't a pace.
+        log = ('lit 0 at 0 pos 0\nlit 1 at 10000 pos 10500\n'
+               'lit 2 at 20000 pos 21000\nlit 3 at 30000 pos 32025\nlit 4 at 40000 pos 43050\n'
+               'lit 5 at 50000 pos 60000\nlit 6 at 60000 pos 71025\nlit 7 at 70000 pos 82050\n')
+        self.assertAlmostEqual(1.1025, r.lit_pace(log), places=3)
+
+    def test_too_few_lines_lit_dont_say_how_fast_the_words_go(self):
+        self.assertIsNone(r.lit_pace('lit 0 at 0 pos 0\n'))
+
+    def test_the_player_rate_is_the_last_the_app_saw(self):
+        self.assertEqual(1.05, r.player_rate('app PlaybackClock(positionMs=1, atMs=2, speed=1.0, playing=true)\napp PlaybackClock(positionMs=1, atMs=2, speed=1.05, playing=true)\n'))
+        self.assertEqual(1.0, r.player_rate('app null\n'))
+
+    def test_a_file_on_the_phone_opens_instead_of_the_songs_link(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                patch.object(r, 'shell', return_value='') as shell, patch.object(r, 'adb'), patch.object(r, 'allow_listening'), \
+                patch.object(r.time, 'sleep'), patch.object(r, 'tap', return_value=False), \
+                patch.object(r, 'playing', return_value=('Song', 100)):
+            with self.assertRaisesRegex(SystemExit, "Couldn't open"):
+                r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri='file:///sdcard/Music/song.m4a'))
+        self.assertIn(('am', 'start', '-a', 'android.intent.action.VIEW', '-d', 'file:///sdcard/Music/song.m4a', '-t', 'audio/*', '-p', 'player'), [c.args for c in shell.call_args_list])
+
     def test_no_line_with_truth_lit_still_scores(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), patch.object(r, 'audio', return_value=MagicMock()), \
                 patch.object(r, 'behind', return_value=0.0), patch('builtins.print') as said:
@@ -764,6 +848,105 @@ class PhoneTest(unittest.TestCase):
             (kept / 'log.txt').write_text('lit 0 at 100 pos 1000\nlit -1 at 200 pos 3000\n')
             r.score_phone('song', kept)
         self.assertIn('never lit 1', said.call_args_list[-1].args[0])
+
+
+class WhereTheWhileWasHeardTest(unittest.TestCase):
+    """What's made of how well a while fits, on what CI's `site` job has: finding how well takes numpy, which it hasn't, so it's stood in for here."""
+    def samples(self, seconds=60):
+        rng = random.Random(1)
+        return array('h', (rng.randrange(-30000, 30000) for _ in range(16000 * seconds)))
+
+    def fits_only_where_its_samples_are(self, near, piece):
+        rng = random.Random(piece[0])
+        fits = [rng.random() for _ in range(len(near) - len(piece) + 1)]
+        for at in range(len(fits)):
+            if near[at] == piece[0] and near[at:at + 8] == piece[:8]:
+                fits[at] = 2.0
+                break
+        return fits
+
+    def behind_with(self, song, heard, lit, rate=1.0, fits=None):
+        with tempfile.TemporaryDirectory() as directory, patch('builtins.print') as said, \
+                patch.object(r, 'fits_along', fits or self.fits_only_where_its_samples_are):
+            (Path(directory) / 'heard-5000.pcm').write_bytes(heard.tobytes())
+            return r.behind(song, Path(directory), lit, rate), [call.args[0] for call in said.call_args_list]
+
+    def stretched(self, song):
+        # As a player keeping the pitch does it: bits of the recording as they are, and every so often one left out.
+        return array('h', (sample for at in range(16000 * 10, 16000 * 18, 1680) for sample in song[at:at + 1600]))
+
+    def test_a_while_that_fits_two_places_doesnt_say_where_the_clock_is(self):
+        # A riff played twice: heard in it, the match is as good far from the app's clock as near it. Police, run 3: "54 s behind".
+        fits = [0.0] * (16000 * 60)
+        fits[16000 * 10], fits[16000 * 40] = 1.0, 0.93
+        lag, said = self.behind_with(array('h'), array('h', [1]), [(0, 5000, 10000)], fits=lambda *_: fits)
+        self.assertEqual(0, lag)
+        self.assertIn('fits more than one place', said[0])
+
+    def test_a_while_that_fits_one_place_says_how_far_behind_the_clock_is(self):
+        # True fits measured up to 0.85 of the best, near it: those aren't another place.
+        fits = [0.0] * (16000 * 60)
+        fits[16000 * 10], fits[16000 * 10 + 8000], fits[16000 * 40] = 1.0, 0.85, 0.7
+        lag, _ = self.behind_with(array('h'), array('h', [1]), [(0, 5000, 9500)], fits=lambda *_: fits)
+        self.assertEqual(500, lag)
+
+    def test_a_while_heard_at_another_rate_says_how_far_behind_the_clock_is(self):
+        song = self.samples()
+        lag, _ = self.behind_with(song, self.stretched(song), [(0, 5000, 9500)], 1.05)
+        self.assertAlmostEqual(500, lag, delta=15)
+
+    def test_a_while_heard_at_another_rate_goes_by_the_rate_since_the_line_lit(self):
+        song = self.samples()
+        # Lit 2 s before the while started: the clock says 8000 + 2000 x 1.05 = 10100, so it's 100 ms ahead.
+        lag, _ = self.behind_with(song, self.stretched(song), [(0, 3000, 8000)], 1.05)
+        self.assertAlmostEqual(-100, lag, delta=15)
+
+    def test_a_while_at_another_rate_that_fits_nowhere_doesnt_say(self):
+        song = self.samples()
+        rng = random.Random(2)
+        lag, said = self.behind_with(song, array('h', (rng.randrange(-30000, 30000) for _ in range(16000 * 8))), [(0, 5000, 9500)], 1.05)
+        self.assertEqual(0, lag)
+        self.assertIn("doesn't say", said[0])
+
+    def test_silence_at_another_rate_says_nothing(self):
+        song = self.samples(20)
+        self.assertIsNone(r.found_at_rate(song, array('h', [0] * 16000), 5000, 1.05))
+
+
+@unittest.skipUnless(importlib.util.find_spec('numpy'), "CI's site job has no numpy; the replay's own Python has it")
+class FitsAlongTest(unittest.TestCase):
+    def test_a_while_fits_where_it_was_taken_from_even_next_to_something_louder(self):
+        import numpy as np
+        song = np.random.default_rng(1).normal(0, 3000, 16000 * 20).astype(np.float32)
+        song[16000 * 15:] *= 5
+        fits = r.fits_along(song, song[16000 * 5:16000 * 8])
+        self.assertEqual(16000 * 5, r.found_in_one_place(fits))
+
+    def test_bits_of_a_while_played_faster_still_find_it(self):
+        import numpy as np
+        song = np.random.default_rng(1).normal(0, 3000, 16000 * 60).astype(np.float32)
+        heard = array('h', np.concatenate([song[at:at + 1600] for at in range(16000 * 10, 16000 * 18, 1680)]).astype(np.int16).tobytes())
+        self.assertAlmostEqual(10000, r.found_at_rate(song, heard, 9500, 1.05), delta=15)
+
+
+class PhoneVolumeTest(unittest.TestCase):
+    def volumes_with_the_phone_at(self, level):
+        """The phone's media volume while the song plays, and after."""
+        volume = [level]
+        heard = []
+        def shell(*parts):
+            if '--set' in parts:
+                volume[0] = int(parts[parts.index('--set') + 1])
+            return f'[V] volume is {volume[0]} in range [0..15]'
+        with patch.object(r, 'shell', side_effect=shell), patch.object(r, 'watch', side_effect=lambda args: heard.append(volume[0])):
+            r.phone(argparse.Namespace())
+        return heard[0], volume[0]
+
+    def test_plays_at_one_from_silence_and_puts_it_back(self):
+        self.assertEqual(self.volumes_with_the_phone_at(0), (1, 0))
+
+    def test_plays_at_one_from_louder_and_puts_it_back(self):
+        self.assertEqual(self.volumes_with_the_phone_at(9), (1, 9))
 
 
 if __name__ == '__main__':

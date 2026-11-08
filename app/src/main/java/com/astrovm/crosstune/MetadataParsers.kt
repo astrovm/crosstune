@@ -197,6 +197,7 @@ internal object MetadataParsers {
      * alone doesn't say it.
      */
     fun musicVideo(title: String, channel: String, byDash: Boolean = true): MusicMetadata? {
+        spotifyPageSplitAtItsDash(title, channel)?.let { return it }
         spotifyPage(title)?.let { return it }
         val song = youtubeVideo(title, channel) ?: return null
         val says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.containsMatchIn(title) ||
@@ -230,6 +231,11 @@ internal object MetadataParsers {
         Regex("""^(.+)(?: [-–‑] |: )""" + wording.split("%s").joinToString("(.+)") { Regex.escape(it) } + """ \| Spotify$""", RegexOption.IGNORE_CASE)
     }
 
+    /** The same wordings with no song before them, as a page's title is once a player has cut it at its dash. */
+    private val spotifyPageDescriptions = spotifyPageWordings.map { wording ->
+        Regex(wording.pattern.removePrefix("^(.+)(?: [-–‑] |: )"), RegexOption.IGNORE_CASE)
+    }
+
     private val spotifyPageSeparators = listOf(" - ", " – ", " ‑ ")
     private val anySpace = Regex("""\p{Zs}""")
 
@@ -242,6 +248,19 @@ internal object MetadataParsers {
         val (song, artist) = known?.let { (song, artist) -> song to artist } ?: (beforeDescription(page) to "")
         // Arabic quotes the song.
         return MusicMetadata(song.trim().removeSurrounding("\"").trim(), artist.trim())
+    }
+
+    /**
+     * A page's title a player cut at its dash, so that the song is the artist and the title is only how
+     * Spotify describes the page, "música, letra e videoclipe de Artist | Spotify" by "Song". The song is
+     * what the player calls the artist, and the real artist is in the description.
+     */
+    private fun spotifyPageSplitAtItsDash(said: String, song: String): MusicMetadata? {
+        val title = said.replace(anySpace, " ").trim()
+        // A whole title, song and all, is read as itself: "Song - Artistの曲、歌詞、ミュージックビデオ" is no description alone.
+        if (spotifyPageWordings.any { it.matches(title) }) return null
+        val artist = spotifyPageDescriptions.firstNotNullOfOrNull { it.matchEntire(title) }?.groupValues?.get(1) ?: return null
+        return MusicMetadata(song.trim(), artist.trim()).takeIf { it.title.isNotBlank() && it.artist.isNotBlank() }
     }
 
     /** A page's song, before what it says it is: after the last dash, or else a colon. */
@@ -258,7 +277,7 @@ internal object MetadataParsers {
      * Without both there's no song to look up by name.
      */
     fun playerSong(title: String, artist: String): MusicMetadata? =
-        (if (noOneArtist.matches(artist.trim())) youtubeVideo(title, "") else MusicMetadata(title, artist))
+        (spotifyPageSplitAtItsDash(title, artist) ?: if (noOneArtist.matches(artist.trim())) youtubeVideo(title, "") else MusicMetadata(title, artist))
             ?.takeIf { it.title.isNotBlank() && it.artist.isNotBlank() && !namesAFile(it) }
 
     /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */

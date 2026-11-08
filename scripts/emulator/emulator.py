@@ -162,6 +162,7 @@ def sound_options(window):
 def start(name, window):
     serial = serial_of(name)
     if running(name):
+        hear_host(name)
         print(f"{name} is running already: {serial}")
         return
     if image_in_avd(name) is None:
@@ -179,7 +180,13 @@ def start(name, window):
         if time.monotonic() > deadline:
             die(f"{name} didn't finish starting in {BOOT_SECONDS} s. Its log: {log_path}")
         time.sleep(1)
+    hear_host(name)
     print(f"{name} is running: {serial}")
+
+
+def hear_host(name):
+    """The mic hears the private sink only once told to: otherwise it records silence (-50 dB against -14 dB, measured)."""
+    adb("-s", serial_of(name), "emu", "avd", "hostmicon")
 
 
 def apps(name):

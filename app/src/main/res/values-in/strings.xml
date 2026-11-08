@@ -190,6 +190,7 @@
     <string name="lyrics_button">Lirik</string>
     <string name="lyrics_loading">Mencari lirik…</string>
     <string name="lyrics_none">Lirik lagu ini tidak ditemukan.</string>
+    <string name="lyrics_instrumental">Lagu ini tidak punya lirik.</string>
     <string name="lyrics_sync_service">Sinkronisasi lirik Crosstune</string>
     <string name="lyrics_follow_allow">Biarkan lirik mengikuti lagu yang diputar di aplikasi musikmu.</string>
     <string name="lyrics_following_app">Mengikuti %1$s</string>

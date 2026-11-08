@@ -116,6 +116,33 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anotherNameHeardIsTheSameRecordingOnlyWellIntoTheSongAndCloseToWhereItIs() {
+        val after = MainViewModel.SAME_RECORDING_AFTER_MS
+        val near = MainViewModel.SAME_RECORDING_MS
+        // From 30 s in, a hearing up to 10 s either side of where the song shown is counts as it.
+        assertTrue(MainViewModel.sameRecordingPlace(after, after + near))
+        assertTrue(MainViewModel.sameRecordingPlace(after + near, after))
+        assertFalse(MainViewModel.sameRecordingPlace(after, after + near + 1))
+        // Earlier than that, it may just as well be the next song, which starts over.
+        assertFalse(MainViewModel.sameRecordingPlace(after - 1, after - 1))
+    }
+
+    @Test
+    fun aLineThatSaysWhichItIsIsHeardAloneFromItsVeryMillisecondButNotOneLater() {
+        // Every line too far from the next to hear three, but "Every river finds the sea" has five words no other line shares.
+        val lines = listOf(
+            LyricLine(0, "Sing to me tonight"), LyricLine(3_000, "Under the yellow moon"), LyricLine(40_000, "Every river finds the sea"),
+            LyricLine(60_000, "Hold the morning light"), LyricLine(80_000, "Dancing on the water"), LyricLine(99_000, "Never let it go")
+        )
+        // Right at its start, it's heard from now.
+        assertEquals(0L, MainViewModel.untilSung(lines, here = 40_000, speed = 1f, after = null))
+        // A millisecond in, its first words are gone, so it isn't heard alone now.
+        assertTrue(MainViewModel.untilSung(lines, here = 40_001, speed = 1f, after = null).let { it == null || it > 0 })
+        // Before it, from a second and a half ahead of it, as fast as the song goes by: 1.5 s of the song at double speed.
+        assertEquals(750L, MainViewModel.untilSung(lines, here = 37_000, speed = 2f, after = null))
+    }
+
+    @Test
     fun aModelWithoutTheOptionalPartsLeavesTheirFeaturesAlone() {
         val model = model()
         model.setUpInOneTap()
@@ -730,6 +757,38 @@ class MainViewModelTest {
         assertEquals(MusicLinks.recognizedSong(MusicMetadata("Stars", "Orbit")).text, model.uiState.linkText)
         coverHeld.countDown()
         until("looked the song up") { !model.uiState.isLoading }
+    }
+
+    @Test
+    fun theNextSongHeardIsFollowedOnlyOnceItsWordsAreFound() {
+        val ears = ScriptedEars(heardNow())
+        val playback = FakePlayback()
+        val moonHeld = CountDownLatch(1)
+        fake.handler = { request ->
+            when {
+                request.url.host != "lrclib.net" -> FakeSpotify.html(request, "")
+                "Moon" in request.url.toString() -> { moonHeld.await(10, TimeUnit.SECONDS); FakeSpotify.html(request, timed.replace("Hush", "Moon").replace("Band", "Luna")) }
+                else -> FakeSpotify.html(request, timed)
+            }
+        }
+        playback.playing.value = null
+        // Looked up on a thread of its own, so the next song's words can be held while it's shown.
+        val model = playingModel(playback, lyricsFinder = LyricsFinder(fake.client(), "test", Dispatchers.IO, busyPauseMs = 0), listener = ears)
+        model.playerLyrics()
+        until("found the words") { model.uiState.lyrics.isNotEmpty() }
+        playback.onThePhone = null
+        model.listenAlong()
+        idle()
+        assertNotNull(model.uiState.following)
+        val next = MusicMetadata("Moon", "Luna")
+        ears.queue.add(heardNow(of = next, at = 1_000, match = "m2"))
+        pass(8_500)
+        until("the next song shown") { model.uiState.lyricsFor == next }
+        // Its place has no lines to light yet, so nothing follows it, rather than the last song's place or its own.
+        assertNull(model.uiState.following)
+        moonHeld.countDown()
+        until("found its words") { model.uiState.lyrics.isNotEmpty() }
+        until("followed") { model.uiState.following != null }
     }
 
     @Test

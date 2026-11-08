@@ -64,6 +64,16 @@ const webAddress = /https?:\/\/|www\.|\b[a-z0-9-]+\.[a-z]{2,6}\//i;
 const namesHeader = /^(?:artist|album|title)\s*:.*$/i;
 /** Who wrote or made it, in Chinese, Japanese or English, which NetEase opens a song with: "作词 : …". */
 const netEaseCredit = /^\s*(?:(?:作词|作詞|作曲|编曲|編曲|制作人|製作人)\s+\S|(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer|OP|SP)\s*[:：])/i;
+/** A credit before anything is sung: a short label, a colon of either width, and a name. "编程 : …". */
+const openingCredit = /^([^:：]{1,40}?)\s*[:：]\s*\S/;
+/** A credit a song ends on: a part and who played it, with either colon. "Guitar : …", "贝斯：…". */
+const closingCredit = /^([^:：]{1,60})\s*[:：]\s*\S/;
+/** Who sings a line, in a duet, rather than who played on it. */
+const sungPart = /^(?:male|female|both|all|verse|chorus|hook|bridge|rap|intro|outro|pre-?chorus|男|女|合)(?:\s*\d+)?$/i;
+/** Where it was made, which can sit among the closing credits. */
+const netEaseStudio = /^(?:(?:recorded|mixed|mastered)\b[^:：]*\bat|published by)\b/i;
+const instrumentalOpen = "([（【";
+const instrumentalClose = ")]）】";
 const lyricsPage = /"browseId":"(MPLY[^"]+)"/;
 const letrasPagePatterns = [
   // A song in another language has Letras's own translation beside it: its words are the ones on the left.
@@ -243,14 +253,78 @@ function netEaseMatch(row: Obj, song: Song): boolean {
   return sameVersion(song.title, name, album) && objects(row["artists"]).some((artist) => artistInside(str(artist["name"]), credit));
 }
 
+/** A line that only marks an instrumental stretch: "[Instrumental]", "（instrumental）". A line that merely says the word stays. */
+function isInstrumentalMark(line: string): boolean {
+  let text = line.trim();
+  if (text.length >= 2) {
+    const open = instrumentalOpen.indexOf(text[0] ?? "");
+    const close = instrumentalClose.indexOf(text[text.length - 1] ?? "");
+    if (open >= 0 && open === close) text = text.slice(1, -1).trim();
+  }
+  return text.toLowerCase() === "instrumental";
+}
+
+/** Whether [line] is a credit before anything is sung. A blank line counts, so credits can have one between them. */
+function isOpeningCredit(line: string): boolean {
+  const text = line.trim();
+  if (text === "") return true;
+  const label = openingCredit.exec(text)?.[1]?.trim();
+  if (label === undefined) return false;
+  return /\p{L}/u.test(label) && !sungPart.test(label) && label.split(" ").length <= 3;
+}
+
+/** Whether [line] names who played. A time ends on a digit, as "7" in "7:30" and "When it's 11" in "When it's 11:30". */
+function isClosingCredit(line: string): boolean {
+  const label = closingCredit.exec(line)?.[1]?.trim() ?? "";
+  return label !== "" && /\p{L}/u.test(label) && !/\p{Nd}$/u.test(label) && !sungPart.test(label);
+}
+
+function dropOpening<T>(lines: T[], text: (line: T) => string): T[] {
+  let start = 0;
+  while (start < lines.length && isOpeningCredit(text(lines[start] as T))) start++;
+  return lines.slice(start);
+}
+
+/** The lines before a run of at least two credits at the end. One credit there can be sung, so it stays. */
+function dropClosing<T>(lines: T[], text: (line: T) => string): T[] {
+  let start = lines.length;
+  let credits = 0;
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = text(lines[index] as T).trim();
+    if (line === "") continue;
+    if (isClosingCredit(line)) credits++;
+    else if (!netEaseStudio.test(line)) break;
+    start = index;
+  }
+  return credits >= 2 ? lines.slice(0, start) : lines;
+}
+
+/** [lines] without credits, by the known labels and by their shape, and without an instrumental mark. */
+function withoutCreditShape<T>(lines: T[], text: (line: T) => string): T[] {
+  const kept = lines.filter((line) => !netEaseCredit.test(text(line)) && !isInstrumentalMark(text(line)));
+  return dropClosing(dropOpening(kept, text), text);
+}
+
 function netEaseAnswer(lrc: string, lengthMs: number | undefined): Lyrics {
   // Its note for an instrumental takes the words' place.
   if (lrc.includes(NETEASE_INSTRUMENTAL)) return { kind: "instrumental" };
-  const lines = timedLines(lrc).filter((line) => !netEaseCredit.test(line.text));
   const length = lengthMs === undefined ? {} : { lengthMs };
-  if (isTimed(lines)) return { kind: "found", words: wordsFrom(lines), lines, ...length, source: "netease" };
-  const words = withoutAds(lrc).filter((line) => !netEaseCredit.test(line) && !line.startsWith("[")).join("\n").trim();
-  return words === "" ? { kind: "none" } : { kind: "found", words, lines: [], source: "netease" };
+  const timed = timedLines(lrc);
+  if (timed.length > 0) {
+    const lines = withoutCreditShape(timed, (line) => line.text);
+    if (isTimed(lines)) return { kind: "found", words: wordsFrom(lines), lines, ...length, source: "netease" };
+    // Nothing sung, and a line was only the mark: the song has no words.
+    if (timed.some((line) => isInstrumentalMark(line.text))) return { kind: "instrumental" };
+    return { kind: "none" };
+  }
+  const raw = withoutAds(lrc);
+  // A line in brackets is a part's name, unless the brackets hold only the instrumental mark.
+  const plain = raw.filter((line) => !line.trim().startsWith("[") || isInstrumentalMark(line));
+  const lines = withoutCreditShape(plain.map((text) => ({ timeMs: 0, text })), (line) => line.text);
+  const words = wordsFrom(lines);
+  if (words !== "") return { kind: "found", words, lines: [], source: "netease" };
+  if (raw.some((line) => isInstrumentalMark(line))) return { kind: "instrumental" };
+  return { kind: "none" };
 }
 
 async function fromNetEase(song: Song, fetcher: Fetcher): Promise<Lyrics> {

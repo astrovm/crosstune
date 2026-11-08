@@ -190,6 +190,7 @@
     <string name="lyrics_button">歌詞</string>
     <string name="lyrics_loading">正在查詢歌詞…</string>
     <string name="lyrics_none">沒有找到這首歌的歌詞。</string>
+    <string name="lyrics_instrumental">這首歌沒有歌詞。</string>
     <string name="lyrics_sync_service">Crosstune 歌詞同步</string>
     <string name="lyrics_follow_allow">讓歌詞跟隨音樂應用程式中正在播放的歌曲。</string>
     <string name="lyrics_following_app">正在跟隨 %1$s</string>

@@ -27,8 +27,23 @@ class PracticeCardsTest {
     @After
     fun stop() = scope.cancel()
 
+    private val sites = FakeSpotify()
+
     private fun cards(source: PlaybackSource? = playback) =
-        PracticeCards(screen, scope, source, ExactMatcher(FakeSpotify().client(), "AR"), store, { 1_000_000L }, { System.currentTimeMillis() })
+        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, { 1_000_000L }, { System.currentTimeMillis() })
+
+    /** Spotify having the demo song, under [SPOTIFY_ID]. */
+    private fun spotifyHasTheSong() {
+        sites.handler = { request ->
+            when {
+                request.url.host == "labs.api.listenbrainz.org" -> FakeSpotify.html(request, """[{"spotify_track_ids":["$SPOTIFY_ID"]}]""")
+                request.url.encodedPath == "/track/$SPOTIFY_ID" -> FakeSpotify.html(request, """<meta property="og:title" content="Demo"/><meta property="og:description" content="Band · Album · Song · 2000"/><meta name="music:duration" content="200"/>""")
+                else -> FakeSpotify.html(request, "{}", code = 404)
+            }
+        }
+    }
+
+    private val keptFromSpotify get() = line().copy(app = MusicService.SPOTIFY.packageName)
 
     private fun line(text: String = "Night sky", start: Long? = 10_000, lead: Long = 0, type: String = READ_TYPE) =
         SavedLine(text, translation = "Cielo", title = "Demo", artist = "Band", startMs = start, endMs = start?.plus(5_000), leadMs = lead, cardType = type)
@@ -356,6 +371,60 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun aSongKeptFromSpotifyOpensThereOnItsOwnLink() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        assertEquals(listOf(MusicService.SPOTIFY.packageName to "https://open.spotify.com/track/$SPOTIFY_ID"), playback.opened.toList())
+        // It ignores songs asked for by name.
+        assertTrue(playback.songsAsked.isEmpty())
+        // It plays, so the line can be reached, and Crosstune comes back to the card.
+        playing()
+        waitFor("the line is reached") { playback.seeks.isNotEmpty() }
+        assertEquals(listOf(10_000L), playback.seeks.toList())
+        assertEquals(1, playback.cameBack)
+    }
+
+    @Test
+    fun aSongSpotifyCantBeFoundForIsAskedOfYouTubeMusicAsBefore() {
+        sites.handler = { request ->
+            when {
+                request.url.host == "labs.api.listenbrainz.org" -> FakeSpotify.html(request, """[{"spotify_track_ids":[]}]""")
+                else -> FakeSpotify.html(request, "{}", code = 404)
+            }
+        }
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("it's asked") { playback.songsAsked.isNotEmpty() }
+        assertTrue(playback.opened.isEmpty())
+    }
+
+    @Test
+    fun spotifyThatWontOpenFallsBackToAsking() {
+        spotifyHasTheSong()
+        playback.opens = false
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("it's asked") { playback.songsAsked.isNotEmpty() }
+        assertEquals(0, playback.cameBack)
+    }
+
+    @Test
+    fun aSongKeptFromAnAppThatPlaysWhatsAskedIsAskedOfIt() {
+        spotifyHasTheSong()
+        keep(line().copy(app = MusicService.TIDAL.packageName))
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("it's asked") { playback.songsAsked.isNotEmpty() }
+        assertEquals(MusicService.TIDAL.packageName, playback.songsAsked.single().second)
+        assertTrue(playback.opened.isEmpty())
+    }
+
+    @Test
     fun theLineIsWaitedForWhileTheAppIsStillOnItsWayToIt() {
         keep(line())
         playback.access = true
@@ -389,3 +458,5 @@ class PracticeCardsTest {
         assertEquals(listOf(false, true), lines.map { it.newWords })
     }
 }
+
+private const val SPOTIFY_ID = "1demoAAAAAAAAAAAAAAAAA"

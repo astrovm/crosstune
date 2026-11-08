@@ -190,6 +190,7 @@
     <string name="lyrics_button">Tekst</string>
     <string name="lyrics_loading">Szukanie tekstu…</string>
     <string name="lyrics_none">Nie znaleziono tekstu tego utworu.</string>
+    <string name="lyrics_instrumental">Ten utwór nie ma tekstu.</string>
     <string name="lyrics_sync_service">Synchronizacja tekstów Crosstune</string>
     <string name="lyrics_follow_allow">Niech tekst podąża za utworem grającym w Twojej aplikacji muzycznej.</string>
     <string name="lyrics_following_app">Podąża za %1$s</string>

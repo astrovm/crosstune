@@ -17,6 +17,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -201,6 +202,12 @@ class ListeningTest {
 
     private fun shazamRequests() = fake.requestedUrls.count { it.startsWith("https://amp.shazam.com/") }
 
+    /** Closes the words, not the offer to follow the music app above them, which has a Dismiss of its own. */
+    private fun closeWords() {
+        composeRule.onNode(hasContentDescription(string(R.string.dismiss_button)) and !hasAnySibling(hasText(string(R.string.follow_turn_on)))).performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun click(text: String) {
         composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
         composeRule.waitForIdle()
@@ -326,7 +333,7 @@ class ListeningTest {
         // Its player opens, with the song's card made under it for its link tools.
         waitForDescription(string(R.string.more_button))
         assertFalse(barShown())
-        click(string(R.string.dismiss_button))
+        closeWords()
         // The card shows the song that plays, and the bar stays, a swipe from its player.
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(barShown())
@@ -569,7 +576,7 @@ class ListeningTest {
         click("Iris")
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertFalse(barShown())
-        click(string(R.string.dismiss_button))
+        closeWords()
         // Once the song the tap looked up is found, which happens off the main thread.
         waitUntil(TIMEOUT_MS) { barShown() }
         // The app letting it go takes the bar away.
@@ -1661,6 +1668,32 @@ class ListeningTest {
     }
 
     @Test
+    fun anotherSongHeardNearWhereTheSongShownIsTakesOverAsItsNoReleaseOfIt() {
+        // As on a phone: a song in the room was named, then the one the phone plays was heard again and
+        // again, well into it and 6 seconds from where the one shown had got to.
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        hearing.song("Demo", 41.0)
+        hearing.song("Demo", 41.0)
+        waitUntil(TIMEOUT_MS) { lit("Demo three") }
+        hearing.song("Other", 35.0)
+        waitUntil(TIMEOUT_MS) { lit("Other two") }
+        assertEquals("Other", HistoryStore(prefs()).load().first().metadata.title)
+        // Nor is one of the same name by someone else.
+        hearing.song("Other", 36.0, artist = "Someone Else")
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor?.artist == "Someone Else" }
+    }
+
+    @Test
+    fun wordsFollowedByEarWhileWhatPlaysCantBeSeenStillSayHowToFollowTheMusicApp() {
+        MainActivity.playbackFactory = { FakePlayback() }
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // The microphone hears the room as well as the phone, so it isn't the music app's place to go by.
+        waitForText(string(R.string.lyrics_follow_allow))
+    }
+
+    @Test
     fun aSongHeardAlongWithNoCoverGetsOneByItsNameInRecentAndItsWords() {
         val hearing = FakeHearing()
         demoWords(hearing)
@@ -1775,7 +1808,7 @@ class ListeningTest {
         val hearing = FakeHearing()
         demoWords(hearing)
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
-        click(string(R.string.dismiss_button))
+        closeWords()
         waitForText(string(R.string.lyrics_button))
         // The music moves on meanwhile; the words opened again are still the song shown, and don't listen.
         hearing.song("Other", 1.0)
@@ -2215,13 +2248,13 @@ class ListeningTest {
     }
 
     /** A video first named by its fingerprint, as opening lyrics of what is playing does. */
-    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0, playerMs: Long = 12_000): FakePlayback {
+    private fun heardVideo(hearing: FakeHearing, recognizedMs: Long? = null, heardSeconds: Double = 2.0, playerMs: Long = 12_000, playerSpeed: Float = 1f): FakePlayback {
         listeningAlong(hearing)
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band","duration":52,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three"}]""" else "{}") }
         val phone = FakePlayback().apply {
             access = true
             onThePhone = Heard.Song(MusicMetadata("Demo", "Band", recordingId = "video:demo"), null)
-            playing.value = Following(PlaybackClock(playerMs, SystemClock.elapsedRealtime()), "YouTube", canSeek = true, video = true, durationMs = 62_000)
+            playing.value = Following(PlaybackClock(playerMs, SystemClock.elapsedRealtime(), speed = playerSpeed), "YouTube", canSeek = true, video = true, durationMs = 62_000)
         }
         MainActivity.playbackFactory = { phone }
         allowMicrophone()
@@ -2278,6 +2311,58 @@ class ListeningTest {
         // Each impossible as a place in it, as a part played again is.
         speeds.forEach { hearsAt(hearing, 200_000, it) }
         return phone
+    }
+
+    @Test
+    fun thePlayersSpeedIsNotCountedAgainAsTheRecordingsSpeed() {
+        val hearing = FakeHearing()
+        heardVideo(hearing, playerSpeed = 1.05f)
+        composeRule.runOnIdle {
+            controllerModel().syncLine(0)
+        }
+        repeat(3) { hearsAt(hearing, 200_000, 1.05f) }
+        composeRule.runOnIdle {
+            assertEquals(1.05f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
+    }
+
+    @Test
+    fun thePlayersSpeedAtCaptureIsUsedWhenItChangesBeforeTheAnswer() {
+        val hearing = FakeHearing()
+        val phone = heardVideo(hearing, playerSpeed = 1.05f)
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        repeat(2) { hearsAt(hearing, 200_000, 1.05f) }
+        // The third capture is already waiting for its answer at 1.05, then the player changes rate.
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(12_000, SystemClock.elapsedRealtime(), speed = 1.25f))
+        }
+        hearsAt(hearing, 200_000, 1.05f)
+        composeRule.runOnIdle {
+            assertEquals(1.25f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
+    }
+
+    @Test
+    fun aMusicAppsLeadTakesTheRecordingsSpeedOffItsClockOnlyOnce() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing, video = false)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // Avoid the app's immediate answer being fed back into automatic calibration after each reply.
+        composeRule.runOnIdle { phone.onThePhone = null }
+        hearIntro(phone, hearing, 0..2)
+        waitUntil(TIMEOUT_MS) { !controllerModel().uiState.listeningAlong }
+        composeRule.runOnIdle {
+            phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(32_000, SystemClock.elapsedRealtime(), speed = 1.05f))
+            controllerModel().listenAlong()
+            controllerModel().syncLine(0)
+        }
+        repeat(4) { hearsAt(hearing, 200_000, 0.945f) }
+        composeRule.runOnIdle {
+            assertEquals(0.945f, controllerModel().uiState.following!!.clock.speed, 0.001f)
+            assertEquals(40_000L, wordsSpan())
+        }
     }
 
     @Test
@@ -2793,7 +2878,7 @@ class ListeningTest {
         hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
         // The words stay; closed, the song says why it stopped.
-        click(string(R.string.dismiss_button))
+        closeWords()
         waitForText(string(R.string.error_microphone))
     }
 
@@ -4364,6 +4449,19 @@ class ListeningTest {
         // A line no longer sung, and another song's, are left as they were; so is one whose line is kept already.
         assertEquals("Lluvia", kept[6].translation)
         assertEquals("Noche", kept[7].translation)
+    }
+
+    @Test
+    fun aLineKeptKeepsItsTranslationWhenTheWordsChangeAndNothingIsTranslatedNow() {
+        // Kept from the words as another site wrote them, and translated then; translation is off now.
+        val saved = """[{"text":"Night  Sky!","translation":"Cielo","title":"Demo","artist":"Band","box":2,"due":5}]"""
+        prefs().edit().putString("saved_lines", saved).putBoolean("lyrics_translation", false).commit()
+        wordsOf(null, "Night sky")
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().text == "Night sky" }
+        val kept = SavedLinesStore(prefs()).load().single()
+        // The practice and the translation it had go with the line to its new words.
+        assertEquals(3, kept.interval)
+        assertEquals("Cielo", kept.translation)
     }
 
     @Test

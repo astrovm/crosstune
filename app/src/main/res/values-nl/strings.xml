@@ -190,6 +190,7 @@
     <string name="lyrics_button">Tekst</string>
     <string name="lyrics_loading">Tekst opzoeken…</string>
     <string name="lyrics_none">Geen tekst gevonden voor dit nummer.</string>
+    <string name="lyrics_instrumental">Dit nummer heeft geen tekst.</string>
     <string name="lyrics_sync_service">Crosstune-songtekstsynchronisatie</string>
     <string name="lyrics_follow_allow">Laat de tekst het nummer volgen dat in je muziek-app speelt.</string>
     <string name="lyrics_following_app">Volgt %1$s</string>
