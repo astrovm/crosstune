@@ -115,6 +115,16 @@ scripts/record/emulator.sh restore
 
 `record.sh` records with [scrcpy](https://github.com/Genymobile/scrcpy) while Android's animations run at half speed, and plays the take back at double speed, so each of its 60 frames a second is a real one. Drive it at half speed too: double the waits and swipe durations.
 
+Several agents share that emulator and the Samsung phone. Hold the device with [`scripts/devicelock.py`](scripts/devicelock.py) for about as long as the job, instead of locking the file by hand. On mr the locks are `/mnt/data/agent-cache/samsung.lock` and `/mnt/data/agent-cache/crosstune-phone.lock`. Elsewhere they are in `~/.cache/agent-cache`. If that folder is missing, the command says so.
+
+```bash
+python3 scripts/devicelock.py take crosstune-phone --who "promo" --minutes 15
+python3 scripts/devicelock.py who
+python3 scripts/devicelock.py release crosstune-phone
+```
+
+`take` waits its turn. An earlier waiter gets the device before a later one, and taking it again while others wait puts you at the back of the line. Taking it again while you already hold it, and nobody is waiting, returns at once. A detached holder lets go when the minutes are up. `release` only ends your own hold. `release --force` ends someone else's and prints who that was. `who` reads the holder from the lock itself.
+
 [`scripts/milkdrop-render/render.py`](scripts/milkdrop-render/render.py) draws the MilkDrop visuals for any song into a 60 fps video, with the app's projectM, presets and settings:
 
 ```bash

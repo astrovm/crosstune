@@ -81,7 +81,8 @@ class MainViewModelTest {
         offline: OfflineSongs? = null,
         qobuzNumbers: QobuzNumbers? = null,
         playQueue: PlayQueue? = null,
-        lookAhead: Boolean = true
+        lookAhead: Boolean = true,
+        reminders: PracticeReminders? = null
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -107,8 +108,20 @@ class MainViewModelTest {
             playQueue = playQueue,
             lookAhead = lookAhead,
             qobuzNumbers = qobuzNumbers,
-            offline = offline
+            offline = offline,
+            reminders = reminders
         ).also { made += it }
+    }
+
+    @Test
+    fun aReminderKeptIsOnTheBellFromTheFirstFrameAndNoneKeptIsOff() {
+        assertFalse(model().uiState.reminder.on)
+        val reminders = PracticeReminders(app)
+        reminders.sessionDone()
+        reminders.turn(true)
+        val first = model(reminders = reminders).uiState.reminder
+        assertTrue(first.on)
+        assertEquals(reminders.state.minute, first.minute)
     }
 
     @Test

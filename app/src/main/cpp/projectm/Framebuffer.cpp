@@ -336,16 +336,22 @@ void Framebuffer::RemoveDepthStencilAttachment(int framebufferIndex)
     RemoveAttachment(framebufferIndex, GL_DEPTH_STENCIL_ATTACHMENT);
 }
 
+#ifdef USE_GLES
+// GLES has no per-buffer mask (glColorMaski), so the index can't be used and the mask covers every buffer.
+void Framebuffer::MaskDrawBuffer(int /*bufferIndex*/, bool masked)
+{
+    // Invert the flag, as "true" means the color channel *will* be written.
+    auto glMasked = static_cast<GLboolean>(!masked);
+    glColorMask(glMasked, glMasked, glMasked, glMasked);
+}
+#else
 void Framebuffer::MaskDrawBuffer(int bufferIndex, bool masked)
 {
     // Invert the flag, as "true" means the color channel *will* be written.
     auto glMasked = static_cast<GLboolean>(!masked);
-#ifdef USE_GLES
-    glColorMask(glMasked, glMasked, glMasked, glMasked);
-#else
     glColorMaski(bufferIndex, glMasked, glMasked, glMasked, glMasked);
-#endif
 }
+#endif
 
 void Framebuffer::UpdateDrawBuffers(int framebufferIndex)
 {

@@ -144,6 +144,7 @@ class MainActivity : ComponentActivity() {
                     ).takeIf { checksForUpdates(applicationContext) },
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     singing = singingFactory(applicationContext, client),
+                    reminders = remindersFactory(applicationContext),
                     reports = ReportSender(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(), lookupDispatcher),
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory(applicationContext),
@@ -221,6 +222,20 @@ class MainActivity : ComponentActivity() {
      */
     private val signInNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { signInWithChatGpt() }
 
+    /**
+     * Reminders of due cards ask for notifications when their bell is tapped. Turned down for good,
+     * Android won't ask again, so the bell goes to its settings instead.
+     */
+    private val reminderPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) remindersOn()
+        else if (!shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putBoolean(KEY_REMINDER_DENIED, true).apply()
+        }
+    }
+
+    /** Set while away in Android's settings to allow reminders, so they're on once back, if they were. */
+    private var remindOnceAllowed = false
+
     /** Set when the floating words' microphone was tapped without it allowed, to ask once back in sight. */
     private var listenAlongWhenBack = false
 
@@ -262,6 +277,10 @@ class MainActivity : ComponentActivity() {
         const val ACTION_LISTEN = "com.astrovm.crosstune.action.LISTEN"
         /** The unexported alias the widget listens through, so no other app can make Crosstune listen. */
         const val LISTEN_ALIAS = "com.astrovm.crosstune.ListenForSong"
+        /** Practises what's due, from a reminder. */
+        const val ACTION_PRACTISE = "com.astrovm.crosstune.action.PRACTISE"
+        /** The unexported alias reminders open through, so no other app can start a session, which moves the music app. */
+        const val PRACTISE_ALIAS = "com.astrovm.crosstune.PractiseDue"
         /** On a listen, opens the words of the song as soon as it's named, and keeps listening along. */
         const val EXTRA_LYRICS = "com.astrovm.crosstune.extra.LYRICS"
 
@@ -278,6 +297,12 @@ class MainActivity : ComponentActivity() {
         private const val KEY_ASKED_MICROPHONE = "asked_microphone"
         /** Set when the microphone was turned down for good, so Android won't ask again until it's allowed in settings. */
         private const val KEY_MICROPHONE_DENIED = "microphone_denied"
+
+        /** Set when notifications were turned down for good, for reminders, so Android won't ask again until they're allowed in settings. */
+        private const val KEY_REMINDER_DENIED = "reminder_notifications_denied"
+
+        /** Set once Android's alarms and reminders page was opened for a reminder, so it's asked once. */
+        private const val KEY_ASKED_EXACT_ALARMS = "reminder_exact_alarms_asked"
 
         /** Whether the microphone may be used, Android still asks for it, or it's turned down for good. */
         private fun microphoneAccess(context: Context): MicAccess = when {
@@ -478,6 +503,10 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var shellFactory: () -> List<Shell> = { listOf(ShizukuShell(), RootShell()) }
 
+        /** What asks cards due back, on the clock that's on the wall; tests set the clock. */
+        @VisibleForTesting
+        internal var remindersFactory: (Context) -> PracticeReminders = { PracticeReminders(it) }
+
         /** The kind of phone, whose settings pages the steps to fix things show. */
         @VisibleForTesting
         internal var phoneFactory: (Context) -> Phone = {
@@ -549,6 +578,12 @@ class MainActivity : ComponentActivity() {
         // Out of sight too: a song's app opens over Crosstune, which then covers it.
         lifecycleScope.launch {
             snapshotFlow { viewModel.uiState.coveringApp }.filter { it }.collect { cover() }
+        }
+        // Lines let go, or a kind of card turned off, may leave a reminder showing with nothing due.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                snapshotFlow { viewModel.uiState.run { savedLines to cardTypes } }.collect { viewModel.clearReminderIfNoneDue() }
+            }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -695,6 +730,9 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { CrosstuneWidget.updateAllWidgets(applicationContext) }
         },
         onPureBlackChange = viewModel::setPureBlack,
+        onReminderChange = { on -> if (on) remind() else viewModel.setReminder(false) },
+        onReminderTimeChange = viewModel::setReminderTime,
+        onReminderExact = ::openExactAlarmPage,
         onPlayingBarChange = viewModel::setPlayingBar,
         onLinesEarlyChange = viewModel::setLinesEarly,
         onNextLineAheadChange = viewModel::setNextLineAhead,
@@ -774,6 +812,10 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         refresh()
         recognizers = SongRecognizers.available(this)
+        viewModel.refreshReminder()
+        // Allowed in Android's settings, as just asked to, reminders are on now.
+        if (remindOnceAllowed && viewModel.uiState.reminder.allowed) remindersOn()
+        remindOnceAllowed = false
         // Its steps left without allowing it, the words don't float later out of the blue.
         if (viewModel.uiState.fixes?.need != Need.Float) floatOnceAllowed = false
         // Let show over other apps, as just asked to, the words float now.
@@ -852,6 +894,42 @@ class MainActivity : ComponentActivity() {
             return
         }
         floatNow()
+    }
+
+    /**
+     * Turns reminders on, once Android lets them show: asked here where it still asks, or else in its
+     * settings, and on once back if they were allowed there.
+     */
+    private fun remind() {
+        val denied = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getBoolean(KEY_REMINDER_DENIED, false)
+        val asks = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !denied && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        when {
+            viewModel.uiState.reminder.allowed -> remindersOn()
+            asks -> reminderPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            else -> {
+                remindOnceAllowed = true
+                tryStartActivity(remindersFactory(applicationContext).settingsPage)
+            }
+        }
+    }
+
+    /**
+     * Turns reminders on, and, once, takes the user to Android's page where exact alarms are allowed
+     * if they aren't yet: only they can, and without it a reminder can come an hour late. Asked after
+     * notifications, since the time is no use for one that can't show. Turned off and on again, or
+     * said no to, it isn't asked again; settings says it and goes there.
+     */
+    private fun remindersOn() {
+        viewModel.setReminder(true)
+        val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+        if (!viewModel.uiState.reminder.exact && !prefs.getBoolean(KEY_ASKED_EXACT_ALARMS, false)) {
+            prefs.edit().putBoolean(KEY_ASKED_EXACT_ALARMS, true).apply()
+            openExactAlarmPage()
+        }
+    }
+
+    private fun openExactAlarmPage() {
+        tryStartActivity(remindersFactory(applicationContext).exactPage)
     }
 
     /** Signs in with ChatGPT, kept running while the browser signs in, until it's done, however it ends. */
@@ -987,13 +1065,9 @@ class MainActivity : ComponentActivity() {
         when (intent.action) {
             // The widget's songs ask to be shown here rather than opened. Back from signing in with
             // ChatGPT, it's all done by then.
-            // A test link Crosstune sent itself says its links reach it, and is nothing to look up.
-            Intent.ACTION_VIEW -> if (intent.data?.fragment == TEST_LINK) viewModel.linkTested(intent.data?.host) else if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
-                intent.dataString,
-                show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false),
-                keepWords = floatedWhenBack
-            )
+            Intent.ACTION_VIEW -> handleLink(intent)
             ACTION_OPEN_RECENT -> viewModel.openRecent(intent.dataString)
+            ACTION_PRACTISE -> if (intent.component?.className == PRACTISE_ALIAS) viewModel.practiseDue()
             Intent.ACTION_SEND -> {
                 // Some apps share styled text, which getStringExtra would drop.
                 val shared = listOf(Intent.EXTRA_TEXT, Intent.EXTRA_SUBJECT)
@@ -1006,6 +1080,16 @@ class MainActivity : ComponentActivity() {
                 withMicrophone(if (intent.getBooleanExtra(EXTRA_LYRICS, false)) MicrophoneFor.LISTEN_FOR_LYRICS else MicrophoneFor.LISTEN)
             }
         }
+    }
+
+    /** A link opened here: a test link Crosstune sent itself says its links reach it, and is nothing to look up. */
+    private fun handleLink(intent: Intent) {
+        if (intent.data?.fragment == TEST_LINK) return viewModel.linkTested(intent.data?.host)
+        if (intent.data?.scheme != ChatGpt.RETURN_SCHEME) viewModel.resolveIncoming(
+            intent.dataString,
+            show = intent.getBooleanExtra(EXTRA_SHOW_SONG, false),
+            keepWords = floatedWhenBack
+        )
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

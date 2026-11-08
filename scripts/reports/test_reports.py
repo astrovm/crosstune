@@ -205,6 +205,18 @@ class MainTest(unittest.TestCase):
         self.assertEqual([song["id"] for song in json.loads((reports.CHECK / "songs.json").read_text())], ["39"])
         self.assertIn("39 no_lyrics", said.call_args_list[2].args[0])
 
+    def test_a_new_song_list_drops_the_last_runs_answers(self):
+        # SongCheck goes on from the answers it finds, so an old one would pass for what the finders say now.
+        reports.SAVED.write_text(json.dumps([row(39)]))
+        old = reports.CHECK / "reports" / "39.json"
+        old.parent.mkdir(parents=True)
+        old.write_text(json.dumps({"lyrics": {"kind": "none"}}))
+        with mock.patch("builtins.print") as said:
+            reports.main(["songs", "--since", "39"])
+            reports.main(["check", "--since", "39"])
+        self.assertFalse(old.exists())
+        self.assertIn("-> not run", said.call_args_list[1].args[0])
+
 
 if __name__ == "__main__":
     unittest.main()

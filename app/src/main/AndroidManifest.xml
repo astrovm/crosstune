@@ -19,6 +19,10 @@
     <!-- The screen turned on for a moment at a list song's end, so Spotify plays the next, when set to. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+    <!-- A practice reminder's alarm, which Android forgets on a reboot, is set again after one. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- The day's practice reminder on the minute, when the user allows it; without it, up to an hour late. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Phones without a microphone can still install Crosstune; they just can't listen. -->
     <uses-feature
         android:name="android.hardware.microphone"
@@ -292,6 +296,24 @@
             android:name=".PasteFromClipboard"
             android:exported="false"
             android:targetActivity=".MainActivity" />
+
+        <!-- Practises what's due, from a reminder; not exported, so no other app can start a session. -->
+        <activity-alias
+            android:name=".PractiseDue"
+            android:exported="false"
+            android:targetActivity=".MainActivity" />
+
+        <!-- The day's practice reminder, set again whenever Android forgets it or its hour moves. -->
+        <receiver
+            android:name=".PracticeReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Starts listening for a song; not exported, so no other app can make Crosstune listen. -->
         <activity-alias

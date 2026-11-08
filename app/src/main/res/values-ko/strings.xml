@@ -394,6 +394,16 @@
     <string name="practice_done">%1$d개 연습함</string>
     <string name="practice_back_to">%1$s(으)로 돌아가기</string>
     <string name="practice_progress">%1$d/%2$d</string>
+    <string name="practice_reminders">연습 알림</string>
+    <string name="practice_remind_me">알림 받기</string>
+    <string name="practice_reminder_at">%1$s에 알림</string>
+    <string name="practice_reminder_blocked">알림이 꺼져 있어요</string>
+    <string name="practice_reminder_exact">정확한 시간 허용</string>
+    <string name="practice_reminder_late">허용하지 않으면 알림이 최대 1시간 늦을 수 있어요</string>
+    <string name="practice_reminder_songs">%1$s 외 %2$d곡</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="other">연습할 카드 %1$d장</item>
+    </plurals>
     <string name="song_tab_meaning">의미</string>
     <string name="song_tab_words">단어</string>
     <string name="song_tab_artist">아티스트</string>
