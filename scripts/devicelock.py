@@ -170,7 +170,7 @@ def write_holder_note(note):
     os.replace(temporary, path)
 
 
-def trusted_note(pid, who, device):
+def checked_note(pid, who, device):
     note = read_note(holder_path(pid))
     if not note:
         return None
@@ -383,7 +383,7 @@ def describe(device):
         argv = argv_of(pid)
         if is_our_holder(argv, device):
             who = flag(argv, "--who") or "unknown"
-            note = trusted_note(pid, who, device)
+            note = checked_note(pid, who, device)
             if note:
                 when = f"pid {pid} (alive) since {note['start']} until {note['until']}"
             else:
