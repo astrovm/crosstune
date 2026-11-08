@@ -2,6 +2,7 @@
 
 Nothing here opens the shared device locks under the agent cache.
 """
+import fcntl
 import json
 import os
 import signal
@@ -111,9 +112,15 @@ class DeviceLockTest(unittest.TestCase):
         return result.stdout
 
     def note(self, device):
-        raw = (self.cache / f"{device}.lock").read_text()
-        self.assertTrue(raw.strip(), "the lock file has no note")
-        return json.loads(raw)
+        directory = self.cache / "holders"
+        self.assertTrue(directory.is_dir(), "the holder note was not written")
+        matches = []
+        for path in sorted(directory.glob("*.json")):
+            data = json.loads(path.read_text())
+            if data.get("device") == device:
+                matches.append(data)
+        self.assertEqual(len(matches), 1, matches)
+        return matches[0]
 
     def wait_for(self, check, timeout=8):
         deadline = time.monotonic() + timeout
@@ -158,6 +165,14 @@ class DeviceLockTest(unittest.TestCase):
                     os.kill(pid, signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     pass
+        for proc in self.procs:
+            if proc.poll() is None:
+                proc.kill()
+            try:
+                proc.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
 
     def test_two_takers_queue_until_release_frees_the_next(self):
         first = self.taken("samsung", "ada")
@@ -187,6 +202,7 @@ class DeviceLockTest(unittest.TestCase):
         self.assertIn(note["start"], status)
         self.assertIn(note["until"], status)
         self.assertTrue((self.cache / "samsung.lock").is_file())
+        self.assertNotIn("ada", (self.cache / "samsung.lock").read_text())
 
     def test_taking_a_lock_you_already_hold_returns_at_once(self):
         pid = self.taken("samsung", "ada")
@@ -198,14 +214,14 @@ class DeviceLockTest(unittest.TestCase):
         self.assertEqual(self.note("samsung")["pid"], pid)
         self.assertNotIn("waiting:", self.who("samsung"))
 
-    def test_a_dead_holder_shows_as_stale(self):
+    def test_a_dead_holder_leaves_the_device_free(self):
         pid = self.taken("samsung", "ada")
         os.kill(pid, signal.SIGKILL)
         self.wait_for(lambda: not pid_alive(pid) or "")
         status = self.who("samsung")
-        self.assertIn("stale", status)
-        self.assertIn("ada", status)
-        self.assertIn(f"pid {pid} (dead)", status)
+        self.assertIn("samsung: free", status)
+        self.assertNotIn("ada", status)
+        self.assertNotIn("stale", status)
         nxt = self.taken("samsung", "bea", timeout=5)
         self.assertNotEqual(nxt, pid)
         self.assertIn(f"held by bea pid {nxt} (alive)", self.who("samsung"))
@@ -311,6 +327,97 @@ class DeviceLockTest(unittest.TestCase):
     def test_release_of_a_free_device_says_so(self):
         result = self.invoke_ok("release", "crosstune-phone")
         self.assertIn("free", result.stdout)
+
+    def spawn_session(self, *args):
+        """A take from its own session, as another helper would call it."""
+        proc = subprocess.Popen(
+            [sys.executable, str(SCRIPT), *args],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=self.env(),
+            start_new_session=True,
+        )
+        self.procs.append(proc)
+        return proc
+
+    def test_an_earlier_waiter_is_served_before_a_later_one(self):
+        # The Deezer helper queued first. The holder's own later take must not be
+        # the one flock wakes, and it must not keep the device while others wait.
+        self.taken("crosstune-phone", "chord")
+        early = self.spawn_session("take", "crosstune-phone", "--who", "deezer", "--minutes", "2")
+        self.wait_for(lambda: "waiting: deezer" in self.who("crosstune-phone"))
+        later = self.spawn_session("take", "crosstune-phone", "--who", "chord", "--minutes", "2")
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and later.poll() is None and "waiting: chord" not in self.who("crosstune-phone"):
+            time.sleep(0.05)
+        if later.poll() is not None:
+            out, err = later.communicate()
+            self.fail(f"the holder's later take got the device while deezer was already waiting\n{out}\n{err}")
+        status = self.who("crosstune-phone")
+        self.assertLess(status.index("waiting: deezer"), status.index("waiting: chord"), status)
+        self.invoke_ok("release", "crosstune-phone")
+        early_pid = self.finish(early, timeout=10)
+        self.assertIsNone(later.poll(), "the later waiter got the device before the earlier one")
+        status = self.who("crosstune-phone")
+        self.assertIn(f"held by deezer pid {early_pid}", status)
+        self.assertIn("waiting: chord", status)
+        self.assertLess(status.index("held by deezer"), status.index("waiting: chord"), status)
+
+    def test_who_reads_the_holder_from_the_lock_not_an_overwritten_note(self):
+        pid = self.taken("samsung", "ada")
+        self.assertNotIn("ada", (self.cache / "samsung.lock").read_text())
+        (self.cache / "samsung.lock").write_text('{"who": "Free", "pid": 1, "start": "x", "until": "y"}\n')
+        for path in (self.cache / "holders").glob("*.json"):
+            path.write_text(
+                '{"device": "samsung", "pid": 1, "session": 1, "start": "x", "until": "y", "who": "Free"}\n'
+            )
+        status = self.who("samsung")
+        self.assertIn(f"held by ada pid {pid} (alive)", status)
+        self.assertNotIn("Free", status)
+        self.assertNotIn("samsung: free", status)
+        released = self.invoke_ok("release", "samsung")
+        self.assertIn("released samsung", released.stdout)
+        self.wait_for(lambda: (not pid_alive(pid)) or "")
+        self.assertTrue(pid_alive(1))
+        self.assertIn("samsung: free", self.who("samsung"))
+
+    def test_a_plain_flock_cannot_take_the_device_while_devicelock_holds_it(self):
+        self.taken("samsung", "ada")
+        fd = os.open(self.cache / "samsung.lock", os.O_RDWR)
+        try:
+            with self.assertRaises(BlockingIOError):
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(fd)
+        self.invoke_ok("release", "samsung")
+        fd = os.open(self.cache / "samsung.lock", os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+        self.assertIn("samsung: free", self.who("samsung"))
+
+    def test_who_reports_a_plain_flock_and_release_leaves_it(self):
+        path = self.cache / "samsung.lock"
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            status = self.who("samsung")
+            self.assertIn(f"held by pid {os.getpid()} (alive)", status)
+            self.assertNotIn("samsung: free", status)
+            refused = self.invoke("release", "samsung", "--force")
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn(str(os.getpid()), refused.stderr)
+            self.assertNotIn("Traceback", refused.stderr)
+            probe = os.open(path, os.O_RDWR)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(probe)
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+        self.assertIn("samsung: free", self.who("samsung"))
 
 
 if __name__ == "__main__":

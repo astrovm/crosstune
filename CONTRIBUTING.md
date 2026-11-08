@@ -123,7 +123,7 @@ python3 scripts/devicelock.py who
 python3 scripts/devicelock.py release crosstune-phone
 ```
 
-`take` waits its turn, writes who holds it and until when, and a detached holder lets go when the minutes are up. Taking it again while you already hold it returns at once. `release` only ends your own hold. `release --force` ends someone else's and prints who that was.
+`take` waits its turn. An earlier waiter gets the device before a later one, and taking it again while others wait puts you at the back of the line. Taking it again while you already hold it, and nobody is waiting, returns at once. A detached holder lets go when the minutes are up. `release` only ends your own hold. `release --force` ends someone else's and prints who that was. `who` reads the holder from the lock itself.
 
 [`scripts/milkdrop-render/render.py`](scripts/milkdrop-render/render.py) draws the MilkDrop visuals for any song into a 60 fps video, with the app's projectM, presets and settings:
 
