@@ -1076,9 +1076,15 @@ internal class LyricsFinder(
      * artist given, or by one it only writes in another script, or, for an artist given in another
      * script, as Korea's store gives 아일릿 for ILLIT, by one as long. Under another title, as it
      * translates 체포하겠어 as You're Under Arrest, it's the song when the store of the country that
-     * writes the names given has it under them. Null when it's not there.
+     * writes the names given has it under them. A movement the player numbers "1." and the store
+     * "I.", or the other way around, is asked for again under that spelling when the first search
+     * doesn't find it. Null when it's not there.
      */
-    private suspend fun inStore(metadata: MusicMetadata): Recording? = try {
+    private suspend fun inStore(metadata: MusicMetadata): Recording? =
+        recordingInStore(metadata) ?: movementSpelledTheOtherWay(metadata.title)?.let { recordingInStore(metadata.copy(title = it)) }
+
+    /** [inStore] asked once, under [metadata]'s title as given. */
+    private suspend fun recordingInStore(metadata: MusicMetadata): Recording? = try {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", "${metadata.title} ${metadata.artist}")
             .addQueryParameter("country", "us")
@@ -1090,7 +1096,7 @@ internal class LyricsFinder(
         fun asLong(song: JSONObject) = metadata.lengthMs?.let { abs(song.optLong("trackTimeMillis") - it) <= SAME_RECORDING_LENGTH_MS }
         val named = songs.firstOrNull { song ->
             val artist = song.optString("artistName")
-            SongNames.same(song.optString("trackName"), metadata.title) &&
+            sameTitle(song.optString("trackName"), metadata.title) &&
                 (SongNames.sameArtist(artist, metadata.artist) || !artist.hasLatin() || (asLong(song) == true && !metadata.artist.hasLatin()))
         } ?: songs.firstOrNull { asLong(it) != false }?.takeIf { namedAtHome(metadata, it.optLong("trackId")) }
         named?.let { song ->
@@ -1101,6 +1107,57 @@ internal class LyricsFinder(
         null
     } catch (_: JSONException) {
         null
+    }
+
+    /** The store's title is the one playing, also when only its movement index is written the other way. */
+    private fun sameTitle(storeTitle: String, playedTitle: String): Boolean {
+        if (SongNames.same(storeTitle, playedTitle)) return true
+        val spelled = movementSpelledTheOtherWay(playedTitle) ?: return false
+        return SongNames.same(storeTitle, spelled)
+    }
+
+    /**
+     * [title] with its movement index written the other way: "I." for "1.", and "4." for "IV.".
+     * Only an index at the start or after a colon, so "Op. 3" and "I Want You" stay as written.
+     * Null when there is none, or it isn't a movement from 1 to [MAX_MOVEMENT].
+     */
+    private fun movementSpelledTheOtherWay(title: String): String? {
+        val match = MOVEMENT_INDEX.find(title) ?: return null
+        val token = match.groupValues[2]
+        val number = movementNumber(token) ?: return null
+        val spelled = if (token.first().isDigit()) romanNumeral(number) else number.toString()
+        val start = match.range.first + match.groupValues[1].length
+        return title.replaceRange(start, start + token.length, spelled)
+    }
+
+    /** [token] as a movement number. Digits must not be padded, and a Roman index must be the usual spelling, so "IIII" is not "IV". */
+    private fun movementNumber(token: String): Int? {
+        if (token.first().isDigit()) {
+            val number = token.toInt()
+            return number.takeIf { it in 1..MAX_MOVEMENT && token == it.toString() }
+        }
+        val number = romanValue(token)
+        return number.takeIf { it in 1..MAX_MOVEMENT && romanNumeral(number).equals(token, ignoreCase = true) }
+    }
+
+    /** [token] read as a Roman number. A smaller letter before a larger one is subtracted, so "IV" is 4. */
+    private fun romanValue(token: String): Int {
+        val values = token.map { ROMAN_VALUES.getValue(it.uppercaseChar()) }
+        return values.indices.sumOf { index ->
+            val value = values[index]
+            val next = values.getOrNull(index + 1) ?: 0
+            if (next > value) -value else value
+        }
+    }
+
+    /** [number] in Roman numerals, the usual way, which writes 1 to [MAX_MOVEMENT]. */
+    private fun romanNumeral(number: Int): String {
+        var left = number
+        return ROMAN_PARTS.joinToString("") { (part, value) ->
+            val times = left / value
+            left -= times * value
+            part.repeat(times)
+        }
     }
 
     /** Whether the store of the country that writes [metadata]'s names so has recording [id] under them. */
@@ -1488,6 +1545,20 @@ internal class LyricsFinder(
          * organ trio or rain. Rap, Latin and Pop ones, which do, are never among them.
          */
         @JvmField val WORDLESS_GENRES = setOf("Classical", "New Age", "Jazz", "Latin Jazz", "Bop")
+
+        /** 39 is XXXIX. 40 is XL, and a movement index doesn't go that high. */
+        private const val MAX_MOVEMENT = 39
+
+        /** Parts that write [MAX_MOVEMENT] and below, largest first. */
+        private val ROMAN_PARTS = listOf("X" to 10, "IX" to 9, "V" to 5, "IV" to 4, "I" to 1)
+
+        private val ROMAN_VALUES = mapOf('I' to 1, 'V' to 5, 'X' to 10, 'L' to 50, 'C' to 100, 'D' to 500, 'M' to 1000)
+
+        /**
+         * A movement index at the start of a title or after a colon: "1. Allegro", "Op. 3: IV. Allegro".
+         * The period keeps a pronoun, "I Want You", and a work number, "Op. 3", from being read as one.
+         */
+        private val MOVEMENT_INDEX = Regex("""(^|:\s*)(\d{1,2}|[IVXLCDM]{1,7})\.(?=\s)""", RegexOption.IGNORE_CASE)
         const val GENIUS_URL = "https://genius.com/"
         const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
 
