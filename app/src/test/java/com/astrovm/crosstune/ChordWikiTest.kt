@@ -128,6 +128,22 @@ class ChordWikiTest {
     }
 
     @Test
+    fun aHitIsNamedByItsAddressWhenItsTextIsCutShortOrLeadsWithCredits() {
+        // ChordWiki cuts a long link's text with "...", and a credit can come before the title.
+        // The address always spells the page's own name, with a plus for a space.
+        val lines = """
+            キラッ！満開スマイル (アニメ「アイドルマスター シンデレラ ...	https://ja.chordwiki.org/wiki/%E3%82%AD%E3%83%A9%E3%83%83%EF%BC%81%E6%BA%80%E9%96%8B%E3%82%B9%E3%83%9E%E3%82%A4%E3%83%AB
+            三浦徳子 作曲：八神純子 - 夜空のイヤリング （歌 - ChordWiki	https://ja.chordwiki.org/wiki/%E5%A4%9C%E7%A9%BA%E3%81%AE%E3%82%A4%E3%83%A4%E3%83%AA%E3%83%B3%E3%82%B0
+            Human System	https://ja.chordwiki.org/wiki.cgi?c=view&t=Human+System
+            Odd	https://ja.chordwiki.org/wiki/%zz
+        """.trimIndent()
+        val hits = chordWikiHits(lines)
+        assertEquals(listOf("キラッ！満開スマイル", "夜空のイヤリング", "Human System", "Odd"), hits.map { it.page })
+        assertEquals("キラッ！満開スマイル", chordWikiBest(hits, "キラッ! 満開スマイル", "島村卯月", "キラッ! 満開スマイル (GAME VERSION)", listOf("キラッ！満開スマイル"))?.page)
+        assertEquals("夜空のイヤリング", chordWikiBest(hits, "夜空のイヤリング", "八神純子", "夜空のイヤリング")?.page)
+    }
+
+    @Test
     fun theBrowserReadsTheEditorFromBehindTheScreen() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         runBlocking(Dispatchers.Main.immediate) {

@@ -30,6 +30,7 @@ private val uFretResult = Regex(
 private val tags = Regex("<[^>]*>[^<]*</[^>]*>|<[^>]*>")
 private val uFretSheet = Regex("""var ufret_chord_datas = (\[.*?]);""")
 private val titleBreak = Regex(""" [-–—/] |／""")
+private val creditBracket = Regex("""\s*[(（].*$""")
 private val ugData = Regex("""class="js-store" data-content="([^"]*)"""")
 
 /** In LaCuerda's results, an artist, or a song of theirs: its row, the kind of sheet each take is, and the takes best liked first. */
@@ -255,16 +256,23 @@ internal class ChordFinder(
             chordWikiPause()
             val hits = chordWikiHits(pages.page(chordWikiSearchUrl(query)))
             val best = chordWikiBest(hits, known, song.artist, song.title, more)
-            note("wiki search q=$query hits=${hits.joinToString(" | ") { "${it.title} / ${it.artist}" }} best=${best?.title ?: "none"}")
+            note("wiki search q=$query hits=${hits.joinToString(" | ") { "${it.title} / ${it.artist}" }} best=${best?.page ?: "none"}")
             if (best == null) continue
             chordWikiPause()
-            return chordWikiSheet(pages, best.title)?.takeIf(fits)
+            return chordWikiSheet(pages, best.page)?.takeIf(fits)
         }
         return null
     }
 
-    private fun chordWikiQuery(name: String, artist: String): String =
-        listOf(name, artist).filter { it.isNotBlank() }.joinToString(" ")
+    /**
+     * The song and its lead singer. A game recording credits every character and the actor behind
+     * each, "島村卯月 (CV: 大橋彩香), 小日向美穂 (CV: ...)", and ChordWiki's search lists nothing for
+     * all of that. The first name, up to its bracket, is the one it indexes.
+     */
+    private fun chordWikiQuery(name: String, artist: String): String {
+        val lead = SongNames.artistNames(artist).firstOrNull().orEmpty().replace(creditBracket, "").trim()
+        return listOf(name, lead).filter { it.isNotBlank() }.joinToString(" ")
+    }
 
     /**
      * [title] with a trailing tag taken off, and with ASCII punctuation written at full width or

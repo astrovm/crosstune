@@ -30,7 +30,26 @@ internal fun interface ChordWikiPages {
 }
 
 /** One song a ChordWiki search lists: its title, its singer, and the page that names them. */
-internal data class ChordWikiHit(val title: String, val artist: String, val href: String)
+internal data class ChordWikiHit(val title: String, val artist: String, val href: String) {
+    /**
+     * The page's own name, as its address spells it. The link's text can be cut short with "..." or
+     * lead with the credits, so the address is the one thing that always names the page.
+     */
+    val page: String get() = chordWikiPageName(href) ?: title
+}
+
+private fun chordWikiPageName(href: String): String? {
+    val raw = if ("/wiki/" in href) {
+        href.substringAfter("/wiki/").substringBefore('?').substringBefore('#')
+    } else {
+        href.substringAfter("t=", "").substringBefore('&').substringBefore('#')
+    }
+    return try {
+        java.net.URLDecoder.decode(raw, "UTF-8").takeIf { it.isNotBlank() }
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+}
 
 /** What one look at a ChordWiki page showed, from the text a person would see. */
 internal data class ChordWikiSeen(
@@ -305,7 +324,7 @@ internal fun chordWikiBest(
     also: String,
     more: List<String> = emptyList(),
 ): ChordWikiHit? =
-    hits.filter { hit -> chordWikiNames(hit.title, title, also, more) }.minByOrNull { hit ->
+    hits.filter { hit -> chordWikiNames(hit.title, title, also, more) || chordWikiNames(hit.page, title, also, more) }.minByOrNull { hit ->
         when {
             SongNames.sameArtist(hit.artist, artist) -> 0
             hit.artist.isBlank() -> 1

@@ -1477,6 +1477,8 @@ Singing to the morning light</div>"""
         [F]朝の光に歌っている
     """.trimIndent()
 
+    private fun wikiHref(page: String) = "https://ja.chordwiki.org/wiki/" + java.net.URLEncoder.encode(page, "UTF-8")
+
     private fun withWiki(pages: ChordWikiPages, cache: LookupCache? = null, pauseMs: Long = 0) =
         ChordFinder(fake.client(), lookups, cache, pages, chordWikiPauseMs = pauseMs)
 
@@ -1569,7 +1571,7 @@ Singing to the morning light</div>"""
         }
         // The title we could ask for is the Latin one, so a Japanese hit of another name isn't this song.
         // The first edit of that title is empty; the same address after the search is the sheet the singer owns.
-        val hits = "海の歌 - 歩く人\thttps://ja.chordwiki.org/wiki/umi\nKawa no Michi - 他の人\thttps://ja.chordwiki.org/wiki/other\nKawa no Michi - 歩く人\thttps://ja.chordwiki.org/wiki/kawa"
+        val hits = "海の歌 - 歩く人\t${wikiHref("海の歌")}\nKawa no Michi - 他の人\t${wikiHref("Kawa no Michi (2)")}\nKawa no Michi - 歩く人\t${wikiHref("Kawa no Michi")}"
         edits = 0
         val searched = chords(
             song,
@@ -1660,7 +1662,7 @@ Singing to the morning light</div>"""
                     marks += System.nanoTime()
                     urls += url
                     when {
-                        "search.html" in url -> "川の道\thttps://ja.chordwiki.org/wiki/kawa"
+                        "search.html" in url -> "川の道\t${wikiHref("川の道")}"
                         else -> if (edits++ == 0) "" else chordPro
                     }
                 },
@@ -1687,7 +1689,7 @@ Singing to the morning light</div>"""
             withWiki(ChordWikiPages { url ->
                 urls += url
                 when {
-                    "search.html" in url -> "川の道\thttps://ja.chordwiki.org/wiki/kawa"
+                    "search.html" in url -> "川の道\t${wikiHref("川の道")}"
                     else -> if (edits++ == 0) "" else chordPro
                 }
             })
@@ -1706,7 +1708,7 @@ Singing to the morning light</div>"""
             japanese,
             withWiki(ChordWikiPages { url ->
                 when {
-                    "search.html" in url -> "川の道 - 歩く人\thttps://ja.chordwiki.org/wiki/kawa"
+                    "search.html" in url -> "川の道 - 歩く人\t${wikiHref("川の道")}"
                     else -> { edits++; if (edits == 1) wrong else chordPro }
                 }
             })
@@ -1749,7 +1751,7 @@ Singing to the morning light</div>"""
         val answer = chords(MusicMetadata(full, "島村卯月"), japanese, withWiki(ChordWikiPages { url ->
             val decoded = java.net.URLDecoder.decode(url, "UTF-8")
             when {
-                "search.html" in url -> "$page - 島村卯月\thttps://ja.chordwiki.org/wiki/smile"
+                "search.html" in url -> "$page (アニメ「アイドルマスター シンデレラ ...\t${wikiHref(page)}"
                 decoded.contains("t=$page") -> chordPro.replace("川の道", page)
                 else -> ""
             }
@@ -1757,6 +1759,31 @@ Singing to the morning light</div>"""
         val found = answer as? ChordFinder.Chords.Found
         assertEquals(chordWikiViewUrl(page), found?.sheet?.url)
         assertEquals(2, found?.sheet?.lines?.sumOf { it.chords.size })
+    }
+
+    @Test
+    fun aCreditWithVoiceActorsStillFindsTheChordWikiPage() {
+        // Apple credits the game recording to every character and the actor behind each, and
+        // ChordWiki's search lists nothing for a query that carries all of that. The song and its lead
+        // singer are enough to find the page.
+        noOtherChordSites()
+        val full = "キラッ! 満開スマイル (GAME VERSION)"
+        val credit = "島村卯月 (CV: 大橋彩香), 小日向美穂 (CV: 津田美波) & 双葉杏 (CV: 五十嵐裕美)"
+        val page = "キラッ！満開スマイル"
+        val queries = mutableListOf<String>()
+        val answer = chords(MusicMetadata(full, credit), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> {
+                    queries += decoded.substringAfter("q=")
+                    if ("CV:" in decoded || "GAME" in decoded) "" else "$page (アニメ「アイドルマスター シンデレラ ...\t${wikiHref(page)}"
+                }
+                decoded.contains("t=$page") -> chordPro.replace("川の道", page)
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl(page), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+        assertTrue(queries.toString(), queries.none { "CV:" in it })
     }
 
     @Test
@@ -1813,7 +1840,7 @@ Singing to the morning light</div>"""
         val answer = chords(MusicMetadata("THIS NIGHT", "TM NETWORK"), japanese, withWiki(ChordWikiPages { url ->
             val decoded = java.net.URLDecoder.decode(url, "UTF-8")
             when {
-                "search.html" in url && "THIS NIGHT" in decoded -> "This Night - TM NETWORK\thttps://ja.chordwiki.org/wiki/night"
+                "search.html" in url && "THIS NIGHT" in decoded -> "This Night - TM NETWORK\t${wikiHref("This Night")}"
                 "search.html" in url -> ""
                 decoded.contains("t=This Night") -> chordPro.replace("川の道", "This Night")
                 else -> ""
