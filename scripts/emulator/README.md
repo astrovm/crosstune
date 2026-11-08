@@ -4,7 +4,7 @@ Two, declared in [`emulators.json`](emulators.json), so a wiped machine gets the
 
 | Emulator | Image | For | By hand |
 |---|---|---|---|
-| `crosstune-phone` | Android 17, Play Store | Music apps, Qobuz tries, sound and mic checks, promo recordings | Google test account, Qobuz login |
+| `crosstune-phone` | Android 17, Play Store | Music apps, Qobuz tries, sound and mic checks, promo recordings | Google test account, Qobuz and Amazon Music logins; Proton VPN and the Deezer sign-in still to do (Issue #678) |
 | `crosstune-tv` | Google TV, Android 16, the newest TV image there is | TV screens, remote focus, Cast checks | Google test account |
 
 ```bash
