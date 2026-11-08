@@ -187,11 +187,9 @@ internal class PracticeCards(
                 // it's played on from where it is, if the caller wants that.
                 val fromTheStart = !there && latest?.clock?.playing == true
                 if (fromTheStart) fromStart()
-                if (!there && !fromTheStart && paused != null) {
-                    paused()
-                    return@coroutineScope true
-                }
-                return@coroutineScope there || fromTheStart
+                val resumes = !there && !fromTheStart && paused != null
+                if (resumes) paused?.invoke()
+                return@coroutineScope there || fromTheStart || resumes
             }
             val opened = openUntilItCanMove(source, song, app, { latest }, fromStart)
             if (opened.canSeek) block { latest }
