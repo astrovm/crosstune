@@ -1658,6 +1658,124 @@ class ExactMatcherTest {
         assertEquals(2, attempts)
     }
 
+    private fun qobuzItem(title: String, credit: String, track: String, album: String = "a1") = """
+        <li><div class="ListItem">
+            <a href="/us-en/album/slug/$album" class="ListItem__title" title="$title">$title</a>
+            <p class="ListItem__artists">$credit</p>
+            <button data-url="&#x2F;v4&#x2F;ajax&#x2F;popin-add-cart&#x2F;track&#x2F;$track"></button>
+        </div></li>"""
+
+    @Test
+    fun qobuzFindsASongWhoseNameHasASlash() {
+        // Qobuz's store answers 404 for a "/" in the search, even written %2F, so these songs had no number (#774, measured
+        // 2026-11-07: AC/DC "Back In Black", Tove Styrke "Me/You (always and forever)"). Spaced, it finds them.
+        val sent = CopyOnWriteArrayList<String>()
+        fake.handler = { request ->
+            sent += request.url.encodedPath
+            if (request.url.pathSegments.size != 4 || "%2F" in request.url.encodedPath.uppercase()) {
+                FakeSpotify.html(request, "Not found", code = 404)
+            } else {
+                FakeSpotify.html(
+                    request,
+                    qobuzItem("Me/You (always and forever)", "Tove Styrke • Me/You (always and forever)", "423808056", "album1") +
+                        qobuzItem("Quevedo: Bzrp Music Sessions, Vol. 52/66", "Bizarrap • Quevedo: Bzrp Music Sessions, Vol. 52/66", "164512766", "album2") +
+                        qobuzItem("Back In Black", "AC/DC • Back In Black", "19906024", "album3")
+                )
+            }
+        }
+        val me = MusicMetadata("Me/You (always and forever)", "Tove Styrke")
+        assertEquals("https://play.qobuz.com/track/423808056", find(MusicService.QOBUZ, me))
+        assertEquals("/gb-en/search/tracks/Me%20You%20(always%20and%20forever)%20Tove%20Styrke", sent.last())
+        assertEquals("https://play.qobuz.com/track/164512766", find(MusicService.QOBUZ, MusicMetadata("Quevedo: Bzrp Music Sessions, Vol. 52/66", "Bizarrap")))
+        assertEquals("https://play.qobuz.com/track/19906024", find(MusicService.QOBUZ, MusicMetadata("Back In Black", "AC/DC")))
+        assertEquals("/gb-en/search/tracks/Back%20In%20Black%20AC%20DC", sent.last())
+        // An album too, and the other store's number, which the retry asks for.
+        assertEquals("https://play.qobuz.com/album/album3", find(MusicService.QOBUZ, MusicMetadata("Back In Black", "AC/DC", ItemType.ALBUM)))
+        assertEquals("https://play.qobuz.com/track/19906024", runBlocking { matcher("IE").otherQobuzLink(MusicMetadata("Back In Black", "AC/DC"), "https://play.qobuz.com/track/1") })
+        assertEquals("/us-en/search/tracks/Back%20In%20Black%20AC%20DC", sent.last())
+        // " / " and a slash at an end leave one space, not a gap.
+        find(MusicService.QOBUZ, MusicMetadata("A / B", "/Band/"))
+        assertEquals("/gb-en/search/tracks/A%20B%20Band", sent.last())
+    }
+
+    private fun slowQobuz(timeoutMs: Long, vararg attempts: (Request) -> okhttp3.Response): Pair<ExactMatcher, AtomicInteger> {
+        val asked = AtomicInteger()
+        fake.handler = { request -> attempts[minOf(asked.getAndIncrement(), attempts.size - 1)](request) }
+        return ExactMatcher(fake.client(), "US", timeoutMs = timeoutMs) to asked
+    }
+
+    private fun qobuzAfter(ms: Long): (Request) -> okhttp3.Response = { request ->
+        Thread.sleep(ms)
+        FakeSpotify.html(request, qobuzItem("Song", "Band • Album", "625089"))
+    }
+
+    private fun qobuzFailsAfter(ms: Long): (Request) -> okhttp3.Response = { _ ->
+        Thread.sleep(ms)
+        throw IOException("reset")
+    }
+
+    private val usNumber = "https://play.qobuz.com/track/45242130"
+
+    @Test
+    fun qobuzsOtherStoreStillGetsItsTimeToAnswerAfterTheFirstTryIsSlow() {
+        // Android lets Crosstune open an app again only 9.5 s after the first launch (#745), and the store had two tries of 5 s
+        // one after the other: the first, cut off at 5 s, wasted what it had waited for, and the second had what was left. A
+        // store that takes 7 s to answer got nothing from either. Here 300 ms stand for 5 s: the first try answers at 700 ms,
+        // the second, which went out at 300 ms, would at 1000.
+        val (matcher, asked) = slowQobuz(300, qobuzAfter(700), qobuzAfter(700))
+        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
+        assertEquals(2, asked.get())
+    }
+
+    @Test
+    fun qobuzsOtherStoreIsAskedAgainAtOnceWhenTheFirstTryFailsAndAfterAWhileWhenItIsSilent() {
+        val song = MusicMetadata("Song", "Band")
+        // Failed outright: the second try goes out at once, not after the wait.
+        slowQobuz(5_000, qobuzFailsAfter(0), qobuzAfter(0)).let { (matcher, asked) ->
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+            assertEquals(2, asked.get())
+        }
+        // Silent: the second try answers while the first is still stuck.
+        slowQobuz(200, qobuzAfter(4_000), qobuzAfter(0)).let { (matcher, asked) ->
+            val started = System.nanoTime()
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+            assertTrue((System.nanoTime() - started) / 1_000_000 < 2_000)
+            assertEquals(2, asked.get())
+        }
+        // The second fails while the first is still on its way, and the first fails after the second went out.
+        slowQobuz(200, qobuzAfter(900), qobuzFailsAfter(0)).let { (matcher, _) ->
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+        }
+        slowQobuz(200, qobuzFailsAfter(500), qobuzAfter(600)).let { (matcher, _) ->
+            assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(song, usNumber) })
+        }
+        // Both failed: no other number.
+        slowQobuz(200, qobuzFailsAfter(0), qobuzFailsAfter(0)).let { (matcher, asked) ->
+            assertNull(runBlocking { matcher.otherQobuzLink(song, usNumber) })
+            assertEquals(2, asked.get())
+        }
+    }
+
+    @Test
+    fun qobuzsOtherStoreIsAskedOnceWhenTheFirstTryAnswersInTime() {
+        val (matcher, asked) = slowQobuz(200, qobuzAfter(0), qobuzAfter(0))
+        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
+        // Past the wait for the first, a second would have gone out.
+        Thread.sleep(500)
+        assertEquals(1, asked.get())
+    }
+
+    @Test
+    fun qobuzsOtherStoreStopsWhenItsCallerGivesUpWithoutWaitingForTheTriesInFlight() {
+        // At 9.5 s the retry is cancelled, see QobuzNumbers: tries still waiting on the store mustn't hold that up.
+        val (matcher, asked) = slowQobuz(100, qobuzAfter(3_000), qobuzAfter(3_000))
+        val started = System.nanoTime()
+        val answer = runBlocking { kotlinx.coroutines.withTimeoutOrNull(400) { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) } }
+        assertNull(answer)
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 1_500)
+        assertEquals(2, asked.get())
+    }
+
     @Test
     fun qobuzFindsSongsAndAlbumsOnItsStoresSearchPage() {
         fun item(title: String, credit: String, track: String, album: String) = """
