@@ -500,6 +500,11 @@ class ChordSheetsTest {
             listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("abcd", listOf(Chord(0, "Am")))),
             ChordSheets.fromJTotal("${jTotal("C")}<br>$empty<br>${jTotal("Am")}<br>abcd")
         )
+        // Two empty links with a space between them are still a blank line once the tags are gone.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$empty $empty<br>abcd")
+        )
     }
 
     @Test
