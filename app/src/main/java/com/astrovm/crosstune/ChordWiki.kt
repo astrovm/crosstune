@@ -293,17 +293,26 @@ internal fun chordWikiHits(page: String): List<ChordWikiHit> {
 }
 
 /**
- * Of [hits], the one whose title is [title] or [also]. The singer's own comes before a sheet with no
- * credit, and that before someone else's.
+ * Of [hits], the one whose title is [title], [also], or one of [more]. The singer's own comes before
+ * a sheet with no credit, and that before someone else's.
  */
-internal fun chordWikiBest(hits: List<ChordWikiHit>, title: String, artist: String, also: String): ChordWikiHit? =
-    hits.filter { SongNames.same(it.title, title) || SongNames.same(it.title, also) }.minByOrNull { hit ->
+internal fun chordWikiBest(
+    hits: List<ChordWikiHit>,
+    title: String,
+    artist: String,
+    also: String,
+    more: List<String> = emptyList(),
+): ChordWikiHit? =
+    hits.filter { hit -> chordWikiNames(hit.title, title, also, more) }.minByOrNull { hit ->
         when {
             SongNames.sameArtist(hit.artist, artist) -> 0
             hit.artist.isBlank() -> 1
             else -> 2
         }
     }
+
+private fun chordWikiNames(title: String, one: String, other: String, more: List<String>): Boolean =
+    SongNames.same(title, one) || SongNames.same(title, other) || more.any { SongNames.same(title, it) }
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
     val tab = line.indexOf('\t')

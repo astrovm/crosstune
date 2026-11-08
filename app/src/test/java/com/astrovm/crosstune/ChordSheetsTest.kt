@@ -525,6 +525,37 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun aShortLineTheWordsDontHaveStillKeepsItsChordInOrder() {
+        // F7 sits on three letters the lyric lines don't have, between chords that do get drawn.
+        // Those three letters are too few to call the line another verse, so the chord stays, in order.
+        // Chords on their own after the last line stay too.
+        val sheet = sheet(
+            SheetLine("", listOf(Chord(0, "DbM7"), Chord(4, "E"))),
+            SheetLine("Hey", listOf(Chord(0, "F7"))),
+            SheetLine("", listOf(Chord(0, "C7"))),
+            SheetLine("Walking down the river road", listOf(Chord(0, "G"))),
+            SheetLine("Singing to the morning light", listOf(Chord(0, "D"))),
+            SheetLine("", listOf(Chord(0, "Em")))
+        )
+        val placed = ChordSheets.place(sheet, listOf("Walking down the river road", "Singing to the morning light"))!!
+        val names = placed.flatMap { line -> line.before + line.over.map { it.name } }
+        assertEquals(listOf("DbM7", "E", "F7", "C7", "G", "D", "Em"), names)
+    }
+
+    @Test
+    fun aChordOnLettersThatLinedUpStaysWhenTheRestOfTheLineDoesNot() {
+        // Most of the line is words the song never sings, so it is under half. The chord on the
+        // words that did line up stays. The one on the words that didn't is not this song's.
+        val lyric = "Walking down the river road"
+        val sheet = sheet(
+            SheetLine("$lyric ${"q".repeat(30)}", listOf(Chord(0, "G"), Chord(lyric.length + 1, "C"))),
+            SheetLine("Singing to the morning light", listOf(Chord(0, "D")))
+        )
+        val placed = ChordSheets.place(sheet, listOf(lyric, "Singing to the morning light"))!!
+        assertEquals(listOf("G", "D"), placed.flatMap { line -> line.before + line.over.map { it.name } })
+    }
+
+    @Test
     fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
         assertEquals(
             listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),

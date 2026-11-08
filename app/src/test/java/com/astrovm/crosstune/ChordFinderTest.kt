@@ -1736,4 +1736,89 @@ Singing to the morning light</div>"""
         assertEquals(first, again)
         assertEquals(1, calls)
     }
+
+    @Test
+    fun aGameVersionTagStillReadsTheChordWikiPageNamedWithoutIt() {
+        // Apple names the recording "キラッ! 満開スマイル (GAME VERSION)". ChordWiki's page omits the tag.
+        // The edit page of the whole name is empty, and a search hit of the page without the tag is the sheet.
+        noOtherChordSites()
+        val full = "キラッ! 満開スマイル (GAME VERSION)"
+        // The page itself has no space and a fullwidth bang. Guessing an edit address from Apple's
+        // spelling doesn't open it. The search lists it, and that hit is this song once the tag is gone.
+        val page = "キラッ！満開スマイル"
+        val answer = chords(MusicMetadata(full, "島村卯月"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> "$page - 島村卯月\thttps://ja.chordwiki.org/wiki/smile"
+                decoded.contains("t=$page") -> chordPro.replace("川の道", page)
+                else -> ""
+            }
+        }))
+        val found = answer as? ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl(page), found?.sheet?.url)
+        assertEquals(2, found?.sheet?.lines?.sumOf { it.chords.size })
+    }
+
+    @Test
+    fun aHalfwidthBangStillOpensTheFullwidthChordWikiPage() {
+        // Apple writes a halfwidth "!". ChordWiki's page uses the fullwidth one, so the edit page of
+        // the name Apple gives is empty. The search lists nothing for that halfwidth name either.
+        noOtherChordSites()
+        val half = "回レ!雪月花"
+        val full = "回レ！雪月花"
+        val answer = chords(MusicMetadata(half, "歌組雪月花"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> ""
+                decoded.contains("t=$full") -> chordPro.replace("川の道", full)
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl(full), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
+
+    @Test
+    fun aFullwidthBangStillOpensTheHalfwidthChordWikiPage() {
+        // The name we're given uses the fullwidth bang. ChordWiki's page uses the halfwidth one.
+        // The search lists nothing, so the edit page of the halfwidth name is the sheet.
+        noOtherChordSites()
+        val full = "回レ！雪月花"
+        val half = "回レ!雪月花"
+        val answer = chords(MusicMetadata(full, "歌組雪月花"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> ""
+                decoded.contains("t=$half") -> chordPro.replace("川の道", half)
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl(half), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
+
+    @Test
+    fun anUpperCaseTitleIsFoundWhenTheJapaneseAliasPageIsNotTheSong() {
+        // NetEase's Japanese name is a different song. The edit page of THIS NIGHT is empty because
+        // ChordWiki's page is "This Night". The search for the alias does not list it. The search for
+        // the name the song was given does.
+        noOtherChordSites()
+        val beyond = "BEYOND THE TIME (メビウスの宇宙を越えて) -2025 Version-"
+        val sites = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") {
+                FakeSpotify.html(request, netEase(beyond to listOf("TM NETWORK")))
+            } else {
+                sites(request)
+            }
+        }
+        val answer = chords(MusicMetadata("THIS NIGHT", "TM NETWORK"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url && "THIS NIGHT" in decoded -> "This Night - TM NETWORK\thttps://ja.chordwiki.org/wiki/night"
+                "search.html" in url -> ""
+                decoded.contains("t=This Night") -> chordPro.replace("川の道", "This Night")
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl("This Night"), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
 }

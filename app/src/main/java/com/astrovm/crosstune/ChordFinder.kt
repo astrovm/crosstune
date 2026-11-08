@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.text.Html
+import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -89,17 +90,27 @@ internal class ChordFinder(
     /** [song]'s chords, from a sheet whose words line up with [texts], the lines shown. */
     suspend fun chordsOf(song: MusicMetadata, texts: List<String>, timeoutMs: Long = TIMEOUT_MS): Chords = withContext(ioDispatcher) {
         val key = "$CACHE_VERSION\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+        note("lookup title=${song.title} artist=${song.artist} lines=${texts.size}")
         // One kept before a page of the words alone stopped counting as chords is looked up again.
-        cache?.get(key)?.let { kept -> fromCache(kept)?.takeIf { ChordSheets.place(it, texts) != null }?.let { return@withContext Chords.Found(it) } }
+        cache?.get(key)?.let { kept ->
+            fromCache(kept)?.takeIf { ChordSheets.place(it, texts) != null }?.let {
+                note("cache ${it.site.name}")
+                return@withContext Chords.Found(it)
+            }
+        }
         // U-FRET and J-Total both want the song's other names, so this lookup asks for them once, and only if a step does.
         val otherNames = askedOnce { otherNames(song) }
         // Japanese words are likelier on U-FRET; any song may be on either.
-        val sites: List<suspend ((ChordSheet) -> Boolean) -> ChordSheet?> = if (texts.any(::japanese)) {
-            listOf({ fromUFret(song, otherNames, it) }, { fromUltimateGuitar(song, it) }, { fromJTotal(song, otherNames, it) })
+        val sites = if (texts.any(::japanese)) {
+            listOf(Site("ufret") { fromUFret(song, otherNames, it) }, Site("ug") { fromUltimateGuitar(song, it) }, Site("jtotal") { fromJTotal(song, otherNames, it) })
         } else {
-            listOf({ fromUltimateGuitar(song, it) }, { fromCifraClub(song, it) }, { fromLaCuerda(song, it) }, { fromUFret(song, otherNames, it) })
+            listOf(Site("ug") { fromUltimateGuitar(song, it) }, Site("cifra") { fromCifraClub(song, it) }, Site("lacuerda") { fromLaCuerda(song, it) }, Site("ufret") { fromUFret(song, otherNames, it) })
         }
-        val fits = { sheet: ChordSheet -> ChordSheets.place(sheet, texts) != null }
+        val fits = { sheet: ChordSheet ->
+            val aligned = ChordSheets.align(sheet, texts)
+            if (sheet.site == ChordSite.CHORDWIKI) note(wikiFit(aligned))
+            aligned.placed != null
+        }
         // ChordWiki only for a song in Japanese, and alongside the others: their sheet wins, and it doesn't go first.
         if (!wantsChordWiki(song, texts)) return@withContext answered(key, readSites(sites, timeoutMs, fits))
         coroutineScope {
@@ -118,16 +129,15 @@ internal class ChordFinder(
     /** One site's try: the sheet it found, and whether a site wouldn't answer. */
     private class Tried(val sheet: ChordSheet?, val unavailable: Boolean)
 
-    private suspend fun readSites(
-        sites: List<suspend ((ChordSheet) -> Boolean) -> ChordSheet?>,
-        timeoutMs: Long,
-        fits: (ChordSheet) -> Boolean
-    ): Tried {
+    /** A site asked in order, by the short name the lookup log uses. */
+    private class Site(val name: String, val read: suspend ((ChordSheet) -> Boolean) -> ChordSheet?)
+
+    private suspend fun readSites(sites: List<Site>, timeoutMs: Long, fits: (ChordSheet) -> Boolean): Tried {
         var unavailable = false
         for (site in sites) {
             val sheet = withTimeoutOrNull(timeoutMs) {
                 try {
-                    Result.success(site(fits))
+                    Result.success(site.read(fits))
                 } catch (e: IOException) {
                     Result.failure(e)
                 } catch (e: JSONException) {
@@ -136,9 +146,15 @@ internal class ChordFinder(
             }
             if (sheet == null || sheet.isFailure) {
                 unavailable = true
+                note("${site.name} ${if (sheet == null) "timeout" else "error"}")
                 continue
             }
-            sheet.getOrNull()?.let { return Tried(it, false) }
+            val found = sheet.getOrNull()
+            if (found != null) {
+                note("${site.name} sheet ${found.lines.sumOf { it.chords.size }}")
+                return Tried(found, false)
+            }
+            note("${site.name} none")
         }
         return Tried(null, unavailable)
     }
@@ -162,7 +178,35 @@ internal class ChordFinder(
                 Result.failure(e)
             }
         }
-        return if (looked == null || looked.isFailure) Tried(null, true) else Tried(looked.getOrNull(), false)
+        if (looked == null || looked.isFailure) {
+            note("wiki ${if (looked == null) "timeout" else "error"}")
+            return Tried(null, true)
+        }
+        val found = looked.getOrNull()
+        if (found == null) note("wiki none")
+        return Tried(found, false)
+    }
+
+    /** One line for logcat: the letter match, and the chord names [align] did not draw. No lyric text. */
+    private fun wikiFit(aligned: ChordSheets.ChordAlign): String {
+        val dropped = aligned.lines.flatMap { line ->
+            val left = line.drawn.toMutableList()
+            line.chords.mapNotNull { name ->
+                val at = left.indexOf(name)
+                if (at < 0) name else {
+                    left.removeAt(at)
+                    null
+                }
+            }
+        }
+        val drawn = aligned.lines.sumOf { it.drawn.size }
+        val page = aligned.lines.sumOf { it.chords.size }
+        val names = dropped.take(DROPPED_LOG).joinToString(",")
+        return "wiki letters=${aligned.matchedLetters}/${aligned.letters} runs=${aligned.runs}/${aligned.letters} placed=${aligned.placed != null} drawn=$drawn/$page dropped=$names"
+    }
+
+    private fun note(message: String) {
+        if (Log.isLoggable(CHORD_LOG, Log.INFO)) Log.i(CHORD_LOG, message)
     }
 
     /** ChordWiki's sheet wins when the others had none; a failure only matters when nobody had a sheet. */
@@ -174,22 +218,81 @@ internal class ChordFinder(
     /**
      * ChordWiki's sheet for [song] that [fits]. The edit page of the name it's known by, then the
      * name it was given when that page is another song, and the search only when neither is: then
-     * one more sheet, no faster than a person would open them.
+     * one more sheet, no faster than a person would open them. An empty page is tried again under
+     * the name with a trailing tag taken off, and with its punctuation written the other width.
      */
     private suspend fun readChordWiki(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val pages = chordWiki ?: return null
-        val title = chordWikiTitle(song, otherNames)
-        chordWikiSheet(pages, title, fits)?.let { return it }
+        val known = chordWikiTitle(song, otherNames)
+        openChordWiki(pages, known, fits)?.let { return it }
         // The Japanese name a search lists can be a different song. This one's own page is still its sheet.
-        if (song.title.isNotBlank() && title != song.title) {
+        if (song.title.isNotBlank() && known != song.title) {
             chordWikiPause()
-            chordWikiSheet(pages, song.title, fits)?.let { return it }
+            openChordWiki(pages, song.title, fits)?.let { return it }
         }
-        chordWikiPause()
-        val query = listOf(title, song.artist).filter { it.isNotBlank() }.joinToString(" ")
-        val best = chordWikiBest(chordWikiHits(pages.page(chordWikiSearchUrl(query))), title, song.artist, song.title) ?: return null
-        chordWikiPause()
-        return chordWikiSheet(pages, best.title, fits)
+        return searchChordWiki(pages, song, known, fits)
+    }
+
+    /**
+     * The edit page of [title] when its words are the song's. An empty editor is not that page, so
+     * the same name written another way is opened too. A page of a different song is not.
+     */
+    private suspend fun openChordWiki(pages: ChordWikiPages, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val opened = chordWikiSheet(pages, title)
+        if (opened != null) return opened.takeIf(fits)
+        for (name in chordWikiSpellings(title)) {
+            chordWikiPause()
+            chordWikiSheet(pages, name)?.takeIf(fits)?.let { return it }
+        }
+        return null
+    }
+
+    /** The search for [known], then for the name the song was given, then for either written another way. */
+    private suspend fun searchChordWiki(pages: ChordWikiPages, song: MusicMetadata, known: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val more = (chordWikiSpellings(known) + chordWikiSpellings(song.title)).distinct()
+        val names = listOf(known, song.title).filter { it.isNotBlank() } + more
+        for (query in names.map { chordWikiQuery(it, song.artist) }.distinct()) {
+            chordWikiPause()
+            val hits = chordWikiHits(pages.page(chordWikiSearchUrl(query)))
+            val best = chordWikiBest(hits, known, song.artist, song.title, more)
+            note("wiki search hits=${hits.size} best=${best?.title ?: "none"}")
+            if (best == null) continue
+            chordWikiPause()
+            return chordWikiSheet(pages, best.title)?.takeIf(fits)
+        }
+        return null
+    }
+
+    private fun chordWikiQuery(name: String, artist: String): String =
+        listOf(name, artist).filter { it.isNotBlank() }.joinToString(" ")
+
+    /**
+     * [title] with a trailing tag taken off, and with ASCII punctuation written at full width or
+     * back. Letters stay as they are. The title itself isn't here.
+     */
+    private fun chordWikiSpellings(title: String): List<String> {
+        val bare = SongNames.bareTitle(title)
+        return listOf(bare, chordWikiWide(title), chordWikiNarrow(title), chordWikiWide(bare), chordWikiNarrow(bare))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != title }
+            .distinct()
+    }
+
+    private fun chordWikiWide(title: String): String = buildString(title.length) {
+        title.forEach { letter ->
+            append(if (letter.code in 0x21..0x7E && !letter.isLetterOrDigit()) (letter.code + 0xFEE0).toChar() else letter)
+        }
+    }
+
+    private fun chordWikiNarrow(title: String): String = buildString(title.length) {
+        title.forEach { letter ->
+            append(if (chordWikiWidePunct(letter)) (letter.code - 0xFEE0).toChar() else letter)
+        }
+    }
+
+    private fun chordWikiWidePunct(letter: Char): Boolean {
+        val code = letter.code
+        return code in 0xFF01..0xFF0F || code in 0xFF1A..0xFF20 || code in 0xFF3B..0xFF40 || code in 0xFF5B..0xFF5E
     }
 
     private suspend fun chordWikiPause() {
@@ -206,12 +309,13 @@ internal class ChordFinder(
         }
     }
 
-    /** The edit page of [title], when its words are the song's. The address shown is the sheet's page, not the editor. */
-    private suspend fun chordWikiSheet(pages: ChordWikiPages, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+    /** The edit page of [title], or null when its editor is empty. The address shown is the sheet's page, not the editor. */
+    private suspend fun chordWikiSheet(pages: ChordWikiPages, title: String): ChordSheet? {
         val read = ChordSheets.fromChordWiki(pages.page(chordWikiEditUrl(title)))
+        val chords = read.lines.sumOf { it.chords.size }
+        note("wiki open title=$title editorLines=${read.lines.size} editorChords=$chords pageTitle=${read.title}")
         if (read.lines.isEmpty()) return null
-        val sheet = ChordSheet(read.lines, read.capo, ChordSite.CHORDWIKI, chordWikiViewUrl(read.title.ifBlank { title }))
-        return sheet.takeIf(fits)
+        return ChordSheet(read.lines, read.capo, ChordSite.CHORDWIKI, chordWikiViewUrl(read.title.ifBlank { title }))
     }
 
     /**
@@ -630,6 +734,12 @@ internal class ChordFinder(
 
         /** Between ChordWiki's pages. A person looks a song up about this fast, and no faster. */
         const val CHORD_WIKI_PAUSE_MS = 400L
+
+        /** Logcat tag for one lookup: the title passed in, what each site answered, and why a sheet was dropped. */
+        const val CHORD_LOG = "ChordFinder"
+
+        /** Chord names named in one dropped-sheet line. The rest are counted, not listed. */
+        private const val DROPPED_LOG = 24
 
         private val titleWords = Regex("""[\p{L}\p{N}]+""")
 
