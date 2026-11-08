@@ -292,6 +292,9 @@
     <string name="floating_close">Fermer</string>
     <string name="floating_done">OK</string>
     <string name="floating_channel">Paroles flottantes</string>
+    <string name="return_channel">Retour</string>
+    <string name="return_title">Retour à la carte</string>
+    <string name="return_text">Touchez pour revenir à Crosstune</string>
     <string name="hearing_channel">Écoute de la musique</string>
     <string name="floating_notification">Paroles flottant sur vos applis</string>
     <string name="lyrics_learn">Lectures et traduction</string>

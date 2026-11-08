@@ -1,9 +1,14 @@
 package com.astrovm.crosstune
 
+import android.app.ActivityOptions
 import android.app.KeyguardManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.media.AudioManager
@@ -17,12 +22,14 @@ import android.os.Build
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.service.notification.NotificationListenerService
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
@@ -534,11 +541,14 @@ internal class MediaSessionPlayback(
         context.getSystemService(PowerManager::class.java).newWakeLock(wakes, "crosstune:next song").acquire(WAKE_MS)
     }
 
-    // From the background, Android only lets it if Crosstune may show over other apps; otherwise it stays behind.
-    // Behind it too when the app opened wouldn't play in the background, as it would stop as soon as it's left.
+    // From the background, Android only lets the activity start if Crosstune may show over other apps, and a
+    // blocked start doesn't say so. Otherwise a notification is one tap back: Android sends that tap itself.
+    // Left alone when the app opened wouldn't play in the background, as it would stop as soon as it's left.
     override fun comesBack() {
         if (opened?.let(onlyInFront::contains) == true) return
-        runCatching { context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
+        val back = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        runCatching { context.startActivity(back) }
+        if (!Settings.canDrawOverlays(context)) context.noticeToReturn(back)
     }
 
     // Without the user's say-so Android shows none, and says so by throwing.
@@ -886,6 +896,59 @@ private const val ENDED_WITHIN_MS = 2_000L
  * Android counts the wake as using the phone, so the screen then stays on until it times out.
  */
 private const val WAKE_MS = 1_000L
+
+/** The notice that brings Crosstune back after a music app covered it. */
+internal const val RETURN_CHANNEL = "return"
+
+/** 1 is floating lyrics, 3 is ChatGPT sign-in, 4 is hearing, and 5 is a practice reminder. */
+internal const val RETURN_NOTICE_ID = 6
+
+/** Set once Android has been asked for the notice, so it isn't asked on every card. */
+internal const val KEY_ASKED_RETURN = "asked_return_notifications"
+
+/** Removes the notice, once Crosstune is in front again or the tap opened it. */
+internal fun Context.dismissReturnToCard() {
+    getSystemService(NotificationManager::class.java).cancel(RETURN_NOTICE_ID)
+}
+
+/**
+ * Asks [launch] for notification permission once, while Crosstune is still in front, when it can't
+ * show over other apps. Returns whether it asked, so what would leave can wait for the answer.
+ * Turned down, the music app stays in front and Back still returns.
+ */
+internal fun Context.askToReturnToCard(launch: (String) -> Unit): Boolean {
+    if (Settings.canDrawOverlays(this)) return false
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+    if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return false
+    val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+    if (prefs.getBoolean(KEY_ASKED_RETURN, false)) return false
+    prefs.edit().putBoolean(KEY_ASKED_RETURN, true).apply()
+    launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    return true
+}
+
+/** One tap back to the card. Android sends the tap, so it can start the activity the app itself no longer can. */
+private fun Context.noticeToReturn(back: Intent) {
+    val notices = getSystemService(NotificationManager::class.java)
+    notices.createNotificationChannel(NotificationChannel(RETURN_CHANNEL, getString(R.string.return_channel), NotificationManager.IMPORTANCE_HIGH))
+    val options = ActivityOptions.makeBasic()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        options.setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+    }
+    val open = PendingIntent.getActivity(this, RETURN_NOTICE_ID, back, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE, options.toBundle())
+    notices.notify(
+        RETURN_NOTICE_ID,
+        NotificationCompat.Builder(this, RETURN_CHANNEL)
+            .setSmallIcon(R.drawable.ic_lyrics)
+            .setContentTitle(getString(R.string.return_title))
+            .setContentText(getString(R.string.return_text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+    )
+}
 
 /**
  * Only here so Android shows Crosstune what music apps are playing, which it does for an app the
