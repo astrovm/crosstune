@@ -1591,6 +1591,62 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun aLatinTitleWhoseJapaneseSearchHitIsAnotherSongIsStillReadOnChordWiki() {
+        // The search that names "This Night" also names "BEYOND THE TIME (メビウスの宇宙を越えて)",
+        // and the one for "IT'S SO DELICIOUS" leads with a longer Japanese title. Neither page is
+        // the song. The name it was given still has the sheet, and that is the one to show.
+        noOtherChordSites()
+        val sites = fake.handler
+        val own = """
+            {title:This Night}
+            {subtitle:歌:TM NETWORK}
+            [G]川の道を歩いていく
+            [A]朝の光に歌っている
+        """.trimIndent()
+        val other = """
+            {title:別の歌}
+            [C]全然違う歌詞です
+            これも別の話です
+        """.trimIndent()
+        val beyond = "BEYOND THE TIME (メビウスの宇宙を越えて) -2025 Version-"
+        val medley = "决戦は金曜日~IT'S SO DELICIOUS~决戦は金曜日"
+        val urls = mutableListOf<String>()
+        fun pages(ownTitle: String) = ChordWikiPages { url ->
+            urls += url
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> ""
+                beyond in decoded || medley in decoded -> other
+                decoded.contains("t=$ownTitle") -> own.replace("This Night", ownTitle)
+                else -> error(decoded)
+            }
+        }
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") {
+                FakeSpotify.html(request, netEase("This Night" to listOf("TM NETWORK"), beyond to listOf("TM NETWORK")))
+            } else {
+                sites(request)
+            }
+        }
+        val found = chords(MusicMetadata("This Night", "TM NETWORK"), japanese, withWiki(pages("This Night"))) as ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl("This Night"), found.sheet.url)
+        assertEquals(listOf(beyond, "This Night"), urls.map { java.net.URLDecoder.decode(it.substringAfter("t="), "UTF-8") })
+
+        urls.clear()
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") {
+                FakeSpotify.html(request, netEase(medley to listOf("DREAMS COME TRUE"), "IT'S SO DELICIOUS" to listOf("DREAMS COME TRUE")))
+            } else {
+                sites(request)
+            }
+        }
+        val delicious = "IT'S SO DELICIOUS"
+        val second = chords(MusicMetadata(delicious, "DREAMS COME TRUE"), japanese, withWiki(pages(delicious))) as ChordFinder.Chords.Found
+        assertEquals(chordWikiViewUrl(delicious), second.sheet.url)
+        assertEquals(listOf(medley, delicious), urls.map { java.net.URLDecoder.decode(it.substringAfter("t="), "UTF-8") })
+    }
+
+    @Test
     fun chordWikiWaitsBetweenPagesAndLeavesABlankArtistOutOfTheSearch() {
         noOtherChordSites()
         val urls = mutableListOf<String>()

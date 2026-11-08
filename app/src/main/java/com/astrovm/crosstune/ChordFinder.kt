@@ -172,13 +172,19 @@ internal class ChordFinder(
     }
 
     /**
-     * ChordWiki's sheet for [song] that [fits]. The edit page first, one page, and the search only
-     * when that isn't the song: then one more sheet, no faster than a person would open them.
+     * ChordWiki's sheet for [song] that [fits]. The edit page of the name it's known by, then the
+     * name it was given when that page is another song, and the search only when neither is: then
+     * one more sheet, no faster than a person would open them.
      */
     private suspend fun readChordWiki(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val pages = chordWiki ?: return null
         val title = chordWikiTitle(song, otherNames)
         chordWikiSheet(pages, title, fits)?.let { return it }
+        // The Japanese name a search lists can be a different song. This one's own page is still its sheet.
+        if (song.title.isNotBlank() && title != song.title) {
+            chordWikiPause()
+            chordWikiSheet(pages, song.title, fits)?.let { return it }
+        }
         chordWikiPause()
         val query = listOf(title, song.artist).filter { it.isNotBlank() }.joinToString(" ")
         val best = chordWikiBest(chordWikiHits(pages.page(chordWikiSearchUrl(query))), title, song.artist, song.title) ?: return null
