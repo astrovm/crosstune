@@ -135,6 +135,59 @@ test("NetEase's own note for an instrumental says it has no words", async () => 
   assert.deepEqual(await find(AFRICA, net), { kind: "instrumental" });
 });
 
+function netEaseLyric(lyric: string): Internet {
+  return internet([
+    [LRCLIB, "[]"],
+    [YTM_SEARCH, "{}"],
+    [NETEASE_SEARCH, fixture("netease-search.json")],
+    [NETEASE_LYRIC, JSON.stringify({ lrc: { lyric }, code: 200 })],
+    [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+  ]);
+}
+
+test("a NetEase line that only marks an instrumental is no words", async () => {
+  const net = netEaseLyric("作词 : Ada Writer\n作曲 : Ada Writer\n[Instrumental]");
+  assert.deepEqual(await find(AFRICA, net), { kind: "instrumental" });
+  assert.deepEqual(await find(AFRICA, netEaseLyric("（instrumental）")), { kind: "instrumental" });
+});
+
+test("a NetEase instrumental mark between real lines is only a break", async () => {
+  const lyric = "[00:10.00] First line of the song\n[00:20.00] [Instrumental]\n[00:30.00] Love this instrumental part\n[00:40.00] Second line of the song";
+  const lyrics = found(await find(AFRICA, netEaseLyric(lyric)));
+  assert.equal(lyrics.words, "First line of the song\nLove this instrumental part\nSecond line of the song");
+  assert.equal(lyrics.lines.some((line) => line.text.includes("[Instrumental]")), false);
+});
+
+test("a credit NetEase opens with is left out, whatever its label", async () => {
+  const only = await find(AFRICA, netEaseLyric("[00:01.00] 编程 : Player One"));
+  assert.deepEqual(only, { kind: "none" });
+  const lyrics = found(await find(AFRICA, netEaseLyric("[00:01.00] 人声 : Singer One\n[00:10.00] First line of the song")));
+  assert.equal(lyrics.words, "First line of the song");
+  // Who sings a line is a line, and one credit at the end can be sung.
+  const kept = found(await find(AFRICA, netEaseLyric("[00:10.00] Chorus : Stay with me\n[00:20.00] First line of the song\n[00:40.00] Mastering : Someone")));
+  assert.equal(kept.words, "Chorus : Stay with me\nFirst line of the song\nMastering : Someone");
+});
+
+test("credits NetEase closes with are left out once two of them end the song", async () => {
+  const lyric = "[00:10.00] First line of the song\n[00:20.00] Male : Stay with me\n[00:40.00] Guitar : Player One\n[00:40.50] Recorded at Some Studio\n[00:41.00] Bass : Player Two";
+  const closed = found(await find(AFRICA, netEaseLyric(lyric)));
+  assert.equal(closed.words, "First line of the song\nMale : Stay with me");
+});
+
+test("a closing credit needs no space before its colon, and a time is still sung", async () => {
+  const dropped = found(await find(AFRICA, netEaseLyric("[00:10.00] First line of the song\n[00:40.00] 贝斯：Player One\n[00:41.00] 鼓:Player Two")));
+  assert.equal(dropped.words, "First line of the song");
+  const one = found(await find(AFRICA, netEaseLyric("[00:10.00] First line of the song\n[00:40.00] 贝斯：Player One")));
+  assert.equal(one.words, "First line of the song\n贝斯：Player One");
+  const times = found(await find(AFRICA, netEaseLyric("[00:10.00] First line of the song\n[00:40.00] 7:30 in the night\n[00:41.00] When it's 11:30 in the night")));
+  assert.equal(times.words, "First line of the song\n7:30 in the night\nWhen it's 11:30 in the night");
+  // Punctuation isn't who played, and neither is a colon with no label.
+  const marks = found(await find(AFRICA, netEaseLyric("[00:10.00] First line of the song\n[00:40.00] ???: still here\n[00:41.00] !!!: still here")));
+  assert.equal(marks.words, "First line of the song\n???: still here\n!!!: still here");
+  const blank = found(await find(AFRICA, netEaseLyric("[00:10.00] First line of the song\n[00:40.00]  : Someone\n[00:41.00]   : Else")));
+  assert.equal(blank.words, "First line of the song\n: Someone\n: Else");
+});
+
 test("Letras's words come from the page its search points to, untimed and without its ads", async () => {
   const net = internet([
     [LRCLIB, "[]"],
