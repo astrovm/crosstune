@@ -2544,7 +2544,8 @@ class MainActivityTest {
     @Test
     fun practiceAsksOnceForANotificationThatBringsTheCardBack() {
         ShadowSettings.setCanDrawOverlays(false)
-        prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo","title":"Demo","artist":"Band"}]""").remove(KEY_ASKED_RETURN).commit()
+        // Timed, so practising it may open the music app. An untimed card stays here and isn't asked.
+        prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo","title":"Demo","artist":"Band","start":0,"end":1000}]""").remove(KEY_ASKED_RETURN).commit()
         launch()
         val practice = "${string(R.string.saved_practice)}, ${string(R.string.practice_due, 1)}"
         click(practice)
