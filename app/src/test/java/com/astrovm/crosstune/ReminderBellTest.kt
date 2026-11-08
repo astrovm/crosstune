@@ -399,6 +399,8 @@ class ReminderBellTest {
         click(app.getString(R.string.back_button))
         openSettings()
         composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
+        // Under its own header.
+        assertTrue(shown(app.getString(R.string.saved_practice)))
         assertTrue(shown(exactTime))
         assertTrue(shown(late))
         click(exactTime)
@@ -439,6 +441,8 @@ class ReminderBellTest {
         // On, a tap is the time.
         click(reminderAt)
         composeRule.waitForIdle()
+        // The question the time answers.
+        assertTrue(shown(remindMe))
         composeRule.onNode(hasContentDescription("9 o'clock") and androidx.compose.ui.test.hasClickAction()).performClick()
         composeRule.waitForIdle()
         click(app.getString(R.string.save_button))

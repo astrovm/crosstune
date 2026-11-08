@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
@@ -26,6 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 
 /** When due cards are asked back, what's said, and when nothing is. */
 @RunWith(RobolectricTestRunner::class)
@@ -237,6 +239,22 @@ class PracticeRemindersTest {
         reminders.turn(true)
         assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
         assertTrue(reminders.state.exact)
+    }
+
+    /** Android 12 is the first one that asks, so the boundary is its own version. Robolectric has no jar for it, so only the number is set. */
+    @Test
+    fun onAndroidTwelveItselfExactIsTheUsersToAllow() {
+        val was = Build.VERSION.SDK_INT
+        ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", Build.VERSION_CODES.S)
+        try {
+            ShadowAlarmManager.setCanScheduleExactAlarms(false)
+            reminders.sessionDone()
+            reminders.turn(true)
+            assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
+            assertFalse(reminders.state.exact)
+        } finally {
+            ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", was)
+        }
     }
 
     @Test
