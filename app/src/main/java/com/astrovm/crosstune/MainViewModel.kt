@@ -2254,8 +2254,7 @@ internal class MainViewModel(
 
     private fun sameRecordingThere(song: MusicMetadata, shown: MusicMetadata, at: PlaybackClock, clock: PlaybackClock): Boolean {
         if (!clock.playing || heardSong?.let { sameSong(it, shown) } != true || !SongNames.releasesOfOneSong(song, shown)) return false
-        val where = clock.positionAt(now())
-        return where >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - where) <= SAME_RECORDING_MS
+        return sameRecordingPlace(clock.positionAt(now()), at.positionAt(now()))
     }
 
     /** Whether this hearing needs no further clock update. */
@@ -4576,6 +4575,11 @@ internal class MainViewModel(
 
         /** How far into the song shown that's believed: earlier, it may just as well be the next song. */
         const val SAME_RECORDING_AFTER_MS = 30_000L
+
+        /** Whether another name heard [heardMs] into its song is where the song shown is, [shownMs] into it: well into it, and close. */
+        internal fun sameRecordingPlace(shownMs: Long, heardMs: Long): Boolean =
+            shownMs >= SAME_RECORDING_AFTER_MS && abs(heardMs - shownMs) <= SAME_RECORDING_MS
+
         /** How long ago the song can have been heard and still line up a video with it. */
         const val HEARD_LATELY_MS = 60_000L
         /** How far Shazam's place in a song may be from where its words are timed. */

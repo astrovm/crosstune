@@ -103,6 +103,18 @@ class MainViewModelTest {
     }
 
     @Test
+    fun anotherNameHeardIsTheSameRecordingOnlyWellIntoTheSongAndCloseToWhereItIs() {
+        val after = MainViewModel.SAME_RECORDING_AFTER_MS
+        val near = MainViewModel.SAME_RECORDING_MS
+        // From 30 s in, a hearing up to 10 s either side of where the song shown is counts as it.
+        assertTrue(MainViewModel.sameRecordingPlace(after, after + near))
+        assertTrue(MainViewModel.sameRecordingPlace(after + near, after))
+        assertFalse(MainViewModel.sameRecordingPlace(after, after + near + 1))
+        // Earlier than that, it may just as well be the next song, which starts over.
+        assertFalse(MainViewModel.sameRecordingPlace(after - 1, after - 1))
+    }
+
+    @Test
     fun aModelWithoutTheOptionalPartsLeavesTheirFeaturesAlone() {
         val model = model()
         model.setUpInOneTap()
