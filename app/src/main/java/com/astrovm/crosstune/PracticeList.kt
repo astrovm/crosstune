@@ -72,7 +72,8 @@ internal fun PracticeList(state: UiState, actions: ScreenActions, onBack: () -> 
             IconButton(onClick = onBack) {
                 AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
             }
-        }
+        },
+        actions = { ReminderBell(state, actions) }
     ) {
         // All of them practises what's due; with none, it says so, and the kinds of card can still be set there.
         PracticeRow(stringResource(R.string.practice_all_songs), songs.sumOf { it.due }, onClick = actions.onStartPractice) {

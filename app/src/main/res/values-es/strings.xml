@@ -394,6 +394,18 @@
     <string name="practice_done">%1$d practicadas</string>
     <string name="practice_back_to">Volver a %1$s</string>
     <string name="practice_progress">%1$d de %2$d</string>
+    <string name="practice_reminders">Recordatorios de práctica</string>
+    <string name="practice_remind_me">Recordarme</string>
+    <string name="practice_reminder_at">Recordatorio a las %1$s</string>
+    <string name="practice_reminder_blocked">Las notificaciones están desactivadas</string>
+    <string name="practice_reminder_exact">Permitir la hora exacta</string>
+    <string name="practice_reminder_late">Sin eso, un recordatorio puede llegar hasta una hora tarde</string>
+    <string name="practice_reminder_songs">%1$s y %2$d más</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="one">%1$d tarjeta para practicar</item>
+        <item quantity="many">%1$d tarjetas para practicar</item>
+        <item quantity="other">%1$d tarjetas para practicar</item>
+    </plurals>
     <string name="song_tab_meaning">Significado</string>
     <string name="song_tab_words">Palabras</string>
     <string name="song_tab_artist">Artista</string>

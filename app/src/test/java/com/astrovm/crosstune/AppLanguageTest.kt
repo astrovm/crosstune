@@ -40,6 +40,19 @@ class AppLanguageTest {
     }
 
     @Test
+    fun wordsAreInThePickedLanguageOnEveryVersionAndTheContextItselfWhenNoneIsPicked() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        assertSame(app, AppLanguage.words(app))
+        assertSame(app, AppLanguage.words(app, olderAndroid))
+
+        AppLanguage.set(activity, "ja", olderAndroid)
+        assertEquals("ja", AppLanguage.words(app, olderAndroid).resources.configuration.locales[0].language)
+        AppLanguage.set(activity, "ja")
+        assertEquals("ja", AppLanguage.words(app).resources.configuration.locales[0].language)
+        AppLanguage.set(activity, null)
+    }
+
+    @Test
     fun newerAndroidAppliesTheLanguageItself() {
         assertSame(app, AppLanguage.wrap(app))
     }
