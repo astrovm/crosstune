@@ -893,6 +893,9 @@ internal class LyricsFinder(
         if (own != null && triedNetEase(fromNetEase(metadata, lengthMs, timeoutMs))) return answers.last()
         // Letras's words are untimed, so they can't better untimed ones.
         if (!untimed && tried(fromLetras(metadata, timeoutMs))) return answers.last()
+        // Genius, last: it keeps words the others don't, mostly from newer rap and Latin pop, often under the song's own names.
+        if (!untimed && tried(fromGenius(metadata, timeoutMs))) return answers.last()
+        if (!untimed && own != null && tried(fromGenius(own, timeoutMs))) return answers.last()
         // None better: the best timed of what was found, the first among equals, e.g. words timed
         // badly over untimed ones, as they still mostly follow the song and can be put in time by hand.
         val best = answers.reduce(::better)
@@ -1199,6 +1202,57 @@ internal class LyricsFinder(
         }
     } ?: Lyrics.Unavailable
 
+    /**
+     * Genius's words for the song, from the page its own search points to. They come untimed. Its
+     * search answers a request that looks like a browser's, and sorts songs from the many pages of
+     * lists, scripts and books it keeps too, so a result has to be the song by title and artist.
+     * A song it marks as instrumental has none to find.
+     */
+    private suspend fun fromGenius(metadata: MusicMetadata, timeoutMs: Long): Lyrics = withTimeoutOrNull(timeoutMs) {
+        try {
+            val search = GENIUS_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("q", "${metadata.title} ${metadata.artist}").build()
+            val sections = JSONObject(browserPage(search.toString())).optJSONObject("response")?.optJSONArray("sections")
+                ?: return@withTimeoutOrNull Lyrics.Unavailable
+            val credit = SongNames.withGuests(metadata.artist, metadata.title)
+            val song = sections.objects().flatMap { it.optJSONArray("hits").objects() }
+                .filter { it.optString("type") == "song" }.mapNotNull { it.optJSONObject("result") }
+                .firstOrNull { result ->
+                    SongNames.sameVersion(metadata.title, result.optString("title")) && listOf("artist_names", "primary_artist_names").any {
+                        result.optString(it).let { artist -> artist.isNotEmpty() && (SongNames.sameArtist(artist, metadata.artist) || SongNames.artistInside(artist, credit)) }
+                    }
+                } ?: return@withTimeoutOrNull Lyrics.None
+            if (song.optBoolean("instrumental")) return@withTimeoutOrNull Lyrics.Instrumental
+            val page = GENIUS_URL.toHttpUrl().newBuilder().encodedPath(song.optString("path").ifEmpty { return@withTimeoutOrNull Lyrics.None }).build()
+            geniusWords(browserPage(page.toString()), song.optString("title"))?.let { Lyrics.Found(it, source = GENIUS) } ?: Lyrics.None
+        } catch (_: IOException) {
+            Lyrics.Unavailable
+        } catch (_: JSONException) {
+            Lyrics.Unavailable
+        }
+    } ?: Lyrics.Unavailable
+
+    /**
+     * The words in a Genius page's boxes of lyrics, without the name it opens them with, "Song Lyrics",
+     * and the verse tags between, "[Chorus: Artist]". Null when there are none.
+     */
+    private fun geniusWords(page: String, title: String): String? {
+        val boxes = geniusBox.findAll(page).map { start ->
+            var depth = 0
+            val end = letrasBox.findAll(page, start.range.first).firstOrNull { tag ->
+                depth += if (tag.value == "</div>") -1 else 1
+                depth == 0
+            }
+            page.substring(start.range.last + 1, end?.range?.first ?: page.length)
+        }.filter { it.isNotBlank() }.joinToString("\n")
+        val text = ChordFinder.unescape(boxes.replace(letrasBreak, "\n").replace(letrasTag, ""))
+        val lines = text.lines().map { it.trim() }
+        // The first box opens with the song's name and "Lyrics", and maybe how the page calls it.
+        val opening = lines.firstOrNull()?.takeIf { it.startsWith(title) && " Lyrics" in it }
+        val words = lines.drop(if (opening != null) 1 else 0).filterNot { geniusTag.matches(it) }
+            .joinToString("\n").replace(Regex("""\n{3,}"""), "\n\n").trim()
+        return words.ifEmpty { null }
+    }
+
     /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
     private fun withoutAds(page: String): String {
         var text = page
@@ -1371,6 +1425,8 @@ internal class LyricsFinder(
         const val LETRAS_SEARCH_URL = "https://solr.sscdn.co/letras/m1/"
         const val LETRAS_INSTRUMENTAL = "instrumental-lyric"
         const val LETRAS_SONG = "2"
+        const val GENIUS_URL = "https://genius.com/"
+        const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
 
         // Where words came from, as reports name them.
         const val LRCLIB = "lrclib"
@@ -1391,12 +1447,15 @@ internal class LyricsFinder(
         const val YOUTUBE_MUSIC = "youtube_music"
         const val NETEASE = "netease"
         const val LETRAS = "letras"
+        const val GENIUS = "genius"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
         val letrasWords = Regex("""<div class="lyric-content[^"]*">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
 
         /** On a page with Letras's own translation beside the song, the song's words, after its name. */
         val letrasOriginal = Regex("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
         private val letrasBox = Regex("""<div\b|</div>""")
+        private val geniusBox = Regex("""<div\b[^>]*data-lyrics-container="true"[^>]*>""")
+        private val geniusTag = Regex("""\[[^\]]*]""")
 
         /** Someone credited on an Apple Music song page, and their roles. */
         private val credit = Regex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
