@@ -168,14 +168,25 @@ internal class PracticeCards(
             // it can't be moved, e.g. during an ad, asking again would only start it over.
             val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
             var opened = false
+            var cameBack = false
             val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null else {
                 // Spotify plays nothing asked of it by name, but its own link it starts at once, and it can
                 // be moved around in from there, on its free plan too.
                 opened = openedOnOwnLink(source, song, app)
                 val asked = !opened && asked(source, song, app) { link -> opened = source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link) }
-                (asked || opened) && withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) { ready() } != null
+                (asked || opened) && withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) {
+                    // Left once it plays, not once it can be moved around in: Spotify on the Samsung never offered a
+                    // seek, and the way back, a notice when Crosstune can't cover the app, waited the whole 12 s for it.
+                    if (opened) {
+                        while (latest?.clock?.playing != true) delay(SOUND_CHECK_MS)
+                        source.comesBack()
+                        cameBack = true
+                    }
+                    ready()
+                } != null
             }
-            if (opened) source.comesBack()
+            // Never playing, it's left all the same, so the card isn't stuck behind it.
+            if (opened && !cameBack) source.comesBack()
             if (there) block { latest } else null
         } finally {
             following.cancel()

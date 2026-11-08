@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.ActivityOptions
 import android.app.Application
 import android.app.KeyguardManager
 import android.app.Notification
@@ -1289,28 +1290,61 @@ class PlaybackTest {
         val back = shadowOf(notice.notification.contentIntent).savedIntent
         assertEquals(MainActivity::class.java.name, back.component?.className)
         assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT, back.flags and (Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        assertEquals(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS, returnNoticeMode(notice.notification.contentIntent!!))
         app.dismissReturnToCard()
         assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
+    }
+
+    /** Android 14 is the first release that records who may start an activity from a notification. */
+    @Test
+    @Config(sdk = [34])
+    fun theWayBackNoticeMayStartTheCardFromAndroidFourteen() {
+        ShadowSettings.setCanDrawOverlays(false)
+        playback.comesBack()
+        val notice = app.getSystemService(NotificationManager::class.java).activeNotifications.single()
+        assertEquals(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS, returnNoticeMode(notice.notification.contentIntent!!))
     }
 
     @Test
     fun theWayBackIsAskedOnceUntilNotificationsAreAllowed() {
         ShadowSettings.setCanDrawOverlays(false)
         val asked = mutableListOf<String>()
-        app.askToReturnToCard { asked += it }
+        assertTrue(app.askToReturnToCard { asked += it })
         assertEquals(listOf(android.Manifest.permission.POST_NOTIFICATIONS), asked)
         // Asked already, a later card doesn't ask again.
-        app.askToReturnToCard { asked += it }
+        assertFalse(app.askToReturnToCard { asked += it })
         assertEquals(1, asked.size)
         // Allowed, or able to show over other apps, there's nothing to ask.
         app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().remove(KEY_ASKED_RETURN).commit()
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        app.askToReturnToCard { asked += it }
+        assertFalse(app.askToReturnToCard { asked += it })
         shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         ShadowSettings.setCanDrawOverlays(true)
-        app.askToReturnToCard { asked += it }
+        assertFalse(app.askToReturnToCard { asked += it })
         assertEquals(1, asked.size)
     }
+
+    /** Before Android 13 a notification needs no permission, so nothing is asked. */
+    @Test
+    @Config(sdk = [32])
+    fun beforeAndroidThirteenTheWayBackIsNotAsked() {
+        ShadowSettings.setCanDrawOverlays(false)
+        assertFalse(app.askToReturnToCard { error("asked") })
+    }
+
+    /** Android 13 is the first release that can ask, and it does when notifications are still off. */
+    @Test
+    @Config(sdk = [33])
+    fun onAndroidThirteenTheWayBackIsAskedWhenNotificationsAreOff() {
+        ShadowSettings.setCanDrawOverlays(false)
+        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().remove(KEY_ASKED_RETURN).commit()
+        val asked = mutableListOf<String>()
+        assertTrue(app.askToReturnToCard { asked += it })
+        assertEquals(listOf(android.Manifest.permission.POST_NOTIFICATIONS), asked)
+    }
+
+    private fun returnNoticeMode(open: android.app.PendingIntent) =
+        shadowOf(open).options?.getInt("android.activity.pendingIntentCreatorBackgroundActivityStartMode", -1) ?: -1
 
     @Test
     fun comingBackOverOtherAppsDoesntPostThatNotification() {

@@ -300,7 +300,7 @@ val songCheck = tasks.register<Test>("songCheck") {
 // before it was all there, and so ran on Android's empty stubs instead. One configuration each, as
 // Gradle would otherwise keep only the newest of one library's versions.
 val robolectricRuntimes = files(
-    listOf("9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "16-robolectric-13921718-i7").map {
+    listOf("9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "14-robolectric-10818077-i7", "16-robolectric-13921718-i7").map {
         configurations.detachedConfiguration(dependencies.create("org.robolectric:android-all-instrumented:$it")).apply { isTransitive = false }
     }
 )
