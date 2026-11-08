@@ -2,7 +2,7 @@
 """Hold a shared test device so agents take turns.
 
   python3 scripts/devicelock.py take DEVICE --who TEXT --minutes N
-  python3 scripts/devicelock.py release DEVICE [--force]
+  python3 scripts/devicelock.py release DEVICE [--who TEXT] [--force]
   python3 scripts/devicelock.py who [DEVICE]
 
 DEVICE is samsung or crosstune-phone. The locks are samsung.lock and
@@ -14,8 +14,9 @@ a plain flock on the same file waits too. who reads the holder from that
 lock. The name and the times live beside it, and writing over the lock file
 does not change who holds it. Taking a lock this --who already holds, while
 nobody is waiting, returns at once and prints that holder pid. release ends
-the holder this session took. --force ends someone else's and prints who
-that was. The holder lets go after N minutes (a fraction is fine).
+the holder this session took, or, with --who, the one taken with that name:
+an agent's shell calls each run in their own session. --force ends someone
+else's and prints who that was. The holder lets go after N minutes (a fraction is fine).
 """
 import argparse
 import fcntl
@@ -568,7 +569,7 @@ def hold(device, who, minutes, session, ready_fd):
             os.close(ready_fd)
 
 
-def release(device, force):
+def release(device, force, name=None):
     device = require_device(device)
     pid = kernel_holder(device)
     if pid is None or not pid_alive(pid):
@@ -578,9 +579,10 @@ def release(device, force):
     if not is_our_holder(argv, device):
         die(f"{device} is held by pid {pid}, which is not a devicelock holder. Not ending it.")
     who = flag(argv, "--who") or "unknown"
-    if not ours(pid) and not force:
-        die(f"{device} is held by {who} (pid {pid}), not this session. Pass --force to end it.")
-    if force and not ours(pid):
+    mine = ours(pid) or (name is not None and name.strip() == who)
+    if not mine and not force:
+        die(f"{device} is held by {who} (pid {pid}), not this session. Pass --who with its name, or --force to end it.")
+    if force and not mine:
         print(f"{device} was held by {who}")
     if holder_alive(pid, device):
         try:
@@ -619,6 +621,7 @@ def main():
     take_cmd.add_argument("--minutes", required=True, type=float)
     release_cmd = commands.add_parser("release", help="end this session's hold")
     release_cmd.add_argument("device")
+    release_cmd.add_argument("--who", help="the name it was taken with, to release it from another shell session")
     release_cmd.add_argument("--force", action="store_true", help="end someone else's hold and print who it was")
     who_cmd = commands.add_parser("who", help="show who holds the device and who is waiting")
     who_cmd.add_argument("device", nargs="?")
@@ -632,7 +635,7 @@ def main():
     if args.command == "take":
         take(args.device, args.who, args.minutes)
     elif args.command == "release":
-        release(args.device, args.force)
+        release(args.device, args.force, args.who)
     elif args.command == "who":
         who(args.device)
     else:
