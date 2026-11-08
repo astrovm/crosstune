@@ -145,8 +145,8 @@ private val year = Regex("""(?:19|20)\d\d""")
 /** A credit NetEase opens some songs with, a short label and who: "Producers: …", "Writers：…", "母帯工程師：…". */
 private val netEaseOpeningCredit = Regex("""^([^:：]{1,40}?)\s*[:：]\s*\S""")
 
-/** A credit NetEase closes some songs with, a part and who played it: "Bass Guitar : John Deacon". */
-private val netEaseClosingCredit = Regex("""^([^:：]{1,60})\s[:：]\s+\S""")
+/** A credit NetEase closes some songs with, a part and who played it: "Bass Guitar : John Deacon", "贝斯：Someone". */
+private val netEaseClosingCredit = Regex("""^([^:：]{1,60})\s*[:：]\s*\S""")
 
 /** Where it was made, or who published it, which can come among those credits: "Recorded at Rockfield Studio, …". */
 private val netEaseStudio = Regex("""^(?:(?:Recorded|Mixed|Mastered)\b[^:：]*\bat|Published by)\b""", RegexOption.IGNORE_CASE)
@@ -283,9 +283,27 @@ private val webAddress = Regex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/"
 /** A line of the header some LRCLIB answers open with: "Artist: …", "Album: …", "Title: …". */
 private val namesHeader = Regex("""(?:artist|album|title)\s*:.*""", RegexOption.IGNORE_CASE)
 
-/** The lines without all NetEase's contributors add to a song's words: credits, a heading, notes and parts' names. */
+/** Brackets a lyrics line uses, in matching pairs: (), [], （）, 【】. */
+private const val INSTRUMENTAL_OPEN = "([（【"
+private const val INSTRUMENTAL_CLOSE = ")]）】"
+
+/**
+ * A line that only marks an instrumental stretch, in either case, optionally inside one pair of
+ * brackets: "[Instrumental]", "（instrumental）". A sung line that merely says the word stays.
+ */
+private fun isInstrumentalMark(line: String): Boolean {
+    var text = line.trim()
+    if (text.length >= 2) {
+        val open = INSTRUMENTAL_OPEN.indexOf(text.first())
+        val close = INSTRUMENTAL_CLOSE.indexOf(text.last())
+        if (open >= 0 && open == close) text = text.substring(1, text.lastIndex).trim()
+    }
+    return text.equals("instrumental", ignoreCase = true)
+}
+
+/** The lines without all NetEase's contributors add to a song's words: credits, a heading, notes, parts' names and an instrumental mark. */
 private fun <T> List<T>.withoutNetEaseExtras(song: MusicMetadata, text: (T) -> String): List<T> =
-    filterNot { netEaseCredit.containsMatchIn(text(it)) }.withoutOpeningCredits(song, text).withoutClosingCredits(text).withoutClosingHeading(song, text).withoutNotes(text)
+    filterNot { netEaseCredit.containsMatchIn(text(it)) || isInstrumentalMark(text(it)) }.withoutOpeningCredits(song, text).withoutClosingCredits(text).withoutClosingHeading(song, text).withoutNotes(text)
 
 /** Words without the "Artist: … / Album: … / Title: …" some LRCLIB answers open with, all an instrumental's may have. */
 private fun withoutNamesHeader(words: String): String {
@@ -428,7 +446,7 @@ private fun <T> List<T>.withoutClosingCredits(text: (T) -> String): List<T> {
         val part = netEaseClosingCredit.find(line)?.groupValues?.get(1)?.trim()
         when {
             line.isEmpty() -> continue
-            part != null && !sungPart.matches(part) -> credits++
+            part != null && isClosingCreditLabel(part) -> credits++
             netEaseStudio.containsMatchIn(line) -> Unit
             else -> break
         }
@@ -436,6 +454,13 @@ private fun <T> List<T>.withoutClosingCredits(text: (T) -> String): List<T> {
     }
     return if (credits >= 2) take(start) else this
 }
+
+/**
+ * Whether [label] names who played, rather than a time or who sings the line. A time ends on a
+ * digit, as "7" in "7:30" and "When it's 11" in "When it's 11:30".
+ */
+private fun isClosingCreditLabel(label: String): Boolean =
+    label.isNotEmpty() && label.any(Char::isLetter) && !label.last().isDigit() && !sungPart.matches(label)
 
 /**
  * A song's words, from LRCLIB, which asks for no account and no key. Its answers are
@@ -509,11 +534,11 @@ internal class LyricsFinder(
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
-        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asJapanWrites(cleaned(words, metadata)), final = !provisional) } }
+        cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) } }
         val lookup = Answers()
         val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
-        if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asJapanWrites(cleaned(it, metadata)), final = true) }
+        if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true) }
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
         // they're the recording's own, which no copy found elsewhere times better.
         cache?.let { cache ->
@@ -543,6 +568,17 @@ internal class LyricsFinder(
             cache.save()
         }
         return asJapanWrites(answer)
+    }
+
+    /**
+     * [found] as it would be shown now. A sheet kept when a mark such as "[Instrumental]" was still
+     * taken for words, and that mark is all it holds, is an instrumental: looking it up again can't
+     * say more, and a blank sheet would show nothing.
+     */
+    private fun asKept(found: Lyrics.Found, song: MusicMetadata): Lyrics {
+        val clean = asJapanWrites(cleaned(found, song)) as Lyrics.Found
+        val blank = clean.words.isBlank() && clean.lines.all { it.text.isBlank() }
+        return if (blank && found.words.lineSequence().any(::isInstrumentalMark)) Lyrics.Instrumental else clean
     }
 
     /**
@@ -1158,8 +1194,7 @@ internal class LyricsFinder(
             // It flags an instrumental itself, and its note, "Pure music, please enjoy", takes the words' place. Its
             // credits go on to name the players, so they're not looked at once it says so.
             if (answer?.optBoolean("pureMusic") == true || lrc.contains(NETEASE_INSTRUMENTAL)) return@withTimeoutOrNull Lyrics.Instrumental
-            // Words it keeps garbled are none, so another site's are looked for.
-            (netEaseWordByWord(byWord, metadata) ?: netEaseWords(lrc, metadata))?.takeUnless { readAsGbk(it.words) }?.copy(lengthMs = recordingMs) ?: Lyrics.None
+            netEaseRead(lrc, byWord, metadata, recordingMs)
         } catch (_: IOException) {
             Lyrics.Unavailable
         } catch (_: JSONException) {
@@ -1299,6 +1334,26 @@ internal class LyricsFinder(
         val lines = SyncedLyrics.parseWordByWord(yrc).withoutNetEaseExtras(song) { it.text }.withoutOpeningMoments()
         if (lines.isEmpty()) return null
         return Lyrics.Found(lines.joinToString("\n") { it.text }, lines, source = NETEASE)
+    }
+
+    /**
+     * NetEase's words. A mark such as "[Instrumental]" and nothing sung is an instrumental. Words it
+     * keeps garbled are none, so another site's are looked for, even when a mark is among them.
+     */
+    private fun netEaseRead(lrc: String, yrc: String, song: MusicMetadata, recordingMs: Long?): Lyrics {
+        val words = netEaseWordByWord(yrc, song) ?: netEaseWords(lrc, song)
+        return when {
+            words != null && !readAsGbk(words.words) -> words.copy(lengthMs = recordingMs)
+            words == null && hasInstrumentalMark(lrc, yrc) -> Lyrics.Instrumental
+            else -> Lyrics.None
+        }
+    }
+
+    /** Whether [lrc], or NetEase's word-by-word [yrc], has a line that only marks an instrumental. */
+    private fun hasInstrumentalMark(lrc: String, yrc: String): Boolean {
+        val timed = SyncedLyrics.parse(lrc).map { it.text }
+        val lines = if (timed.isNotEmpty()) timed else lrc.lines()
+        return (lines + SyncedLyrics.parseWordByWord(yrc).map { it.text }).any(::isInstrumentalMark)
     }
 
     /** NetEase's words, without the credits, such as "作词 : …", it puts first or last; null for none. */
