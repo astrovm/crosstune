@@ -70,10 +70,15 @@ class ChordWikiTest {
         assertThrows("didn't finish") { chordWikiLook(seen(text = "しばらくお待ちください"), timedOut = true) }
         val links = "川の道 - 歩く人\thttps://ja.chordwiki.org/wiki/kawa"
         assertEquals(links, (chordWikiLook(seen(links = links), timedOut = false) as ChordWikiLook.Ready).body)
-        val long = "あ".repeat(201)
-        assertEquals("", (chordWikiLook(seen(text = long), timedOut = false) as ChordWikiLook.Ready).body)
-        // 200 words is still a page that hasn't arrived. One more, and it's the page.
-        assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(title = "", text = "あ".repeat(200)), timedOut = false))
+        // The search says so when nothing matches, and that is the page, however much else is on it.
+        val nothing = "コード譜検索\n検索条件に一致するものは見つかりませんでした。\n人気の検索ワード: ${"あ".repeat(100)}"
+        assertEquals("", (chordWikiLook(seen(text = nothing), timedOut = false) as ChordWikiLook.Ready).body)
+        // The menu's own links are on the page before the search has answered. They are not an answer.
+        val menu = "[トップ]\thttps://ja.chordwiki.org/\n[閲覧履歴]\thttps://ja.chordwiki.org/wiki.cgi?c=history"
+        assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(links = menu, text = "[トップ]\n[閲覧履歴]"), timedOut = false))
+        assertThrows("empty") { chordWikiLook(seen(links = menu, text = "[トップ]\n[閲覧履歴]"), timedOut = true) }
+        // A page with words and no answer yet is waited on too, not taken for the answer.
+        assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(title = "", text = "あ".repeat(300)), timedOut = false))
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(text = "short"), timedOut = false))
         assertThrows("empty") { chordWikiLook(seen(text = "short"), timedOut = true) }
         assertEquals(ChordWikiCheck.NONE, chordWikiCheck("川の道", "川の道を歩いていく"))
@@ -92,7 +97,7 @@ class ChordWikiTest {
             川の道 - 他の人	https://ja.chordwiki.org/wiki/other
             川の道 - 歩く人	https://ja.chordwiki.org/wiki/kawa
         """.trimIndent()
-        val hits = chordWikiHits(lines)
+        val hits = chordWikiHits("[閲覧履歴]\thttps://ja.chordwiki.org/wiki.cgi?c=history\n$lines")
         assertEquals(listOf("川の道", "海の歌", "川の道", "川の道"), hits.map { it.title })
         assertEquals("歩く人", hits.last().artist)
         assertEquals("https://ja.chordwiki.org/wiki/kawa", chordWikiBest(hits, "川の道", "歩く人", "Kawa")?.href)

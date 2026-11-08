@@ -277,7 +277,9 @@ internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLoo
         val why = if (check == ChordWikiCheck.INTERACTIVE) "ChordWiki asked for a check a person has to click" else "ChordWiki's check didn't finish"
         throw IOException(why)
     }
-    if (seen.links.isNotEmpty() || seen.title.length + seen.text.length > 200) return ChordWikiLook.Ready(seen.links)
+    // The menu's links are there before the search has answered, and its words are too. Only a song's
+    // link, or the search saying nothing matched, is the answer.
+    if (chordWikiHits(seen.links).isNotEmpty() || NO_MATCH in seen.text) return ChordWikiLook.Ready(seen.links)
     if (timedOut) throw IOException("ChordWiki's page was empty")
     return ChordWikiLook.Waiting
 }
@@ -322,7 +324,8 @@ private fun chordWikiHitLine(line: String): ChordWikiHit? {
 
 private fun chordWikiHit(text: String, href: String): ChordWikiHit? {
     val link = href.trim()
-    if ("/wiki/" !in link && "wiki.cgi" !in link) return null
+    // A song's page, not the menu's own "wiki.cgi?c=history".
+    if ("/wiki/" !in link && !("wiki.cgi" in link && "t=" in link)) return null
     val title = text.substringBefore(" - ").trim()
     if (title.isEmpty()) return null
     return ChordWikiHit(title, text.substringAfter(" - ", "").trim(), link)
@@ -330,6 +333,9 @@ private fun chordWikiHit(text: String, href: String): ChordWikiHit? {
 
 private val ANCHOR = Regex("""<a\b[^>]*\bhref="([^"]*)"[^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
 private val ANCHOR_TAGS = Regex("<[^>]+>")
+
+/** What ChordWiki's search says when no song matches. */
+private const val NO_MATCH = "一致するものは見つかりませんでした"
 
 private val INTERACTIVE = listOf(
     "verify you are human",

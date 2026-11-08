@@ -255,7 +255,7 @@ internal class ChordFinder(
             chordWikiPause()
             val hits = chordWikiHits(pages.page(chordWikiSearchUrl(query)))
             val best = chordWikiBest(hits, known, song.artist, song.title, more)
-            note("wiki search hits=${hits.size} best=${best?.title ?: "none"}")
+            note("wiki search q=$query hits=${hits.joinToString(" | ") { "${it.title} / ${it.artist}" }} best=${best?.title ?: "none"}")
             if (best == null) continue
             chordWikiPause()
             return chordWikiSheet(pages, best.title)?.takeIf(fits)
