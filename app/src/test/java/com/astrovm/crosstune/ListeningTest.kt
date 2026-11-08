@@ -17,6 +17,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -201,6 +202,12 @@ class ListeningTest {
 
     private fun shazamRequests() = fake.requestedUrls.count { it.startsWith("https://amp.shazam.com/") }
 
+    /** Closes the words, not the offer to follow the music app above them, which has a Dismiss of its own. */
+    private fun closeWords() {
+        composeRule.onNode(hasContentDescription(string(R.string.dismiss_button)) and !hasAnySibling(hasText(string(R.string.follow_turn_on)))).performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun click(text: String) {
         composeRule.onNode(hasText(text) or hasContentDescription(text)).performClick()
         composeRule.waitForIdle()
@@ -326,7 +333,7 @@ class ListeningTest {
         // Its player opens, with the song's card made under it for its link tools.
         waitForDescription(string(R.string.more_button))
         assertFalse(barShown())
-        click(string(R.string.dismiss_button))
+        closeWords()
         // The card shows the song that plays, and the bar stays, a swipe from its player.
         waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(barShown())
@@ -569,7 +576,7 @@ class ListeningTest {
         click("Iris")
         waitForDescription(string(R.string.player_playing_in, "YouTube Music"))
         assertFalse(barShown())
-        click(string(R.string.dismiss_button))
+        closeWords()
         // Once the song the tap looked up is found, which happens off the main thread.
         waitUntil(TIMEOUT_MS) { barShown() }
         // The app letting it go takes the bar away.
@@ -1801,7 +1808,7 @@ class ListeningTest {
         val hearing = FakeHearing()
         demoWords(hearing)
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_stop_listening)) }
-        click(string(R.string.dismiss_button))
+        closeWords()
         waitForText(string(R.string.lyrics_button))
         // The music moves on meanwhile; the words opened again are still the song shown, and don't listen.
         hearing.song("Other", 1.0)
@@ -2871,7 +2878,7 @@ class ListeningTest {
         hearing.next.trySend(Heard.Failed(AppError.MICROPHONE))
         waitUntil(TIMEOUT_MS) { described(string(R.string.lyrics_listen_along)) }
         // The words stay; closed, the song says why it stopped.
-        click(string(R.string.dismiss_button))
+        closeWords()
         waitForText(string(R.string.error_microphone))
     }
 
