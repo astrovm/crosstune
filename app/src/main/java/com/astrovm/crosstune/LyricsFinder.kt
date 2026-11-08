@@ -1432,7 +1432,7 @@ internal class LyricsFinder(
          * service had words for: every one in these genres was an instrumental, a piano piece, a quartet, an
          * organ trio or rain. Rap, Latin and Pop ones, which do, are never among them.
          */
-        val WORDLESS_GENRES = setOf("Classical", "New Age", "Jazz", "Latin Jazz", "Bop")
+        @JvmField val WORDLESS_GENRES = setOf("Classical", "New Age", "Jazz", "Latin Jazz", "Bop")
         const val GENIUS_URL = "https://genius.com/"
         const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
 
