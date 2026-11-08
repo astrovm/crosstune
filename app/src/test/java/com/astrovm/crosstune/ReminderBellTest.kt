@@ -9,6 +9,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Looper
 import android.provider.Settings
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasContentDescription
@@ -23,6 +25,9 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
+import com.astrovm.crosstune.ui.theme.LightColorScheme
+import com.astrovm.crosstune.ui.theme.Palette
+import com.astrovm.crosstune.ui.theme.withAccent
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -464,6 +469,57 @@ class ReminderBellTest {
         assertFalse(model().uiState.reminder.on)
         assertTrue(described(remindMe))
         assertNull(alarms.peekNextScheduledAlarm())
+    }
+
+    /** The bell's look, by its icon and the color it's drawn in, as it's on the screen now. */
+    private fun look(): Pair<Int, Color> {
+        val config = composeRule.onNode(SemanticsMatcher.keyIsDefined(ReminderIcon)).fetchSemanticsNode().config
+        return config[ReminderIcon] to config[ReminderTint]
+    }
+
+    /** The app's colors, in a look the test sets so they don't depend on the wallpaper or the hour. */
+    private val colors = LightColorScheme.withAccent(Palette.OCEAN.light)
+
+    private fun inTheLook() {
+        prefs().edit().putString("theme", "LIGHT").putString("palette", "OCEAN").commit()
+    }
+
+    /** Off, on and not allowed by Android each look their own, with the screen's bell wherever it is. */
+    private fun assertTheThreeLooks() {
+        assertEquals(R.drawable.ic_notifications to colors.onSurfaceVariant, look())
+        click(remindMe)
+        assertEquals(R.drawable.ic_notifications_on to colors.primary, look())
+        allowed(false)
+        controller?.pause()?.resume()
+        waitUntil { shown(blocked) || described(blocked) }
+        assertEquals(R.drawable.ic_notifications_off to colors.error, look())
+    }
+
+    @Test
+    fun theBellOnTheEndOfASessionLooksOffOnAndNotAllowed() {
+        inTheLook()
+        launch()
+        finishASession()
+        assertTheThreeLooks()
+    }
+
+    @Test
+    fun theBellOnTheListLooksOffOnAndNotAllowed() {
+        inTheLook()
+        launch()
+        finishASession()
+        backToTheList()
+        assertTheThreeLooks()
+    }
+
+    /** The one built for the real app, which tests otherwise stand in for, arms a real alarm. */
+    @Test
+    fun theRealRemindersTheAppBuildsSetAnAlarm() {
+        val reminders = realReminders(app)
+        reminders.sessionDone()
+        reminders.turn(true)
+        assertTrue(reminders.state.on)
+        assertNotNull(alarms.peekNextScheduledAlarm())
     }
 
     @Test

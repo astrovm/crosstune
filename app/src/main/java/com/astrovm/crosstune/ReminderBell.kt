@@ -22,8 +22,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import java.util.Calendar
 
@@ -35,6 +38,12 @@ internal fun reminderTime(context: Context, minute: Int): String {
     }
     return DateFormat.getTimeFormat(context).format(at.time)
 }
+
+/** The icon the bell draws, for tests to see the look it shows: off, on and not allowed each have their own. */
+internal val ReminderIcon = SemanticsPropertyKey<Int>("ReminderIcon")
+
+/** The color the bell draws in, for tests to see the look it shows. */
+internal val ReminderTint = SemanticsPropertyKey<Color>("ReminderTint")
 
 /**
  * The bell that asks for due cards to come back, once there's been a session to take its time from;
@@ -62,14 +71,18 @@ internal fun ReminderBell(state: UiState, actions: ScreenActions, labelled: Bool
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val onClick = { if (reminder.working) picking = true else actions.onReminderChange(true) }
+    val look = Modifier.semantics {
+        this[ReminderIcon] = icon
+        this[ReminderTint] = tint
+    }
     if (labelled) {
-        TextButton(onClick = onClick, colors = ButtonDefaults.textButtonColors(contentColor = tint)) {
+        TextButton(onClick = onClick, modifier = look, colors = ButtonDefaults.textButtonColors(contentColor = tint)) {
             AppIcon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(words)
         }
     } else {
-        IconButton(onClick = onClick) { AppIcon(icon, contentDescription = words, tint = tint) }
+        IconButton(onClick = onClick, modifier = look) { AppIcon(icon, contentDescription = words, tint = tint) }
     }
     if (picking) ReminderTimeDialog(minute, onPick = actions.onReminderTimeChange, onOff = { actions.onReminderChange(false) }, onDismiss = { picking = false })
 }
