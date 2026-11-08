@@ -154,27 +154,29 @@ internal class PracticeCards(
         soundJob?.cancel()
         soundJob = scope.launch {
             val song = MusicMetadata(line.title, line.artist)
-            if (line.app in cantMove || !inApp(source, song, line.app, onStuck = { following -> handOver(source, song, line, following) }) { app ->
-                val lead = if (app()?.video == true) line.leadMs else 0L
-                val start = (line.startMs ?: 0L) + lead
-                // A moment past where the words say it ends, so its last word isn't cut short.
-                val end = (line.endMs ?: 0L) + lead + MainViewModel.LINE_TAIL_MS
-                source.seekTo(song, start)
-                // Turned while the app got there, it plays now.
-                val now = play || uiState.practice?.turned == true
-                source.playPause(song, now)
-                if (!now) return@inApp setSound(line, LineSound.PLAYED)
-                setSound(line, LineSound.PLAYING)
-                // Once the app says it's there, it plays to the end of the line.
-                withTimeoutOrNull(SEEK_WAIT_MS) { while (app()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
-                withTimeoutOrNull(end - start + SEEK_WAIT_MS) { while ((app()?.clock?.positionAt(now()) ?: end) < end) delay(SOUND_CHECK_MS) }
-                source.playPause(song, false)
-                setSound(line, LineSound.PLAYED)
-            }) {
-                inYouTube(line, play)
-            }
+            if (line.app in cantMove || !inMusicApp(source, song, line, play)) inYouTube(line, play)
         }
     }
+
+    /** Has the music app play [line], moving to it first. False when it can't be moved there, which the player then makes up for. */
+    private suspend fun inMusicApp(source: PlaybackSource, song: MusicMetadata, line: SavedLine, play: Boolean): Boolean =
+        inApp(source, song, line.app, onStuck = { following -> handOver(source, song, line, following) }) { app ->
+            val lead = if (app()?.video == true) line.leadMs else 0L
+            val start = (line.startMs ?: 0L) + lead
+            // A moment past where the words say it ends, so its last word isn't cut short.
+            val end = (line.endMs ?: 0L) + lead + MainViewModel.LINE_TAIL_MS
+            source.seekTo(song, start)
+            // Turned while the app got there, it plays now.
+            val now = play || uiState.practice?.turned == true
+            source.playPause(song, now)
+            if (!now) return@inApp setSound(line, LineSound.PLAYED)
+            setSound(line, LineSound.PLAYING)
+            // Once the app says it's there, it plays to the end of the line.
+            withTimeoutOrNull(SEEK_WAIT_MS) { while (app()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
+            withTimeoutOrNull(end - start + SEEK_WAIT_MS) { while ((app()?.clock?.positionAt(now()) ?: end) < end) delay(SOUND_CHECK_MS) }
+            source.playPause(song, false)
+            setSound(line, LineSound.PLAYED)
+        }
 
     /** The music app [following] [song] won't move to the line, so it's paused, and not asked again, for the player to play it. */
     private fun handOver(source: PlaybackSource, song: MusicMetadata, line: SavedLine, following: Following?) {
@@ -251,26 +253,34 @@ internal class PracticeCards(
     private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, latest: () -> Following?, onStuck: (Following?) -> Unit): Boolean {
         var opened = openedOnOwnLink(source, song, app)
         val asked = !opened && asked(source, song, app) { link -> source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link).also { opened = it } }
+        val wait = MoveWait()
+        val canSeek = (asked || opened) && waitUntilItMoves(source, opened, latest, wait)
+        if (opened && !wait.cameBack) source.comesBack()
+        if (!canSeek && wait.playingSince != null) onStuck(latest())
+        return canSeek
+    }
+
+    /** What waiting for an app to offer a seek has seen: since when it plays, and whether Crosstune came back to the card. */
+    private class MoveWait {
         var playingSince: Long? = null
         var cameBack = false
-        val canSeek = (asked || opened) && withTimeoutOrNull(songLoadMs) {
+    }
+
+    /** Waits for the app to offer a seek; false when time runs out, or when it plays a moment and still doesn't, as it never will. */
+    private suspend fun waitUntilItMoves(source: PlaybackSource, opened: Boolean, latest: () -> Following?, wait: MoveWait): Boolean =
+        withTimeoutOrNull(songLoadMs) {
             while (latest()?.canSeek != true) {
-                // Playing for a moment and still not offering a seek, it never will: that's the free plan.
-                playingSince = if (opened && latest()?.clock?.playing == true) playingSince ?: now() else null
-                if (playingSince != null && !cameBack) {
-                    // It's playing, so there's nothing more to see there: back to the card, without waiting to be sure.
+                wait.playingSince = if (opened && latest()?.clock?.playing == true) wait.playingSince ?: now() else null
+                // It's playing, so there's nothing more to see there: back to the card, without waiting to be sure.
+                if (wait.playingSince != null && !wait.cameBack) {
                     source.comesBack()
-                    cameBack = true
+                    wait.cameBack = true
                 }
-                if (playingSince?.let { now() - it >= STUCK_AFTER_MS } == true) return@withTimeoutOrNull false
+                if (wait.playingSince?.let { now() - it >= STUCK_AFTER_MS } == true) return@withTimeoutOrNull false
                 delay(SOUND_CHECK_MS)
             }
             true
         } == true
-        if (opened && !cameBack) source.comesBack()
-        if (!canSeek && playingSince != null) onStuck(latest())
-        return canSeek
-    }
 
     /** Whether [app], one that plays nothing asked of it but each song's own link, was opened on [song]'s. */
     private suspend fun openedOnOwnLink(source: PlaybackSource, song: MusicMetadata, app: String?): Boolean {
