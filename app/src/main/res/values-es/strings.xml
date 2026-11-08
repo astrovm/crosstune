@@ -190,6 +190,7 @@
     <string name="lyrics_button">Letra</string>
     <string name="lyrics_loading">Buscando la letra…</string>
     <string name="lyrics_none">No se encontró la letra de esta canción.</string>
+    <string name="lyrics_instrumental">Esta canción no tiene letra.</string>
     <string name="lyrics_sync_service">Sincronización de letras de Crosstune</string>
     <string name="lyrics_follow_allow">Hacé que la letra siga la canción que suena en tu app de música.</string>
     <string name="lyrics_following_app">Siguiendo %1$s</string>

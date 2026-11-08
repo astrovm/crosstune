@@ -901,8 +901,10 @@ internal class LyricsFinder(
         val best = answers.reduce(::better)
         // LRCLIB, which has most songs' words, busy all along while the others had none: asked once
         // more, as they took a while. Still busy, it isn't known that the song has none.
-        if (first !is Lyrics.Unavailable || best !is Lyrics.None) return best
-        return fromLrclib(metadata, timeoutMs)
+        val last = if (first !is Lyrics.Unavailable || best !is Lyrics.None) best else fromLrclib(metadata, timeoutMs)
+        // No service has words for a song the store files as classical or jazz, and a note hears nothing sung either:
+        // it's an instrumental, which isn't a problem to report. Words anywhere still win, as above.
+        return if (last is Lyrics.None && recording?.genre in WORDLESS_GENRES) Lyrics.Instrumental else last
     }
 
     /**
@@ -1031,7 +1033,7 @@ internal class LyricsFinder(
     private fun fits(found: Lyrics.Found, metadata: MusicMetadata) = found.timedFor(metadata.lengthMs)
 
     /** A recording in the iTunes Store: its [id], how long it lasts, when that's given, and the [names] it's under there. */
-    private data class Recording(val id: Long, val lengthMs: Long?, val names: MusicMetadata)
+    private data class Recording(val id: Long, val lengthMs: Long?, val names: MusicMetadata, val genre: String = "")
 
     /**
      * The song in the US iTunes Store, which names it as music apps do, in Latin letters: by the
@@ -1057,7 +1059,7 @@ internal class LyricsFinder(
         } ?: songs.firstOrNull { asLong(it) != false }?.takeIf { namedAtHome(metadata, it.optLong("trackId")) }
         named?.let { song ->
             val names = metadata.copy(title = song.optString("trackName"), artist = song.optString("artistName"))
-            Recording(song.optLong("trackId"), song.optLong("trackTimeMillis").takeIf { it > 0 }, names).takeIf { it.id > 0 }
+            Recording(song.optLong("trackId"), song.optLong("trackTimeMillis").takeIf { it > 0 }, names, song.optString("primaryGenreName")).takeIf { it.id > 0 }
         }
     } catch (_: IOException) {
         null
@@ -1425,6 +1427,12 @@ internal class LyricsFinder(
         const val LETRAS_SEARCH_URL = "https://solr.sscdn.co/letras/m1/"
         const val LETRAS_INSTRUMENTAL = "instrumental-lyric"
         const val LETRAS_SONG = "2"
+        /**
+         * The iTunes Store genres whose songs measured as having no words, across the reports of songs no
+         * service had words for: every one in these genres was an instrumental, a piano piece, a quartet, an
+         * organ trio or rain. Rap, Latin and Pop ones, which do, are never among them.
+         */
+        val WORDLESS_GENRES = setOf("Classical", "New Age", "Jazz", "Latin Jazz", "Bop")
         const val GENIUS_URL = "https://genius.com/"
         const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
 

@@ -402,7 +402,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                         LyricsMessage {
                             Icon(
                                 painterResource(R.drawable.ic_music_note),
-                                contentDescription = stringResource(R.string.lyrics_none),
+                                contentDescription = stringResource(if (state.lyricsInstrumental) R.string.lyrics_instrumental else R.string.lyrics_none),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.size(72.dp)
                             )
