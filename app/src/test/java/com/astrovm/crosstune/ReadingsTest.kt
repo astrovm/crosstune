@@ -126,6 +126,73 @@ class ReadingsTest {
     }
 
     @Test
+    fun kanaInsideAWordKeepsItsReadingOffAndEachKanjiRunKeepsItsOwn() {
+        val (flying) = Readings.of(listOf("窓辺からやがて飛び立つ"), Script.JAPANESE)
+        assertEquals(
+            listOf(Ruby("窓辺", "まどべ"), Ruby("からやがて"), Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")),
+            flying.parts
+        )
+        assertEquals("まどべからやがてとびたつ", flying.reading)
+        val (handle) = Readings.of(listOf("取り扱い"), Script.JAPANESE)
+        assertEquals(listOf(Ruby("取", "と"), Ruby("り"), Ruby("扱", "あつか"), Ruby("い")), handle.parts)
+        val (think) = Readings.of(listOf("思い出す"), Script.JAPANESE)
+        assertEquals(listOf(Ruby("思", "おも"), Ruby("い"), Ruby("出", "だ"), Ruby("す")), think.parts)
+        // At the end, at the start and both: the same as before.
+        assertEquals(listOf(Ruby("食", "た"), Ruby("べる")), Readings.of(listOf("食べる"), Script.JAPANESE)[0].parts)
+        assertEquals(listOf(Ruby("お"), Ruby("茶", "ちゃ")), Readings.of(listOf("お茶"), Script.JAPANESE)[0].parts)
+        assertEquals(listOf(Ruby("お"), Ruby("願", "ねが"), Ruby("い")), Readings.of(listOf("お願い"), Script.JAPANESE)[0].parts)
+    }
+
+    @Test
+    fun aWordWithKanaInItIsSplitAroundThemWhereverItIsRead() {
+        assertEquals(listOf(Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), Readings.furigana("飛び立つ", "とびたつ"))
+        // Katakana kana count too, however the reading spells them.
+        assertEquals(listOf(Ruby("手", "て"), Ruby("ー"), Ruby("袋", "ぶくろ")), Readings.furigana("手ー袋", "てーぶくろ"))
+        assertEquals(listOf(Ruby("飛", "と"), Ruby("ビ"), Ruby("立", "た")), Readings.furigana("飛ビ立", "とびた"))
+        // A kana that is also in the reading is looked for again where the first try leaves nothing for the rest.
+        assertEquals(listOf(Ruby("切", "き"), Ruby("り"), Ruby("取", "と"), Ruby("り"), Ruby("線", "せん")), Readings.furigana("切り取り線", "きりとりせん"))
+        assertEquals(listOf(Ruby("気", "き"), Ruby("に"), Ruby("入", "い"), Ruby("る")), Readings.furigana("気に入る", "きにいる"))
+        // Kana that don't match its reading can't be told apart from the kanji: one reading over the lot.
+        assertEquals(listOf(Ruby("飛び立つ", "ゆく")), Readings.furigana("飛び立つ", "ゆく"))
+        assertEquals(listOf(Ruby("飛び立つ", "とべばたつ")), Readings.furigana("飛び立つ", "とべばたつ"))
+        // Kanji alone, or none, have nothing to split around.
+        assertEquals(listOf(Ruby("東京", "とうきょう")), Readings.furigana("東京", "とうきょう"))
+        assertEquals(listOf(Ruby("2人", "ふたり")), Readings.furigana("2人", "ふたり"))
+        assertEquals(listOf(Ruby("ひらがな")), Readings.furigana("ひらがな", "ひらがな"))
+    }
+
+    @Test
+    fun piecesKeptWithTheirKanaUnderAReadingAreSplitToo() {
+        val kept = listOf(Ruby("窓辺", "まどべ"), Ruby("からやがて"), Ruby("飛び立", "とびた"), Ruby("つ"))
+        assertEquals(
+            listOf(Ruby("窓辺", "まどべ"), Ruby("からやがて"), Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")),
+            Readings.rubied(kept)
+        )
+        val right = Readings.rubied(kept)
+        assertEquals(right, Readings.rubied(right))
+        // Chinese and kanji alone are as they were.
+        val pinyin = listOf(Ruby("我", "wǒ"), Ruby("爱", "ài"))
+        assertEquals(pinyin, Readings.rubied(pinyin))
+        assertEquals(listOf(Ruby("飛び立つ", "ゆく")), Readings.rubied(listOf(Ruby("飛び立つ", "ゆく"))))
+    }
+
+    @Test
+    fun aWordKeptWithItsReadingShowsItOverItsKanjiOnly() {
+        assertEquals(listOf(Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), Readings.rubyOf("飛び立つ", "とびたつ"))
+        assertEquals(listOf(Ruby("我爱", "wǒài")), Readings.rubyOf("我爱", "wǒài"))
+    }
+
+    @Test
+    fun aReadingFixedByHandReachesTheKanjiNextToKana() {
+        val (line) = Readings.of(listOf("飛び立つ"), Script.JAPANESE)
+        val fixed = Readings.corrected(listOf(line), listOf(ReadingFix(0, "飛", "とび")))[0]
+        assertEquals(listOf(Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), fixed.parts)
+        val other = Readings.corrected(listOf(line), listOf(ReadingFix(0, "飛", "ひ")))[0]
+        assertEquals(listOf(Ruby("飛", "ひ"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), other.parts)
+        assertEquals("ひびたつ", other.reading)
+    }
+
+    @Test
     fun wordsTheDictionaryDoesntKnowReadAsWritten() {
         val (line) = Readings.of(listOf("I love 東京"), Script.JAPANESE)
         assertEquals(Ruby("東京", "とうきょう"), line.parts.last())

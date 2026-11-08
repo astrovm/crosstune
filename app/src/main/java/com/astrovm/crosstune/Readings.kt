@@ -570,18 +570,47 @@ internal object Readings {
     /** What only spaces words in Japanese, a wide space and the ・ of アスファルト・レディ: a space in romaji. */
     private val LATIN_MARKS = mapOf('　' to ' ', '・' to ' ')
 
-    /** Kana over only the kanji of [surface]: the kana it starts or ends with read as written. */
-    private fun furigana(surface: String, kana: String): List<Ruby> {
-        val tail = surface.reversed().zip(kana.reversed()).takeWhile { (s, k) -> s == k && isKana(s) }.size
-        val head = surface.zip(kana).takeWhile { (s, k) -> s == k && isKana(s) }.size
-        val core = surface.substring(head, surface.length - tail)
-        val coreReading = kana.substring(head, kana.length - tail)
-        return listOfNotNull(
-            surface.take(head).takeIf { it.isNotEmpty() }?.let { Ruby(it) },
-            Ruby(core, coreReading),
-            surface.takeLast(tail).takeIf { it.isNotEmpty() }?.let { Ruby(it) }
-        )
+    /**
+     * [surface] with its [kana] over only the kanji, not over the kana written among them: と over 飛
+     * and た over 立 in 飛び立つ, nothing over び or つ, and over only 食 in 食べる or 茶 in お茶. A reading
+     * that doesn't spell those kana the way they're written stays whole over all of it.
+     */
+    fun furigana(surface: String, kana: String): List<Ruby> {
+        val runs = surface.fold(mutableListOf<String>()) { runs, c ->
+            if (runs.isNotEmpty() && isKana(runs.last().first()) == isKana(c)) runs[runs.lastIndex] += c else runs += c.toString()
+            runs
+        }
+        val reads = readingsOf(runs, 0, kana, hiragana(kana), 0) ?: return listOf(Ruby(surface, kana))
+        return runs.zip(reads) { run, reading -> Ruby(run, reading) }
     }
+
+    /**
+     * What each of [runs], from the [from]th, reads as in [kana] from [at] to its end: nothing for
+     * kana, which are as written, and for the rest what's left up to where the kana after it come
+     * again. [hira] is [kana] in hiragana, to compare katakana with.
+     */
+    private fun readingsOf(runs: List<String>, from: Int, kana: String, hira: String, at: Int): List<String?>? {
+        if (from == runs.size) return emptyList<String?>().takeIf { at == kana.length }
+        val run = runs[from]
+        if (isKana(run.first())) {
+            return if (hira.startsWith(hiragana(run), at)) readingsOf(runs, from + 1, kana, hira, at + run.length)?.let { listOf<String?>(null) + it } else null
+        }
+        // A kanji's reading is never empty, so the kana after it start at least one letter on.
+        return (at + 1..kana.length).firstNotNullOfOrNull { end ->
+            readingsOf(runs, from + 1, kana, hira, end)?.let { listOf<String?>(kana.substring(at, end)) + it }
+        }
+    }
+
+    /**
+     * [parts] with each reading moved off the kana written among its kanji, for those kept when it
+     * was laid over the whole of 飛び立: they show right without being read again.
+     */
+    fun rubied(parts: List<Ruby>): List<Ruby> = joined(
+        parts.flatMap { if (it.reading != null && it.text.any(::isKana)) furigana(it.text, it.reading) else listOf(it) }
+    )
+
+    /** The word [text] with its [reading] over its kanji only, as one line's parts. */
+    fun rubyOf(text: String, reading: String): List<Ruby> = rubied(listOf(Ruby(text, reading)))
 
     private var transliterator: Transliterator? = null
 

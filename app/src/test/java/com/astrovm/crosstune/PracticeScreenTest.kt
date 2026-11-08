@@ -1,9 +1,11 @@
 package com.astrovm.crosstune
 
 import android.content.Context
+import androidx.compose.ui.semantics.getOrElseNullable
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -139,6 +141,19 @@ class PracticeScreenTest {
     fun caughtUpWithNothingKeptHasNoOptionsToSet() {
         show(UiState(practice = Practice(), savedLines = listOf(SavedLine("x", title = "T", artist = "A"))))
         composeRule.onNodeWithContentDescription(string(R.string.practice_card_options)).assertDoesNotExist()
+    }
+
+    /** The readings drawn over the words of the card, front first, on a card showing them. */
+    private fun readingsOver(saved: SavedLine): List<String> {
+        val type = READ_IT.copy(options = CardOptions(front = CardSide(readings = true)))
+        show(UiState(practice = Practice(queue = listOf(saved), total = 1), cardTypes = listOf(type)))
+        return composeRule.onAllNodesWithText(saved.text, useUnmergedTree = true).fetchSemanticsNodes()
+            .firstNotNullOf { it.config.getOrElseNullable(ReadingsShown) { null } }
+    }
+
+    @Test
+    fun aWordKeptWithItsReadingShowsItOverItsKanjiOnly() {
+        assertEquals(listOf("と", "た"), readingsOver(SavedLine("飛び立つ", reading = "とびたつ", title = "T", artist = "A")))
     }
 
     private fun readingFields(onSave: (List<String>) -> Unit = {}, onCancel: () -> Unit = {}) {

@@ -311,10 +311,10 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     private fun JSONObject.text(name: String): String? = optString(name).takeIf { has(name) && it.isNotEmpty() }
 
-    /** The pieces of a line with their readings, as [text, reading or null] each. */
+    /** The pieces of a line with their readings, as [text, reading or null] each; kept over kana among kanji, they're moved off them. */
     private fun JSONObject.ruby(): List<Ruby>? = optJSONArray("ruby")?.let { array ->
         (0 until array.length()).mapNotNull { index -> array.optJSONArray(index)?.let { Ruby(it.optString(0), it.optString(1).takeIf { _ -> !it.isNull(1) }) } }
-    }?.takeIf { it.isNotEmpty() }
+    }?.takeIf { it.isNotEmpty() }?.let(Readings::rubied)
 
     /** The days it waits, or, saved before Anki's way, as long as its old box did. */
     private fun JSONObject.interval(): Int = if (has("interval")) optInt("interval") else optInt("box").let { if (it > 0) LEGACY_DAYS[minOf(it, LEGACY_DAYS.size) - 1] else 0 }
