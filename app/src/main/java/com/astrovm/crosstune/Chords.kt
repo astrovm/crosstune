@@ -10,7 +10,10 @@ internal data class Chord(val at: Int, val name: String)
 internal data class SheetLine(val text: String, val chords: List<Chord>)
 
 /** Where a song's chords were found. */
-internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA, CIFRA_CLUB, J_TOTAL }
+internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA, CIFRA_CLUB, J_TOTAL, CHORDWIKI }
+
+/** ChordWiki's sheet as its text names it: the lines, the fret a capo goes on, and the title and singer. */
+internal data class ChordWikiSong(val lines: List<SheetLine>, val capo: Int = 0, val title: String = "", val artist: String = "")
 
 /** A song's chords as a sheet has them, with the fret a capo goes on to play them, and where it's from. */
 internal data class ChordSheet(val lines: List<SheetLine>, val capo: Int = 0, val site: ChordSite, val url: String)
@@ -155,6 +158,160 @@ internal object ChordSheets {
     /** The first letter of [words] that starts at or after [column]. */
     private fun letterAt(words: String, column: Int): Int =
         (0..words.length).first { it == words.length || columns(words.substring(0, it)) >= column }
+
+    /** A ChordPro directive name, as `{title:…}` and `{start_of_tab}` write it. */
+    private val directiveName = Regex("""[a-z_][a-z0-9_]*""")
+
+    /** The longest editor on an edit page; a page with none is the ChordPro text itself. */
+    private val textarea = Regex("""<textarea\b[^>]*>(.*?)</textarea>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+
+    /** A chord token: a letter root, then only what a chord name uses, and not a whole word. */
+    private val chordToken = Regex("""[A-G][0-9A-Za-z#/()+\-]*""")
+    private val letterRun = Regex("""[A-Za-z]{4,}""")
+    private val chordWord = Regex("""maj|min|sus|add|dim|aug""")
+
+    /** `(4/4)` at the start of a line, which is not sung and not part of where a chord sits. */
+    private val timeSignature = Regex("""^\(\d+/\d+\)""")
+
+    /**
+     * Who sings it, after 歌 and a colon (half or full width). The credit that follows (作詞, 作曲,
+     * 編曲, 歌詞) is not their name. A subtitle with no such mark is the name itself.
+     */
+    private val sungBy = Regex("""歌[:：][\s　]*(.+?)(?=[\s　]*(?:作詞|作曲|編曲|歌詞)|$)""")
+
+    /** Title, singer and capo read so far, and whether a tab or grid is open. */
+    private data class ChordWikiHead(
+        val title: String = "",
+        val artist: String = "",
+        val capo: Int = 0,
+        val capoSet: Boolean = false,
+        val inTab: Boolean = false
+    )
+
+    /**
+     * ChordWiki's [source], ChordPro as its editor has it, or the edit page that holds that editor.
+     * A `#` ends a note, `{…}` is a direction rather than a line sung, and `[Am]` is the chord played
+     * on the letter it stands before. Bars and a leading time signature are not part of the words.
+     */
+    fun fromChordWiki(source: String): ChordWikiSong {
+        var head = ChordWikiHead()
+        val lines = mutableListOf<SheetLine>()
+        for (raw in chordWikiText(source).lineSequence()) {
+            val line = chordWikiBare(raw).trim()
+            val directive = chordWikiDirectiveLine(line)
+            if (directive != null) {
+                head = chordWikiApply(head, directive)
+                continue
+            }
+            if (head.inTab || line.isEmpty()) continue
+            chordWikiLine(line)?.let { lines += it }
+        }
+        return ChordWikiSong(lines, head.capo, head.title, head.artist)
+    }
+
+    /** `{…}` when [line] is one directive, braces included. */
+    private fun chordWikiDirectiveLine(line: String): Pair<String, String>? =
+        line.takeIf { it.startsWith("{") && it.endsWith("}") }?.let(::chordWikiDirective)
+
+    /** [head] after one directive. The first title, singer and capo stay; a bad capo leaves room for a later one. */
+    private fun chordWikiApply(head: ChordWikiHead, directive: Pair<String, String>): ChordWikiHead {
+        val (name, value) = directive
+        return when (name) {
+            "title", "t" -> if (head.title.isNotEmpty() || value.isEmpty()) head else head.copy(title = value)
+            "subtitle", "st" -> chordWikiNamed(head, value)
+            "capo" -> chordWikiCapoOn(head, value)
+            else -> head.copy(inTab = chordWikiInTab(name, head.inTab))
+        }
+    }
+
+    /** [head] with the singer [subtitle] names, when it doesn't already name one. */
+    private fun chordWikiNamed(head: ChordWikiHead, subtitle: String): ChordWikiHead {
+        if (head.artist.isNotEmpty()) return head
+        val artist = chordWikiArtist(subtitle)
+        return if (artist.isEmpty()) head else head.copy(artist = artist)
+    }
+
+    /** [head] with the fret [value] names, when no capo was set yet and [value] is one. */
+    private fun chordWikiCapoOn(head: ChordWikiHead, value: String): ChordWikiHead {
+        if (head.capoSet) return head
+        val capo = chordWikiCapo(value) ?: return head
+        return head.copy(capo = capo, capoSet = true)
+    }
+
+    /** The ChordPro text: the longest textarea on an edit page, or [page] when it has none. An empty editor stays empty. */
+    private fun chordWikiText(page: String): String {
+        val editors = textarea.findAll(page).map { it.groupValues[1] }.toList()
+        if (editors.isEmpty()) return page
+        return ChordFinder.unescape(editors.maxBy { it.length })
+    }
+
+    /** [line] up to a `#` that isn't inside a chord, so `[C#m]` stays and the note after it doesn't. */
+    private fun chordWikiBare(line: String): String = buildString {
+        var depth = 0
+        for (ch in line) {
+            if (ch == '#' && depth == 0) break
+            if (ch == '[') depth++ else if (ch == ']' && depth > 0) depth--
+            append(ch)
+        }
+    }
+
+    /** `{name}` or `{name: value}` when [line] is one directive, braces included. */
+    private fun chordWikiDirective(line: String): Pair<String, String>? {
+        val body = line.substring(1, line.lastIndex)
+        val colon = body.indexOf(':')
+        val name = (if (colon < 0) body else body.substring(0, colon)).trim().lowercase()
+        if (!directiveName.matches(name)) return null
+        val value = if (colon < 0) "" else body.substring(colon + 1).trim()
+        return name to value
+    }
+
+    /** The singer named in a subtitle, or nothing when it names nobody. */
+    private fun chordWikiArtist(subtitle: String): String {
+        sungBy.find(subtitle)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return subtitle.substringBefore("作詞").substringBefore("作曲").substringBefore("編曲").substringBefore("歌詞").trim()
+    }
+
+    /** The fret [value] names, when it's a guitar fret; words and a number past the neck are not. */
+    private fun chordWikiCapo(value: String): Int? {
+        val number = Regex("""\d+""").find(value)?.value?.toIntOrNull() ?: return null
+        return number.takeIf { it <= 24 }
+    }
+
+    /** Whether [name] opens or closes a tab or grid, leaving [inTab] as it was for any other directive. */
+    private fun chordWikiInTab(name: String, inTab: Boolean): Boolean = when (name) {
+        "sot", "start_of_tab", "sog", "start_of_grid" -> true
+        "eot", "end_of_tab", "eog", "end_of_grid" -> false
+        else -> inTab
+    }
+
+    /**
+     * One ChordPro line. A bracket that isn't a chord is dropped, not sung. A line of chords and
+     * bars, with no letters left, keeps where each chord sat and has no words. Nothing at all is omitted.
+     */
+    private fun chordWikiLine(line: String): SheetLine? {
+        val bare = line.replace("|", "")
+        val body = bare.removePrefix(timeSignature.find(bare)?.value.orEmpty())
+        val chords = mutableListOf<Chord>()
+        val text = StringBuilder()
+        var from = 0
+        inline.findAll(body).forEach { match ->
+            text.append(body, from, match.range.first)
+            val name = match.groupValues[1].trim()
+            if (chordWikiChord(name)) chords += Chord(text.length, name)
+            from = match.range.last + 1
+        }
+        text.append(body.substring(from))
+        val words = text.toString()
+        if (chords.isEmpty() && words.none { it.isLetter() }) return null
+        return SheetLine(if (words.any { it.isLetter() }) words else "", chords)
+    }
+
+    /** [name] is a chord, including N.C., and not a word or a section such as Chorus or サビ. */
+    private fun chordWikiChord(name: String): Boolean {
+        if (name.equals("N.C.", ignoreCase = true) || name.equals("NC", ignoreCase = true)) return true
+        if (name.length > 15 || !chordToken.matches(name)) return false
+        return letterRun.findAll(name).all { chordWord.containsMatchIn(it.value) }
+    }
 
     /**
      * Ultimate Guitar's sheet: a line of chords over the line of words they're played on, each over

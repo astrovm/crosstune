@@ -3,8 +3,14 @@ package com.astrovm.crosstune
 import android.text.Html
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -63,7 +69,11 @@ internal class ChordFinder(
     private val client: OkHttpClient,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Sheets found, so a song played again needs no lookup. */
-    private val cache: LookupCache? = null
+    private val cache: LookupCache? = null,
+    /** ChordWiki, read in the phone's browser. Absent in tests that aren't about it, and for a build with no screen. */
+    private val chordWiki: ChordWikiPages? = null,
+    /** A pause between ChordWiki's pages, so a lookup goes no faster than a person opening them. */
+    private val chordWikiPauseMs: Long = CHORD_WIKI_PAUSE_MS
 ) {
     /** A song's chords, or why there are none to show. */
     sealed interface Chords {
@@ -89,11 +99,35 @@ internal class ChordFinder(
         } else {
             listOf({ fromUltimateGuitar(song, it) }, { fromCifraClub(song, it) }, { fromLaCuerda(song, it) }, { fromUFret(song, otherNames, it) })
         }
+        val fits = { sheet: ChordSheet -> ChordSheets.place(sheet, texts) != null }
+        // ChordWiki only for a song in Japanese, and alongside the others: their sheet wins, and it doesn't go first.
+        if (!wantsChordWiki(song, texts)) return@withContext answered(key, readSites(sites, timeoutMs, fits))
+        coroutineScope {
+            val wiki = async { wikiTried(song, otherNames, fits, timeoutMs) }
+            yield()
+            val earlier = readSites(sites, timeoutMs, fits)
+            if (earlier.sheet != null) {
+                wiki.cancel()
+                answered(key, earlier)
+            } else {
+                answered(key, mergeWiki(earlier, wiki.await()))
+            }
+        }
+    }
+
+    /** One site's try: the sheet it found, and whether a site wouldn't answer. */
+    private class Tried(val sheet: ChordSheet?, val unavailable: Boolean)
+
+    private suspend fun readSites(
+        sites: List<suspend ((ChordSheet) -> Boolean) -> ChordSheet?>,
+        timeoutMs: Long,
+        fits: (ChordSheet) -> Boolean
+    ): Tried {
         var unavailable = false
         for (site in sites) {
             val sheet = withTimeoutOrNull(timeoutMs) {
                 try {
-                    Result.success(site { ChordSheets.place(it, texts) != null })
+                    Result.success(site(fits))
                 } catch (e: IOException) {
                     Result.failure(e)
                 } catch (e: JSONException) {
@@ -104,15 +138,74 @@ internal class ChordFinder(
                 unavailable = true
                 continue
             }
-            sheet.getOrNull()?.let { found ->
-                cache?.let {
-                    it.put(key, toCache(found))
-                    it.save()
-                }
-                return@withContext Chords.Found(found)
+            sheet.getOrNull()?.let { return Tried(it, false) }
+        }
+        return Tried(null, unavailable)
+    }
+
+    private suspend fun answered(key: String, tried: Tried): Chords {
+        val found = tried.sheet ?: return if (tried.unavailable) Chords.Unavailable else Chords.None
+        cache?.put(key, toCache(found))
+        cache?.save()
+        return Chords.Found(found)
+    }
+
+    /** Japanese words, or a Japanese title or singer. Anything else never asks ChordWiki. */
+    private fun wantsChordWiki(song: MusicMetadata, texts: List<String>): Boolean =
+        chordWiki != null && (texts.any(::japanese) || japanese(song.title) || japanese(song.artist))
+
+    private suspend fun wikiTried(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean, timeoutMs: Long): Tried {
+        val looked = withTimeoutOrNull(timeoutMs) {
+            try {
+                Result.success(readChordWiki(song, otherNames, fits))
+            } catch (e: IOException) {
+                Result.failure(e)
             }
         }
-        if (unavailable) Chords.Unavailable else Chords.None
+        return if (looked == null || looked.isFailure) Tried(null, true) else Tried(looked.getOrNull(), false)
+    }
+
+    /** ChordWiki's sheet wins when the others had none; a failure only matters when nobody had a sheet. */
+    private fun mergeWiki(earlier: Tried, wiki: Tried): Tried {
+        val sheet = wiki.sheet ?: earlier.sheet
+        return if (sheet != null) Tried(sheet, false) else Tried(null, earlier.unavailable || wiki.unavailable)
+    }
+
+    /**
+     * ChordWiki's sheet for [song] that [fits]. The edit page first, one page, and the search only
+     * when that isn't the song: then one more sheet, no faster than a person would open them.
+     */
+    private suspend fun readChordWiki(song: MusicMetadata, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val pages = chordWiki ?: return null
+        val title = chordWikiTitle(song, otherNames)
+        chordWikiSheet(pages, title, fits)?.let { return it }
+        chordWikiPause()
+        val query = listOf(title, song.artist).filter { it.isNotBlank() }.joinToString(" ")
+        val best = chordWikiBest(chordWikiHits(pages.page(chordWikiSearchUrl(query))), title, song.artist, song.title) ?: return null
+        chordWikiPause()
+        return chordWikiSheet(pages, best.title, fits)
+    }
+
+    private suspend fun chordWikiPause() {
+        if (chordWikiPauseMs > 0) delay(chordWikiPauseMs)
+    }
+
+    /** [song]'s title, or the Japanese one it's known by when the one given isn't. */
+    private suspend fun chordWikiTitle(song: MusicMetadata, otherNames: suspend () -> OtherNames): String {
+        if (japanese(song.title)) return song.title
+        return try {
+            otherNames().titles.firstOrNull(::japanese) ?: song.title
+        } catch (e: IOException) {
+            song.title
+        }
+    }
+
+    /** The edit page of [title], when its words are the song's. The address shown is the sheet's page, not the editor. */
+    private suspend fun chordWikiSheet(pages: ChordWikiPages, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
+        val read = ChordSheets.fromChordWiki(pages.page(chordWikiEditUrl(title)))
+        if (read.lines.isEmpty()) return null
+        val sheet = ChordSheet(read.lines, read.capo, ChordSite.CHORDWIKI, chordWikiViewUrl(read.title.ifBlank { title }))
+        return sheet.takeIf(fits)
     }
 
     /**
@@ -386,10 +479,14 @@ internal class ChordFinder(
     /** A song's names in Japanese, and its artists' names, as NetEase or Japan's Apple Music store has them. */
     private class OtherNames(val titles: List<String>, val artists: List<String>)
 
-    /** [ask]'s answer, asked for the first time it's wanted and kept for the rest. One that failed isn't kept, so the next step asks again. */
+    /**
+     * [ask]'s answer, asked for the first time it's wanted and kept for the rest. One that failed isn't
+     * kept, so the next step asks again. ChordWiki and U-FRET can ask together; only one request goes out.
+     */
     private fun <T> askedOnce(ask: suspend () -> T): suspend () -> T {
+        val gate = Mutex()
         var kept: T? = null
-        return { kept ?: ask().also { kept = it } }
+        return { gate.withLock { kept ?: ask().also { kept = it } } }
     }
 
     /**
@@ -524,6 +621,9 @@ internal class ChordFinder(
         /** What Cifra Club's search calls a song, among artists and other things. */
         const val CIFRA_CLUB_SONG = "2"
         const val BROWSER = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+        /** Between ChordWiki's pages. A person looks a song up about this fast, and no faster. */
+        const val CHORD_WIKI_PAUSE_MS = 400L
 
         private val titleWords = Regex("""[\p{L}\p{N}]+""")
 

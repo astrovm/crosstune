@@ -364,6 +364,107 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun chordWikisChordsSitOnTheWordsAndItsNotesAreNotSung() {
+        val source = """
+            {title:川の道}
+            {subtitle:歌:歩く人　作詞:誰か}
+            {capo:2}
+            {c:BPM=90}
+            # [C]この行はメモ
+            |[Am]---- [G]----|
+            (4/4)[Am]川の道を歩いていく
+            [F]朝の光に[C]歌っている
+            {soc}
+            [G]川の道
+            {eoc}
+        """.trimIndent()
+        val song = ChordSheets.fromChordWiki(source)
+        assertEquals("川の道", song.title)
+        assertEquals("歩く人", song.artist)
+        assertEquals(2, song.capo)
+        assertEquals(
+            listOf(
+                SheetLine("", listOf(Chord(0, "Am"), Chord(5, "G"))),
+                SheetLine("川の道を歩いていく", listOf(Chord(0, "Am"))),
+                SheetLine("朝の光に歌っている", listOf(Chord(0, "F"), Chord(4, "C"))),
+                SheetLine("川の道", listOf(Chord(0, "G")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun chordWikisEditorIsItsLongestTextareaAndAnEmptyOneIsNotThePageAroundIt() {
+        val page = """
+            <p>{title:外}</p>
+            <textarea>short</textarea>
+            <TEXTAREA id="chord">{title:川&amp;道}
+            {subtitle:歌：歩く人}
+            [F]あ</TEXTAREA>
+        """.trimIndent()
+        assertEquals(ChordWikiSong(listOf(SheetLine("あ", listOf(Chord(0, "F")))), title = "川&道", artist = "歩く人"), ChordSheets.fromChordWiki(page))
+        assertEquals(ChordWikiSong(emptyList()), ChordSheets.fromChordWiki("<textarea name=\"source\"></textarea>{title:外}[C]川"))
+    }
+
+    @Test
+    fun chordWikiKeepsRealChordsDropsWordsInBracketsAndSkipsTabsNotesAndASecondName() {
+        val source = """
+            {title:}
+            {title:一}
+            {t:二}
+            {subtitle:}
+            {subtitle:作詞:誰か}
+            {subtitle:歩く人　作曲:誰か}
+            {subtitle:歌:甲　作詞:誰か}
+            {st:歌：乙　歌詞:誰か}
+            {capo:no}
+            {capo:99}
+            {capo:2}
+            {capo:4}
+            {c:BPM=90}
+            {comment:メモ}
+            {ci:もう一つ}
+            {soc}
+            {eoc}
+            # [C]この行はメモ
+            {sot}
+            [D]----
+            {eot}
+            {start_of_tab}
+            [D]----
+            {end_of_tab}
+            {sog}
+            [D]----
+            {eog}
+            {start_of_grid}
+            [D]----
+            {end_of_grid}
+            [C#m]川 # [G]メモ
+            [サビ][Chorus][A B][Good][Caaa][Cabcdefghijklmno]川[C!]の道
+            [Cmaj7]の[N.C.]道[NC]よ[Dbadd9][Eb7(9)][Am7b5][F/G]ね
+            {川}
+            朝の光
+            ----
+            |(4/4)[Am]川|の[n.c.]道
+        """.trimIndent()
+        val song = ChordSheets.fromChordWiki(source)
+        assertEquals("一", song.title)
+        assertEquals("歩く人", song.artist)
+        assertEquals(2, song.capo)
+        assertEquals(
+            listOf(
+                SheetLine("川", listOf(Chord(0, "C#m"))),
+                SheetLine("川の道", emptyList()),
+                SheetLine("の道よね", listOf(Chord(0, "Cmaj7"), Chord(1, "N.C."), Chord(2, "NC"), Chord(3, "Dbadd9"), Chord(3, "Eb7(9)"), Chord(3, "Am7b5"), Chord(3, "F/G"))),
+                SheetLine("{川}", emptyList()),
+                SheetLine("朝の光", emptyList()),
+                SheetLine("川の道", listOf(Chord(0, "Am"), Chord(2, "n.c.")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
     fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
         assertEquals(
             listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),
