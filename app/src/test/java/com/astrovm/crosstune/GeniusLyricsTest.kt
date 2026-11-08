@@ -145,4 +145,39 @@ class GeniusLyricsTest {
         assertEquals(Lyrics.Found("Walking down the river road\nSinging to the morning light\n\nOh, oh & home\nLast light fades", source = LyricsFinder.GENIUS), lookup())
         assertTrue(fake.requestedUrls.any { it == "https://genius.com/Walkers-kawa-lyrics" })
     }
+
+    @Test
+    fun aBoxThatHoldsAnotherBoxKeepsAllItsWordsAndNothingAfterIt() {
+        respond(page = "<div data-lyrics-container=\"true\">River Road Lyrics<br/>One<br/><div>Two</div><br/>Three</div><div>Footer</div>")
+        assertEquals(Lyrics.Found("One\nTwo\nThree", source = LyricsFinder.GENIUS), lookup())
+    }
+
+    @Test
+    fun anArtistIsOneOfTheFirstOnesNamesOrNoneAtAll() {
+        // Named only as the song's primary artist.
+        respond(search(hit(artists = "Someone Else", primary = "The Walkers")))
+        assertEquals(LyricsFinder.GENIUS, (lookup() as Lyrics.Found).source)
+        // Naming none is not naming any, so it can't be the song's.
+        val unnamed = JSONObject().put("type", "song").put("result", JSONObject().put("title", song.title).put("artist_names", "Someone Else").put("path", "/x"))
+        respond(search(unnamed))
+        assertEquals(Lyrics.None, lookup())
+    }
+
+    @Test
+    fun itIsNotAskedForWordsThatOnlyNeedTimingEither() {
+        // LRCLIB has them untimed: Genius's are untimed too, so they can't be better.
+        respond()
+        val others = fake.handler
+        fake.handler = { request ->
+            when {
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"River Road","artistName":"The Walkers","plainLyrics":"Walking down\nthe road","duration":200}]""")
+                request.url.host == "itunes.apple.com" && request.url.encodedPath == "/search" -> FakeSpotify.html(request, """{"results":[{"trackId":42,"trackName":"River Road","artistName":"The Walkers"}]}""")
+                request.url.encodedPath == "/lookup" -> FakeSpotify.html(request, """{"results":[{"trackName":"川の道","artistName":"歩く人"}]}""")
+                else -> others(request)
+            }
+        }
+        assertEquals(LyricsFinder.LRCLIB, (lookup() as Lyrics.Found).source)
+        assertTrue(fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/lookup") })
+        assertTrue(fake.requestedUrls.none { it.startsWith("https://genius.com/") })
+    }
 }
