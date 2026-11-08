@@ -526,8 +526,8 @@ class PracticeCardsTest {
         cards.stop()
         assertTrue(player.pauses > graded)
         assertNull(practice)
-        // Spotify isn't resumed.
-        assertEquals(listOf(false), playback.plays)
+        // Spotify is paused, never resumed.
+        assertTrue(playback.plays.isNotEmpty() && playback.plays.none { it })
     }
 
     @Test

@@ -122,7 +122,7 @@ class PracticeScreenTest {
         val card = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
         assertEquals(card.left.value + 24f, bounds.left.value, 0.5f)
         assertTrue(bounds.bottom.value <= card.bottom.value)
-        val song = composeRule.onNodeWithText("Night Song").getBoundsInRoot()
+        val song = composeRule.onNodeWithText("Night Song", useUnmergedTree = true).getBoundsInRoot()
         assertTrue("player $bounds, song $song, card $card", bounds.top.value >= song.bottom.value)
         assertTrue(view.parent != null)
         // Its play button stays the card's one control of the sound.

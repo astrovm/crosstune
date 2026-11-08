@@ -893,9 +893,9 @@ class FlashcardsTest {
         phone.running = emptySet()
         waitUntil { phone.opened.size == 2 }
         assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000", phone.opened.last())
-        // Never getting there, Crosstune still comes back, with nothing to play.
+        // Never getting there, Crosstune still comes back, and YouTube plays the line in the player.
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        waitUntil { practice().sound == LineSound.NONE }
+        waitUntil { practice().video == "other000000" }
         assertEquals(2, phone.cameBack)
     }
 
