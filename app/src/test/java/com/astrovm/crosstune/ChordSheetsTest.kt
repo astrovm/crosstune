@@ -485,6 +485,46 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun chordWikiTakesTheShortTitleAndSubtitleAndAChordOnceATabHasEnded() {
+        assertEquals("一", ChordSheets.fromChordWiki("{t:一}\n[C]川").title)
+        assertEquals("歩く人", ChordSheets.fromChordWiki("{st:歌：歩く人}\n[C]川").artist)
+        // A blank name after 歌： is nobody, so the subtitle's own words stay.
+        assertEquals("歌：", ChordSheets.fromChordWiki("{subtitle:歌： }\n[C]川").artist)
+        val song = ChordSheets.fromChordWiki(
+            """
+            {c:BPM=90}
+            [C]残
+            {sot}
+            [D]----
+            {eot}
+            [E]甲
+            {start_of_tab}
+            [D]----
+            {end_of_tab}
+            [F]乙
+            {sog}
+            [D]----
+            {eog}
+            [G]丙
+            {start_of_grid}
+            [D]----
+            {end_of_grid}
+            [A]丁
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(
+                SheetLine("残", listOf(Chord(0, "C"))),
+                SheetLine("甲", listOf(Chord(0, "E"))),
+                SheetLine("乙", listOf(Chord(0, "F"))),
+                SheetLine("丙", listOf(Chord(0, "G"))),
+                SheetLine("丁", listOf(Chord(0, "A")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
     fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
         assertEquals(
             listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),

@@ -1595,12 +1595,13 @@ Singing to the morning light</div>"""
         noOtherChordSites()
         val urls = mutableListOf<String>()
         var edits = 0
-        val began = System.nanoTime()
+        val marks = mutableListOf<Long>()
         val found = chords(
             MusicMetadata("川の道", " "),
             japanese,
             withWiki(
                 ChordWikiPages { url ->
+                    marks += System.nanoTime()
                     urls += url
                     when {
                         "search.html" in url -> "川の道\thttps://ja.chordwiki.org/wiki/kawa"
@@ -1610,10 +1611,33 @@ Singing to the morning light</div>"""
                 pauseMs = 400
             )
         ) as ChordFinder.Chords.Found
-        assertTrue(System.nanoTime() - began >= 700_000_000L)
+        assertEquals(3, marks.size)
+        // The pause is between the pages. A slow test around it doesn't count as that pause.
+        assertTrue(marks[1] - marks[0] >= 350_000_000L)
+        assertTrue(marks[2] - marks[1] >= 350_000_000L)
         val query = java.net.URLDecoder.decode(urls.first { "search.html" in it }.substringAfter("q="), "UTF-8")
         assertEquals("川の道", query)
         assertEquals(ChordSite.CHORDWIKI, found.sheet.site)
+    }
+
+    @Test
+    fun chordWikiLeavesAnEmptyArtistOutOfTheSearch() {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        var edits = 0
+        chords(
+            MusicMetadata("川の道", ""),
+            japanese,
+            withWiki(ChordWikiPages { url ->
+                urls += url
+                when {
+                    "search.html" in url -> "川の道\thttps://ja.chordwiki.org/wiki/kawa"
+                    else -> if (edits++ == 0) "" else chordPro
+                }
+            })
+        )
+        val query = java.net.URLDecoder.decode(urls.first { "search.html" in it }.substringAfter("q="), "UTF-8")
+        assertEquals("川の道", query)
     }
 
     @Test

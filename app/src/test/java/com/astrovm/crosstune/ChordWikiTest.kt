@@ -4,7 +4,9 @@ import android.app.Activity
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -110,6 +112,12 @@ class ChordWikiTest {
             ChordWikiHit("川の道", "歩く人", "https://ja.chordwiki.org/wiki/kawa")
         )
         assertEquals("https://ja.chordwiki.org/wiki/kawa", chordWikiBest(hitsByOtherName, "Kawa", "歩く人", "川の道")?.href)
+        // No credit still beats another singer when that other sheet is listed first.
+        val blankAfterSomeoneElse = listOf(
+            ChordWikiHit("川の道", "他の人", "https://ja.chordwiki.org/wiki/other"),
+            ChordWikiHit("川の道", "", "https://ja.chordwiki.org/wiki/bare")
+        )
+        assertEquals("https://ja.chordwiki.org/wiki/bare", chordWikiBest(blankAfterSomeoneElse, "川の道", "歩く人", "川の道")?.href)
     }
 
     @Test
@@ -124,11 +132,15 @@ class ChordWikiTest {
             }
         }
         val root = activity.window.decorView as ViewGroup
+        CookieManager.getInstance().setAcceptCookie(false)
         val done = open(activity, gapMs = 20, waitMs = 10_000)
         val web = findWeb(root)
         assertEquals(0f, web.alpha)
         assertEquals(0, root.indexOfChild(web))
         assertFalse(web.isClickable)
+        assertFalse(web.isFocusable)
+        assertFalse(web.isFocusableInTouchMode)
+        assertTrue(CookieManager.getInstance().acceptCookie())
         assertTrue(web.settings.javaScriptEnabled)
         assertTrue(web.settings.domStorageEnabled)
         assertTrue(web.settings.loadsImagesAutomatically)
@@ -267,6 +279,52 @@ class ChordWikiTest {
         job.cancel()
         shadowOf(Looper.getMainLooper()).idle()
         assertNull(web.parent)
+        assertTrue(shadowOf(web).wasDestroyCalled())
+    }
+
+    /**
+     * The first look already ran. A page that is still waiting has to ask again on its own,
+     * or the editor that arrives later is never read.
+     */
+    @Test
+    fun aPageThatIsStillWaitingIsAskedAgainOnItsOwn() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = activity.window.decorView as ViewGroup
+        var clock = 100L
+        val done = open(activity, now = { clock }, gapMs = 20, waitMs = 10_000)
+        val web = findWeb(root)
+        web.webViewClient = WebViewClient()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
+        val first = shadowOf(web).lastEvaluatedJavascriptCallback
+        first.onReceiveValue(page(href = "about:blank"))
+        assertFalse(done.isCompleted)
+        clock = 105
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
+        val second = shadowOf(web).lastEvaluatedJavascriptCallback
+        assertTrue(first !== second)
+        second.onReceiveValue(page(source = "[C]川", hasEditor = true))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("[C]川", runBlocking { done.await() }.getOrThrow())
+    }
+
+    /** No injected clock. The phone's own clock is what decides the page took too long. */
+    @Test
+    fun thePhonesOwnClockGivesUpWhenThePageNeverAnswers() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = activity.window.decorView as ViewGroup
+        val done = CompletableDeferred<Result<String>>()
+        val browser = ChordWikiBrowser(activity, gapMs = 10, waitMs = 40)
+        CoroutineScope(Dispatchers.Main).launch { done.complete(runCatching { browser.page("https://ja.chordwiki.org/wiki.cgi?c=edit") }) }
+        shadowOf(Looper.getMainLooper()).idle()
+        val web = findWeb(root)
+        web.webViewClient = WebViewClient()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(60))
+        val callback = shadowOf(web).lastEvaluatedJavascriptCallback
+        callback.onReceiveValue(page(title = "Just a moment...", text = "Checking your browser"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(done.isCompleted)
+        val error = runBlocking { done.await() }.exceptionOrNull()
+        assertTrue(error is IOException && error.message!!.contains("didn't finish"))
     }
 
     /** ChordFinder cancels ChordWiki from a worker when another site already has the sheet. */
