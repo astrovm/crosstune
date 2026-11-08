@@ -1,10 +1,12 @@
 package com.astrovm.crosstune
 
 import android.app.Activity
+import android.net.Uri
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -144,6 +146,8 @@ class ChordWikiTest {
         assertTrue(web.settings.javaScriptEnabled)
         assertTrue(web.settings.domStorageEnabled)
         assertTrue(web.settings.loadsImagesAutomatically)
+        assertFalse(web.settings.blockNetworkImage)
+        assertTrue(shadowOf(web).webViewClient.shouldInterceptRequest(web, resource("https://ja.chordwiki.org/icon.png", "image/png")) == null)
         assertFalse(web.settings.userAgentString.orEmpty().contains("Macintosh"))
         assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO, web.importantForAccessibility)
         assertEquals("https://ja.chordwiki.org/wiki.cgi?c=edit", shadowOf(web).lastLoadedUrl)
@@ -151,6 +155,38 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
         assertEquals("[C]川の道", runBlocking { done.await() }.getOrThrow())
         assertNull(web.parent)
+    }
+
+    @Test
+    fun aMeasurementLeavesPicturesAndFontsUnloaded() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val asked = mutableListOf<String>()
+        val done = CompletableDeferred<Result<String>>()
+        CoroutineScope(Dispatchers.Main).launch {
+            done.complete(runCatching {
+                ChordWikiBrowser(activity, gapMs = 20, waitMs = 10_000, loadPictures = false, onRequest = { asked += it })
+                    .page("https://ja.chordwiki.org/wiki.cgi?c=edit")
+            })
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        val web = findWeb(activity.window.decorView)
+        assertFalse(web.settings.loadsImagesAutomatically)
+        assertTrue(web.settings.blockNetworkImage)
+        val client = shadowOf(web).webViewClient
+        asked.clear()
+        val picture = resource("https://ja.chordwiki.org/icon.png", "image/png")
+        val font = resource("https://ja.chordwiki.org/face.woff2", "font/woff2")
+        val document = resource("https://ja.chordwiki.org/wiki.cgi?c=edit", "text/html")
+        assertTrue(client.shouldInterceptRequest(web, picture) != null)
+        assertTrue(client.shouldInterceptRequest(web, font) != null)
+        assertTrue(client.shouldInterceptRequest(web, document) == null)
+        assertEquals(
+            listOf("https://ja.chordwiki.org/icon.png", "https://ja.chordwiki.org/face.woff2", "https://ja.chordwiki.org/wiki.cgi?c=edit"),
+            asked
+        )
+        answer(web, page(source = "[C]川の道", hasEditor = true))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
+        assertEquals("[C]川の道", runBlocking { done.await() }.getOrThrow())
     }
 
     @Test
@@ -366,6 +402,15 @@ class ChordWikiTest {
         if (!finished.await(0, TimeUnit.MILLISECONDS)) fail("cancel did not finish")
         if (failed != null) fail(failed.toString())
         assertNull(findWebOrNull(root))
+    }
+
+    private fun resource(url: String, accept: String): WebResourceRequest = object : WebResourceRequest {
+        override fun getUrl() = Uri.parse(url)
+        override fun isForMainFrame() = false
+        override fun isRedirect() = false
+        override fun hasGesture() = false
+        override fun getMethod() = "GET"
+        override fun getRequestHeaders() = mapOf("Accept" to accept)
     }
 
     private fun open(activity: Activity, gapMs: Long, waitMs: Long, now: () -> Long = { 0L }): CompletableDeferred<Result<String>> {

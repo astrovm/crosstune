@@ -6,6 +6,8 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import kotlinx.coroutines.CancellableContinuation
@@ -15,6 +17,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.net.URLEncoder
 import kotlin.coroutines.resume
@@ -59,7 +62,11 @@ internal class ChordWikiBrowser(
     private val now: () -> Long = { SystemClock.uptimeMillis() },
     private val gapMs: Long = GAP_MS,
     private val waitMs: Long = WAIT_MS,
-    private val screen: () -> ViewGroup? = { host.window?.decorView as? ViewGroup }
+    private val screen: () -> ViewGroup? = { host.window?.decorView as? ViewGroup },
+    /** Pictures and fonts. Off only while a lookup is measured without them. */
+    private val loadPictures: Boolean = true,
+    /** Each address the page asks for, so a measurement can see images and fonts. */
+    private val onRequest: ((String) -> Unit)? = null,
 ) : ChordWikiPages {
     override suspend fun page(url: String): String = withContext(Dispatchers.Main.immediate) {
         suspendCancellableCoroutine { cont -> open(url, cont) }
@@ -75,8 +82,9 @@ internal class ChordWikiBrowser(
         val settings = web.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        // Pictures stay. What a lookup costs is measured with them on; nothing here pretends to be another browser.
-        settings.loadsImagesAutomatically = true
+        // Pictures stay for a real lookup. A measurement can turn them off and see whether the editor still arrives.
+        settings.loadsImagesAutomatically = loadPictures
+        settings.blockNetworkImage = !loadPictures
         web.alpha = 0f
         web.isClickable = false
         web.isFocusable = false
@@ -100,6 +108,12 @@ internal class ChordWikiBrowser(
             detach(web)
         }
         web.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                onRequest?.invoke(request.url.toString())
+                if (loadPictures || !skipsPicture(request)) return null
+                return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+            }
+
             override fun onPageFinished(view: WebView, loaded: String) {
                 ask(view, started, ::finish)
             }
@@ -145,6 +159,16 @@ internal class ChordWikiBrowser(
         }
         web.postDelayed({ ask(web, started, finish) }, gapMs)
     }
+
+    /** An image or a font. The editor's text doesn't need either, and a measurement can leave them out. */
+    private fun skipsPicture(request: WebResourceRequest): Boolean {
+        val url = request.url.toString().substringBefore('?').lowercase()
+        val accept = request.requestHeaders["Accept"].orEmpty().lowercase()
+        return pictureFile(url) || accept.startsWith("image/") || "font/" in accept
+    }
+
+    private fun pictureFile(url: String): Boolean =
+        listOf(".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".avif", ".bmp", ".woff", ".woff2", ".ttf", ".otf", ".eot").any(url::endsWith)
 
     /** The view belongs to the main thread. Cancelling a lookup runs on whatever thread the other sites finished on. */
     private fun detach(web: WebView) {
