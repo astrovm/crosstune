@@ -810,4 +810,36 @@ class PlayQueueTest {
         plays("Radio", 150)
         assertEquals(1, phone.listsAsked.size)
     }
+
+    @Test
+    fun stoppedAPartsLastSongNoLongerSkipsOnByItself() {
+        val queue = queue()
+        val playback = queue.skipping(phone)
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube Music", canSeek = true, appPackage = music)
+        queue.playing()
+        for (number in 1..50) plays(number, 99L + number)
+        assertEquals(true, playback.canSkipOn(50))
+        queue.stop()
+        assertEquals(false, playback.canSkipOn(50))
+    }
+
+    @Test
+    fun playingOnFromPastTheSongsStillToAskForDoesNothing() {
+        val queue = queue()
+        val songs = tracks.take(4)
+        runBlocking { queue.play(songs, MusicService.TIDAL, tidal, 1, songs.take(1)) }
+        // Three songs are still to ask for. The one after those isn't one of them.
+        runBlocking { queue.playFrom(3) }
+        assertTrue(phone.songsAsked.isEmpty())
+        assertTrue(file.exists())
+    }
+
+    @Test
+    fun youTubeOnATvStillShowsTheListWhenYouTubeMusicItselfIsntInstalled() {
+        val queue = queue()
+        runBlocking { queue.play(tracks, MusicService.YOUTUBE_MUSIC, music, 50, tracks.take(50), "Road Trip") }
+        phone.playing.value = Following(PlaybackClock(0, 0), "YouTube", canSeek = true, appPackage = MusicService.YOUTUBE_TV)
+        val seen = runBlocking { queue.skipping(phone).follow(MusicMetadata("Song 1", "Band")).first() }!!
+        assertEquals("Road Trip", seen.from)
+    }
 }

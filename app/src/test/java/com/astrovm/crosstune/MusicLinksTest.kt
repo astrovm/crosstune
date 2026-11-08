@@ -29,6 +29,8 @@ class MusicLinksTest {
         assertEquals(song, MusicLinks.parse("shazam.com/song/1109658204"))
         // Older links use Shazam's own key, looked up later.
         assertEquals(LinkInput.ShazamTrack("20066955"), MusicLinks.parse("https://www.shazam.com/track/20066955/kiss-the-rain"))
+        // A doubled slash still has the track's number in it.
+        assertEquals(LinkInput.ShazamTrack("20066955"), MusicLinks.parse("https://www.shazam.com//track/20066955/kiss-the-rain"))
         // Shazam's other pages aren't songs.
         assertEquals(null, MusicLinks.parse("https://www.shazam.com/artist/hugel/978839124"))
         assertEquals(null, MusicLinks.parse("https://www.shazam.com/song/iris"))
@@ -317,8 +319,11 @@ class MusicLinksTest {
             "example.com/watch?v=x#t=10",
             "open.spotify.com",
             "deezer.com",
-            "music.youtube.com"
+            "music.youtube.com",
+            // A two-letter ending is still an address. One letter is a name, as "a.b".
+            "youtu.be/4NRXx6U8ABQ"
         ).forEach { assertTrue(it, MusicLinks.looksLikeALink(it)) }
+        assertFalse("a.b/c", MusicLinks.looksLikeALink("a.b/c"))
 
         // What made a link before still does: a scheme, a bare path, a bare id.
         listOf("spotify:track:11dFghVXANMlKmJXsNCbNl", "/track/11dFghVXANMlKmJXsNCbNl", "11dFghVXANMlKmJXsNCbNl")

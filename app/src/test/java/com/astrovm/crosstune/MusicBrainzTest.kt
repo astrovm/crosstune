@@ -266,9 +266,13 @@ class MusicBrainzTest {
         val answer = fake.handler
         fake.handler = { request -> times += System.nanoTime(); answer(request) }
         // As the app's own lookups and its queue's each ask it.
+        // The gap since whatever was asked before has passed, so the next one goes at once.
+        Thread.sleep(250)
+        val started = System.nanoTime()
         runBlocking { brainz(gapMs = 150).spotifyArtist("Stella Lefty") }
         runBlocking { brainz(File(folder.root, "queue.json"), gapMs = 150).spotifyArtist("Stella Lefty") }
         assertEquals(4, times.size)
+        assertTrue("the first request waited ${(times[0] - started) / 1_000_000} ms", times[0] - started < 80_000_000)
         assertTrue("${(times[2] - times[1]) / 1_000_000} ms between them", times[2] - times[1] >= 140_000_000)
     }
 
@@ -279,8 +283,12 @@ class MusicBrainzTest {
             times += System.nanoTime()
             FakeSpotify.html(request, JSONObject().put("recordings", JSONArray().put(recording("studio", "1990"))).put("releases", JSONArray()).toString())
         }
+        // The gap since whatever was asked before has passed, so the next one goes at once.
+        Thread.sleep(250)
+        val started = System.nanoTime()
         facts(brainz = brainz(gapMs = 150))
         assertEquals(2, times.size)
+        assertTrue("the first request waited ${(times[0] - started) / 1_000_000} ms", times[0] - started < 80_000_000)
         assertTrue("${(times[1] - times[0]) / 1_000_000} ms between them", times[1] - times[0] >= 140_000_000)
     }
 }

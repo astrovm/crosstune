@@ -1049,6 +1049,9 @@ class PlaybackTest {
         assertTrue(through.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
         // It opens the song there, the way the app's own link does, and closes.
         val screen = org.robolectric.Robolectric.buildActivity(OpenSongActivity::class.java, through).create().get()
+        // Android crashes an activity that doesn't call through to super.onCreate, so the song never opens.
+        val called = android.app.Activity::class.java.getDeclaredField("mCalled").apply { isAccessible = true }
+        assertTrue(called.getBoolean(screen))
         val opened = shadowOf(app).nextStartedActivity
         assertEquals(Intent.ACTION_VIEW, opened.action)
         assertEquals(qobuz, opened.`package`)

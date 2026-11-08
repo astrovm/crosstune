@@ -159,7 +159,8 @@ internal class MusicBrainz(
     private fun yearOf(date: String): Int? = date.take(YEAR_DIGITS).takeIf { it.length == YEAR_DIGITS }?.toIntOrNull()
 
     private suspend fun get(url: HttpUrl): JSONObject = turn.withLock {
-        delay(maxOf(0, askedAt + gapMs - System.currentTimeMillis()))
+        // At most the gap. A clock jumping back would otherwise wait out the whole jump, and nothing would be asked.
+        delay(maxOf(0, askedAt + gapMs - System.currentTimeMillis()).coerceAtMost(gapMs))
         // MusicBrainz turns away a request that doesn't say who it is.
         val request = Request.Builder().url(url).header("User-Agent", "Crosstune/$versionName (https://github.com/astrovm/crosstune)").header("Accept", "application/json").get().build()
         try {

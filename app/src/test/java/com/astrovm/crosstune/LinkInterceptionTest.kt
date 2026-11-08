@@ -62,6 +62,14 @@ class LinkInterceptionTest {
     }
 
     @Test
+    fun amazonMusicAndQobuzAreOpenedInButNotReadFrom() {
+        // Their pages are drawn with JavaScript and say nothing a link can be read from, so they are destinations only.
+        assertFalse(MusicService.AMAZON_MUSIC.canBeSource)
+        assertFalse(MusicService.QOBUZ.canBeSource)
+        assertTrue(MusicService.SPOTIFY.canBeSource)
+    }
+
+    @Test
     fun soundCloudBandcampAndAudiomackLinksAreOnlySharedOrPasted() {
         // Much of what's on them is on no other service (#372), so tapped, their links stay in their own apps.
         val links = mapOf(

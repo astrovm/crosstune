@@ -549,6 +549,72 @@ class PlayerScreenTest {
     }
 
     @Test
+    fun aSongWithoutACoverUsesTheResultsOnlyWhenItIsThatSong() {
+        val asked = mutableListOf<String>()
+        player(ScreenActions(loadArtwork = { asked += it; null }))
+        showing { it.copy(result = MusicMetadata("Song", "Band", artworkUrl = "https://covers.example/song.jpg")) }
+        assertTrue(asked.contains("https://covers.example/song.jpg"))
+        asked.clear()
+        showing {
+            it.copy(
+                player = it.player!!.copy(song = MusicMetadata("Song", "Other")),
+                result = MusicMetadata("Song", "Band", artworkUrl = "https://covers.example/song.jpg")
+            )
+        }
+        assertFalse(asked.contains("https://covers.example/song.jpg"))
+        asked.clear()
+        showing {
+            it.copy(
+                player = it.player!!.copy(song = MusicMetadata("Other", "Band")),
+                result = MusicMetadata("Song", "Band", artworkUrl = "https://covers.example/song.jpg")
+            )
+        }
+        assertFalse(asked.contains("https://covers.example/song.jpg"))
+        asked.clear()
+        showing {
+            it.copy(
+                player = it.player!!.copy(song = MusicMetadata("Song", "Band", artworkUrl = "https://covers.example/own.jpg")),
+                result = MusicMetadata("Song", "Band", artworkUrl = "https://covers.example/song.jpg")
+            )
+        }
+        assertTrue(asked.contains("https://covers.example/own.jpg"))
+        assertFalse(asked.contains("https://covers.example/song.jpg"))
+    }
+
+    @Test
+    fun thePlayerIsTintedBeforeACoverLoads() {
+        player()
+        compose.mainClock.advanceTimeBy(800)
+        compose.waitForIdle()
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val top = image.getPixel(image.width / 2, 8)
+        val bottom = image.getPixel(image.width / 2, image.height - 8)
+        assertTrue("The top of the player is the same color as the ground", top != bottom)
+    }
+
+    @Test
+    @Config(qualifiers = "w168dp-h900dp")
+    fun atItsSmallestTheCoverStillShows() {
+        player()
+        compose.onNodeWithTag(PLAYER_COVER_TAG).assertExists()
+    }
+
+    @Test
+    fun putAwayTheRemoteReturnsToTheButtonUnderTheButtons() {
+        player { it.copy(from = "Road trip", upNext = listOf(Queued("Next Song", "Band", 7))) }
+        compose.runOnIdle { inputModes.requestInputMode(InputMode.Keyboard) }
+        val upNext = context.getString(R.string.player_up_next)
+        val bottom = compose.onNodeWithContentDescription(upNext)
+        bottom.requestFocus()
+        bottom.performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        compose.runOnIdle { back.onBackPressed() }
+        compose.waitForIdle()
+        // Opened from under the buttons, even with the list named up top, the remote goes back there.
+        bottom.assertIsFocused()
+    }
+
+    @Test
     fun theSongsNameOpensItsCard() {
         var cards = 0
         player(ScreenActions(onPlayerCard = { cards++ }))
