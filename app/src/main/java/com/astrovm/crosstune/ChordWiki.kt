@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.app.Activity
+import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
@@ -145,7 +146,12 @@ internal class ChordWikiBrowser(
         web.postDelayed({ ask(web, started, finish) }, gapMs)
     }
 
+    /** The view belongs to the main thread. Cancelling a lookup runs on whatever thread the other sites finished on. */
     private fun detach(web: WebView) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            web.post { detach(web) }
+            return
+        }
         val parent = web.parent as? ViewGroup ?: return
         parent.removeView(web)
         web.stopLoading()

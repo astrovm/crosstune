@@ -5,12 +5,15 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import android.widget.FrameLayout
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -208,6 +211,47 @@ class ChordWikiTest {
         job.cancel()
         shadowOf(Looper.getMainLooper()).idle()
         assertNull(web.parent)
+    }
+
+    /** ChordFinder cancels ChordWiki from a worker when another site already has the sheet. */
+    @Test
+    fun cancellingFromAnotherThreadRemovesThePage() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val decor = activity.window.decorView as ViewGroup
+        val root = object : FrameLayout(activity) {
+            override fun removeView(child: View) {
+                check(Looper.myLooper() == Looper.getMainLooper()) { "wrong thread" }
+                super.removeView(child)
+            }
+        }
+        decor.addView(root)
+        val job = CoroutineScope(Dispatchers.Main).launch {
+            ChordWikiBrowser(activity, screen = { root }, gapMs = 60_000, waitMs = 60_000).page("https://ja.chordwiki.org/")
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(findWebOrNull(root) != null)
+        var failed: Throwable? = null
+        val finished = CountDownLatch(1)
+        Thread {
+            try {
+                runBlocking {
+                    job.cancel()
+                    job.join()
+                }
+            } catch (e: Throwable) {
+                failed = e
+            } finally {
+                finished.countDown()
+            }
+        }.start()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (!finished.await(20, TimeUnit.MILLISECONDS) && System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        if (!finished.await(0, TimeUnit.MILLISECONDS)) fail("cancel did not finish")
+        if (failed != null) fail(failed.toString())
+        assertNull(findWebOrNull(root))
     }
 
     private fun open(activity: Activity, gapMs: Long, waitMs: Long, now: () -> Long = { 0L }): CompletableDeferred<Result<String>> {
