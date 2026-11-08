@@ -297,7 +297,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
         if (!toolsShown && barFocused) focusManager.moveFocus(FocusDirection.Up)
         if (!toolsShown && infoFocused) focusManager.moveFocus(FocusDirection.Down)
     }
-    // A touch on the words, when the tools were away, only brings them back.
+    // The remote's key on the words, when the tools were away, only brings them back: the words took its focus as the tools
+    // went, so it isn't aimed at a line. A tap is, so it does what a tap on that line does, and brings them back too.
     val toolsAway by rememberUpdatedState(!toolsShown)
     // Again once the words arrive, which put their own tools first on it; not while the bar is away, where it would only pull the remote back.
     if (tv) LaunchedEffect(state.lyrics.isEmpty()) { if (toolsShown) focusBar = true }
@@ -363,17 +364,8 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     .fillMaxWidth()
                     // The bar and its menus come and go over the words, so they never move for them.
                     .padding(bottom = 16.dp)
-                    // The touch that brings the tools back isn't also a tap on a line.
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { if (toolsAway && it.changedToDown()) it.consume() }
-                            }
-                        }
-                    }
                     .onPreviewKeyEvent {
                         tv && it.type == KeyEventType.KeyDown && when {
-                            // Nor is the remote's key that does.
                             toolsAway && it.key in SELECT_KEYS -> true
                             it.key != Key.DirectionRight -> false
                             toolsAway -> { focusBar = true; true }
