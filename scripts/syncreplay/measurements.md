@@ -535,22 +535,37 @@ This branch first replayed with main's harness, which told the app a sheet is as
 
 ### On the phone
 
-The Samsung at media volume 1, put back to 0 after each run, on the APK from this branch, `phone ID --seconds 150 --app app.morphe.android.apps.youtube.music`. The earlier phone recordings were lost, and main wasn't run on the phone, so these have nothing to compare with yet.
+The Samsung at media volume 1, put back to 0 after each run, `phone ID --seconds 150 --app app.morphe.android.apps.youtube.music`. This branch's APK (ea572d9c) and main's (7e8e88f7), each with what it learnt forgotten before every run. Within 0.5 s, within 1 s, and the median off:
 
-| Song | Run | Within 0.5 s | Within 1 s | Median off | Never lit | Clock behind |
-|---|---:|---:|---:|---:|---:|---:|
-| Every Little Thing She Does Is Magic, XB7AmIsxzfI | 1 | 13/22 | 22/22 | 0.41 s | 0 | -0.20 s |
-| | 2 | 6/21 | 12/21 | 0.97 s | 0 | -0.04 s |
-| | 3 | 20/22 | 22/22 | 0.23 s | 0 | taken as 0 |
-| Expresso Love, 0_RLLNRWur4 | 1 | 12/17 | 14/17 | 0.18 s | 0 | +0.26 s |
-| | 2 | 16/18 | 18/18 | 0.33 s | 0 | -0.12 s |
-| | 3 | 12/17 | 17/17 | 0.38 s | 0 | -0.03 s |
+| Song | Run | This PR | Main |
+|---|---:|---|---|
+| Every Little Thing She Does Is Magic, XB7AmIsxzfI | 1 | 13/22, 22/22, 0.41 s | 19/21, 21/21, 0.16 s |
+| | 2 | 6/21, 12/21, 0.97 s | 19/21, 21/21, 0.18 s |
+| | 3 | 20/22, 22/22, 0.23 s | 9/22, 17/22, 0.57 s |
+| Expresso Love, 0_RLLNRWur4 | 1 | 12/17, 14/17, 0.18 s | 15/18, 18/18, 0.19 s |
+| | 2 | 16/18, 18/18, 0.33 s | 16/17, 17/17, 0.22 s |
+| | 3 | 12/17, 17/17, 0.38 s | 15/17, 17/17, 0.31 s |
 
-- Measured: no sung line goes dark on either song, in any run. Expresso Love's run 1 has three lines at +5.2 s, and the Police's run 2 has lines 5 to 19 up to +2.1 s late until the words are put right at about 105 s. Why run 2 differs isn't known.
+- Measured: no sung line goes dark in any run, on either build.
+- Late runs happen on both builds. This PR's Police run 2 has lines 5 to 19 up to +2.1 s late until about 105 s. Main's run 3 has lines 12 to 29 +1.0 to +1.4 s late. Expresso Love's run 1 on this PR has three lines at +5.2 s; main's three runs have none.
+- Replayed with `run ID --like-phone` from what the phone kept, this PR's code and main's light the same lines at the same times. The Police run 2: 20/22 within 0.5 s on both, median 0.47 s apart from the phone, worst 2.4 s. Expresso Love run 1: 11/18 on both, median 0.23 s apart, worst 5.3 s. So the late stretches come from something the replay doesn't have, not from this PR's code. What it is isn't known.
+- Measured, with 3 runs a song: this PR's Police is behind main's in runs 1 and 2, and ahead in run 3. Too few runs to tell the builds apart on the phone.
+- Main's runs 2 and 3 were first run with the last run's lead still known (`lead 210` on the first hearing). The harness had given the app notification access after stopping it, which started it again, and it wrote what it had learnt back over the forgetting. The harness now gives access before it stops the app, and only when it's missing. Those runs were redone, starting with `lead null`.
 - Run 3 of the Police first read 54 s behind: it kept one while, in an intro riff that fits two places almost equally. `behind` now leaves out a while that fits elsewhere at 0.8 of its best fit or more. False fits measured 0.91 to 0.95 of the best, true ones up to 0.85.
-- `run ID --like-phone`, replay against phone: the Police run 1 median 0.57 s apart, worst 1.2 s. Run 2 median 0.49 s, worst 2.4 s. Expresso Love run 2 median 0.03 s, worst 2.0 s.
 - On the phone the Police's first while starts at 11.4 s to 11.6 s, as the replay's does at 11 s. With the stand-in Shazam above it starts at 22.8 s, so the stand-in is further from the phone on this song.
 
-A faster player wasn't run on the phone. Neither YouTube Music build shows a speed in its menu, and its session doesn't offer one (`actions=2600887`, no `ACTION_SET_PLAYBACK_SPEED`). The YouTube app has one, but stops as soon as Crosstune comes to the front. The 1.05x table above is the only measure of it.
+### A faster player on the phone: VLC at 1.05x
+
+VLC for Android 3.7.1 played the Police from a tagged local file, `phone XB7AmIsxzfI --app org.videolan.vlc --uri file:///sdcard/Music/crosstune-police.m4a`, at 1.05x set on the track in VLC, which keeps it when VLC is stopped. Its session says the rate (`speed=1.05` in `dumpsys media_session`), and the app's timing log has `speed=1.05` on every clock: 17 or 18 in each run.
+
+| Build | Run | Words' clock | Within 0.5 s | Within 1 s | Median off |
+|---|---:|---:|---:|---:|---:|
+| This PR | 1 | 1.050x | 18/19 | 19/19 | 0.36 s |
+| This PR | 2 | 1.050x | 18/19 | 19/19 | 0.30 s |
+| Main | 1 | 1.050x | 18/19 | 19/19 | 0.32 s |
+
+- Measured: main doesn't count the rate twice on the phone here, as it does in the 1.05x replay (1.1025x).
+- Inferred, from main's log: only the first 3 hearings are Shazam's, with speeds 1.003, 1.046 and 1.040. Every later hearing is the player's own clock, which main gives speed 1.0, so the pace goes back to 1.0 by 49 s. In the replay every hearing is Shazam's, so main stays off.
+- YouTube Music has no speed control: neither build shows one, and its session offers none (`actions=2600887`, no `ACTION_SET_PLAYBACK_SPEED`). The YouTube app has one, but it stops once Crosstune comes to the front.
 
 `phone` reads the screen with uiautomator, and only one thing may read it at a time: with a T3 device session holding it, `uiautomator dump` exits 137, and `phone` now says so instead of asking whether the phone is unlocked.
