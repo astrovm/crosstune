@@ -351,9 +351,223 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalsColumnsFollowTheFontItsPageAsksFor() {
+        // The letter before the chord is what's measured. Leading spaces would be trimmed, as the browser does.
+        // Inconsolata, the font the page names first, draws an ellipsis, an em dash and Ā at one column.
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("…${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("—${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("‘${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("↑${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(1, "C")))), ChordSheets.fromJTotal("\u0100${jTotal("C")}<br>abcd"))
+        // A full-width ） and a corner bracket are two columns in the Japanese font under that.
+        // → is not in Inconsolata, so it is two as well. A zero-width mark adds none.
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("）${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("（${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("「${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("→${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\u200B${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\u0301${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\uFF9E${jTotal("C")}<br>abcd"))
+        assertEquals(listOf(SheetLine("abcd", listOf(Chord(0, "C")))), ChordSheets.fromJTotal("\uFF9F${jTotal("C")}<br>abcd"))
+        // Four Latin columns reach い: あ and ） are two each, because い is not punctuation.
+        assertEquals(listOf(SheetLine("あ）い", listOf(Chord(2, "C")))), ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）い"))
+    }
+
+    @Test
+    fun jTotalsFullwidthBracketsTakeOneColumnBesideThePunctuationChromiumTrims() {
+        // A closing mark before one of these is one column, so four Latin columns land on い.
+        val closingBefore = listOf(
+            '\u3000', '\u30FB', '\u00B7', '\u2027', '\u2019', '\u201D',
+            '）', '、', '。', '，', '．', ')'
+        )
+        for (next in closingBefore) {
+            assertEquals(
+                "U+%04X".format(next.code),
+                listOf(SheetLine("あ）${next}い", listOf(Chord(3, "C")))),
+                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）${next}い")
+            )
+        }
+        // The same for a stop, a corner bracket, and the other full-width block, not only ）.
+        for (mark in listOf('、', '。', '，', '．', '」', '\uFF60')) {
+            assertEquals(
+                "U+%04X".format(mark.code),
+                listOf(SheetLine("あ${mark}\u3000い", listOf(Chord(3, "C")))),
+                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ${mark}\u3000い")
+            )
+        }
+        // An opening mark after one of these is one column. Six Latin columns then land past い, on z.
+        val openingAfterWide = listOf('\u3000', '\u30FB', '\u2027', '）', '（', '「')
+        for (prev in openingAfterWide) {
+            assertEquals(
+                "U+%04X".format(prev.code),
+                listOf(SheetLine("あ${prev}（iz", listOf(Chord(4, "C")))),
+                ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ${prev}（iz")
+            )
+        }
+        // A one-column neighbor needs the chord one column earlier to show the same trim.
+        for (prev in listOf('\u00B7', '\u2018', '\u201C', '(')) {
+            assertEquals(
+                "U+%04X".format(prev.code),
+                listOf(SheetLine("あ${prev}（iz", listOf(Chord(4, "C")))),
+                ChordSheets.fromJTotal("abcde${jTotal("C")}<br>あ${prev}（iz")
+            )
+        }
+        // An opening corner bracket from the other block, and a small-form bracket that does not trim.
+        assertEquals(
+            listOf(SheetLine("あ\u3000「iz", listOf(Chord(4, "C")))),
+            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ\u3000「iz")
+        )
+        assertEquals(
+            listOf(SheetLine("あ\uFE5A\u3000い", listOf(Chord(2, "C")))),
+            ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ\uFE5A\u3000い")
+        )
+        // At the end of the chord's own gap there is no following letter, so ） stays two columns.
+        assertEquals(
+            listOf(SheetLine("abcdef", listOf(Chord(4, "C")))),
+            ChordSheets.fromJTotal("あ）${jTotal("C")}<br>abcdef")
+        )
+        // Kana beside a bracket does not trim it. Column 6 is い, not the letter after it.
+        assertEquals(
+            listOf(SheetLine("ああ（iz", listOf(Chord(3, "C")))),
+            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>ああ（iz")
+        )
+    }
+
+    @Test
+    fun jTotalsFullwidthColonAndSemicolonTrimTheMarkBesideThem() {
+        // CSS Text 4 puts these with the middle dots for Japanese. Chromium does that with no lang too,
+        // so four Latin columns land on い, and six land on z.
+        for (mark in listOf('\uFF1A', '\uFF1B')) {
+            assertEquals(
+                "U+%04X".format(mark.code),
+                listOf(SheetLine("あ）${mark}い", listOf(Chord(3, "C")))),
+                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）${mark}い")
+            )
+            assertEquals(
+                "U+%04X stop".format(mark.code),
+                listOf(SheetLine("あ、${mark}い", listOf(Chord(3, "C")))),
+                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ、${mark}い")
+            )
+            assertEquals(
+                "U+%04X open".format(mark.code),
+                listOf(SheetLine("あ${mark}（iz", listOf(Chord(4, "C")))),
+                ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ${mark}（iz")
+            )
+        }
+    }
+
+    @Test
+    fun jTotalsMarksOutsideTheSpacingClassesStayTwoColumns() {
+        // Measured in Chromium, beside the page font: these are not middle dots, quotes or Ps/Pe,
+        // so ） stays two columns and four Latin columns land on the mark, not on い.
+        for (next in listOf('\uFF65', '\u00BB', '\uFE10', '\uFE11', '\uFE13', '\uFE15')) {
+            assertEquals(
+                "U+%04X".format(next.code),
+                listOf(SheetLine("あ）${next}い", listOf(Chord(2, "C")))),
+                ChordSheets.fromJTotal("abcd${jTotal("C")}<br>あ）${next}い")
+            )
+        }
+        // An opening mark after a guillemet (one column) or a vertical comma (two) stays two.
+        assertEquals(
+            listOf(SheetLine("あ\u00AB（iz", listOf(Chord(4, "C")))),
+            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ\u00AB（iz")
+        )
+        assertEquals(
+            listOf(SheetLine("あ\uFE10（iz", listOf(Chord(3, "C")))),
+            ChordSheets.fromJTotal("abcdef${jTotal("C")}<br>あ\uFE10（iz")
+        )
+        // A right quote trims the closing mark before it, and not the opening mark after it.
+        assertEquals(
+            listOf(SheetLine("あ”（iz", listOf(Chord(3, "C")))),
+            ChordSheets.fromJTotal("abcde${jTotal("C")}<br>あ”（iz")
+        )
+    }
+
+    @Test
+    fun jTotalsEmptyLinksAddNoColumnAndNoLine() {
+        // Measured in Chromium: an empty link is not drawn, so "C / " is four columns and the next C is on e.
+        val empty = """<a href="JavaScript:jump_1('../../../cd/C.html');"></a>"""
+        assertEquals(
+            listOf(SheetLine("abcdefghijklmnopqrstuvwxyz", listOf(Chord(0, "C"), Chord(4, "C")))),
+            ChordSheets.fromJTotal("${jTotal("C")} / $empty${jTotal("C")}<br>abcdefghijklmnopqrstuvwxyz")
+        )
+        // A line that is only that link is blank on the page, so the chord stays over the words under it.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$empty<br>abcd")
+        )
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("abcd", listOf(Chord(0, "Am")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$empty<br>${jTotal("Am")}<br>abcd")
+        )
+        // Two empty links with a space between them are still a blank line once the tags are gone.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$empty $empty<br>abcd")
+        )
+    }
+
+    @Test
+    fun jTotalsALinkSplitByALineBreakStillNamesItsChord() {
+        // Measured: the page breaks before Em, Em is two columns, and F is on d.
+        val split = """<a href="JavaScript:jump_1('../../../cd/Em.html');"><br>Em</a>"""
+        assertEquals(
+            listOf(SheetLine("abcdef", listOf(Chord(0, "Em"), Chord(3, "F")))),
+            ChordSheets.fromJTotal("$split ${jTotal("F")}<br>abcdef")
+        )
+        // The bass stays on the name, same as a link the line break did not cut. "EmonG#" is six columns.
+        val splitBass = """<a href="JavaScript:jump_1('../../../cd/Em.html');"><br>Em</a>onG#"""
+        assertEquals(
+            listOf(SheetLine("abcdefgh", listOf(Chord(0, "Em/G#"), Chord(7, "F")))),
+            ChordSheets.fromJTotal("$splitBass ${jTotal("F")}<br>abcdefgh")
+        )
+        // The cut link is its own line, so the chord above it does not take Em as its words.
+        assertEquals(
+            listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("abcdef", listOf(Chord(0, "Em")))),
+            ChordSheets.fromJTotal("${jTotal("C")}<br>$split<br>abcdef")
+        )
+    }
+
+    @Test
+    fun jTotalsInconsolataLettersTakeOneColumn() {
+        val letters = listOf(
+            '\u0100', '\u0131', '\u0134', '\u0148', '\u014A', '\u017E', '\u018F', '\u0192', '\u0198',
+            '\u01A0', '\u01A1', '\u01AF', '\u01B0', '\u01B8', '\u01B9', '\u01C7', '\u01C9', '\u01E6',
+            '\u01E7', '\u01EA', '\u01EB', '\u01FA', '\u021B', '\u022A', '\u022D', '\u0230', '\u0233',
+            '\u0237', '\u024D', '\u0259', '\u027B', '\u0298', '\u029A', '\u02B9', '\u02BC', '\u02BE',
+            '\u02BF', '\u02C6', '\u02CC', '\u02DA', '\u02DC', '\u02DD', '\u1E08', '\u1E09', '\u1E0C',
+            '\u1E0F', '\u1E14', '\u1E17', '\u1E1C', '\u1E1D', '\u1E20', '\u1E21', '\u1E24', '\u1E25',
+            '\u1E2A', '\u1E2B', '\u1E2E', '\u1E2F', '\u1E36', '\u1E37', '\u1E3A', '\u1E3B', '\u1E42',
+            '\u1E49', '\u1E4C', '\u1E53', '\u1E5A', '\u1E5B', '\u1E5E', '\u1E69', '\u1E6C', '\u1E6F',
+            '\u1E78', '\u1E7B', '\u1E80', '\u1E85', '\u1E8E', '\u1E8F', '\u1E92', '\u1E93', '\u1E97',
+            '\u1E9E', '\u1EA0', '\u1EF9', '\u2009', '\u2013', '\u2014', '\u2018', '\u201A', '\u201C',
+            '\u201E', '\u2020', '\u2022', '\u2026', '\u2032', '\u2033', '\u2039', '\u203A', '\u2044',
+            '\u20A1', '\u20A3', '\u20A4', '\u20A6', '\u20A7', '\u20A9', '\u20AB', '\u20AD', '\u20B1',
+            '\u20B2', '\u20B5', '\u20B9', '\u20BA', '\u20BC', '\u20BD', '\u2113', '\u2122', '\u2191',
+            '\u2193', '\u2212', '\u2215', '\uFFFD'
+        )
+        for (letter in letters) {
+            assertEquals(
+                "U+%04X".format(letter.code),
+                listOf(SheetLine("abcd", listOf(Chord(1, "C")))),
+                ChordSheets.fromJTotal("$letter${jTotal("C")}<br>abcd")
+            )
+        }
+        for (letter in listOf('\u0300', '\u0303', '\u0304', '\u0308', '\u0309', '\u0323', '\uFEFF')) {
+            assertEquals(
+                "U+%04X".format(letter.code),
+                listOf(SheetLine("abcd", listOf(Chord(0, "C")))),
+                ChordSheets.fromJTotal("$letter${jTotal("C")}<br>abcd")
+            )
+        }
+    }
+
+
+    @Test
     fun jTotalsWideLettersStartRightPastLatinAndOnEitherSideOfHalfWidthKana() {
         // What comes before the chord is what's measured; words in Latin letters say how many columns it took.
-        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 2, '\uFF60' to 2, '\uFF61' to 1, '\uFF9F' to 1, '\uFFA0' to 2)
+        // Ā is one column: Inconsolata has it. The last half-width kana letter is one; the voice marks are none, covered above.
+        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 1, '\uFF60' to 2, '\uFF61' to 1, '\uFF9D' to 1, '\uFFA0' to 2)
         for ((letter, columns) in columnsOf) {
             assertEquals(
                 "U+%04X".format(letter.code),

@@ -9,6 +9,7 @@ import android.content.ClipData
 import android.content.ClipDescription
 import androidx.activity.BackEventCompat
 import androidx.compose.ui.unit.dp
+import androidx.core.content.IntentCompat
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assert
@@ -8289,7 +8290,7 @@ class MainActivityTest {
         controller!!.newIntent(newer)
         controller!!.start().resume()
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
-        val opened = generateSequence { nextStartedActivity() }.map { it.getParcelableExtra<Intent>(OpenSongActivity.EXTRA_OPEN) ?: it }.mapNotNull { it.dataString }.toList()
+        val opened = generateSequence { nextStartedActivity() }.map { IntentCompat.getParcelableExtra(it, OpenSongActivity.EXTRA_OPEN, Intent::class.java) ?: it }.mapNotNull { it.dataString }.toList()
         assertEquals(listOf("https://play.qobuz.com/track/3"), opened)
     }
 
