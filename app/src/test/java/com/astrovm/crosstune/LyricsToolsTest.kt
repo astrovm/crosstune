@@ -281,30 +281,22 @@ class LyricsToolsTest {
     }
 
     @Test
-    fun aTouchThatBringsThemBackIsNotATapOnALine() {
+    fun aLineTappedWhileTheyWereAwayMovesTheMusicThereAndBringsThemBack() {
+        // A tap is aimed at its line, so the first one after a pause and play, when they've gone, moves the music too.
         phone = Phone.OTHER
         openLyrics()
         awayFromTheTools()
-        line("Demo two").performClick()
-        passes(1)
-        assertTrue(playback.seeks.isEmpty())
-        assertTrue(described(learn))
-        // Once they're back, a line takes its taps as ever.
         line("Demo two").performClick()
         passes(1)
         assertEquals(listOf(10_000L), playback.seeks)
+        assertTrue(described(learn))
     }
 
     @Test
-    fun aLineHeldWhileTheyWereAwayIsNotOpenedToStudyEither() {
+    fun aLineHeldWhileTheyWereAwayOpensToStudy() {
         phone = Phone.OTHER
         openLyrics()
         awayFromTheTools()
-        line("Demo two").performTouchInput { longClick() }
-        passes(1)
-        assertFalse(shown(string(R.string.lyrics_repeat_line)))
-        assertTrue(described(learn))
-        // Once they're back, held, a line opens to study as ever.
         line("Demo two").performTouchInput { longClick() }
         passes(1)
         assertTrue(shown(string(R.string.lyrics_repeat_line)))

@@ -190,6 +190,7 @@
     <string name="lyrics_button">Lirik</string>
     <string name="lyrics_loading">Mencari lirik…</string>
     <string name="lyrics_none">Lirik lagu ini tidak ditemukan.</string>
+    <string name="lyrics_instrumental">Lagu ini tidak punya lirik.</string>
     <string name="lyrics_sync_service">Sinkronisasi lirik Crosstune</string>
     <string name="lyrics_follow_allow">Biarkan lirik mengikuti lagu yang diputar di aplikasi musikmu.</string>
     <string name="lyrics_following_app">Mengikuti %1$s</string>
@@ -393,6 +394,16 @@
     <string name="practice_done">%1$d dilatih</string>
     <string name="practice_back_to">Kembali ke %1$s</string>
     <string name="practice_progress">%1$d dari %2$d</string>
+    <string name="practice_reminders">Pengingat latihan</string>
+    <string name="practice_remind_me">Ingatkan saya</string>
+    <string name="practice_reminder_at">Pengingat pukul %1$s</string>
+    <string name="practice_reminder_blocked">Notifikasi dimatikan</string>
+    <string name="practice_reminder_exact">Izinkan waktu tepat</string>
+    <string name="practice_reminder_late">Tanpa ini, pengingat bisa terlambat hingga satu jam</string>
+    <string name="practice_reminder_songs">%1$s dan %2$d lainnya</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="other">%1$d kartu untuk dilatih</item>
+    </plurals>
     <string name="song_tab_meaning">Arti</string>
     <string name="song_tab_words">Kata</string>
     <string name="song_tab_artist">Artis</string>

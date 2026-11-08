@@ -163,6 +163,10 @@ class MetadataParsersTest {
         )) assertEquals(title, queen, MetadataParsers.musicVideo(title, "open.spotify.com"))
         // The page auto report #15 had.
         assertEquals(MusicMetadata("new trick", "ROSÉ"), MetadataParsers.musicVideo("new trick – música, letra e videoclipe de ROSÉ | Spotify", "open.spotify.com"))
+        // A player that cut the title at its dash has the song as the artist and only the description as the title (Report 15).
+        assertEquals(MusicMetadata("Fake Tune", "Fake Singer"), MetadataParsers.musicVideo("música, letra e videoclipe de Fake Singer | Spotify", "Fake Tune"))
+        assertEquals(MusicMetadata("Fake Tune", "Fake Singer"), MetadataParsers.musicVideo("Song, Lyrics, and Music Video by Fake Singer\u00a0| Spotify", "Fake Tune"))
+        assertEquals(MusicMetadata("Fake Tune", "Fake Singer"), MetadataParsers.playerSong("música, letra e videoclipe de Fake Singer | Spotify", "Fake Tune"))
         // Worded in a way not known, the song is still read, by no artist rather than a wrong one.
         assertEquals(MusicMetadata("new trick", ""), MetadataParsers.musicVideo("new trick – Lied und Text von ROSÉ | Spotify", "open.spotify.com"))
     }

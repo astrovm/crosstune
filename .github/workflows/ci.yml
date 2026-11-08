@@ -95,8 +95,10 @@ jobs:
           python3 -m unittest discover -s scripts/contrast -p "test_*.py"
           python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
           python3 -m unittest discover -s scripts/emulator -p "test_*.py"
+          python3 -m unittest scripts/test_devicelock.py
           python3 -m unittest discover -s scripts/record -p "test_*.py"
           python3 -m unittest discover -s scripts/reports -p "test_*.py"
+          python3 -m unittest discover -s scripts/lyrics -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
           node --test "report/*.test.mjs"
@@ -138,7 +140,7 @@ jobs:
       # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "25"
@@ -183,7 +185,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "25"
@@ -216,7 +218,7 @@ jobs:
           # projectM, which draws the MilkDrop visuals, is built from source.
           submodules: recursive
 
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "25"

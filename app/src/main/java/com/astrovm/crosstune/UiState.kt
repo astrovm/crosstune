@@ -67,6 +67,8 @@ internal data class UiState(
     val isLoadingLyrics: Boolean = false,
     /** Set when the service wouldn't answer, which isn't the same as the song having no words. */
     val lyricsFailed: Boolean = false,
+    /** Set when the song has no words to find, as an instrumental has none. */
+    val lyricsInstrumental: Boolean = false,
     /** The words with when each is sung, so they can follow the song; empty when they aren't timed. */
     val lyricLines: List<LyricLine> = emptyList(),
     /** Whether the user put any of [lyricLines] in time by hand. */
@@ -131,6 +133,8 @@ internal data class UiState(
     val sleep: Sleep? = null,
     /** The kinds of practice card, each with what it shows on either side. */
     val cardTypes: List<CardType> = DEFAULT_CARD_TYPES,
+    /** Whether due cards are asked back once a day, and when. */
+    val reminder: Reminder = Reminder(),
     /** The ChatGPT account whose plan the AI features run on. */
     val chatGpt: ChatGptState = ChatGptState(),
     /** The line the music app keeps going back to, while it does. */

@@ -190,6 +190,7 @@
     <string name="lyrics_button">歌詞</string>
     <string name="lyrics_loading">正在查詢歌詞…</string>
     <string name="lyrics_none">沒有找到這首歌的歌詞。</string>
+    <string name="lyrics_instrumental">這首歌沒有歌詞。</string>
     <string name="lyrics_sync_service">Crosstune 歌詞同步</string>
     <string name="lyrics_follow_allow">讓歌詞跟隨音樂應用程式中正在播放的歌曲。</string>
     <string name="lyrics_following_app">正在跟隨 %1$s</string>
@@ -393,6 +394,16 @@
     <string name="practice_done">已練習 %1$d 項</string>
     <string name="practice_back_to">回到 %1$s</string>
     <string name="practice_progress">%1$d / %2$d</string>
+    <string name="practice_reminders">練習提醒</string>
+    <string name="practice_remind_me">提醒我</string>
+    <string name="practice_reminder_at">%1$s 提醒</string>
+    <string name="practice_reminder_blocked">通知已關閉</string>
+    <string name="practice_reminder_exact">允許準時提醒</string>
+    <string name="practice_reminder_late">不允許的話，提醒最多可能晚一小時</string>
+    <string name="practice_reminder_songs">%1$s 和另外 %2$d 首</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="other">有 %1$d 張卡片待練習</item>
+    </plurals>
     <string name="song_tab_meaning">含義</string>
     <string name="song_tab_words">詞語</string>
     <string name="song_tab_artist">藝人</string>

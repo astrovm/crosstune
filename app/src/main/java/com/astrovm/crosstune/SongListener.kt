@@ -350,8 +350,14 @@ internal class PlayingFirst(private val playback: PlaybackSource, private val he
         return listenToPlaying() as? Heard.Song ?: playing
     }
 
-    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard =
-        played.listen().let { if (byMicrophone && it == Heard.Failed(AppError.MICROPHONE)) hearing.listen() else it }
+    override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
+        val heard = played.listen()
+        if (!byMicrophone || heard != Heard.Failed(AppError.MICROPHONE)) return heard
+        // The microphone hears the room too: another song playing there isn't the one the phone plays.
+        val room = hearing.listen()
+        val playing = playback.nowPlaying()?.metadata ?: return room
+        return room.takeIf { it !is Heard.Song || SongNames.names(playing.title, playing.artist, it.metadata) } ?: Heard.Nothing
+    }
 }
 
 /**

@@ -136,6 +136,7 @@
     <string name="lyrics_button">Lyrics</string>
     <string name="lyrics_loading">Getting lyrics…</string>
     <string name="lyrics_none">No lyrics found for this song.</string>
+    <string name="lyrics_instrumental">This song has no words.</string>
     <string name="lyrics_sync_service">Crosstune lyrics sync</string>
     <string name="lyrics_follow_allow">Let the words follow the song playing in your music app.</string>
     <string name="lyrics_following_app">Following %1$s</string>
@@ -414,6 +415,17 @@
     <string name="practice_done">%1$d practiced</string>
     <string name="practice_back_to">Back to %1$s</string>
     <string name="practice_progress">%1$d of %2$d</string>
+    <string name="practice_reminders">Practice reminders</string>
+    <string name="practice_remind_me">Remind me</string>
+    <string name="practice_reminder_at">Reminder at %1$s</string>
+    <string name="practice_reminder_blocked">Notifications are off</string>
+    <string name="practice_reminder_exact">Allow exact time</string>
+    <string name="practice_reminder_late">Without it, a reminder can arrive up to an hour late</string>
+    <string name="practice_reminder_songs">%1$s and %2$d more</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="one">%1$d card to practice</item>
+        <item quantity="other">%1$d cards to practice</item>
+    </plurals>
     <string name="song_tab_meaning">Meaning</string>
     <string name="song_tab_words">Words</string>
     <string name="song_tab_artist">Artist</string>

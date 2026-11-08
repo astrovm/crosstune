@@ -601,6 +601,33 @@ class SongListenerTest {
         assertEquals(bySound, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { bySound }).listenToPlaying(byMicrophone = false) })
     }
 
+    @Test
+    fun anotherSongTheMicrophoneHearsInTheRoomIsntTakenForTheOneThePhonePlays() {
+        // A video, so its app can't say where in the song it is, and the phone won't share its sound.
+        val video = Heard.Song(MusicMetadata("Every Little Thing She Does Is Magic", "The Police"), null)
+        val phone = FakePlayback().apply { onThePhone = video }
+        val unshared = SongHearing { Heard.Failed(AppError.MICROPHONE) }
+        val room = Heard.Song(MusicMetadata("No Llora", "El Cuarteto de Nos"), null, 56_000, 400_000)
+        assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listen() })
+        assertEquals(Heard.Nothing, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listenToPlaying() })
+        // Nor one of the same name by someone else.
+        val namesake = Heard.Song(MusicMetadata("Every Little Thing She Does Is Magic", "Someone Else"), null, 56_000, 400_000)
+        assertEquals(video, runBlocking { PlayingFirst(phone, SongHearing { namesake }, unshared).listen() })
+        // The song played, heard by the microphone, still says where it is, though Shazam names it otherwise.
+        val heard = Heard.Song(MusicMetadata("Every Little Thing She Does Is Magic (Remastered 2003)", "The Police"), null, 54_000, 400_000)
+        assertEquals(heard, runBlocking { PlayingFirst(phone, SongHearing { heard }, unshared).listen() })
+        // So does a video whose title names more and whose channel isn't the artist, as YouTube Music's upload
+        // "Police, The   Every Little Thing She Does Is Magic Audio Flac" by "keyloginhot".
+        phone.onThePhone = Heard.Song(checkNotNull(MetadataParsers.youtubeVideo("Police, The   Every Little Thing She Does Is Magic Audio Flac", "keyloginhot")), null)
+        val shazam = heard.copy(metadata = MusicMetadata("Every Little Thing She Does Is Magic", "The Police"))
+        assertEquals(shazam, runBlocking { PlayingFirst(phone, SongHearing { shazam }, unshared).listen() })
+        assertEquals(phone.onThePhone, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listen() })
+        // Nothing playing on the phone, the room's song is the one asked for.
+        phone.onThePhone = null
+        assertEquals(room, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listen() })
+        assertEquals(room, runBlocking { PlayingFirst(phone, SongHearing { room }, unshared).listenToPlaying() })
+    }
+
     private companion object {
         const val NO_MATCH = """{"matches":[],"timestamp":5,"tagid":"x"}"""
         const val MATCH = """{"matches":[{"id":"238534"}],"track":{"key":"238534","title":"Iris","subtitle":"The Goo Goo Dolls",""" +
