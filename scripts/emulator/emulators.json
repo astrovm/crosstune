@@ -30,7 +30,7 @@
     "by_hand": [
       "Log in to Qobuz",
       "Log in to Amazon Music with the test account (its free plan plays nothing, Issue #759)",
-      "Proton VPN (ch.protonvpn.android) is installed but not set up: it asks for a human-verification puzzle, so a person has to solve it, and the solve did not survive a relaunch, so connect to a US or Canada server for Deezer right away (Issue #678)",
+      "Proton VPN (ch.protonvpn.android) was gone by Nov 8 11:50: reinstall it from Play, then a person solves its human-verification puzzle and connects to a US or Canada server for Deezer right away, because a solve did not survive earlier (Issue #678)",
       "Deezer is installed but not signed in: its free plan only exists in some countries, so sign in with Google behind that VPN"
     ]
   },
