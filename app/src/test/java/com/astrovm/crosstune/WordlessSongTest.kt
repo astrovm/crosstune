@@ -187,6 +187,8 @@ class WordlessSongTest {
         leavesItUnfound("Fake Piece: 40. Allegro", "XXXX", "Fake Piece: XXXX. Allegro")
         leavesItUnfound("Fake Piece: L. Allegro", ": 50.", "Fake Piece: 50. Allegro")
         leavesItUnfound("Fake Piece: XL. Allegro", ": 40.", "Fake Piece: 40. Allegro")
+        // "XXXX" is how the usual parts write 40, so only the range keeps it out.
+        leavesItUnfound("Fake Piece: XXXX. Allegro", ": 40.", "Fake Piece: 40. Allegro")
         leavesItUnfound("Fake Piece: C. Allegro", ": 100.", "Fake Piece: 100. Allegro")
         leavesItUnfound("Fake Piece: D. Allegro", ": 500.", "Fake Piece: 500. Allegro")
         leavesItUnfound("Fake Piece: M. Allegro", ": 1000.", "Fake Piece: 1000. Allegro")
