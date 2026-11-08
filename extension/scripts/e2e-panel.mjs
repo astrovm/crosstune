@@ -277,6 +277,8 @@ try {
   await step("a site with no media element, SoundCloud: the words follow its progress bar, within the second", async () => {
     lyricsSites = nothing();
     lyricsSites.set("https://lrclib.net/", { contentType: "application/json", body: lrclibAfrica.replaceAll('"Africa"', '"Barely Audible"') });
+    // SoundCloud's own page is asked about the song too, for its cover.
+    lyricsSites.set("https://soundcloud.com/oembed", { contentType: "application/json", body: "{}" });
     const sound = await context.newPage();
     await sound.goto("https://soundcloud.com/some-uploader/barely-audible");
     assert.equal(await sound.locator("audio, video").count(), 0);
