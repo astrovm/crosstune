@@ -110,23 +110,6 @@ def argv_of(pid):
     return listed.stdout.split()
 
 
-def environ_of(pid):
-    path = Path(f"/proc/{pid}/environ")
-    if not path.exists():
-        return {}
-    try:
-        raw = path.read_bytes()
-    except OSError:
-        return {}
-    found = {}
-    for item in raw.split(b"\x00"):
-        if b"=" not in item:
-            continue
-        key, value = item.split(b"=", 1)
-        found[key.decode(errors="replace")] = value.decode(errors="replace")
-    return found
-
-
 def flag(argv, name):
     try:
         index = argv.index(name)
@@ -368,9 +351,9 @@ def is_head(device, ticket):
 
 
 def session_of_holder(pid):
+    # The holder carries its session in its own arguments: reading another process's environment would pull in
+    # whatever secrets it was started with.
     text = flag(argv_of(pid), "--session")
-    if text is None:
-        text = environ_of(pid).get("CROSSTUNE_LOCK_SESSION")
     try:
         return int(text)
     except (TypeError, ValueError):
@@ -459,8 +442,6 @@ def take(device, who, minutes):
 
     read_fd, write_fd = os.pipe()
     os.set_inheritable(write_fd, True)
-    env = os.environ.copy()
-    env["CROSSTUNE_LOCK_SESSION"] = str(os.getsid(0))
     script = str(Path(__file__).resolve())
     proc = subprocess.Popen(
         [
@@ -471,7 +452,7 @@ def take(device, who, minutes):
             "--ready-fd", str(write_fd),
         ],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True, close_fds=True, pass_fds=(write_fd,), env=env,
+        start_new_session=True, close_fds=True, pass_fds=(write_fd,),
     )
     os.close(write_fd)
     ready = False
