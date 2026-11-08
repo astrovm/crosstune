@@ -2269,7 +2269,8 @@ internal class MainViewModel(
                 return true
             }
         } else {
-            hear(steadied(heardClock, heard.clock ?: return true), hearing.matchId, gap)
+            // Heard with no place in it, it stays where it was, and goes on as a first hearing with no place does.
+            heard.clock?.let { hear(steadied(heardClock, it), hearing.matchId, gap) }
         }
         return false
     }
@@ -2635,25 +2636,9 @@ internal class MainViewModel(
         uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
     }
 
-    /**
-     * How long until what's heard from then on has lines sung in it, by [clock]; null when no stretch
-     * of the song left has enough. Only from [after] on, when the song was heard up to there, and
-     * [straightOn] from there, wherever the lines are timed.
-     */
-    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?, straightOn: Boolean = false): Long? {
-        val here = clock.positionAt(now())
-        val at = maxOf(here, after ?: here)
-        val heardMs = SingingListener.SECONDS * 1000L - SINGING_TAIL_MS
-        val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }
-        // Heard from just before a line starts, or now, as one just has: a while opening on music alone, the model may hear only that.
-        // Less just before, when that's what lets enough lines after it be heard too, so the line isn't left to the next while.
-        // A line alone only when it's heard from its start: its words are all that tell it apart, so one already begun may not be placed.
-        val from = if (straightOn) at else starts.withIndex().firstNotNullOfOrNull { (index, line) ->
-            val last = if (line.timeMs >= at && SungAlignment.canPlaceAlone(line, lines)) line.timeMs else starts.getOrNull(index + SINGING_LINES - 1)?.timeMs
-            last?.let { maxOf(at, line.timeMs - SINGING_LEAD_MS, it - heardMs + 1).takeIf { from -> from <= maxOf(at, line.timeMs) } }
-        } ?: return null
-        return ((from - here) / clock.speed).toLong()
-    }
+    /** [untilSung] from where [clock] has the song now. */
+    private fun untilSung(lines: List<LyricLine>, clock: PlaybackClock, after: Long?, straightOn: Boolean = false): Long? =
+        untilSung(lines, clock.positionAt(now()), clock.speed, after, straightOn)
 
     /**
      * Whether what [app] plays may be ahead of, or behind, where the words are timed: a video, which
@@ -4579,6 +4564,25 @@ internal class MainViewModel(
         /** Whether another name heard [heardMs] into its song is where the song shown is, [shownMs] into it: well into it, and close. */
         internal fun sameRecordingPlace(shownMs: Long, heardMs: Long): Boolean =
             shownMs >= SAME_RECORDING_AFTER_MS && abs(heardMs - shownMs) <= SAME_RECORDING_MS
+
+        /**
+         * How long until what's heard from [here] in the song on, going by at [speed], has lines sung in it;
+         * null when no stretch of the song left has enough. Only from [after] on, when the song was heard
+         * up to there, and [straightOn] from there, wherever the lines are timed.
+         */
+        internal fun untilSung(lines: List<LyricLine>, here: Long, speed: Float, after: Long?, straightOn: Boolean = false): Long? {
+            val at = maxOf(here, after ?: here)
+            val heardMs = SingingListener.SECONDS * 1000L - SINGING_TAIL_MS
+            val starts = lines.filter { it.text.isNotBlank() && it.timeMs + SINGING_LEAD_MS >= at }
+            // Heard from just before a line starts, or now, as one just has: a while opening on music alone, the model may hear only that.
+            // Less just before, when that's what lets enough lines after it be heard too, so the line isn't left to the next while.
+            // A line alone only when it's heard from its start: its words are all that tell it apart, so one already begun may not be placed.
+            val from = if (straightOn) at else starts.withIndex().firstNotNullOfOrNull { (index, line) ->
+                val last = if (line.timeMs >= at && SungAlignment.canPlaceAlone(line, lines)) line.timeMs else starts.getOrNull(index + SINGING_LINES - 1)?.timeMs
+                last?.let { maxOf(at, line.timeMs - SINGING_LEAD_MS, it - heardMs + 1).takeIf { from -> from <= maxOf(at, line.timeMs) } }
+            } ?: return null
+            return ((from - here) / speed).toLong()
+        }
 
         /** How long ago the song can have been heard and still line up a video with it. */
         const val HEARD_LATELY_MS = 60_000L
