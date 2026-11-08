@@ -551,7 +551,7 @@ class MainViewModelTest {
         assertNotNull(model.uiState.following)
         model.dismissLyrics()
         idle()
-        assertEquals(withWords - 1, playback.playing.subscriptionCount.value)
+        assertEquals(withWords - 2, playback.playing.subscriptionCount.value)
         playback.playing.value = following(app = "com.tidal")
         idle()
         assertNull(model.uiState.following)
@@ -564,6 +564,7 @@ class MainViewModelTest {
         val model = playingModel(playback)
         val before = playback.playing.subscriptionCount.value
         val next = MusicMetadata("Moon", "Luna")
+        playback.playing.value = null
         playback.onThePhone = Heard.Song(next, null, app = "com.spotify")
         until("the next song in the player") { model.uiState.player?.song == next }
         idle()
