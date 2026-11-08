@@ -27,11 +27,11 @@ mkdir -p "$ANDROID_AVD_HOME/$name.avd"
 printf 'image.sysdir.1=%s/\nhw.ramSize=96\n' "$image" > "$ANDROID_AVD_HOME/$name.avd/config.ini"
 echo "path=$ANDROID_AVD_HOME/$name.avd" > "$ANDROID_AVD_HOME/$name.ini"
 """,
-    "emulator/emulator": ASK + 'touch "$FAKE/booted.$4"\n',
+    "emulator/emulator": ASK + 'echo "emulator log: loaded the snapshot, then nothing"\ntouch "$FAKE/booted.$4"\n',
     "platform-tools/adb": ASK + r"""
 case "$*" in
   devices) echo "List of devices attached"; for f in "$FAKE"/booted.*; do [ -e "$f" ] && printf 'emulator-%s\tdevice\n' "${f##*.}"; done ;;
-  *"getprop sys.boot_completed"*) echo 1 ;;
+  *"getprop sys.boot_completed"*) [ -e "$FAKE/never_boots" ] || echo 1 ;;
   *"pm path "*) pkg="${*##* }"; grep -qx "$pkg" "$FAKE/installed" 2>/dev/null && echo "package:/data/app/$pkg/base.apk" ;;
   *"dumpsys account"*) echo "  Accounts: 0"; cat "$FAKE/accounts" 2>/dev/null; echo "    ServiceInfo: AuthenticatorDescription {type=com.google}, ComponentInfo{gms}" ;;
   *"am start"*) pkg="${*##*id=}"; [ -e "$FAKE/installs_when_opened" ] && echo "$pkg" >> "$FAKE/installed" ;;
@@ -157,6 +157,38 @@ class EmulatorScriptTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse([a for a in self.asked() if a.startswith("emulator ")])
         self.assertIn("emulator-5580", result.stdout)
+
+    def test_start_boots_cold_so_an_old_quick_boot_snapshot_cant_roll_the_disk_back(self):
+        self.run_script("create", PHONE)
+        result = self.run_script("start", PHONE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        started = [a for a in self.asked() if a.startswith("emulator ")]
+        self.assertRegex(started[0], r"-no-snapshot( |$)")
+
+    def test_start_deletes_the_stale_quick_boot_snapshot(self):
+        self.run_script("create", PHONE)
+        snapshot = self.avds / f"{PHONE}.avd" / "snapshots" / "default_boot"
+        snapshot.mkdir(parents=True)
+        (snapshot / "ram.bin").write_text("from an earlier day")
+        result = self.run_script("start", PHONE)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(snapshot.exists())
+
+    def test_start_when_it_runs_already_leaves_its_snapshot_alone(self):
+        self.run_script("create", PHONE)
+        snapshot = self.avds / f"{PHONE}.avd" / "snapshots" / "default_boot"
+        snapshot.mkdir(parents=True)
+        self.boot()
+        self.run_script("start", PHONE)
+        self.assertTrue(snapshot.exists())
+
+    def test_start_fails_with_the_log_when_the_emulator_exits_before_it_booted(self):
+        self.run_script("create", PHONE)
+        (self.fake / "never_boots").touch()
+        result = self.run_script("start", PHONE)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("stopped while starting", result.stdout + result.stderr)
+        self.assertIn("emulator log: loaded the snapshot", result.stdout + result.stderr)
 
     def test_start_before_create_says_so(self):
         result = self.run_script("start", PHONE)
