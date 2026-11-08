@@ -465,6 +465,26 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun chordWikiKeepsTheLastFretAChordOfFifteenCharactersAndCutsANoteAfterAStrayBracket() {
+        val kept = "Cmaj7sus4add11x"
+        val dropped = "Cmaj7sus4add11xx"
+        assertEquals(15, kept.length)
+        assertEquals(16, dropped.length)
+        assertEquals(0, ChordSheets.fromChordWiki("{capo:25}\n[C]川").capo)
+        val song = ChordSheets.fromChordWiki(
+            """
+            {capo:25}
+            {capo:24}
+            [$kept]川
+            [$dropped]道
+            ]#[Am]メモ
+            """.trimIndent()
+        )
+        assertEquals(24, song.capo)
+        assertEquals(listOf(SheetLine("川", listOf(Chord(0, kept))), SheetLine("道", emptyList())), song.lines)
+    }
+
+    @Test
     fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
         assertEquals(
             listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),

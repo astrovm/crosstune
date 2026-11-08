@@ -68,6 +68,8 @@ class ChordWikiTest {
         assertEquals(links, (chordWikiLook(seen(links = links), timedOut = false) as ChordWikiLook.Ready).body)
         val long = "あ".repeat(201)
         assertEquals("", (chordWikiLook(seen(text = long), timedOut = false) as ChordWikiLook.Ready).body)
+        // 200 words is still a page that hasn't arrived. One more, and it's the page.
+        assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(title = "", text = "あ".repeat(200)), timedOut = false))
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(text = "short"), timedOut = false))
         assertThrows("empty") { chordWikiLook(seen(text = "short"), timedOut = true) }
         assertEquals(ChordWikiCheck.NONE, chordWikiCheck("川の道", "川の道を歩いていく"))
@@ -102,6 +104,12 @@ class ChordWikiTest {
         assertEquals(listOf("Lemon", "川の道"), chordWikiHits(html).map { it.title })
         assertTrue(chordWikiHits(html).first().href.contains("&"))
         assertEquals("誰か", chordWikiHits(html).first().artist)
+        // The title we were given doesn't match. The song's other name does, and that sheet is the one.
+        val hitsByOtherName = listOf(
+            ChordWikiHit("別の歌", "歩く人", "https://ja.chordwiki.org/wiki/other"),
+            ChordWikiHit("川の道", "歩く人", "https://ja.chordwiki.org/wiki/kawa")
+        )
+        assertEquals("https://ja.chordwiki.org/wiki/kawa", chordWikiBest(hitsByOtherName, "Kawa", "歩く人", "川の道")?.href)
     }
 
     @Test
@@ -183,6 +191,54 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals("[C]川", runBlocking { done.await() }.getOrThrow())
         assertNull(web.parent)
+    }
+
+    /** onPageFinished never runs. The delayed look still reads the editor. */
+    @Test
+    fun aPageThatNeverFinishesLoadingIsStillRead() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = activity.window.decorView as ViewGroup
+        val done = open(activity, gapMs = 20, waitMs = 10_000)
+        val web = findWeb(root)
+        assertNull(shadowOf(web).lastEvaluatedJavascriptCallback)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
+        val script = shadowOf(web).lastEvaluatedJavascript
+        assertTrue(script, script.orEmpty().contains("textarea"))
+        shadowOf(web).lastEvaluatedJavascriptCallback.onReceiveValue(page(source = "[C]川", hasEditor = true))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("[C]川", runBlocking { done.await() }.getOrThrow())
+    }
+
+    /**
+     * A check that hasn't used up the wait is asked again, from a clock that didn't start at zero.
+     * Exactly the wait, and it gives up.
+     */
+    @Test
+    fun aCheckThatHasNotTimedOutIsAskedAgain() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = activity.window.decorView as ViewGroup
+        var clock = 100L
+        val done = open(activity, now = { clock }, gapMs = 20, waitMs = 10)
+        val web = findWeb(root)
+        answer(web, page(title = "Just a moment...", text = "Checking your browser"))
+        val first = shadowOf(web).lastEvaluatedJavascriptCallback
+        assertFalse(done.isCompleted)
+        // Five milliseconds in. Adding the clock to the start would already call this too late.
+        clock = 105
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
+        val second = shadowOf(web).lastEvaluatedJavascriptCallback
+        assertTrue(first !== second)
+        second.onReceiveValue(page(title = "Just a moment...", text = "Checking your browser"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(done.isCompleted)
+        clock = 110
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
+        val third = shadowOf(web).lastEvaluatedJavascriptCallback
+        assertTrue(second !== third)
+        third.onReceiveValue(page(title = "Just a moment...", text = "Checking your browser"))
+        shadowOf(Looper.getMainLooper()).idle()
+        val error = runBlocking { done.await() }.exceptionOrNull()
+        assertTrue(error is IOException && error.message!!.contains("didn't finish"))
     }
 
     @Test

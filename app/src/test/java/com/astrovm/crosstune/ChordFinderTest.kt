@@ -1513,7 +1513,10 @@ Singing to the morning light</div>"""
             started.complete(Unit)
             suspendCancellableCoroutine { }
         }
+        val began = System.nanoTime()
         val found = chords(kawa, japanese, withWiki(pages)) as ChordFinder.Chords.Found
+        // Cancelling the wiki lookup is what lets this return. Waiting out its own timeout would take 20s.
+        assertTrue(System.nanoTime() - began < 8_000_000_000L)
         assertTrue(started.isCompleted)
         assertEquals(ChordSite.U_FRET, found.sheet.site)
         assertEquals("https://www.ufret.jp/song.php?data=1", found.sheet.url)
@@ -1585,6 +1588,32 @@ Singing to the morning light</div>"""
         assertEquals(chordWikiViewUrl("川の道"), searched.sheet.url)
         assertTrue(urls.any { "search.html" in it })
         assertTrue(urls.none { java.net.URLDecoder.decode(it, "UTF-8").contains("海の歌") })
+    }
+
+    @Test
+    fun chordWikiWaitsBetweenPagesAndLeavesABlankArtistOutOfTheSearch() {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        var edits = 0
+        val began = System.nanoTime()
+        val found = chords(
+            MusicMetadata("川の道", " "),
+            japanese,
+            withWiki(
+                ChordWikiPages { url ->
+                    urls += url
+                    when {
+                        "search.html" in url -> "川の道\thttps://ja.chordwiki.org/wiki/kawa"
+                        else -> if (edits++ == 0) "" else chordPro
+                    }
+                },
+                pauseMs = 400
+            )
+        ) as ChordFinder.Chords.Found
+        assertTrue(System.nanoTime() - began >= 700_000_000L)
+        val query = java.net.URLDecoder.decode(urls.first { "search.html" in it }.substringAfter("q="), "UTF-8")
+        assertEquals("川の道", query)
+        assertEquals(ChordSite.CHORDWIKI, found.sheet.site)
     }
 
     @Test
