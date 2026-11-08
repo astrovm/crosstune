@@ -673,6 +673,39 @@ class SingingTest {
     }
 
     @Test
+    fun aLineThatSaysWhichItIsIsHeardAloneWithNoLinesNearIt() {
+        // Every line is too far from the next to hear three, but the third has five words no other line shares:
+        // heard from a second and a half before its 40 seconds, which at double speed is 15.75 seconds away.
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
+        openLyrics()
+        plays(positionMs = 7_000, speed = 2f)
+        passes(15_650)
+        assertEquals(0, singing.hears)
+        passes(200)
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
+    fun aLineThatSaysWhichItIsIsHeardAloneJustBeforeItStarts() {
+        // Not right at its 40 seconds: the first change to the screen can ask for a frame, and Robolectric moves the clock 15 ms for that.
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
+        openLyrics()
+        plays(positionMs = 39_900)
+        passes(1)
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
+    fun aLineAlreadyBegunIsntHeardAlone() {
+        // Only this line says which it is, and its first words are gone, so nothing's left to hear.
+        lyricsTimedFor(null, times = listOf(0, 3, 40, 60, 80, 99))
+        openLyrics()
+        plays(positionMs = 40_100)
+        passes(60_000)
+        assertEquals(0, singing.hears)
+    }
+
+    @Test
     fun aSongMovedALittleWhileHeardIsStillPlaced() {
         val heard = CompletableDeferred<Sung?>()
         singing.answer = { heard.await() }

@@ -44,6 +44,18 @@ const musicPage = `<!doctype html><title>Player</title><body><script>
   window.go = (seconds) => { audio.currentTime = seconds; return audio.play(); };
 </script>`;
 
+/** SoundCloud's page: no media element, only a progress bar that says its second, as theirs does. */
+const soundcloudPage = `<!doctype html><title>Player</title><body>
+  <div class="playbackTimeline__progressWrapper" role="progressbar" aria-valuenow="0" aria-valuemax="${LENGTH_S}"></div>
+  <script>
+    window.say = (title, artist) => { navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album: "" }); };
+    // The bar moves to [seconds] and stays, so the only way past it is the time since it moved.
+    window.go = (seconds) => {
+      document.querySelector(".playbackTimeline__progressWrapper").setAttribute("aria-valuenow", String(seconds));
+      navigator.mediaSession.playbackState = "playing";
+    };
+  </script>`;
+
 const profile = await mkdtemp(join(tmpdir(), "crosstune-e2e-panel-"));
 const launch = (lang, extensionArgs = [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]) =>
   chromium.launchPersistentContext(profile, {
@@ -63,6 +75,7 @@ async function answer(route) {
   const request = route.request();
   const url = request.url();
   if (/^https:\/\/(music|www)\.youtube\.com\/watch/.test(url)) return route.fulfill({ contentType: "text/html", body: musicPage });
+  if (/^https:\/\/soundcloud\.com\/some-uploader\//.test(url)) return route.fulfill({ contentType: "text/html", body: soundcloudPage });
   asked.push(url);
   for (const [start, reply] of lyricsSites) {
     if (url.startsWith(start)) return typeof reply === "function" ? reply(route) : route.fulfill(reply);
@@ -259,6 +272,26 @@ try {
     // Only the copy timed for 340 seconds has its first line there; the other's has it at 10.5.
     await panel.waitForFunction((line) => document.querySelector("#words p.now")?.textContent === line, FIRST_LINE, { timeout: 15_000 });
     await music.evaluate((seconds) => { window.load(seconds); return window.go(1); }, LENGTH_S);
+  });
+
+  await step("a site with no media element, SoundCloud: the words follow its progress bar, within the second", async () => {
+    lyricsSites = nothing();
+    lyricsSites.set("https://lrclib.net/", { contentType: "application/json", body: lrclibAfrica.replaceAll('"Africa"', '"Barely Audible"') });
+    // SoundCloud's own page is asked about the song too, for its cover.
+    lyricsSites.set("https://soundcloud.com/oembed", { contentType: "application/json", body: "{}" });
+    const sound = await context.newPage();
+    await sound.goto("https://soundcloud.com/some-uploader/barely-audible");
+    assert.equal(await sound.locator("audio, video").count(), 0);
+    await sound.evaluate(() => { window.say("Barely Audible", "Toto"); window.go(1); });
+    await waitForWords(panel, FIRST_LINE);
+    await panel.bringToFront();
+    await panel.waitForFunction(() => document.getElementById("words")?.classList.contains("following"), null, { timeout: 5_000 });
+    // The bar says 15 and stays: the line starts at 15.5 less the panel's 0.3 s lead, so it takes the
+    // time since the bar moved, which a reading in whole seconds has none of, to light it.
+    await sound.evaluate(() => window.go(15));
+    await panel.waitForFunction((line) => document.querySelector("#words p.now")?.textContent === line, SECOND_LINE, { timeout: 5_000 });
+    assert.equal(await sound.evaluate(() => document.querySelector(".playbackTimeline__progressWrapper").getAttribute("aria-valuenow")), "15");
+    await sound.close();
   });
 
   await step("a video that isn't music: its name goes nowhere", async () => {

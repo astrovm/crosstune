@@ -246,6 +246,29 @@ internal object SongNames {
     }
 
     /**
+     * Whether [one] and [other] are releases of one song, as Shazam calls the song an app plays "Song (Live
+     * at Home)": by one artist, and one name but for what each adds after it. Another song isn't, however
+     * near where the song is it's heard.
+     */
+    fun releasesOfOneSong(one: MusicMetadata, other: MusicMetadata): Boolean =
+        same(bareTitle(one.title), bareTitle(other.title)) && (sameArtist(one.artist, other.artist) || sameArtist(other.artist, one.artist))
+
+    /**
+     * Whether what a player names by [title] and [artist] is [song]. A video's title names more, e.g.
+     * "Artist - Song (Official Video)", and its channel may be named "Artist - Topic", or not be the
+     * artist at all, when the title names them: "Police, The   Every Little Thing She Does Is Magic
+     * Audio Flac" by "keyloginhot".
+     */
+    fun names(title: String, artist: String, song: MusicMetadata): Boolean {
+        if (title.isBlank()) return false
+        // Read as the song it names the way the song playing is named, e.g. "YOASOBI「アイドル」 Official Music Video".
+        val named = MetadataParsers.youtubeVideo(title, artist)?.title
+        if (!(same(title, song.title) || wordsMatch(title, song.title) || named?.let { same(it, song.title) } == true)) return false
+        return artist.isBlank() || artistInside(artist, song.artist) || sameArtist(song.artist, artist) ||
+            artistNames(song.artist).map(::words).any { it.isNotEmpty() && words(title).containsAll(it) }
+    }
+
+    /**
      * Whether [loanword], a name in katakana, says [latin], as "プラスティック・ラブ" does "Plastic
      * Love". Japanese puts vowels between consonants, reads l as r, v as b, and leaves out an r
      * that ends a sound, so the two are compared by the consonants they're said with, one off.

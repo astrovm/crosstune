@@ -408,3 +408,164 @@ out-of-memory kill was logged, so what brought it down isn't known. Hearing also
 
 Run it again with: `scripts/syncreplay/setup.sh` (`REPLAY_CACHE=FOLDER REPLAY_ROCM=1`), then with `SYNCREPLAY_DIR`, `DEMUCS_PYTHON`, `DEMUCS_DEVICE=cuda` and `WHISPER_PYTHON` set,
 `syncreplay.py set --at-once 1 --gradle scripts/gradle-box/gradle-box.sh`, then `all` with the same `--gradle`. Point `HF_HOME`, `TORCH_HOME` and `XDG_CACHE_HOME` at the same folder for the models.
+
+## Counting player speed once, and singing without spaces (PR #728)
+
+Measured on 2026-11-07, with the set above, never looked up again. Main at 57bd6bfc gave the same as that section, line for line in the totals: 1179, 317, 616, 112, 410, so PR #742 moved nothing here.
+
+### The baseline from here on: the sheet's own length
+
+The replay now tells the app how long the sheet it found is (`length` in `ID.found.json`), as the phone does, and no longer that every sheet is as long as the recording (Issue #689). The app's own hearing stays unset: a stand-in Shazam put the Police's first while at 22.8 s, where the phone puts it at 11.4 to 11.6 s and the replay without it at 11 s. Measured on main 7e8e88f7 and this branch merged on it (ea572d9c), both with this harness.
+
+| `all` | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|---:|
+| Main, old harness | 1179 | 317 | 616 | 112 | 410 |
+| Main, sheet's own length | 1168 | 314 | 612 | 85 | 417 |
+| This branch, sheet's own length | 1168 | 311 | 624 | 85 | 407 |
+
+Main, old harness to the sheet's own length, the songs that moved:
+
+| Song | Recording | Lines | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 二人だけのセレモニー | SaeY5sxStGM | 25 → 14 | 0 → 0 | 0 → 0 | 25 → 1 | 0 → 0 | none → +11.1 |
+| It's My Life | yWQezjGjiqs | 23 | 1 → 1 | 1 → 1 | 3 → 0 | 18 → 22 | +5.8 → -2.7 |
+| Otro Como Tú | 2V2nqZjRELg | 38 | 16 → 16 | 24 → 23 | 0 → 0 | 14 → 15 | -1.6 → -1.6 |
+| Every Little Thing She Does Is Magic | 5WEjz2YoH80 | 24 | 8 → 7 | 19 → 18 | 0 → 0 | 5 → 5 | -0.7 → -0.7 |
+| Easy Love | VK4PJfTMawc | 7 | 1 → 1 | 4 → 3 | 0 → 0 | 3 → 4 | -0.7 → -0.7 |
+| Bad Guy | ZD6rXLXZOEI | 34 | 23 → 22 | 33 → 33 | 0 → 0 | 0 → 0 | +0.5 → +0.5 |
+| Shape of You | xTvyyoF_LZY | 36 | 7 → 6 | 25 → 24 | 0 → 0 | 11 → 12 | -0.9 → -0.9 |
+
+- The 11 lines no longer scored are all 二人だけのセレモニー's. Told the sheet is as long as the 178.2 s recording, its last two lines, at up to 184.5 s, run past that end, so the app didn't take it (the 212.6 s sheet is from a longer release). It showed no lines, and the scoring fell back to prep's 38 lines, all dark. Told the sheet's own length, it shows the sheet's 24 lines, which join 11 pairs of prep's lines into one ("ねぇ 3本きりの花束でも ときめいてる"). The second of each pair has no line of its own to light, so it has no time to score. The phone scores the same way, by the lines the app shows.
+- It's My Life loses its 3 dark lines on main and on this branch, so its +14.4 s regression below is gone with this harness: -2.7 s on both.
+
+This branch against main, both with the sheet's own length, the songs that moved:
+
+| Song | Recording | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---|---:|---:|---:|---:|---:|
+| Otro Como Tú | 2V2nqZjRELg | 16 → 16 | 23 → 24 | 0 → 0 | 15 → 14 | -1.6 → -1.6 |
+| Every Little Thing She Does Is Magic | 5WEjz2YoH80 | 7 → 8 | 18 → 19 | 0 → 0 | 5 → 5 | -0.7 → -0.7 |
+| 99 Luftballons | AT_0zXw2rRo | 10 → 6 | 13 → 18 | 0 → 0 | 12 → 7 | -1.3 → -1.3 |
+| Hotel California | BciS5krYL80 | 11 → 11 | 36 → 35 | 0 → 0 | 13 → 14 | +1.3 → +1.3 |
+| Despacito | FXovf5dsRTw | 11 → 14 | 26 → 29 | 0 → 0 | 30 → 27 | +6.2 → +6.2 |
+| Dynamite | HaEYUJ2aRHs | 12 → 10 | 20 → 19 | 0 → 0 | 3 → 4 | -0.6 → -0.9 |
+| Tell It to My Heart | OtXIsUjDOk8 | 10 → 11 | 24 → 24 | 0 → 0 | 7 → 7 | -2.1 → -2.1 |
+| Plastic Love | T_lC2O1oIew | 0 → 0 | 0 → 1 | 0 → 0 | 14 → 13 | -11.6 → -11.1 |
+| Easy Love | VK4PJfTMawc | 1 → 0 | 3 → 6 | 0 → 0 | 4 → 1 | -0.7 → -0.5 |
+| Time to Pretend | XUKyV49P8F0 | 11 → 11 | 15 → 15 | 0 → 0 | 0 → 0 | +1.0 → +1.1 |
+| Bizarre Love Triangle | ZnrSNEah_20 | 6 → 3 | 10 → 8 | 2 → 2 | 5 → 7 | -24.1 → -24.1 |
+| Nel blu dipinto di blu | dXN0jpUUmOw | 0 → 2 | 1 → 3 | 0 → 0 | 12 → 10 | -1.2 → -1.0 |
+| Hips Don't Lie | nOj6d-HOw2w | 7 → 7 | 23 → 24 | 0 → 0 | 33 → 33 | -1.0 → -1.1 |
+| Shape of You | xTvyyoF_LZY | 6 → 6 | 24 → 23 | 0 → 0 | 12 → 13 | -0.9 → -0.9 |
+
+Worse here: 99 Luftballons, Bizarre Love Triangle, Dynamite, Hotel California and Shape of You, for the reasons below, which this harness doesn't change. It's My Life no longer is.
+
+`run ID --like-phone` again, now told the sheet's own length too, against the same phone runs:
+
+| Phone run | Median apart, before | Median apart, now | Worst, before | Worst, now |
+|---|---:|---:|---:|---:|
+| Police run 1 | 0.57 s | 0.79 s | 1.2 s | 1.5 s |
+| Police run 2 | 0.49 s | 0.47 s | 2.4 s | 2.4 s |
+| Expresso Love run 2 | 0.03 s | 0.03 s | 2.0 s | 2.0 s |
+
+Not closer. `--like-phone` already took the sheet's length from the phone's log, so only the length NetEase's word-by-word answer gives changed. What keeps Police run 1 apart is a drift: the phone lit each line a little later than the replay, 0.2 s at 12 s and 1.5 s at 142 s (1.2 s before this change). Its hearings put Shazam's speed at 0.96 to 1.01, about the 0.985 a 261 s sheet on a 265 s video means. Why the phone's words go slower than the replay's isn't known yet (Issue #722).
+
+### Before: main's harness, as it was
+
+| `all` | Lines | Within 0.3 s | Within 0.5 s | Dark | Early |
+|---|---:|---:|---:|---:|---:|
+| Main | 1179 | 317 | 616 | 112 | 410 |
+| This branch | 1179 | 311 | 623 | 111 | 405 |
+| This branch again | 1179 | 312 | 624 | 111 | 404 |
+
+The songs that moved, of 42. The repeat moved at most 1 line on a song.
+
+| Song | Recording | Within 0.3 s | Within 0.5 s | Dark | Early | Worst |
+|---|---|---:|---:|---:|---:|---:|
+| 99 Luftballons | AT_0zXw2rRo | 10 → 6 | 13 → 18 | 0 → 0 | 12 → 7 | -1.3 → -1.3 |
+| Hotel California | BciS5krYL80 | 11 → 11 | 36 → 35 | 0 → 0 | 13 → 14 | +1.3 → +1.3 |
+| Despacito | FXovf5dsRTw | 11 → 14 | 26 → 29 | 0 → 0 | 30 → 27 | +6.2 → +6.2 |
+| Dynamite | HaEYUJ2aRHs | 12 → 10 | 20 → 18 | 0 → 0 | 3 → 5 | -0.6 → -0.9 |
+| Take On Me | HzdD8kbDzZA | 11 → 10 | 15 → 15 | 0 → 0 | 5 → 5 | -4.5 → -4.5 |
+| Tell It to My Heart | OtXIsUjDOk8 | 10 → 11 | 24 → 24 | 0 → 0 | 7 → 7 | -2.1 → -2.1 |
+| Plastic Love | T_lC2O1oIew | 0 → 0 | 0 → 1 | 0 → 0 | 14 → 13 | -11.6 → -11.1 |
+| Easy Love | VK4PJfTMawc | 1 → 0 | 4 → 6 | 0 → 0 | 3 → 1 | -0.7 → -0.5 |
+| Time to Pretend | XUKyV49P8F0 | 11 → 11 | 15 → 15 | 0 → 0 | 0 → 0 | +1.0 → +1.1 |
+| Bizarre Love Triangle | ZnrSNEah_20 | 6 → 3 | 10 → 8 | 2 → 2 | 5 → 7 | -24.1 → -24.1 |
+| Nel blu dipinto di blu | dXN0jpUUmOw | 0 → 2 | 1 → 3 | 0 → 0 | 12 → 10 | -1.2 → -1.0 |
+| Hips Don't Lie | nOj6d-HOw2w | 7 → 7 | 23 → 24 | 0 → 0 | 33 → 33 | -1.0 → -1.1 |
+| Gee | qizghQs4K6E | 0 → 0 | 5 → 5 | 1 → 1 | 17 → 17 | -1.1 → -1.0 |
+| Shape of You | xTvyyoF_LZY | 7 → 6 | 25 → 23 | 0 → 0 | 11 → 13 | -0.9 → -0.9 |
+| It's My Life | yWQezjGjiqs | 1 → 1 | 1 → 1 | 3 → 2 | 18 → 19 | +5.8 → +14.4 |
+
+Each part off, to see which moved what, all else as this branch:
+
+| `all` | Within 0.3 s | Within 0.5 s | Dark | Early | Moved most |
+|---|---:|---:|---:|---:|---|
+| No line heard alone (`canPlaceAlone` in `untilSung`) | 316 | 621 | 112 | 406 | Easy Love 4 → 1 within 0.5 s, worst -10.1 s, against 6 with it |
+| No shift from a distinct line (`distinctLineShift`) | 320 | 619 | 111 | 408 | 99 Luftballons 16 within 0.3 s, against 6 with it |
+
+Worse, and why:
+
+- 99 Luftballons, 10 → 6 within 0.3 s, but 13 → 18 within 0.5 s. A distinct line puts the words right 12 s sooner. They end up as near the singing as with that part off, a mean of 0.18 s off against 0.20 s, but about 0.25 s earlier. Lines light 0.3 s early on purpose, so more of them land just past 0.3 s.
+- Bizarre Love Triangle (ZnrSNEah_20), 6 → 3 and 10 → 8. A line heard alone moves every later while: it hears from 57.7 s where main hears from 79.3 s, and the whiles that follow catch lines 14 to 19 less well, +1.5 s against +0.6 s.
+- It's My Life, worst +5.8 → +14.4 s, with one dark line fewer. Also from a line heard alone: the first seconds of a while at 65 s are heard as music, so the words stop being shown for 24.5 s, against 20.5 s from 60 s on main. One line then lights as they come back. That stop is main's, on any while opening without words.
+- Dynamite (20 → 18, 19 on the repeat) and Shape of You (25 → 23) are at the edge of the noise.
+
+### Plastic Love
+
+| T_lC2O1oIew | Within 0.5 s | Early | Median off, once put right | Put right at |
+|---|---:|---:|---:|---:|
+| Main | 0 of 14 | 14 | 10.86 s | never |
+| This branch | 1 of 14 | 13 | 0.98 s | 78.1 s |
+
+Better, not fixed. On main no while heard is ever matched, as the words have no spaces and the singing is split elsewhere. Here the second is, the one from 53.5 s, and the whole sheet moves about 10.4 s, at 78.1 s. Lines 0 to 5 are lit before that, so they stay about 11 s early. After it, the sheet is within 0.5 s for 9 of its 14 lines and within 1.1 s for all, and the later lines drift to about -1 s. Nothing here corrects that drift, so the line-by-line target stays open.
+
+### A player rate of 1.05x
+
+`run XB7AmIsxzfI --from 1 --player-speed 1.05 --skew 0 --shazam-ahead 0 --words-length 0 --video`, the same harness on both. This tests the clock's sums on cached hearing, not hearing stretched audio. Told the sheet's own length, both give exactly the same lines.
+
+| | Lyrics clock | Within 0.3 s | Within 0.5 s | Worst |
+|---|---:|---:|---:|---:|
+| Main | 1.1024998x | 0 of 22 | 1 of 22 | -6.6 s |
+| This branch | 1.05x | 21 of 22 | 22 of 22 | -0.5 s |
+
+### What the replay gets told
+
+This branch first replayed with main's harness, which told the app a sheet is as long as the recording. With the sheet's own length and a stand-in Shazam together, main gave 1168 lines, 311, 614, 90 dark, 407, and this branch 306, 619, 87, 406. Hearing then started later on some songs, as on XB7AmIsxzfI, from 22.8 s instead of 11 s, so the stand-in moved the replay away from the phone. The sheet's own length alone is the baseline now, at the top of this section.
+
+### On the phone
+
+The Samsung at media volume 1, put back to 0 after each run, `phone ID --seconds 150 --app app.morphe.android.apps.youtube.music`. This branch's APK (ea572d9c) and main's (7e8e88f7), each with what it learnt forgotten before every run. Within 0.5 s, within 1 s, and the median off:
+
+| Song | Run | This PR | Main |
+|---|---:|---|---|
+| Every Little Thing She Does Is Magic, XB7AmIsxzfI | 1 | 13/22, 22/22, 0.41 s | 19/21, 21/21, 0.16 s |
+| | 2 | 6/21, 12/21, 0.97 s | 19/21, 21/21, 0.18 s |
+| | 3 | 20/22, 22/22, 0.23 s | 9/22, 17/22, 0.57 s |
+| Expresso Love, 0_RLLNRWur4 | 1 | 12/17, 14/17, 0.18 s | 15/18, 18/18, 0.19 s |
+| | 2 | 16/18, 18/18, 0.33 s | 16/17, 17/17, 0.22 s |
+| | 3 | 12/17, 17/17, 0.38 s | 15/17, 17/17, 0.31 s |
+
+- Measured: no sung line goes dark in any run, on either build.
+- Late runs happen on both builds. This PR's Police run 2 has lines 5 to 19 up to +2.1 s late until about 105 s. Main's run 3 has lines 12 to 29 +1.0 to +1.4 s late. Expresso Love's run 1 on this PR has three lines at +5.2 s; main's three runs have none.
+- Replayed with `run ID --like-phone` from what the phone kept, this PR's code and main's light the same lines at the same times. The Police run 2: 20/22 within 0.5 s on both, median 0.47 s apart from the phone, worst 2.4 s. Expresso Love run 1: 11/18 on both, median 0.23 s apart, worst 5.3 s. So the late stretches come from something the replay doesn't have, not from this PR's code. What it is isn't known.
+- Measured, with 3 runs a song: this PR's Police is behind main's in runs 1 and 2, and ahead in run 3. Too few runs to tell the builds apart on the phone.
+- Main's runs 2 and 3 were first run with the last run's lead still known (`lead 210` on the first hearing). The harness had given the app notification access after stopping it, which started it again, and it wrote what it had learnt back over the forgetting. The harness now gives access before it stops the app, and only when it's missing. Those runs were redone, starting with `lead null`.
+- Run 3 of the Police first read 54 s behind: it kept one while, in an intro riff that fits two places almost equally. `behind` now leaves out a while that fits elsewhere at 0.8 of its best fit or more. False fits measured 0.91 to 0.95 of the best, true ones up to 0.85.
+- On the phone the Police's first while starts at 11.4 s to 11.6 s, as the replay's does at 11 s. With the stand-in Shazam above it starts at 22.8 s, so the stand-in is further from the phone on this song.
+
+### A faster player on the phone: VLC at 1.05x
+
+VLC for Android 3.7.1 played the Police from a tagged local file, `phone XB7AmIsxzfI --app org.videolan.vlc --uri file:///sdcard/Music/crosstune-police.m4a`, at 1.05x set on the track in VLC, which keeps it when VLC is stopped. Its session says the rate (`speed=1.05` in `dumpsys media_session`), and the app's timing log has `speed=1.05` on every clock: 17 or 18 in each run.
+
+| Build | Run | Words' clock | Within 0.5 s | Within 1 s | Median off |
+|---|---:|---:|---:|---:|---:|
+| This PR | 1 | 1.050x | 18/19 | 19/19 | 0.36 s |
+| This PR | 2 | 1.050x | 18/19 | 19/19 | 0.30 s |
+| Main | 1 | 1.050x | 18/19 | 19/19 | 0.32 s |
+
+- Measured: main doesn't count the rate twice on the phone here, as it does in the 1.05x replay (1.1025x).
+- Inferred, from main's log: only the first 3 hearings are Shazam's, with speeds 1.003, 1.046 and 1.040. Every later hearing is the player's own clock, which main gives speed 1.0, so the pace goes back to 1.0 by 49 s. In the replay every hearing is Shazam's, so main stays off.
+- YouTube Music has no speed control: neither build shows one, and its session offers none (`actions=2600887`, no `ACTION_SET_PLAYBACK_SPEED`). The YouTube app has one, but it stops once Crosstune comes to the front.
+
+`phone` reads the screen with uiautomator, and only one thing may read it at a time: with a T3 device session holding it, `uiautomator dump` exits 137, and `phone` now says so instead of asking whether the phone is unlocked.
