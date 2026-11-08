@@ -120,10 +120,10 @@ Several agents share that emulator and the Samsung phone. Hold the device with [
 ```bash
 python3 scripts/devicelock.py take crosstune-phone --who "promo" --minutes 15
 python3 scripts/devicelock.py who
-python3 scripts/devicelock.py release crosstune-phone
+python3 scripts/devicelock.py release crosstune-phone --who "promo"
 ```
 
-`take` waits its turn. An earlier waiter gets the device before a later one, and taking it again while others wait puts you at the back of the line. Taking it again while you already hold it, and nobody is waiting, returns at once. A detached holder lets go when the minutes are up. `release` only ends your own hold. `release --force` ends someone else's and prints who that was. `who` reads the holder from the lock itself.
+`take` waits its turn. An earlier waiter gets the device before a later one, and taking it again while others wait puts you at the back of the line. Taking it again while you already hold it, and nobody is waiting, returns at once. A detached holder lets go when the minutes are up. `release` only ends your own hold: the one this shell session took, or, with `--who`, the one taken under that name, since an agent's shell calls each run in their own session. `release --force` ends someone else's and prints who that was. `who` reads the holder from the lock itself.
 
 [`scripts/milkdrop-render/render.py`](scripts/milkdrop-render/render.py) draws the MilkDrop visuals for any song into a 60 fps video, with the app's projectM, presets and settings:
 

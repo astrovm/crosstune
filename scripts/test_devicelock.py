@@ -254,6 +254,26 @@ class DeviceLockTest(unittest.TestCase):
         self.wait_for(lambda: (not pid_alive(pid)) or "")
         self.assertIn("samsung: free", self.who("samsung"))
 
+    def test_release_by_name_works_from_another_session(self):
+        # An agent's shell calls each get their own session, so the take and the release never share one.
+        proc = subprocess.Popen(
+            [sys.executable, str(SCRIPT), "take", "samsung", "--who", "ada", "--minutes", "2"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=self.env(),
+            start_new_session=True,
+        )
+        self.procs.append(proc)
+        pid = self.finish(proc)
+        wrong = self.invoke("release", "samsung", "--who", "bea")
+        self.assertNotEqual(wrong.returncode, 0)
+        self.assertIn("ada", wrong.stderr)
+        self.assertNotIn("Traceback", wrong.stderr)
+        self.assertTrue(pid_alive(pid))
+        released = self.invoke_ok("release", "samsung", "--who", "ada")
+        self.assertIn("released samsung", released.stdout)
+        self.assertNotIn("was held by", released.stdout)
+        self.wait_for(lambda: (not pid_alive(pid)) or "")
+        self.assertIn("samsung: free", self.who("samsung"))
+
     def test_who_spots_a_holder_whose_session_is_gone(self):
         proc = subprocess.Popen(
             [sys.executable, str(SCRIPT), "take", "samsung", "--who", "ada", "--minutes", "2"],
