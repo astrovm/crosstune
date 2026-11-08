@@ -108,6 +108,7 @@ ONE_PLACE = 0.8
 # How far from where the app says a while heard at another rate is looked for: a riff played again is further off.
 STRETCH_REACH_MS = 1500
 # What the dev app learns of a song's timing, forgotten before each check unless --again.
+PREFS = "shared_prefs/crosstune_preferences.xml"
 LEARNT = ("lyrics_sync", "song_lengths", "sung_heard", "shazam_gaps", "video_timing")
 # Letters a text needs to name a song inside a longer title, so "Play" or a clock doesn't.
 MIN_NAME = 8
@@ -640,15 +641,27 @@ def phone(args):
         media_volume(volume)
 
 
+def allow_listening():
+    """Gives the app its notification access back: its data cleared, it loses that too, and can't see the
+    player then, only hear the room, which may play another song."""
+    listener = f"{DEV_APP}/com.astrovm.crosstune.NowPlayingListener"
+    shell("cmd", "notification", "allow_listener", listener)
+    if listener not in shell("settings", "get", "secure", "enabled_notification_listeners").strip().split(":"):
+        sys.exit(f"{DEV_APP} has no notification access, so it can't see what plays")
+
+
 def watch(args):
     shell("setprop", f"log.tag.{TIMING_LOG}", "DEBUG")
     # Started again, Crosstune reads the log level, and nothing's left from before.
     shell("am", "force-stop", DEV_APP)
     shell("am", "force-stop", args.app)
     shell("run-as", DEV_APP, "find", "cache", "-name", "heard-*.pcm", "-delete")
+    allow_listening()
     if not args.again:
-        for key in LEARNT:
-            shell("run-as", DEV_APP, "sed", "-i", "-e", f"s#<string name=\"{key}\">[^<]*</string>##", "shared_prefs/crosstune_preferences.xml")
+        # With its data cleared the app has no settings yet, so there's nothing learnt to forget.
+        if shell("run-as", DEV_APP, "find", ".", "-path", f"./{PREFS}").strip():
+            for key in LEARNT:
+                shell("run-as", DEV_APP, "sed", "-i", "-e", f"s#<string name=\"{key}\">[^<]*</string>##", PREFS)
         shell("run-as", DEV_APP, "rm", "-f", "cache/kept_words.json", "cache/lyrics.json", "cache/sung_readings.json", "cache/lookups.json")
     adb("logcat", "-G", "16M")
     adb("logcat", "-c")

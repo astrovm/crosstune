@@ -15,6 +15,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
+# A shared folder set for real replays (SYNCREPLAY_DIR) would have the tests read and write the real ones.
+os.environ.pop('SYNCREPLAY_DIR', None)
 spec = importlib.util.spec_from_file_location('replay', Path(__file__).with_name('syncreplay.py'))
 r = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r)
@@ -718,13 +720,43 @@ class PhoneTest(unittest.TestCase):
 
     def test_phone_waits_for_the_requested_song_before_opening_lyrics(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
-                patch.object(r, 'shell', return_value=''), patch.object(r, 'adb'), \
+                patch.object(r, 'shell', return_value=''), patch.object(r, 'adb'), patch.object(r, 'allow_listening'), \
                 patch.object(r.time, 'sleep'), patch.object(r, 'tap', return_value=False), \
                 patch.object(r, 'playing', side_effect=[('Previous song', 100), ('Song requested', 200)]) as playing:
             (r.OUT / 'set.json').write_text(json.dumps([dict(id='fake', title='Song requested')]))
             with self.assertRaisesRegex(SystemExit, "Couldn't open"):
                 r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
             self.assertEqual(2, playing.call_count)
+
+    def test_learnt_timing_is_forgotten_only_where_the_app_has_settings(self):
+        for prefs, edits in (('', 0), ('./shared_prefs/crosstune_preferences.xml\n', len(r.LEARNT))):
+            said = []
+
+            def phone(*command):
+                said.append(command)
+                return prefs if 'find' in command and '-path' in command else ''
+            with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                    patch.object(r, 'shell', side_effect=phone), patch.object(r, 'adb'), patch.object(r.time, 'sleep'), patch.object(r, 'allow_listening'), \
+                    patch.object(r, 'playing', return_value=('Song', 100)), patch.object(r, 'tap', return_value=False):
+                with self.assertRaisesRegex(SystemExit, "Couldn't open"):
+                    r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
+            self.assertEqual(edits, sum('sed' in command for command in said))
+
+    def test_the_app_gets_notification_access_back_before_it_plays(self):
+        listener = f'{r.DEV_APP}/com.astrovm.crosstune.NowPlayingListener'
+        for allowed, ends in (('other/Listener:' + listener, "Couldn't open"), ('other/Listener', 'no notification access')):
+            said = []
+
+            def phone(*command):
+                said.append(command)
+                return allowed if command[:2] == ('settings', 'get') else ''
+            with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
+                    patch.object(r, 'shell', side_effect=phone), patch.object(r, 'adb'), patch.object(r.time, 'sleep'), \
+                    patch.object(r, 'playing', return_value=('Song', 100)), patch.object(r, 'tap', return_value=False):
+                with self.assertRaisesRegex(SystemExit, ends):
+                    r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
+            self.assertIn(('cmd', 'notification', 'allow_listener', listener), said)
+            self.assertEqual(ends == 'no notification access', not any(command[:2] == ('am', 'start') for command in said))
 
     def test_a_screen_nothing_can_read_says_so_instead_of_blaming_the_lock_screen(self):
         # Only one thing at a time may read the screen, and a T3 device session may be it: uiautomator then dies with exit 137.
@@ -792,7 +824,7 @@ class PhoneTest(unittest.TestCase):
 
     def test_a_file_on_the_phone_opens_instead_of_the_songs_link(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
-                patch.object(r, 'shell', return_value='') as shell, patch.object(r, 'adb'), \
+                patch.object(r, 'shell', return_value='') as shell, patch.object(r, 'adb'), patch.object(r, 'allow_listening'), \
                 patch.object(r.time, 'sleep'), patch.object(r, 'tap', return_value=False), \
                 patch.object(r, 'playing', return_value=('Song', 100)):
             with self.assertRaisesRegex(SystemExit, "Couldn't open"):
