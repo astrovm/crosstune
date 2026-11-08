@@ -46,6 +46,13 @@ class KeptWordsTest {
     }
 
     @Test
+    fun readingsKeptOverKanaAmongKanjiReadBackOverTheKanjiOnly() {
+        val flying = all.copy(learning = all.learning.copy(lines = listOf(LineReading(listOf(Ruby("飛び立", "とびた"), Ruby("つ")), "とびたつ", "tobitatsu"))))
+        val back = KeptWords.from(flying.json())!!
+        assertEquals(listOf(Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), back.learning.lines.single().parts)
+    }
+
+    @Test
     fun wordsKeptBeforeTheirPaceWasGoOnAsTimed() {
         val before = org.json.JSONObject(all.json()).apply { remove("pace") }.toString()
         assertEquals(all.copy(pace = 1.0), KeptWords.from(before))

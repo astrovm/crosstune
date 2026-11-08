@@ -97,7 +97,8 @@ internal data class KeptWords(
 
         private fun reading(array: JSONArray, index: Int) = array.getJSONObject(index).let { reading ->
             LineReading(
-                reading.getJSONArray("parts").list { parts, at -> parts.getJSONArray(at).let { Ruby(it.getString(0), if (it.isNull(1)) null else it.getString(1)) } },
+                // Kept over the kana among a word's kanji, as it once was, they're moved off them.
+                Readings.rubied(reading.getJSONArray("parts").list { parts, at -> parts.getJSONArray(at).let { Ruby(it.getString(0), if (it.isNull(1)) null else it.getString(1)) } }),
                 reading.getString("reading"),
                 reading.getString("romanized"),
                 reading.getString("typed")
