@@ -391,19 +391,48 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun aSongAlreadyOnThatIsntPlayingStaysQuiet() {
+    fun aSongPausedThatCantMoveIsPlayedOnFromWhereItWasAndSaysSo() {
         keep(line())
-        // Paused, or a YouTube Music ad kept under the song's name: the follow says the song isn't playing.
-        // "Playing from the start" would be false, and opening the link would start it over.
+        // Paused in an app whose session offers no seek, as Spotify's free plan. The line can't be reached,
+        // but silence with nothing said is worse: it plays on, and the card says where from. It isn't opened again.
         playing(canSeek = false, playing = false)
-        cards().start(null, before = null)
-        waitFor("the card stays silent") { practice?.sound == LineSound.NONE }
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the card says the song plays on from where it was") { practice?.sound == LineSound.FROM_WHERE_IT_WAS }
         Thread.sleep(500)
-        assertEquals(LineSound.NONE, practice?.sound)
+        assertEquals(LineSound.FROM_WHERE_IT_WAS, practice?.sound)
+        assertEquals(listOf(true), playback.plays)
         assertTrue(playback.seeks.isEmpty())
         assertTrue(playback.opened.isEmpty())
         assertTrue(playback.songsAsked.isEmpty())
         assertEquals(0, playback.cameBack)
+        cards.replay()
+        Thread.sleep(100)
+        assertEquals(LineSound.FROM_WHERE_IT_WAS, practice?.sound)
+        assertEquals(listOf(true), playback.plays)
+        // Stopped, what it started is paused again.
+        cards.stop()
+        assertEquals(listOf(true, false), playback.plays)
+    }
+
+    @Test
+    fun aSongPausedThatWontPlayOnSaysSoPlainly() {
+        keep(line())
+        playing(canSeek = false, playing = false)
+        playback.startsInBackground = false
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the card says it couldn't play") { practice?.sound == LineSound.WONT_PLAY }
+        Thread.sleep(500)
+        assertEquals(LineSound.WONT_PLAY, practice?.sound)
+        assertTrue(playback.seeks.isEmpty())
+        assertTrue(playback.opened.isEmpty())
+        cards.replay()
+        Thread.sleep(100)
+        assertEquals(LineSound.WONT_PLAY, practice?.sound)
+        // Nothing was started, so stopping has nothing to pause.
+        cards.stop()
+        assertEquals(listOf(true), playback.plays)
     }
 
     @Test

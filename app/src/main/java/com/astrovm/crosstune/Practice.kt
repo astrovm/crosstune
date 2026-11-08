@@ -138,7 +138,11 @@ internal class PracticeCards(
         soundJob?.cancel()
         soundJob = scope.launch {
             val song = MusicMetadata(line.title, line.artist)
-            val stayed = inApp(source, song, line.app, fromStart = { setSound(line, LineSound.FROM_START) }) { app ->
+            val stayed = inApp(
+                source, song, line.app,
+                fromStart = { setSound(line, LineSound.FROM_START) },
+                paused = { setSound(line, if (source.resume(song)) LineSound.FROM_WHERE_IT_WAS else LineSound.WONT_PLAY) }
+            ) { app ->
                 val lead = if (app()?.video == true) line.leadMs else 0L
                 val start = (line.startMs ?: 0L) + lead
                 // A moment past where the words say it ends, so its last word isn't cut short.
@@ -162,9 +166,13 @@ internal class PracticeCards(
     /**
      * Follows [song] in the music app, asking [app] for it by name when no app has it, then does
      * [block] once it can be moved around in, with where it is as that changes. True when it could,
-     * or when that song is already playing and the app won't move, so it stays where it started.
+     * or when that song is already playing and the app won't move, so it stays where it started
+     * ([fromStart]), or is paused and the app won't move, so [paused] is left to say what's done about it.
      */
-    private suspend fun inApp(source: PlaybackSource, song: MusicMetadata, app: String?, fromStart: () -> Unit = {}, block: suspend (() -> Following?) -> Unit): Boolean = coroutineScope {
+    private suspend fun inApp(
+        source: PlaybackSource, song: MusicMetadata, app: String?,
+        fromStart: () -> Unit = {}, paused: (suspend () -> Unit)? = null, block: suspend (() -> Following?) -> Unit
+    ): Boolean = coroutineScope {
         var latest: Following? = null
         val following = launch { source.follow(song).collect { latest = it } }
         try {
@@ -175,9 +183,14 @@ internal class PracticeCards(
                 val there = withTimeoutOrNull(FIND_SONG_MS) { ready() } != null
                 if (there) block { latest }
                 // Already this song, and it won't move, as Spotify's free plan. Said only while the song
-                // itself plays. A pause, or an ad under the song's name, isn't that, and opening it again would start it over.
+                // itself plays. A pause, or an ad under the song's name, isn't that, and opening it again would start it over:
+                // it's played on from where it is, if the caller wants that.
                 val fromTheStart = !there && latest?.clock?.playing == true
                 if (fromTheStart) fromStart()
+                if (!there && !fromTheStart && paused != null) {
+                    paused()
+                    return@coroutineScope true
+                }
                 return@coroutineScope there || fromTheStart
             }
             val opened = openUntilItCanMove(source, song, app, { latest }, fromStart)
@@ -249,7 +262,7 @@ internal class PracticeCards(
     /** Plays the card's line again, or, while it plays, stops it there, paused, to be played again. */
     fun replay() {
         val practice = uiState.practice ?: return
-        val line = practice.line?.takeIf { practice.sound != LineSound.NONE && practice.sound != LineSound.FROM_START } ?: return
+        val line = practice.line?.takeIf { !practice.sound.unreached } ?: return
         if (practice.sound != LineSound.PLAYING) return sound(line)
         soundJob?.cancel()
         playback?.playPause(MusicMetadata(line.title, line.artist), false)
@@ -290,7 +303,7 @@ internal class PracticeCards(
 
     /** Stops practising, the line playing, or the song on its way, paused. */
     fun stop() {
-        val playing = uiState.practice?.takeIf { it.sound == LineSound.PLAYING || it.sound == LineSound.LOADING || it.sound == LineSound.FROM_START }?.line
+        val playing = uiState.practice?.takeIf { it.sound == LineSound.PLAYING || it.sound == LineSound.LOADING || it.sound == LineSound.FROM_START || it.sound == LineSound.FROM_WHERE_IT_WAS }?.line
         soundJob?.cancel()
         soundJob = null
         playing?.let { playback?.playPause(MusicMetadata(it.title, it.artist), false) }

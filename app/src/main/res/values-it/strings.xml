@@ -393,6 +393,8 @@
     <string name="practice_stop">Ferma la riga</string>
     <string name="practice_loading">Apertura in %1$s</string>
     <string name="practice_from_start">In riproduzione dall\'inizio. Non salta a questa riga.</string>
+    <string name="practice_from_where_it_was">Riprende da dove era. Non salta a questa riga.</string>
+    <string name="practice_wont_play">Impossibile riprodurre. Premi play nell\'app musicale.</string>
     <string name="practice_done">%1$d ripassate</string>
     <string name="practice_back_to">Torna a %1$s</string>
     <string name="practice_progress">%1$d di %2$d</string>

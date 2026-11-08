@@ -392,6 +392,8 @@
     <string name="practice_stop">停止这一行</string>
     <string name="practice_loading">正在 %1$s 中打开</string>
     <string name="practice_from_start">正从开头播放。不会跳到这一行。</string>
+    <string name="practice_from_where_it_was">正从暂停处继续播放。不会跳到这一行。</string>
+    <string name="practice_wont_play">无法播放。请在音乐应用里点播放。</string>
     <string name="practice_done">已练习 %1$d 条</string>
     <string name="practice_back_to">回到 %1$s</string>
     <string name="practice_progress">%1$d / %2$d</string>

@@ -392,6 +392,8 @@
     <string name="practice_stop">लाइन रोकें</string>
     <string name="practice_loading">%1$s में खुल रहा है</string>
     <string name="practice_from_start">शुरू से चल रहा है. यह इस लाइन पर नहीं जाएगा.</string>
+    <string name="practice_from_where_it_was">जहाँ रुका था वहीं से चल रहा है. यह इस लाइन पर नहीं जाएगा.</string>
+    <string name="practice_wont_play">चला नहीं सका. संगीत ऐप में प्ले दबाएं.</string>
     <string name="practice_done">%1$d का अभ्यास हुआ</string>
     <string name="practice_back_to">%1$s पर वापस जाएं</string>
     <string name="practice_progress">%2$d में से %1$d</string>

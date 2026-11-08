@@ -114,6 +114,23 @@ class PracticeScreenTest {
     }
 
     @Test
+    fun aSongPlayingOnFromWhereItWasSaysSoAndHasNoPlayButton() {
+        val heard = line.copy(cardType = HEAR_TYPE)
+        show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.FROM_WHERE_IT_WAS), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))))
+        composeRule.onNodeWithText(string(R.string.practice_from_where_it_was)).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_stop)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aSongThatWontPlaySaysSoAndHasNoPlayButton() {
+        val translated = line.copy(cardType = TRANSLATE_TYPE)
+        show(UiState(practice = Practice(queue = listOf(translated), total = 2, turned = true, sound = LineSound.WONT_PLAY), cardTypes = listOf(READ_IT, TRANSLATE_IT.copy(on = true))))
+        composeRule.onNodeWithText(string(R.string.practice_wont_play)).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertDoesNotExist()
+    }
+
+    @Test
     fun whileTheMusicAppGetsThereItsNameIsOnlySaidWhenItIsKnown() {
         val heard = line.copy(cardType = HEAR_TYPE, app = "com.example.nothing")
         show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.LOADING), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))))

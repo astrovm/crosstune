@@ -392,6 +392,8 @@
     <string name="practice_stop">Satırı durdur</string>
     <string name="practice_loading">%1$s içinde açılıyor</string>
     <string name="practice_from_start">Baştan çalıyor. Bu satıra atlamıyor.</string>
+    <string name="practice_from_where_it_was">Kaldığı yerden çalıyor. Bu satıra atlamıyor.</string>
+    <string name="practice_wont_play">Çalınamadı. Müzik uygulamasından başlat.</string>
     <string name="practice_done">%1$d pratik yapıldı</string>
     <string name="practice_back_to">%1$s şarkısına dön</string>
     <string name="practice_progress">%1$d / %2$d</string>

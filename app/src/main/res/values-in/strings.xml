@@ -392,6 +392,8 @@
     <string name="practice_stop">Hentikan baris</string>
     <string name="practice_loading">Membuka di %1$s</string>
     <string name="practice_from_start">Diputar dari awal. Tidak meloncat ke baris ini.</string>
+    <string name="practice_from_where_it_was">Diputar dari posisi terakhir. Tidak meloncat ke baris ini.</string>
+    <string name="practice_wont_play">Tidak bisa diputar. Tekan putar di aplikasi musik.</string>
     <string name="practice_done">%1$d dilatih</string>
     <string name="practice_back_to">Kembali ke %1$s</string>
     <string name="practice_progress">%1$d dari %2$d</string>

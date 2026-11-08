@@ -201,7 +201,7 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, lea
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
-                if (preview == null && practice.sound == LineSound.FROM_START) FromStart()
+                if (preview == null) practice.sound.said()?.let { Said(it) }
                 CardFace(line, practice, type.options, learning, actions, preview, onSide)
             }
         }
@@ -219,18 +219,18 @@ private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, le
     // Each side plays the line when it has its sound; a front with nothing to show or play shows the words.
     if (preview != null) {
         val side = if (preview.back) cards.back else cards.front
-        CardSideEditor(line, side, lyrics, onPlay = actions.onReplayLine, canPlay = practice.sound != LineSound.NONE && practice.sound != LineSound.FROM_START, playing = practice.sound == LineSound.PLAYING, onChange = onSide)
+        CardSideEditor(line, side, lyrics, onPlay = actions.onReplayLine, canPlay = !practice.sound.unreached, playing = practice.sound == LineSound.PLAYING, onChange = onSide)
         return
     }
     val front = cards.front
-    val plays = front.sound && practice.sound != LineSound.NONE && practice.sound != LineSound.FROM_START
+    val plays = front.sound && !practice.sound.unreached
     if (plays) LineSound(line, practice.sound, actions.onReplayLine)
     if (!front.bare) CardSideContent(line, front, lyrics, back = false)
     else if (!plays) CardSideContent(line, CardSide(), lyrics, back = false)
     // Turned, the other side comes in below the front, which stays.
     if (practice.turned) {
         HorizontalDivider()
-        if (cards.back.sound && practice.sound != LineSound.FROM_START) LineSound(line, practice.sound, actions.onReplayLine)
+        if (cards.back.sound && practice.sound.said() == null) LineSound(line, practice.sound, actions.onReplayLine)
         CardSideContent(line, cards.back, lyrics, back = true)
     }
 }
@@ -316,11 +316,19 @@ internal fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCa
     }
 }
 
-/** The song is playing from its start, because the app won't move to the line. */
+/** What the card says when the app won't move to the line, if it does. */
+private fun LineSound.said(): Int? = when (this) {
+    LineSound.FROM_START -> R.string.practice_from_start
+    LineSound.FROM_WHERE_IT_WAS -> R.string.practice_from_where_it_was
+    LineSound.WONT_PLAY -> R.string.practice_wont_play
+    else -> null
+}
+
+/** The song plays as it can, or doesn't, because the app won't move to the line. */
 @Composable
-private fun FromStart() {
+private fun Said(text: Int) {
     Text(
-        stringResource(R.string.practice_from_start),
+        stringResource(text),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.heightIn(min = 48.dp)

@@ -414,8 +414,17 @@ internal data class Practice(
     val line: SavedLine? get() = queue.firstOrNull()
 }
 
-/** How a card's line sounds: not at all, on its way in the music app, playing, or ready to play (again). */
-internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED, FROM_START }
+/**
+ * How a card's line sounds: not at all, on its way in the music app, playing, or ready to play (again).
+ * When the app won't move to the line, the song plays [FROM_START] or [FROM_WHERE_IT_WAS], or [WONT_PLAY] when it
+ * wouldn't even start; those say so on the card, and the line can't be played again from it.
+ */
+internal enum class LineSound {
+    NONE, LOADING, PLAYING, PLAYED, FROM_START, FROM_WHERE_IT_WAS, WONT_PLAY;
+
+    /** The line itself can't be played from the card: there's nothing to play, or the app won't move to it. */
+    val unreached: Boolean get() = this == NONE || this == FROM_START || this == FROM_WHERE_IT_WAS || this == WONT_PLAY
+}
 
 /** A [song] the music app [app] played, at [positionMs], before practice took it over. */
 internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?)
