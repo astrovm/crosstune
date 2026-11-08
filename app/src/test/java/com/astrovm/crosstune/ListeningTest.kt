@@ -1661,6 +1661,32 @@ class ListeningTest {
     }
 
     @Test
+    fun anotherSongHeardNearWhereTheSongShownIsTakesOverAsItsNoReleaseOfIt() {
+        // As on a phone: a song in the room was named, then the one the phone plays was heard again and
+        // again, well into it and 6 seconds from where the one shown had got to.
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        hearing.song("Demo", 41.0)
+        hearing.song("Demo", 41.0)
+        waitUntil(TIMEOUT_MS) { lit("Demo three") }
+        hearing.song("Other", 35.0)
+        waitUntil(TIMEOUT_MS) { lit("Other two") }
+        assertEquals("Other", HistoryStore(prefs()).load().first().metadata.title)
+        // Nor is one of the same name by someone else.
+        hearing.song("Other", 36.0, artist = "Someone Else")
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.lyricsFor?.artist == "Someone Else" }
+    }
+
+    @Test
+    fun wordsFollowedByEarWhileWhatPlaysCantBeSeenStillSayHowToFollowTheMusicApp() {
+        MainActivity.playbackFactory = { FakePlayback() }
+        val hearing = FakeHearing()
+        demoWords(hearing)
+        // The microphone hears the room as well as the phone, so it isn't the music app's place to go by.
+        waitForText(string(R.string.lyrics_follow_allow))
+    }
+
+    @Test
     fun aSongHeardAlongWithNoCoverGetsOneByItsNameInRecentAndItsWords() {
         val hearing = FakeHearing()
         demoWords(hearing)

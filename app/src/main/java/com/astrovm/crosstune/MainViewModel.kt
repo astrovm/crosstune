@@ -2238,19 +2238,24 @@ internal class MainViewModel(
         }
     }
 
+    /**
+     * Heard by another name of the song right where the song shown is, well into it, it's the same
+     * recording on another release, as Shazam sometimes names it, not the next song, which starts over.
+     * Another song heard there is still another song, e.g. one the phone plays, the room's named first.
+     */
     private fun keepsHeardRecording(heard: Heard.Song, shown: MusicMetadata): Boolean {
-        // Heard by another name right where the song shown is, well into it, it's the same recording
-        // on another release, as Shazam sometimes names it, not the next song, which starts over.
         val clock = heardClock
         val at = heard.clock
-        if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true &&
-            clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
-        ) {
-            heardClock = steadied(clock, at)
-            keepInTime()
-            return true
-        }
-        return false
+        if (at == null || clock == null || !sameRecordingThere(heard.metadata, shown, at, clock)) return false
+        heardClock = steadied(clock, at)
+        keepInTime()
+        return true
+    }
+
+    private fun sameRecordingThere(song: MusicMetadata, shown: MusicMetadata, at: PlaybackClock, clock: PlaybackClock): Boolean {
+        if (!clock.playing || heardSong?.let { sameSong(it, shown) } != true || !SongNames.releasesOfOneSong(song, shown)) return false
+        val where = clock.positionAt(now())
+        return where >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - where) <= SAME_RECORDING_MS
     }
 
     /** Whether this hearing needs no further clock update. */

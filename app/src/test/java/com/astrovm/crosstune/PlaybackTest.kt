@@ -697,6 +697,20 @@ class PlaybackTest {
     }
 
     @Test
+    fun aVideoYouTubeMusicPatchedWithMorphePlaysIsNamedByTheAppThoughItsNamesSayLittle() {
+        allow()
+        sounding()
+        // As seen on a phone: an upload with no album, titled oddly, under a channel that isn't the artist.
+        val morphe = "app.morphe.android.apps.youtube.music"
+        shadowOf(sessions).addController(player(morphe, "YouTube Music", "Police, The   Every Little Thing She Does Is Magic Audio Flac", "keyloginhot"))
+        val playing = checkNotNull(playback.nowPlaying())
+        assertEquals(morphe, playing.app)
+        assertTrue(SongNames.wordsMatch(playing.metadata.title, "Every Little Thing She Does Is Magic"))
+        // A video's place isn't its song's, so it's heard for that.
+        assertNull(playing.clock)
+    }
+
+    @Test
     fun anAppMovingOnToTheSongIsFollowedFromThen() {
         allow()
         // YouTube plays an ad first, then the video, in the same session.
