@@ -10,10 +10,15 @@ import java.util.concurrent.TimeUnit
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.time.Duration
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -75,6 +80,8 @@ class MainViewModelTest {
         queueOrder: QueueOrder? = null,
         offline: OfflineSongs? = null,
         qobuzNumbers: QobuzNumbers? = null,
+        playQueue: PlayQueue? = null,
+        lookAhead: Boolean = true,
         reminders: PracticeReminders? = null
     ): MainViewModel {
         val client = fake.client()
@@ -98,6 +105,8 @@ class MainViewModelTest {
             songSearcher = songSearcher,
             reports = reports,
             queueOrder = queueOrder,
+            playQueue = playQueue,
+            lookAhead = lookAhead,
             qobuzNumbers = qobuzNumbers,
             offline = offline,
             reminders = reminders
@@ -261,10 +270,11 @@ class MainViewModelTest {
         Following(PlaybackClock(1_000, android.os.SystemClock.elapsedRealtime(), playing = playing), "Spotify", seek, app, canSkipNext = skipNext, canSkipPrevious = skipPrevious, shuffle = shuffle, repeat = repeat, like = like, upNext = upNext)
 
     /** A model whose music app plays [song], offered as playing now, with the player open on it when [open]. */
-    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null, listener: SongHearing = SongHearing { Heard.Nothing }, queueOrder: QueueOrder? = null): MainViewModel {
+    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null, listener: SongHearing = SongHearing { Heard.Nothing }, queueOrder: QueueOrder? = null, playQueue: PlayQueue? = null, lookAhead: Boolean = true): MainViewModel {
         playback.access = true
         playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
-        val model = model(playback = queueOrder?.ordering(playback) ?: playback, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports, listener = listener, queueOrder = queueOrder)
+        val ordered = queueOrder?.ordering(playback) ?: playback
+        val model = model(playback = playQueue?.skipping(ordered) ?: ordered, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports, listener = listener, queueOrder = queueOrder, playQueue = playQueue, lookAhead = lookAhead)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         if (open) {
@@ -497,6 +507,82 @@ class MainViewModelTest {
     }
 
     private fun lrclibAsked() = fake.requestedUrls.count { "lrclib.net" in it }
+
+    @Test
+    fun aLateLyricsAnswerCannotReplaceTheNextSongsWords() = lateLyrics { model, playback ->
+        val next = MusicMetadata("Moon", "Luna")
+        playback.playing.value = null
+        playback.onThePhone = Heard.Song(next, null, app = "com.spotify")
+        until("the next song's words") { model.uiState.lyricsFor == next && model.uiState.lyrics.contains("Moon words") }
+    }
+
+    @Test
+    fun aLateLyricsAnswerCannotReopenClosedWords() = lateLyrics { model, _ ->
+        model.dismissLyrics()
+        assertNull(model.uiState.lyricsFor)
+    }
+
+    private fun lateLyrics(leave: (MainViewModel, FakePlayback) -> Unit) {
+        val arrived = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        fake.handler = { request ->
+            if (request.url.host != "lrclib.net") FakeSpotify.html(request, "")
+            else if (request.url.toString().contains("Hush")) {
+                arrived.countDown()
+                release.await(10, TimeUnit.SECONDS)
+                FakeSpotify.html(request, timed)
+            } else {
+                FakeSpotify.html(request, """[{"trackName":"Moon","artistName":"Luna","duration":60,"plainLyrics":"Moon words"}]""")
+            }
+        }
+        val playback = FakePlayback().apply { playing.value = following() }
+        val finder = LyricsFinder(fake.client(), "test", Dispatchers.IO, busyPauseMs = 0)
+        val model = playingModel(playback, lyricsFinder = finder, lookAhead = false)
+        try {
+            model.playerLyrics()
+            assertTrue(arrived.await(5, TimeUnit.SECONDS))
+            val field = MainViewModel::class.java.getDeclaredField("lyricsJob").apply { isAccessible = true }
+            val old = field.get(model) as Job
+            leave(model, playback)
+            val expectedSong = model.uiState.lyricsFor
+            val expectedWords = model.uiState.lyrics
+            release.countDown()
+            until("the old lookup finished") { old.isCompleted }
+            idle()
+            assertEquals(expectedSong, model.uiState.lyricsFor)
+            assertEquals(expectedWords, model.uiState.lyrics)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun closingWordsStopsTheirAppFollowerBeforeItCanSetTheClockAgain() {
+        val playback = FakePlayback()
+        val model = lyricsModel(playback)
+        val withWords = playback.playing.subscriptionCount.value
+        assertNotNull(model.uiState.following)
+        model.dismissLyrics()
+        idle()
+        assertEquals(withWords - 2, playback.playing.subscriptionCount.value)
+        playback.playing.value = following(app = "com.tidal")
+        idle()
+        assertNull(model.uiState.following)
+    }
+
+    @Test
+    fun thePlayerStopsFollowingThePreviousSongWhenTheAppGoesOn() {
+        val playback = FakePlayback()
+        playback.playing.value = following()
+        val model = playingModel(playback)
+        val before = playback.playing.subscriptionCount.value
+        val next = MusicMetadata("Moon", "Luna")
+        playback.playing.value = null
+        playback.onThePhone = Heard.Song(next, null, app = "com.spotify")
+        until("the next song in the player") { model.uiState.player?.song == next }
+        idle()
+        assertEquals(before, playback.playing.subscriptionCount.value)
+    }
 
     @Test
     fun timedWordsFollowTheAppAndItsButtonsMoveIt() {
@@ -1284,7 +1370,7 @@ class MainViewModelTest {
     private val ytLink = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** A model with YouTube Music on the phone and set as where songs go, and [ytLink] looked up, shown as the result. */
-    private fun ytMusicModel(playback: FakePlayback, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null): MainViewModel {
+    private fun ytMusicModel(playback: PlaybackSource, phone: Phone = Phone.OTHER, oneTap: OneTapSetup? = null): MainViewModel {
         shadowOf(app.packageManager).installPackage(installedApp(ytMusic, "YouTube Music"))
         prefs().edit().putString("default_target", "YOUTUBE_MUSIC").commit()
         fake.handler = { request -> FakeSpotify.html(request, """{"title":"Dakare Ni Kita Onna","author_name":"Kingo Hamada"}""") }
@@ -1299,6 +1385,57 @@ class MainViewModelTest {
 
     private fun appPlays(playback: FakePlayback, playing: Boolean = true) {
         playback.playing.value = Following(PlaybackClock(0, android.os.SystemClock.elapsedRealtime(), playing = playing), "Music", canSeek = true, appPackage = ytMusic)
+    }
+
+    /** Holds the app's answer while an open is waiting to see if the song is already playing. */
+    private fun pendingOpen(action: (MainViewModel, MutableSharedFlow<Following?>, List<Effect>, FakePlayback) -> Unit) {
+        val playback = FakePlayback().apply { access = true }
+        val answers = MutableSharedFlow<Following?>(extraBufferCapacity = 1)
+        val source = object : PlaybackSource by playback {
+            override fun follow(song: MusicMetadata): Flow<Following?> = answers
+        }
+        val model = ytMusicModel(source)
+        val effects = mutableListOf<Effect>()
+        model.viewModelScope.launch { model.effects.collect { effects += it } }
+        model.openResult()
+        until("the first open waiting on the app") { answers.subscriptionCount.value == 1 }
+        action(model, answers, effects, playback)
+    }
+
+    @Test
+    fun openingAgainCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
+        model.openResult()
+        idle()
+        until("only the new open waiting") { answers.subscriptionCount.value == 1 }
+        assertTrue(answers.tryEmit(null))
+        until("opened once") { effects.isNotEmpty() }
+        assertEquals(1, effects.size)
+    }
+
+    @Test
+    fun playingCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, playback ->
+        model.playResult()
+        idle()
+        // The player and the play request now follow the app; the old open no longer does.
+        assertEquals(2, answers.subscriptionCount.value)
+        assertTrue(answers.tryEmit(null))
+        until("the app asked to play") { playback.songsAsked.isNotEmpty() }
+        assertEquals(1, playback.songsAsked.size)
+        assertTrue(effects.isEmpty())
+    }
+
+    @Test
+    fun openingTheOriginalCancelsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
+        model.openOriginal()
+        until("the old open stopped") { answers.subscriptionCount.value == 0 }
+        assertEquals(listOf(ytLink), effects.filterIsInstance<Effect.Open>().map { it.url })
+    }
+
+    @Test
+    fun cancellingAHandoffStopsTheOpenAlreadyWaitingOnTheApp() = pendingOpen { model, answers, effects, _ ->
+        model.cancelHandoff()
+        until("the old open stopped") { answers.subscriptionCount.value == 0 }
+        assertTrue(effects.isEmpty())
     }
 
     @Test
@@ -1406,6 +1543,69 @@ class MainViewModelTest {
         model.playerMoveQueued(0, 1)
         until("moved") { upNext() == listOf("B", "A", "L1", "L2") }
         order.off()
+    }
+
+    @Test
+    fun aListCanPlayFromItsFirstWaitingSongWhenTheAppIsNoLongerFollowed() {
+        val playback = FakePlayback()
+        val ytMusic = MusicService.YOUTUBE_MUSIC.packageName
+        val tracks = listOf(song, MusicMetadata("List 1", "Band"), MusicMetadata("List 2", "Band"))
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val queue = PlayQueue(
+            playback,
+            { _, songs -> YouTubeQueue("https://music.youtube.com/watch?v=${songs.first().title}&list=TL", songs) },
+            { _, _ -> null },
+            File(app.noBackupFilesDir, "play_queue_unfollowed.json"),
+            scope,
+            Dispatchers.Unconfined
+        )
+        try {
+            runBlocking { queue.play(tracks, MusicService.YOUTUBE_MUSIC, ytMusic, 1, tracks.take(1)) }
+            val model = playingModel(playback, playQueue = queue)
+            assertNull(model.uiState.player?.following)
+            model.playerPlayLater(0)
+            until("the first waiting song asked for") { playback.listsAsked.isNotEmpty() }
+            assertEquals("https://music.youtube.com/watch?v=List 1&list=TL", playback.listsAsked.single().second)
+        } finally {
+            queue.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aListsSongsUpNextAreMovedAndPlayedFromByTheirPlaceAmongTheAppsOwnAheadOfThem() {
+        val playback = FakePlayback()
+        val ytMusic = MusicService.YOUTUBE_MUSIC.packageName
+        // The playing song, two the app has queued from this part, then six still to ask for.
+        val tracks = listOf(song) + (1..2).map { MusicMetadata("App $it", "Band") } + (1..6).map { MusicMetadata("List $it", "Band") }
+        val queue = PlayQueue(
+            playback,
+            { _, songs -> YouTubeQueue("https://music.youtube.com/watch?v=${songs.first().title}&list=TL", songs) },
+            { _, _ -> null },
+            File(app.noBackupFilesDir, "play_queue_model.json"),
+            CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+            Dispatchers.Unconfined
+        )
+        runBlocking { queue.play(tracks, MusicService.YOUTUBE_MUSIC, ytMusic, 3, tracks.take(3), "Road Trip") }
+        playback.playing.value = following(app = ytMusic, upNext = listOf(Queued("App 1", "Band", 1), Queued("App 2", "Band", 2)))
+        val model = playingModel(playback, playQueue = queue)
+        val upNext = { model.uiState.player?.following?.upNext?.map { it.title } }
+        val all = listOf("App 1", "App 2", "List 1", "List 2", "List 3", "List 4", "List 5", "List 6")
+        until("following") { upNext() == all }
+        // One of the app's onto one of the list's, or the other way, is no move.
+        model.playerMoveQueued(0, 2)
+        model.playerMoveQueued(2, 0)
+        idle()
+        assertEquals(all, upNext())
+        // The list's own move by their place among the list's, past the app's two ahead of them.
+        model.playerMoveQueued(3, 4)
+        until("moved") { upNext() == listOf("App 1", "App 2", "List 1", "List 3", "List 2", "List 4", "List 5", "List 6") }
+        // Tapped, the list plays on from there, as the app is asked for it.
+        model.playerPlayLater(5)
+        until("asked") { playback.listsAsked.isNotEmpty() }
+        assertEquals("https://music.youtube.com/watch?v=List 4&list=TL", playback.listsAsked.single().second)
+        assertTrue(model.uiState.player?.played == true)
+        queue.stop()
     }
 
     @Test
