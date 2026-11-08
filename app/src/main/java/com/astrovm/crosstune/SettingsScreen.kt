@@ -136,6 +136,47 @@ private fun depth(key: String?) = when (key) {
     else -> 2
 }
 
+/** Once there's been a session to take the time from; the time is set from the bell on the practice list. */
+@Composable
+private fun ReminderSetting(state: UiState, actions: ScreenActions) {
+    val minute = state.reminderMinute ?: return
+    SectionHeader(stringResource(R.string.saved_practice))
+    Group {
+        SettingSwitch(
+            label = stringResource(R.string.practice_reminders),
+            description = when {
+                state.reminder.blocked -> stringResource(R.string.practice_reminder_blocked)
+                state.reminder.on -> reminderTime(LocalContext.current, minute)
+                else -> null
+            },
+            checked = state.reminder.working,
+            onCheckedChange = actions.onReminderChange
+        )
+        // A problem, so in words: Android may hold the reminder an hour, until the user allows the minute.
+        if (state.reminder.late) ExactReminderRow(actions.onReminderExact)
+    }
+}
+
+/** Opens where alarms and reminders are allowed for the app. */
+@Composable
+private fun ExactReminderRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.practice_reminder_exact), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(R.string.practice_reminder_late),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
+    }
+}
+
 @Composable
 private fun SettingsList(
     state: UiState,
@@ -208,6 +249,8 @@ private fun SettingsList(
             LinesEarlyRow(state.linesEarlyMs, actions.onLinesEarlyChange)
             NextLineAheadRow(state.nextLineAheadMs, actions.onNextLineAheadChange)
         }
+
+        ReminderSetting(state, actions)
 
         // The AI features run on the user's ChatGPT plan, once signed in.
         SectionHeader(stringResource(R.string.settings_chatgpt_title))

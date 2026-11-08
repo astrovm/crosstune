@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import unicodedata
@@ -161,6 +162,8 @@ def main(argv=None):
         print(triage(rows))
     elif args.step == "songs":
         CHECK.mkdir(parents=True, exist_ok=True)
+        # SongCheck goes on from the answers it finds, so the last run's would pass for what the finders say now.
+        shutil.rmtree(CHECK / "reports", ignore_errors=True)
         (CHECK / "songs.json").write_text(json.dumps(as_songs(rows), ensure_ascii=False, indent=1))
         print(f"{len(rows)} songs in {CHECK / 'songs.json'}; now: scripts/gradle-box/gradle-box.sh :app:songCheck -PsongcheckDir={CHECK}")
     else:

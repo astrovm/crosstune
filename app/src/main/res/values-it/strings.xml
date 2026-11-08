@@ -396,6 +396,18 @@
     <string name="practice_done">%1$d ripassate</string>
     <string name="practice_back_to">Torna a %1$s</string>
     <string name="practice_progress">%1$d di %2$d</string>
+    <string name="practice_reminders">Promemoria degli esercizi</string>
+    <string name="practice_remind_me">Ricordamelo</string>
+    <string name="practice_reminder_at">Promemoria alle %1$s</string>
+    <string name="practice_reminder_blocked">Le notifiche sono disattivate</string>
+    <string name="practice_reminder_exact">Consenti l\'ora esatta</string>
+    <string name="practice_reminder_late">Senza, un promemoria può arrivare fino a un\'ora in ritardo</string>
+    <string name="practice_reminder_songs">%1$s e %2$d in più</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="one">%1$d scheda da ripassare</item>
+        <item quantity="many">%1$d schede da ripassare</item>
+        <item quantity="other">%1$d schede da ripassare</item>
+    </plurals>
     <string name="song_tab_meaning">Significato</string>
     <string name="song_tab_words">Parole</string>
     <string name="song_tab_artist">Artista</string>

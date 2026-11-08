@@ -97,6 +97,7 @@ internal class PracticeCards(
     private val store: SavedLinesStore,
     private val wallClock: () -> Long,
     private val now: () -> Long,
+    private val reminders: PracticeReminders? = null,
     private val songLoadMs: Long = MainViewModel.LOAD_SONG_MS
 ) {
     private var uiState by screen
@@ -279,6 +280,8 @@ internal class PracticeCards(
             practice = if (grade == Grade.AGAIN) practice.copy(queue = missedAgain(practice.queue), missed = practice.missed + 1)
             else practice.copy(queue = practice.queue.drop(1), done = practice.done + 1)
         )
+        reminders?.let { if (uiState.practice?.line == null) it.sessionDone() else it.practised() }
+        uiState = uiState.copy(reminder = reminders?.state ?: uiState.reminder)
         showCard()
     }
 

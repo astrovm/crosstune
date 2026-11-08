@@ -30,7 +30,7 @@ class PracticeCardsTest {
     private val sites = FakeSpotify()
 
     private fun cards(source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS) =
-        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, { 1_000_000L }, { System.currentTimeMillis() }, songLoadMs)
+        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, { 1_000_000L }, { System.currentTimeMillis() }, songLoadMs = songLoadMs)
 
     /** Spotify having the demo song, under [SPOTIFY_ID]. */
     private fun spotifyHasTheSong() {

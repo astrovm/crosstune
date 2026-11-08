@@ -395,6 +395,17 @@
     <string name="practice_done">%1$d geoefend</string>
     <string name="practice_back_to">Terug naar %1$s</string>
     <string name="practice_progress">%1$d van %2$d</string>
+    <string name="practice_reminders">Oefenherinneringen</string>
+    <string name="practice_remind_me">Herinner me</string>
+    <string name="practice_reminder_at">Herinnering om %1$s</string>
+    <string name="practice_reminder_blocked">Meldingen staan uit</string>
+    <string name="practice_reminder_exact">Exacte tijd toestaan</string>
+    <string name="practice_reminder_late">Zonder dit kan een herinnering tot een uur te laat komen</string>
+    <string name="practice_reminder_songs">%1$s en nog %2$d</string>
+    <plurals name="practice_reminder_title">
+        <item quantity="one">%1$d kaart om te oefenen</item>
+        <item quantity="other">%1$d kaarten om te oefenen</item>
+    </plurals>
     <string name="song_tab_meaning">Betekenis</string>
     <string name="song_tab_words">Woorden</string>
     <string name="song_tab_artist">Artiest</string>

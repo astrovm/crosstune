@@ -135,7 +135,7 @@ internal fun PracticeScreen(state: UiState, actions: ScreenActions) {
                     if (shown.total == 0) {
                         if (editing != null && optionLine != null) Card(optionLine, shown, state.cardTypes, state.learning, actions, editing, onSide) else CaughtUp()
                     }
-                    else if (line == null) Done(shown, actions)
+                    else if (line == null) Done(shown, state, actions)
                     else Card(line, shown, state.cardTypes, state.learning, actions, editing, onSide)
                 }
             }
@@ -444,9 +444,9 @@ internal fun waitText(ms: Long, locale: Locale): String {
     }
 }
 
-/** All done: how many were practised, and the music played before, a tap away. */
+/** All done: how many were practised, whether they'll be asked back, and the music played before, a tap away. */
 @Composable
-private fun Done(practice: Practice, actions: ScreenActions) {
+private fun Done(practice: Practice, state: UiState, actions: ScreenActions) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Spacer(Modifier.weight(1f))
         Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp))
@@ -457,6 +457,8 @@ private fun Done(practice: Practice, actions: ScreenActions) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 16.dp)
         )
+        // Turned off by hand, it's not offered again here, only on the list and in settings.
+        if (state.reminder.on || !state.reminder.turnedOff) ReminderBell(state, actions, labelled = true)
         Spacer(Modifier.weight(1f))
         // What played before, unless that's where practice left off.
         practice.before?.takeIf { before -> practice.lastSong?.let { it.title == before.song.title && it.artist == before.song.artist } != true }?.let { before ->

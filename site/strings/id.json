@@ -49,7 +49,7 @@
     ],
     [
       "Pelajari liriknya",
-      "Kana, pinyin, romaji, dan terjemahan. Lalu latih setiap baris di aplikasi musikmu saat aplikasi bisa pindah ke sana, atau dari awal jika tidak, dan kartunya mengatakannya."
+      "Kana, pinyin, romaji, dan terjemahan. Lalu latih setiap baris di aplikasi musikmu saat aplikasi bisa pindah ke sana, atau dari awal jika tidak, dan kartunya mengatakannya, dengan pengingat harian untuk kartu yang sudah waktunya."
     ],
     [
       "ChatGPT, kalau kamu punya",
@@ -163,7 +163,7 @@
     ],
     [
       "p",
-      "Crosstune memakai izin internet Android untuk mengambil info musik dan sampul, dan membaca status jaringan untuk tahu kapan ponsel sedang offline. Crosstune meminta izin mikrofon saat Anda pertama kali mengenali lagu atau membuka lirik, dan memakai mikrofon hanya selama mendengarkan. Jika kamu mengambangkan lirik di atas aplikasi lain, aplikasi meminta izin untuk tampil di atas aplikasi lain dan, sekali saja, untuk menampilkan notifikasi, yang membuat lirik tetap tampil dan memungkinkanmu membuka kunci atau menutupnya. Crosstune tidak meminta izin lokasi, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika Anda menambahkan tujuan khusus, pilih alamat HTTPS tepercaya. Visual MilkDrop juga memakai izin mikrofon untuk membaca suara yang diputar ponselmu, lewat Android; suara itu tidak direkam atau dikirim ke mana pun. Jika kamu memakai Shizuku atau root, mengetuk Atur semuanya atau Perbaiki semua akan meminta izinnya, yang dipakai Crosstune hanya untuk mengubah setelan link Android, akses mikrofon, akses lirik, dan tampilan di atas aplikasi lain untukmu. Ini juga membuat lirik bisa mendengar apa yang diputar aplikasi musik tanpa Android bertanya setiap kali."
+      "Crosstune memakai izin internet Android untuk mengambil info musik dan sampul, dan membaca status jaringan untuk tahu kapan ponsel sedang offline. Crosstune meminta izin mikrofon saat Anda pertama kali mengenali lagu atau membuka lirik, dan memakai mikrofon hanya selama mendengarkan. Jika kamu mengambangkan lirik di atas aplikasi lain, aplikasi meminta izin untuk tampil di atas aplikasi lain dan, sekali saja, untuk menampilkan notifikasi, yang membuat lirik tetap tampil dan memungkinkanmu membuka kunci atau menutupnya. Jika kamu menyalakan pengingat latihan, aplikasi meminta izin menampilkan notifikasi, dan memasang lagi alarm hariannya saat ponsel dimulai ulang. Kartu yang sudah waktunya dihitung di ponselmu, dan tidak ada yang dikirim. Crosstune tidak meminta izin lokasi, kamera, kontak, atau ID iklan. Permintaan bawaan ke layanan musik memakai HTTPS. Jika Anda menambahkan tujuan khusus, pilih alamat HTTPS tepercaya. Visual MilkDrop juga memakai izin mikrofon untuk membaca suara yang diputar ponselmu, lewat Android; suara itu tidak direkam atau dikirim ke mana pun. Jika kamu memakai Shizuku atau root, mengetuk Atur semuanya atau Perbaiki semua akan meminta izinnya, yang dipakai Crosstune hanya untuk mengubah setelan link Android, akses mikrofon, akses lirik, dan tampilan di atas aplikasi lain untukmu. Ini juga membuat lirik bisa mendengar apa yang diputar aplikasi musik tanpa Android bertanya setiap kali."
     ],
     [
       "h2",

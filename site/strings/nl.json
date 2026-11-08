@@ -49,7 +49,7 @@
     ],
     [
       "Leer de tekst",
-      "Kana, pinyin, romaji en vertalingen. Oefen daarna elke regel in je muziek-app als die erheen kan, of vanaf het begin als dat niet kan, en de kaart zegt dat."
+      "Kana, pinyin, romaji en vertalingen. Oefen daarna elke regel in je muziek-app als die erheen kan, of vanaf het begin als dat niet kan, en de kaart zegt dat, met een dagelijkse herinnering aan wat klaarstaat."
     ],
     [
       "ChatGPT, als je het hebt",
@@ -163,7 +163,7 @@
     ],
     [
       "p",
-      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen, en leest de netwerkstatus om te weten wanneer de telefoon offline is. Het vraagt de microfoonmachtiging de eerste keer dat je een nummer herkent of songteksten opent, en gebruikt de microfoon alleen tijdens het luisteren. Laat je songteksten boven andere apps zweven, dan vraagt het om boven andere apps te mogen verschijnen en, één keer, om een melding te tonen, die ze zichtbaar houdt en waarmee je ze ontgrendelt of sluit. Het vraagt geen machtigingen voor locatie, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekdiensten gebruiken HTTPS. Als je een eigen bestemming toevoegt, kies dan een betrouwbaar HTTPS-adres. MilkDrop-visuals gebruiken ook de microfoontoestemming om via Android het geluid te lezen dat je telefoon afspeelt; dat wordt niet opgenomen of verstuurd. Als je Shizuku of root gebruikt, vraagt Alles instellen of Alles oplossen om de bijbehorende toestemming, die Crosstune alleen gebruikt om voor jou de linkinstellingen van Android, de microfoontoegang, de toegang voor teksten en het weergeven vóór andere apps aan te passen. Het laat de teksten ook horen wat muziek-apps afspelen, zonder dat Android het elke keer vraagt."
+      "Crosstune gebruikt de internetmachtiging van Android om muziekinformatie en hoezen op te halen, en leest de netwerkstatus om te weten wanneer de telefoon offline is. Het vraagt de microfoonmachtiging de eerste keer dat je een nummer herkent of songteksten opent, en gebruikt de microfoon alleen tijdens het luisteren. Laat je songteksten boven andere apps zweven, dan vraagt het om boven andere apps te mogen verschijnen en, één keer, om een melding te tonen, die ze zichtbaar houdt en waarmee je ze ontgrendelt of sluit. Zet je oefenherinneringen aan, dan vraagt het om meldingen te tonen en zet het zijn dagelijkse wekker opnieuw na een herstart van de telefoon. Het telt je kaarten op de telefoon, en er wordt niets verstuurd. Het vraagt geen machtigingen voor locatie, camera, contacten of advertentie-ID. Ingebouwde verzoeken aan muziekdiensten gebruiken HTTPS. Als je een eigen bestemming toevoegt, kies dan een betrouwbaar HTTPS-adres. MilkDrop-visuals gebruiken ook de microfoontoestemming om via Android het geluid te lezen dat je telefoon afspeelt; dat wordt niet opgenomen of verstuurd. Als je Shizuku of root gebruikt, vraagt Alles instellen of Alles oplossen om de bijbehorende toestemming, die Crosstune alleen gebruikt om voor jou de linkinstellingen van Android, de microfoontoegang, de toegang voor teksten en het weergeven vóór andere apps aan te passen. Het laat de teksten ook horen wat muziek-apps afspelen, zonder dat Android het elke keer vraagt."
     ],
     [
       "h2",
