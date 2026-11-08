@@ -76,8 +76,8 @@ class ChordAlignTest {
         assertEquals(10, aligned.lines[1].letters)
         assertEquals(5, aligned.lines[1].matched)
         assertEquals(listOf(Chord(0, "G")), aligned.placed!![0].over)
-        assertEquals(1, aligned.placed!![1].over.size)
-        assertEquals("D", aligned.placed!![1].over.single().name)
+        assertEquals(1, aligned.placed[1].over.size)
+        assertEquals("D", aligned.placed[1].over.single().name)
     }
 
     @Test
@@ -91,7 +91,7 @@ class ChordAlignTest {
         assertEquals(listOf("A"), aligned.lines[1].drawn)
         assertEquals(listOf("A", "B"), aligned.lines[1].chords)
         assertEquals(listOf(Chord(1, "A")), aligned.placed!![1].over)
-        assertEquals(emptyList<String>(), aligned.placed!![1].before)
+        assertEquals(emptyList<String>(), aligned.placed[1].before)
     }
 
     @Test
@@ -114,8 +114,8 @@ class ChordAlignTest {
         assertEquals(1, aligned.lines[0].matched)
         assertEquals(listOf("X"), aligned.lines[0].drawn)
         assertEquals(listOf(Chord(0, "X")), aligned.placed!![0].over)
-        assertEquals(listOf(Chord(0, "Y")), aligned.placed!![1].over)
-        assertEquals(listOf(Chord(0, "Z")), aligned.placed!![2].over)
+        assertEquals(listOf(Chord(0, "Y")), aligned.placed[1].over)
+        assertEquals(listOf(Chord(0, "Z")), aligned.placed[2].over)
     }
 
     @Test
@@ -147,7 +147,7 @@ class ChordAlignTest {
         )
         // Line 0 is the first line shown, and there is nothing above it to take the chord.
         assertEquals(listOf("A"), aligned.placed!![0].before)
-        assertEquals(listOf(Chord(0, "G")), aligned.placed!![0].over)
+        assertEquals(listOf(Chord(0, "G")), aligned.placed[0].over)
         assertEquals(listOf(listOf("A"), listOf("G")), aligned.lines.map { it.drawn })
     }
 
@@ -158,7 +158,7 @@ class ChordAlignTest {
             listOf(first, second, "")
         )
         assertEquals(listOf(Chord(10, "E")), aligned.placed!![1].over)
-        assertEquals(emptyList<Chord>(), aligned.placed!![2].over)
+        assertEquals(emptyList<Chord>(), aligned.placed[2].over)
         assertEquals(listOf(listOf("G"), emptyList(), listOf("E")), aligned.lines.map { it.drawn })
     }
 
