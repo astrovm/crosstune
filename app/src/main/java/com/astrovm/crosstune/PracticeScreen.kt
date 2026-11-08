@@ -282,7 +282,7 @@ private fun CardSideContent(line: SavedLine, side: CardSide, lyrics: Learning, b
 private fun SideWords(line: SavedLine, side: CardSide, shows: WordsAs, lyrics: Learning, back: Boolean) {
     val base = if (line.line != null) MaterialTheme.typography.displaySmall else if (back) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium
     val style = base.copy(fontSize = base.fontSize * side.wordsScale, lineHeight = base.lineHeight * side.wordsScale, fontWeight = FontWeight.Bold).writing(line.text)
-    val ruby = line.ruby ?: line.reading?.let { listOf(Ruby(line.text, it)) }
+    val ruby = line.ruby ?: line.reading?.let { Readings.rubyOf(line.text, it) }
     if (shows == WordsAs.WRITTEN && side.readings && ruby != null) RubyLine(ruby, style, scale = side.readingScale)
     else Text(line.shownAs(shows, lyrics), style = style)
     line.line?.let { Text(it, style = MaterialTheme.typography.bodyLarge.writing(it), color = MaterialTheme.colorScheme.onSurfaceVariant) }

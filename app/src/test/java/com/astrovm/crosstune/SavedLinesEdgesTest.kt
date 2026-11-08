@@ -29,6 +29,21 @@ class SavedLinesEdgesTest {
     }
 
     @Test
+    fun aLineKeptWithItsReadingOverKanaAmongKanjiLoadsWithItOverTheKanjiOnly() {
+        val old = SavedLine(
+            "窓辺からやがて飛び立つ", reading = "まどべからやがてとびたつ", romanized = "madobe", title = "Demo", artist = "Band",
+            ruby = listOf(Ruby("窓辺", "まどべ"), Ruby("からやがて"), Ruby("飛び立", "とびた"), Ruby("つ"))
+        )
+        val byHand = SavedLine("取り扱い", reading = "とりあつかい", title = "Demo", artist = "Band", readByHand = true, ruby = listOf(Ruby("取り扱", "とりあつか"), Ruby("い")))
+        SavedLinesStore(prefs).addAll(listOf(old, byHand))
+        val loaded = SavedLinesStore(prefs).load().associateBy { it.text }
+        assertEquals(listOf(Ruby("窓辺", "まどべ"), Ruby("からやがて"), Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), loaded.getValue(old.text).ruby)
+        assertEquals(listOf(Ruby("取", "と"), Ruby("り"), Ruby("扱", "あつか"), Ruby("い")), loaded.getValue("取り扱い").ruby)
+        // Each kanji run is read on its own now, to put right by hand.
+        assertEquals(listOf(Ruby("窓辺", "まどべ"), Ruby("飛", "と"), Ruby("立", "た")), loaded.getValue(old.text).readable)
+    }
+
+    @Test
     fun aLineInLatinLettersIsTheOneTypedWhenAskedSoAndTheOneSaidOtherwise() {
         val line = SavedLine("先生", romanized = "sensee", typed = "sensei", title = "Demo", artist = "Band")
         assertEquals("sensei", line.latin(typed = true))
