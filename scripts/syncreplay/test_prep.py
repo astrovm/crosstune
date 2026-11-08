@@ -744,19 +744,25 @@ class PhoneTest(unittest.TestCase):
 
     def test_the_app_gets_notification_access_back_before_it_plays(self):
         listener = f'{r.DEV_APP}/com.astrovm.crosstune.NowPlayingListener'
-        for allowed, ends in (('other/Listener:' + listener, "Couldn't open"), ('other/Listener', 'no notification access')):
+        # Allowed already, by the phone's own say once allowed, or never.
+        for allowed, ends, asked in (([listener], "Couldn't open", False), (['', listener], "Couldn't open", True), ([''], 'no notification access', True)):
             said = []
+            answers = iter(allowed)
 
             def phone(*command):
                 said.append(command)
-                return allowed if command[:2] == ('settings', 'get') else ''
+                return 'other/Listener:' + next(answers, allowed[-1]) if command[:2] == ('settings', 'get') else ''
             with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)), \
                     patch.object(r, 'shell', side_effect=phone), patch.object(r, 'adb'), patch.object(r.time, 'sleep'), \
                     patch.object(r, 'playing', return_value=('Song', 100)), patch.object(r, 'tap', return_value=False):
                 with self.assertRaisesRegex(SystemExit, ends):
                     r.watch(argparse.Namespace(id='fake', app='player', again=False, seconds=150, uri=None))
-            self.assertIn(('cmd', 'notification', 'allow_listener', listener), said)
+            self.assertEqual(asked, ('cmd', 'notification', 'allow_listener', listener) in said)
             self.assertEqual(ends == 'no notification access', not any(command[:2] == ('am', 'start') for command in said))
+            # Allowing it starts the app, so it comes before the app's stopped and its learning forgotten.
+            if ends != 'no notification access':
+                checked = max(i for i, command in enumerate(said) if command[:2] == ('settings', 'get'))
+                self.assertLess(checked, said.index(('am', 'force-stop', r.DEV_APP)))
 
     def test_a_screen_nothing_can_read_says_so_instead_of_blaming_the_lock_screen(self):
         # Only one thing at a time may read the screen, and a T3 device session may be it: uiautomator then dies with exit 137.

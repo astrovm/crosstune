@@ -643,20 +643,26 @@ def phone(args):
 
 def allow_listening():
     """Gives the app its notification access back: its data cleared, it loses that too, and can't see the
-    player then, only hear the room, which may play another song."""
+    player then, only hear the room, which may play another song. Only when it's missing, and before the
+    app is stopped: allowing it starts the app, which would write what it learnt back over the forgetting."""
     listener = f"{DEV_APP}/com.astrovm.crosstune.NowPlayingListener"
+
+    def allowed():
+        return listener in shell("settings", "get", "secure", "enabled_notification_listeners").strip().split(":")
+    if allowed():
+        return
     shell("cmd", "notification", "allow_listener", listener)
-    if listener not in shell("settings", "get", "secure", "enabled_notification_listeners").strip().split(":"):
+    if not allowed():
         sys.exit(f"{DEV_APP} has no notification access, so it can't see what plays")
 
 
 def watch(args):
     shell("setprop", f"log.tag.{TIMING_LOG}", "DEBUG")
+    allow_listening()
     # Started again, Crosstune reads the log level, and nothing's left from before.
     shell("am", "force-stop", DEV_APP)
     shell("am", "force-stop", args.app)
     shell("run-as", DEV_APP, "find", "cache", "-name", "heard-*.pcm", "-delete")
-    allow_listening()
     if not args.again:
         # With its data cleared the app has no settings yet, so there's nothing learnt to forget.
         if shell("run-as", DEV_APP, "find", ".", "-path", f"./{PREFS}").strip():
