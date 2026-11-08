@@ -1471,6 +1471,10 @@ class LyricsFinderTest {
         assertEquals(Lyrics.Instrumental, found(hatsukoi))
         japaneseSong(netEase = { ownSong }, lyric = "（instrumental）")
         assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "(Instrumental)")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
+        japaneseSong(netEase = { ownSong }, lyric = "【instrumental】")
+        assertEquals(Lyrics.Instrumental, found(hatsukoi))
         japaneseSong(netEase = { ownSong }, lyric = "INSTRUMENTAL")
         assertEquals(Lyrics.Instrumental, found(hatsukoi))
         // A bracket that doesn't close is a line, not the mark.
