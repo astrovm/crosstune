@@ -466,7 +466,18 @@ class TvPlayTest {
     @Test
     fun onAPhoneNotAllowedToShowOverAppsAnAppThatOnlyPlaysInFrontIsLeftThere() {
         ShadowSettings.setCanDrawOverlays(false)
-        playInFront()
+        phone = Phone.OTHER
+        shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
+        playback.running = null
+        playback.startsInBackground = false
+        launch()
+        click(play)
+        // Not allowed over other apps, so Play asks once for the way back, then still leaves an app that only plays in front.
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
+        controller!!.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
+        composeRule.waitForIdle()
+        waitUntil { playback.opened.size == 1 }
         playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = true), "YouTube Music", canSeek = true, appPackage = youTubeMusic)
         composeRule.waitForIdle()
         shadowOf(android.os.Looper.getMainLooper()).idle()

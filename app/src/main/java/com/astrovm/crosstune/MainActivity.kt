@@ -236,6 +236,39 @@ class MainActivity : ComponentActivity() {
     /** Set while away in Android's settings to allow reminders, so they're on once back, if they were. */
     private var remindOnceAllowed = false
 
+    /**
+     * Coming back after a music app covered Crosstune needs a notification when it may not show over
+     * other apps. Asked once, before the app is left. Turned down, Back still returns.
+     * What was tapped runs once that has been asked about, so the music app doesn't cover the question.
+     */
+    private var afterReturnAsk: (() -> Unit)? = null
+
+    private val returnNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) dismissReturnToCard()
+        val next = afterReturnAsk
+        afterReturnAsk = null
+        next?.invoke()
+    }
+
+    /**
+     * Plays the song, once the way back has been asked about.
+     * On a TV that still can't cover the app, Play only shows how to allow that, and does not leave.
+     */
+    private fun playOrReturn() {
+        val showHowToCover = viewModel.uiState.phone == Phone.TV && !viewModel.uiState.canFloatOverApps
+        if (showHowToCover) viewModel.playResult() else askToReturn { viewModel.playResult() }
+    }
+
+    /** Asks for that notice while this screen is still in front, then does [then]. A second tap waits with the first. */
+    private fun askToReturn(then: () -> Unit) {
+        if (afterReturnAsk != null) return
+        afterReturnAsk = then
+        if (!askToReturnToCard { returnNotificationPermission.launch(it) }) {
+            afterReturnAsk = null
+            then()
+        }
+    }
+
     /** Set when the floating words' microphone was tapped without it allowed, to ask once back in sight. */
     private var listenAlongWhenBack = false
 
@@ -624,7 +657,7 @@ class MainActivity : ComponentActivity() {
         onClear = viewModel::clear,
         onRetry = { if (viewModel.retryListens) listen() else viewModel.retry() },
         onOpen = { viewModel.openResult() },
-        onPlayResult = viewModel::playResult,
+        onPlayResult = { playOrReturn() },
         onClosePlayer = viewModel::closePlayer,
         onPlayerOpenApp = viewModel::openPlayerApp,
         onPlayerOpenWith = viewModel::playerOpenWith,
@@ -668,9 +701,9 @@ class MainActivity : ComponentActivity() {
         onToggleSavedLine = viewModel::toggleSavedLine,
         onLookUpWord = viewModel::lookUpWord,
         onExplainLine = viewModel::explainLine,
-        onStartPractice = { viewModel.startPractice() },
-        onPractiseSong = viewModel::practiseSong,
-        onPractiseSongOf = viewModel::startPractice,
+        onStartPractice = { askToReturn { viewModel.startPractice() } },
+        onPractiseSong = { askToReturn { viewModel.practiseSong() } },
+        onPractiseSongOf = { song -> askToReturn { viewModel.startPractice(song) } },
         onReadCardAs = viewModel::readCardAs,
         onTurnPractice = viewModel::turnPractice,
         onGradePractice = viewModel::gradePractice,
@@ -784,8 +817,8 @@ class MainActivity : ComponentActivity() {
         onHistoryOpen = viewModel::openHistoryEntry,
         onRemoveHistory = viewModel::removeHistoryEntry,
         onOpenTrack = viewModel::openTrack,
-        onPlayAll = { viewModel.playAll() },
-        onShuffleAll = { viewModel.playAll(shuffled = true) },
+        onPlayAll = { askToReturn { viewModel.playAll() } },
+        onShuffleAll = { askToReturn { viewModel.playAll(shuffled = true) } },
         onCopySongs = { copyToClipboard("Crosstune songs", viewModel.songList(), R.string.songs_copied) },
         onShareSongs = { viewModel.songList()?.let { startActivity(shareChooser(it)) } },
         onClearHistory = viewModel::clearHistory,
@@ -965,6 +998,7 @@ class MainActivity : ComponentActivity() {
     /** Back in sight, the words stop floating, and listening along with them, and on to the next song, picks up again. */
     override fun onStart() {
         super.onStart()
+        dismissReturnToCard()
         // Back from Android's settings, the guide floating over them is done with.
         GuideActivity.close()
         // Even from a screen made again since, in a new look or language; but a new screen only handing a

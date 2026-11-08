@@ -128,7 +128,7 @@ class MainActivityTest {
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         // Most tests exercise the main screen with links going straight to an app picked already, as searches; the rest have their own tests.
-        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).commit()
+        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean(KEY_ASKED_RETURN, true).commit()
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
@@ -2539,6 +2539,35 @@ class MainActivityTest {
 
         assertTextAbsent(string(R.string.settings_advanced_title))
         assertTextShown(string(R.string.error_invalid_url))
+    }
+
+    @Test
+    fun practiceAsksOnceForANotificationThatBringsTheCardBack() {
+        ShadowSettings.setCanDrawOverlays(false)
+        prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo","title":"Demo","artist":"Band"}]""").remove(KEY_ASKED_RETURN).commit()
+        launch()
+        val practice = "${string(R.string.saved_practice)}, ${string(R.string.practice_due, 1)}"
+        click(practice)
+        assertTextShown(string(R.string.practice_all_songs))
+        // The list stays here. A song is what leaves, and it waits until the question is answered.
+        click("Demo")
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
+        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", nextStartedActivity()!!.action)
+        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        assertNull(model.uiState.practice)
+        // Tapped again while Android is still asking, it doesn't leave and it doesn't ask twice.
+        click("Demo")
+        assertNull(model.uiState.practice)
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        controller!!.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
+        composeRule.waitForIdle()
+        assertNotNull(model.uiState.practice)
+        click(string(R.string.floating_close))
+        composeRule.waitForIdle()
+        if (composeRule.onAllNodesWithText(string(R.string.practice_all_songs)).fetchSemanticsNodes().isEmpty()) click(practice)
+        click(string(R.string.practice_all_songs))
+        assertNull(shadowOf(app).peekNextStartedActivity())
     }
 
     @Test

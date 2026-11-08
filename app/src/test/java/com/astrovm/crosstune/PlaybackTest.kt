@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.app.Application
 import android.app.KeyguardManager
+import android.app.Notification
+import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.ContextWrapper
 import android.app.SearchManager
@@ -54,6 +56,7 @@ import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.PlaybackInfoBuilder
 import org.robolectric.shadows.ShadowMediaSessionManager
+import org.robolectric.shadows.ShadowSettings
 
 /** Following what a music app plays, through the media sessions Android shows Crosstune once allowed. */
 @RunWith(RobolectricTestRunner::class)
@@ -1274,6 +1277,50 @@ class PlaybackTest {
     }
 
     @Test
+    fun comingBackWithoutOverlayLeavesANotificationThatBringsTheCardBack() {
+        ShadowSettings.setCanDrawOverlays(false)
+        playback.comesBack()
+        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component?.className)
+        val notice = app.getSystemService(NotificationManager::class.java).activeNotifications.single()
+        assertEquals(app.getString(R.string.return_title), notice.notification.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(app.getString(R.string.return_text), notice.notification.extras.getString(Notification.EXTRA_TEXT))
+        assertTrue(notice.notification.flags and Notification.FLAG_AUTO_CANCEL != 0)
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, app.getSystemService(NotificationManager::class.java).getNotificationChannel("return").importance)
+        val back = shadowOf(notice.notification.contentIntent).savedIntent
+        assertEquals(MainActivity::class.java.name, back.component?.className)
+        assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT, back.flags and (Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        app.dismissReturnToCard()
+        assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
+    }
+
+    @Test
+    fun theWayBackIsAskedOnceUntilNotificationsAreAllowed() {
+        ShadowSettings.setCanDrawOverlays(false)
+        val asked = mutableListOf<String>()
+        app.askToReturnToCard { asked += it }
+        assertEquals(listOf(android.Manifest.permission.POST_NOTIFICATIONS), asked)
+        // Asked already, a later card doesn't ask again.
+        app.askToReturnToCard { asked += it }
+        assertEquals(1, asked.size)
+        // Allowed, or able to show over other apps, there's nothing to ask.
+        app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE).edit().remove(KEY_ASKED_RETURN).commit()
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        app.askToReturnToCard { asked += it }
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        ShadowSettings.setCanDrawOverlays(true)
+        app.askToReturnToCard { asked += it }
+        assertEquals(1, asked.size)
+    }
+
+    @Test
+    fun comingBackOverOtherAppsDoesntPostThatNotification() {
+        ShadowSettings.setCanDrawOverlays(true)
+        playback.comesBack()
+        assertEquals(MainActivity::class.java.name, shadowOf(app).nextStartedActivity.component?.className)
+        assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
+    }
+
+    @Test
     fun qobuzOpenedIsLeftInFrontWhenItOnlyPlaysThere() = runBlocking {
         allow()
         val qobuz = MusicService.QOBUZ.packageName
@@ -1294,6 +1341,7 @@ class PlaybackTest {
         // Behind Crosstune it would stop, and the screen that opened it counts as opening it.
         playback.comesBack()
         assertNull(shadowOf(app).nextStartedActivity)
+        assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
     }
 
     @Test
@@ -1318,6 +1366,7 @@ class PlaybackTest {
         // Behind Crosstune it would stop, and the search that opened it counts as opening it.
         playback.comesBack()
         assertNull(shadowOf(app).nextStartedActivity)
+        assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
     }
 
     @Test
