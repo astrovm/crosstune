@@ -398,6 +398,8 @@
     <string name="practice_remind_me">알림 받기</string>
     <string name="practice_reminder_at">%1$s에 알림</string>
     <string name="practice_reminder_blocked">알림이 꺼져 있어요</string>
+    <string name="practice_reminder_exact">정확한 시간 허용</string>
+    <string name="practice_reminder_late">허용하지 않으면 알림이 최대 1시간 늦을 수 있어요</string>
     <string name="practice_reminder_songs">%1$s 외 %2$d곡</string>
     <plurals name="practice_reminder_title">
         <item quantity="other">연습할 카드 %1$d장</item>

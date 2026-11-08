@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Me le rappeler</string>
     <string name="practice_reminder_at">Rappel à %1$s</string>
     <string name="practice_reminder_blocked">Les notifications sont désactivées</string>
+    <string name="practice_reminder_exact">Autoriser l\'heure exacte</string>
+    <string name="practice_reminder_late">Sans cela, un rappel peut arriver jusqu\'à une heure en retard</string>
     <string name="practice_reminder_songs">%1$s et %2$d de plus</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d carte à réviser</item>

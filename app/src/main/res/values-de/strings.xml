@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Erinnern</string>
     <string name="practice_reminder_at">Erinnerung um %1$s</string>
     <string name="practice_reminder_blocked">Benachrichtigungen sind aus</string>
+    <string name="practice_reminder_exact">Genaue Uhrzeit erlauben</string>
+    <string name="practice_reminder_late">Ohne das kann eine Erinnerung bis zu einer Stunde zu spät kommen</string>
     <string name="practice_reminder_songs">%1$s und %2$d weitere</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d Karte zum Üben</item>

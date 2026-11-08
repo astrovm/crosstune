@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Herinner me</string>
     <string name="practice_reminder_at">Herinnering om %1$s</string>
     <string name="practice_reminder_blocked">Meldingen staan uit</string>
+    <string name="practice_reminder_exact">Exacte tijd toestaan</string>
+    <string name="practice_reminder_late">Zonder dit kan een herinnering tot een uur te laat komen</string>
     <string name="practice_reminder_songs">%1$s en nog %2$d</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d kaart om te oefenen</item>

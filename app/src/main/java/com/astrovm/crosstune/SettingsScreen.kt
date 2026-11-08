@@ -152,6 +152,28 @@ private fun ReminderSetting(state: UiState, actions: ScreenActions) {
             checked = state.reminder.working,
             onCheckedChange = actions.onReminderChange
         )
+        // A problem, so in words: Android may hold the reminder an hour, until the user allows the minute.
+        if (state.reminder.late) ExactReminderRow(actions.onReminderExact)
+    }
+}
+
+/** Opens where alarms and reminders are allowed for the app. */
+@Composable
+private fun ExactReminderRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.practice_reminder_exact), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(R.string.practice_reminder_late),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(18.dp))
     }
 }
 

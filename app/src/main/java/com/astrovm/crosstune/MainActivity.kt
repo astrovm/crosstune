@@ -227,7 +227,7 @@ class MainActivity : ComponentActivity() {
      * Android won't ask again, so the bell goes to its settings instead.
      */
     private val reminderPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) viewModel.setReminder(true)
+        if (granted) remindersOn()
         else if (!shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
             getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).edit().putBoolean(KEY_REMINDER_DENIED, true).apply()
         }
@@ -300,6 +300,9 @@ class MainActivity : ComponentActivity() {
 
         /** Set when notifications were turned down for good, for reminders, so Android won't ask again until they're allowed in settings. */
         private const val KEY_REMINDER_DENIED = "reminder_notifications_denied"
+
+        /** Set once Android's alarms and reminders page was opened for a reminder, so it's asked once. */
+        private const val KEY_ASKED_EXACT_ALARMS = "reminder_exact_alarms_asked"
 
         /** Whether the microphone may be used, Android still asks for it, or it's turned down for good. */
         private fun microphoneAccess(context: Context): MicAccess = when {
@@ -729,6 +732,7 @@ class MainActivity : ComponentActivity() {
         onPureBlackChange = viewModel::setPureBlack,
         onReminderChange = { on -> if (on) remind() else viewModel.setReminder(false) },
         onReminderTimeChange = viewModel::setReminderTime,
+        onReminderExact = ::openExactAlarmPage,
         onPlayingBarChange = viewModel::setPlayingBar,
         onLinesEarlyChange = viewModel::setLinesEarly,
         onNextLineAheadChange = viewModel::setNextLineAhead,
@@ -810,7 +814,7 @@ class MainActivity : ComponentActivity() {
         recognizers = SongRecognizers.available(this)
         viewModel.refreshReminder()
         // Allowed in Android's settings, as just asked to, reminders are on now.
-        if (remindOnceAllowed && viewModel.uiState.reminder.allowed) viewModel.setReminder(true)
+        if (remindOnceAllowed && viewModel.uiState.reminder.allowed) remindersOn()
         remindOnceAllowed = false
         // Its steps left without allowing it, the words don't float later out of the blue.
         if (viewModel.uiState.fixes?.need != Need.Float) floatOnceAllowed = false
@@ -900,13 +904,32 @@ class MainActivity : ComponentActivity() {
         val denied = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE).getBoolean(KEY_REMINDER_DENIED, false)
         val asks = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !denied && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         when {
-            viewModel.uiState.reminder.allowed -> viewModel.setReminder(true)
+            viewModel.uiState.reminder.allowed -> remindersOn()
             asks -> reminderPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             else -> {
                 remindOnceAllowed = true
                 tryStartActivity(remindersFactory(applicationContext).settingsPage)
             }
         }
+    }
+
+    /**
+     * Turns reminders on, and, once, takes the user to Android's page where exact alarms are allowed
+     * if they aren't yet: only they can, and without it a reminder can come an hour late. Asked after
+     * notifications, since the time is no use for one that can't show. Turned off and on again, or
+     * said no to, it isn't asked again; settings says it and goes there.
+     */
+    private fun remindersOn() {
+        viewModel.setReminder(true)
+        val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
+        if (!viewModel.uiState.reminder.exact && !prefs.getBoolean(KEY_ASKED_EXACT_ALARMS, false)) {
+            prefs.edit().putBoolean(KEY_ASKED_EXACT_ALARMS, true).apply()
+            openExactAlarmPage()
+        }
+    }
+
+    private fun openExactAlarmPage() {
+        tryStartActivity(remindersFactory(applicationContext).exactPage)
     }
 
     /** Signs in with ChatGPT, kept running while the browser signs in, until it's done, however it ends. */

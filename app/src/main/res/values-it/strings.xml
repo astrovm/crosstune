@@ -399,6 +399,8 @@
     <string name="practice_remind_me">Ricordamelo</string>
     <string name="practice_reminder_at">Promemoria alle %1$s</string>
     <string name="practice_reminder_blocked">Le notifiche sono disattivate</string>
+    <string name="practice_reminder_exact">Consenti l\'ora esatta</string>
+    <string name="practice_reminder_late">Senza, un promemoria può arrivare fino a un\'ora in ritardo</string>
     <string name="practice_reminder_songs">%1$s e %2$d in più</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d scheda da ripassare</item>

@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Ingatkan saya</string>
     <string name="practice_reminder_at">Pengingat pukul %1$s</string>
     <string name="practice_reminder_blocked">Notifikasi dimatikan</string>
+    <string name="practice_reminder_exact">Izinkan waktu tepat</string>
+    <string name="practice_reminder_late">Tanpa ini, pengingat bisa terlambat hingga satu jam</string>
     <string name="practice_reminder_songs">%1$s dan %2$d lainnya</string>
     <plurals name="practice_reminder_title">
         <item quantity="other">%1$d kartu untuk dilatih</item>

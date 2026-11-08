@@ -38,6 +38,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowAlarmManager
 
 /** The bell that asks cards due back, as a user meets it, and a reminder tapped. */
 @RunWith(RobolectricTestRunner::class)
@@ -75,6 +76,7 @@ class ReminderBellTest {
         fake.handler = { request -> FakeSpotify.html(request, "{}") }
         // Allowed, unless the test says it's not.
         allowed(true)
+        exactAllowed(true)
         saved()
     }
 
@@ -96,6 +98,17 @@ class ReminderBellTest {
         val shadow = shadowOf(app)
         if (yes) shadow.grantPermissions(Manifest.permission.POST_NOTIFICATIONS) else shadow.denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(manager).setNotificationsEnabled(yes)
+    }
+
+    /** Whether the user has allowed alarms and reminders for the app, in Android's settings. */
+    private fun exactAllowed(yes: Boolean) = ShadowAlarmManager.setCanScheduleExactAlarms(yes)
+
+    private val exactTime get() = app.getString(R.string.practice_reminder_exact)
+    private val late get() = app.getString(R.string.practice_reminder_late)
+
+    private fun assertExactPage(page: Intent?) {
+        assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, requireNotNull(page) { "Android's alarms and reminders page was not opened" }.action)
+        assertEquals("package:${app.packageName}", page.dataString)
     }
 
     private fun saved(lines: String = """{"text":"Stars","translation":"Meaning","title":"Demo","artist":"Band"}""") =
@@ -293,6 +306,125 @@ class ReminderBellTest {
     private fun androidx.compose.ui.test.junit4.ComposeTestRule.onNodeWithTextScrolled(text: String) {
         onNode(hasText(text)).performScrollTo()
         waitForIdle()
+    }
+
+    @Test
+    fun turnedOnWithoutExactAlarmsAllowedItAsksForThemOnceAndWorksAnyway() {
+        exactAllowed(false)
+        launch()
+        finishASession()
+        drainStartedActivities()
+        click(remindMe)
+        // On at once, the inexact alarm set, and Android's page to allow the exact one.
+        assertTrue(shown(reminderAt))
+        assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
+        assertExactPage(shadowOf(activity).nextStartedActivity)
+        assertTrue(model().uiState.reminder.late)
+        // Back without allowing it: still on, still late, and not asked again.
+        controller?.pause()?.resume()
+        composeRule.waitForIdle()
+        assertTrue(model().uiState.reminder.late)
+        assertTrue(model().uiState.reminder.working)
+        model().setReminder(false)
+        // Off by hand, the session's end stops offering it; the list still has the bell.
+        backToTheList()
+        drainStartedActivities()
+        click(remindMe)
+        assertTrue(described(reminderAt))
+        assertNull(shadowOf(activity).nextStartedActivity)
+        // Allowed there later, it isn't late any more.
+        exactAllowed(true)
+        controller?.pause()?.resume()
+        waitUntil { !model().uiState.reminder.late }
+        assertTrue(model().uiState.reminder.exact)
+    }
+
+    @Test
+    fun withExactAlarmsAllowedAlreadyNothingMoreIsAsked() {
+        launch()
+        finishASession()
+        drainStartedActivities()
+        click(remindMe)
+        assertTrue(shown(reminderAt))
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
+    }
+
+    /** Notifications come first: no use setting the time exactly for one that can't show. */
+    @Test
+    @Config(sdk = [33])
+    fun theNotificationPermissionIsAskedBeforeTheExactAlarmOne() {
+        allowed(false)
+        exactAllowed(false)
+        launch()
+        finishASession()
+        drainStartedActivities()
+        click(remindMe)
+        val asked = shadowOf(activity).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.POST_NOTIFICATIONS), asked.requestedPermissions.toList())
+        // Android's own question comes first, and nothing else yet.
+        drainStartedActivities()
+        allowed(true)
+        activity.answer(asked, PackageManager.PERMISSION_GRANTED)
+        waitUntil { shown(reminderAt) }
+        assertExactPage(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test
+    fun allowedInAndroidsSettingsAfterwardsItAsksForTheExactTimeToo() {
+        allowed(false)
+        exactAllowed(false)
+        launch()
+        finishASession()
+        click(remindMe)
+        activity.answer(shadowOf(activity).lastRequestedPermission, PackageManager.PERMISSION_DENIED)
+        composeRule.waitForIdle()
+        drainStartedActivities()
+        click(remindMe)
+        assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, shadowOf(activity).nextStartedActivity.action)
+        allowed(true)
+        controller?.pause()?.resume()
+        waitUntil { shown(reminderAt) }
+        assertExactPage(shadowOf(activity).nextStartedActivity)
+    }
+
+    @Test
+    fun settingsSaysAReminderCanBeLateAndATapGoesToAllowItOnTime() {
+        exactAllowed(false)
+        launch()
+        finishASession()
+        click(remindMe)
+        drainStartedActivities()
+        backToTheList()
+        click(app.getString(R.string.back_button))
+        openSettings()
+        composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
+        assertTrue(shown(exactTime))
+        assertTrue(shown(late))
+        click(exactTime)
+        assertExactPage(shadowOf(activity).nextStartedActivity)
+        // Allowed there, the row goes.
+        exactAllowed(true)
+        controller?.pause()?.resume()
+        waitUntil { !shown(exactTime) }
+        assertFalse(shown(late))
+    }
+
+    @Test
+    fun settingsSaysNothingOfItWhenItIsOffOrOnTime() {
+        exactAllowed(false)
+        launch()
+        finishASession()
+        backToTheList()
+        click(app.getString(R.string.back_button))
+        openSettings()
+        composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
+        // Off, there's nothing to be late.
+        assertFalse(shown(exactTime))
+        exactAllowed(true)
+        switch().performClick()
+        waitUntil { model().uiState.reminder.working }
+        assertFalse(shown(exactTime))
     }
 
     @Test

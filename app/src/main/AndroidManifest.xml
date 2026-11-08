@@ -21,6 +21,8 @@
     <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
     <!-- A practice reminder's alarm, which Android forgets on a reboot, is set again after one. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- The day's practice reminder on the minute, when the user allows it; without it, up to an hour late. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Phones without a microphone can still install Crosstune; they just can't listen. -->
     <uses-feature
         android:name="android.hardware.microphone"
@@ -309,6 +311,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
 

@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Recordarme</string>
     <string name="practice_reminder_at">Recordatorio a las %1$s</string>
     <string name="practice_reminder_blocked">Las notificaciones están desactivadas</string>
+    <string name="practice_reminder_exact">Permitir la hora exacta</string>
+    <string name="practice_reminder_late">Sin eso, un recordatorio puede llegar hasta una hora tarde</string>
     <string name="practice_reminder_songs">%1$s y %2$d más</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d tarjeta para practicar</item>

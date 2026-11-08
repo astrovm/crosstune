@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Przypominaj</string>
     <string name="practice_reminder_at">Przypomnienie o %1$s</string>
     <string name="practice_reminder_blocked">Powiadomienia są wyłączone</string>
+    <string name="practice_reminder_exact">Zezwól na dokładną godzinę</string>
+    <string name="practice_reminder_late">Bez tego przypomnienie może przyjść nawet godzinę po czasie</string>
     <string name="practice_reminder_songs">%1$s i jeszcze %2$d</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d fiszka do ćwiczenia</item>

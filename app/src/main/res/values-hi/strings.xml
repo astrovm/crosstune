@@ -398,6 +398,8 @@
     <string name="practice_remind_me">याद दिलाएँ</string>
     <string name="practice_reminder_at">%1$s पर रिमाइंडर</string>
     <string name="practice_reminder_blocked">सूचनाएँ बंद हैं</string>
+    <string name="practice_reminder_exact">सटीक समय की अनुमति दें</string>
+    <string name="practice_reminder_late">इसके बिना रिमाइंडर एक घंटे तक देर से आ सकता है</string>
     <string name="practice_reminder_songs">%1$s और %2$d अन्य</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">अभ्यास के लिए %1$d कार्ड</item>

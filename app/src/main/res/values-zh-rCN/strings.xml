@@ -398,6 +398,8 @@
     <string name="practice_remind_me">提醒我</string>
     <string name="practice_reminder_at">%1$s 提醒</string>
     <string name="practice_reminder_blocked">通知已关闭</string>
+    <string name="practice_reminder_exact">允许准时提醒</string>
+    <string name="practice_reminder_late">不允许的话，提醒最多可能晚一小时</string>
     <string name="practice_reminder_songs">%1$s 和另外 %2$d 首</string>
     <plurals name="practice_reminder_title">
         <item quantity="other">有 %1$d 张卡片待练习</item>

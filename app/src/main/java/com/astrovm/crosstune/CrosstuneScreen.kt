@@ -372,6 +372,8 @@ internal data class ScreenActions(
     val onReminderChange: (Boolean) -> Unit = {},
     /** The time of day they're asked back, in minutes from midnight. */
     val onReminderTimeChange: (Int) -> Unit = {},
+    /** Opens Android's page where a reminder is allowed to go on the minute. */
+    val onReminderExact: () -> Unit = {},
     val onPlayingBarChange: (Boolean) -> Unit = {},
     /** How far ahead of the voice a line lights, one of [LINES_EARLY_STEPS]. */
     val onLinesEarlyChange: (Long) -> Unit = {},

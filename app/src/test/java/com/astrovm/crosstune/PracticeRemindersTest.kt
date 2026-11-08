@@ -24,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.annotation.Config
 
 /** When due cards are asked back, what's said, and when nothing is. */
@@ -69,6 +70,8 @@ class PracticeRemindersTest {
     @Before
     fun setUp() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        // Android's page for it, where a user has allowed it.
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
     }
 
     @Test
@@ -177,7 +180,7 @@ class PracticeRemindersTest {
     }
 
     @Test
-    fun turnedOnItSetsAnAlarmThatGoesInDozeAndNeedsNoExactPermission() {
+    fun turnedOnWithExactAlarmsAllowedItSetsOneThatGoesOnTimeEvenInDoze() {
         reminders.sessionDone()
         // Off, nothing wakes the phone.
         reminders.arm()
@@ -188,11 +191,82 @@ class PracticeRemindersTest {
         assertEquals(at(3, 20, 5), alarm?.triggerAtMs)
         assertEquals(AlarmManager.RTC_WAKEUP, alarm?.getType())
         assertEquals(true, alarm?.isAllowWhileIdle)
-        // Inexact, so it asks no special permission.
-        assertTrue(requireNotNull(alarm).windowLengthMs != 0L)
+        // Exact: Samsung's freezer holds an inexact one for as long as the app stays frozen.
+        assertEquals(0L, requireNotNull(alarm).windowLengthMs)
+        assertTrue(reminders.state.exact)
+        assertFalse(reminders.state.late)
         assertNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))
         reminders.turn(false)
         assertNull(alarms.peekNextScheduledAlarm())
+    }
+
+    @Test
+    fun withoutThePermissionItSetsTheInexactOneAndSaysItCanBeLate() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        reminders.sessionDone()
+        reminders.turn(true)
+        val alarm = requireNotNull(alarms.peekNextScheduledAlarm())
+        assertEquals(at(3, 20, 5), alarm.triggerAtMs)
+        assertEquals(true, alarm.isAllowWhileIdle)
+        assertTrue(alarm.windowLengthMs != 0L)
+        assertFalse(reminders.state.exact)
+        // Only a reminder that's on can be late.
+        assertTrue(reminders.state.late)
+        reminders.turn(false)
+        assertFalse(reminders.state.late)
+    }
+
+    @Test
+    fun theSameAlarmIsReplacedWhenThePermissionChangesSoOneIsNeverLeftBehind() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        reminders.sessionDone()
+        reminders.turn(true)
+        assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        reminders.arm()
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
+    }
+
+    /** Before Android 12 there's no permission: exact is always allowed. */
+    @Test
+    @Config(sdk = [30])
+    fun beforeAndroidTwelveExactNeedsNothingAsked() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        reminders.sessionDone()
+        reminders.turn(true)
+        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
+        assertTrue(reminders.state.exact)
+    }
+
+    @Test
+    fun theExactAlarmPageIsTheAppsOwnOnAndroidsAlarmsAndRemindersList() {
+        val page = reminders.exactPage
+        assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, page.action)
+        assertEquals("package:${app.packageName}", page.dataString)
+    }
+
+    @Test
+    fun theAppAsksForTheExactAlarmPermissionAndHearsWhenItChanges() {
+        val declared = app.packageManager.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+        assertTrue("android.permission.SCHEDULE_EXACT_ALARM" in declared)
+        // Never the one for alarm and calendar apps, which Play gives only to them.
+        assertFalse("android.permission.USE_EXACT_ALARM" in declared)
+        val heard = app.packageManager.queryBroadcastReceivers(Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED).setPackage(app.packageName), 0)
+        assertTrue(heard.any { it.activityInfo.name == PracticeReminderReceiver::class.java.name })
+    }
+
+    @Test
+    fun allowedFromAndroidsSettingsTheReceiverSetsTheAlarmAgainExact() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val phone = PracticeReminders(app)
+        phone.sessionDone()
+        phone.turn(true)
+        assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        PracticeReminderReceiver().onReceive(app, Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED))
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
     }
 
     @Test
@@ -398,6 +472,11 @@ class PracticeRemindersTest {
             val songs = words.getString(R.string.practice_reminder_songs, "Demo", 2)
             assertTrue(tag, songs.contains("Demo") && songs.contains("2"))
             assertTrue(tag, words.getString(R.string.practice_reminder_at, "8:05").contains("8:05"))
+            // Said in the language, not left in English by a language missing it.
+            if (!tag.startsWith("en")) {
+                assertTrue(tag, words.getString(R.string.practice_reminder_exact) != app.getString(R.string.practice_reminder_exact))
+                assertTrue(tag, words.getString(R.string.practice_reminder_late) != app.getString(R.string.practice_reminder_late))
+            }
         }
     }
 }

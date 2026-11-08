@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Hatırlat</string>
     <string name="practice_reminder_at">%1$s için hatırlatıcı</string>
     <string name="practice_reminder_blocked">Bildirimler kapalı</string>
+    <string name="practice_reminder_exact">Tam saate izin ver</string>
+    <string name="practice_reminder_late">Bu olmadan hatırlatıcı bir saate kadar geç gelebilir</string>
     <string name="practice_reminder_songs">%1$s ve %2$d tane daha</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">Pratik için %1$d kart</item>

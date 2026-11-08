@@ -419,6 +419,8 @@
     <string name="practice_remind_me">Remind me</string>
     <string name="practice_reminder_at">Reminder at %1$s</string>
     <string name="practice_reminder_blocked">Notifications are off</string>
+    <string name="practice_reminder_exact">Allow exact time</string>
+    <string name="practice_reminder_late">Without it, a reminder can arrive up to an hour late</string>
     <string name="practice_reminder_songs">%1$s and %2$d more</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d card to practice</item>

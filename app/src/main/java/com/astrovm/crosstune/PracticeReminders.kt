@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
@@ -22,13 +24,18 @@ internal data class Reminder(
     /** Whether Android lets it show, for the app and for its channel. */
     val allowed: Boolean = true,
     /** Turned off by hand, so the end of a session stops offering it. */
-    val turnedOff: Boolean = false
+    val turnedOff: Boolean = false,
+    /** Whether Android lets the alarm go at the exact minute: from Android 12 the user allows that in its settings. */
+    val exact: Boolean = true
 ) {
     /** On, but Android won't show it, which needs saying. */
     val blocked get() = on && !allowed
 
     /** Showing as it should: tapped, it's the time or off. */
     val working get() = on && allowed
+
+    /** On, but only on the inexact alarm, which Android may hold up to an hour. */
+    val late get() = on && !exact
 }
 
 /** The time of day reminders are set for, when they can be: after a first session, and not on a TV. */
@@ -65,9 +72,11 @@ private const val RESTED_AFTER_MS = 6 * 60 * 60 * 1000L
  * itself: nothing leaves it. Nothing due, or a session done that day, it says nothing, and after
  * [IGNORED_ENOUGH] in a row with no answer it stops until the next time cards are practised.
  *
- * An inexact alarm that fires in Doze: on time enough, with no special permission to ask for.
+ * An exact alarm that fires in Doze, when the user has allowed alarms and reminders for the app:
+ * Samsung's freezer holds an inexact one for as long as it holds the app, which no window shortens.
+ * Not allowed, an inexact one still fires in Doze, up to an hour late, which [Reminder.late] says.
  * Android forgets alarms on a reboot or a force stop, so they're set again then, and when the clock
- * or time zone changes, so it stays the same hour on the wall.
+ * or time zone changes, so it stays the same hour on the wall, and when the permission changes.
  */
 internal class PracticeReminders(
     base: Context,
@@ -90,7 +99,13 @@ internal class PracticeReminders(
 
     private val allowed get() = notifications.areNotificationsEnabled() && notifications.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
 
-    val state get() = Reminder(minute, on, allowed, preferences.getBoolean(KEY_TURNED_OFF, false))
+    /** Before Android 12 exact alarms need nothing asked; from it, the user allows them. */
+    private val exact get() = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
+
+    val state get() = Reminder(minute, on, allowed, preferences.getBoolean(KEY_TURNED_OFF, false), exact)
+
+    /** Android's page where alarms and reminders are allowed for the app, which only the user can do. */
+    val exactPage: Intent get() = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
 
     /** Android's page where they're allowed: the channel's, when it's only that that's off. */
     val settingsPage: Intent
@@ -140,8 +155,12 @@ internal class PracticeReminders(
     /** Sets the next reminder, or, off or ignored, none, so the phone isn't woken for nothing. */
     fun arm() {
         val minute = minute
-        if (on && minute != null && ignored < IGNORED_ENOUGH) alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextReminderAt(minute, now(), zone()), alarm)
-        else alarms.cancel(alarm)
+        if (on && minute != null && ignored < IGNORED_ENOUGH) {
+            val at = nextReminderAt(minute, now(), zone())
+            if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, alarm) else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, alarm)
+        } else {
+            alarms.cancel(alarm)
+        }
     }
 
     /** The alarm went: says what's due, unless there's no reason to, and sets tomorrow's. */

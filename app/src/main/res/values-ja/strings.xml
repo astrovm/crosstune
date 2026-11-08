@@ -399,6 +399,8 @@
     <string name="practice_remind_me">通知する</string>
     <string name="practice_reminder_at">%1$s に通知</string>
     <string name="practice_reminder_blocked">通知はオフです</string>
+    <string name="practice_reminder_exact">時刻ぴったりを許可</string>
+    <string name="practice_reminder_late">許可しないと、通知が最大1時間遅れることがあります</string>
     <string name="practice_reminder_songs">%1$s ほか %2$d 曲</string>
     <plurals name="practice_reminder_title">
         <item quantity="other">練習するカードが %1$d 枚あります</item>

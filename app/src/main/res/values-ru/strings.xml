@@ -398,6 +398,8 @@
     <string name="practice_remind_me">Напоминать</string>
     <string name="practice_reminder_at">Напоминание в %1$s</string>
     <string name="practice_reminder_blocked">Уведомления выключены</string>
+    <string name="practice_reminder_exact">Разрешить точное время</string>
+    <string name="practice_reminder_late">Без этого напоминание может прийти с опозданием до часа</string>
     <string name="practice_reminder_songs">%1$s и ещё %2$d</string>
     <plurals name="practice_reminder_title">
         <item quantity="one">%1$d карточка для практики</item>
