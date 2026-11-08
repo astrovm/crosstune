@@ -44,6 +44,22 @@ const musicPage = `<!doctype html><title>Player</title><body><script>
   window.go = (seconds) => { audio.currentTime = seconds; return audio.play(); };
 </script>`;
 
+/** SoundCloud's page: no media element, only a progress bar that moves a whole second at a time, as theirs does. */
+const soundcloudPage = `<!doctype html><title>Player</title><body>
+  <div class="playbackTimeline__progressWrapper" role="progressbar" aria-valuenow="0" aria-valuemax="${LENGTH_S}"></div>
+  <script>
+    let timer;
+    window.say = (title, artist) => { navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album: "" }); };
+    // From [seconds], the bar's second changes once a second, and the player says it's playing.
+    window.go = (seconds) => {
+      clearInterval(timer);
+      const bar = document.querySelector(".playbackTimeline__progressWrapper");
+      bar.setAttribute("aria-valuenow", String(seconds));
+      navigator.mediaSession.playbackState = "playing";
+      timer = setInterval(() => bar.setAttribute("aria-valuenow", String(Number(bar.getAttribute("aria-valuenow")) + 1)), 1000);
+    };
+  </script>`;
+
 const profile = await mkdtemp(join(tmpdir(), "crosstune-e2e-panel-"));
 const launch = (lang, extensionArgs = [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]) =>
   chromium.launchPersistentContext(profile, {
@@ -63,6 +79,7 @@ async function answer(route) {
   const request = route.request();
   const url = request.url();
   if (/^https:\/\/(music|www)\.youtube\.com\/watch/.test(url)) return route.fulfill({ contentType: "text/html", body: musicPage });
+  if (/^https:\/\/soundcloud\.com\/some-uploader\//.test(url)) return route.fulfill({ contentType: "text/html", body: soundcloudPage });
   asked.push(url);
   for (const [start, reply] of lyricsSites) {
     if (url.startsWith(start)) return typeof reply === "function" ? reply(route) : route.fulfill(reply);
@@ -259,6 +276,26 @@ try {
     // Only the copy timed for 340 seconds has its first line there; the other's has it at 10.5.
     await panel.waitForFunction((line) => document.querySelector("#words p.now")?.textContent === line, FIRST_LINE, { timeout: 15_000 });
     await music.evaluate((seconds) => { window.load(seconds); return window.go(1); }, LENGTH_S);
+  });
+
+  await step("a site with no media element, SoundCloud: the words follow its progress bar, within the second", async () => {
+    lyricsSites = nothing();
+    lyricsSites.set("https://lrclib.net/", { contentType: "application/json", body: lrclibAfrica.replaceAll('"Africa"', '"Barely Audible"') });
+    const sound = await context.newPage();
+    await sound.goto("https://soundcloud.com/some-uploader/barely-audible");
+    assert.equal(await sound.locator("audio, video").count(), 0);
+    await sound.evaluate(() => { window.say("Barely Audible", "Toto"); window.go(1); });
+    await waitForWords(panel, FIRST_LINE);
+    await panel.bringToFront();
+    await panel.waitForFunction(() => document.getElementById("words")?.classList.contains("following"), null, { timeout: 5_000 });
+    // The bar reads 15 at a time the panel doesn't know; its line starts at 15.5 less the 0.3 s lead.
+    await sound.evaluate(() => window.go(15));
+    const lit = () => panel.evaluate(() => document.querySelector("#words p.now")?.textContent);
+    await panel.waitForFunction((line) => document.querySelector("#words p.now")?.textContent === line, SECOND_LINE, { timeout: 5_000 });
+    // It lit before the bar's next second (16), which a reading in whole seconds would wait for.
+    assert.equal(await sound.evaluate(() => document.querySelector(".playbackTimeline__progressWrapper").getAttribute("aria-valuenow")), "15");
+    assert.equal(await lit(), SECOND_LINE);
+    await sound.close();
   });
 
   await step("a video that isn't music: its name goes nowhere", async () => {

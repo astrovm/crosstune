@@ -3,6 +3,7 @@
 // keep one in the page. It reads and tells the extension; it never changes the page, and sends nothing out.
 
 import { POSITION_MESSAGE, SONG_MESSAGE, songFrom, videoIdOf, type Position, type SongMessage } from "./song.ts";
+import { PROGRESS_BAR, SecondsClock, readingOf, type Reading } from "./timeline.ts";
 
 const CHECK_MS = 1_000;
 /** A new song waits a check more, for the player to hold its length rather than the last song's. */
@@ -22,6 +23,12 @@ function mediaElement(): HTMLMediaElement | null {
   return [...(going.length > 0 ? going : all)].sort((a, b) => b.duration - a.duration)[0] ?? null;
 }
 
+/** The progress bar's reading, for the sites that keep no media element in the page. */
+function progressBar(): Reading | null {
+  const bar = document.querySelector(PROGRESS_BAR);
+  return bar === null ? null : readingOf(bar.getAttribute("aria-valuenow"), bar.getAttribute("aria-valuemax"));
+}
+
 function isPlaying(media: HTMLMediaElement | null): boolean {
   if (media !== null) return !media.paused && !media.ended;
   return navigator.mediaSession.playbackState === "playing";
@@ -33,11 +40,12 @@ function report(): SongMessage["song"] {
   const named = songFrom(location.hostname, { title: metadata.title, artist: metadata.artist, album: metadata.album });
   if (named === null) return null;
   const media = mediaElement();
+  const lengthMs = media === null ? progressBar()?.lengthSeconds : media.duration;
   const id = videoIdOf(location.hostname, location.search);
   return {
     ...named,
     playing: isPlaying(media),
-    ...(media === null ? {} : { lengthMs: Math.round(media.duration * 1_000) }),
+    ...(lengthMs === undefined ? {} : { lengthMs: Math.round(lengthMs * 1_000) }),
     ...(id === undefined ? {} : { videoId: id }),
   };
 }
@@ -66,12 +74,22 @@ function check(): void {
   }
 }
 
+const clock = new SecondsClock();
+
 function position(): Position | null {
   if (isAdShowing()) return null;
   const media = mediaElement();
-  if (media === null) return null;
-  return { positionMs: Math.round(media.currentTime * 1_000), durationMs: Math.round(media.duration * 1_000), playing: isPlaying(media) };
+  if (media !== null) return { positionMs: Math.round(media.currentTime * 1_000), durationMs: Math.round(media.duration * 1_000), playing: isPlaying(media) };
+  const reading = progressBar();
+  if (reading === null) return null;
+  const playing = isPlaying(null);
+  return { positionMs: Math.round(clock.positionMs(reading.seconds, playing, performance.now())), durationMs: Math.round(reading.lengthSeconds * 1_000), playing };
 }
+
+// The bar's moves are what time the part of a second, so they're noted as they happen, not when asked.
+new MutationObserver((changes) => {
+  if (changes.some((change) => change.target instanceof Element && change.target.matches(PROGRESS_BAR))) position();
+}).observe(document, { attributes: true, attributeFilter: ["aria-valuenow"], subtree: true });
 
 chrome.runtime.onMessage.addListener((message: { type?: string } | undefined, _sender, respond) => {
   if (message?.type === POSITION_MESSAGE) respond(position());
