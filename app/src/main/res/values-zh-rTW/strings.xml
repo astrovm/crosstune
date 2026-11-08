@@ -394,9 +394,6 @@
     <string name="practice_play">播放這一行</string>
     <string name="practice_stop">停止這一行</string>
     <string name="practice_loading">正在 %1$s 中開啟</string>
-    <string name="practice_from_start">正從開頭播放。不會跳到這一行。</string>
-    <string name="practice_from_where_it_was">正從暫停處繼續播放。不會跳到這一行。</string>
-    <string name="practice_wont_play">無法播放。請在音樂應用程式裡按播放。</string>
     <string name="practice_done">已練習 %1$d 項</string>
     <string name="practice_back_to">回到 %1$s</string>
     <string name="practice_progress">%1$d / %2$d</string>

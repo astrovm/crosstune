@@ -49,7 +49,7 @@
     ],
     [
       "Pelajari liriknya",
-      "Kana, pinyin, romaji, dan terjemahan. Lalu latih setiap baris di aplikasi musikmu saat aplikasi bisa pindah ke sana, atau dari posisinya sekarang jika tidak, dan kartunya mengatakannya, dengan pengingat harian untuk kartu yang sudah waktunya. Jika kartu membuka aplikasi musik, ketuk notifikasi untuk kembali, kecuali Crosstune boleh tampil di atasnya."
+      "Kana, pinyin, romaji, dan terjemahan. Lalu latih setiap baris di aplikasi musikmu saat aplikasi bisa pindah ke sana, atau di pemutar YouTube kecil pada kartu jika tidak, dengan pengingat harian untuk kartu yang sudah waktunya. Jika kartu membuka aplikasi musik, ketuk notifikasi untuk kembali, kecuali Crosstune boleh tampil di atasnya."
     ],
     [
       "ChatGPT, kalau kamu punya",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Jika kamu membiarkan lirik mengikuti lagu yang diputar di aplikasi musikmu, Android memintamu mengizinkan akses notifikasi untuk Crosstune. Crosstune hanya memakainya untuk melihat lagu apa yang menurut aplikasi musikmu sedang diputar dan sampai mana, agar lirik bisa mengikuti dan baris yang kamu ketuk bisa memindahkan lagu ke sana. Crosstune tidak pernah membaca notifikasimu, dan semua ini tidak keluar dari ponselmu. Kamu bisa mematikannya kapan saja di pengaturan Android. Saat kamu melatih baris yang disimpan, Crosstune juga meminta aplikasi musikmu memutar lagu dari setiap baris, tepat di baris itu jika aplikasi bisa pindah ke sana, dan dari posisinya sekarang jika tidak. Pemutar Crosstune memakai akses yang sama untuk menampilkan lagu dan lagu berikutnya, serta menjeda, melewati, menggeser, mengulang, atau mengacaknya, menekan tombol suka milik aplikasi, atau menjedanya dengan timer tidur di aplikasi musikmu."
+      "Jika kamu membiarkan lirik mengikuti lagu yang diputar di aplikasi musikmu, Android memintamu mengizinkan akses notifikasi untuk Crosstune. Crosstune hanya memakainya untuk melihat lagu apa yang menurut aplikasi musikmu sedang diputar dan sampai mana, agar lirik bisa mengikuti dan baris yang kamu ketuk bisa memindahkan lagu ke sana. Crosstune tidak pernah membaca notifikasimu, dan semua ini tidak keluar dari ponselmu. Kamu bisa mematikannya kapan saja di pengaturan Android. Saat kamu melatih baris yang disimpan, Crosstune juga meminta aplikasi musikmu memutar lagu dari setiap baris, tepat di baris itu jika aplikasi bisa pindah ke sana. Jika tidak bisa, seperti paket gratis Spotify, Crosstune memutarnya di pemutar YouTube kecil pada kartu: YouTube diminta video lagu dan waktu barisnya, dan melihat alamat ponselmu, seperti pada video apa pun. Kamu tidak masuk akun di sana, dan tidak ada audio yang dikirim. Pemutar Crosstune memakai akses yang sama untuk menampilkan lagu dan lagu berikutnya, serta menjeda, melewati, menggeser, mengulang, atau mengacaknya, menekan tombol suka milik aplikasi, atau menjedanya dengan timer tidur di aplikasi musikmu."
     ],
     [
       "p",

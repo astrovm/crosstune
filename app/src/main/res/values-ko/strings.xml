@@ -394,9 +394,6 @@
     <string name="practice_play">이 줄 재생</string>
     <string name="practice_stop">이 줄 멈추기</string>
     <string name="practice_loading">%1$s에서 여는 중</string>
-    <string name="practice_from_start">처음부터 재생 중입니다. 이 줄로 이동하지 않습니다.</string>
-    <string name="practice_from_where_it_was">멈춘 위치부터 재생 중입니다. 이 줄로 이동하지 않습니다.</string>
-    <string name="practice_wont_play">재생하지 못했습니다. 음악 앱에서 재생해 주세요.</string>
     <string name="practice_done">%1$d개 연습함</string>
     <string name="practice_back_to">%1$s(으)로 돌아가기</string>
     <string name="practice_progress">%1$d/%2$d</string>

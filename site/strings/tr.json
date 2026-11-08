@@ -49,7 +49,7 @@
     ],
     [
       "Sözleri öğren",
-      "Kana, pinyin, romaji ve çeviriler. Sonra her satırı, müzik uygulaman oraya gidebiliyorsa orada, gidemiyorsa olduğu yerden pratik yap. Kart da bunu söyler. Sırası gelenler için her gün hatırlatma al. Bir kart müzik uygulamasını açarsa, bildirime dokunup dön; Crosstune diğer uygulamaların üstünde gösterilemiyorsa."
+      "Kana, pinyin, romaji ve çeviriler. Sonra her satırı, müzik uygulaman oraya gidebiliyorsa orada, gidemiyorsa kartın üzerindeki küçük YouTube oynatıcısında pratik yap. Sırası gelenler için her gün hatırlatma al. Bir kart müzik uygulamasını açarsa, bildirime dokunup dön; Crosstune diğer uygulamaların üstünde gösterilemiyorsa."
     ],
     [
       "ChatGPT'n varsa",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Sözlerin müzik uygulamanda çalan şarkıyı takip etmesine izin verirsen, Android senden Crosstune'a bildirim erişimi vermeni ister. Crosstune bunu yalnızca müzik uygulamalarının hangi şarkıyı çaldığını ve şarkının neresinde olduğunu görmek için kullanır; böylece sözler takip eder ve dokunduğun bir satır şarkıyı oraya götürebilir. Bildirimlerini asla okumaz ve bunların hiçbiri telefonundan çıkmaz. Bunu istediğin zaman Android ayarlarından kapatabilirsin. Kaydedilen satırlarla pratik yaptığında Crosstune, müzik uygulamandan her satırın şarkısını, oraya gidebiliyorsa o satırdan, gidemiyorsa olduğu yerden, çalmasını da ister. Crosstune'un oynatıcısı aynı erişimi şarkıyı ve sıradakileri göstermek, müzik uygulamanda duraklatmak, atlamak, ilerletmek, tekrarlamak ya da karıştırmak, uygulamanın kendi beğen düğmesine basmak veya uyku zamanlayıcısıyla duraklatmak için kullanır."
+      "Sözlerin müzik uygulamanda çalan şarkıyı takip etmesine izin verirsen, Android senden Crosstune'a bildirim erişimi vermeni ister. Crosstune bunu yalnızca müzik uygulamalarının hangi şarkıyı çaldığını ve şarkının neresinde olduğunu görmek için kullanır; böylece sözler takip eder ve dokunduğun bir satır şarkıyı oraya götürebilir. Bildirimlerini asla okumaz ve bunların hiçbiri telefonundan çıkmaz. Bunu istediğin zaman Android ayarlarından kapatabilirsin. Kaydedilen satırlarla pratik yaptığında Crosstune, müzik uygulamandan her satırın şarkısını, oraya gidebiliyorsa o satırdan, çalmasını da ister. Gidemiyorsa, Spotify'ın ücretsiz planında olduğu gibi, Crosstune satırı kartın üzerindeki küçük bir YouTube oynatıcısında çalar: YouTube'dan şarkının videosu ve satırın zamanı istenir, YouTube de her videoda olduğu gibi telefonunun adresini görür. Orada oturum açmış değilsin ve hiç ses gönderilmez. Crosstune'un oynatıcısı aynı erişimi şarkıyı ve sıradakileri göstermek, müzik uygulamanda duraklatmak, atlamak, ilerletmek, tekrarlamak ya da karıştırmak, uygulamanın kendi beğen düğmesine basmak veya uyku zamanlayıcısıyla duraklatmak için kullanır."
     ],
     [
       "p",

@@ -49,7 +49,7 @@
     ],
     [
       "Lerne die Texte",
-      "Kana, Pinyin, Romaji und Übersetzungen. Dann übe jede Zeile in deiner Musik-App, wenn sie dorthin springen kann, sonst von der Stelle, an der sie ist, und die Karte sagt das, mit einer täglichen Erinnerung an fällige Karten. Wenn eine Karte die Musik-App öffnet, tippe auf die Mitteilung, es sei denn, Crosstune darf darüber liegen."
+      "Kana, Pinyin, Romaji und Übersetzungen. Dann übe jede Zeile in deiner Musik-App, wenn sie dorthin springen kann, sonst in einem kleinen YouTube-Player auf der Karte, mit einer täglichen Erinnerung an fällige Karten. Wenn eine Karte die Musik-App öffnet, tippe auf die Mitteilung, es sei denn, Crosstune darf darüber liegen."
     ],
     [
       "ChatGPT, wenn du es hast",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Wenn du den Liedtext dem Song folgen lässt, der in deiner Musik-App läuft, bittet Android dich, Crosstune den Benachrichtigungszugriff zu erlauben. Crosstune nutzt ihn nur, um zu sehen, welchen Song deine Musik-Apps gerade abspielen und an welcher Stelle sie sind, damit der Text mitläuft und eine angetippte Zeile den Song dorthin springen lassen kann. Deine Benachrichtigungen liest es nie, und nichts davon verlässt dein Handy. Du kannst das jederzeit in den Android-Einstellungen ausschalten. Wenn du gespeicherte Zeilen übst, bittet Crosstune deine Musik-App außerdem, den Song jeder Zeile an genau dieser Stelle abzuspielen, wenn sie dorthin springen kann, und sonst von der Stelle, an der sie ist. Der Player von Crosstune nutzt denselben Zugriff, um den Song und das, was als Nächstes kommt, anzuzeigen und ihn in deiner Musik-App zu pausieren, zu überspringen, zu verschieben, zu wiederholen, die Zufallswiedergabe umzuschalten, den eigenen Like-Button der App zu drücken oder per Schlaftimer anzuhalten."
+      "Wenn du den Liedtext dem Song folgen lässt, der in deiner Musik-App läuft, bittet Android dich, Crosstune den Benachrichtigungszugriff zu erlauben. Crosstune nutzt ihn nur, um zu sehen, welchen Song deine Musik-Apps gerade abspielen und an welcher Stelle sie sind, damit der Text mitläuft und eine angetippte Zeile den Song dorthin springen lassen kann. Deine Benachrichtigungen liest es nie, und nichts davon verlässt dein Handy. Du kannst das jederzeit in den Android-Einstellungen ausschalten. Wenn du gespeicherte Zeilen übst, bittet Crosstune deine Musik-App außerdem, den Song jeder Zeile an genau dieser Stelle abzuspielen, wenn sie dorthin springen kann. Kann sie das nicht, wie Spotify im kostenlosen Tarif, spielt Crosstune die Zeile stattdessen in einem kleinen YouTube-Player auf der Karte ab: YouTube erhält die Anfrage nach dem Video des Songs und der Zeit der Zeile und sieht die Adresse deines Handys, wie bei jedem Video. Du bist dort nicht angemeldet, und es wird kein Ton gesendet. Der Player von Crosstune nutzt denselben Zugriff, um den Song und das, was als Nächstes kommt, anzuzeigen und ihn in deiner Musik-App zu pausieren, zu überspringen, zu verschieben, zu wiederholen, die Zufallswiedergabe umzuschalten, den eigenen Like-Button der App zu drücken oder per Schlaftimer anzuhalten."
     ],
     [
       "p",

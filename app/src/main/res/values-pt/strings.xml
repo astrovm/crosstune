@@ -394,9 +394,6 @@
     <string name="practice_play">Ouvir a linha</string>
     <string name="practice_stop">Parar a linha</string>
     <string name="practice_loading">Abrindo no %1$s</string>
-    <string name="practice_from_start">Tocando do início. Não pula para esta linha.</string>
-    <string name="practice_from_where_it_was">Tocando de onde estava. Não pula para esta linha.</string>
-    <string name="practice_wont_play">Não deu para tocar. Toque em play no app de música.</string>
     <string name="practice_done">%1$d praticadas</string>
     <string name="practice_back_to">Voltar para %1$s</string>
     <string name="practice_progress">%1$d de %2$d</string>

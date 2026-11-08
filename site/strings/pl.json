@@ -49,7 +49,7 @@
     ],
     [
       "Ucz się tekstu",
-      "Kana, pinyin, romaji i tłumaczenia. Potem ćwicz każdy wiersz w aplikacji muzycznej, gdy może tam przejść, albo od miejsca, w którym jest, gdy nie może, a karta to mówi, z codziennym przypomnieniem o tym, co czeka. Gdy fiszka otwiera aplikację muzyczną, stuknij powiadomienie, by wrócić, chyba że Crosstune może być nad nią."
+      "Kana, pinyin, romaji i tłumaczenia. Potem ćwicz każdy wiersz w aplikacji muzycznej, gdy może tam przejść, albo w małym odtwarzaczu YouTube na karcie, gdy nie może, z codziennym przypomnieniem o tym, co czeka. Gdy fiszka otwiera aplikację muzyczną, stuknij powiadomienie, by wrócić, chyba że Crosstune może być nad nią."
     ],
     [
       "ChatGPT, jeśli go masz",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida. Gdy ćwiczysz zapisane wiersze, Crosstune prosi też Twoją aplikację muzyczną o odtworzenie utworu każdego wiersza od tego wiersza, gdy może tam przejść, albo od miejsca, w którym jest, gdy nie może. Odtwarzacz Crosstune używa tego samego dostępu, by pokazać utwór i to, co gra następne, oraz go zatrzymać, pominąć, przewinąć, powtarzać, włączyć odtwarzanie losowe, nacisnąć polubienie samej aplikacji lub zatrzymać wyłącznikiem czasowym w Twojej aplikacji muzycznej."
+      "Jeśli pozwolisz, by tekst podążał za utworem grającym w Twojej aplikacji muzycznej, Android poprosi o zezwolenie Crosstune na dostęp do powiadomień. Crosstune używa go tylko do sprawdzenia, jaki utwór według Twoich aplikacji muzycznych jest odtwarzany i w którym miejscu, aby tekst podążał za nim, a dotknięta linijka mogła przenieść tam utwór. Nigdy nie czyta Twoich powiadomień i nic z tego nie opuszcza Twojego telefonu. Możesz to wyłączyć w dowolnej chwili w ustawieniach Androida. Gdy ćwiczysz zapisane wiersze, Crosstune prosi też Twoją aplikację muzyczną o odtworzenie utworu każdego wiersza od tego wiersza, gdy może tam przejść. Gdy nie może, jak w darmowym planie Spotify, Crosstune odtwarza wiersz w małym odtwarzaczu YouTube na karcie: YouTube dostaje prośbę o wideo utworu i czas wiersza oraz widzi adres Twojego telefonu, jak przy każdym wideo. Nie jesteś tam zalogowany i żaden dźwięk nie jest wysyłany. Odtwarzacz Crosstune używa tego samego dostępu, by pokazać utwór i to, co gra następne, oraz go zatrzymać, pominąć, przewinąć, powtarzać, włączyć odtwarzanie losowe, nacisnąć polubienie samej aplikacji lub zatrzymać wyłącznikiem czasowym w Twojej aplikacji muzycznej."
     ],
     [
       "p",
