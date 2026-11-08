@@ -145,6 +145,22 @@ class ChordWikiTest {
     }
 
     @Test
+    fun aCreditAfterTheTitleDoesNotHideTheSong() {
+        // Seen on a phone: "夜に駆ける" is listed as "夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）", and that is also its address.
+        val lines = """
+            夜に駆けるよ （歌：誰か 作詞・作曲：誰か） - ChordWiki	https://ja.chordwiki.org/wiki/yorunikakeruyo
+            夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase） - ChordWiki	https://ja.chordwiki.org/wiki/%E5%A4%9C%E3%81%AB%E9%A7%86%E3%81%91%E3%82%8B%20%EF%BC%88%E6%AD%8C%EF%BC%9AYOASOBI%20%E4%BD%9C%E8%A9%9E%E3%83%BB%E4%BD%9C%E6%9B%B2%E3%83%BB%E7%B7%A8%E6%9B%B2%EF%BC%9AAyase%EF%BC%89
+            夜に駆ける (Live) - ChordWiki	https://ja.chordwiki.org/wiki/live
+        """.trimIndent()
+        val hits = chordWikiHits(lines)
+        assertEquals("夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）", chordWikiBest(hits, "夜に駆ける", "YOASOBI", "夜に駆ける")?.title)
+        // Another song with the same start, and a live take, are still not it.
+        assertNull(chordWikiBest(hits.take(1) + hits.drop(2), "夜に駆ける", "YOASOBI", "夜に駆ける"))
+        // A credit after the name works when the name was the one that came with a credit too.
+        assertEquals("夜に駆けるよ （歌：誰か 作詞・作曲：誰か）", chordWikiBest(hits, "夜に駆けるよ", "誰か", "夜に駆けるよ")?.title)
+    }
+
+    @Test
     fun theBrowserReadsTheEditorFromBehindTheScreen() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         // Looked at through a deferred, so a lookup that never settles fails the test rather than hanging the run.

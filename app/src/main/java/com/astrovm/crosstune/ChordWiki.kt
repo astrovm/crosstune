@@ -333,7 +333,12 @@ internal fun chordWikiBest(
     }
 
 private fun chordWikiNames(title: String, one: String, other: String, more: List<String>): Boolean =
-    SongNames.same(title, one) || SongNames.same(title, other) || more.any { SongNames.same(title, it) }
+    chordWikiTitles(title).any { name -> SongNames.same(name, one) || SongNames.same(name, other) || more.any { SongNames.same(name, it) } }
+
+/** A page's name as listed, and without the credit ChordWiki hangs on it, as in "夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）". */
+private fun chordWikiTitles(title: String): List<String> = listOf(title, title.replace(CREDIT, ""))
+
+private val CREDIT = Regex("""\s*[（(]\s*(?:歌|唄|作詞|作曲|編曲|原曲)[^）)]*[）)]\s*$""")
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
     val tab = line.indexOf('\t')
