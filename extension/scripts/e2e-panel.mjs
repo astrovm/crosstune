@@ -44,19 +44,15 @@ const musicPage = `<!doctype html><title>Player</title><body><script>
   window.go = (seconds) => { audio.currentTime = seconds; return audio.play(); };
 </script>`;
 
-/** SoundCloud's page: no media element, only a progress bar that moves a whole second at a time, as theirs does. */
+/** SoundCloud's page: no media element, only a progress bar that says its second, as theirs does. */
 const soundcloudPage = `<!doctype html><title>Player</title><body>
   <div class="playbackTimeline__progressWrapper" role="progressbar" aria-valuenow="0" aria-valuemax="${LENGTH_S}"></div>
   <script>
-    let timer;
     window.say = (title, artist) => { navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album: "" }); };
-    // From [seconds], the bar's second changes once a second, and the player says it's playing.
+    // The bar moves to [seconds] and stays, so the only way past it is the time since it moved.
     window.go = (seconds) => {
-      clearInterval(timer);
-      const bar = document.querySelector(".playbackTimeline__progressWrapper");
-      bar.setAttribute("aria-valuenow", String(seconds));
+      document.querySelector(".playbackTimeline__progressWrapper").setAttribute("aria-valuenow", String(seconds));
       navigator.mediaSession.playbackState = "playing";
-      timer = setInterval(() => bar.setAttribute("aria-valuenow", String(Number(bar.getAttribute("aria-valuenow")) + 1)), 1000);
     };
   </script>`;
 
@@ -288,13 +284,11 @@ try {
     await waitForWords(panel, FIRST_LINE);
     await panel.bringToFront();
     await panel.waitForFunction(() => document.getElementById("words")?.classList.contains("following"), null, { timeout: 5_000 });
-    // The bar reads 15 at a time the panel doesn't know; its line starts at 15.5 less the 0.3 s lead.
+    // The bar says 15 and stays: the line starts at 15.5 less the panel's 0.3 s lead, so it takes the
+    // time since the bar moved, which a reading in whole seconds has none of, to light it.
     await sound.evaluate(() => window.go(15));
-    const lit = () => panel.evaluate(() => document.querySelector("#words p.now")?.textContent);
     await panel.waitForFunction((line) => document.querySelector("#words p.now")?.textContent === line, SECOND_LINE, { timeout: 5_000 });
-    // It lit before the bar's next second (16), which a reading in whole seconds would wait for.
     assert.equal(await sound.evaluate(() => document.querySelector(".playbackTimeline__progressWrapper").getAttribute("aria-valuenow")), "15");
-    assert.equal(await lit(), SECOND_LINE);
     await sound.close();
   });
 
