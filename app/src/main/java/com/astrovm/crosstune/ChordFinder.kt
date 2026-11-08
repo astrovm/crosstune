@@ -203,7 +203,10 @@ internal class ChordFinder(
         val drawn = aligned.lines.sumOf { it.drawn.size }
         val page = aligned.lines.sumOf { it.chords.size }
         val names = dropped.take(DROPPED_LOG).joinToString(",")
-        return "wiki letters=${aligned.matchedLetters}/${aligned.letters} runs=${aligned.runs}/${aligned.letters} placed=${aligned.placed != null} drawn=$drawn/$page dropped=$names"
+        // Where they were: the sheet line, how many of its letters lined up, and how many chords it lost.
+        val where = aligned.lines.withIndex().filter { (_, line) -> line.drawn.size < line.chords.size }.take(DROPPED_LOG)
+            .joinToString(" ") { (number, line) -> "#$number:${line.matched}/${line.letters}:${line.drawn.size}/${line.chords.size}" }
+        return "wiki lines=$where letters=${aligned.matchedLetters}/${aligned.letters} runs=${aligned.runs}/${aligned.letters} placed=${aligned.placed != null} drawn=$drawn/$page dropped=$names"
     }
 
     private fun note(message: String) {

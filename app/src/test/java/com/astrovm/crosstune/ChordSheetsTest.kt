@@ -608,6 +608,49 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun aReadingInBracketsAfterAKanjiIsNotWordsOfTheSong() {
+        val song = ChordSheets.fromChordWiki(
+            """
+            [C]川(かわ)の道(みち)を[F]歩(ある)く人(ひと)
+            [G]今(い[F]----ま)の[Am]夜(ﾖﾙ)
+            [Dm]あ(パパヤ)[C]回(マワ)レ
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(
+                // The chord before 歩 stays before it, with the readings gone.
+                SheetLine("川の道を歩く人", listOf(Chord(0, "C"), Chord(4, "F"))),
+                // A chord inside a reading sits where the reading was.
+                SheetLine("今の夜", listOf(Chord(0, "G"), Chord(1, "F"), Chord(2, "Am"))),
+                // Brackets that follow no kanji are sung.
+                SheetLine("あ(パパヤ)回レ", listOf(Chord(0, "Dm"), Chord(6, "C")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun aLineWhoseReadingsAreLongerThanItsWordsKeepsAllItsChords() {
+        val texts = listOf("朝の光に歌っているよ川の道", "風が吹いて花が咲く春の日", "夜明けの空に鳥が歌う", "遠い海へ船を漕ぎ出そう")
+        val written = ChordSheets.fromChordWiki(
+            """
+            [Am]朝(あさひかりのなか)の光(ひかりのさき)に[F]歌(うたごえがきこえる)っているよ[G]川(かわのながれ)の道(みちのり)[C]
+            [C]風が吹いて[Am]花が咲く春の日
+            [F]夜(よるのさき)明けの空に[G]鳥が歌(うたごえ)う
+            [C]遠い海へ[Am]船を漕ぎ出そう
+            """.trimIndent()
+        ).lines
+        val placed = ChordSheets.place(sheet(*written.toTypedArray()), texts)!!
+        // The last one is played after the line, past readings the song doesn't have.
+        assertEquals(listOf("Am", "F", "G", "C"), placed[0].over.map { it.name })
+        assertEquals(listOf("C", "Am"), placed[1].over.map { it.name })
+        assertEquals(listOf("F", "G"), placed[2].over.map { it.name })
+        assertEquals(listOf("C", "Am"), placed[3].over.map { it.name })
+        // And each over the letter it was played on.
+        assertEquals(listOf(0, 4, 10, 13), placed[0].over.map { it.at })
+    }
+
+    @Test
     fun chordWikisEditorIsItsLongestTextareaAndAnEmptyOneIsNotThePageAroundIt() {
         val page = """
             <p>{title:外}</p>

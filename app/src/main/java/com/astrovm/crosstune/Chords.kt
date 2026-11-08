@@ -80,6 +80,9 @@ internal object ChordSheets {
     private const val LETTER_MS = 150L
 
     private val inline = Regex("""\[([^\]]*)]""")
+
+    /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
+    private val reading = Regex("""(?<=\p{IsHan})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
     private val ugChord = Regex("""\[ch]([^\[]*)\[/ch]""")
     private val ugTab = Regex("""\[/?tab]""")
     private val section = Regex("""^\s*\[[^\]]*]\s*$""")
@@ -472,9 +475,23 @@ internal object ChordSheets {
             from = match.range.last + 1
         }
         text.append(body.substring(from))
-        val words = text.toString()
-        if (chords.isEmpty() && words.none { it.isLetter() }) return null
-        return SheetLine(if (words.any { it.isLetter() }) words else "", chords)
+        val (words, placed) = withoutReadings(text.toString(), chords)
+        if (placed.isEmpty() && words.none { it.isLetter() }) return null
+        return SheetLine(if (words.any { it.isLetter() }) words else "", placed)
+    }
+
+    /**
+     * [words] without the readings ChordWiki writes after a kanji, "川(かわ)", which are not sung, with
+     * each of [chords] still before the letter it was. A chord inside a reading goes where the reading was.
+     * Left in, they are letters the song never has, and a line that is mostly readings looks like another verse.
+     */
+    private fun withoutReadings(words: String, chords: List<Chord>): Pair<String, List<Chord>> {
+        val ranges = reading.findAll(words).map { it.range }.toList()
+        if (ranges.isEmpty()) return words to chords
+        return reading.replace(words, "") to chords.map { chord ->
+            val gone = ranges.sumOf { range -> (minOf(chord.at, range.last + 1) - range.first).coerceAtLeast(0) }
+            chord.copy(at = chord.at - gone)
+        }
     }
 
     /** [name] is a chord, including N.C., and not a word or a section such as Chorus or サビ. */
