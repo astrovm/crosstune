@@ -1966,7 +1966,7 @@ internal class MainViewModel(
             lyricsJob = viewModelScope.launch {
                 var first: LyricsFinder.FirstLook? = null
                 uiState = uiState.copy(
-                    lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
+                    lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
                     canFollowApps = playback?.hasAccess() == true
                 )
                 try {
@@ -1995,7 +1995,7 @@ internal class MainViewModel(
                         // No words were shown while looking, so there's none to clear.
                         LyricsFinder.Lyrics.None -> problemFound(SongProblem.NO_LYRICS)
                         // Having no words is what an instrumental is, not a problem.
-                        LyricsFinder.Lyrics.Instrumental -> Unit
+                        LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyricsInstrumental = true)
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {
@@ -2064,7 +2064,7 @@ internal class MainViewModel(
         syncPoints = kept.syncPoints
         wordsPace = kept.pace
         uiState = uiState.copy(
-            lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, isLoadingLyrics = false,
+            lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, titleMeaning = kept.learning.titleMeaning, fromRomaji = kept.learning.fromRomaji),
             chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
         )
@@ -3274,7 +3274,7 @@ internal class MainViewModel(
         stopFollowing()
         stopListeningAlong()
         uiState = uiState.copy(
-            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, isLoadingLyrics = false,
+            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
     }
