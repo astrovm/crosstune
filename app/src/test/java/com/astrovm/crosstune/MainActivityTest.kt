@@ -1,6 +1,9 @@
 package com.astrovm.crosstune
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.SearchManager
 import android.content.ClipData
 import android.content.ClipDescription
@@ -129,7 +132,7 @@ class MainActivityTest {
         MainActivity.systemDispatcher = Dispatchers.Unconfined
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         // Most tests exercise the main screen with links going straight to an app picked already, as searches; the rest have their own tests.
-        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).commit()
+        prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean(KEY_ASKED_RETURN, true).commit()
         // What an earlier test found for a song would be found again without asking.
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
@@ -2540,6 +2543,84 @@ class MainActivityTest {
 
         assertTextAbsent(string(R.string.settings_advanced_title))
         assertTextShown(string(R.string.error_invalid_url))
+    }
+
+    @Test
+    fun practiceAsksOnceForANotificationThatBringsTheCardBack() {
+        ShadowSettings.setCanDrawOverlays(false)
+        // Timed, so practising it may open the music app. An untimed card stays here and isn't asked.
+        prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo","title":"Demo","artist":"Band","start":0,"end":1000}]""").remove(KEY_ASKED_RETURN).commit()
+        launch()
+        val practice = "${string(R.string.saved_practice)}, ${string(R.string.practice_due, 1)}"
+        click(practice)
+        assertTextShown(string(R.string.practice_all_songs))
+        // The list stays here. A song is what leaves, and it waits until the question is answered.
+        click("Demo")
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
+        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", nextStartedActivity()!!.action)
+        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        assertNull(model.uiState.practice)
+        // Tapped again while Android is still asking, it doesn't leave and it doesn't ask twice.
+        click("Demo")
+        assertNull(model.uiState.practice)
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        // Turned down, a notice already up is dropped. Back is what remains.
+        postReturnNotice()
+        controller!!.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
+        composeRule.waitForIdle()
+        assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
+        assertNotNull(model.uiState.practice)
+        click(string(R.string.floating_close))
+        composeRule.waitForIdle()
+        if (composeRule.onAllNodesWithText(string(R.string.practice_all_songs)).fetchSemanticsNodes().isEmpty()) click(practice)
+        click(string(R.string.practice_all_songs))
+        assertNull(shadowOf(app).peekNextStartedActivity())
+    }
+
+    @Test
+    fun practiceAsksForEveryTimedCardAndNotForAnotherSong() {
+        ShadowSettings.setCanDrawOverlays(false)
+        // One song leaves. The other never does, so practising that one is not asked, and practising all of them is.
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"Night","translation":"Noche","title":"Timed","artist":"Band","start":0,"end":1000},{"text":"Day","translation":"Dia","title":"Loose","artist":"Band"}]"""
+        ).remove(KEY_ASKED_RETURN).commit()
+        launch()
+        val practice = "${string(R.string.saved_practice)}, ${string(R.string.practice_due, 2)}"
+        click(practice)
+        assertTextShown(string(R.string.practice_all_songs))
+        click("Loose")
+        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+        assertNull(shadowOf(app).peekNextStartedActivity())
+        assertNotNull(model.uiState.practice)
+        click(string(R.string.floating_close))
+        composeRule.waitForIdle()
+        if (composeRule.onAllNodesWithText(string(R.string.practice_all_songs)).fetchSemanticsNodes().isEmpty()) click(practice)
+        click(string(R.string.practice_all_songs))
+        val asked = shadowOf(controller!!.get()).lastRequestedPermission
+        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
+        assertNull(model.uiState.practice)
+    }
+
+    @Test
+    fun theReturnNoticeIsGoneOnceTheCardIsInFront() {
+        launch()
+        postReturnNotice()
+        val notices = app.getSystemService(NotificationManager::class.java)
+        assertEquals(1, notices.activeNotifications.size)
+        controller!!.pause().stop()
+        assertEquals(1, notices.activeNotifications.size)
+        controller!!.restart().resume()
+        composeRule.waitForIdle()
+        assertTrue(notices.activeNotifications.isEmpty())
+    }
+
+    private fun postReturnNotice() {
+        val notices = app.getSystemService(NotificationManager::class.java)
+        notices.createNotificationChannel(NotificationChannel(RETURN_CHANNEL, "return", NotificationManager.IMPORTANCE_HIGH))
+        notices.notify(RETURN_NOTICE_ID, Notification.Builder(app, RETURN_CHANNEL).setSmallIcon(R.drawable.ic_lyrics).setContentTitle("back").build())
+        assertEquals(1, notices.activeNotifications.size)
     }
 
     @Test

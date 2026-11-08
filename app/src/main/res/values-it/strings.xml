@@ -293,6 +293,9 @@
     <string name="floating_close">Chiudi</string>
     <string name="floating_done">Fatto</string>
     <string name="floating_channel">Testo fluttuante</string>
+    <string name="return_channel">Ritorno</string>
+    <string name="return_title">Torna alla scheda</string>
+    <string name="return_text">Tocca per tornare a Crosstune</string>
     <string name="hearing_channel">Ascolto della musica</string>
     <string name="floating_notification">Testo che fluttua sopra le tue app</string>
     <string name="lyrics_learn">Letture e traduzione</string>
