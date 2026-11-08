@@ -82,6 +82,9 @@ internal fun songLines(lines: List<String>, words: List<String>): List<SongLine>
     return seen.values.toList()
 }
 
+/** An opened song: whether it can be seeked, and whether it is playing from the start because it can't. */
+private class OpenedSong(val canSeek: Boolean, val fromTheStart: Boolean)
+
 /**
  * Kept lines practised as cards, on [screen]: each card's line ready in the music app, and played
  * once it's turned, then said how well it was known.
@@ -93,7 +96,8 @@ internal class PracticeCards(
     private val matcher: ExactMatcher,
     private val store: SavedLinesStore,
     private val wallClock: () -> Long,
-    private val now: () -> Long
+    private val now: () -> Long,
+    private val songLoadMs: Long = MainViewModel.LOAD_SONG_MS
 ) {
     private var uiState by screen
     private var soundJob: Job? = null
@@ -133,7 +137,7 @@ internal class PracticeCards(
         soundJob?.cancel()
         soundJob = scope.launch {
             val song = MusicMetadata(line.title, line.artist)
-            val reached = inApp(source, song, line.app) { app ->
+            val stayed = inApp(source, song, line.app, fromStart = { setSound(line, LineSound.FROM_START) }) { app ->
                 val lead = if (app()?.video == true) line.leadMs else 0L
                 val start = (line.startMs ?: 0L) + lead
                 // A moment past where the words say it ends, so its last word isn't cut short.
@@ -150,15 +154,16 @@ internal class PracticeCards(
                 source.playPause(song, false)
                 setSound(line, LineSound.PLAYED)
             }
-            if (reached == null) setSound(line, LineSound.NONE)
+            if (!stayed) setSound(line, LineSound.NONE)
         }
     }
 
     /**
      * Follows [song] in the music app, asking [app] for it by name when no app has it, then does
-     * [block] once it can be moved around in, with where it is as that changes; null when it never can.
+     * [block] once it can be moved around in, with where it is as that changes. True when it could,
+     * or when an opened song is already playing and the app won't move, so it stays where it started.
      */
-    private suspend fun <T> inApp(source: PlaybackSource, song: MusicMetadata, app: String?, block: suspend (() -> Following?) -> T): T? = coroutineScope {
+    private suspend fun inApp(source: PlaybackSource, song: MusicMetadata, app: String?, fromStart: () -> Unit = {}, block: suspend (() -> Following?) -> Unit): Boolean = coroutineScope {
         var latest: Following? = null
         val following = launch { source.follow(song).collect { latest = it } }
         try {
@@ -166,19 +171,43 @@ internal class PracticeCards(
             // Not already there, it's asked for by name, which takes the app a moment. There, but where
             // it can't be moved, e.g. during an ad, asking again would only start it over.
             val found = withTimeoutOrNull(FIND_SONG_MS) { while (latest == null) delay(SOUND_CHECK_MS) } != null
-            var opened = false
-            val there = if (found) withTimeoutOrNull(FIND_SONG_MS) { ready() } != null else {
-                // Spotify plays nothing asked of it by name, but its own link it starts at once, and it can
-                // be moved around in from there, on its free plan too.
-                opened = openedOnOwnLink(source, song, app)
-                val asked = !opened && asked(source, song, app) { link -> opened = source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link) }
-                (asked || opened) && withTimeoutOrNull(MainViewModel.LOAD_SONG_MS) { ready() } != null
+            if (found) {
+                val there = withTimeoutOrNull(FIND_SONG_MS) { ready() } != null
+                if (there) block { latest }
+                return@coroutineScope there
             }
-            if (opened) source.comesBack()
-            if (there) block { latest } else null
+            val opened = openUntilItCanMove(source, song, app, { latest }, fromStart)
+            if (opened.canSeek) block { latest }
+            opened.canSeek || opened.fromTheStart
         } finally {
             following.cancel()
         }
+    }
+
+    /**
+     * Opens [song] on its own link, or asks for it, then waits until it can be moved. Spotify plays
+     * nothing asked of it by name; its own link starts the song. On a free plan it never offers a
+     * seek, and sending one errors the player, so once that song is playing it stays where it started.
+     */
+    private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, latest: () -> Following?, fromStart: () -> Unit): OpenedSong {
+        var opened = openedOnOwnLink(source, song, app)
+        val asked = !opened && asked(source, song, app) { link -> opened = source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link) }
+        var fromTheStart = false
+        var cameBack = false
+        val canSeek = (asked || opened) && withTimeoutOrNull(songLoadMs) {
+            while (latest()?.canSeek != true) {
+                if (!fromTheStart && opened && latest()?.clock?.playing == true) {
+                    fromTheStart = true
+                    fromStart()
+                    source.comesBack()
+                    cameBack = true
+                }
+                delay(SOUND_CHECK_MS)
+            }
+            true
+        } != null
+        if (opened && !cameBack) source.comesBack()
+        return OpenedSong(canSeek, fromTheStart)
     }
 
     /** Whether [app], one that plays nothing asked of it but each song's own link, was opened on [song]'s. */
@@ -216,7 +245,7 @@ internal class PracticeCards(
     /** Plays the card's line again, or, while it plays, stops it there, paused, to be played again. */
     fun replay() {
         val practice = uiState.practice ?: return
-        val line = practice.line?.takeIf { practice.sound != LineSound.NONE } ?: return
+        val line = practice.line?.takeIf { practice.sound != LineSound.NONE && practice.sound != LineSound.FROM_START } ?: return
         if (practice.sound != LineSound.PLAYING) return sound(line)
         soundJob?.cancel()
         playback?.playPause(MusicMetadata(line.title, line.artist), false)
@@ -255,7 +284,7 @@ internal class PracticeCards(
 
     /** Stops practising, the line playing, or the song on its way, paused. */
     fun stop() {
-        val playing = uiState.practice?.takeIf { it.sound == LineSound.PLAYING || it.sound == LineSound.LOADING }?.line
+        val playing = uiState.practice?.takeIf { it.sound == LineSound.PLAYING || it.sound == LineSound.LOADING || it.sound == LineSound.FROM_START }?.line
         soundJob?.cancel()
         soundJob = null
         playing?.let { playback?.playPause(MusicMetadata(it.title, it.artist), false) }

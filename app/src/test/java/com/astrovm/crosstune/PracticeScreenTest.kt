@@ -96,6 +96,24 @@ class PracticeScreenTest {
     }
 
     @Test
+    fun aSongPlayingFromTheStartSaysSoAndHasNoPlayButton() {
+        val heard = line.copy(cardType = HEAR_TYPE)
+        show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.FROM_START), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))))
+        composeRule.onNodeWithText(string(R.string.practice_from_start)).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_stop)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aTurnedCardPlayingFromTheStartStillHasNoPlayButton() {
+        // The back would play the line. It doesn't: opening the song again would start it over.
+        val translated = line.copy(cardType = TRANSLATE_TYPE)
+        show(UiState(practice = Practice(queue = listOf(translated), total = 2, turned = true, sound = LineSound.FROM_START), cardTypes = listOf(READ_IT, TRANSLATE_IT.copy(on = true))))
+        composeRule.onNodeWithText(string(R.string.practice_from_start)).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertDoesNotExist()
+    }
+
+    @Test
     fun whileTheMusicAppGetsThereItsNameIsOnlySaidWhenItIsKnown() {
         val heard = line.copy(cardType = HEAR_TYPE, app = "com.example.nothing")
         show(UiState(practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.LOADING), cardTypes = listOf(READ_IT, HEAR_IT.copy(on = true))))

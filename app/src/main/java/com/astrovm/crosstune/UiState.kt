@@ -413,7 +413,7 @@ internal data class Practice(
 }
 
 /** How a card's line sounds: not at all, on its way in the music app, playing, or ready to play (again). */
-internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }
+internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED, FROM_START }
 
 /** A [song] the music app [app] played, at [positionMs], before practice took it over. */
 internal data class Before(val song: MusicMetadata, val positionMs: Long, val app: String?)

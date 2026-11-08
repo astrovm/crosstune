@@ -391,6 +391,7 @@
     <string name="practice_play">Odtwórz wiersz</string>
     <string name="practice_stop">Zatrzymaj wiersz</string>
     <string name="practice_loading">Otwieranie w %1$s</string>
+    <string name="practice_from_start">Gra od początku. Nie przeskakuje do tego wiersza.</string>
     <string name="practice_done">Przećwiczono %1$d</string>
     <string name="practice_back_to">Wróć do %1$s</string>
     <string name="practice_progress">%1$d z %2$d</string>

@@ -391,6 +391,7 @@
     <string name="practice_play">Écouter la ligne</string>
     <string name="practice_stop">Arrêter la ligne</string>
     <string name="practice_loading">Ouverture dans %1$s</string>
+    <string name="practice_from_start">Lecture depuis le début. L\'appli ne saute pas à cette ligne.</string>
     <string name="practice_done">%1$d révisées</string>
     <string name="practice_back_to">Revenir à %1$s</string>
     <string name="practice_progress">%1$d sur %2$d</string>

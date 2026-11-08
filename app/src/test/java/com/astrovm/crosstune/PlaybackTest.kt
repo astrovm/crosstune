@@ -1428,6 +1428,21 @@ class PlaybackTest {
     }
 
     @Test
+    @Config(shadows = [AppAsked::class])
+    fun aSeekTheAppDoesntOfferIsntSent() {
+        allow()
+        // Playing, with skip and pause, and no seek: what Spotify's free plan advertises.
+        val playingButStuck = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT
+        val spotify = player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", actions = playingButStuck)
+        shadowOf(sessions).addController(spotify)
+        playback.seekTo(song, 45_000)
+        // No playback state at all is the same: nothing was offered, so nothing is sent.
+        shadowOf(spotify).setPlaybackState(null)
+        playback.seekTo(song, 45_000)
+        assertEquals(emptyList<String>(), asked())
+    }
+
+    @Test
     fun theAppPlayingItIsTheOneControlledAsItsTheOneFollowed() {
         allow()
         // Spotify, first, is paused on the song, and YouTube Music plays it.

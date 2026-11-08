@@ -412,6 +412,7 @@
     <string name="practice_play">Play the line</string>
     <string name="practice_stop">Stop the line</string>
     <string name="practice_loading">Opening in %1$s</string>
+    <string name="practice_from_start">Playing from the start. It won\'t jump to this line.</string>
     <string name="practice_done">%1$d practiced</string>
     <string name="practice_back_to">Back to %1$s</string>
     <string name="practice_progress">%1$d of %2$d</string>

@@ -49,7 +49,7 @@
     ],
     [
       "Apprenez les paroles",
-      "Kana, pinyin, romaji et traductions. Puis révisez chaque ligne pendant qu'elle joue."
+      "Kana, pinyin, romaji et traductions. Puis révisez chaque ligne dans votre appli de musique quand elle peut y aller, ou depuis le début sinon, et la carte le dit."
     ],
     [
       "ChatGPT, si vous l'avez",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android. Quand vous révisez des lignes enregistrées, Crosstune demande aussi à votre app de musique de lire la chanson de chaque ligne, à cette ligne. Le lecteur de Crosstune utilise ce même accès pour afficher la chanson et la suite, et la mettre en pause, la passer, la déplacer, la répéter, activer la lecture aléatoire, appuyer sur le J'aime de l'app ou la mettre en pause avec le minuteur de sommeil dans votre app de musique."
+      "Si vous faites suivre aux paroles la chanson qui joue dans votre app de musique, Android vous demande d'autoriser l'accès aux notifications de Crosstune. Crosstune s'en sert uniquement pour voir quelle chanson vos apps de musique disent lire et où elles en sont, afin que les paroles suivent et qu'une ligne touchée puisse amener la chanson à cet endroit. Il ne lit jamais vos notifications, et rien de tout cela ne quitte votre téléphone. Vous pouvez le désactiver à tout moment dans les paramètres d'Android. Quand vous révisez des lignes enregistrées, Crosstune demande aussi à votre app de musique de lire la chanson de chaque ligne, à cette ligne si elle peut y aller, et depuis le début sinon. Le lecteur de Crosstune utilise ce même accès pour afficher la chanson et la suite, et la mettre en pause, la passer, la déplacer, la répéter, activer la lecture aléatoire, appuyer sur le J'aime de l'app ou la mettre en pause avec le minuteur de sommeil dans votre app de musique."
     ],
     [
       "p",

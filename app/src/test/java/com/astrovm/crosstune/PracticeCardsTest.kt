@@ -29,8 +29,8 @@ class PracticeCardsTest {
 
     private val sites = FakeSpotify()
 
-    private fun cards(source: PlaybackSource? = playback) =
-        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, { 1_000_000L }, { System.currentTimeMillis() })
+    private fun cards(source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS) =
+        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, { 1_000_000L }, { System.currentTimeMillis() }, songLoadMs)
 
     /** Spotify having the demo song, under [SPOTIFY_ID]. */
     private fun spotifyHasTheSong() {
@@ -368,6 +368,57 @@ class PracticeCardsTest {
         cards.readAs(listOf("りゅう", "ほし"))
         assertEquals(listOf("流れる星", "Plain"), practice!!.queue.map { it.text }.sortedByDescending { it == "流れる星" })
         assertFalse(practice!!.queue.first { it.text == "Plain" }.readByHand)
+    }
+
+    @Test
+    fun aSongAlreadyOnThatCantMoveLeavesTheCardSilent() {
+        keep(line())
+        // Already on, and stuck, as during an ad. Asking again would start it over, and it isn't the song from the start.
+        playing(canSeek = false)
+        cards().start(null, before = null)
+        waitFor("the card stays silent") { practice?.sound == LineSound.NONE }
+        assertTrue(playback.seeks.isEmpty())
+        assertTrue(playback.opened.isEmpty())
+        assertTrue(playback.songsAsked.isEmpty())
+    }
+
+    @Test
+    fun aSpotifySongThatWontMoveKeepsPlayingFromTheStart() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        val cards = cards(songLoadMs = 1_500)
+        cards.start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), playing = true), "Spotify", canSeek = false, appPackage = MusicService.SPOTIFY.packageName)
+        waitFor("the card says the song is playing from the start") { practice?.sound == LineSound.FROM_START }
+        // The load window ends with the song still playing, and the card still says so.
+        Thread.sleep(2_000)
+        assertEquals(LineSound.FROM_START, practice?.sound)
+        assertTrue(playback.seeks.isEmpty())
+        assertTrue(playback.songsAsked.isEmpty())
+        assertEquals(1, playback.cameBack)
+        val opened = playback.opened.size
+        cards.replay()
+        Thread.sleep(100)
+        assertEquals(opened, playback.opened.size)
+        cards.stop()
+        assertNull(practice)
+        assertEquals(listOf(false), playback.plays)
+    }
+
+    @Test
+    fun aSpotifySongThatStartsUnmovableSeeksOnceItCan() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), playing = true), "Spotify", canSeek = false)
+        waitFor("the song is playing from the start") { practice?.sound == LineSound.FROM_START }
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), 20f), "Spotify", canSeek = true)
+        waitFor("the line is reached") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(10_000L), playback.seeks.toList())
     }
 
     @Test

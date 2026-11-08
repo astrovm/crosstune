@@ -369,9 +369,15 @@ internal class MediaSessionPlayback(
         controllers.filter { it.plays(song) }.maxByOrNull { if (it.playbackState?.state == PlaybackState.STATE_PLAYING) 1 else 0 }
 
     override fun seekTo(song: MusicMetadata, positionMs: Long) {
-        moves++
-        // Taken back meanwhile, the words just stay where they are.
-        runCatching { appFor(song)?.transportControls?.seekTo(positionMs) }
+        // Taken back meanwhile, the words just stay where they are. An app that doesn't offer a seek,
+        // as Spotify's free plan, errors its player if one is sent, so it isn't.
+        runCatching {
+            val app = appFor(song) ?: return
+            val actions = app.playbackState?.actions ?: 0L
+            if (actions and PlaybackState.ACTION_SEEK_TO == 0L) return
+            moves++
+            app.transportControls.seekTo(positionMs)
+        }
     }
 
     override fun playPause(song: MusicMetadata, play: Boolean) {

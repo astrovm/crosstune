@@ -391,6 +391,7 @@
     <string name="practice_play">Включить строку</string>
     <string name="practice_stop">Остановить строку</string>
     <string name="practice_loading">Открывается в %1$s</string>
+    <string name="practice_from_start">Играет с начала. К этой строке не переходит.</string>
     <string name="practice_done">Повторено: %1$d</string>
     <string name="practice_back_to">Вернуться к %1$s</string>
     <string name="practice_progress">%1$d из %2$d</string>

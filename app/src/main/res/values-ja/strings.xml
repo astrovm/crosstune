@@ -392,6 +392,7 @@
     <string name="practice_play">この行を再生</string>
     <string name="practice_stop">この行を止める</string>
     <string name="practice_loading">%1$sで開いています</string>
+    <string name="practice_from_start">最初から再生しています。この行には移動しません。</string>
     <string name="practice_done">%1$d件練習</string>
     <string name="practice_back_to">%1$sに戻る</string>
     <string name="practice_progress">%1$d / %2$d</string>

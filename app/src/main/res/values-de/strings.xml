@@ -391,6 +391,7 @@
     <string name="practice_play">Zeile abspielen</string>
     <string name="practice_stop">Zeile anhalten</string>
     <string name="practice_loading">Wird in %1$s geöffnet</string>
+    <string name="practice_from_start">Läuft von Anfang an. Es springt nicht zu dieser Zeile.</string>
     <string name="practice_done">%1$d geübt</string>
     <string name="practice_back_to">Zurück zu %1$s</string>
     <string name="practice_progress">%1$d von %2$d</string>

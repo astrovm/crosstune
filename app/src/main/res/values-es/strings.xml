@@ -391,6 +391,7 @@
     <string name="practice_play">Escuchar la línea</string>
     <string name="practice_stop">Parar la línea</string>
     <string name="practice_loading">Abriendo en %1$s</string>
+    <string name="practice_from_start">Suena desde el inicio. No salta a esta línea.</string>
     <string name="practice_done">%1$d practicadas</string>
     <string name="practice_back_to">Volver a %1$s</string>
     <string name="practice_progress">%1$d de %2$d</string>
