@@ -426,6 +426,26 @@ class PlayQueueTest {
     }
 
     @Test
+    fun aListPlaysOnFromItsFirstAndLastSongStillToAskForButNotFromPastIt() {
+        val queue = queue()
+        val songs = tracks.take(4)
+        runBlocking { queue.play(songs, MusicService.TIDAL, tidal, 1, songs.take(1)) }
+        // Three are still to ask for: one past the last is nowhere, and leaves the list as it was.
+        runBlocking { queue.playFrom(3) }
+        assertTrue(phone.songsAsked.isEmpty())
+        assertTrue(file.exists())
+        // The first plays, and the list goes on from it.
+        runBlocking { queue.playFrom(0) }
+        assertEquals(listOf("Song 2"), phone.songsAsked.map { it.first.title })
+        // The last of the two left plays too, and nothing is left to play on from.
+        runBlocking { queue.playFrom(1) }
+        assertEquals(listOf("Song 2", "Song 4"), phone.songsAsked.map { it.first.title })
+        runBlocking { queue.playFrom(0) }
+        assertEquals(2, phone.songsAsked.size)
+        assertTrue(file.exists())
+    }
+
+    @Test
     fun aListsSongsMovedOrPlayedFromAreLookedUpSoAnew() {
         val queue = queue()
         queue.playing()
