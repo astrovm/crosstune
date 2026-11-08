@@ -292,6 +292,9 @@
     <string name="floating_close">關閉</string>
     <string name="floating_done">完成</string>
     <string name="floating_channel">懸浮歌詞</string>
+    <string name="return_channel">返回</string>
+    <string name="return_title">返回卡片</string>
+    <string name="return_text">輕觸即可返回 Crosstune</string>
     <string name="hearing_channel">聆聽音樂</string>
     <string name="floating_notification">歌詞正懸浮在應用程式上方</string>
     <string name="lyrics_learn">讀音和翻譯</string>

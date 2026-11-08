@@ -292,6 +292,9 @@
     <string name="floating_close">Sluiten</string>
     <string name="floating_done">Klaar</string>
     <string name="floating_channel">Zwevende tekst</string>
+    <string name="return_channel">Terug</string>
+    <string name="return_title">Terug naar de kaart</string>
+    <string name="return_text">Tik om terug te gaan naar Crosstune</string>
     <string name="hearing_channel">Muziek horen</string>
     <string name="floating_notification">Tekst zweeft over je apps</string>
     <string name="lyrics_learn">Uitspraak en vertaling</string>

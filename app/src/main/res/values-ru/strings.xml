@@ -292,6 +292,9 @@
     <string name="floating_close">Закрыть</string>
     <string name="floating_done">Готово</string>
     <string name="floating_channel">Плавающий текст</string>
+    <string name="return_channel">Возврат</string>
+    <string name="return_title">Назад к карточке</string>
+    <string name="return_text">Нажмите, чтобы вернуться в Crosstune</string>
     <string name="hearing_channel">Прослушивание музыки</string>
     <string name="floating_notification">Текст поверх ваших приложений</string>
     <string name="lyrics_learn">Чтение и перевод</string>

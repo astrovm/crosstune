@@ -54,8 +54,8 @@ class PracticeCardsTest {
 
     private val practice get() = screen.value.practice
 
-    private fun waitFor(what: String, until: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + 10_000
+    private fun waitFor(what: String, seconds: Long = 10, until: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + seconds * 1_000
         while (!until()) {
             check(System.currentTimeMillis() < deadline) { "Never got to: $what" }
             Thread.sleep(20)
@@ -502,6 +502,54 @@ class PracticeCardsTest {
         waitFor("the line is reached") { playback.seeks.isNotEmpty() }
         assertEquals(listOf(10_000L), playback.seeks.toList())
         assertEquals(1, playback.cameBack)
+    }
+
+    @Test
+    fun spotifyIsLeftOnceItPlaysEvenWhenItWontLetTheLineBeReached() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        // Not playing yet, so nothing comes back and the notice, if one is needed, doesn't cover it early.
+        Thread.sleep(300)
+        assertEquals(0, playback.cameBack)
+        // Playing, but with no way to move around in it: Crosstune comes back now, not 12 s later.
+        playing(canSeek = false)
+        waitFor("it comes back") { playback.cameBack == 1 }
+        assertTrue(playback.seeks.isEmpty())
+        // Moved around in later, the line is still reached, and it doesn't come back twice.
+        playing()
+        waitFor("the line is reached") { playback.seeks.isNotEmpty() }
+        assertEquals(1, playback.cameBack)
+    }
+
+    @Test
+    fun aPausedSpotifyIsNotLeftUntilItPlays() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        playback.playing.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), playing = false), "Spotify", canSeek = false)
+        Thread.sleep(300)
+        assertEquals(0, playback.cameBack)
+        playback.playing.value = Following(PlaybackClock(10_000, System.currentTimeMillis()), "Spotify", canSeek = false)
+        waitFor("it comes back") { playback.cameBack == 1 }
+    }
+
+    /** The only test that waits out the whole 12 s the music app is given to start. */
+    @Test
+    fun aSongThatNeverPlaysIsLeftAllTheSame() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        Thread.sleep(1_000)
+        assertEquals(0, playback.cameBack)
+        waitFor("it comes back at the end of the wait", seconds = 15) { playback.cameBack == 1 }
+        assertTrue(playback.seeks.isEmpty())
     }
 
     @Test
