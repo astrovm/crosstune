@@ -2216,14 +2216,9 @@ internal class MainViewModel(
                 if (autoCalibrating) stopListeningAlong()
             }
         }
-        // Heard by another name of the song right where the song shown is, well into it, it's the same
-        // recording on another release, as Shazam sometimes names it, not the next song, which starts over.
-        // Another song heard there is still another song, e.g. one the phone plays, the room's named first.
         val clock = heardClock
         val at = heard.clock
-        if (at != null && clock != null && clock.playing && heardSong?.let { sameSong(it, shown) } == true && SongNames.releasesOfOneSong(song, shown) &&
-            clock.positionAt(now()) >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - clock.positionAt(now())) <= SAME_RECORDING_MS
-        ) {
+        if (at != null && clock != null && sameRecordingThere(song, shown, at, clock)) {
             heardClock = steadied(clock, at)
             return keepInTime()
         }
@@ -2345,6 +2340,17 @@ internal class MainViewModel(
      * time, is only believed once a second hearing agrees, as a skip would. A song that had stopped
      * starts again from where it's heard.
      */
+    /**
+     * Heard by another name of the song right where the song shown is, well into it, it's the same
+     * recording on another release, as Shazam sometimes names it, not the next song, which starts over.
+     * Another song heard there is still another song, e.g. one the phone plays, the room's named first.
+     */
+    private fun sameRecordingThere(song: MusicMetadata, shown: MusicMetadata, at: PlaybackClock, clock: PlaybackClock): Boolean {
+        if (!clock.playing || heardSong?.let { sameSong(it, shown) } != true || !SongNames.releasesOfOneSong(song, shown)) return false
+        val where = clock.positionAt(now())
+        return where >= SAME_RECORDING_AFTER_MS && abs(at.positionAt(now()) - where) <= SAME_RECORDING_MS
+    }
+
     private fun steadied(current: PlaybackClock?, heard: PlaybackClock): PlaybackClock {
         if (current == null || !current.playing) return heard.also { unconfirmed = null }
         val at = now()
