@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -146,14 +147,15 @@ class ChordWikiTest {
     @Test
     fun theBrowserReadsTheEditorFromBehindTheScreen() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
-        runBlocking(Dispatchers.Main.immediate) {
-            try {
-                ChordWikiBrowser(activity, screen = { null }).page("https://ja.chordwiki.org/")
-                fail()
-            } catch (e: IOException) {
-                assertTrue(e.message!!.contains("nowhere"))
-            }
+        // Looked at through a deferred, so a lookup that never settles fails the test rather than hanging the run.
+        val nowhere = CompletableDeferred<Result<String>>()
+        CoroutineScope(Dispatchers.Main).launch {
+            nowhere.complete(runCatching { ChordWikiBrowser(activity, screen = { null }).page("https://ja.chordwiki.org/") })
         }
+        shadowOf(Looper.getMainLooper()).idle()
+        val error = nowhere.within().exceptionOrNull()
+        assertTrue(error is IOException)
+        assertTrue(error!!.message!!.contains("nowhere"))
         val root = activity.window.decorView as ViewGroup
         CookieManager.getInstance().setAcceptCookie(false)
         val done = open(activity, gapMs = 20, waitMs = 10_000)
@@ -174,7 +176,7 @@ class ChordWikiTest {
         assertEquals("https://ja.chordwiki.org/wiki.cgi?c=edit", shadowOf(web).lastLoadedUrl)
         answer(web, page(source = "[C]川の道", hasEditor = true))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
-        assertEquals("[C]川の道", runBlocking { done.await() }.getOrThrow())
+        assertEquals("[C]川の道", done.within().getOrThrow())
         assertNull(web.parent)
     }
 
@@ -207,7 +209,7 @@ class ChordWikiTest {
         )
         answer(web, page(source = "[C]川の道", hasEditor = true))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
-        assertEquals("[C]川の道", runBlocking { done.await() }.getOrThrow())
+        assertEquals("[C]川の道", done.within().getOrThrow())
     }
 
     @Test
@@ -219,7 +221,7 @@ class ChordWikiTest {
         clock = 20
         answer(findWeb(root), null)
         shadowOf(Looper.getMainLooper()).idle()
-        val stalledError = runBlocking { stalled.await() }.exceptionOrNull()
+        val stalledError = stalled.within().exceptionOrNull()
         assertTrue(stalledError is IOException && stalledError.message!!.contains("didn't finish loading"))
 
         clock = 0
@@ -227,14 +229,14 @@ class ChordWikiTest {
         clock = 20
         answer(findWeb(root), JSONObject.quote("not an object"))
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(runBlocking { garbage.await() }.exceptionOrNull() is IOException)
+        assertTrue(garbage.within().exceptionOrNull() is IOException)
 
         clock = 0
         val checking = open(activity, now = { clock }, gapMs = 60_000, waitMs = 10)
         clock = 20
         answer(findWeb(root), page(title = "Just a moment...", text = "Checking your browser"))
         shadowOf(Looper.getMainLooper()).idle()
-        val check = runBlocking { checking.await() }.exceptionOrNull()
+        val check = checking.within().exceptionOrNull()
         assertTrue(check is IOException && check.message!!.contains("didn't finish"))
 
         clock = 0
@@ -242,7 +244,7 @@ class ChordWikiTest {
         clock = 20
         answer(findWeb(root), page(title = "Verify you are human", text = "cf-turnstile"))
         shadowOf(Looper.getMainLooper()).idle()
-        val click = runBlocking { clicked.await() }.exceptionOrNull()
+        val click = clicked.within().exceptionOrNull()
         assertTrue(click is IOException && click.message!!.contains("click"))
     }
 
@@ -258,7 +260,7 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
         shadowOf(web).lastEvaluatedJavascriptCallback.onReceiveValue(page(source = "[C]川", hasEditor = true))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals("[C]川", runBlocking { done.await() }.getOrThrow())
+        assertEquals("[C]川", done.within().getOrThrow())
         assertNull(web.parent)
     }
 
@@ -275,7 +277,7 @@ class ChordWikiTest {
         assertTrue(script, script.orEmpty().contains("textarea"))
         shadowOf(web).lastEvaluatedJavascriptCallback.onReceiveValue(page(source = "[C]川", hasEditor = true))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals("[C]川", runBlocking { done.await() }.getOrThrow())
+        assertEquals("[C]川", done.within().getOrThrow())
     }
 
     /**
@@ -306,7 +308,7 @@ class ChordWikiTest {
         assertTrue(second !== third)
         third.onReceiveValue(page(title = "Just a moment...", text = "Checking your browser"))
         shadowOf(Looper.getMainLooper()).idle()
-        val error = runBlocking { done.await() }.exceptionOrNull()
+        val error = done.within().exceptionOrNull()
         assertTrue(error is IOException && error.message!!.contains("didn't finish"))
     }
 
@@ -361,7 +363,7 @@ class ChordWikiTest {
         assertTrue(first !== second)
         second.onReceiveValue(page(source = "[C]川", hasEditor = true))
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals("[C]川", runBlocking { done.await() }.getOrThrow())
+        assertEquals("[C]川", done.within().getOrThrow())
     }
 
     /** No injected clock. The phone's own clock is what decides the page took too long. */
@@ -380,7 +382,7 @@ class ChordWikiTest {
         callback.onReceiveValue(page(title = "Just a moment...", text = "Checking your browser"))
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(done.isCompleted)
-        val error = runBlocking { done.await() }.exceptionOrNull()
+        val error = done.within().exceptionOrNull()
         assertTrue(error is IOException && error.message!!.contains("didn't finish"))
     }
 
@@ -441,6 +443,9 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idle()
         return done
     }
+
+    /** The result, or a failure within seconds. A lookup that never settles must not hang the run. */
+    private fun <T> CompletableDeferred<T>.within(): T = runBlocking { withTimeout(2_000) { await() } }
 
     private fun answer(web: WebView, value: String?) {
         // Robolectric only runs the page callbacks on the next load after this is set, and posts them.

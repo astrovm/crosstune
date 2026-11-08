@@ -565,12 +565,12 @@ internal object ChordSheets {
     /** [place], plus the letter match and which chords were left off a line. */
     fun align(sheet: ChordSheet, texts: List<String>): ChordAlign {
         val direct = matchLines(sheet, texts)
-        if (direct.raw != null) return direct.report(direct.raw.takeUnless { lines -> lines.all { it.isEmpty } })
-        val said = said(texts) ?: return direct.report(null)
+        if (direct.placed != null) return direct.copy(placed = direct.placed.takeUnless { lines -> lines.all { it.isEmpty } })
+        val said = said(texts) ?: return direct
         val roman = matchLines(sheet, said)
-        if (roman.raw == null) return direct.report(null)
-        val shown = romanizedChords(roman.raw, texts, said)
-        return roman.report(shown.takeUnless { lines -> lines.all { it.isEmpty } })
+        if (roman.placed == null) return direct
+        val shown = romanizedChords(roman.placed, texts, said)
+        return roman.copy(placed = shown.takeUnless { lines -> lines.all { it.isEmpty } })
     }
 
     /** The lines [texts] as they read in Latin letters, kept for the next sheet tried: the same words are put against several. */
@@ -593,26 +593,23 @@ internal object ChordSheets {
             LineChords(line.before, line.over.map { chord -> Chord((chord.at.toLong() * length / readLength).toInt().coerceIn(0, length), chord.name) })
         }
 
-    private class Match(val raw: List<LineChords>?, val matchedLetters: Int, val letters: Int, val runs: Int, val lines: List<LineFit>) {
-        fun report(placed: List<LineChords>?) = ChordAlign(placed, matchedLetters, letters, runs, lines)
-    }
-
-    private fun matchLines(sheet: ChordSheet, texts: List<String>): Match {
+    /** The match of [sheet]'s letters to [texts]. [ChordAlign.placed] is every chord laid down, before a page of the words alone is told apart. */
+    private fun matchLines(sheet: ChordSheet, texts: List<String>): ChordAlign {
         val lines = inScriptOf(sheet.lines, texts)
         val ours = Letters(texts)
         val theirs = Letters(lines.map { it.text })
         val fewer = minOf(theirs.size, ours.size)
         val unmatched = lines.map { LineFit(it.chords.map { chord -> chord.name }, 0, 0, emptyList()) }
-        if (theirs.size < MIN_LETTERS || ours.size == 0) return Match(null, 0, fewer, 0, unmatched)
-        val matchedAt = BorrowedTimings.lineUp(ours.keys, theirs.keys) ?: return Match(null, 0, fewer, 0, unmatched)
+        if (theirs.size < MIN_LETTERS || ours.size == 0) return ChordAlign(null, 0, fewer, 0, unmatched)
+        val matchedAt = BorrowedTimings.lineUp(ours.keys, theirs.keys) ?: return ChordAlign(null, 0, fewer, 0, unmatched)
         val matched = matchedAt.count { it >= 0 }
         val runs = (1 until matchedAt.size).count { at -> matchedAt[at - 1] >= 0 && matchedAt[at] == matchedAt[at - 1] + 1 }
         val fits = lines.mapIndexed { number, line ->
             val letters = theirs.of(number)
             LineFit(line.chords.map { chord -> chord.name }, letters.size, letters.count { matchedAt[it] >= 0 }, emptyList())
         }
-        if (matched < fewer * GOOD_LETTERS || runs < fewer * GOOD_RUNS) return Match(null, matched, fewer, runs, fits)
-        return layChords(lines, texts, ours, theirs, matchedAt, Match(null, matched, fewer, runs, fits))
+        if (matched < fewer * GOOD_LETTERS || runs < fewer * GOOD_RUNS) return ChordAlign(null, matched, fewer, runs, fits)
+        return layChords(lines, texts, ours, theirs, matchedAt, ChordAlign(null, matched, fewer, runs, fits))
     }
 
     /**
@@ -627,8 +624,8 @@ internal object ChordSheets {
         ours: Letters,
         theirs: Letters,
         matchedAt: IntArray,
-        soFar: Match,
-    ): Match {
+        soFar: ChordAlign,
+    ): ChordAlign {
         val before = Array(texts.size) { mutableListOf<String>() }
         val over = Array(texts.size) { mutableListOf<Chord>() }
         val waiting = mutableListOf<String>()
@@ -666,7 +663,7 @@ internal object ChordSheets {
         landRest(waiting, waitingLine, landed, over, texts)
         val raw = texts.indices.map { LineChords(before[it], over[it].sortedBy { chord -> chord.at }) }
         val fits = soFar.lines.mapIndexed { index, fit -> fit.copy(drawn = landed[index]) }
-        return Match(raw, soFar.matchedLetters, soFar.letters, soFar.runs, fits)
+        return soFar.copy(placed = raw, lines = fits)
     }
 
     /** A line with words, under [GOOD_LINE]: too little of it is this song to take the line as a whole. */
@@ -687,8 +684,9 @@ internal object ChordSheets {
         over: Array<MutableList<Chord>>,
         texts: List<String>,
     ) {
-        if (waiting.isEmpty() || texts.isEmpty()) return
-        val last = texts.indexOfLast { it.isNotBlank() }.takeIf { it >= 0 } ?: texts.lastIndex
+        if (waiting.isEmpty()) return
+        // Some line has letters, or nothing would have been matched, so there is a last line with words.
+        val last = texts.indexOfLast { it.isNotBlank() }
         over[last] += waiting.map { name -> Chord(texts[last].length, name) }
         waiting.forEachIndexed { index, name -> landed[waitingLine[index]] += name }
     }

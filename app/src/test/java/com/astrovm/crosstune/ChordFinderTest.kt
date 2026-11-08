@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -19,6 +20,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -1847,5 +1849,156 @@ Singing to the morning light</div>"""
             }
         }))
         assertEquals(chordWikiViewUrl("This Night"), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
+
+    /** What the lookup told logcat. The phone check reads it, so each line is pinned. */
+    private fun logged(): List<String> = ShadowLog.getLogsForTag(ChordFinder.CHORD_LOG).map { it.msg }
+
+    private fun logging(level: Int = Log.INFO) {
+        ShadowLog.clear()
+        ShadowLog.setLoggable(ChordFinder.CHORD_LOG, level)
+    }
+
+    @Test
+    fun aChordWikiLookupSaysWhatItDidAndWhichChordsItLeftOffWithoutAWordOfTheLyrics() {
+        noOtherChordSites()
+        logging()
+        // A third line that isn't sung: its D has no letter to land on.
+        val page = chordPro + "\n[D]zzzzzzzzzz"
+        chords(kawa, japanese, withWiki(ChordWikiPages { page }))
+        val said = logged()
+        assertEquals("lookup title=川の道 artist=歩く人 lines=2", said.first())
+        assertEquals(listOf("ufret none", "ug none", "jtotal none"), said.filter { it.startsWith("ufret") || it.startsWith("ug") || it.startsWith("jtotal") })
+        assertEquals(
+            listOf(
+                "wiki open title=川の道 editorLines=3 editorChords=3 pageTitle=川の道",
+                "wiki lines=#2:0/10:0/1 letters=18/18 runs=17/18 placed=true drawn=2/3 dropped=D"
+            ),
+            said.filter { it.startsWith("wiki") }
+        )
+        assertEquals(said.toString(), 6, said.size)
+        assertTrue(said.toString(), said.none { "歩いて" in it || "朝の光" in it })
+    }
+
+    @Test
+    fun aCachedSheetIsLoggedAsTheCacheAndAFoundOneByHowManyChordsItHas() {
+        noOtherChordSites()
+        val file = File.createTempFile("chords", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        chords(kawa, japanese, withWiki(ChordWikiPages { chordPro }, cache))
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { error("The page was opened again") }, cache))
+        assertEquals(listOf("lookup title=川の道 artist=歩く人 lines=2", "cache CHORDWIKI"), logged())
+
+        fake.handler = uFret(
+            mapOf("川の道 歩く人" to uFretResult(1, "川の道", "歩く人")),
+            mapOf("https://www.ufret.jp/song.php?data=1" to uFretSong("[Am]川の道を歩いていく", "[F]朝の光に歌っている"))
+        )
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { suspendCancellableCoroutine { } }))
+        assertEquals(listOf("lookup title=川の道 artist=歩く人 lines=2", "ufret sheet 2"), logged())
+    }
+
+    @Test
+    fun aSiteThatWontAnswerIsLoggedAsAnErrorAndAWikiThatWontAsAnErrorWithWhy() {
+        fake.handler = { request ->
+            when (request.url.host) {
+                "www.ufret.jp" -> FakeSpotify.html(request, "", code = 500)
+                "music.163.com" -> FakeSpotify.html(request, "{}")
+                else -> FakeSpotify.html(request, "")
+            }
+        }
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { throw IOException("ChordWiki asked for a check a person has to click") }))
+        val said = logged()
+        assertTrue(said.toString(), "ufret error" in said)
+        assertEquals(listOf("wiki error: ChordWiki asked for a check a person has to click"), said.filter { it.startsWith("wiki") })
+    }
+
+    @Test
+    fun aWikiThatIsTooSlowIsLoggedAsATimeout() {
+        noOtherChordSites()
+        logging()
+        val slow = withWiki(ChordWikiPages { delay(1_000); chordPro })
+        runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 400) }
+        assertEquals(listOf("wiki timeout"), logged().filter { it.startsWith("wiki") })
+    }
+
+    @Test
+    fun aSearchIsLoggedWithWhatItListedAndWhichPageItChose() {
+        noOtherChordSites()
+        logging()
+        var edits = 0
+        chords(kawa, japanese, withWiki(ChordWikiPages { url ->
+            when {
+                "search.html" in url -> "海の歌 - 他の人\t${wikiHref("海の歌")}\n川の道 - 歩く人\t${wikiHref("川の道")}"
+                else -> if (edits++ == 0) "" else chordPro
+            }
+        }))
+        assertEquals(
+            listOf(
+                "wiki open title=川の道 editorLines=0 editorChords=0 pageTitle=",
+                "wiki search q=川の道 歩く人 hits=海の歌 / 他の人 | 川の道 / 歩く人 best=川の道",
+                "wiki open title=川の道 editorLines=2 editorChords=2 pageTitle=川の道",
+                "wiki lines= letters=18/18 runs=17/18 placed=true drawn=2/2 dropped="
+            ),
+            logged().filter { it.startsWith("wiki") }
+        )
+    }
+
+    @Test
+    fun aSearchThatListsNothingIsLoggedAsNoPageAndTheLookupAsNone() {
+        noOtherChordSites()
+        logging()
+        chords(kawa, japanese, withWiki(ChordWikiPages { "Just a moment. Nothing like the song." }))
+        assertEquals(
+            listOf(
+                // The check's own words are one line with no chords, and none of its letters are the song's.
+                "wiki open title=川の道 editorLines=1 editorChords=0 pageTitle=",
+                "wiki lines= letters=0/18 runs=0/18 placed=false drawn=0/0 dropped=",
+                "wiki search q=川の道 歩く人 hits= best=none",
+                "wiki none"
+            ),
+            logged().filter { it.startsWith("wiki") }
+        )
+    }
+
+    @Test
+    fun nothingIsLoggedWhenLogcatIsNotListeningForIt() {
+        noOtherChordSites()
+        logging(Log.WARN)
+        chords(kawa, japanese, withWiki(ChordWikiPages { chordPro + "\n[D]zzzzzzzzzz" }))
+        assertEquals(emptyList<String>(), logged())
+    }
+
+    /** The pages the lookup opened for [title], by the name each asked for. Every one is empty, so they are all tried. */
+    private fun editsTried(title: String): List<String> {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        chords(MusicMetadata(title, "歩く人"), japanese, withWiki(ChordWikiPages { url -> urls += url; "" }))
+        return urls.filter { "search.html" !in it }.map { java.net.URLDecoder.decode(it.substringAfter("t="), "UTF-8") }
+    }
+
+    @Test
+    fun anAsciiBangAndTildeAreWrittenAtFullWidthButASpaceIsNot() {
+        // 0x21 and 0x7E are the first and last of the punctuation, and a space is the one before them.
+        val tried = editsTried("川!~ 道")
+        assertTrue(tried.toString(), "川！～ 道" in tried)
+    }
+
+    @Test
+    fun fullWidthPunctuationIsWrittenBackAtEachEndOfEachRangeAndLettersAndDigitsAreNot() {
+        // ！ ／, ： ＠, ［ ｀ and ｛ ～ are the first and last of the four ranges. Beside them are letters and digits, ｟ and a gap that aren't punctuation.
+        val tried = editsTried("川ＡＺａｚ０９｟\uFF00！／：＠［｀｛～道")
+        assertTrue(tried.toString(), "川ＡＺａｚ０９｟\uFF00!/:@[`{~道" in tried)
+    }
+
+    @Test
+    fun aTitleWithNothingButBlanksIsOnlyOpenedAsItIs() {
+        noOtherChordSites()
+        val urls = mutableListOf<String>()
+        chords(MusicMetadata("   ", "歩く人"), japanese, withWiki(ChordWikiPages { url -> urls += url; "" }))
+        // Trimmed, every other way of writing it is empty: no page to open and no search for the singer alone.
+        assertEquals(urls.toString(), 1, urls.size)
     }
 }
