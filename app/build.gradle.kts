@@ -23,8 +23,8 @@ android {
         minSdk = 26
         targetSdk = 37
         // For X.Y.Z use X*1000000 + Y*10000 + Z*100. Update both values for each release.
-        versionCode = 2220300
-        versionName = "2.22.3"
+        versionCode = 2230000
+        versionName = "2.23.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -350,7 +350,11 @@ tasks.withType<Test>().configureEach {
     // didn't expect looks to the app like the network failing, and the test passes on without checking what it means to.
     val threadsDied = mutableSetOf<String>()
     addTestOutputListener { test, output ->
-        if (output.message.contains("Exception in thread \"")) threadsDied += "${test.className}.${test.name}"
+        val who = "${test.className}.${test.name}"
+        if (output.message.contains("Exception in thread \"")) threadsDied += who
+        // Said as it happens, with its stack: runTest reports a coroutine that leaked its exception in the next
+        // test it starts, and a failed test hides this output from the log, so only this names the one that leaked.
+        if (who in threadsDied) logger.lifecycle("$who: ${output.message.trimEnd()}")
     }
     doLast {
         if (threadsDied.isNotEmpty()) throw GradleException("A thread died on an exception during ${threadsDied.sorted().joinToString()}")

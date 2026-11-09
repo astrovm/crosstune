@@ -578,6 +578,241 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun chordWikisChordsSitOnTheWordsAndItsNotesAreNotSung() {
+        val source = """
+            {title:川の道}
+            {subtitle:歌:歩く人　作詞:誰か}
+            {capo:2}
+            {c:BPM=90}
+            # [C]この行はメモ
+            |[Am]---- [G]----|
+            (4/4)[Am]川の道を歩いていく
+            [F]朝の光に[C]歌っている
+            {soc}
+            [G]川の道
+            {eoc}
+        """.trimIndent()
+        val song = ChordSheets.fromChordWiki(source)
+        assertEquals("川の道", song.title)
+        assertEquals("歩く人", song.artist)
+        assertEquals(2, song.capo)
+        assertEquals(
+            listOf(
+                SheetLine("", listOf(Chord(0, "Am"), Chord(5, "G"))),
+                SheetLine("川の道を歩いていく", listOf(Chord(0, "Am"))),
+                SheetLine("朝の光に歌っている", listOf(Chord(0, "F"), Chord(4, "C"))),
+                SheetLine("川の道", listOf(Chord(0, "G")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun aReadingInBracketsAfterAKanjiIsNotWordsOfTheSong() {
+        val song = ChordSheets.fromChordWiki(
+            """
+            [C]川(かわ)の道(みち)を[F]歩(ある)く人(ひと)
+            [G]今(い[F]----ま)の[Am]夜(ﾖﾙ)
+            [Dm]あ(パパヤ)[C]回(マワ)レ
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(
+                // The chord before 歩 stays before it, with the readings gone.
+                SheetLine("川の道を歩く人", listOf(Chord(0, "C"), Chord(4, "F"))),
+                // A chord inside a reading sits where the reading was.
+                SheetLine("今の夜", listOf(Chord(0, "G"), Chord(1, "F"), Chord(2, "Am"))),
+                // Brackets that follow no kanji are sung.
+                SheetLine("あ(パパヤ)回レ", listOf(Chord(0, "Dm"), Chord(6, "C")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun aLineWhoseReadingsAreLongerThanItsWordsKeepsAllItsChords() {
+        val texts = listOf("朝の光に歌っているよ川の道", "風が吹いて花が咲く春の日", "夜明けの空に鳥が歌う", "遠い海へ船を漕ぎ出そう")
+        val written = ChordSheets.fromChordWiki(
+            """
+            [Am]朝(あさひかりのなか)の光(ひかりのさき)に[F]歌(うたごえがきこえる)っているよ[G]川(かわのながれ)の道(みちのり)[C]
+            [C]風が吹いて[Am]花が咲く春の日
+            [F]夜(よるのさき)明けの空に[G]鳥が歌(うたごえ)う
+            [C]遠い海へ[Am]船を漕ぎ出そう
+            """.trimIndent()
+        ).lines
+        val placed = ChordSheets.place(sheet(*written.toTypedArray()), texts)!!
+        // The last one is played after the line, past readings the song doesn't have.
+        assertEquals(listOf("Am", "F", "G", "C"), placed[0].over.map { it.name })
+        assertEquals(listOf("C", "Am"), placed[1].over.map { it.name })
+        assertEquals(listOf("F", "G"), placed[2].over.map { it.name })
+        assertEquals(listOf("C", "Am"), placed[3].over.map { it.name })
+        // And each over the letter it was played on.
+        assertEquals(listOf(0, 4, 10, 13), placed[0].over.map { it.at })
+    }
+
+    @Test
+    fun chordWikisEditorIsItsLongestTextareaAndAnEmptyOneIsNotThePageAroundIt() {
+        val page = """
+            <p>{title:外}</p>
+            <textarea>short</textarea>
+            <TEXTAREA id="chord">{title:川&amp;道}
+            {subtitle:歌：歩く人}
+            [F]あ</TEXTAREA>
+        """.trimIndent()
+        assertEquals(ChordWikiSong(listOf(SheetLine("あ", listOf(Chord(0, "F")))), title = "川&道", artist = "歩く人"), ChordSheets.fromChordWiki(page))
+        assertEquals(ChordWikiSong(emptyList()), ChordSheets.fromChordWiki("<textarea name=\"source\"></textarea>{title:外}[C]川"))
+    }
+
+    @Test
+    fun chordWikiKeepsRealChordsDropsWordsInBracketsAndSkipsTabsNotesAndASecondName() {
+        val source = """
+            {title:}
+            {title:一}
+            {t:二}
+            {subtitle:}
+            {subtitle:作詞:誰か}
+            {subtitle:歩く人　作曲:誰か}
+            {subtitle:歌:甲　作詞:誰か}
+            {st:歌：乙　歌詞:誰か}
+            {capo:no}
+            {capo:99}
+            {capo:2}
+            {capo:4}
+            {c:BPM=90}
+            {comment:メモ}
+            {ci:もう一つ}
+            {soc}
+            {eoc}
+            # [C]この行はメモ
+            {sot}
+            [D]----
+            {eot}
+            {start_of_tab}
+            [D]----
+            {end_of_tab}
+            {sog}
+            [D]----
+            {eog}
+            {start_of_grid}
+            [D]----
+            {end_of_grid}
+            [C#m]川 # [G]メモ
+            [サビ][Chorus][A B][Good][Caaa][Cabcdefghijklmno]川[C!]の道
+            [Cmaj7]の[N.C.]道[NC]よ[Dbadd9][Eb7(9)][Am7b5][F/G]ね
+            {川}
+            朝の光
+            ----
+            |(4/4)[Am]川|の[n.c.]道
+        """.trimIndent()
+        val song = ChordSheets.fromChordWiki(source)
+        assertEquals("一", song.title)
+        assertEquals("歩く人", song.artist)
+        assertEquals(2, song.capo)
+        assertEquals(
+            listOf(
+                SheetLine("川", listOf(Chord(0, "C#m"))),
+                SheetLine("川の道", emptyList()),
+                SheetLine("の道よね", listOf(Chord(0, "Cmaj7"), Chord(1, "N.C."), Chord(2, "NC"), Chord(3, "Dbadd9"), Chord(3, "Eb7(9)"), Chord(3, "Am7b5"), Chord(3, "F/G"))),
+                SheetLine("{川}", emptyList()),
+                SheetLine("朝の光", emptyList()),
+                SheetLine("川の道", listOf(Chord(0, "Am"), Chord(2, "n.c.")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun chordWikiKeepsTheLastFretAChordOfFifteenCharactersAndCutsANoteAfterAStrayBracket() {
+        val kept = "Cmaj7sus4add11x"
+        val dropped = "Cmaj7sus4add11xx"
+        assertEquals(15, kept.length)
+        assertEquals(16, dropped.length)
+        assertEquals(0, ChordSheets.fromChordWiki("{capo:25}\n[C]川").capo)
+        val song = ChordSheets.fromChordWiki(
+            """
+            {capo:25}
+            {capo:24}
+            [$kept]川
+            [$dropped]道
+            ]#[Am]メモ
+            """.trimIndent()
+        )
+        assertEquals(24, song.capo)
+        assertEquals(listOf(SheetLine("川", listOf(Chord(0, kept))), SheetLine("道", emptyList())), song.lines)
+    }
+
+    @Test
+    fun chordWikiTakesTheShortTitleAndSubtitleAndAChordOnceATabHasEnded() {
+        assertEquals("一", ChordSheets.fromChordWiki("{t:一}\n[C]川").title)
+        assertEquals("歩く人", ChordSheets.fromChordWiki("{st:歌：歩く人}\n[C]川").artist)
+        // A blank name after 歌： is nobody, so the subtitle's own words stay.
+        assertEquals("歌：", ChordSheets.fromChordWiki("{subtitle:歌： }\n[C]川").artist)
+        val song = ChordSheets.fromChordWiki(
+            """
+            {c:BPM=90}
+            [C]残
+            {sot}
+            [D]----
+            {eot}
+            [E]甲
+            {start_of_tab}
+            [D]----
+            {end_of_tab}
+            [F]乙
+            {sog}
+            [D]----
+            {eog}
+            [G]丙
+            {start_of_grid}
+            [D]----
+            {end_of_grid}
+            [A]丁
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf(
+                SheetLine("残", listOf(Chord(0, "C"))),
+                SheetLine("甲", listOf(Chord(0, "E"))),
+                SheetLine("乙", listOf(Chord(0, "F"))),
+                SheetLine("丙", listOf(Chord(0, "G"))),
+                SheetLine("丁", listOf(Chord(0, "A")))
+            ),
+            song.lines
+        )
+    }
+
+    @Test
+    fun aShortLineTheWordsDontHaveStillKeepsItsChordInOrder() {
+        // F7 sits on three letters the lyric lines don't have, between chords that do get drawn.
+        // Those three letters are too few to call the line another verse, so the chord stays, in order.
+        // Chords on their own after the last line stay too.
+        val sheet = sheet(
+            SheetLine("", listOf(Chord(0, "DbM7"), Chord(4, "E"))),
+            SheetLine("Hey", listOf(Chord(0, "F7"))),
+            SheetLine("", listOf(Chord(0, "C7"))),
+            SheetLine("Walking down the river road", listOf(Chord(0, "G"))),
+            SheetLine("Singing to the morning light", listOf(Chord(0, "D"))),
+            SheetLine("", listOf(Chord(0, "Em")))
+        )
+        val placed = ChordSheets.place(sheet, listOf("Walking down the river road", "Singing to the morning light"))!!
+        val names = placed.flatMap { line -> line.before + line.over.map { it.name } }
+        assertEquals(listOf("DbM7", "E", "F7", "C7", "G", "D", "Em"), names)
+    }
+
+    @Test
+    fun aChordOnLettersThatLinedUpStaysWhenTheRestOfTheLineDoesNot() {
+        // Most of the line is words the song never sings, so it is under half. The chord on the
+        // words that did line up stays. The one on the words that didn't is not this song's.
+        val lyric = "Walking down the river road"
+        val sheet = sheet(
+            SheetLine("$lyric ${"q".repeat(30)}", listOf(Chord(0, "G"), Chord(lyric.length + 1, "C"))),
+            SheetLine("Singing to the morning light", listOf(Chord(0, "D")))
+        )
+        val placed = ChordSheets.place(sheet, listOf(lyric, "Singing to the morning light"))!!
+        assertEquals(listOf("G", "D"), placed.flatMap { line -> line.before + line.over.map { it.name } })
+    }
+
+    @Test
     fun jTotalsHalfWidthLettersTakeOneColumnAndChordsBeforeOthersHaveNoWords() {
         assertEquals(
             listOf(SheetLine("", listOf(Chord(0, "C"))), SheetLine("ab川ｶ道", listOf(Chord(3, "G")))),
