@@ -249,6 +249,11 @@ class PracticeScreenTest {
         assertEquals(listOf("と", "た"), readingsOver(SavedLine("飛び立つ", reading = "とびたつ", title = "T", artist = "A")))
     }
 
+    @Test
+    fun aWordKeptWithAReadingThatSpellsItsKanaAnotherWayShowsItOverItsKanjiOnly() {
+        assertEquals(listOf("こんにち", "わ"), readingsOver(SavedLine("今日は", reading = "こんにちわ", title = "T", artist = "A")))
+    }
+
     private fun readingFields(onSave: (List<String>) -> Unit = {}, onCancel: () -> Unit = {}) {
         val ruby = SavedLine("夜空", title = "T", artist = "A", ruby = listOf(Ruby("夜", "よる"), Ruby("の"), Ruby("空", "そら")), line = "夜の空")
         composeRule.setContent { CrosstuneTheme { ReadingFields(ruby, onSave, onCancel) } }
