@@ -213,7 +213,7 @@ class ReadingsTest {
         over("大きい", "おおきー", Ruby("大", "おお"), Ruby("きい"))
         over("大きー", "おおきい", Ruby("大", "おお"), Ruby("きー"))
         // A run longer than what's left of the reading isn't in it.
-        over("見ていた", "みて", Ruby("見", "みて"), Ruby("ていた"))
+        over("見ていた", "みて", Ruby("見", "み"), Ruby("ていた"))
         over("先生ぇ", "せんせい", Ruby("先生", "せんせ"), Ruby("ぇ"))
         over("今日は", "きょうは", Ruby("今日", "きょう"), Ruby("は"))
     }
@@ -223,12 +223,14 @@ class ReadingsTest {
         fun over(surface: String, reading: String, vararg parts: Ruby) = assertEquals("$surface $reading", parts.toList(), Readings.furigana(surface, reading))
         // At the start of a word, at its end, and both.
         over("お茶", "ちゃ", Ruby("お"), Ruby("茶", "ちゃ"))
-        over("食べる", "たべ", Ruby("食", "たべ"), Ruby("べる"))
+        over("食べる", "たべ", Ruby("食", "た"), Ruby("べる"))
         over("お願い", "ねがえ", Ruby("お"), Ruby("願", "ねがえ"), Ruby("い"))
         // In the middle, between kanji, it can't be left out of the one reading, but what's found around it is.
         over("気に入る", "けいる", Ruby("気に入", "けい"), Ruby("る"))
         over("切り取り線", "きとせん", Ruby("切り取り線", "きとせん"))
-        over("思って", "おもえて", Ruby("思", "おもえて"), Ruby("って"))
+        over("思って", "おもえて", Ruby("思っ", "おもえ"), Ruby("て"))
+        over("思って出", "おもえてで", Ruby("思っ", "おもえ"), Ruby("て"), Ruby("出", "で"))
+        over("思って出", "おもったで", Ruby("思", "おも"), Ruby("っ"), Ruby("て出", "たで"))
         // Nothing to read it over.
         over("ひらがな", "ゆく", Ruby("ひらがな"))
         over("東京", "", Ruby("東京"))

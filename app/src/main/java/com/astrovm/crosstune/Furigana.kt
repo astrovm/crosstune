@@ -4,8 +4,8 @@ package com.astrovm.crosstune
  * Where the reading of a Japanese word goes when the word has kana among its kanji: over the
  * kanji, and over a kana only when it isn't said as it's written.
  *
- * The word is cut into runs, kanji and kana in turn (飛 び 立 つ), and its reading is laid along
- * them: each run of kana has to be found in the reading, and what's left between two of them is
+ * The word is cut into kanji runs and individual kana (飛 び 立 つ), and its reading is laid along
+ * them: the kana are found in the reading, and what's left between them is
  * the reading of the kanji there. A reading often spells those kana another way than the word
  * does, and they still count as found. Katakana for hiragana, small kana for big ones, ぢ, づ and
  * を, and a long vowel drawn out or spelled out (おう, おお, おー) are said as they're written, so
@@ -17,27 +17,29 @@ internal object Furigana {
     /** [surface] with its [kana] over the kanji only, split around the kana written among them. */
     fun over(surface: String, kana: String): List<Ruby> {
         val runs = surface.fold(mutableListOf<String>()) { runs, c ->
-            if (runs.isNotEmpty() && Readings.isKana(runs.last().first()) == Readings.isKana(c)) runs[runs.lastIndex] += c else runs += c.toString()
+            if (runs.isNotEmpty() && !Readings.isKana(c) && !Readings.isKana(runs.last().first())) runs[runs.lastIndex] += c else runs += c.toString()
             runs
         }
         val plan = Aligner(runs, kana).best(0, 0)
         // Nothing to read it over: no kanji, or no reading. The word stays as written.
-        return if (plan.kept < 0) listOf(Ruby(surface)) else plan.parts
+        return if (plan.kept < 0) listOf(Ruby(surface)) else plan.parts.fold(mutableListOf()) { parts, part ->
+            if (part.reading == null && parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + part.text) else parts += part
+            parts
+        }
     }
 
     /** A way to lay the reading along the runs from some point on: [parts] of it, and how many kana of the word it finds in the reading. */
     private class Plan(val kept: Int, val parts: List<Ruby>)
 
+    private val order = compareBy<Plan> { it.kept }.thenBy { -it.parts.count { part -> part.reading != null } }
+
     /** No way at all. */
     private val NONE = Plan(-1, emptyList())
 
     /**
-     * The best way to lay [kana] along [runs]. The one that finds the most written kana in the
-     * reading wins, and when they all can't be found, which is when the reading is not this word's
-     * (飛び立つ read ゆく), it is the least wrong thing to say: only the kana at the start and at the
-     * end of the word are left out of the reading, as nothing written there can be inside the
-     * kanji's, and what's between the kanji, kana and all, gets the one reading together, as 今日 does
-     * with its two kanji. That is a group, not a guess at where the reading splits.
+     * The best way to lay [kana] along [runs] finds the most written kana in the reading. If some
+     * cannot be found, adjacent kanji and kana can share a reading. Among equally good matches,
+     * fewer readings win: 飛び立つ read ゆく gets ゆく over 飛び立, not a guessed split.
      */
     private class Aligner(private val runs: List<String>, private val kana: String) {
         private val sounds = kana.map(::sound)
@@ -52,22 +54,27 @@ internal object Furigana {
             }
         }
 
-        /** The run of kana at [i]: found in the reading, or, at the start or the end of the word, not in it. */
+        /** A kana found in the reading, left out at the edge, or grouped with a following kanji. */
         private fun written(i: Int, at: Int): Plan {
             val run = runs[i]
             val found = spelledAt(run, at)?.let { then(i + 1, at + run.length, it, run.length) } ?: NONE
-            val left = if (i == 0 || i == runs.lastIndex) then(i + 1, at, listOf(Ruby(run)), 0) else NONE
-            return listOf(found, left).maxBy { it.kept }
+            val left = when {
+                runs.take(i).all { Readings.isKana(it.first()) } -> then(i + 1, at, listOf(Ruby(run)), 0)
+                runs.drop(i).all { Readings.isKana(it.first()) } -> then(runs.size, at, listOf(Ruby(runs.drop(i).joinToString(""))), 0)
+                else -> NONE
+            }
+            val grouped = if (runs.drop(i).any { !Readings.isKana(it.first()) }) kanji(i, at) else NONE
+            return listOf(found, left, grouped).maxWith(order)
         }
 
-        /** The kanji at [i], on their own or with the kana and kanji up to a later run [j] of kanji, read as far as [kana] goes, [end]. */
+        /** A group containing kanji, read as far as [kana] goes. */
         private fun kanji(i: Int, at: Int): Plan {
-            val plans = (i until runs.size step 2).flatMap { j ->
+            val plans = (i until runs.size).filter { j -> runs.subList(i, j + 1).any { !Readings.isKana(it.first()) } }.flatMap { j ->
                 (at + 1..kana.length).map { end ->
                     then(j + 1, end, listOf(Ruby(runs.subList(i, j + 1).joinToString(""), kana.substring(at, end))), 0)
                 }
             }
-            return plans.maxByOrNull { it.kept } ?: NONE
+            return plans.maxWithOrNull(order) ?: NONE
         }
 
         /** [parts], and then the best of the rest of the runs from the [next]th, if it can be done. */
