@@ -307,6 +307,8 @@ internal data class ScreenActions(
     val onGradePractice: (Grade) -> Unit = {},
     val onStopPractice: () -> Unit = {},
     val onReplayLine: () -> Unit = {},
+    /** The small YouTube player's picture, for the card its line plays in. */
+    val linePlayerView: () -> android.view.View? = { null },
     val onBackToBefore: () -> Unit = {},
     /** Keeps the lines of the words shown given by index, lets the kept ones given go, and practises the song when asked. */
     val onChooseLines: (List<Int>, List<SavedLine>, Boolean) -> Unit = { _, _, _ -> },

@@ -140,7 +140,9 @@ internal class MainViewModel(
     /** Tries Qobuz's other number for a song it doesn't play, see [QobuzNumbers]. */
     private val qobuzNumbers: QobuzNumbers? = null,
     /** The songs, albums and playlists kept for offline; nullable so tests need none. */
-    private val offline: OfflineSongs? = null
+    private val offline: OfflineSongs? = null,
+    /** Makes the small YouTube player a card's line plays in when its music app can't move to it; nullable so tests need none. */
+    newLinePlayer: (() -> LinePlayer)? = null
 ) : ViewModel() {
     /**
      * An app opened on a song is covered rather than left, once Android lets Crosstune show over other
@@ -161,14 +163,14 @@ internal class MainViewModel(
             }
 
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
-            override fun playPause(song: MusicMetadata, play: Boolean) {
+            override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
                 qobuzNumbers?.off()
                 leftJob?.cancel()
-                if (!play) return source.playPause(song, false)
+                if (!play) return source.playPause(song, false, app)
                 viewModelScope.launch {
-                    if (source.resume(song)) return@launch
+                    if (source.resume(song, app)) return@launch
                     if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
-                    if (!source.bringToFront(song)) uncover()
+                    if (!source.bringToFront(song, app)) uncover()
                 }
             }
 
@@ -304,7 +306,7 @@ internal class MainViewModel(
         private set
 
     /** Kept lines practised as cards. */
-    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, wallClock, now, reminders)
+    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, AppTraitsStore(preferences, wallClock), wallClock, now, reminders, newPlayer = newLinePlayer)
 
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.withOneTap() }
@@ -554,6 +556,7 @@ internal class MainViewModel(
         return copy(
             systemStateKnown = true,
             installed = state.serviceApps.keys,
+            musicApps = state.apps,
             unapprovedHosts = state.unapprovedHosts,
             ownLinksOff = state.ownLinksOff,
             blockingApps = claiming?.filterValues { it }?.keys,
@@ -3467,6 +3470,12 @@ internal class MainViewModel(
     fun gradePractice(grade: Grade) = cards.grade(grade)
 
     fun stopPractice() = cards.stop()
+
+    /** The small player's picture, shown on the card its line plays in. */
+    fun linePlayerView() = cards.playerView()
+
+    /** Crosstune is out of sight: a line playing in the small player stops. */
+    fun pausePracticeSound() = cards.background()
 
     /** Due cards asked back once a day, or not. */
     fun setReminder(on: Boolean) {

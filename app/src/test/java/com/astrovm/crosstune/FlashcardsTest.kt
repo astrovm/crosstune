@@ -30,6 +30,12 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -46,6 +52,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -60,6 +67,7 @@ import org.robolectric.annotation.Config
 /** Saved lines practised as cards that play in the music app, and whole songs learned. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w411dp-h2000dp")
+@OptIn(ExperimentalTestApi::class)
 class FlashcardsTest {
 
     @get:Rule
@@ -67,7 +75,17 @@ class FlashcardsTest {
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
-    private val phone = FakePlayback().apply { access = true }
+    private val phone = FakePlayback().apply {
+        access = true
+        // A card's app says it's at the line once it's sent there, on the phone's clock, as the card waits for it to.
+        obeys = true
+        clock = SystemClock::elapsedRealtime
+    }
+    private val linePlayer = FakeLinePlayer(app)
+
+    /** Put back after a test that sets the device to a TV. */
+    private val realPhone = MainActivity.phoneFactory
+    private val realLinePlayer = MainActivity.linePlayerFactory
     private var controller: ActivityController<MainActivity>? = null
 
     @Before
@@ -77,6 +95,7 @@ class FlashcardsTest {
         MainActivity.lookupDispatcher = Dispatchers.Unconfined
         MainActivity.playbackFactory = { phone }
         MainActivity.lyricsBusyPauseMs = 0
+        MainActivity.linePlayerFactory = { linePlayer }
         prefs().edit().clear().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).putBoolean(KEY_ASKED_RETURN, true).commit()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
@@ -93,6 +112,13 @@ class FlashcardsTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
+        MainActivity.linePlayerFactory = realLinePlayer
+        MainActivity.phoneFactory = realPhone
+    }
+
+    @Test
+    fun theSmallPlayerIsMadeOfAYouTubePage() {
+        assertTrue(realLinePlayer(app) is YouTubeLinePlayer)
     }
 
     // region helpers
@@ -756,9 +782,9 @@ class FlashcardsTest {
         waitUntil { practice().sound == LineSound.PLAYED }
         click(string(R.string.practice_show))
         waitUntil { practice().sound == LineSound.PLAYING }
-        // The app lets the song go before the next card, of the same song, so it loads again.
-        phone.playing.value = null
+        // The line plays out; then the app lets the song go before the next card, of the same song, so it loads again.
         waitUntil { practice().sound == LineSound.PLAYED }
+        phone.playing.value = null
         // Four grades, as Anki has them.
         listOf(R.string.practice_again, R.string.practice_hard, R.string.practice_good, R.string.practice_easy).forEach { assertTrue(shown(string(it))) }
         click(string(R.string.practice_good))
@@ -810,9 +836,11 @@ class FlashcardsTest {
         waitUntil { phone.songsAsked.size == 4 }
         assertEquals(listOf("Gone", "Elsewhere"), phone.songsAsked.drop(2).map { it.first.title })
         assertEquals(listOf(null, null), phone.linksAsked.drop(2))
-        // Spotify plays nothing asked of it, so YouTube Music is, as for a song kept from no app.
+        // No app played it, so YouTube plays its line in the player.
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        waitUntil { practice().sound == LineSound.NONE }
+        waitUntil { practice().video == "elsewhere00" }
+        assertEquals(LineSound.PLAYED, practice().sound)
+        // Spotify plays nothing asked of it, so YouTube Music is, as for a song kept from no app.
         click(string(R.string.practice_show))
         click(string(R.string.practice_good))
         waitUntil { phone.songsAsked.size == 5 }
@@ -877,10 +905,96 @@ class FlashcardsTest {
         phone.running = emptySet()
         waitUntil { phone.opened.size == 2 }
         assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000", phone.opened.last())
-        // Never getting there, Crosstune still comes back, with nothing to play.
+        // Never getting there, Crosstune still comes back, and YouTube plays the line in the player.
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
-        waitUntil { practice().sound == LineSound.NONE }
+        waitUntil { practice().video == "other000000" }
         assertEquals(2, phone.cameBack)
+    }
+
+    /** One saved line from Spotify, and YouTube Music having a video of its song. */
+    private fun spotifyFreeHasTheCard() {
+        saved("""{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"com.spotify.music"}""")
+        fake.handler = { request ->
+            when {
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, WORDS)
+                request.url.host == "music.youtube.com" -> FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                    "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Other"}]}}},
+                    {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                    "playlistItemData":{"videoId":"other000000"}}}]}""")
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+    }
+
+    @Test
+    fun theLineInThePlayerStopsWhenCrosstuneGoesOutOfSight() {
+        spotifyFreeHasTheCard()
+        launch()
+        practiseAll(1)
+        appHas("Other", canSeek = false)
+        waitUntil { model().uiState.practice?.video == "other000000" }
+        click(string(R.string.practice_show))
+        waitUntil { practice().sound == LineSound.PLAYING }
+        val pauses = linePlayer.pauses
+        controller!!.pause().stop()
+        waitUntil { practice().sound == LineSound.PLAYED }
+        assertTrue(linePlayer.pauses > pauses)
+    }
+
+    @Test
+    fun aSongSpotifyFreeWontMoveIsPlayedInTheSmallPlayerOnTheCard() {
+        spotifyFreeHasTheCard()
+        launch()
+        practiseAll(1)
+        appHas("Other", canSeek = false)
+        waitUntil { model().uiState.practice?.video == "other000000" }
+        composeRule.onNodeWithTag(LINE_PLAYER_TAG).assertExists()
+        // The card shows the player's own picture, which the view model hands out.
+        assertSame(linePlayer.view(), model().linePlayerView())
+        assertTrue(linePlayer.view().parent != null)
+        assertTrue(phone.seeks.isEmpty())
+        // The card's one control of the sound plays the line in the player.
+        click(string(R.string.practice_show))
+        waitUntil { linePlayer.shown.any { it.play } }
+        assertEquals(Shown("other000000", 5_000, 9_000 + MainViewModel.LINE_TAIL_MS, null, play = true), linePlayer.shown.last())
+        linePlayer.end(LineEnd.ENDED)
+        waitUntil { practice().sound == LineSound.PLAYED }
+        click(string(R.string.practice_play))
+        waitUntil { linePlayer.shown.count { it.play } == 2 }
+        // Closed, the player stops, and the app isn't played again.
+        val pauses = linePlayer.pauses
+        click(string(R.string.floating_close))
+        waitUntil { model().uiState.practice == null }
+        assertTrue(linePlayer.pauses > pauses)
+        assertTrue(phone.plays.none { it })
+    }
+
+    @Test
+    fun theRemoteStaysOnTheCardsControlsWhenAPlayerIsOnIt() {
+        MainActivity.phoneFactory = { Phone.TV }
+        spotifyFreeHasTheCard()
+        launch()
+        practiseAll(1)
+        appHas("Other", canSeek = false)
+        waitUntil { model().uiState.practice?.video == "other000000" }
+        val player = linePlayer.view()
+        // A TV's remote, as Robolectric starts as a touch screen, where buttons take no focus.
+        composeRule.onRoot().performKeyInput { keyDown(Key.ShiftLeft); keyUp(Key.ShiftLeft) }
+        val show = composeRule.onAllNodes(hasText(string(R.string.practice_show)) or hasContentDescription(string(R.string.practice_show))).onLast()
+        show.requestFocus()
+        show.assertIsFocused()
+        for (key in listOf(Key.DirectionDown, Key.DirectionDown, Key.DirectionRight, Key.DirectionUp, Key.DirectionLeft)) {
+            composeRule.onRoot().performKeyInput { keyDown(key); keyUp(key) }
+            composeRule.waitForIdle()
+            // The remote is never in the player, which it couldn't get out of.
+            assertFalse(player.hasFocus())
+        }
+        assertFalse(player.isFocusable)
+        // Turning the card keeps it on the card's own controls.
+        show.requestFocus()
+        click(string(R.string.practice_show))
+        waitUntil { practice().turned }
+        assertFalse(player.hasFocus())
     }
 
     @Test
@@ -903,7 +1017,7 @@ class FlashcardsTest {
         waitUntil { phone.songsAsked.isNotEmpty() }
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         waitUntil { practice().sound == LineSound.NONE }
-        // There, but where the app can't move it, e.g. during an ad, it isn't asked for again, and it's read.
+        // Already this song, and it won't move, and YouTube has no video of it. It isn't asked for again, and the card has no sound.
         val asked = phone.songsAsked.size
         appHas(practice().line!!.title, canSeek = false)
         click(string(R.string.floating_close))
@@ -911,6 +1025,8 @@ class FlashcardsTest {
         practiseAll(1)
         waitUntil { model().uiState.practice?.sound == LineSound.NONE }
         assertEquals(asked, phone.songsAsked.size)
+        assertNull(model().uiState.practice?.video)
+        assertFalse(described(string(R.string.practice_play)))
         // Stopped while a line plays, the app pauses it.
         val playing = practice().line!!
         appHas(playing.title, atMs = 0)
