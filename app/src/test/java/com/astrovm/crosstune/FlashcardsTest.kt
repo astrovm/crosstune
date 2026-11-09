@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.pinch
@@ -43,11 +44,13 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.isNotEnabled
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -114,6 +117,7 @@ class FlashcardsTest {
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.linePlayerFactory = realLinePlayer
         MainActivity.phoneFactory = realPhone
+        MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
     }
 
     @Test
@@ -915,13 +919,7 @@ class FlashcardsTest {
     fun withoutShowingOverOtherAppsACardPlaysItsLineHereAndSaysWhatTheMusicAppNeeds() {
         val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
         saved("""{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""")
-        fake.handler = { request ->
-            if (request.url.host == "music.youtube.com" && "Another" in FakeSpotify.bodyOf(request)) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
-                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Another"}]}}},
-                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
-                "playlistItemData":{"videoId":"another0000"}}}]}""")
-            else FakeSpotify.html(request, "{}")
-        }
+        youTubeMusicHasAnother()
         // YouTube Music can't be woken, so it would have to be opened, over the card, which Crosstune couldn't come back from.
         phone.running = setOf("com.spotify.music")
         phone.comesBackByItself = false
@@ -944,6 +942,40 @@ class FlashcardsTest {
         model().setCanFloatOverApps(true)
         composeRule.waitForIdle()
         assertFalse(shown(string(R.string.practice_float_allow)))
+    }
+
+    @Test
+    fun theCardsAllowOfferWaitsWhileShizukuAllowsIt() {
+        // Shizuku asks the user first, and they haven't answered yet.
+        val shell = FakeShell().apply { answer = CompletableDeferred() }
+        MainActivity.shellFactory = { listOf(shell) }
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        saved("""{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""")
+        youTubeMusicHasAnother()
+        phone.running = setOf("com.spotify.music")
+        phone.comesBackByItself = false
+        launch()
+        practiseAll(1)
+        waitUntil { shown(string(R.string.practice_float_allow)) }
+        val allow = hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))
+        composeRule.onAllNodes(allow, useUnmergedTree = true).onFirst().performClick()
+        composeRule.waitForIdle()
+        assertEquals(OneTapFix.FLOAT, model().uiState.fixingInOneTap)
+        // Tapped once, it can't be again while it's being allowed.
+        val waiting = isNotEnabled() and hasAnyDescendant(hasText(string(R.string.allow_button))) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))
+        waitUntil { composeRule.onAllNodes(waiting, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        shell.answer.complete(Unit)
+    }
+
+    /** YouTube Music has "Another" by Band, as the video another0000. */
+    private fun youTubeMusicHasAnother() {
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com" && "Another" in FakeSpotify.bodyOf(request)) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Another"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                "playlistItemData":{"videoId":"another0000"}}}]}""")
+            else FakeSpotify.html(request, "{}")
+        }
     }
 
     /** One saved line from Spotify, and YouTube Music having a video of its song. */

@@ -182,7 +182,8 @@ internal class PracticeCards(
             val song = MusicMetadata(line.title, line.artist)
             leftOut = false
             val inApp = inBestApp(source, song, line, play)
-            if (leftOut) uiState.practice?.let { uiState = uiState.copy(practice = it.copy(cantComeBack = true)) }
+            // Each card says so for its own chain: one played once it's allowed doesn't, as the last did.
+            uiState.practice?.takeIf { it.line?.isSame(line) == true }?.let { uiState = uiState.copy(practice = it.copy(cantComeBack = leftOut)) }
             if (!inApp) inYouTube(line, play)
         }
     }
@@ -357,7 +358,7 @@ internal class PracticeCards(
      * preview, it doesn't hear the pause, and starts that song a second later. Followed again, it's let go, see [letGo].
      */
     private fun keepStopped(source: PlaybackSource, packageName: String) {
-        keptStopped.remove(packageName)?.cancel()
+        letGo(packageName)
         keptStopped[packageName] = scope.launch {
             withTimeoutOrNull(KEEP_STOPPED_MS) {
                 while (true) {
@@ -370,8 +371,7 @@ internal class PracticeCards(
 
     /** Lets [packageName] play again, or every app kept paused when it's null, as the song followed may then be in any of them. */
     private fun letGo(packageName: String?) {
-        if (packageName != null) keptStopped.remove(packageName)?.cancel()
-        else keptStopped.values.toList().also { keptStopped.clear() }.forEach(Job::cancel)
+        (packageName?.let(::listOf) ?: keptStopped.keys.toList()).forEach { keptStopped.remove(it)?.cancel() }
     }
 
     /** [app] plays the song and won't move in it, as Spotify's free plan: that's remembered, and it's paused, for the next app to play the line. */
@@ -439,7 +439,7 @@ internal class PracticeCards(
         onStuck: (Following?) -> Unit = {}, block: suspend (() -> Following?) -> Unit
     ): Boolean = coroutineScope {
         // What it follows may be an app a card stopped a moment ago: it's let play.
-        letGo(only ?: app)
+        letGo(only)
         var latest: Following? = null
         val following = launch {
             source.follow(song, only).collect {
@@ -471,14 +471,11 @@ internal class PracticeCards(
      * seek, and sending one errors the player, so once that song plays and still can't be moved, [onStuck] hears of it.
      */
     private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, at: Long?, latest: () -> Following?, onStuck: (Following?) -> Unit): Boolean {
-        hushed = at != null
-        hushedAt = null
         // Opened, an app covers the card, and without showing over other apps Crosstune can't come back, nor open the next app from behind it.
         val opens = source.comesBackByItself()
         val ownLink = ownLinkOf(song, app)
         if (ownLink != null && !opens) return false.also { leaveOut(app) }
-        // Opened or asked, an app may play a moment of the song's start, or of what it played before, before it's paused: none of it's heard.
-        if (at != null) source.quiet(true)
+        hush(source, at != null)
         var opened = app?.let { ownLink?.let { link -> source.openSong(it, link) } } == true
         val asked = !opened && asked(source, song, app, at) { asking, link -> if (opens) opened = source.openSong(asking, link) else leaveOut(asking) }
         val wait = MoveWait()
@@ -486,6 +483,16 @@ internal class PracticeCards(
         if (opened && !wait.cameBack) source.comesBack()
         if (!canSeek && wait.playingSince != null) onStuck(latest())
         return canSeek
+    }
+
+    /**
+     * Has the app about to be opened or asked for the card's song kept quiet, [on] when it's sent to the line next, see
+     * [hushed]: it may play a moment of the song's start, or of what it played before, before it's paused, and none of it's heard.
+     */
+    private fun hush(source: PlaybackSource, on: Boolean) {
+        hushed = on
+        hushedAt = null
+        if (on) source.quiet(true)
     }
 
     /** What waiting for an app to offer a seek has seen: since when it plays, and whether Crosstune came back to the card. */

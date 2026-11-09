@@ -1440,6 +1440,45 @@ class PracticeCardsTest {
         cards.grade(Grade.GOOD)
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         assertEquals(spotify, playback.opened.single().first)
+        playing()
+        waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
+        // Nothing left out of this card's chain, it doesn't say it can't come back.
+        assertFalse(practice!!.cantComeBack)
+    }
+
+    @Test
+    fun aCardPlayedInAnAppAfterOneWasLeftOutStillSaysWhatTheLeftOutOneNeeds() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(keptFromSpotify)
+        installed(spotify, morphe)
+        playback.comesBackByItself = false
+        // Spotify would have to be opened on its own link; Morphe already plays the song.
+        appPlays(morphe, speed = 1f, positionMs = 9_500)
+        cards().start(null, before = null)
+        waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf<String?>(morphe), playback.seekedApps.toList())
+        assertTrue(practice!!.cantComeBack)
+    }
+
+    @Test
+    fun anAppTriedAfterOneThatWasOpenedIsNotPausedBeforeItsSentToTheLine() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(keptFromSpotify)
+        installed(spotify, morphe)
+        playback.access = true
+        appPlays(morphe, speed = 1f, positionMs = 9_500)
+        // Whether Morphe had been sent to the line yet each time it was paused.
+        val sentWhenPaused = CopyOnWriteArrayList<Boolean>()
+        playback.onPlay = { app, play -> if (app == morphe && !play) sentWhenPaused += morphe in playback.seekedApps }
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        // Opened, Spotify plays and never moves, so it's left while still kept quiet.
+        playing(canSeek = false)
+        waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
+        assertTrue(sentWhenPaused.isNotEmpty())
+        assertTrue("$sentWhenPaused", sentWhenPaused.all { it })
     }
 
     @Test
