@@ -1509,7 +1509,9 @@ class PracticeCardsTest {
         assertEquals(listOf(false, true), playback.plays.take(2))
         // Muted from before it was opened until it said it plays the line: the song's start was never heard.
         assertEquals(listOf(false to true, true to true), quietAt.take(2))
+        // Heard while it plays the line, not only once it's over.
         waitFor("the line is heard") { !playback.quiet }
+        assertEquals(LineSound.PLAYING, practice?.sound)
         assertEquals(listOf(true, false), playback.quiets.toList())
     }
 
@@ -1576,6 +1578,22 @@ class PracticeCardsTest {
         assertTrue(playback.seeks.isEmpty())
         assertFalse(playback.plays.contains(true))
         assertEquals(listOf("trying $tidal", "$tidal did not play the line", "the YouTube player"), steps())
+        assertEquals(AppTraits(keeps = false), traits.of(tidal))
+    }
+
+    @Test
+    fun aSongTheAppPlaysOnlyPartOfBeforeTheLineIsNotGotToOnACardsFront() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line())
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        appPlays(tidal)
+        playback.appPlaying.getValue(tidal).value = playback.appPlaying.getValue(tidal).value!!.copy(durationMs = 8_000)
+        cards().start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $tidal", "$tidal did not get to the line", "the YouTube player"), steps())
+        assertEquals(AppTraits(seeks = false), traits.of(tidal))
     }
 
     @Test
