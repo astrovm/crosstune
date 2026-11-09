@@ -522,8 +522,9 @@ internal class ChordFinder(
 
     private suspend fun searchJTotal(song: MusicMetadata, names: List<String>, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(names, { name -> jTotalSheets(song, name) }, fits) { url ->
-            val sheet = jTotalSheet.firstGroup(fetch(url, charset = J_TOTAL_CHARSET) { code, _ -> code == 404 }) ?: return@firstSheet null
-            ChordSheet(ChordSheets.fromJTotal(unescape(sheet)), site = ChordSite.J_TOTAL, url = url)
+            val page = fetch(url, charset = J_TOTAL_CHARSET) { code, _ -> code == 404 }
+            val sheet = jTotalSheet.firstGroup(page) ?: return@firstSheet null
+            ChordSheet(ChordSheets.fromJTotal(unescape(sheet), ChordSheets.jTotalMonospace(page)), site = ChordSite.J_TOTAL, url = url)
         }
 
     /** The pages of J-Total's sheets of [name]: by the artist first, and its easier versions after its own. */

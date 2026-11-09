@@ -30,6 +30,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1] if len(HERE.parents) > 1 else HERE  # in the container the script sits at /script
 TABLE = REPO / "app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt"
+MONO_TABLE = TABLE.with_name("jtotal-widths-mono.txt")
 IMAGE = "localhost/crosstune-jtotal-widths"
 
 # Google Fonts' Inconsolata v37, in the three files J-Total's stylesheet asks for, with their ranges.
@@ -49,6 +50,7 @@ FONTS = {
     ),
 }
 STACK = '"Inconsolata","MS Gothic","Hiragino Kaku Gothic","Monaco",sans-serif'
+MONO_STACK = '"Inconsolata",monospace'
 
 # Where lyrics can have letters: all of the Basic Multilingual Plane above Latin-1's controls, and emoji.
 SPANS = ((0x80, 0xD7FF), (0xE000, 0xFFFD), (0x1F000, 0x1FAFF))
@@ -97,7 +99,7 @@ def installed_fonts(packages):
     return [line.removesuffix(" installed") for line in packages.splitlines() if line.endswith(" installed")]
 
 
-def measure(out):
+def measure(out, stack=STACK):
     """Inside the container: the width of every letter, in thousandths of a digit. Writes JSON to `out`."""
     from playwright.sync_api import sync_playwright
 
@@ -105,12 +107,13 @@ def measure(out):
         f'@font-face {{ font-family:"Inconsolata"; src:url("file:///fonts/inconsolata-{name}.woff2") format("woff2"); unicode-range:{span}; }}\n'
         for name, (_, span) in FONTS.items()
     )
-    head = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>\n{faces}tt {{ font-family:{STACK}; font-size:40px; line-height:1; white-space:pre; }}\ndiv {{ margin:0; }}\n</style></head><body>'
+    head = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>\n{faces}tt {{ font-family:{stack}; font-size:40px; line-height:1; white-space:pre; }}\ndiv {{ margin:0; }}\n</style></head><body>'
     codes = spans_codes()
     widths = {}
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         environment = [
+            f"Font stack {stack}",
             f"Chromium {browser.version}",
             f"Playwright {subprocess.check_output(['pip', 'show', 'playwright'], text=True).split('Version: ', 1)[1].splitlines()[0]}",
             f"Unicode {unicodedata.unidata_version}",
@@ -150,7 +153,7 @@ def cache():
     return (mnt if mnt.is_dir() else Path.home() / ".cache/agent-cache") / "crosstune-jtotal-widths"
 
 
-def in_container():
+def in_container(mono=False):
     """Measures in the container and gives back the table text it makes."""
     work = cache()
     (work / "fonts").mkdir(parents=True, exist_ok=True)
@@ -161,7 +164,7 @@ def in_container():
     subprocess.run(["podman", "build", "-t", IMAGE, "-f", str(HERE / "Containerfile"), str(HERE)], check=True)
     subprocess.run(
         ["podman", "run", "--rm", "-v", f"{work}:/work", "-v", f"{work / 'fonts'}:/fonts:ro", "-v", f"{HERE}:/script:ro",
-         IMAGE, "python3", "/script/jtotal_widths.py", "measure", "/work/raw.json"],
+         IMAGE, "python3", "/script/jtotal_widths.py", "measure", "/work/raw.json", *(["--mono"] if mono else [])],
         check=True,
     )
     raw = json.loads((work / "raw.json").read_text(encoding="utf-8"))
@@ -173,17 +176,19 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("command", choices=("generate", "check", "measure"))
     parser.add_argument("out", nargs="?")
+    parser.add_argument("--mono", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "measure":
-        measure(args.out)
+        measure(args.out, MONO_STACK if args.mono else STACK)
         return 0
-    text = in_container()
+    tables = [(TABLE, in_container()), (MONO_TABLE, in_container(mono=True))]
     if args.command == "generate":
-        TABLE.parent.mkdir(parents=True, exist_ok=True)
-        TABLE.write_text(text, encoding="utf-8")
-        print(f"{TABLE.relative_to(REPO)}: {len(text.splitlines())} runs")
+        for table, text in tables:
+            table.parent.mkdir(parents=True, exist_ok=True)
+            table.write_text(text, encoding="utf-8")
+            print(f"{table.relative_to(REPO)}: {len(text.splitlines())} lines")
         return 0
-    if TABLE.read_text(encoding="utf-8") == text:
+    if all(table.read_text(encoding="utf-8") == text for table, text in tables):
         print("the table is what the browser measures")
         return 0
     print("the table differs from the browser: run `generate` and look at the diff", file=sys.stderr)

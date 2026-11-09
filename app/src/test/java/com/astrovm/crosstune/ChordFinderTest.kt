@@ -232,6 +232,16 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun jTotalUsesTheFontStackFromThePage() {
+        val words = "あ".repeat(22)
+        val page = "<style>tt { font-family: 'Inconsolata', monospace; }</style>" +
+            jTotalSong("${"x".repeat(41)}$jTotalChord", words)
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to page))
+        val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
+        assertEquals(20, found.sheet.lines.single().chords.single().at)
+    }
+
+    @Test
     fun jTotalsSongOfTheSameNameBySomeoneElseWaitsForTheArtists() {
         jTotal(
             mapOf("川の道" to jTotalResult("other/001", "川の道", "別の人") + jTotalResult("kawa/001", "川の道")),

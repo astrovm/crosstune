@@ -18,6 +18,15 @@ class JTotalWidthsTest {
     fun anAsciiLetterIsOneColumn() {
         assertEquals(1000, JTotalWidths.of('a'.code))
         assertEquals(1000, JTotalWidths.of(0x7F))
+        assertEquals(1000, JTotalWidths.of('a'.code, monospace = true))
+    }
+
+    @Test
+    fun theMonospaceFallbackHasItsOwnWidths() {
+        assertEquals(2050, JTotalWidths.of('あ'.code, monospace = true))
+        val sheet = "${"x".repeat(41)}${jTotal("C")}<br>${"あ".repeat(22)}"
+        assertEquals(21, ChordSheets.fromJTotal(sheet).single().chords.single().at)
+        assertEquals(20, ChordSheets.fromJTotal(sheet, monospace = true).single().chords.single().at)
     }
 
     @Test

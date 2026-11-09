@@ -395,6 +395,17 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalUsesTheLastActiveTtFontRule() {
+        val normal = "<style>tt { font-family: 'Inconsolata', sans-serif; }</style>"
+        val mono = "<style><!-- tt { font-family: 'Inconsolata', monospace; } --></style>"
+        assertEquals(false, ChordSheets.jTotalMonospace(""))
+        assertEquals(false, ChordSheets.jTotalMonospace("$normal<!-- $mono -->"))
+        assertEquals(true, ChordSheets.jTotalMonospace(normal + mono))
+        assertEquals(false, ChordSheets.jTotalMonospace(mono + normal))
+        assertEquals(false, ChordSheets.jTotalMonospace(normal + "<style>/* tt { font-family: 'Inconsolata', monospace; } */</style>"))
+    }
+
+    @Test
     fun jTotalsChordsPastTheWordsEndLandAtTheEndAndWordsWithNoChordsStay() {
         assertEquals(
             listOf(SheetLine("川の道", listOf(Chord(3, "Am"))), SheetLine("朝の光 2", emptyList())),
