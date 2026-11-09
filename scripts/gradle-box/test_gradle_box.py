@@ -52,6 +52,8 @@ class GradleBoxTest(unittest.TestCase):
                 "ANDROID_HOME": str(self.sdk),
                 "GRADLE_BOX_DIR": str(self.dir / "state"),
                 "GRADLE_BOX_SLOTS": slots,
+                # 1 GiB a build, so the slots asked for fit on any machine the tests run on.
+                "GRADLE_BOX_MEMORY": "1",
                 "FAKE_DIR": str(self.dir),
                 "FAKE_RUN": run,
                 **env,
@@ -168,6 +170,19 @@ class GradleBoxTest(unittest.TestCase):
         second.communicate(timeout=20)
         homes = {part for command in self.asked() for part in command.split() if part.startswith("GRADLE_USER_HOME=")}
         self.assertEqual(len(homes), 2, self.asked())
+
+    def test_asking_for_more_slots_than_fit_in_memory_still_waits(self):
+        self.hold("first")
+        first = self.start("first", "help", slots="2", GRADLE_BOX_MEMORY="100000")
+        self.wait_for("started.first")
+        second = self.start("second", "help", slots="2", GRADLE_BOX_MEMORY="100000")
+        time.sleep(0.5)
+        self.assertFalse((self.dir / "started.second").exists())
+        self.release("first")
+        first.communicate(timeout=20)
+        output, _ = second.communicate(timeout=20)
+        self.assertIn("waiting, 1 ahead of you", output)
+        self.assertTrue((self.dir / "started.second").exists())
 
     def test_a_build_that_died_holds_nobody_up(self):
         queue = self.dir / "state" / "queue"

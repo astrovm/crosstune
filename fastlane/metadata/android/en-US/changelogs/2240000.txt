@@ -1,0 +1,7 @@
+A practice card plays its line in your best music app, or in a small YouTube player.
+A card only says it played a line when it did.
+Furigana goes over kana not read as written, like い over ひ in 思ひ出.
+J-Total chords sit over the right letter.
+Qobuz finds songs with a slash in the name.
+A ChatGPT sign-in file that can't be read no longer crashes the app.
+Timing reports carry the music app, its speed and Crosstune's timing notes.

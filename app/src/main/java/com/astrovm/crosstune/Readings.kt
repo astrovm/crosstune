@@ -572,34 +572,10 @@ internal object Readings {
 
     /**
      * [surface] with its [kana] over only the kanji, not over the kana written among them: と over 飛
-     * and た over 立 in 飛び立つ, nothing over び or つ, and over only 食 in 食べる or 茶 in お茶. A reading
-     * that doesn't spell those kana the way they're written stays whole over all of it.
+     * and た over 立 in 飛び立つ, nothing over び or つ, and over only 食 in 食べる or 茶 in お茶. Where
+     * the reading spells those kana another way, or doesn't have them, see [Furigana].
      */
-    fun furigana(surface: String, kana: String): List<Ruby> {
-        val runs = surface.fold(mutableListOf<String>()) { runs, c ->
-            if (runs.isNotEmpty() && isKana(runs.last().first()) == isKana(c)) runs[runs.lastIndex] += c else runs += c.toString()
-            runs
-        }
-        val reads = readingsOf(runs, 0, kana, hiragana(kana), 0) ?: return listOf(Ruby(surface, kana))
-        return runs.zip(reads) { run, reading -> Ruby(run, reading) }
-    }
-
-    /**
-     * What each of [runs], from the [from]th, reads as in [kana] from [at] to its end: nothing for
-     * kana, which are as written, and for the rest what's left up to where the kana after it come
-     * again. [hira] is [kana] in hiragana, to compare katakana with.
-     */
-    private fun readingsOf(runs: List<String>, from: Int, kana: String, hira: String, at: Int): List<String?>? {
-        if (from == runs.size) return emptyList<String?>().takeIf { at == kana.length }
-        val run = runs[from]
-        if (isKana(run.first())) {
-            return if (hira.startsWith(hiragana(run), at)) readingsOf(runs, from + 1, kana, hira, at + run.length)?.let { listOf<String?>(null) + it } else null
-        }
-        // A kanji's reading is never empty, so the kana after it start at least one letter on.
-        return (at + 1..kana.length).firstNotNullOfOrNull { end ->
-            readingsOf(runs, from + 1, kana, hira, end)?.let { listOf<String?>(kana.substring(at, end)) + it }
-        }
-    }
+    fun furigana(surface: String, kana: String): List<Ruby> = Furigana.over(surface, kana)
 
     /**
      * [parts] with each reading moved off the kana written among its kanji, for those kept when it
