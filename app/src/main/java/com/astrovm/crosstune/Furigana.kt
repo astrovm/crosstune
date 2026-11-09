@@ -55,7 +55,7 @@ internal object Furigana {
         /** The run of kana at [i]: found in the reading, or, at the start or the end of the word, not in it. */
         private fun written(i: Int, at: Int): Plan {
             val run = runs[i]
-            val found = spelledAt(run, at)?.let { then(i + 1, at + run.length, it, run.length) } ?: NONE
+            val found = spelledAt(run, at).takeIf { it.isNotEmpty() }?.let { then(i + 1, at + run.length, it, run.length) } ?: NONE
             val left = if (i == 0 || i == runs.lastIndex) then(i + 1, at, listOf(Ruby(run)), 0) else NONE
             return listOf(found, left).maxBy { it.kept }
         }
@@ -77,21 +77,21 @@ internal object Furigana {
         }
 
         /**
-         * [run] as found in the reading from [at], if it is: as written, with what each kana that
-         * isn't said as written is said as over it on its own.
+         * [run] as found in the reading from [at]: as written, with what each kana that isn't said
+         * as written is said as over it on its own. Nothing when it isn't found there.
          */
-        private fun spelledAt(run: String, at: Int): List<Ruby>? {
+        private fun spelledAt(run: String, at: Int): List<Ruby> {
             val parts = mutableListOf<Ruby>()
             for (k in run.indices) {
                 // Past the reading's end, the run isn't in it.
-                val said = sounds.getOrNull(at + k) ?: return null
+                val said = sounds.getOrNull(at + k) ?: return emptyList()
                 val written = sound(run[k])
                 val before = sounds.getOrNull(at + k - 1)
                 when {
                     written == said || stretched(written, before) == stretched(said, before) || "$said$written" in SAID_AS ->
                         if (parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + run[k]) else parts += Ruby(run[k].toString())
                     "$written$said" in SAID_AS -> parts += Ruby(run[k].toString(), kana.substring(at + k, at + k + 1))
-                    else -> return null
+                    else -> return emptyList()
                 }
             }
             return parts
