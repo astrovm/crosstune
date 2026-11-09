@@ -153,8 +153,8 @@ def cache():
     return (mnt if mnt.is_dir() else Path.home() / ".cache/agent-cache") / "crosstune-jtotal-widths"
 
 
-def in_container(mono=False):
-    """Measures in the container and gives back the table text it makes."""
+def container():
+    """Downloads Inconsolata once, builds the image, and gives back the folder that holds the fonts' work files."""
     work = cache()
     (work / "fonts").mkdir(parents=True, exist_ok=True)
     for name, (url, _) in FONTS.items():
@@ -162,6 +162,12 @@ def in_container(mono=False):
         if not font.exists():
             font.write_bytes(urllib.request.urlopen(url, timeout=60).read())
     subprocess.run(["podman", "build", "-t", IMAGE, "-f", str(HERE / "Containerfile"), str(HERE)], check=True)
+    return work
+
+
+def in_container(mono=False):
+    """Measures in the container and gives back the table text it makes."""
+    work = container()
     subprocess.run(
         ["podman", "run", "--rm", "-v", f"{work}:/work", "-v", f"{work / 'fonts'}:/fonts:ro", "-v", f"{HERE}:/script:ro",
          IMAGE, "python3", "/script/jtotal_widths.py", "measure", "/work/raw.json", *(["--mono"] if mono else [])],
