@@ -298,3 +298,32 @@ test("Genius supplies untimed words when the other sites have none", async () =>
   ]);
   assert.deepEqual(await find(song, net), { kind: "found", words: "Paper boats\nalong the river", lines: [], source: "genius" });
 });
+
+test("Genius rejects other artists, versions and paths outside its site", async () => {
+  const hit = (title: string, artist: string, path: string) => ({ type: "song", result: { title, artist_names: artist, path } });
+  const search = { response: { sections: [{ hits: [hit("Paper Boats", "Another Band", "/wrong"), hit("Paper Boats (Live)", "River Band", "/live"), hit("Paper Boats", "River Band", "//elsewhere.invalid/")] }] } };
+  const net = internet([["https://genius.com/api/search/multi", JSON.stringify(search)], ...nothing]);
+  assert.deepEqual(await find({ title: "Paper Boats", artist: "River Band" }, net), { kind: "none" });
+  assert.ok(!net.asked.some((url) => url.includes("elsewhere.invalid")));
+});
+
+test("Genius joins nested boxes, decodes entities, and removes verse headings", async () => {
+  const hit = { type: "song", result: { title: "Paper Boats", artist_names: "River Band", path: "/paper-boats" } };
+  const net = internet([
+    ["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits: [hit] }] } })],
+    ["https://genius.com/paper-boats", '<div data-lyrics-container="true">Paper Boats Lyrics<br>[Verse]<br>River &amp; rain<div>flow</div></div><div>Footer</div><div data-lyrics-container="true">Home<br>[Outro]</div>'],
+    ...nothing,
+  ]);
+  assert.equal(found(await find({ title: "Paper Boats", artist: "River Band" }, net)).words, "River & rainflow\nHome");
+});
+
+test("Genius can mark a song instrumental and handles a failed page", async () => {
+  const hit = (instrumental: boolean) => ({ type: "song", result: { title: "Paper Boats", artist_names: "River Band", path: "/paper-boats", instrumental } });
+  const net = (instrumental: boolean) => internet([
+    ["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits: [hit(instrumental)] }] } })],
+    ["https://genius.com/paper-boats", { status: 403 }], ...nothing,
+  ]);
+  const song = { title: "Paper Boats", artist: "River Band" };
+  assert.deepEqual(await find(song, net(true)), { kind: "instrumental" });
+  assert.deepEqual(await find(song, net(false)), { kind: "none" });
+});

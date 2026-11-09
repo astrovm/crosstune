@@ -70,6 +70,18 @@ class GeniusLyricsTest {
     }
 
     @Test
+    fun aSongUnderAnotherScriptCanMatchItsLatinNameAndArtist() {
+        respond(search(hit(title = "별빛 (River Road)", artists = "걷는 사람 (The Walkers)")))
+        assertEquals(LyricsFinder.GENIUS, (lookup() as Lyrics.Found).source)
+        respond(search(hit(title = "별빛 (River Rood)", artists = "걷는 사람 (The Walkers)")))
+        assertEquals(LyricsFinder.GENIUS, (lookup() as Lyrics.Found).source)
+        respond(search(hit(title = "별빛 (River Rood)", artists = "Someone Else")))
+        assertEquals(Lyrics.None, lookup())
+        respond(search(hit(title = "별빛 (River Road) (Live)", artists = "걷는 사람 (The Walkers)")))
+        assertEquals(Lyrics.None, lookup())
+    }
+
+    @Test
     fun aSongItMarksAsInstrumentalHasNoWords() {
         respond(search(hit(instrumental = true)))
         assertEquals(Lyrics.Instrumental, lookup())
