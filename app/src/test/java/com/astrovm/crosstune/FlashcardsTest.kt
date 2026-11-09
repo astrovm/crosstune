@@ -817,8 +817,8 @@ class FlashcardsTest {
         }
         launch()
         practiseAll(5)
-        // YouTube Music ignores being asked by name, so it's given the song's link there.
-        for ((title, link) in listOf("Other" to "https://music.youtube.com/watch?v=other000000", "Another" to "https://music.youtube.com/watch?v=another0000")) {
+        // YouTube Music ignores being asked by name, so it's given the song's link there, at the line: 5 s in.
+        for ((title, link) in listOf("Other" to "https://music.youtube.com/watch?v=other000000&t=5", "Another" to "https://music.youtube.com/watch?v=another0000&t=5")) {
             waitUntil { phone.songsAsked.lastOrNull()?.first?.title == title }
             assertEquals(link, phone.linksAsked.last())
             appHas(title, atMs = 0, app = youTubeMusic)
@@ -845,7 +845,7 @@ class FlashcardsTest {
         click(string(R.string.practice_good))
         waitUntil { phone.songsAsked.size == 5 }
         assertEquals(MusicMetadata("Fifth", "Band") to youTubeMusic, phone.songsAsked.last())
-        assertEquals("https://music.youtube.com/watch?v=fifth000000", phone.linksAsked.last())
+        assertEquals("https://music.youtube.com/watch?v=fifth000000&t=5", phone.linksAsked.last())
     }
 
     @Test
@@ -865,7 +865,7 @@ class FlashcardsTest {
         practiseAll(1)
         waitUntil { phone.songsAsked.isNotEmpty() }
         assertEquals(MusicMetadata("Other", "Band") to youTubeMusic, phone.songsAsked.single())
-        assertEquals("https://music.youtube.com/watch?v=other000000", phone.linksAsked.single())
+        assertEquals("https://music.youtube.com/watch?v=other000000&t=5", phone.linksAsked.single())
         appHas("Other", atMs = 0, app = youTubeMusic)
         waitUntil { practice().sound == LineSound.PLAYED }
     }
@@ -891,7 +891,7 @@ class FlashcardsTest {
         launch()
         practiseAll(2)
         waitUntil { phone.opened.isNotEmpty() }
-        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=another0000", phone.opened.single())
+        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=another0000&t=5", phone.opened.single())
         assertTrue(phone.songsAsked.isEmpty())
         appHas("Another", atMs = 0, app = youTubeMusic)
         // Once it has the song, Crosstune's back in front, with the line ready.
@@ -904,7 +904,7 @@ class FlashcardsTest {
         phone.canPlaySongs = false
         phone.running = emptySet()
         waitUntil { phone.opened.size == 2 }
-        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000", phone.opened.last())
+        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000&t=5", phone.opened.last())
         // Never getting there, Crosstune still comes back, and YouTube plays the line in the player.
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         waitUntil { practice().video == "other000000" }
@@ -933,8 +933,8 @@ class FlashcardsTest {
         assertEquals(0, phone.cameBack)
         // And the card says, plainly, what the music app needs, with the way to allow it.
         waitUntil { shown(string(R.string.practice_float_allow)) }
-        assertTrue(composeRule.onAllNodes(hasTestTag(PRACTICE_COME_BACK_TAG) and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG))).fetchSemanticsNodes().isNotEmpty())
-        composeRule.onAllNodes(hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))).onFirst().performClick()
+        assertTrue(composeRule.onAllNodes(hasTestTag(PRACTICE_COME_BACK_TAG) and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        composeRule.onAllNodes(hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG)), useUnmergedTree = true).onFirst().performClick()
         composeRule.waitForIdle()
         assertEquals(listOf(Need.Float), model().uiState.fixes?.steps)
         // Back from the steps, it's still asked until it's allowed, then gone.
