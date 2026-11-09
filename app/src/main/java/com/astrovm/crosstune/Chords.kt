@@ -98,6 +98,8 @@ internal object ChordSheets {
     private val markup = Regex("""<[^>]+>""")
     private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^>]+>""", RegexOption.IGNORE_CASE)
     private val sourceSpace = Regex("""[ \t\r\n]+""")
+    private val spacesAcrossTags = Regex(""" ((?:<[^>]+>)+) +""")
+    private val leadingSpaceInTags = Regex("""^((?:<[^>]+>)+) +""")
 
     private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
@@ -138,7 +140,10 @@ internal object ChordSheets {
      * no column, and a link split by a <br> still names the chord on the next line.
      */
     fun fromJTotal(sheet: String): List<SheetLine> {
-        val lines = sheet.split(jTotalLineEnd).map { it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ").trim(' ') }
+        val lines = sheet.split(jTotalLineEnd).map {
+            it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ").trim(' ')
+                .replace(spacesAcrossTags, " $1").replace(leadingSpaceInTags, "$1")
+        }
             .filter { it.replace(markup, "").trim(' ').isNotEmpty() }
         val result = mutableListOf<SheetLine>()
         var index = 0
@@ -154,14 +159,14 @@ internal object ChordSheets {
             // The opening tag stayed on the previous line, so this one starts at the chord's name.
             splitChord.find(line)?.let { split ->
                 val (name, bass) = split.destructured
-                chords += column to if (bass.isEmpty()) name else "$name/$bass"
+                chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
                 column += columns(split.value.replace(markup, ""))
                 from = split.range.last + 1
             }
             jTotalChord.findAll(line).forEach { match ->
                 val (name, bass) = match.destructured
                 column += columns(line.substring(from, match.range.first).replace(markup, ""))
-                chords += column to if (bass.isEmpty()) name else "$name/$bass"
+                chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
                 column += columns(match.value.replace(markup, ""))
                 from = match.range.last + 1
             }
