@@ -309,7 +309,7 @@
     <string name="report_problem_text">歌詞錯誤、時間不準或其他問題。寫下問題後送出。</string>
     <string name="report_by_email">電子郵件</string>
     <string name="report_comment">哪裡有問題？（選填）</string>
-    <string name="report_what_goes">會傳送這首歌、歌詞的時間軸和應用程式版本。只有 Crosstune 的開發者會看到。</string>
+    <string name="report_what_goes">會傳送這首歌、歌詞的時間軸和應用程式版本。只有 Crosstune 的開發者會看到。若是時間軸問題，還會傳送播放的應用程式、播放速度、歌詞提前顯示多少，以及最近一分鐘的時間軸記錄。</string>
     <string name="report_send">傳送</string>
     <string name="report_sent">已傳送，謝謝！</string>
     <string name="report_failed">無法傳送。請檢查網路連線後再試一次。</string>

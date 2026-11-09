@@ -61,6 +61,60 @@ class ReportTest {
     }
 
     @Test
+    fun aReportAboutTimingAlsoSaysTheAppItsSpeedTheLeadAndTheLog() {
+        val report = Report(
+            "2.22.3", MusicMetadata("Demo", "Band"), timed = true, synced = true, app = "KDE Connect", android = "17 (37)",
+            timing = listOf(HandTiming("Take me", 34_210, 32_900)),
+            problem = SongProblem.TIMED_BY_HAND,
+            player = PlayerTiming("org.kde.kdeconnect_tp", 1.1f, -1_450, 400, "1000 said 5000 at 1000\n2000 lines in time 1>2")
+        )
+        val song = JSONObject(report.json()).getJSONObject("song")
+        assertEquals("org.kde.kdeconnect_tp", song.getString("appPackage"))
+        // A Float's own digits (1.100000023841858) aren't sent.
+        assertEquals("1.1", song.get("speed").toString())
+        assertEquals(-1_450L, song.getLong("leadMs"))
+        assertEquals(400L, song.getLong("earlyMs"))
+        assertEquals("1000 said 5000 at 1000\n2000 lines in time 1>2", song.getString("log"))
+        // Only those, on top of what a report says.
+        assertEquals(
+            listOf("title", "artist", "app", "timed", "synced", "sung", "appPackage", "speed", "leadMs", "earlyMs", "log", "timing"),
+            song.keys().asSequence().toList()
+        )
+    }
+
+    @Test
+    fun whatTheAppDoesntKnowOrHasNothingForIsLeftOut() {
+        val song = JSONObject(Report("2.22.3", MusicMetadata("Demo", "Band"), player = PlayerTiming(null, null, null, 0, "")).json()).getJSONObject("song")
+        assertEquals(listOf("title", "artist", "timed", "synced", "sung", "earlyMs"), song.keys().asSequence().toList())
+        assertEquals(0L, song.getLong("earlyMs"))
+    }
+
+    @Test
+    fun aReportAboutTimingStaysWithinWhatTheBoxTakesNoMatterHowBusyTheMinuteWas() {
+        var now = 5_000_000L
+        TimingLog.clear()
+        TimingLog.clock = { now }
+        // Fingerprints are the longest notes: every one with its clocks, a few a second.
+        repeat(1_000) { index ->
+            now += 20
+            TimingLog.note("fingerprint $index at 4000000 match 123456789 received $now speed 1.0 length 220000 app PlaybackClock(positionMs=$index, atMs=$now, speed=1.0, playing=true) video true duration 62000 lead -1450 guessed null")
+        }
+        val log = TimingLog.lastMinute()
+        TimingLog.clock = android.os.SystemClock::elapsedRealtime
+        TimingLog.clear()
+        assertTrue(log.length <= TimingLog.MAX_CHARS)
+        // The longest comment, and twenty lines put in time by hand with the longest words a line has, as well.
+        val report = Report(
+            "2.22.3", MusicMetadata("T".repeat(300), "A".repeat(300)), app = "A".repeat(100), android = "17 (37)", comment = "c".repeat(2_000),
+            timing = List(20) { HandTiming("y".repeat(300), 1, 2) }, problem = SongProblem.TIMED_BY_HAND,
+            player = PlayerTiming("com.spotify.music", 1f, 120_000, 400, log)
+        )
+        // The Worker turns away more than 48 KB.
+        assertTrue(report.json().toByteArray().size.toString(), report.json().toByteArray().size < 48 * 1024)
+        assertEquals(log, JSONObject(report.json()).getJSONObject("song").getString("log"))
+    }
+
+    @Test
     fun aReportIsSentToCrosstunesOwnBoxAndSaysWhetherItGotThere() = runBlocking {
         val fake = FakeSpotify()
         var code = 204

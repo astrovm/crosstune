@@ -4,7 +4,12 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 
 /** A problem Crosstune finds with a song by itself, as its reports name it. */
-internal enum class SongProblem(val key: String, val offered: Boolean = true) {
+internal enum class SongProblem(
+    val key: String,
+    val offered: Boolean = true,
+    /** Whether it's about the words' timing, so its report says how they were put in time: see [PlayerTiming]. */
+    val aboutTiming: Boolean = false
+) {
     /** Every lyrics service answered, and none has the song's words. */
     NO_LYRICS("no_lyrics"),
 
@@ -12,10 +17,10 @@ internal enum class SongProblem(val key: String, val offered: Boolean = true) {
     NO_TIMING("no_timing"),
 
     /** Its words were put in time by hand, and left so. */
-    TIMED_BY_HAND("timed_by_hand"),
+    TIMED_BY_HAND("timed_by_hand", aboutTiming = true),
 
     /** The singing heard was off from the words. The words were moved, so the user saw nothing wrong to be asked about. */
-    SUNG_OFF("sung_off", offered = false),
+    SUNG_OFF("sung_off", offered = false, aboutTiming = true),
 
     /** Every chords site answered, and none has its chords. */
     NO_CHORDS("no_chords")

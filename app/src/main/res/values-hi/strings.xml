@@ -309,7 +309,7 @@
     <string name="report_problem_text">गलत बोल, गलत टाइमिंग या कुछ और। बताएं क्या गलत है और भेजें।</string>
     <string name="report_by_email">ईमेल</string>
     <string name="report_comment">क्या गलत है? (वैकल्पिक)</string>
-    <string name="report_what_goes">गाना, उसके बोलों की टाइमिंग और ऐप का वर्ज़न भेजता है। इसे सिर्फ़ Crosstune का डेवलपर पढ़ता है।</string>
+    <string name="report_what_goes">गाना, उसके बोलों की टाइमिंग और ऐप का वर्ज़न भेजता है। इसे सिर्फ़ Crosstune का डेवलपर पढ़ता है। टाइमिंग की समस्या में प्लेयर ऐप, उसकी स्पीड, बोल कितने आगे दिखते हैं और टाइमिंग के आखिरी एक मिनट के नोट भी जाते हैं।</string>
     <string name="report_send">भेजें</string>
     <string name="report_sent">भेज दिया। धन्यवाद!</string>
     <string name="report_failed">भेजा नहीं जा सका। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>

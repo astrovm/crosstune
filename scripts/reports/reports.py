@@ -30,7 +30,7 @@ OUT = ROOT / "build" / "reports"
 SAVED = OUT / "reports.json"
 CHECK = OUT / "check"
 WRANGLER = ROOT / "report" / "wrangler.jsonc"
-COLUMNS = "id, at, version, android, title, artist, app, timed, synced, sung, length_ms, source, problem, comment"
+COLUMNS = "id, at, version, android, title, artist, app, timed, synced, sung, length_ms, source, problem, comment, app_package, speed, lead_ms, early_ms, timing_log"
 # Every column but `timing`, which is long and only says where lines were moved.
 READ = f"select {COLUMNS} from reports order by id"
 # Asked in the same batch, so it counts the table the rows were read from.

@@ -27,7 +27,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.Log
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -76,7 +75,7 @@ internal class SteadyClock(
     private var stopped = 0L
 
     fun of(clock: PlaybackClock): PlaybackClock = steady(clock).also {
-        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "said ${clock.positionMs} at ${clock.atMs} playing ${clock.playing}, kept ${it.positionMs} at ${it.atMs}")
+        TimingLog.note("said ${clock.positionMs} at ${clock.atMs} playing ${clock.playing} speed ${clock.speed}, kept ${it.positionMs} at ${it.atMs}")
     }
 
     private fun steady(clock: PlaybackClock): PlaybackClock {

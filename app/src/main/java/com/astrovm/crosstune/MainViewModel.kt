@@ -2,7 +2,6 @@ package com.astrovm.crosstune
 
 import android.content.SharedPreferences
 import android.os.SystemClock
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -1049,7 +1048,7 @@ internal class MainViewModel(
     }
 
     private fun showHeard(heard: Heard.Song, lyrics: Boolean) {
-        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "recognized ${heard.offsetMs} at ${heard.startedAtMs} match ${heard.matchId} received ${now()} speed ${heard.speed} length ${heard.metadata.lengthMs}")
+        TimingLog.note("recognized ${heard.offsetMs} at ${heard.startedAtMs} match ${heard.matchId} received ${now()} speed ${heard.speed} length ${heard.metadata.lengthMs}")
         retryListens = false
         showSong(heard.metadata, heard.appleMusicId)
         // Once it's shown, as showing it forgets what was heard for whatever was shown before.
@@ -1852,6 +1851,10 @@ internal class MainViewModel(
     /** The name of the app last seen playing the song shown, kept once it stops or goes on, which is often when a report goes. */
     private var playedIn: String? = null
 
+    /** The package and the speed of the app [playedIn] names, kept the same way: a report about timing says which player and how fast. */
+    private var playedPackage: String? = null
+    private var playedSpeed: Float? = null
+
     /** How far the video an app plays is ahead of its song, as last heard; null until it's been heard. */
     private var appLeadMs: Long? = null
     /**
@@ -2199,7 +2202,7 @@ internal class MainViewModel(
      * the one shown was heard playing, as the next song. A song picked to read stays.
      */
     private fun heardAlong(hearing: Heard.Song, playerSpeed: Float) {
-        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "fingerprint ${hearing.offsetMs} at ${hearing.startedAtMs} match ${hearing.matchId} received ${now()} speed ${hearing.speed} length ${hearing.metadata.lengthMs} app ${appFollowing?.clock} video ${appFollowing?.video} duration ${appFollowing?.durationMs} lead $appLeadMs guessed $guessedLeadMs")
+        TimingLog.note("fingerprint ${hearing.offsetMs} at ${hearing.startedAtMs} match ${hearing.matchId} received ${now()} speed ${hearing.speed} length ${hearing.metadata.lengthMs} app ${appFollowing?.clock} video ${appFollowing?.video} duration ${appFollowing?.durationMs} lead $appLeadMs guessed $guessedLeadMs")
         val song = hearing.metadata
         val shown = uiState.lyricsFor ?: return
         if (!hearingFits(song, shown)) return
@@ -2236,6 +2239,7 @@ internal class MainViewModel(
                 appLeadMs = lead
                 leadFromMs = app.clock.positionAt(now())
                 leadMatch = hearing.matchId
+                TimingLog.note("lead $lead from hearing at ${hearing.offsetMs}")
                 leadStore.save(shown, lead)
                 if (app.video) leadSavedLines(shown, app.appPackage, lead)
                 if (autoCalibrating) stopListeningAlong()
@@ -2318,6 +2322,7 @@ internal class MainViewModel(
         }
         val gap = heard.clock?.let { gapTiming.heard(app.clock, it, -MAX_GAP_MS..MAX_GAP_MS) } ?: return
         gapStore.save(shown, words, match, gap)
+        TimingLog.note("gap $gap to match $match")
         if (autoCalibrating) stopListeningAlong()
     }
 
@@ -2333,6 +2338,7 @@ internal class MainViewModel(
         val heardPace = if (abs(speed - 1) >= MIN_SKEW) 1.0 / speed else 1.0
         if (heardPace == wordsPace) return
         wordsPace = heardPace
+        TimingLog.note("pace $heardPace from speed ${heard.speed} player speed $playerSpeed")
         syncStore.save(shown, foundLines, withGuess(syncPoints), heardPace)
         showPoints()
     }
@@ -2668,6 +2674,7 @@ internal class MainViewModel(
         (from - at.positionMs).takeIf { it in LeadTiming.possible(extraIn(app)) }?.let { lead ->
             guessedLeadMs = lead
             leadFromMs = from
+            TimingLog.note("lead guessed $lead")
         }
     }
 
@@ -2751,6 +2758,10 @@ internal class MainViewModel(
                 if (left != null && heardSong?.let { sameSong(it, song) } == true) hear(left)
                 appFollowing = playing
                 playing?.app?.let { playedIn = it }
+                playing?.let {
+                    playedPackage = it.appPackage
+                    playedSpeed = it.clock.speed
+                }
                 playing?.clock?.let(::noteClock)
                 // Listening by itself only lines up what the app plays: once it plays this no more, there's
                 // nothing for it, and the microphone would hear the room, as between two songs.
@@ -2841,6 +2852,8 @@ internal class MainViewModel(
         liningUp = false
         appFollowing = null
         playedIn = null
+        playedPackage = null
+        playedSpeed = null
         appLeadMs = null
         guessedLeadMs = null
         leadMatch = null
@@ -3040,10 +3053,27 @@ internal class MainViewModel(
     }
 
     /** A report on the words shown, [song]'s: how they're timed, and each line put in time by hand. */
-    private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null) = Report(
-        sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = playedIn, comment = comment,
-        sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = handTiming(), problem = problem, source = found?.source
+    private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null): Report {
+        val byHand = handTiming()
+        return Report(
+            sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = playedIn, comment = comment,
+            sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = byHand, problem = problem, source = found?.source,
+            player = if (byHand.isNotEmpty() || problem?.aboutTiming == true) playerTiming() else null
+        )
+    }
+
+    /**
+     * Why the words may be off, for a report about their timing: the app that was followed, how fast it
+     * played, how far ahead the words were shown, and the timing log. Put in time by hand, the log is
+     * as it was at the last line moved, since the words are often left, and reported, a song later.
+     */
+    private fun playerTiming() = PlayerTiming(
+        appPackage = playedPackage, speed = playedSpeed, leadMs = leadNow, earlyMs = uiState.linesEarlyMs,
+        log = timingAtCorrection.takeIf { timedByHand } ?: TimingLog.lastMinute()
     )
+
+    /** The timing log as it was when the words were last put in time by hand. */
+    private var timingAtCorrection: String? = null
 
     /** Sends a report on the words shown, with what the user says is wrong. [UiState.report] says how it goes. */
     fun sendReport(comment: String) {
@@ -3088,9 +3118,10 @@ internal class MainViewModel(
         val report = reportOn(sender, song, problem = problem)
         viewModelScope.launch {
             // Found before it's followed, or before following it said anything, as a song with no words always is.
-            val app = report.app ?: playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.app
+            val playing = if (report.app == null) playback?.takeIf { it.hasAccess() }?.follow(song)?.first() else null
+            val player = report.player?.let { it.copy(appPackage = it.appPackage ?: playing?.appPackage, speed = it.speed ?: playing?.clock?.speed) }
             // One that didn't get there goes the next time it's found.
-            if (sender.send(report.copy(app = app))) autoReports.remember(song, problem)
+            if (sender.send(report.copy(app = report.app ?: playing?.app, player = player))) autoReports.remember(song, problem)
         }
     }
 
@@ -3183,6 +3214,8 @@ internal class MainViewModel(
         if (abs(gap) > MAX_GAP_MS) return false
         if (handGap == null) handGap = HandGap(match, before, appLeadMs.takeIf { app != null }, lineMs)
         gapStore.save(song, words, match, gap)
+        TimingLog.note("gap moved by hand to $gap")
+        timingAtCorrection = TimingLog.lastMinute()
         appLeadMs?.takeIf { app != null }?.let { moveLead(song, it + shiftMs) }
         placeHeard()
         uiState = uiState.copy(lyricsSynced = true, lyricsOffTake = false)
@@ -3202,6 +3235,8 @@ internal class MainViewModel(
 
     private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
         syncPoints = points
+        TimingLog.note("lines in time ${points.takeLast(MAX_NOTED_POINTS).joinToString(" ") { "${it.lineMs}>${it.songMs}" }}")
+        if (timedByHand) timingAtCorrection = TimingLog.lastMinute()
         // Put in time by hand or for good, what was heard this time only gives way.
         heardPoints = emptyList()
         // Kept for the words as found, which is how they're found next time.
@@ -4622,6 +4657,9 @@ internal class MainViewModel(
         const val HEARD_LATELY_MS = 60_000L
         /** How far Shazam's place in a song may be from where its words are timed. */
         const val MAX_GAP_MS = 60_000L
+
+        /** The lines put in time a note of them names: the latest, as a song has many. */
+        const val MAX_NOTED_POINTS = 6
 
         /** How much faster or slower than the recording it matched Shazam must hear one for it to go on at its own pace: less is as near as Shazam tells. */
         const val MIN_SKEW = 1f / 256
