@@ -1,9 +1,15 @@
 package com.astrovm.crosstune
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
@@ -490,24 +496,46 @@ internal class ExactMatcher(
     /**
      * The number of [song] in the store [findOnQobuz] doesn't ask, when it isn't [link]'s: stores differ on about one song
      * in four, and which one an account follows can't be told. Null with no other, or no answer.
+     *
+     * Android lets Crosstune open an app again only 9.5 s after the first launch, see [QobuzNumbers], which gives up on this
+     * then, so this gives the store all of that time. One try that failed isn't evidence that the store has no song, so a second
+     * goes out at once; one that is only slow goes on, with a second beside it after [timeoutMs] in case it's stuck. Cutting it
+     * off at [timeoutMs] and starting over, as it did, lost a store that takes 7 s to answer, and cost its data twice.
      */
     suspend fun otherQobuzLink(song: MusicMetadata, link: String): String? {
-        // As for queues, one transient network failure isn't evidence that the store has no song.
-        repeat(2) {
-            val answer = withTimeoutOrNull(timeoutMs) {
-                try {
-                    Answer(findOnQobuzStore(if (qobuzStore == "us-en") "gb-en" else "us-en", song))
-                } catch (_: IOException) {
-                    null
+        val other = if (qobuzStore == "us-en") "gb-en" else "us-en"
+        // Apart from this coroutine's job, as a try waiting on the store can't be interrupted, and mustn't hold back the answer.
+        val tries = CoroutineScope(currentCoroutineContext().minusKey(Job) + Job())
+        try {
+            val first = tries.async { qobuzTry(other, song) }
+            val wait = tries.async { delay(timeoutMs) }
+            // Null for a try that failed too: then the second goes out at once.
+            val answer = select<Answer?> {
+                first.onAwait { it }
+                wait.onAwait { null }
+            } ?: run {
+                val second = tries.async { qobuzTry(other, song) }
+                select<Answer?> {
+                    first.onAwait { it ?: second.await() }
+                    second.onAwait { it ?: first.await() }
                 }
             }
-            if (answer != null) return answer.url?.takeIf { it != link }
+            return answer?.url?.takeIf { it != link }
+        } finally {
+            tries.cancel()
         }
-        return null
     }
 
+    /** What the store said, or null when it couldn't be asked. */
+    private suspend fun qobuzTry(store: String, song: MusicMetadata): Answer? =
+        try {
+            Answer(findOnQobuzStore(store, song))
+        } catch (_: IOException) {
+            null
+        }
+
     private suspend fun findOnQobuzStore(store: String, metadata: MusicMetadata): String? {
-        val url = "https://www.qobuz.com/$store/search/tracks".toHttpUrl().newBuilder().addPathSegment(searchQuery(metadata)).build()
+        val url = "https://www.qobuz.com/$store/search/tracks".toHttpUrl().newBuilder().addPathSegment(inOnePathSegment(searchQuery(metadata))).build()
         val page = client.newCall(Request.Builder().url(url).asPhoneBrowser().get().build()).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
             response.body.stringAtMost()

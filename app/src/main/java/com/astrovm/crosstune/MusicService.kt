@@ -223,8 +223,17 @@ private fun querySearchUrl(baseUrl: String, parameter: String): (String) -> Stri
 }
 
 private fun pathSearchUrl(baseUrl: String): (String) -> String = { query ->
-    baseUrl.toHttpUrl().newBuilder().addPathSegment(query).build().toString()
+    baseUrl.toHttpUrl().newBuilder().addPathSegment(inOnePathSegment(query)).build().toString()
 }
+
+/**
+ * [query] for a search whose address is a path, e.g. Qobuz's, Deezer's and Amazon Music's: a "/" can't be in it, as they read
+ * even its %2F as a separator and answer 404 (measured, with "AC/DC"), so it's a space, which finds the same songs. Every other
+ * character was measured to go through (?, #, %, \, ;, &, +, :, quotes, accents, kana).
+ */
+internal fun inOnePathSegment(query: String): String = query.replace(slashes, " ").trim()
+
+private val slashes = Regex("""\s*/\s*""")
 
 /** Without a tag that names no other recording, which some services' names leave out, and then find nothing. */
 internal fun searchQuery(metadata: MusicMetadata): String =
