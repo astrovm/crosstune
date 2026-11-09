@@ -106,8 +106,8 @@ internal class ChordWikiBrowser(
         settings.blockNetworkImage = !loadPictures
         web.alpha = 0f
         web.isClickable = false
+        // Not focusable at all, which takes touch mode with it: a view can't be focusable in touch mode and not otherwise.
         web.isFocusable = false
-        web.isFocusableInTouchMode = false
         web.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         CookieManager.getInstance().setAcceptCookie(true)
         // Behind everything else, so it can't take a tap meant for the lyrics.
@@ -191,10 +191,10 @@ internal class ChordWikiBrowser(
 
     /** The view belongs to the main thread. Cancelling a lookup runs on whatever thread the other sites finished on. */
     private fun detach(web: WebView) {
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            web.post { detach(web) }
-            return
-        }
+        if (Looper.myLooper() == Looper.getMainLooper()) remove(web) else web.post { remove(web) }
+    }
+
+    private fun remove(web: WebView) {
         val parent = web.parent as? ViewGroup ?: return
         parent.removeView(web)
         web.stopLoading()
