@@ -4939,6 +4939,8 @@ class MainActivityTest {
         val playback = timedSong()
         playback.access = true
         controller!!.pause().resume()
+        // The words are fetched off the main thread and fade in over the placeholder, so they can still be on their way.
+        waitForText("Two")
         fun tapLabel() = composeRule.onNodeWithText("Two").fetchSemanticsNode().config[SemanticsActions.OnClick].label
         // With nowhere to move the app, a tap opens the line to study.
         assertEquals(string(R.string.lyrics_study_line), tapLabel())
