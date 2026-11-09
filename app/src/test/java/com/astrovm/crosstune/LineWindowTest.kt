@@ -11,6 +11,8 @@ class LineWindowTest {
     @Test
     fun aLineEndsAMomentAfterTheWordsDo() {
         assertEquals(LineWindow(10_000, 15_000 + MainViewModel.LINE_TAIL_MS), LineWindow.of(line(), lead = 0))
+        assertEquals(10_000L, LineWindow.of(line(), lead = 0).start)
+        assertEquals(15_000L + MainViewModel.LINE_TAIL_MS, LineWindow.of(line(), lead = 0).end)
     }
 
     @Test
