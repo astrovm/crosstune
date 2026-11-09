@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Record two songs per launch route on the shared Samsung, restoring prefs and keeping the phone silent.
 
+--serial points it at another device instead, such as the crosstune-phone emulator
+(emulator-5580). The Samsung stays the default, and is the only one picked by model.
+
 Pass the device-bound CLI returned by T3 device_open as --device-cli. Evidence stays
 under build/, including screenshots, visible nodes and Android task dumps. No login
 or subscription prompts are accepted. Review the evidence before calling a row right.
@@ -42,6 +45,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('phase', choices=['before', 'after'])
     parser.add_argument('--device-cli', required=True)
+    parser.add_argument('--serial', help='adb serial to use instead of the Samsung, e.g. emulator-5580')
     parser.add_argument('--service', choices=SERVICES)
     parser.add_argument('--kind', choices=['search', 'link'])
     parser.add_argument('--routes', choices=['all', 'primary'], default='all', help='primary checks card searches and directly shared song links')
@@ -52,9 +56,11 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     adb_cli = str(Path(os.environ.get('ANDROID_HOME', Path.home() / 'Android/Sdk')) / 'platform-tools/adb')
     devices = run(['timeout', '10', adb_cli, 'devices', '-l'])
-    serial = next((row.split()[0] for row in devices.splitlines() if 'SM_S908E' in row and row.split()[1] == 'device'), None)
+    wanted = args.serial or next((row.split()[0] for row in devices.splitlines() if 'SM_S908E' in row), None)
+    serial = next((row.split()[0] for row in devices.splitlines() if row.split()[0] == wanted and row.split()[1] == 'device'), None)
     if not serial:
-        raise SystemExit('Samsung is not attached; refusing to touch another device')
+        raise SystemExit(f'{args.serial or "Samsung"} is not attached; refusing to touch another device')
+    where = 'the emulator' if args.serial else 'the Samsung'
 
     def adb(*command, **kwargs):
         return run(['timeout', '25', adb_cli, '-s', serial, *command], **kwargs)
@@ -118,13 +124,13 @@ def main():
         # Each launch argument is its own token, including text containing spaces.
         device('open', APP, *[token for item in extra for token in ['--launch-args', item]])
 
-    lock_path = Path('/tmp') / ('claude-' + str(os.getuid())) / 'samsung.lock'
+    lock_path = Path('/tmp') / ('claude-' + str(os.getuid())) / ((serial if args.serial else 'samsung') + '.lock')
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     for target, label in SERVICES.items():
         if args.service and target != args.service:
             continue
         if 'package:' + PACKAGES[target] not in adb('shell', 'pm', 'list', 'packages', PACKAGES[target]).splitlines():
-            (args.output / (args.phase + '-' + target + '.not-testable.txt')).write_text('App is not installed on the Samsung.')
+            (args.output / (args.phase + '-' + target + '.not-testable.txt')).write_text(f'App is not installed on {where}.')
             continue
         for kind in ['search', 'link']:
             if args.kind and kind != args.kind:

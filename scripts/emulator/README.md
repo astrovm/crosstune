@@ -4,7 +4,7 @@ Two, declared in [`emulators.json`](emulators.json), so a wiped machine gets the
 
 | Emulator | Image | For | By hand |
 |---|---|---|---|
-| `crosstune-phone` | Android 17, Play Store | Music apps, Qobuz tries, sound and mic checks, promo recordings | Google test account, Qobuz login |
+| `crosstune-phone` | Android 17, Play Store | Music apps, Qobuz tries, sound and mic checks, promo recordings | Google test account, Qobuz and Amazon Music logins; Proton VPN and the Deezer sign-in still to do (Issue #678) |
 | `crosstune-tv` | Google TV, Android 16, the newest TV image there is | TV screens, remote focus, Cast checks | Google test account |
 
 ```bash
@@ -35,8 +35,9 @@ python3 scripts/emulator/emulator.py start crosstune-phone   # then it's emulato
 
 1. `-gpu host`: draws on the real GPU. `-gpu auto` picks software here.
 2. `-qt-hide-window`: no window, sound still works. `-no-window` runs a build that logs `Could not init 'pa' audio driver`.
-3. T3's Device panel boots emulators with no sound and `-gpu auto`. To get both, start it here first. The panel attaches to it.
-4. `start` also runs `adb emu avd hostmicon`, even on one already running. Without it the mic records silence: -50 dB against -14 dB with it, on the tone check below.
+3. `-no-snapshot`: always a cold boot (about a minute). Quick Boot loads the last saved snapshot, and that rolls the disk back to the day it was saved: every app and sign-in since is gone (this is how Proton VPN vanished on Nov 8). `start` also deletes an old `default_boot` snapshot, so nothing else that starts this emulator without flags can load it. If the emulator exits before it has booted, `start` fails and prints the end of `started.log`.
+4. T3's Device panel boots emulators with no sound and `-gpu auto`. To get both, start it here first. The panel attaches to it.
+5. `start` also runs `adb emu avd hostmicon`, even on one already running. Without it the mic records silence: -50 dB against -14 dB with it, on the tone check below.
 
 Same swipe test on the same AVD, from `dumpsys gfxinfo`:
 
