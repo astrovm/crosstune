@@ -299,6 +299,20 @@ test("Genius supplies untimed words when the other sites have none", async () =>
   assert.deepEqual(await find(song, net), { kind: "found", words: "Paper boats\nalong the river", lines: [], source: "genius" });
 });
 
+test("Genius's language menu and page name are not words", async () => {
+  const song = { title: "Paper Boats", artist: "River Band" };
+  const search = { response: { sections: [{ hits: [{ type: "song", result: { title: song.title, artist_names: song.artist, path: "/River-band-paper-boats-lyrics" } }] }] } };
+  const net = internet([
+    ["https://genius.com/api/search/multi", JSON.stringify(search)],
+    ...nothing,
+    [
+      "https://genius.com/River-band-paper-boats-lyrics",
+      '<div data-lyrics-container="true"><div data-exclude-from-selection="true" class="Header"><div><button><span>Translations</span></button><span>Romanization</span></div><h2>Paper Boats Lyrics</h2></div>[Note]<br>[Verse 1]<br>Paper boats<div data-exclude-from-selection="true"></div><br>along the river</div>',
+    ],
+  ]);
+  assert.deepEqual(await find(song, net), { kind: "found", words: "Paper boats\nalong the river", lines: [], source: "genius" });
+});
+
 test("Genius rejects other artists, versions and paths outside its site", async () => {
   const hit = (title: string, artist: string, path: string) => ({ type: "song", result: { title, artist_names: artist, path } });
   const search = { response: { sections: [{ hits: [hit("Paper Boats", "Another Band", "/wrong"), hit("Paper Boats (Live)", "River Band", "/live"), hit("Paper Boats", "River Band", "//elsewhere.invalid/")] }] } };

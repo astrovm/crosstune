@@ -351,9 +351,14 @@ async function fromNetEase(song: Song, fetcher: Fetcher): Promise<Lyrics> {
 
 /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
 function withoutLetrasAds(page: string): string {
+  return withoutBoxes(page, /<div id="pub_/);
+}
+
+/** [page] without each box that [opening] starts, and all that's inside it. */
+function withoutBoxes(page: string, opening: RegExp): string {
   let text = page;
   for (;;) {
-    const start = text.indexOf('<div id="pub_');
+    const start = opening.exec(text)?.index ?? -1;
     if (start < 0) return text;
     let depth = 0;
     let end = -1;
@@ -439,17 +444,20 @@ async function fromGenius(song: Song, fetcher: Fetcher): Promise<Lyrics> {
     if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) return { kind: "none" };
     const page = await fetcher(`https://genius.com${path}`);
     if (!page.ok) return { kind: "unavailable" };
+    // A box of words starts with the page's language menu ("Translations", "Romanization") and the name it opens with,
+    // all marked as not part of the words.
+    const body = withoutBoxes(page.text, /<div\b[^>]*data-exclude-from-selection="true"[^>]*>/);
     const boxes: string[] = [];
     const start = /<div\b[^>]*data-lyrics-container="true"[^>]*>/g;
-    for (let box = start.exec(page.text); box !== null; box = start.exec(page.text)) {
+    for (let box = start.exec(body); box !== null; box = start.exec(body)) {
       let depth = 0;
       letrasBox.lastIndex = box.index;
-      let end = page.text.length;
-      for (let tag = letrasBox.exec(page.text); tag !== null; tag = letrasBox.exec(page.text)) {
+      let end = body.length;
+      for (let tag = letrasBox.exec(body); tag !== null; tag = letrasBox.exec(body)) {
         depth += tag[0] === "</div>" ? -1 : 1;
         if (depth === 0) { end = tag.index; break; }
       }
-      boxes.push(page.text.slice(box.index + box[0].length, end));
+      boxes.push(body.slice(box.index + box[0].length, end));
       start.lastIndex = end;
     }
     const text = decodeEntities(boxes.join("\n").replace(letrasBreak, "\n").replace(letrasTag, ""));
