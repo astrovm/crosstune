@@ -81,13 +81,14 @@ internal object Furigana {
          * isn't said as written is said as over it on its own.
          */
         private fun spelledAt(run: String, at: Int): List<Ruby>? {
-            if (at + run.length > kana.length) return null
             val parts = mutableListOf<Ruby>()
             for (k in run.indices) {
-                val said = sounds[at + k]
+                // Past the reading's end, the run isn't in it.
+                val said = sounds.getOrNull(at + k) ?: return null
                 val written = sound(run[k])
+                val before = sounds.getOrNull(at + k - 1)
                 when {
-                    written == said || stretched(written, sounds.getOrNull(at + k - 1)) == stretched(said, sounds.getOrNull(at + k - 1)) || "$said$written" in SAID_AS ->
+                    written == said || stretched(written, before) == stretched(said, before) || "$said$written" in SAID_AS ->
                         if (parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + run[k]) else parts += Ruby(run[k].toString())
                     "$written$said" in SAID_AS -> parts += Ruby(run[k].toString(), kana.substring(at + k, at + k + 1))
                     else -> return null

@@ -211,6 +211,9 @@ class ReadingsTest {
         over("通う", "かよう", Ruby("通", "かよ"), Ruby("う"))
         over("遠い", "とおい", Ruby("遠", "とお"), Ruby("い"))
         over("大きい", "おおきー", Ruby("大", "おお"), Ruby("きい"))
+        over("大きー", "おおきい", Ruby("大", "おお"), Ruby("きー"))
+        // A run longer than what's left of the reading isn't in it.
+        over("見ていた", "みて", Ruby("見", "みて"), Ruby("ていた"))
         over("先生ぇ", "せんせい", Ruby("先生", "せんせ"), Ruby("ぇ"))
         over("今日は", "きょうは", Ruby("今日", "きょう"), Ruby("は"))
     }
