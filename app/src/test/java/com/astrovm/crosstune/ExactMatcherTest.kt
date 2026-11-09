@@ -500,6 +500,41 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aSongNamedInAnotherScriptIsFoundOnYouTubeMusicByItsArtistAndLength() {
+        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
+        val apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis (Director's Edit Version)", "Yoko Takahashi", 245_093))
+        val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
+        fun find(songs: List<String>) = runBlocking {
+            namesAndTabs(songs = songs, apple = apple)
+            matcher().find(MusicService.YOUTUBE_MUSIC, angel)
+        }
+        // Its artist and its length, to the second, are the song's, whatever it's called.
+        assertEquals(
+            "https://music.youtube.com/watch?v=xyVatKhd4s4",
+            find(listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:06", videoId = "xyVatKhd4s4")))
+        )
+        // Not another artist's, another length, or a title in the same script, which is compared by its words.
+        assertNull(find(listOf(youTubeMusicRow(named, "Someone Else • Zankoku na Tenshi no Thesis • 4:06", videoId = "other000000"))))
+        assertNull(find(listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:20", videoId = "longer00000"))))
+        assertNull(find(listOf(youTubeMusicRow("Another Song", "Yoko Takahashi • Another Album • 4:06", videoId = "latin000000"))))
+    }
+
+    @Test
+    fun aSongInAnotherScriptMayBeAsFarFromTheKnownLengthAsTheSameSongIsAndNoFarther() {
+        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
+        val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
+        fun find(length: String) = runBlocking {
+            namesAndTabs(songs = listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • $length", videoId = "xyVatKhd4s4")), apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", 245_000)))
+            matcher().find(MusicService.YOUTUBE_MUSIC, angel)
+        }
+        // 3 s past the known 4:05 is the same song; a second more is not, and nor is 3 s short of it, or a second less.
+        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:08"))
+        assertNull(find("4:09"))
+        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:02"))
+        assertNull(find("4:01"))
+    }
+
+    @Test
     fun aRemixIsFoundOnYouTubeMusicByItsAlbumWhenItsNameLeavesItOut() {
         respond(
             youTubeMusicPage(

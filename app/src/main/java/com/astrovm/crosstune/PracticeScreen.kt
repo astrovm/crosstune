@@ -2,6 +2,9 @@ package com.astrovm.crosstune
 
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -51,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +72,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -80,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.toBitmap
 import java.util.Locale
 import kotlin.math.roundToLong
@@ -199,9 +205,15 @@ private fun Card(line: SavedLine, practice: Practice, types: List<CardType>, lea
                     else Modifier.clip(MaterialTheme.shapes.extraLarge).clickable(onClickLabel = stringResource(R.string.practice_show), onClick = actions.onTurnPractice)
                 )
         ) {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
-                CardFace(line, practice, type.options, learning, actions, preview, onSide)
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp).animateContentSize(Motion.size), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    SongChip(line, actions, kind = type.takeIf { types.count { it.on } > 1 })
+                    CardFace(line, practice, type.options, learning, actions, preview, onSide)
+                }
+                // At the foot, under the words rather than over them, in line with them, once the song's sound comes from here.
+                if (preview == null && practice.video != null && practice.sound != LineSound.NONE) {
+                    LinePlayerView(actions.linePlayerView, Modifier.padding(start = 24.dp, end = 24.dp, bottom = 24.dp))
+                }
             }
         }
         if (preview == null) Grades(line, practice, actions)
@@ -223,13 +235,13 @@ private fun CardFace(line: SavedLine, practice: Practice, cards: CardOptions, le
     }
     val front = cards.front
     val plays = front.sound && practice.sound != LineSound.NONE
-    if (plays) LineSound(line, practice.sound, actions.onReplayLine)
+    if (plays) LineSound(line, practice.sound, practice.video != null, actions.onReplayLine)
     if (!front.bare) CardSideContent(line, front, lyrics, back = false)
     else if (!plays) CardSideContent(line, CardSide(), lyrics, back = false)
     // Turned, the other side comes in below the front, which stays.
     if (practice.turned) {
         HorizontalDivider()
-        if (cards.back.sound) LineSound(line, practice.sound, actions.onReplayLine)
+        if (cards.back.sound) LineSound(line, practice.sound, practice.video != null, actions.onReplayLine)
         CardSideContent(line, cards.back, lyrics, back = true)
     }
 }
@@ -315,14 +327,42 @@ internal fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCa
     }
 }
 
+/** The small YouTube player, shown as YouTube asks of a player that's heard: 16:9 and at least 200 px tall, at any density. */
+@Composable
+@NonRestartableComposable
+private fun LinePlayerView(view: () -> View?, modifier: Modifier = Modifier) {
+    val height = with(LocalDensity.current) { LINE_PLAYER_PX.toDp() }
+    AndroidView(
+        factory = { context ->
+            FrameLayout(context).also { box ->
+                // Not for the remote or a screen reader to land in: the card's own controls are what they use.
+                box.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                box.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                view()?.let { player ->
+                    // Moved from the card it was on, which may not be gone yet.
+                    (player.parent as? ViewGroup)?.removeView(player)
+                    box.addView(player, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                }
+            }
+        },
+        modifier = modifier.size(width = height * 16 / 9, height = height).clip(MaterialTheme.shapes.small).testTag(LINE_PLAYER_TAG)
+    )
+}
+
+private const val LINE_PLAYER_PX = 200
+
+/** The small player on the card, for tests to find. */
+internal const val LINE_PLAYER_TAG = "line-player"
+
 /**
  * How the line sounds: the music app's name while it gets there; then a button that fills as the
  * line plays, to play it again once it has. Nothing when it can't be played.
  */
 @Composable
-private fun LineSound(line: SavedLine, sound: LineSound, onPlay: () -> Unit) {
+private fun LineSound(line: SavedLine, sound: LineSound, inPlayer: Boolean, onPlay: () -> Unit) {
     if (sound == LineSound.LOADING) {
-        AppLoading(line.app)
+        // The player has its own picture; the music app is named only while it is the one that gets there.
+        AppLoading(line.app.takeUnless { inPlayer })
     } else if (sound != LineSound.NONE) {
         SoundButton(line, sound, onPlay)
     }

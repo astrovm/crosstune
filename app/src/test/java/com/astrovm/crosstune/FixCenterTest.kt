@@ -104,7 +104,7 @@ class FixCenterTest {
     @After
     fun tearDown() {
         runCatching { guide?.pause()?.stop()?.destroy() }
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -616,7 +616,7 @@ class FixCenterTest {
         click(string(R.string.open_app_link_settings_button, "Spotify"))
         assertTrue(GuideActivity.host != null)
         activity.finish()
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         controller = null
         assertNull(GuideActivity.host)
     }

@@ -19,6 +19,10 @@ concurrency:
 
 env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  # Every checkout prints Git's hint to name the initial branch. This is what it asks for.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 
 # Separate jobs, so the build's third-party code (Gradle plugins and dependencies) never runs
 # where the signing key or a token that can write to the repository is available.

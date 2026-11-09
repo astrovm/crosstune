@@ -155,7 +155,8 @@ class MainActivity : ComponentActivity() {
                     queueOrder = order,
                     sleepTimer = sleepTimer(applicationContext),
                     qobuzNumbers = qobuzNumbers(applicationContext, matcher),
-                    offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher)
+                    offline = OfflineSongs(File(noBackupFilesDir, "$KEPT_OFFLINE_DIR/songs.json"), caches, artwork, lookupDispatcher),
+                    newLinePlayer = { linePlayerFactory(applicationContext) }
                 )
             }
         }
@@ -392,6 +393,10 @@ class MainActivity : ComponentActivity() {
         /** What music apps are playing, which a song's timed words follow. */
         @VisibleForTesting
         internal var playbackFactory: (Context) -> PlaybackSource = ::MediaSessionPlayback
+
+        /** The small YouTube player a card's line plays in when its music app can't move to the line. */
+        @VisibleForTesting
+        internal var linePlayerFactory: (Context) -> LinePlayer = ::YouTubeLinePlayer
 
         /** Crosstune's own queue, and the app it's for. */
         private var playQueue: Pair<Context, PlayQueue>? = null
@@ -719,6 +724,7 @@ class MainActivity : ComponentActivity() {
         onTurnPractice = viewModel::turnPractice,
         onGradePractice = viewModel::gradePractice,
         onStopPractice = viewModel::stopPractice,
+        linePlayerView = viewModel::linePlayerView,
         onReplayLine = viewModel::replayLine,
         onBackToBefore = viewModel::backToBefore,
         onChooseLines = viewModel::chooseLines,
@@ -1040,6 +1046,7 @@ class MainActivity : ComponentActivity() {
         // Left with the words open, they're kept, as Android may close the app before they're shut.
         viewModel.keep()
         if (viewModel.uiState.listening) viewModel.stopListening()
+        viewModel.pausePracticeSound()
         if (!floatingOverApps) {
             viewModel.pauseListeningAlong()
             viewModel.pauseFollowingNext()

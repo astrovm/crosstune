@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 project(crosstune_milkdrop LANGUAGES C CXX)
 
+include("${CMAKE_CURRENT_LIST_DIR}/patch.cmake")
+
 # Builds the same bytes wherever the source is checked out, so the release APK stays reproducible.
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" ABSOLUTE)
@@ -32,7 +34,19 @@ string(REGEX MATCH "([0-9]+)\\.([0-9]+)\\.([0-9]+)" CMAKE_PROJECT_VERSION "${PRO
 set(CMAKE_PROJECT_VERSION_MAJOR "${CMAKE_MATCH_1}")
 set(CMAKE_PROJECT_VERSION_MINOR "${CMAKE_MATCH_2}")
 set(CMAKE_PROJECT_VERSION_PATCH "${CMAKE_MATCH_3}")
-add_subdirectory("${PROJECT_ROOT}/third_party/projectm" projectm EXCLUDE_FROM_ALL)
+# projectM from a copy with the fixes to what warns when it's built: a format with one argument too many
+# (hlslparser) and a field nothing reads (Waveform). A copy of the whole folder, as the field is in a
+# header that every file of the preset code includes, and each of them has to see the same class.
+set(PROJECTM_COPY "${CMAKE_BINARY_DIR}/patched/projectm")
+crosstune_copy_tree("${PROJECT_ROOT}/third_party/projectm" "${PROJECTM_COPY}"
+    vendor/hlslparser/src/GLSLGenerator.cpp src/libprojectM/MilkdropPreset/Waveform.hpp)
+crosstune_patch("${PROJECT_ROOT}/third_party/projectm/vendor/hlslparser/src/GLSLGenerator.cpp"
+    "${PROJECTM_COPY}/vendor/hlslparser/src/GLSLGenerator.cpp"
+    "m_writer.Write(\",\", op);" "m_writer.Write(\",\");")
+crosstune_patch("${PROJECT_ROOT}/third_party/projectm/src/libprojectM/MilkdropPreset/Waveform.hpp"
+    "${PROJECTM_COPY}/src/libprojectM/MilkdropPreset/Waveform.hpp"
+    "    int m_samples{};         //!< Number of samples in the current waveform. Depends on the mode.\n" "")
+add_subdirectory("${PROJECTM_COPY}" projectm EXCLUDE_FROM_ALL)
 # Our copy of projectM's Framebuffer.cpp, which keeps the picture when the visuals change size. Built
 # from the one this copy was made from only: a new projectM's needs the change brought over again.
 set(PROJECTM_FRAMEBUFFER "${PROJECT_ROOT}/third_party/projectm/src/libprojectM/Renderer/Framebuffer.cpp")
@@ -67,7 +81,17 @@ if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
     set(ENV{GIT_CONFIG_COUNT} 1)
     set(ENV{GIT_CONFIG_KEY_0} core.abbrev)
     set(ENV{GIT_CONFIG_VALUE_0} 12)
+    # whisper.cpp asks for CMake 3.5, which CMake 4 warns it will drop. Its build works the same with
+    # the policies of 3.10, the oldest CMake doesn't warn about, so it's told to use those.
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
     add_subdirectory("${PROJECT_ROOT}/third_party/whisper.cpp" whisper EXCLUDE_FROM_ALL)
+    # Its file with the fix to a size printed as a long, which is not what a size_t is on 32-bit phones.
+    set(WHISPER_PATCHED "${CMAKE_BINARY_DIR}/patched/whisper.cpp/whisper.cpp")
+    crosstune_patch("${PROJECT_ROOT}/third_party/whisper.cpp/src/whisper.cpp" "${WHISPER_PATCHED}"
+        "alignment heads masks size = %ld B" "alignment heads masks size = %zu B")
+    get_target_property(WHISPER_SOURCES whisper SOURCES)
+    list(TRANSFORM WHISPER_SOURCES REPLACE "^whisper\\.cpp$" "${WHISPER_PATCHED}")
+    set_target_properties(whisper PROPERTIES SOURCES "${WHISPER_SOURCES}")
     # Optimized in the dev build too: unoptimized, hearing 20 seconds takes a phone minutes.
     foreach(library whisper ggml ggml-base ggml-cpu)
         target_compile_options(${library} PRIVATE -O3)

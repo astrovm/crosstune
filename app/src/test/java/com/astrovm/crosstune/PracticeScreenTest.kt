@@ -6,7 +6,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -94,6 +96,98 @@ class PracticeScreenTest {
         composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertDoesNotExist()
         composeRule.onNodeWithContentDescription(string(R.string.practice_stop)).assertIsEnabled().performClick()
         assertEquals(1, taps.size)
+    }
+
+    private val heard get() = line.copy(cardType = HEAR_TYPE)
+
+    private val hearing = listOf(READ_IT, HEAR_IT.copy(on = true))
+
+    private fun withPlayer(practice: Practice = Practice(queue = listOf(heard), total = 2, sound = LineSound.PLAYED, video = "abc"), view: android.view.View? = android.view.View(context)) {
+        show(UiState(practice = practice, cardTypes = hearing), ScreenActions(linePlayerView = { view }))
+    }
+
+    @Test
+    fun aLineInThePlayerShowsItAtTheCardsFootInLineWithTheWordsAndAtLeast200PxTall() {
+        val view = android.view.View(context)
+        withPlayer(view = view)
+        val player = composeRule.onNodeWithTag(LINE_PLAYER_TAG)
+        player.assertExists()
+        val bounds = player.getBoundsInRoot()
+        val density = context.resources.displayMetrics.density
+        // YouTube asks for a player of at least 200 px tall, and 16:9.
+        val height = bounds.bottom.value - bounds.top.value
+        assertTrue(height * density >= 200f - 0.5f)
+        assertEquals(height * 16 / 9, bounds.right.value - bounds.left.value, 0.5f)
+        // Bottom left, under the words and in line with them, and not over the grades or the words.
+        val card = composeRule.onNodeWithTag(PRACTICE_CARD_TAG).getBoundsInRoot()
+        assertEquals(card.left.value + 24f, bounds.left.value, 0.5f)
+        assertTrue(bounds.bottom.value <= card.bottom.value)
+        val song = composeRule.onNodeWithText("Night Song", useUnmergedTree = true).getBoundsInRoot()
+        assertTrue("player $bounds, song $song, card $card", bounds.top.value >= song.bottom.value)
+        assertTrue(view.parent != null)
+        // Its play button stays the card's one control of the sound.
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertIsEnabled()
+    }
+
+    @Test
+    fun aTurnedCardKeepsThePlayerToo() {
+        withPlayer(Practice(queue = listOf(heard), total = 2, turned = true, sound = LineSound.PLAYING, video = "abc"))
+        composeRule.onNodeWithTag(LINE_PLAYER_TAG).assertExists()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_stop)).assertIsEnabled()
+    }
+
+    @Test
+    fun aCardWithNoVideoHasNoPlayer() {
+        withPlayer(Practice(queue = listOf(heard), total = 2, sound = LineSound.PLAYED, video = null))
+        composeRule.onNodeWithTag(LINE_PLAYER_TAG).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertExists()
+    }
+
+    @Test
+    fun aCardWithNoSoundHasNoPlayerAndNoPlayButton() {
+        withPlayer(Practice(queue = listOf(heard), total = 2, sound = LineSound.NONE, video = "abc"))
+        composeRule.onNodeWithTag(LINE_PLAYER_TAG).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(string(R.string.practice_play)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aPlayerThatIsStillOnAnOldCardIsMovedToTheNewOne() {
+        val view = android.view.View(context)
+        val old = android.widget.FrameLayout(context).also { it.addView(view) }
+        withPlayer(view = view)
+        assertTrue(view.parent !== old)
+        assertEquals(0, old.childCount)
+    }
+
+    @Test
+    fun aCardWhoseSoundIsGoingThroughThePlayerDoesNotNameTheMusicApp() {
+        installMusicApp()
+        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
+        withPlayer(Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING, video = "abc"))
+        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertDoesNotExist()
+    }
+
+    @Test
+    fun whileTheMusicAppGetsThereItIsNamedWithItsIcon() {
+        installMusicApp()
+        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
+        show(UiState(practice = Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING), cardTypes = hearing))
+        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertExists()
+    }
+
+    /** A music app on the phone, so a card can name it. */
+    private fun installMusicApp() {
+        val info = android.content.pm.ApplicationInfo().apply { packageName = "com.example.music"; nonLocalizedLabel = "Example Music" }
+        org.robolectric.Shadows.shadowOf(context.packageManager).installPackage(android.content.pm.PackageInfo().apply { packageName = "com.example.music"; applicationInfo = info })
+    }
+
+    @Test
+    fun theRemoteAndTalkBackNeverLandInThePlayer() {
+        val view = android.view.View(context)
+        withPlayer(view = view)
+        val box = view.parent as android.view.ViewGroup
+        assertEquals(android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS, box.descendantFocusability)
+        assertEquals(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS, box.importantForAccessibility)
     }
 
     @Test
