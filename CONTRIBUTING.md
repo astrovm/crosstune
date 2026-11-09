@@ -55,6 +55,10 @@ Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/andr
 
 The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.
 
+## Chord sheet widths
+
+Chords from J-Total sit over the letter they sit over on J-Total's page, and that page draws letters at widths that aren't whole columns (U+0132 is 1.470 columns, U+0133 is 0.888). [`jtotal-widths.txt`](app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt) is what Chromium measures for each letter with the page's own CSS and fonts, and `ChordSheets` places chords by it. Remake it with `python3 scripts/jtotal-widths/jtotal_widths.py generate`, which measures in a container (it needs podman and downloads the three Inconsolata files once); `check` says whether the table still matches what the browser draws. Widths come from the container's Noto fonts, so a machine with other Japanese fonts draws some scripts differently.
+
 ## Reports
 
 **Report a problem** and **Report song problems automatically** send to a Cloudflare Worker in [`report/`](report), at `report.crosstune.4st.li`. It keeps reports in the D1 database `crosstune-reports` (table in `schema.sql`), at most 5 a minute from one address, and a daily cron deletes those older than 180 days. Test it with `node --test report/*.test.mjs`, and deploy with `cf deploy` from that folder.

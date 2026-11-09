@@ -98,6 +98,7 @@ jobs:
           python3 -m unittest scripts/test_devicelock.py
           python3 -m unittest discover -s scripts/record -p "test_*.py"
           python3 -m unittest discover -s scripts/reports -p "test_*.py"
+          python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
           python3 -m unittest discover -s scripts/lyrics -p "test_*.py"
           node scripts/test-site-media.cjs
           node scripts/test-site-language.cjs
