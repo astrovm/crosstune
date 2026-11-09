@@ -14,8 +14,9 @@
 #
 # GRADLE_BOX_MEMORY is each build's limit in GiB, 16 by default: :app:ci holds about 13 at its peak,
 # between Gradle, the Kotlin compiler and, from 12 GiB, two test processes side by side, and at 8 or 12
-# one of them gets killed. GRADLE_BOX_SLOTS is how many run at once, by default as many as fit in
-# three quarters of the RAM, and at least one.
+# one of them gets killed. As many run at once as fit in three quarters of the RAM, and at least one.
+# GRADLE_BOX_SLOTS can lower that, never raise it: every checkout shares the machine, so one asking for
+# more slots than fit would run builds side by side that run it out of memory.
 #
 # Idle slot homes are evicted oldest first above 10 GiB (GRADLE_BOX_CACHE_BYTES overrides it).
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
@@ -37,7 +38,9 @@ fi
 
 memory=${GRADLE_BOX_MEMORY:-16}
 ram=$(awk '/^MemTotal/ { print int($2 / 1048576 + 0.5) }' /proc/meminfo)
-slots=${GRADLE_BOX_SLOTS:-$((ram * 3 / 4 / memory))}
+fit=$((ram * 3 / 4 / memory))
+slots=${GRADLE_BOX_SLOTS:-$fit}
+((slots <= fit)) || slots=$fit
 ((slots >= 1)) || slots=1
 cpus=$(($(nproc) / slots))
 ((cpus >= 1)) || cpus=1
