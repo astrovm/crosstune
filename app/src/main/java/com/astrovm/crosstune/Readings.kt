@@ -213,12 +213,16 @@ internal object Readings {
             val a = mutableListOf(ours[i++])
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += ours[i++] else b += theirs[j++]
-            // A word in old kana IPADIC breaks up, まゐる into ま and ゐる and けふ into け and ふ, UniDic keeps whole.
-            val whole = b.size == 1 && a.size > 1 && Furigana.modernKana(b[0].surface, *listOfNotNull(b[0].listed, b[0].spoken).toTypedArray()) != null
-            val better = a.any { it.unknown } || whole || (b.size == 1 && a.size > 1 && b[0].surface.any(::isHan)) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
+            val better = a.any { it.unknown } || keptWhole(a, b) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
             out += if (better && b.none { it.unknown }) b else a
         }
         return out
+    }
+
+    /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
+    private fun keptWhole(a: List<Piece>, b: List<Piece>): Boolean {
+        val whole = b.singleOrNull() ?: return false
+        return a.size > 1 && (whole.surface.any(::isHan) || Furigana.modernKana(whole.surface, *listOfNotNull(whole.listed, whole.spoken).toTypedArray()) != null)
     }
 
     /**
