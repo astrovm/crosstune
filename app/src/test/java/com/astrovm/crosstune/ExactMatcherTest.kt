@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -1776,10 +1778,12 @@ class ExactMatcherTest {
         // A second try that goes out is called off the moment the lookup is done, and whether it got to ask first depends on
         // which thread got there first, so one lookup may not show it. Many on threads of their own do.
         val lookups = 100
-        val (matcher, asked) = slowQobuz(1_000, qobuzAfter(0))
-        runBlocking(Dispatchers.Default) {
-            repeat(lookups) { assertEquals("https://play.qobuz.com/track/625089", matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber)) }
+        // Together, so that lookups which each wait out the timer, as they would if the first's answer weren't taken, end at once.
+        val (matcher, asked) = slowQobuz(5_000, qobuzAfter(0))
+        val links = runBlocking(Dispatchers.Default) {
+            (1..lookups).map { async { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) } }.awaitAll()
         }
+        assertEquals(List(lookups) { "https://play.qobuz.com/track/625089" }, links)
         assertEquals(lookups, asked.get())
     }
 
