@@ -3079,7 +3079,10 @@ internal class MainViewModel(
             app.video && leadNow == null -> "video not calibrated"
             else -> null
         }
-        val lead = if (reason == null) app?.let { it.clock.positionMs - leadTaken(it).clock.positionMs } else null
+        val lead = if (reason == null) app?.let {
+            val at = now()
+            it.clock.positionAt(at) - leadTaken(it).clock.positionAt(at)
+        } else null
         val log = TimingLog.lastMinute()
         return PlayerTiming(playedPackage, playedSpeed, lead, uiState.linesEarlyMs, if (reason == null) log else "lead unavailable: $reason\n$log")
     }
