@@ -225,6 +225,17 @@ class GeniusLyricsTest {
     }
 
     @Test
+    fun theLanguageMenuAndNameAPageOpensItsWordsWithAreNotWords() {
+        // A song with translations opens with a menu in a box marked as not part of the words, then the name and its note.
+        respond(
+            page = """<div data-lyrics-container="true"><div data-exclude-from-selection="true" class="Header"><div><button><span>Translations</span></button>""" +
+                """<span>Romanization</span></div><h2>River Road Lyrics</h2></div>[Letra de "River Road"]<br/>[Verse 1]<br/>Walking down the river road""" +
+                """<div data-exclude-from-selection="true"></div><br/>Home</div>"""
+        )
+        assertEquals(Lyrics.Found("Walking down the river road\nHome", source = LyricsFinder.GENIUS), lookup())
+    }
+
+    @Test
     fun aBoxThatHoldsAnotherBoxKeepsAllItsWordsAndNothingAfterIt() {
         respond(page = "<div data-lyrics-container=\"true\">River Road Lyrics<br/>One<br/><div>Two</div><br/>Three</div><div>Footer</div>")
         assertEquals(Lyrics.Found("One\nTwo\nThree", source = LyricsFinder.GENIUS), lookup())

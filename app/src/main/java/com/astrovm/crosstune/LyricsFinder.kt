@@ -1370,13 +1370,16 @@ internal class LyricsFinder(
      * and the verse tags between, "[Chorus: Artist]". Null when there are none.
      */
     private fun geniusWords(page: String, title: String): String? {
-        val boxes = geniusBox.findAll(page).map { start ->
+        // A box of lyrics starts with the page's language menu ("Translations", "Romanization") and the name it opens with,
+        // all marked as not part of the words.
+        val body = withoutBoxes(page, geniusNotWords)
+        val boxes = geniusBox.findAll(body).map { start ->
             var depth = 0
-            val end = letrasBox.findAll(page, start.range.first).firstOrNull { tag ->
+            val end = letrasBox.findAll(body, start.range.first).firstOrNull { tag ->
                 depth += if (tag.value == "</div>") -1 else 1
                 depth == 0
             }
-            page.substring(start.range.last + 1, end?.range?.first ?: page.length)
+            body.substring(start.range.last + 1, end?.range?.first ?: body.length)
         }.filter { it.isNotBlank() }.joinToString("\n")
         val text = ChordFinder.unescape(boxes.replace(letrasBreak, "\n").replace(letrasTag, ""))
         val lines = text.lines().map { it.trim() }
@@ -1388,10 +1391,13 @@ internal class LyricsFinder(
     }
 
     /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
-    private fun withoutAds(page: String): String {
+    private fun withoutAds(page: String): String = withoutBoxes(page, letrasAd)
+
+    /** [page] without each box that [opening] starts, and all that's inside it. */
+    private fun withoutBoxes(page: String, opening: Regex): String {
         var text = page
         while (true) {
-            val start = text.indexOf("<div id=\"pub_").takeIf { it >= 0 } ?: return text
+            val start = opening.find(text)?.range?.first ?: return text
             var depth = 0
             val end = letrasBox.findAll(text, start).firstOrNull { tag ->
                 depth += if (tag.value == "</div>") -1 else 1
@@ -1635,6 +1641,8 @@ internal class LyricsFinder(
         /** On a page with Letras's own translation beside the song, the song's words, after its name. */
         val letrasOriginal = Regex("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
         private val letrasBox = Regex("""<div\b|</div>""")
+        private val letrasAd = Regex("""<div id="pub_""")
+        private val geniusNotWords = Regex("""<div\b[^>]*data-exclude-from-selection="true"[^>]*>""")
         private val geniusBox = Regex("""<div\b[^>]*data-lyrics-container="true"[^>]*>""")
         private val geniusTag = Regex("""\[[^\]]*]""")
 
