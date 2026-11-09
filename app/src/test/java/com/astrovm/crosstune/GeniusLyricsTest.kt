@@ -82,6 +82,27 @@ class GeniusLyricsTest {
     }
 
     @Test
+    fun aLatinNameInTheOwnScriptsTitleIsOnlyTakenWhenItIsTheOneAndOnly() {
+        val korean = "걷는 사람 (The Walkers)"
+        // Two different pages under one name: not known which is the song.
+        respond(search(hit(title = "별빛 (River Road)", artists = korean, path = "/a"), hit(title = "달빛 (River Road)", artists = korean, path = "/b")))
+        assertEquals(Lyrics.None, lookup())
+        // The same page listed twice is one.
+        respond(search(hit(title = "별빛 (River Road)", artists = korean, path = "/a"), hit(title = "별빛 (River Road)", artists = korean, path = "/a")))
+        assertEquals(LyricsFinder.GENIUS, (lookup() as Lyrics.Found).source)
+        // A Latin name before brackets is not another script's, and a short or wrong-length name is not guessed at.
+        respond(search(hit(title = "River Rood (Live)", artists = korean)))
+        assertEquals(Lyrics.None, lookup())
+        respond(search(hit(title = "별빛 (River Roads Home)", artists = korean)))
+        assertEquals(Lyrics.None, lookup())
+        respond(search(hit(title = "별빛 (Rivr)", artists = korean)))
+        assertEquals(Lyrics.None, lookup(of = MusicMetadata("River", song.artist)))
+        // A title in another script has no Latin spelling to compare.
+        respond(search(hit(title = "별빛 (Byeolbit)", artists = korean)))
+        assertEquals(Lyrics.None, lookup(of = MusicMetadata("별빛", song.artist)))
+    }
+
+    @Test
     fun aSongItMarksAsInstrumentalHasNoWords() {
         respond(search(hit(instrumental = true)))
         assertEquals(Lyrics.Instrumental, lookup())

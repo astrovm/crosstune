@@ -327,3 +327,39 @@ test("Genius can mark a song instrumental and handles a failed page", async () =
   assert.deepEqual(await find(song, net(true)), { kind: "instrumental" });
   assert.deepEqual(await find(song, net(false)), { kind: "none" });
 });
+
+test("a Genius result cannot redirect the request through a backslash path", async () => {
+  const hit = { type: "song", result: { title: "Paper Boats", artist_names: "River Band", path: "/\\elsewhere.invalid/" } };
+  const net = internet([["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits: [hit] }] } })], ...nothing]);
+  assert.deepEqual(await find({ title: "Paper Boats", artist: "River Band" }, net), { kind: "none" });
+  assert.equal(net.asked.length, 5);
+});
+
+test("Genius's title in the song's own script is matched by the Latin name after it", async () => {
+  const page = '<div data-lyrics-container="true">Paper Boats Lyrics<br>Paper boats along the river</div>';
+  const hit = (title: string, artist: string, path: string) => ({ type: "song", result: { title, artist_names: artist, path } });
+  const asked = (hits: unknown[]) => internet([
+    ["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits }] } })],
+    ["https://genius.com/paper", page], ["https://genius.com/other", page], ...nothing,
+  ]);
+  const song = { title: "Paper Boats", artist: "River Band" };
+  const credited = "강물 (River Band)";
+  // The same name, and the same name with a letter misspelled, as Genius spells it.
+  assert.equal(found(await find(song, asked([hit("종이배 (Paper Boats)", credited, "/paper")]))).source, "genius");
+  assert.equal(found(await find(song, asked([hit("종이배 (Paper Boots)", credited, "/paper")]))).source, "genius");
+  const none = async (hits: unknown[]) => assert.deepEqual(await find(song, asked(hits)), { kind: "none" });
+  // Two letters off, or the artist is someone else's, or the title is in Latin letters already.
+  await none([hit("종이배 (Paper Boxes)", credited, "/paper")]);
+  await none([hit("종이배 (Paper Boots)", "Another Band", "/paper")]);
+  await none([hit("Paper Boots (Remix)", credited, "/paper")]);
+  // Another version, whatever the script.
+  await none([hit("종이배 Live (Paper Boots)", credited, "/paper")]);
+  // Two different songs can't both be it.
+  await none([hit("종이배 (Paper Boots)", credited, "/paper"), hit("종이배 둘 (Paper Boats)", credited, "/other")]);
+  // A title short enough that one letter makes another word is matched only as written.
+  const short = { title: "Boat", artist: "River Band" };
+  assert.deepEqual(await find(short, asked([hit("배 (Boot)", credited, "/paper")])), { kind: "none" });
+  assert.equal(found(await find(short, asked([hit("배 (Boat)", credited, "/paper")]))).source, "genius");
+  // A title with letters other than a to z can't be told apart one letter at a time.
+  assert.deepEqual(await find({ title: "Paper Boats 舟", artist: "River Band" }, asked([hit("종이배 (Paper Boats 舟)", credited, "/paper")])), { kind: "none" });
+});

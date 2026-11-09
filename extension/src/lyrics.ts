@@ -7,7 +7,7 @@ import { Apis, YOUTUBE_MUSIC_BROWSE_URL, YOUTUBE_MUSIC_NEXT_URL } from "./apis.t
 import { Unreachable, json, type Fetcher } from "./http.ts";
 import { findObject, list, num, obj, objects, str, type Obj } from "./json.ts";
 import { lookFor } from "./matcher.ts";
-import { artistInside, bareTitle, normalize, sameVersion, withGuests, wordsMatch } from "./names.ts";
+import { artistInside, bareTitle, distance, normalize, sameVersion, saysAnotherVersion, withGuests, wordsMatch } from "./names.ts";
 import { decodeEntities, youtubeMusicVideo } from "./parsers.ts";
 
 export interface Line {
@@ -398,6 +398,29 @@ async function fromLetras(song: Song, fetcher: Fetcher): Promise<Lyrics> {
 
 // Genius
 
+const GENIUS_FUZZY_LENGTH = 7;
+const GENIUS_MAX_TITLE = 256;
+const geniusAlternateName = /^([^()]+)\s*\(([^()]+)\)$/;
+
+/** The one result with its own path, or nothing when there are none or several. */
+function onlyOne(rows: readonly Obj[]): Obj | undefined {
+  const paths = new Set(rows.map((row) => str(row["path"])));
+  return paths.size === 1 ? rows[0] : undefined;
+}
+
+/** Genius may put a Latin name after the original script, with one letter misspelled. */
+function geniusAlternateTitle(song: Song, title: string): boolean {
+  const parts = geniusAlternateName.exec(title);
+  const native = parts?.[1] ?? "";
+  if (parts === null || ![...native].some((letter) => /\p{L}/u.test(letter) && !/\p{Script=Latin}/u.test(letter))) return false;
+  if (saysAnotherVersion(title, song.title, song.artist)) return false;
+  const wanted = normalize(song.title);
+  const alternate = normalize(parts[2] ?? "");
+  if (!/^[a-z0-9]+$/.test(wanted)) return false;
+  if (wanted === alternate) return true;
+  return wanted.length >= GENIUS_FUZZY_LENGTH && wanted.length <= GENIUS_MAX_TITLE && Math.abs(alternate.length - wanted.length) <= 1 && distance(wanted, alternate) === 1;
+}
+
 async function fromGenius(song: Song, fetcher: Fetcher): Promise<Lyrics> {
   try {
     const search = await fetcher(`https://genius.com/api/search/multi?${new URLSearchParams({ q: `${song.title} ${song.artist}` })}`);
@@ -405,14 +428,15 @@ async function fromGenius(song: Song, fetcher: Fetcher): Promise<Lyrics> {
     const sections = obj(obj(JSON.parse(search.text))?.["response"])?.["sections"];
     if (!Array.isArray(sections)) return { kind: "unavailable" };
     const credit = withGuests(song.artist, song.title);
-    const match = objects(sections).flatMap((section) => objects(section["hits"]))
+    const byArtist = objects(sections).flatMap((section) => objects(section["hits"]))
       .filter((hit) => str(hit["type"]) === "song").map((hit) => obj(hit["result"]))
-      .find((row) => row !== undefined && sameVersion(song.title, str(row["title"])) &&
+      .filter((row): row is Obj => row !== undefined &&
         [str(row["artist_names"]), str(row["primary_artist_names"])].some((artist) => artist !== "" && artistInside(artist, credit)));
+    const match = byArtist.find((row) => sameVersion(song.title, str(row["title"]))) ?? onlyOne(byArtist.filter((row) => geniusAlternateTitle(song, str(row["title"]))));
     if (match === undefined) return { kind: "none" };
     if (match["instrumental"] === true) return { kind: "instrumental" };
     const path = str(match["path"]);
-    if (!path.startsWith("/") || path.startsWith("//")) return { kind: "none" };
+    if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) return { kind: "none" };
     const page = await fetcher(`https://genius.com${path}`);
     if (!page.ok) return { kind: "unavailable" };
     const boxes: string[] = [];
