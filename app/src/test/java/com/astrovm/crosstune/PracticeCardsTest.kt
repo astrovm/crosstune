@@ -355,6 +355,20 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun backToBeforeInAnAppThatHasToBeAskedForItLetsItPlay() {
+        keep(line())
+        val cards = cards()
+        cards.start(null, before = Before(MusicMetadata("Before", "Band"), 4_000, "Spotify"))
+        cards.backToBefore()
+        waitFor("it's asked for the song") { playback.songsAsked.isNotEmpty() }
+        // It starts the song it was asked for: that's what was playing, so it isn't paused as a card's line would be.
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis()), "Spotify", canSeek = true)
+        waitFor("it went back") { playback.seeks == listOf(4_000L) && playback.plays == listOf(true) }
+        Thread.sleep(200)
+        assertEquals(listOf(true), playback.plays.toList())
+    }
+
+    @Test
     fun backToBeforeWithNothingToGoBackToLeavesPracticeAlone() {
         keep(line())
         val cards = cards()
