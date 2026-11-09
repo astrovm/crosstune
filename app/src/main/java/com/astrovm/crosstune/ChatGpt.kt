@@ -112,7 +112,8 @@ internal class ChatGpt(
         val model = models.firstOrNull { it.slug == picked }?.slug ?: defaultModel(models)?.slug ?: return null
         tokens.withLock {
             val account = load()
-            if (account.has(ACCESS_TOKEN) && account.optString(LAST_MODEL) != model) write(account.put(LAST_MODEL, model))
+            // Only a hint for when the models can't be listed: a file that can't be written is no reason to fail the ask.
+            if (account.has(ACCESS_TOKEN) && account.optString(LAST_MODEL) != model) keptIfWritable(account.put(LAST_MODEL, model))
         }
         return model
     }
@@ -339,7 +340,8 @@ internal class ChatGpt(
         }
         forget(account)
         listOf(CLIENT_ID, SUBJECT, EMAIL, ID_TOKEN, DECLINED, LAST_MODEL).forEach(account::remove)
-        write(account)
+        // Signed out here and ended at OpenAI; tokens left in a file that can't be written are no longer any good.
+        keptIfWritable(account)
     }
 
     private fun keep(account: JSONObject, response: JSONObject) {
@@ -398,11 +400,14 @@ internal class ChatGpt(
                 if (file.exists()) JSONObject(file.readText()) else JSONObject()
             } catch (_: JSONException) {
                 JSONObject()
+            } catch (_: IOException) {
+                null
             }
-        }
+            // A file that can't be read now may be fine later, so it's left alone, and nobody is signed in meanwhile.
+        } ?: return JSONObject()
         if (!account.has(HOST_ID)) {
             account.put(HOST_ID, "urn:uuid:${UUID.randomUUID()}")
-            write(account)
+            keptIfWritable(account)
         }
         saved = account
         return account
@@ -413,6 +418,14 @@ internal class ChatGpt(
         val temporary = File(file.parentFile, "${file.name}.tmp")
         temporary.writeText(account.toString())
         temporary.renameTo(file)
+    }
+
+    /** [write], for what a failing disk mustn't take a caller down with it: it's still held here, and written next time. */
+    private suspend fun keptIfWritable(account: JSONObject) {
+        try {
+            write(account)
+        } catch (_: IOException) {
+        }
     }
 
     private fun randomString(): String = base64Url(ByteArray(32).also(random::nextBytes))

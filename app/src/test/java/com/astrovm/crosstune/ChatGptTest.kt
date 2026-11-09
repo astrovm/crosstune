@@ -360,6 +360,26 @@ class ChatGptTest {
         assertTrue(saved().getString("ext_agent_host_id").startsWith("urn:uuid:"))
     }
 
+    /** What a coroutine in a screen's scope would take down with it: nothing here may throw when the file can't be written or read. */
+    @Test
+    fun anAccountsFileThatCantBeWrittenNorReadIsNoCrash() {
+        val account = File(folder.root, "account").also { it.mkdirs() }
+        val chatGpt = ChatGpt(fake.client(), File(account, "chatgpt.json"), "com.example.crosstune", Dispatchers.IO, now = { clock })
+        signIn(chatGpt)
+        // The folder goes, as a test's does at its end, with the model it asked last and the sign-out still to keep.
+        account.deleteRecursively()
+        assertEquals("gpt-6.1-sol", runBlocking { chatGpt.model() })
+        runBlocking { chatGpt.signOut() }
+        assertNull(runBlocking { chatGpt.email() })
+
+        // Never written, the account starts over in memory, and one that can't be read is left as it is.
+        val missing = ChatGpt(fake.client(), File(account, "chatgpt.json"), "com.example.crosstune", Dispatchers.IO, now = { clock })
+        assertNull(runBlocking { missing.email() })
+        file.mkdirs()
+        assertNull(runBlocking { chatGpt().email() })
+        assertTrue(file.isDirectory)
+    }
+
     private fun signedIn(): ChatGpt = chatGpt().also { signIn(it) }
 
     @Test
