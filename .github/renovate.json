@@ -6,6 +6,13 @@
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "lockFileMaintenance": { "enabled": true, "schedule": ["* 0-3 */3 * *"] },
+  "packageRules": [
+    {
+      "description": "Gradle 9.8 warns about Kover's call to Configuration.setVisible (Kotlin/kotlinx-kover issue 836: fixed on its master, not released). Stay on 9.7 until a Kover release has the fix.",
+      "matchPackageNames": ["gradle"],
+      "allowedVersions": "<9.8"
+    }
+  ],
   "hostRules": [
     {
       "matchHost": "repo.maven.apache.org",
