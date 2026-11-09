@@ -327,7 +327,8 @@ class LyricsReportTest {
         // Nothing says how far ahead a player is until it's heard, so nothing is guessed.
         assertFalse(song.has("leadMs"))
         val log = song.getString("log")
-        assertTrue(log, Regex("""\d+ lines in time 0>500""").containsMatchIn(log))
+        // Stamped with the phone's clock, which isn't at nothing.
+        assertTrue(log, Regex("""(?m)^[1-9]\d* lines in time 0>500""").containsMatchIn(log))
         // Which line was lit, when, and where the player's clock had the song then.
         assertTrue(log, Regex("""lit -?\d+ at \d+ pos \d+""").containsMatchIn(log))
         assertFalse(log, "a moment later" in log)

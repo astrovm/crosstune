@@ -15,16 +15,20 @@ import org.robolectric.shadows.ShadowLog
 class TimingLogTest {
     private var now = 1_000_000L
 
+    /** The phone's clock the log starts with, put back after each test so the tests of everything else notes with it. */
+    private lateinit var phonesClock: () -> Long
+
     @Before
     fun setUp() {
         TimingLog.clear()
+        phonesClock = TimingLog.clock
         TimingLog.clock = { now }
     }
 
     @After
     fun tearDown() {
         TimingLog.clear()
-        TimingLog.clock = android.os.SystemClock::elapsedRealtime
+        TimingLog.clock = phonesClock
     }
 
     @Test
