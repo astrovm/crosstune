@@ -42,6 +42,54 @@ internal object Furigana {
         return null
     }
 
+    /** Whether [surface] is written in hiragana alone, with old kana in it: いふ, まゐる, てふてふ. */
+    fun inOldKana(surface: String) = surface.any { it in OLD } && surface.all { it in 'ぁ'..'ゖ' }
+
+    /**
+     * A word in old kana alone, [surface], spelled the modern way by the first of [forms] that
+     * spells the same word: how it's said (まゐり is said まいり) and the reading of its dictionary
+     * form (いふ is いう, てふてふ ちょうちょう). A form counts only if it differs from [surface] only
+     * where old kana is said another way, so a different word of the same sound, とこ for ところ, or
+     * a long vowel marked ー, names nothing wrong. Null if none does.
+     */
+    fun modernKana(surface: String, vararg forms: String): String? {
+        if (!inOldKana(surface)) return null
+        return forms.map(Readings::hiragana).firstOrNull { spelled(surface, it) }
+    }
+
+    /** Whether [modern] is [surface] with only its old kana changed, to how they're said. */
+    private fun spelled(surface: String, modern: String): Boolean {
+        var at = 0
+        var to = 0
+        while (at < surface.length && to < modern.length) {
+            val contracted = CONTRACTED.entries.firstOrNull { surface.startsWith(it.key, at) && modern.startsWith(it.value, to) }
+            when {
+                contracted != null -> {
+                    at += contracted.key.length
+                    to += contracted.value.length
+                }
+                surface[at] == modern[to] || "${surface[at]}${modern[to]}" in OLD_SAID_AS -> {
+                    at++
+                    to++
+                }
+                else -> return false
+            }
+        }
+        return at == surface.length && to == modern.length && modern != surface
+    }
+
+    /** How the old ending of a verb, ゐ, ゑ, ひ or ふ, is said when the dictionary leaves it a word of its own: 恋ひ is こい, 住まゐ すまい. */
+    val ENDINGS_SAID = mapOf("ゐ" to "い", "ゑ" to "え", "ひ" to "い", "ふ" to "う")
+
+    /** Old kana said another way, as in [SAID_AS] but only the pairs a word in old kana is spelled with. */
+    private val OLD_SAID_AS = setOf("ゐい", "ゑえ", "ひい", "ふう", "ほお")
+
+    /** Old kana that join the one before it in one sound: けふ is きょう, てふ ちょう. */
+    private val CONTRACTED = mapOf(
+        "えふ" to "よう", "けふ" to "きょう", "せふ" to "しょう", "てふ" to "ちょう", "ねふ" to "にょう",
+        "へふ" to "ひょう", "めふ" to "みょう", "れふ" to "りょう", "げふ" to "ぎょう", "でふ" to "じょう"
+    )
+
     /** The kana only the old spelling writes for another sound. */
     private const val OLD = "ゐゑひふほヰヱ"
     private val OLD_KANA = OLD.map(Char::toString).toSet()

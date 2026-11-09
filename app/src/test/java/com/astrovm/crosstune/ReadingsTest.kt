@@ -446,16 +446,61 @@ class ReadingsTest {
     }
 
     @Test
+    fun aWordInOldKanaAloneIsSpelledTodayByTheFormThatSaysItAlike() {
+        // The dictionary form's reading, the way it's said, and the old kana joined to the one before it.
+        assertEquals("いう", Furigana.modernKana("いふ", "イウ"))
+        assertEquals("まいる", Furigana.modernKana("まゐる", "マイル"))
+        assertEquals("ちょうちょう", Furigana.modernKana("てふてふ", "チョウチョウ"))
+        assertEquals("きょう", Furigana.modernKana("けふ", "キョウ"))
+        assertEquals("ぎょうぎ", Furigana.modernKana("げふぎ", "ぎょうぎ"))
+        assertEquals("いい", Furigana.modernKana("いひ", "いい"))
+        assertEquals("あうぎ", Furigana.modernKana("あふぎ", "あうぎ"))
+        assertEquals("まいり", Furigana.modernKana("まゐり", "マイリ"))
+        // The next form is tried when the first doesn't say it alike: ー for a long vowel, or the form of another word.
+        assertEquals("いう", Furigana.modernKana("いふ", "ユー", "イウ"))
+        assertNull(Furigana.modernKana("いふ", "ユー"))
+        assertNull(Furigana.modernKana("いひ", "イウ"))
+        assertNull(Furigana.modernKana("とこ", "トコロ"))
+        assertNull(Furigana.modernKana("ひとり", "ヒトリ"))
+        // Only a word in hiragana with old kana in it has one.
+        assertNull(Furigana.modernKana("思ひ出", "オモイデ"))
+        assertNull(Furigana.modernKana("いう", "イウ"))
+        assertNull(Furigana.modernKana("いふ"))
+        assertNull(Furigana.modernKana("いふ", "イウエ"))
+        assertNull(Furigana.modernKana("いふう", "イウ"))
+    }
+
+    @Test
     fun aWordCarriesItsModernSpellingOnlyWhenItIsWrittenInOldKana() {
         assertNull(Readings.words("夜空に、分かった!", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
-        // The shipped dictionary says 思ひ出 as it's sung. It splits 住まゐ, so only the ゐ is named.
+        // The shipped dictionary says 思ひ出 as it's sung. It splits the old ending off 恋ひ and 住まゐ, which is said with its word.
         assertEquals("思い出", Readings.words("思ひ出", Script.JAPANESE).single().modern)
-        assertEquals(listOf(null, "い"), Readings.words("住まゐ", Script.JAPANESE).map { it.modern })
+        Readings.words("恋ひ", Script.JAPANESE).single().let {
+            assertEquals(listOf("恋ひ", "こいひ", "恋", "恋い"), listOf(it.text, it.reading, it.lookup, it.modern))
+        }
+        assertEquals("住まい", Readings.words("住まゐ", Script.JAPANESE).single().modern)
+        assertEquals("sumai", Readings.words("住まゐ", Script.JAPANESE).single().romanized)
+        // An ending of its own with a particle between is no ending: it's a word of its own.
+        assertEquals(listOf("恋", "を", "ひ"), Readings.words("恋 を ひ", Script.JAPANESE).map { it.text })
+        assertEquals(listOf("ま", "ゐる"), Readings.words("まゐる", Script.JAPANESE).map { it.text })
+        assertEquals(listOf(null, "いる"), Readings.words("まゐる", Script.JAPANESE).map { it.modern })
+        assertEquals("いい", Readings.words("いひ", Script.JAPANESE).single().modern)
+        assertNull(Readings.words("ふたりでほしい", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
         TestUniDic.reading {
             assertEquals("思い出", Readings.words("思ひ出", Script.JAPANESE).single().modern)
             assertEquals("言う", Readings.words("言ふ", Script.JAPANESE).single().modern)
             assertEquals("言い", Readings.words("言ひ", Script.JAPANESE).single().modern)
             assertEquals("植える", Readings.words("植ゑる", Script.JAPANESE).single().modern)
+            // Words in kana alone: the dictionary form's reading, and how an inflected one is said.
+            assertEquals("いう", Readings.words("いふ", Script.JAPANESE).single().modern)
+            assertEquals("まいる", Readings.words("まゐる", Script.JAPANESE).single().modern)
+            assertEquals("ちょうちょう", Readings.words("てふてふ", Script.JAPANESE).single().modern)
+            assertEquals("きょう", Readings.words("けふ", Script.JAPANESE).single().modern)
+            assertEquals("まいります", Readings.words("まゐります", Script.JAPANESE).single().modern)
+            assertEquals("恋い", Readings.words("恋ひ", Script.JAPANESE).single().modern)
+            assertEquals("逢い", Readings.words("逢ひ", Script.JAPANESE).single().modern)
+            assertNull(Readings.words("いう", Script.JAPANESE).single().modern)
+            assertNull(Readings.words("ふたり", Script.JAPANESE).single().modern)
             // Its lookup and the lyric's own text keep what is written.
             assertEquals(Word("思ひ出", "おもいで", "omoide", "思ひ出", "omoide", "思い出"), Readings.words("思ひ出", Script.JAPANESE).single())
         }

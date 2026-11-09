@@ -168,7 +168,8 @@ internal object Readings {
             token.writtenBaseForm.takeIf { it != "*" } ?: surface,
             said?.let(::hiragana),
             token.position + token.surface.length,
-            unread = said == null
+            unread = said == null,
+            listed = token.lemmaReadingForm.takeIf { it != "*" }
         )
     }
 
@@ -212,7 +213,9 @@ internal object Readings {
             val a = mutableListOf(ours[i++])
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += ours[i++] else b += theirs[j++]
-            val better = a.any { it.unknown } || (b.size == 1 && a.size > 1 && b[0].surface.any(::isHan)) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
+            // A word in old kana IPADIC breaks up, まゐる into ま and ゐる and けふ into け and ふ, UniDic keeps whole.
+            val whole = b.size == 1 && a.size > 1 && Furigana.modernKana(b[0].surface, *listOfNotNull(b[0].listed, b[0].spoken).toTypedArray()) != null
+            val better = a.any { it.unknown } || whole || (b.size == 1 && a.size > 1 && b[0].surface.any(::isHan)) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
             out += if (better && b.none { it.unknown }) b else a
         }
         return out
@@ -362,7 +365,9 @@ internal object Readings {
         /** Where it ends in the line. */
         val end: Int = 0,
         /** Whether the dictionary has no reading for it. */
-        val unread: Boolean = false
+        val unread: Boolean = false,
+        /** The reading of its dictionary form, when the dictionary says it. */
+        val listed: String? = null
     ) {
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
@@ -405,6 +410,9 @@ internal object Readings {
                     out += Piece("は", "は", "助詞", "係助詞")
                     out += Piece(piece.surface.drop(1), piece.surface.drop(1), "助詞", "終助詞")
                 }
+                // The dictionary leaves the old ending of a verb a word of its own, 恋 and ひ, 住ま and ゐ: it's said with it.
+                last != null && piece.surface in Furigana.ENDINGS_SAID && endsOldVerb(last) ->
+                    out[out.lastIndex] = Piece(last.surface + piece.surface, last.kana + piece.kana, last.kind, last.subkind, last.base, last.said + Furigana.ENDINGS_SAID.getValue(piece.surface), piece.end)
                 last?.surface == "違" && piece.surface.first() in "くか" -> {
                     out[out.lastIndex] = last.read("ちが")
                     out += piece
@@ -414,6 +422,9 @@ internal object Readings {
         }
         return out
     }
+
+    /** Whether [piece] is a noun ending in kanji or a verb's stem, which an old ending, 恋|ひ or 住ま|ゐ, goes on. */
+    private fun endsOldVerb(piece: Piece) = piece.kind == "動詞" || (piece.kind == "名詞" && isHan(piece.surface.last()))
 
     /** Whether [piece] is a counter [one], いち, runs into: one kanji starting with k, s, t or h. */
     private fun counted(one: Piece, piece: Piece) = one.kana == "いち" && one.subkind in NUMBERS && piece.surface.length == 1 &&
@@ -548,7 +559,7 @@ internal object Readings {
             val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
             Word(
                 text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base, typed = romaji(typed, typed = true),
-                modern = Furigana.modern(text, kana, said)
+                modern = Furigana.modern(text, kana, said) ?: if (Furigana.inOldKana(text)) Furigana.modernKana(text, said, *listedForm(text)) else null
             )
         }
         else -> segments(line).map { text ->
@@ -560,6 +571,10 @@ internal object Readings {
             }
         }
     }
+
+    /** The reading of the dictionary form UniDic has for [text], when it takes it for one word: いふ has イウ. */
+    private fun listedForm(text: String): Array<String> =
+        uniDic?.tokenize(text)?.singleOrNull()?.lemmaReadingForm?.takeIf { it != "*" }?.let { arrayOf(it) } ?: emptyArray()
 
     /** The words between [line]'s spaces and marks, or, in Chinese, between its words. */
     private fun segments(line: String): List<String> {
