@@ -1542,6 +1542,19 @@ class PlaybackTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aCoverIsNotReturnedWhenItsFileCannotBeWritten() {
+        allow()
+        sounding()
+        val controller = player("com.example.player", "Player", "Fake Song", "")
+        val cover = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, cover).build())
+        shadowOf(sessions).addController(controller)
+        File(app.cacheDir, ARTWORK_DIR).writeText("not a directory")
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+    }
+
+    @Test
     fun anAppAskedForIsTheOnlyOneControlledEvenWhenAnotherPlaysTheSong() {
         allow()
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
