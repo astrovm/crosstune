@@ -4898,6 +4898,9 @@ class ListeningTest {
         wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request ->
             when (request.url.host) {
                 "www.ultimate-guitar.com" -> FakeSpotify.html(request, """<div class="js-store" data-content="${noResults.replace("&", "&amp;").replace("\"", "&quot;")}"></div>""")
+                // The other names U-FRET asks for, with none.
+                "music.163.com" -> FakeSpotify.html(request, """{"result":{}}""")
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
                 // Cifra Club answers its search as a call to a function.
                 "solr.sscdn.co" -> FakeSpotify.html(request, """cb({"response":{"docs":[]}})""")
                 in chordHosts -> FakeSpotify.html(request, "")
