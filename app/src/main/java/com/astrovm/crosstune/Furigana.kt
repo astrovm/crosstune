@@ -40,10 +40,10 @@ internal object Furigana {
      */
     private class Aligner(private val runs: List<String>, private val kana: String) {
         private val sounds = kana.map(::sound)
-        private val memo = HashMap<Int, Plan>()
+        private val memo = HashMap<Pair<Int, Int>, Plan>()
 
         /** The best plan for the runs from the [i]th, with what's left of the reading from [at]. */
-        fun best(i: Int, at: Int): Plan = memo.getOrPut(i * (kana.length + 1) + at) {
+        fun best(i: Int, at: Int): Plan = memo.getOrPut(i to at) {
             when {
                 i == runs.size -> if (at == kana.length) Plan(0, emptyList()) else NONE
                 Readings.isKana(runs[i].first()) -> written(i, at)
