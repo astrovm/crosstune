@@ -4316,14 +4316,16 @@ class ListeningTest {
                 request.url.toString() == UniDic.URL -> FakeSpotify.image(request, jar)
                 // Looking for the sung readings takes until it's here, so the words are still being read.
                 request.url.host == "utaten.com" -> {
-                    val until = System.currentTimeMillis() + TIMEOUT_MS
+                    val until = System.currentTimeMillis() + UNIDIC_MS
                     while (Readings.uniDic == null && System.currentTimeMillis() < until) Thread.sleep(20)
                     FakeSpotify.html(request, "")
                 }
                 else -> null
             }
         })
-        // Fetched while the words show, which are read again with it.
+        // Fetched while the words show: that's 46 MB checked and 150 MB unpacked on disk, which a busy machine takes seconds over.
+        waitUntil(UNIDIC_MS) { Readings.uniDic != null }
+        // They're read again with it, which the screen shows at once.
         waitUntil(TIMEOUT_MS) { readingShown("こぼ") }
         assertTrue(readingShown("きみ") && readingShown("なみだ"))
         assertEquals(1, fake.requestedUrls.count { it == UniDic.URL })
@@ -5483,6 +5485,9 @@ class ListeningTest {
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
+
+        /** For a dictionary that never comes to fail the test. The wait ends the moment it's here, 1 to 3 s in on a busy machine, whatever this says. */
+        const val UNIDIC_MS = 60_000L
         const val DAY_MS = 24 * 60 * 60 * 1000L
         const val NO_MATCH = """{"matches":[]}"""
         const val MATCH = """{"matches":[{"id":"1"}],"track":{"title":"Iris","subtitle":"The Goo Goo Dolls",""" +
