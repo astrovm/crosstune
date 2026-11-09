@@ -4893,11 +4893,13 @@ class ListeningTest {
     fun chordsNoSiteHasAreNotACouldntLoad() {
         prefs().edit().putBoolean("lyrics_chords", true).commit()
         // Every site answers, and none has a sheet for the song.
-        val chordHosts = setOf("www.cifraclub.com.br", "solr.sscdn.co", "acordes.lacuerda.net", "www.ufret.jp")
+        val chordHosts = setOf("www.cifraclub.com.br", "acordes.lacuerda.net", "www.ufret.jp")
         val noResults = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject("""{"results":[]}""")))).toString()
         wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request ->
             when (request.url.host) {
                 "www.ultimate-guitar.com" -> FakeSpotify.html(request, """<div class="js-store" data-content="${noResults.replace("&", "&amp;").replace("\"", "&quot;")}"></div>""")
+                // Cifra Club answers its search as a call to a function.
+                "solr.sscdn.co" -> FakeSpotify.html(request, """cb({"response":{"docs":[]}})""")
                 in chordHosts -> FakeSpotify.html(request, "")
                 else -> null
             }
