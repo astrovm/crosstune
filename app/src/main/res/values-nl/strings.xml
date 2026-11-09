@@ -322,6 +322,7 @@
     <string name="singing_model_download">Downloaden</string>
     <string name="singing_model_close">Niet nu</string>
     <string name="setting_auto_report">Problemen met nummers automatisch melden</string>
+    <string name="setting_auto_report_hint">Stuurt ook teksten die je eerder met de hand op tijd zette.</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_katakana_as_hiragana">Katakana als hiragana</string>

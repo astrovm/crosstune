@@ -2210,6 +2210,23 @@ class ListeningTest {
     }
 
     @Test
+    fun aGapMovedByTheArrowsOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        val before = ShazamGapStore(prefs()).load(52_000, "longer")
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_sync_later))).performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != before }
+        // The gap moved, not the lines: the arrows are a way to put the words in time by hand too.
+        assertEquals(setOf(SongProblem.TIMED_BY_HAND), controllerModel().uiState.reportOfferFor)
+        click(string(R.string.lyrics_sync_done))
+        composeRule.mainClock.advanceTimeBy(8_000)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.auto_report_offer))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun wordsOfASongHeardPutInTimeByHandMoveShazamsGapAndResetPutsItBack() {
         // Shazam hears 12.5 seconds into the recording it matched, which is ten seconds ahead of the words, as learnt before.
         ShazamGapStore(prefs()).save(MusicMetadata("Demo", "Band"), 600_000, "1", -10_000)

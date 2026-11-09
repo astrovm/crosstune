@@ -1383,6 +1383,7 @@ class SingingTest {
         const val TIMEOUT_MS = 10_000L
         const val SHIFT_MS = -1_300L
         const val FAR_MS = 4_000L
-        const val OFFER_ARMED_MS = 500L
+        /** The offer takes no tap for 500 ms from the frame it first shows, so a frame more. */
+        const val OFFER_ARMED_MS = 600L
     }
 }

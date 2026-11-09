@@ -322,6 +322,7 @@
     <string name="singing_model_download">Unduh</string>
     <string name="singing_model_close">Nanti saja</string>
     <string name="setting_auto_report">Laporkan masalah lagu secara otomatis</string>
+    <string name="setting_auto_report_hint">Juga mengirim lirik yang sebelumnya kamu atur waktunya secara manual.</string>
     <string name="lyrics_romanized">Dalam huruf Latin</string>
     <string name="lyrics_romaji_typed">Romaji seperti diketik</string>
     <string name="lyrics_katakana_as_hiragana">Katakana sebagai hiragana</string>

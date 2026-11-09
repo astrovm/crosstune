@@ -323,6 +323,7 @@
     <string name="singing_model_download">Scarica</string>
     <string name="singing_model_close">Non ora</string>
     <string name="setting_auto_report">Segnala automaticamente i problemi dei brani</string>
+    <string name="setting_auto_report_hint">Invia anche i testi messi a tempo a mano in precedenza.</string>
     <string name="lyrics_romanized">In lettere latine</string>
     <string name="lyrics_romaji_typed">Romaji come si digita</string>
     <string name="lyrics_katakana_as_hiragana">Katakana in hiragana</string>

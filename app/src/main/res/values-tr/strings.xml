@@ -322,6 +322,7 @@
     <string name="singing_model_download">İndir</string>
     <string name="singing_model_close">Şimdi değil</string>
     <string name="setting_auto_report">Şarkı sorunlarını otomatik bildir</string>
+    <string name="setting_auto_report_hint">Daha önce elle zamanladığınız sözleri de gönderir.</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_katakana_as_hiragana">Katakana hiragana olarak</string>

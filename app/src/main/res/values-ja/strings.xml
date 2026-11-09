@@ -323,6 +323,7 @@
     <string name="singing_model_download">ダウンロード</string>
     <string name="singing_model_close">今はしない</string>
     <string name="setting_auto_report">曲の問題を自動で報告</string>
+    <string name="setting_auto_report_hint">以前に手動でタイミングを合わせた歌詞も送ります。</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_katakana_as_hiragana">カタカナもひらがなで</string>

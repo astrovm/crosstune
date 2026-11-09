@@ -343,6 +343,7 @@
     <string name="singing_model_download">Download</string>
     <string name="singing_model_close">Not now</string>
     <string name="setting_auto_report">Report song problems automatically</string>
+    <string name="setting_auto_report_hint">Sends words you put in time by hand earlier, too.</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_katakana_as_hiragana">Katakana as hiragana</string>

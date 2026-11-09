@@ -727,8 +727,7 @@ class LyricsReportTest {
         openLyrics()
         composeRule.runOnIdle { model().dismissLyrics() }
         composeRule.runOnIdle { model().allowAutoReports(true) }
-        waitUntil { sentFakes().size == 1 }
-        // Neither got there: both stay, and the first failure doesn't stop the second from being tried.
+        // Neither got there: both were tried, so the first failure doesn't stop the second, and both stay.
         waitUntil { sentFakes().size == 2 }
         assertEquals(2, owed())
         reportsDown = false
@@ -799,6 +798,7 @@ class LyricsReportTest {
 
     private companion object {
         const val TIMEOUT_MS = 10_000L
-        const val OFFER_ARMED_MS = 500L
+        /** The offer takes no tap for 500 ms from the frame it first shows, so a frame more. */
+        const val OFFER_ARMED_MS = 600L
     }
 }

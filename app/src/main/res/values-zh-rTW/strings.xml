@@ -322,6 +322,7 @@
     <string name="singing_model_download">下載</string>
     <string name="singing_model_close">暫不</string>
     <string name="setting_auto_report">自動回報歌曲問題</string>
+    <string name="setting_auto_report_hint">也會傳送你之前手動對時的歌詞。</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
     <string name="lyrics_katakana_as_hiragana">片假名顯示為平假名</string>

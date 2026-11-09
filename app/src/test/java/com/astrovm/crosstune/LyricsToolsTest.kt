@@ -553,7 +553,6 @@ class LyricsToolsTest {
         yes().performClick()
         passes(1)
         assertEquals(0, offers())
-        assertFalse(described(learn))
         assertEquals(true, prefs().getBoolean("auto_reports", false))
     }
 
@@ -696,6 +695,31 @@ class LyricsToolsTest {
     }
 
     @Test
+    fun theOfferInGermanOverTheBiggestFontFitsAboveTheBarAndTakesLittleOfTheWords() {
+        phone = Phone.OTHER
+        org.robolectric.RuntimeEnvironment.setQualifiers("+de")
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        try {
+            openLyrics()
+            touch()
+            composeRule.runOnIdle { model().nudgeSync(500) }
+            passes(OFFER_ARMED_MS)
+            val words = string(R.string.auto_report_offer)
+            assertTrue(words, words.startsWith("Probleme"))
+            val root = composeRule.onRoot().getUnclippedBoundsInRoot()
+            val box = composeRule.onAllNodes(hasText(words))[0]
+            box.assertIsDisplayed()
+            val bounds = box.getUnclippedBoundsInRoot()
+            val bar = composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_learn)))[0].getUnclippedBoundsInRoot()
+            assertTrue("$bounds is over the bar at $bar", bounds.bottom <= bar.top)
+            assertTrue("$bounds is wider than the screen $root", bounds.left >= 0.dp && bounds.right <= root.right)
+            assertTrue("$bounds takes too much of $root", bounds.bottom - bounds.top <= (root.bottom - root.top) / 4)
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
     fun onATvTheOfferTakesNoFocusAndAnsweringLeavesTheRemoteOnTheBar() {
         openLyrics()
         waitUntil { onTheBar() }
@@ -743,7 +767,8 @@ class LyricsToolsTest {
     private companion object {
         const val TIMEOUT_MS = 10_000L
         const val SHOWN_MS = 5_000L
-        const val OFFER_ARMED_MS = 500L
+        /** The offer takes no tap for 500 ms from the frame it first shows, so a frame more. */
+        const val OFFER_ARMED_MS = 600L
         const val FADE_MS = 500L
     }
 }

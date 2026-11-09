@@ -322,6 +322,7 @@
     <string name="singing_model_download">Herunterladen</string>
     <string name="singing_model_close">Jetzt nicht</string>
     <string name="setting_auto_report">Song-Probleme automatisch melden</string>
+    <string name="setting_auto_report_hint">Sendet auch Songtexte, die du früher von Hand zeitlich gesetzt hast.</string>
     <string name="lyrics_romanized">In lateinischen Buchstaben</string>
     <string name="lyrics_romaji_typed">Romaji wie getippt</string>
     <string name="lyrics_katakana_as_hiragana">Katakana als Hiragana</string>
