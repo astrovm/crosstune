@@ -91,7 +91,7 @@ internal object ChordSheets {
     private val jTotalLineEnd = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
 
     /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
-    private val jTotalChord = Regex("""<a [^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
+    private val jTotalChord = Regex("""<a [^>]*cd/[^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
 
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
     private val splitChord = Regex("""^([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
@@ -150,7 +150,7 @@ internal object ChordSheets {
         while (index < lines.size) {
             val line = lines[index++]
             if (!jTotalChord.containsMatchIn(line) && !splitChord.containsMatchIn(line)) {
-                result += SheetLine(line, emptyList())
+                result += SheetLine(line.replace(markup, ""), emptyList())
                 continue
             }
             val chords = mutableListOf<Pair<Int, String>>()
@@ -172,7 +172,7 @@ internal object ChordSheets {
             }
             val words = lines.getOrNull(index)?.takeUnless {
                 jTotalChord.containsMatchIn(it) || splitChord.containsMatchIn(it)
-            }
+            }?.replace(markup, "")
             if (words != null) index++
             result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at), name) })
         }

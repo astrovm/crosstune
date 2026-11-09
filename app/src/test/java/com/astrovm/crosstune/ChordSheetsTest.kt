@@ -369,7 +369,7 @@ class ChordSheetsTest {
 
     @Test
     fun jTotalCollapsesSpacesInsideChordLinks() {
-        val sheet = "<a href='c'> C</a> ${jTotal("F")}<br>abcd"
+        val sheet = "<a href='../../../cd/C.html'> C</a> ${jTotal("F")}<br>abcd"
         assertEquals(
             listOf(SheetLine("abcd", listOf(Chord(0, "C"), Chord(2, "F")))),
             ChordSheets.fromJTotal(sheet)
@@ -378,9 +378,18 @@ class ChordSheetsTest {
 
     @Test
     fun jTotalIgnoresAChordLinkWithOnlyWhitespace() {
-        val sheet = "${jTotal("C")}<a href='empty'> \n </a> ${jTotal("G")}<br>abcd"
+        val sheet = "${jTotal("C")}<a href='../../../cd/C.html'> \n </a> ${jTotal("G")}<br>abcd"
         assertEquals(
             listOf(SheetLine("abcd", listOf(Chord(0, "C"), Chord(2, "G")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
+        val sheet = "<a href='song-e.html'>Easy version</a><br>${jTotal("C")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("Easy version", emptyList()), SheetLine("abcd", listOf(Chord(0, "C")))),
             ChordSheets.fromJTotal(sheet)
         )
     }
