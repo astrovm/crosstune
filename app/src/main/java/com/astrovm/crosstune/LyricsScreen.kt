@@ -2052,13 +2052,28 @@ private fun chordedWords(line: LyricLine, text: String, written: AnnotatedString
  */
 private fun chordPlaces(chords: List<Chord>, widths: List<Float>, words: TextLayoutResult, width: Float, gap: Float): List<Offset> {
     val rows = chords.map { words.getLineForOffset(it.at.coerceIn(0, words.layoutInput.text.length)) }
-    val xs = chords.mapIndexed { index, chord -> words.getHorizontalPosition(chord.at.coerceIn(0, words.layoutInput.text.length), usePrimaryDirection = true) }.toMutableList()
-    for (index in 1 until xs.size) if (rows[index] == rows[index - 1]) xs[index] = maxOf(xs[index], xs[index - 1] + widths[index - 1] + gap)
+    val natural = chords.map { words.getHorizontalPosition(it.at.coerceIn(0, words.layoutInput.text.length), usePrimaryDirection = true) }
+    val xs = spreadChords(natural, rows, widths, width, gap)
+    return xs.mapIndexed { index, x -> Offset(x, words.getLineTop(rows[index])) }
+}
+
+/**
+ * Where each chord's name starts, from the [natural] spot over its letter: on its [rows], moved right
+ * past the one before so none overlap, and back left from the [width]'s edge, the ones before it with it.
+ * A row with too many chords for its width shrinks the [gap] between them, so the first ones aren't
+ * left stacked on the edge.
+ */
+internal fun spreadChords(natural: List<Float>, rows: List<Int>, widths: List<Float>, width: Float, gap: Float): List<Float> {
+    val gaps = rows.indices.groupBy { rows[it] }.mapValues { (_, on) ->
+        minOf(gap, ((width - on.sumOf { widths[it].toDouble() }.toFloat()) / (on.size - 1).coerceAtLeast(1)).coerceAtLeast(0f))
+    }
+    val xs = natural.toMutableList()
+    for (index in 1 until xs.size) if (rows[index] == rows[index - 1]) xs[index] = maxOf(xs[index], xs[index - 1] + widths[index - 1] + gaps.getValue(rows[index]))
     for (index in xs.indices.reversed()) {
-        val limit = if (index + 1 < xs.size && rows[index + 1] == rows[index]) xs[index + 1] - gap else width
+        val limit = if (index + 1 < xs.size && rows[index + 1] == rows[index]) xs[index + 1] - gaps.getValue(rows[index]) else width
         xs[index] = minOf(xs[index], limit - widths[index]).coerceAtLeast(0f)
     }
-    return xs.mapIndexed { index, x -> Offset(x, words.getLineTop(rows[index])) }
+    return xs
 }
 
 /** How big chords are beside the words. */

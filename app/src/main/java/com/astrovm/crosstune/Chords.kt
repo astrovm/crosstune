@@ -10,7 +10,10 @@ internal data class Chord(val at: Int, val name: String)
 internal data class SheetLine(val text: String, val chords: List<Chord>)
 
 /** Where a song's chords were found. */
-internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA, CIFRA_CLUB, J_TOTAL }
+internal enum class ChordSite { U_FRET, ULTIMATE_GUITAR, LA_CUERDA, CIFRA_CLUB, J_TOTAL, CHORDWIKI }
+
+/** ChordWiki's sheet as its text names it: the lines, the fret a capo goes on, and the title and singer. */
+internal data class ChordWikiSong(val lines: List<SheetLine>, val capo: Int = 0, val title: String = "", val artist: String = "")
 
 /** A song's chords as a sheet has them, with the fret a capo goes on to play them, and where it's from. */
 internal data class ChordSheet(val lines: List<SheetLine>, val capo: Int = 0, val site: ChordSite, val url: String)
@@ -77,6 +80,9 @@ internal object ChordSheets {
     private const val LETTER_MS = 150L
 
     private val inline = Regex("""\[([^\]]*)]""")
+
+    /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
+    private val reading = Regex("""(?<=\p{IsHan})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
     private val ugChord = Regex("""\[ch]([^\[]*)\[/ch]""")
     private val ugTab = Regex("""\[/?tab]""")
     private val section = Regex("""^\s*\[[^\]]*]\s*$""")
@@ -327,6 +333,174 @@ internal object ChordSheets {
         return words.length
     }
 
+    /** A ChordPro directive name, as `{title:…}` and `{start_of_tab}` write it. */
+    private val directiveName = Regex("""[a-z_][a-z0-9_]*""")
+
+    /** The longest editor on an edit page; a page with none is the ChordPro text itself. */
+    private val textarea = Regex("""<textarea\b[^>]*>(.*?)</textarea>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+
+    /** A chord token: a letter root, then only what a chord name uses, and not a whole word. */
+    private val chordToken = Regex("""[A-G][0-9A-Za-z#/()+\-]*""")
+    private val letterRun = Regex("""[A-Za-z]{4,}""")
+    private val chordWord = Regex("""maj|min|sus|add|dim|aug""")
+
+    /** `(4/4)` at the start of a line, which is not sung and not part of where a chord sits. */
+    private val timeSignature = Regex("""^\(\d+/\d+\)""")
+
+    /**
+     * Who sings it, after 歌 and a colon (half or full width). The credit that follows (作詞, 作曲,
+     * 編曲, 歌詞) is not their name. A subtitle with no such mark is the name itself.
+     */
+    private val sungBy = Regex("""歌[:：][\s　]*(.+?)(?=[\s　]*(?:作詞|作曲|編曲|歌詞)|$)""")
+
+    /** Title, singer and capo read so far, and whether a tab or grid is open. */
+    private data class ChordWikiHead(
+        val title: String = "",
+        val artist: String = "",
+        val capo: Int = 0,
+        val capoSet: Boolean = false,
+        val inTab: Boolean = false
+    )
+
+    /**
+     * ChordWiki's [source], ChordPro as its editor has it, or the edit page that holds that editor.
+     * A `#` ends a note, `{…}` is a direction rather than a line sung, and `[Am]` is the chord played
+     * on the letter it stands before. Bars and a leading time signature are not part of the words.
+     */
+    fun fromChordWiki(source: String): ChordWikiSong {
+        var head = ChordWikiHead()
+        val lines = mutableListOf<SheetLine>()
+        for (raw in chordWikiText(source).lineSequence()) {
+            val line = chordWikiBare(raw).trim()
+            val directive = chordWikiDirectiveLine(line)
+            if (directive != null) {
+                head = chordWikiApply(head, directive)
+                continue
+            }
+            if (head.inTab || line.isEmpty()) continue
+            chordWikiLine(line)?.let { lines += it }
+        }
+        return ChordWikiSong(lines, head.capo, head.title, head.artist)
+    }
+
+    /** `{…}` when [line] is one directive, braces included. */
+    private fun chordWikiDirectiveLine(line: String): Pair<String, String>? =
+        line.takeIf { it.startsWith("{") && it.endsWith("}") }?.let(::chordWikiDirective)
+
+    /** [head] after one directive. The first title, singer and capo stay; a bad capo leaves room for a later one. */
+    private fun chordWikiApply(head: ChordWikiHead, directive: Pair<String, String>): ChordWikiHead {
+        val (name, value) = directive
+        return when (name) {
+            "title", "t" -> if (head.title.isNotEmpty() || value.isEmpty()) head else head.copy(title = value)
+            "subtitle", "st" -> chordWikiNamed(head, value)
+            "capo" -> chordWikiCapoOn(head, value)
+            else -> head.copy(inTab = chordWikiInTab(name, head.inTab))
+        }
+    }
+
+    /** [head] with the singer [subtitle] names, when it doesn't already name one. */
+    private fun chordWikiNamed(head: ChordWikiHead, subtitle: String): ChordWikiHead {
+        if (head.artist.isNotEmpty()) return head
+        val artist = chordWikiArtist(subtitle)
+        return if (artist.isEmpty()) head else head.copy(artist = artist)
+    }
+
+    /** [head] with the fret [value] names, when no capo was set yet and [value] is one. */
+    private fun chordWikiCapoOn(head: ChordWikiHead, value: String): ChordWikiHead {
+        if (head.capoSet) return head
+        val capo = chordWikiCapo(value) ?: return head
+        return head.copy(capo = capo, capoSet = true)
+    }
+
+    /** The ChordPro text: the longest textarea on an edit page, or [page] when it has none. An empty editor stays empty. */
+    private fun chordWikiText(page: String): String {
+        val editors = textarea.findAll(page).map { it.groupValues[1] }.toList()
+        if (editors.isEmpty()) return page
+        return ChordFinder.unescape(editors.maxBy { it.length })
+    }
+
+    /** [line] up to a `#` that isn't inside a chord, so `[C#m]` stays and the note after it doesn't. */
+    private fun chordWikiBare(line: String): String = buildString {
+        var depth = 0
+        for (ch in line) {
+            if (ch == '#' && depth == 0) break
+            if (ch == '[') depth++ else if (ch == ']' && depth > 0) depth--
+            append(ch)
+        }
+    }
+
+    /** `{name}` or `{name: value}` when [line] is one directive, braces included. */
+    private fun chordWikiDirective(line: String): Pair<String, String>? {
+        val body = line.substring(1, line.lastIndex)
+        val colon = body.indexOf(':')
+        val name = (if (colon < 0) body else body.substring(0, colon)).trim().lowercase()
+        if (!directiveName.matches(name)) return null
+        val value = if (colon < 0) "" else body.substring(colon + 1).trim()
+        return name to value
+    }
+
+    /** The singer named in a subtitle, or nothing when it names nobody. */
+    private fun chordWikiArtist(subtitle: String): String {
+        sungBy.find(subtitle)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return subtitle.substringBefore("作詞").substringBefore("作曲").substringBefore("編曲").substringBefore("歌詞").trim()
+    }
+
+    /** The fret [value] names, when it's a guitar fret; words and a number past the neck are not. */
+    private fun chordWikiCapo(value: String): Int? {
+        val number = Regex("""\d+""").find(value)?.value?.toIntOrNull() ?: return null
+        return number.takeIf { it <= 24 }
+    }
+
+    /** Whether [name] opens or closes a tab or grid, leaving [inTab] as it was for any other directive. */
+    private fun chordWikiInTab(name: String, inTab: Boolean): Boolean = when (name) {
+        "sot", "start_of_tab", "sog", "start_of_grid" -> true
+        "eot", "end_of_tab", "eog", "end_of_grid" -> false
+        else -> inTab
+    }
+
+    /**
+     * One ChordPro line. A bracket that isn't a chord is dropped, not sung. A line of chords and
+     * bars, with no letters left, keeps where each chord sat and has no words. Nothing at all is omitted.
+     */
+    private fun chordWikiLine(line: String): SheetLine? {
+        val bare = line.replace("|", "")
+        val body = bare.removePrefix(timeSignature.find(bare)?.value.orEmpty())
+        val chords = mutableListOf<Chord>()
+        val text = StringBuilder()
+        var from = 0
+        inline.findAll(body).forEach { match ->
+            text.append(body, from, match.range.first)
+            val name = match.groupValues[1].trim()
+            if (chordWikiChord(name)) chords += Chord(text.length, name)
+            from = match.range.last + 1
+        }
+        text.append(body.substring(from))
+        val (words, placed) = withoutReadings(text.toString(), chords)
+        if (placed.isEmpty() && words.none { it.isLetter() }) return null
+        return SheetLine(if (words.any { it.isLetter() }) words else "", placed)
+    }
+
+    /**
+     * [words] without the readings ChordWiki writes after a kanji, "川(かわ)", which are not sung, with
+     * each of [chords] still before the letter it was. A chord inside a reading goes where the reading was.
+     * Left in, they are letters the song never has, and a line that is mostly readings looks like another verse.
+     */
+    private fun withoutReadings(words: String, chords: List<Chord>): Pair<String, List<Chord>> {
+        val ranges = reading.findAll(words).map { it.range }.toList()
+        if (ranges.isEmpty()) return words to chords
+        return reading.replace(words, "") to chords.map { chord ->
+            val gone = ranges.sumOf { range -> (minOf(chord.at, range.last + 1) - range.first).coerceAtLeast(0) }
+            chord.copy(at = chord.at - gone)
+        }
+    }
+
+    /** [name] is a chord, including N.C., and not a word or a section such as Chorus or サビ. */
+    private fun chordWikiChord(name: String): Boolean {
+        if (name.equals("N.C.", ignoreCase = true) || name.equals("NC", ignoreCase = true)) return true
+        if (name.length > 15 || !chordToken.matches(name)) return false
+        return letterRun.findAll(name).all { chordWord.containsMatchIn(it.value) }
+    }
+
     /**
      * Ultimate Guitar's sheet: a line of chords over the line of words they're played on, each over
      * the letter it starts on; a line of chords with no words under it is played on its own.
@@ -365,12 +539,39 @@ internal object ChordSheets {
     }
 
     /**
+     * How [sheet] lines up with the words shown. [placed] is null when its words aren't this song,
+     * or when none of its chords land on them. [lines] is each sheet line: how many of its letters
+     * lined up, and which of its chords were drawn. A line under [GOOD_LINE] keeps a chord when the
+     * line is too short to be another verse, or when the letter that chord is played on lined up.
+     */
+    internal data class ChordAlign(
+        val placed: List<LineChords>?,
+        val matchedLetters: Int,
+        val letters: Int,
+        val runs: Int,
+        val lines: List<LineFit>,
+    )
+
+    /** One sheet line. [drawn] is the chords that landed, in the order they were on the page. */
+    internal data class LineFit(val chords: List<String>, val letters: Int, val matched: Int, val drawn: List<String>)
+
+    /**
      * The [sheet]'s chords over each of [texts], the lines shown; null when its words aren't these,
      * as for another song of the same name, and when none of its chords land on them, as for a page of
      * the words alone.
      */
-    fun place(sheet: ChordSheet, texts: List<String>): List<LineChords>? =
-        (placeIn(sheet, texts) ?: placeRomanized(sheet, texts))?.takeUnless { placed -> placed.all { it.isEmpty } }
+    fun place(sheet: ChordSheet, texts: List<String>): List<LineChords>? = align(sheet, texts).placed
+
+    /** [place], plus the letter match and which chords were left off a line. */
+    fun align(sheet: ChordSheet, texts: List<String>): ChordAlign {
+        val direct = matchLines(sheet, texts)
+        if (direct.placed != null) return direct.copy(placed = direct.placed.takeUnless { lines -> lines.all { it.isEmpty } })
+        val said = said(texts) ?: return direct
+        val roman = matchLines(sheet, said)
+        if (roman.placed == null) return direct
+        val shown = romanizedChords(roman.placed, texts, said)
+        return roman.copy(placed = shown.takeUnless { lines -> lines.all { it.isEmpty } })
+    }
 
     /** The lines [texts] as they read in Latin letters, kept for the next sheet tried: the same words are put against several. */
     private var lastTexts: List<String>? = null
@@ -384,56 +585,131 @@ internal object ChordSheets {
         lastSaid
     }
 
-    /**
-     * Words in Japanese, Chinese or Korean against a sheet that writes them in Latin letters, as
-     * most of them are for such songs on Ultimate Guitar: the words as they read, and each chord on
-     * the same part of its line as it was, since the letters no longer line up with the written ones.
-     */
-    private fun placeRomanized(sheet: ChordSheet, texts: List<String>): List<LineChords>? {
-        val said = said(texts) ?: return null
-        val placed = placeIn(sheet, said) ?: return null
-        return placed.mapIndexed { number, line ->
+    /** Chords placed on the romanized words, moved back onto the letters that are shown. */
+    private fun romanizedChords(placed: List<LineChords>, texts: List<String>, said: List<String>): List<LineChords> =
+        placed.mapIndexed { number, line ->
             val length = texts[number].length
             val readLength = said[number].length.coerceAtLeast(1)
             LineChords(line.before, line.over.map { chord -> Chord((chord.at.toLong() * length / readLength).toInt().coerceIn(0, length), chord.name) })
         }
-    }
 
-    private fun placeIn(sheet: ChordSheet, texts: List<String>): List<LineChords>? {
+    /** The match of [sheet]'s letters to [texts]. [ChordAlign.placed] is every chord laid down, before a page of the words alone is told apart. */
+    private fun matchLines(sheet: ChordSheet, texts: List<String>): ChordAlign {
         val lines = inScriptOf(sheet.lines, texts)
         val ours = Letters(texts)
         val theirs = Letters(lines.map { it.text })
-        if (theirs.size < MIN_LETTERS || ours.size == 0) return null
-        val matchedAt = BorrowedTimings.lineUp(ours.keys, theirs.keys) ?: return null
         val fewer = minOf(theirs.size, ours.size)
-        if (matchedAt.count { it >= 0 } < fewer * GOOD_LETTERS) return null
-        if ((1 until matchedAt.size).count { matchedAt[it - 1] >= 0 && matchedAt[it] == matchedAt[it - 1] + 1 } < fewer * GOOD_RUNS) return null
+        val unmatched = lines.map { LineFit(it.chords.map { chord -> chord.name }, 0, 0, emptyList()) }
+        if (theirs.size < MIN_LETTERS || ours.size == 0) return ChordAlign(null, 0, fewer, 0, unmatched)
+        val matchedAt = BorrowedTimings.lineUp(ours.keys, theirs.keys) ?: return ChordAlign(null, 0, fewer, 0, unmatched)
+        val matched = matchedAt.count { it >= 0 }
+        val runs = (1 until matchedAt.size).count { at -> matchedAt[at - 1] >= 0 && matchedAt[at] == matchedAt[at - 1] + 1 }
+        val fits = lines.mapIndexed { number, line ->
+            val letters = theirs.of(number)
+            LineFit(line.chords.map { chord -> chord.name }, letters.size, letters.count { matchedAt[it] >= 0 }, emptyList())
+        }
+        if (matched < fewer * GOOD_LETTERS || runs < fewer * GOOD_RUNS) return ChordAlign(null, matched, fewer, runs, fits)
+        return layChords(lines, texts, ours, theirs, matchedAt, ChordAlign(null, matched, fewer, runs, fits))
+    }
 
+    /**
+     * The chords of [lines] over [texts]. A chord line with no words waits for the next one that is
+     * kept, and what's still waiting after the last line is played at the end of it. A line under
+     * [GOOD_LINE] keeps its chords when it has too few letters to be another verse. A longer one keeps
+     * only a chord played on a letter that lined up.
+     */
+    private fun layChords(
+        lines: List<SheetLine>,
+        texts: List<String>,
+        ours: Letters,
+        theirs: Letters,
+        matchedAt: IntArray,
+        soFar: ChordAlign,
+    ): ChordAlign {
         val before = Array(texts.size) { mutableListOf<String>() }
         val over = Array(texts.size) { mutableListOf<Chord>() }
-        // Chords played on their own, waiting for the next line sung.
         val waiting = mutableListOf<String>()
+        val waitingLine = mutableListOf<Int>()
+        val landed = MutableList(lines.size) { mutableListOf<String>() }
+        fun hold(line: SheetLine, number: Int) {
+            line.chords.forEach { chord ->
+                waiting += chord.name
+                waitingLine += number
+            }
+        }
+        // [chords] of this line. A kept line with none of its own still takes what was waiting on it.
+        fun place(number: Int, letters: List<Int>, chords: List<Chord>) {
+            if (letters.none { matchedAt[it] >= 0 } || (chords.isEmpty() && waiting.isEmpty())) return
+            landWaiting(waiting, waitingLine, landed, before, texts, lineAt(letters, ours, matchedAt))
+            chords.forEach { chord ->
+                placeChord(chord, letters, theirs, ours, matchedAt)?.let { (at, char) ->
+                    over[at] += Chord(char, chord.name)
+                    landed[number] += chord.name
+                }
+            }
+        }
         lines.forEachIndexed { number, line ->
             val letters = theirs.of(number)
             if (letters.isEmpty()) {
-                waiting += line.chords.map { it.name }
-                return@forEachIndexed
-            }
-            // Its words aren't the song's, as for a verse the song doesn't have: neither are its chords.
-            if (letters.count { matchedAt[it] >= 0 } < letters.size * GOOD_LINE) return@forEachIndexed
-            val anchor = letters.first { matchedAt[it] >= 0 }
-            val lineAt = ours.line[matchedAt[anchor]]
-            if (waiting.isNotEmpty()) {
-                // Into the gap before the line, when the words show one, e.g. for a solo.
-                val gap = lineAt - 1
-                (if (gap >= 0 && texts[gap].isBlank() && before[gap].isEmpty()) before[gap] else before[lineAt]) += waiting
-                waiting.clear()
-            }
-            line.chords.forEach { chord ->
-                placeChord(chord, letters, theirs, ours, matchedAt)?.let { (at, char) -> over[at] += Chord(char, chord.name) }
+                hold(line, number)
+            } else if (underLine(letters, matchedAt) && letters.size < MIN_LETTERS) {
+                hold(line, number)
+            } else if (underLine(letters, matchedAt)) {
+                place(number, letters, line.chords.filter { onMatchedLetter(it, letters, theirs, matchedAt) })
+            } else {
+                place(number, letters, line.chords)
             }
         }
-        return texts.indices.map { LineChords(before[it], over[it].sortedBy { chord -> chord.at }) }
+        landRest(waiting, waitingLine, landed, over, texts)
+        val raw = texts.indices.map { LineChords(before[it], over[it].sortedBy { chord -> chord.at }) }
+        val fits = soFar.lines.mapIndexed { index, fit -> fit.copy(drawn = landed[index]) }
+        return soFar.copy(placed = raw, lines = fits)
+    }
+
+    /** A line with words, under [GOOD_LINE]: too little of it is this song to take the line as a whole. */
+    private fun underLine(letters: List<Int>, matchedAt: IntArray): Boolean =
+        letters.count { matchedAt[it] >= 0 } < letters.size * GOOD_LINE
+
+    /** The letter [chord] is played on lined up with the words shown. */
+    private fun onMatchedLetter(chord: Chord, letters: List<Int>, theirs: Letters, matchedAt: IntArray): Boolean {
+        val on = letters.firstOrNull { theirs.char[it] >= chord.at }
+        return matchedAt[on ?: letters.last()] >= 0
+    }
+
+    /** Chords still waiting once the lines have been read, drawn after the last line's own. */
+    private fun landRest(
+        waiting: MutableList<String>,
+        waitingLine: MutableList<Int>,
+        landed: MutableList<MutableList<String>>,
+        over: Array<MutableList<Chord>>,
+        texts: List<String>,
+    ) {
+        if (waiting.isEmpty()) return
+        // Some line has letters, or nothing would have been matched, so there is a last line with words.
+        val last = texts.indexOfLast { it.isNotBlank() }
+        over[last] += waiting.map { name -> Chord(texts[last].length, name) }
+        waiting.forEachIndexed { index, name -> landed[waitingLine[index]] += name }
+    }
+
+    private fun lineAt(letters: List<Int>, ours: Letters, matchedAt: IntArray): Int {
+        val anchor = letters.first { matchedAt[it] >= 0 }
+        return ours.line[matchedAt[anchor]]
+    }
+
+    private fun landWaiting(
+        waiting: MutableList<String>,
+        waitingLine: MutableList<Int>,
+        landed: MutableList<MutableList<String>>,
+        before: Array<MutableList<String>>,
+        texts: List<String>,
+        lineAt: Int,
+    ) {
+        if (waiting.isEmpty()) return
+        val gap = lineAt - 1
+        (if (gap >= 0 && texts[gap].isBlank() && before[gap].isEmpty()) before[gap] else before[lineAt]) += waiting
+        waiting.forEachIndexed { index, name -> landed[waitingLine[index]] += name }
+        waiting.clear()
+        waitingLine.clear()
     }
 
     private fun latin(text: String): Boolean = text.filter(Char::isLetter).let { letters -> letters.isNotEmpty() && letters.count { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.LATIN } * 2 > letters.length }
