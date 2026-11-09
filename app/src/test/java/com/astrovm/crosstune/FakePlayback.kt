@@ -82,15 +82,39 @@ internal class FakePlayback : PlaybackSource {
     /** Runs when an app is asked to play, for a test to have the app do as it would, e.g. pause itself. */
     var onPlay: (String?, Boolean) -> Unit = { _, _ -> }
 
+    /** Whether the app goes where it's sent, and plays or pauses when asked, saying so as it does; false as one that ignores it. */
+    var obeys = true
+
+    /** What [app] plays, as followed: its own when a test has it apart, else [playing]. */
+    private fun flowOf(app: String?) = app?.let(appPlaying::get) ?: playing
+
+    /** Has what [app] plays say it's at [positionMs], playing or not, from now, as an app does once it's done what it was asked. */
+    private fun moved(app: String?, positionMs: (PlaybackClock, Long) -> Long, playing: (PlaybackClock) -> Boolean) {
+        val flow = flowOf(app)
+        val now = flow.value ?: return
+        val at = System.currentTimeMillis()
+        if (obeys) flow.value = now.copy(clock = PlaybackClock(positionMs(now.clock, at), at, now.clock.speed, playing(now.clock)))
+    }
+
     override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
         seeks += positionMs
         seekedApps += app
+        moved(app, { _, _ -> positionMs }, { it.playing })
     }
 
     override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
         plays += play
         playedApps += app
+        moved(app, { clock, at -> clock.positionAt(at) }, { play })
         onPlay(app, play)
+    }
+
+    /** Each app paused whatever it played, by package. */
+    val pausedApps: MutableList<String> = CopyOnWriteArrayList()
+
+    override fun pauseApp(app: String) {
+        pausedApps += app
+        moved(app, { clock, at -> clock.positionAt(at) }, { false })
     }
 
     // Asked to play on, as the phone's, it does unless it only plays in front.

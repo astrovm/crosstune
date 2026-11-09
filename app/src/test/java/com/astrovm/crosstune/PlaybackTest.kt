@@ -172,6 +172,7 @@ class PlaybackTest {
         val seen = followed(raining)
         // It's the song, waiting at its start, as long as the song is, and the ad's length is never kept as one of the song's.
         assertEquals(PlaybackClock(0, PLAYED_AT, playing = false), seen.last()!!.clock)
+        assertTrue(seen.last()!!.ad)
         assertEquals(325_474L, seen.last()!!.durationMs)
         assertEquals(325_474L, playback.nowPlaying()!!.metadata.lengthMs)
         assertNull(playback.nowPlaying()!!.offsetMs)
@@ -184,6 +185,7 @@ class PlaybackTest {
         shadowOf(music).executeOnPlaybackStateChanged(music.playbackState)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(PlaybackClock(0, PLAYED_AT + 15_069), seen.last()!!.clock)
+        assertFalse(seen.last()!!.ad)
         assertEquals(325_474L, seen.last()!!.durationMs)
     }
 
@@ -1552,6 +1554,35 @@ class PlaybackTest {
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
         shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours"))
         assertEquals("com.spotify.music", playback.appFor(song)?.packageName)
+    }
+
+    @Test
+    @Config(shadows = [AppAsked::class])
+    fun anAppIsPausedByItsNameWhateverItPlaysOnlyWhenItPlays() {
+        allow()
+        // TIDAL went on from the card's song into another; YouTube Music is paused already.
+        shadowOf(sessions).addController(player(MusicService.TIDAL.packageName, "TIDAL", "Wake Me Up Before You Go-Go", "Wham!"))
+        shadowOf(sessions).addController(player(MusicService.YOUTUBE_MUSIC.packageName, "YouTube Music", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
+        playback.pauseApp(MusicService.YOUTUBE_MUSIC.packageName)
+        assertEquals(emptyList<String>(), asked())
+        playback.pauseApp(MusicService.TIDAL.packageName)
+        assertEquals(listOf("pause"), asked())
+    }
+
+    @Test
+    fun anAppFollowedThatSaysItPlaysBeforeSayingItsNewSongIsNoLongerFollowed() {
+        allow()
+        val tidal = player(MusicService.TIDAL.packageName, "TIDAL", "Blinding Lights", "The Weeknd", album = "After Hours")
+        shadowOf(sessions).addController(tidal)
+        val seen = followed()
+        assertEquals(MusicService.TIDAL.packageName, seen.last()?.appPackage)
+        // Its preview over, it goes on to the next song, and says it plays before it says it's another.
+        shadowOf(tidal).setMetadata(
+            MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, "Wake Me Up Before You Go-Go").putString(MediaMetadata.METADATA_KEY_ARTIST, "Wham!").build()
+        )
+        shadowOf(tidal).executeOnPlaybackStateChanged(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f, PLAYED_AT).setActions(PlaybackState.ACTION_SEEK_TO).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(seen.last())
     }
 
     @Test

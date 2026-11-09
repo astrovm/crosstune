@@ -147,7 +147,9 @@ internal data class Following(
     /** What the app plays after it, as far as it says. */
     val upNext: List<Queued> = emptyList(),
     /** The list it plays from, when Crosstune is playing one through: see [PlayQueue]. */
-    val from: String? = null
+    val from: String? = null,
+    /** It plays an ad under the song's name, as YouTube Music's free plan does, and the song waits at its start: see [PlaybackClock]. */
+    val ad: Boolean = false
 )
 
 /**
@@ -185,6 +187,9 @@ internal interface PlaybackSource {
 
     /** Has the app playing [song], [app] when named, [play] it, or pause it. */
     fun playPause(song: MusicMetadata, play: Boolean, app: String? = null)
+
+    /** Pauses whatever [app], by package, plays: a song asked to play there may have gone on into another, which isn't left playing. */
+    fun pauseApp(app: String)
 
     /**
      * Has the app [song] is paused in play it on, from where it is, in the background. False when it
@@ -318,8 +323,9 @@ internal class MediaSessionPlayback(
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller))
         }
         val callback = object : MediaController.Callback() {
+            // Gone on to another song, as TIDAL does at the end of a preview, it plays this one no longer, even before it's said its new name.
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                trySend(followed?.let(::steadily))
+                trySend(followed?.takeIf { it.plays(song) }?.let(::steadily))
             }
 
             // What it plays next.
@@ -391,6 +397,13 @@ internal class MediaSessionPlayback(
     override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
         // Taken back meanwhile, the song just keeps on as it was.
         runCatching { appFor(song, app = app)?.transportControls?.run { if (play) play() else pause() } }
+    }
+
+    override fun pauseApp(app: String) {
+        // Taken back meanwhile, it plays on.
+        runCatching {
+            sessions.getActiveSessions(listener).filter { it.packageName == app && it.playbackState?.state == PlaybackState.STATE_PLAYING }.forEach { it.transportControls.pause() }
+        }
     }
 
     override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
@@ -752,7 +765,8 @@ internal class MediaSessionPlayback(
             durationMs = controller.metadata?.let { controller.lengthOf(it, asked) },
             shuffle = modes.shuffles(controller),
             repeat = modes.repeats(controller),
-            like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) }
+            like = state.customActions.firstOrNull { it.action in LIKES }?.let { AppAction(it.action, it.name.toString(), it.icon, liked(controller.packageName, it)) },
+            ad = ad
         )
     }
 
