@@ -234,7 +234,7 @@ Singing to the morning light</div>"""
     @Test
     fun jTotalsPageIsReadAsABrowserReadsShiftJis() {
         // The circled number and the wave dash are Windows-31J's. Java's Shift_JIS has none of the first.
-        val words = "好きと①った～"
+        val words = "好きと①った～".repeat(5)
         jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSong("${"x".repeat(14)}$jTotalChord", words)))
         val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
         assertEquals(words, found.sheet.lines.single().text)
