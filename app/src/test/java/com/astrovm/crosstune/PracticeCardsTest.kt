@@ -903,7 +903,14 @@ class PracticeCardsTest {
     }
 
     /** What the card said about finding its sound, when the log was asked for. */
-    private fun steps(): List<String> = ShadowLog.getLogsForTag(CHAIN_LOG).map { it.msg }
+    /**
+     * The card's log. A fake app's clock runs on while the test does, at its speed, so the position it
+     * played from is a few ms past the line's start on a slow machine: under a second is "0 ms", and a
+     * position off by more is still shown as it was.
+     */
+    private fun steps(): List<String> = ShadowLog.getLogsForTag(CHAIN_LOG).map { log ->
+        PLAYED_FROM.replace(log.msg) { if (it.groupValues[1].toLong() < 1_000) "from 0 ms" else it.value }
+    }
 
     @Test
     fun theStepsOfACardAreLoggedOnlyWhenTheLogIsAskedFor() {
@@ -1370,3 +1377,6 @@ private const val SPOTIFY_ID = "1demoAAAAAAAAAAAAAAAAA"
 
 /** The log tag a card's steps go to when it's asked for, which `adb shell setprop` names. */
 private const val CHAIN_LOG = "CrosstuneChain"
+
+/** The position a card played a line from, as its log says it: from +5 ms. */
+private val PLAYED_FROM = Regex("""from [+-]?(\d+) ms""")
