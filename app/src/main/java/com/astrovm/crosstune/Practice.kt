@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -84,8 +85,10 @@ internal fun songLines(lines: List<String>, words: List<String>): List<SongLine>
 }
 
 /**
- * Kept lines practised as cards, on [screen]: each card's line ready in the music app, and played
- * once it's turned, then said how well it was known.
+ * Kept lines practised as cards, on [screen]: each card's line ready in the best app the phone has for it, and
+ * played once it's turned, then said how well it was known. A card's line plays in the app the user prefers if
+ * it moves to the line and goes on playing with Crosstune in front, else in another that does, else in the small
+ * YouTube player, else it has no sound. What each app does is learned as cards use it, in [traits].
  */
 internal class PracticeCards(
     screen: MutableState<UiState>,
@@ -93,6 +96,7 @@ internal class PracticeCards(
     private val playback: PlaybackSource?,
     private val matcher: ExactMatcher,
     private val store: SavedLinesStore,
+    private val traits: AppTraitsStore,
     private val wallClock: () -> Long,
     private val now: () -> Long,
     private val reminders: PracticeReminders? = null,
@@ -111,8 +115,11 @@ internal class PracticeCards(
     /** The small player's picture for the card to show, which is made when asked for. */
     fun playerView(): android.view.View? = player()?.view()
 
-    /** The music apps seen playing a song and never offering to move in it, as Spotify's free plan, by package, so they're not asked again. */
-    private val cantMove = mutableSetOf<String>()
+    /** The apps that failed a card since Crosstune started, by package, so the next card doesn't wait on them again. */
+    private val unusable = mutableSetOf<String>()
+
+    /** The app the card's line plays in, for the pause that stops it. */
+    private var soundApp: String? = null
 
     /** How long each song is, by title and artist, as the music app said when it played it. */
     private val lengths = mutableMapOf<Pair<String, String>, Long>()
@@ -145,43 +152,119 @@ internal class PracticeCards(
     }
 
     /**
-     * Has the music app play [line], from where it's sung to the next line, then pause; or, when not
-     * [play] and the card isn't turned yet, only get there. A song it isn't playing it's asked to find first.
-     * When the app can't move to the line, as Spotify's free plan, the small YouTube player plays it.
+     * Has the best app play [line], from where it's sung to the next line, then pause; or, when not
+     * [play] and the card isn't turned yet, only get there. A song an app isn't playing it's asked to find first.
+     * When no app moves to the line and goes on playing, the small YouTube player plays it.
      */
     private fun sound(line: SavedLine, play: Boolean = true) {
         val source = playback ?: return
         soundJob?.cancel()
         soundJob = scope.launch {
             val song = MusicMetadata(line.title, line.artist)
-            if (line.app in cantMove || !inMusicApp(source, song, line, play)) inYouTube(line, play)
+            if (!inBestApp(source, song, line, play)) inYouTube(line, play)
         }
     }
 
-    /** Has the music app play [line], moving to it first. False when it can't be moved there, which the player then makes up for. */
-    private suspend fun inMusicApp(source: PlaybackSource, song: MusicMetadata, line: SavedLine, play: Boolean): Boolean =
-        inApp(source, song, line.app, onStuck = { following -> handOver(source, song, line, following) }) { app ->
-            val lead = if (app()?.video == true) line.leadMs else 0L
-            val start = (line.startMs ?: 0L) + lead
-            // A moment past where the words say it ends, so its last word isn't cut short.
-            val end = (line.endMs ?: 0L) + lead + MainViewModel.LINE_TAIL_MS
-            source.seekTo(song, start)
-            // Turned while the app got there, it plays now.
-            val now = play || uiState.practice?.turned == true
-            source.playPause(song, now)
-            if (!now) return@inApp setSound(line, LineSound.PLAYED)
-            setSound(line, LineSound.PLAYING)
-            // Once the app says it's there, it plays to the end of the line.
-            withTimeoutOrNull(SEEK_WAIT_MS) { while (app()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
-            withTimeoutOrNull(end - start + SEEK_WAIT_MS) { while ((app()?.clock?.positionAt(now()) ?: end) < end) delay(SOUND_CHECK_MS) }
-            source.playPause(song, false)
-            setSound(line, LineSound.PLAYED)
+    /** Goes through the apps [ranked] for [line], a few at most, until one plays it; false when none does. */
+    private suspend fun inBestApp(source: PlaybackSource, song: MusicMetadata, line: SavedLine, play: Boolean): Boolean {
+        val preferred = (uiState.defaultDestination as? Destination.Service)?.service
+        var tried = 0
+        for (app in ranked(line)) {
+            // An app that's neither preferred nor the one the line was kept from needs the song on its service, or it plays whatever it finds by the name.
+            val known = app == null || app == line.app || MusicService.ofPackage(app) == preferred
+            if (tried >= MAX_APPS || (!known && !hasSong(app, song))) continue
+            tried++
+            step("trying ${app ?: "any app"}")
+            if (inMusicApp(source, song, line, app, play)) return true
         }
+        return false
+    }
 
-    /** The music app [following] [song] won't move to the line, so it's paused, and not asked again, for the player to play it. */
-    private fun handOver(source: PlaybackSource, song: MusicMetadata, line: SavedLine, following: Following?) {
-        (following?.appPackage ?: line.app)?.let(cantMove::add)
-        if (following?.clock?.playing == true) source.playPause(song, false)
+    /** Whether the service [app] is of has [song], as its links say. */
+    private suspend fun hasSong(app: String?, song: MusicMetadata): Boolean =
+        MusicService.ofPackage(app)?.let { matcher.find(it, song) } != null
+
+    /**
+     * The apps to try for [line], best first: the user's preferred app, then those seen to move and go on playing,
+     * then those not seen yet, without the ones seen to fail, or failing a card since Crosstune started. The app
+     * [line] was kept from is one of them, too; with none known, any app that has the song.
+     */
+    private fun ranked(line: SavedLine): List<String?> {
+        val all = (uiState.musicApps + listOfNotNull(line.app)).distinct().filter { MusicService.ofPackage(it) != MusicService.YOUTUBE }
+        if (all.isEmpty()) return listOf(null)
+        val live = all.filter { it !in unusable && !traits.of(it).fails }
+        val preferred = (uiState.defaultDestination as? Destination.Service)?.let { destination ->
+            live.filter { MusicService.ofPackage(it) == destination.service }.sortedBy { it != destination.packageName }
+        }.orEmpty()
+        val others = live - preferred.toSet()
+        return preferred + others.filter { traits.of(it).works } + others.filter { !traits.of(it).works }
+    }
+
+    /**
+     * Has [app] play [line], moving to it first. False when it can't be moved there, or stops playing before the
+     * line is over, which the next app, or the player, then makes up for.
+     */
+    private suspend fun inMusicApp(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, play: Boolean): Boolean {
+        var kept = true
+        val moved = inApp(source, song, app, only = app, onStuck = { following -> stuck(source, song, app, following) }) { following ->
+            kept = playLine(source, song, line, app, play, following)
+        }
+        if (!moved || !kept) app?.let(unusable::add)
+        if (!moved) step("${app ?: "any app"} did not move to the line")
+        return moved && kept
+    }
+
+    /** Moves [app] to [line], plays it, and waits for its end; false when the app stopped playing before it. */
+    private suspend fun playLine(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, play: Boolean, following: () -> Following?): Boolean {
+        val packageName = app ?: following()?.appPackage
+        packageName?.let { traits.seeks(it, true) }
+        val lead = if (following()?.video == true) line.leadMs else 0L
+        val start = (line.startMs ?: 0L) + lead
+        // A moment past where the words say it ends, so its last word isn't cut short.
+        val end = (line.endMs ?: 0L) + lead + MainViewModel.LINE_TAIL_MS
+        source.seekTo(song, start, app)
+        // Turned while the app got there, it plays now.
+        val now = play || uiState.practice?.turned == true
+        source.playPause(song, now, app)
+        if (!now) return true.also { setSound(line, LineSound.PLAYED) }
+        soundApp = app
+        setSound(line, LineSound.PLAYING)
+        // Once the app says it's there, it plays to the end of the line.
+        withTimeoutOrNull(SEEK_WAIT_MS) { while (following()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
+        val kept = playsUntil(end, end - start + SEEK_WAIT_MS, following)
+        source.playPause(song, false, app)
+        packageName?.let { traits.keeps(it, kept) }
+        step("${packageName ?: "the app"} ${if (kept) "played the line" else "paused itself"}")
+        setSound(line, if (kept) LineSound.PLAYED else LineSound.LOADING)
+        return kept
+    }
+
+    /** Waits up to [within] for the app to play to [end], false if it paused itself on the way, as YouTube Music without Premium does. */
+    private suspend fun playsUntil(end: Long, within: Long, following: () -> Following?): Boolean {
+        var started = false
+        var pausedSince: Long? = null
+        return withTimeoutOrNull(within) {
+            while ((following()?.clock?.positionAt(now()) ?: end) < end) {
+                val playing = following()?.clock?.playing != false
+                started = started || playing
+                pausedSince = if (playing) null else pausedSince ?: now()
+                if (started && pausedSince?.let { now() - it >= PAUSED_FOR_MS } == true) return@withTimeoutOrNull false
+                delay(SOUND_CHECK_MS)
+            }
+            true
+        } ?: true
+    }
+
+    /** [app] plays the song and won't move in it, as Spotify's free plan: that's remembered, and it's paused, for the next app to play the line. */
+    private fun stuck(source: PlaybackSource, song: MusicMetadata, app: String?, following: Following?) {
+        (following?.appPackage ?: app)?.let { traits.seeks(it, false) }
+        step("${following?.appPackage ?: app ?: "the app"} plays and does not move")
+        if (following?.clock?.playing == true) source.playPause(song, false, app)
+    }
+
+    /** One step of a card finding its sound, to the log when it's asked for: `adb shell setprop log.tag.$CHAIN_LOG DEBUG`. */
+    private fun step(what: String) {
+        if (Log.isLoggable(CHAIN_LOG, Log.DEBUG)) Log.d(CHAIN_LOG, what)
     }
 
     /**
@@ -191,7 +274,8 @@ internal class PracticeCards(
     private suspend fun inYouTube(line: SavedLine, play: Boolean) {
         val player = player()
         val clip = if (player == null) null else videoOf(line)
-        if (player == null || clip == null) return setSound(line, LineSound.NONE)
+        if (player == null || clip == null) return setSound(line, LineSound.NONE).also { step("no sound") }
+        step("the YouTube player")
         val (video, expectedMs) = clip
         val start = line.startMs ?: 0L
         val end = (line.endMs ?: start) + MainViewModel.LINE_TAIL_MS
@@ -221,17 +305,17 @@ internal class PracticeCards(
     }
 
     /**
-     * Follows [song] in the music app, asking [app] for it by name when no app has it, then does
-     * [block] once it can be moved around in, with where it is as that changes. True when it could.
+     * Follows [song] in the music app, [only] the one of that package when named, asking [app] for it by name when no
+     * app has it, then does [block] once it can be moved around in, with where it is as that changes. True when it could.
      * When it's there and won't move, as Spotify's free plan, [onStuck] hears what it was doing.
      */
     private suspend fun inApp(
-        source: PlaybackSource, song: MusicMetadata, app: String?,
+        source: PlaybackSource, song: MusicMetadata, app: String?, only: String? = null,
         onStuck: (Following?) -> Unit = {}, block: suspend (() -> Following?) -> Unit
     ): Boolean = coroutineScope {
         var latest: Following? = null
         val following = launch {
-            source.follow(song).collect { latest = it; it?.durationMs?.let { length -> lengths[song.title to song.artist] = length } }
+            source.follow(song, only).collect { latest = it; it?.durationMs?.let { length -> lengths[song.title to song.artist] = length } }
         }
         try {
             val ready: suspend () -> Unit = { while (latest?.canSeek != true) delay(SOUND_CHECK_MS) }
@@ -324,7 +408,7 @@ internal class PracticeCards(
             soundJob = scope.launch { inYouTube(line, play = true) }
             return
         }
-        if (practice.video != null) made?.pause() else playback?.playPause(MusicMetadata(line.title, line.artist), false)
+        if (practice.video != null) made?.pause() else playback?.playPause(MusicMetadata(line.title, line.artist), false, soundApp)
         setSound(line, LineSound.PLAYED)
     }
 
@@ -366,7 +450,7 @@ internal class PracticeCards(
         soundJob?.cancel()
         soundJob = null
         made?.pause()
-        playing?.takeIf { it.video == null }?.line?.let { playback?.playPause(MusicMetadata(it.title, it.artist), false) }
+        playing?.takeIf { it.video == null }?.line?.let { playback?.playPause(MusicMetadata(it.title, it.artist), false, soundApp) }
         uiState = uiState.copy(practice = null)
     }
 
@@ -400,5 +484,10 @@ internal class PracticeCards(
         const val SOUND_CHECK_MS = 50L
         /** How long a song plays with no seek offered before the app's taken not to offer one. */
         const val STUCK_AFTER_MS = 1_000L
+        /** How many apps a card tries before the small player, so a phone full of music apps doesn't make it wait on all of them. */
+        const val MAX_APPS = 3
+        /** How long an app that was playing the line may stay paused before it's taken to have stopped itself. */
+        const val PAUSED_FOR_MS = 1_500L
+        const val CHAIN_LOG = "CrosstuneChain"
     }
 }

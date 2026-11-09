@@ -176,6 +176,8 @@ internal data class UiState(
     /** False until there's an app songs play in: the only music app, or the first one picked on a song. */
     val hasDefault: Boolean = true,
     val installed: Set<MusicService> = emptySet(),
+    /** Every package a music app is installed under, as many as a service has; see [LinkState.apps]. */
+    val musicApps: List<String> = emptyList(),
     /** Each source's hosts Android doesn't let Crosstune open yet, or null before Android 12, which can't tell. */
     val unapprovedHosts: Map<MusicService, List<String>>? = null,
     /** Crosstune's own links are set to open in the browser, so none reach it; see [LinkState.ownLinksOff]. */

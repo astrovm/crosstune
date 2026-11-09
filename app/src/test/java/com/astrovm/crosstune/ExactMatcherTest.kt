@@ -516,6 +516,21 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aSongInAnotherScriptMayBeAsFarFromTheKnownLengthAsTheSameSongIsAndNoFarther() {
+        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
+        val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
+        fun find(length: String) = runBlocking {
+            namesAndTabs(songs = listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • $length", videoId = "xyVatKhd4s4")), apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", 245_000)))
+            matcher().find(MusicService.YOUTUBE_MUSIC, angel)
+        }
+        // 3 s past the known 4:05 is the same song; a second more is not, and nor is 3 s short of it, or a second less.
+        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:08"))
+        assertNull(find("4:09"))
+        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:02"))
+        assertNull(find("4:01"))
+    }
+
+    @Test
     fun aRemixIsFoundOnYouTubeMusicByItsAlbumWhenItsNameLeavesItOut() {
         respond(
             youTubeMusicPage(

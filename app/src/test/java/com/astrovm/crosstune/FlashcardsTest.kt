@@ -52,6 +52,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -937,6 +938,9 @@ class FlashcardsTest {
         appHas("Other", canSeek = false)
         waitUntil { model().uiState.practice?.video == "other000000" }
         composeRule.onNodeWithTag(LINE_PLAYER_TAG).assertExists()
+        // The card shows the player's own picture, which the view model hands out.
+        assertSame(linePlayer.view(), model().linePlayerView())
+        assertTrue(linePlayer.view().parent != null)
         assertTrue(phone.seeks.isEmpty())
         // The card's one control of the sound plays the line in the player.
         click(string(R.string.practice_show))

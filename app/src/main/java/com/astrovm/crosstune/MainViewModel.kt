@@ -163,14 +163,14 @@ internal class MainViewModel(
             }
 
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
-            override fun playPause(song: MusicMetadata, play: Boolean) {
+            override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
                 qobuzNumbers?.off()
                 leftJob?.cancel()
-                if (!play) return source.playPause(song, false)
+                if (!play) return source.playPause(song, false, app)
                 viewModelScope.launch {
-                    if (source.resume(song)) return@launch
+                    if (source.resume(song, app)) return@launch
                     if (uiState.canFloatOverApps) uiState = uiState.copy(coveringApp = true)
-                    if (!source.bringToFront(song)) uncover()
+                    if (!source.bringToFront(song, app)) uncover()
                 }
             }
 
@@ -306,7 +306,7 @@ internal class MainViewModel(
         private set
 
     /** Kept lines practised as cards. */
-    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, wallClock, now, reminders, newPlayer = newLinePlayer)
+    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, AppTraitsStore(preferences, wallClock), wallClock, now, reminders, newPlayer = newLinePlayer)
 
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.withOneTap() }
@@ -556,6 +556,7 @@ internal class MainViewModel(
         return copy(
             systemStateKnown = true,
             installed = state.serviceApps.keys,
+            musicApps = state.apps,
             unapprovedHosts = state.unapprovedHosts,
             ownLinksOff = state.ownLinksOff,
             blockingApps = claiming?.filterValues { it }?.keys,

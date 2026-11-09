@@ -193,8 +193,25 @@ internal enum class MusicService(
         /** Each app a [link] may open in when [app] is chosen, with the link it takes there; see [appsFor]. */
         fun appLinksIn(app: String, link: String): List<Pair<String, String>> = ofOwnApp(app)?.appLinks(link) ?: listOf(app to link)
 
-        /** The service whose app, or a build patched from it, has [packageName]. */
-        fun ofPackage(packageName: String?): MusicService? = entries.firstOrNull { packageName in it.packageNames }
+        /**
+         * The service whose app, or a build patched from it, has [packageName]: one named in [packageNames], or one
+         * named as patchers name them, a prefix of its own and then the app's package without its "com.google", as
+         * every fork of YouTube and YouTube Music by ReVanced, Morphe and the like does, so a new one is seen as it is.
+         */
+        fun ofPackage(packageName: String?): MusicService? =
+            entries.firstOrNull { packageName in it.packageNames } ?: packageName?.let(::patchedBuildOf)
+
+        private fun patchedBuildOf(packageName: String): MusicService? = when {
+            packageName.endsWith(PATCHED_YOUTUBE_MUSIC) -> YOUTUBE_MUSIC
+            packageName.endsWith(PATCHED_YOUTUBE) -> YOUTUBE
+            else -> null
+        }
+
+        /** How a patched YouTube Music's package ends, whatever the patcher's own name before it. */
+        private const val PATCHED_YOUTUBE_MUSIC = ".android.apps.youtube.music"
+
+        /** How a patched YouTube's package ends. */
+        private const val PATCHED_YOUTUBE = ".android.youtube"
     }
 }
 

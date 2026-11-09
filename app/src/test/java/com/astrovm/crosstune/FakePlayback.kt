@@ -53,7 +53,13 @@ internal class FakePlayback : PlaybackSource {
     /** Each song followed, once per time it's asked. */
     val followed: MutableList<MusicMetadata> = CopyOnWriteArrayList()
 
-    override fun follow(song: MusicMetadata): Flow<Following?> = playing.also { followed += song }
+    /** What each app, by package, plays when a test has it apart from the rest; [playing] for any other. */
+    val appPlaying = mutableMapOf<String, MutableStateFlow<Following?>>()
+
+    /** The app each follow was asked for, null for any. */
+    val followedApps: MutableList<String?> = CopyOnWriteArrayList()
+
+    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = (app?.let(appPlaying::get) ?: playing).also { followed += song; followedApps += app }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
     var quietYet = false
@@ -67,24 +73,38 @@ internal class FakePlayback : PlaybackSource {
     /** How many are listening for what's on the phone. */
     val nowPlayingWatchers get() = songs.subscriptionCount.value
 
-    override fun seekTo(song: MusicMetadata, positionMs: Long) {
+    /** The app each seek was sent to, null for any. */
+    val seekedApps: MutableList<String?> = CopyOnWriteArrayList()
+
+    /** The app each ask to play or pause was sent to, null for any. */
+    val playedApps: MutableList<String?> = CopyOnWriteArrayList()
+
+    /** Runs when an app is asked to play, for a test to have the app do as it would, e.g. pause itself. */
+    var onPlay: (String?, Boolean) -> Unit = { _, _ -> }
+
+    override fun seekTo(song: MusicMetadata, positionMs: Long, app: String?) {
         seeks += positionMs
+        seekedApps += app
     }
 
-    override fun playPause(song: MusicMetadata, play: Boolean) {
+    override fun playPause(song: MusicMetadata, play: Boolean, app: String?) {
         plays += play
+        playedApps += app
+        onPlay(app, play)
     }
 
     // Asked to play on, as the phone's, it does unless it only plays in front.
-    override suspend fun resume(song: MusicMetadata): Boolean {
+    override suspend fun resume(song: MusicMetadata, app: String?): Boolean {
         plays += true
+        playedApps += app
+        onPlay(app, true)
         return startsInBackground.also { if (!it) onlyInFront = true }
     }
 
     /** Each song an app was brought to the front to play on. */
     val broughtToFront: MutableList<MusicMetadata> = CopyOnWriteArrayList()
 
-    override suspend fun bringToFront(song: MusicMetadata): Boolean {
+    override suspend fun bringToFront(song: MusicMetadata, app: String?): Boolean {
         if (!opens) return false
         broughtToFront += song
         return true
