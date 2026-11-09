@@ -124,6 +124,14 @@ class TimingLogTest {
     }
 
     @Test
+    fun aMinuteOneCharacterOverTheBoundLosesItsOldestNote() {
+        // The oldest is a character longer than the rest, so together they're one over 8,000.
+        TimingLog.note("x".repeat(100 - "1000000 ".length))
+        repeat(TimingLog.MAX_CHARS / 100 - 1) { TimingLog.note("x".repeat(99 - "1000000 ".length)) }
+        assertEquals(TimingLog.MAX_CHARS / 100 - 1, TimingLog.lastMinute().lines().size)
+    }
+
+    @Test
     fun aClockIsOnlyNewWhenItIsMoreThanAFewMsFromWhereItWasGoing() {
         fun noted(positionMs: Long): Int {
             TimingLog.clear()

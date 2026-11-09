@@ -51,6 +51,7 @@ class ReportTest {
                 """"timed":true,"synced":true,"sung":true,"lengthMs":220937,"source":"letras, timed by lrclib","timing":[{"line":"Take me","timedMs":34210,"heardMs":32900}]}}""",
             report.json()
         )
+        assertEquals("letras, timed by lrclib", report.source)
         // With no comment, app, length or timing by hand, they're left out; with no song, all about it is.
         val bare = JSONObject(Report("2.12.0", MusicMetadata("Demo", "Band"), android = "16 (36)", comment = " ").json())
         assertFalse(bare.has("comment"))
