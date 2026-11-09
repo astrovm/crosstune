@@ -3072,17 +3072,19 @@ internal class MainViewModel(
      */
     private fun playerTiming(): PlayerTiming = timingAtCorrection?.takeIf { timedByHand }?.second ?: currentPlayerTiming()
 
+    /**
+     * The player's timing now, with the lead [leadTaken] goes by: none (zero) for an app followed on its
+     * own clock, as an audio player is until a lead is heard. With no lead to say, the log starts by
+     * saying why, so a report never leaves it to be guessed.
+     */
     private fun currentPlayerTiming(): PlayerTiming {
         val app = appFollowing
+        val lead = if (app != null && !app.video && appLeadMs == null) 0L else leadNow.takeIf { app != null }
         val reason = when {
             app == null -> "no player followed"
-            app.video && leadNow == null -> "video not calibrated"
+            lead == null -> "video not calibrated"
             else -> null
         }
-        val lead = if (reason == null) app?.let {
-            val at = now()
-            it.clock.positionAt(at) - leadTaken(it).clock.positionAt(at)
-        } else null
         val log = TimingLog.lastMinute()
         return PlayerTiming(playedPackage, playedSpeed, lead, uiState.linesEarlyMs, if (reason == null) log else "lead unavailable: $reason\n$log")
     }
