@@ -65,12 +65,12 @@ class PullTest(unittest.TestCase):
 
     def pull(self, answer, env=None):
         with mock.patch.dict(reports.os.environ, env or {}), mock.patch("builtins.print"):
-            reports.pull(mock.Mock(return_value=answer))
+            reports.pull(mock.Mock(return_value=answer), sleep=mock.Mock())
 
     def test_pull_saves_the_rows_and_tells_cf_the_account(self):
         run = mock.Mock(return_value=mock.Mock(returncode=0, stdout=d1_answer([row(1)])))
         with mock.patch("builtins.print"):
-            reports.pull(run)
+            reports.pull(run, sleep=mock.Mock())
         self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
         self.assertEqual([path.name for path in self.saved.parent.iterdir()], ["reports.json"])
         command, kwargs = run.call_args
@@ -88,6 +88,23 @@ class PullTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "login expired") as stopped:
             self.pull(mock.Mock(returncode=1, stderr="login expired"))
         self.assertIn("no reports were pulled", str(stopped.exception))
+        self.assertEqual(list(self.saved.parent.iterdir()), [])
+
+    def test_a_refusal_that_passes_is_asked_again_and_the_table_saved(self):
+        refused = mock.Mock(returncode=1, stderr="Account is invalid or unauthorized [code: 7403]")
+        run, sleep = mock.Mock(side_effect=[refused, refused, mock.Mock(returncode=0, stdout=d1_answer([row(1)]))]), mock.Mock()
+        with mock.patch("builtins.print"):
+            reports.pull(run, sleep)
+        self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual([wait.args[0] for wait in sleep.call_args_list], list(reports.WAITS))
+
+    def test_a_refusal_that_stays_is_asked_three_times_then_stops(self):
+        run, sleep = mock.Mock(return_value=mock.Mock(returncode=1, stderr="[code: 7403]")), mock.Mock()
+        with mock.patch("builtins.print"), self.assertRaisesRegex(SystemExit, "7403"):
+            reports.pull(run, sleep)
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
         self.assertEqual(list(self.saved.parent.iterdir()), [])
 
     def test_a_failed_pull_exits_non_zero(self):
