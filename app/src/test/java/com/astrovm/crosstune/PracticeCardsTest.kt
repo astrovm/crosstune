@@ -1316,6 +1316,8 @@ class PracticeCardsTest {
         cards(songLoadMs = 300).start(null, before = null)
         waitFor("it was opened") { playback.opened.isNotEmpty() }
         assertEquals(morphe, playback.opened.first().first)
+        // Opened at the line, 10 s in, so it never plays the song's start: rounded down, it's never past it either.
+        assertTrue(playback.opened.first().second, playback.opened.first().second.endsWith("&t=10"))
         assertEquals(listOf<String?>(morphe), playback.followedApps.take(1))
     }
 
@@ -1528,6 +1530,30 @@ class PracticeCardsTest {
         val heardFor = System.currentTimeMillis() - goneAt
         // Not the 1.5 s an app that only pauses a moment is given, at the least: the next song would be heard all that time.
         assertTrue("the next song played $heardFor ms", heardFor < 1_500)
+    }
+
+    @Test
+    fun anAppThatPlaysSomewhereElseThanTheLineIsStoppedAtOnce() {
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        appPlays(tidal, speed = 1f)
+        val flow = playback.appPlaying.getValue(tidal)
+        var movedAt = 0L
+        // As TIDAL past its 30 s preview: still the song it says, whole, but playing from 0, which is the next one.
+        playback.onPlay = { app, play ->
+            if (app == tidal && play) thread {
+                Thread.sleep(200)
+                movedAt = System.currentTimeMillis()
+                flow.value = flow.value?.copy(clock = PlaybackClock(0, movedAt, 1f))
+            }
+        }
+        cards().start(null, before = null)
+        waitFor("it's paused") { playback.pausedApps.isNotEmpty() }
+        val heardFor = System.currentTimeMillis() - movedAt
+        // Not the 1.5 s an app that only pauses a moment is given: what it plays would be heard all that time.
+        assertTrue("it played elsewhere $heardFor ms", heardFor < 1_500)
     }
 }
 
