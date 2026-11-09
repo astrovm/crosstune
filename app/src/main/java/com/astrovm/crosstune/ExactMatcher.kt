@@ -819,7 +819,7 @@ internal class ExactMatcher(
     private fun isTheSongInAnotherScript(row: Row, names: Names): Boolean {
         val length = row.lengthMs ?: return false
         if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
-        if (row.name.none { it.code > 0x7f && it.isLetter() }) return false
+        if (row.name.none { it.isLetter() && Character.UnicodeBlock.of(it) != Character.UnicodeBlock.BASIC_LATIN }) return false
         val wanted = names.artists.flatMap(SongNames::artists).toSet()
         return SongNames.artists(row.details.first()).any(wanted::contains)
     }

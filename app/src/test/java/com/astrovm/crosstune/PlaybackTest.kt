@@ -1547,6 +1547,14 @@ class PlaybackTest {
     }
 
     @Test
+    fun ofTwoAppsPlayingItTheFirstIsTheOneControlled() {
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd"))
+        shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours"))
+        assertEquals("com.spotify.music", playback.appFor(song)?.packageName)
+    }
+
+    @Test
     @Config(shadows = [AppAsked::class])
     fun theAppPlayingItIsAskedToPlayOrPause() {
         allow()

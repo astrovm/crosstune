@@ -54,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -328,6 +329,7 @@ internal fun ReadingFields(line: SavedLine, onSave: (List<String>) -> Unit, onCa
 
 /** The small YouTube player, shown as YouTube asks of a player that's heard: 16:9 and at least 200 px tall, at any density. */
 @Composable
+@NonRestartableComposable
 private fun LinePlayerView(view: () -> View?, modifier: Modifier = Modifier) {
     val height = with(LocalDensity.current) { LINE_PLAYER_PX.toDp() }
     AndroidView(

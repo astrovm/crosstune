@@ -290,8 +290,9 @@ internal class MediaSessionPlayback(
     private val handler = Handler(Looper.getMainLooper())
     /** The clock each app, by package, last fell behind on. */
     private val late = ConcurrentHashMap<String, LateClock>()
-    /** How many times Crosstune has moved a song, so a move a moment back isn't taken for a stale clock. */
-    private var moves = 0
+    /** Replaced each time Crosstune moves a song, so a move a moment back isn't taken for a stale clock. */
+    @Volatile
+    private var moves = Any()
     /** The apps that wouldn't play in the background when asked, as YouTube Music without Premium; see [comesBack]. */
     private val onlyInFront: MutableSet<String> = ConcurrentHashMap.newKeySet()
     /** The app [openSong] last opened. */
@@ -313,7 +314,7 @@ internal class MediaSessionPlayback(
         // What it plays next only for the one followed, as reading an app's queue takes a while.
         fun steadily(controller: MediaController) = following(controller, song.lengthMs)?.let {
             // Moved by Crosstune, where the app says next is believed, even a moment back.
-            if (moves != movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
+            if (moves !== movesSeen) clocks = steadyClock(controller.packageName).also { movesSeen = moves }
             it.copy(clock = clocks.of(it.clock), upNext = upNext(controller))
         }
         val callback = object : MediaController.Callback() {
@@ -382,7 +383,7 @@ internal class MediaSessionPlayback(
             val controller = appFor(song, app = app) ?: return
             val actions = controller.playbackState?.actions ?: 0L
             if (actions and PlaybackState.ACTION_SEEK_TO == 0L) return
-            moves++
+            moves = Any()
             controller.transportControls.seekTo(positionMs)
         }
     }

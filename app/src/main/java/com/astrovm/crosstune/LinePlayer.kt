@@ -121,10 +121,14 @@ internal class YouTubeLinePlayer(context: Context) : LinePlayer {
         web.addJavascriptInterface(
             object {
                 @JavascriptInterface
-                fun ended() = main.post { done(LineEnd.ENDED) }
+                fun ended() {
+                    main.post { done(LineEnd.ENDED) }
+                }
 
                 @JavascriptInterface
-                fun failed() = main.post { done(LineEnd.FAILED) }
+                fun failed() {
+                    main.post { done(LineEnd.FAILED) }
+                }
             },
             "Line"
         )

@@ -218,50 +218,49 @@ internal class PracticeCards(
     private suspend fun playLine(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, play: Boolean, following: () -> Following?): Boolean {
         val packageName = app ?: following()?.appPackage
         packageName?.let { traits.seeks(it, true) }
-        val lead = if (following()?.video == true) line.leadMs else 0L
-        val start = (line.startMs ?: 0L) + lead
-        // A moment past where the words say it ends, so its last word isn't cut short.
-        val end = (line.endMs ?: 0L) + lead + MainViewModel.LINE_TAIL_MS
-        source.seekTo(song, start, app)
+        val window = LineWindow.of(line, lead = if (following()?.video == true) line.leadMs else 0L)
+        source.seekTo(song, window.start, app)
         // Turned while the app got there, it plays now.
         val now = play || uiState.practice?.turned == true
         source.playPause(song, now, app)
         if (!now) return true.also { setSound(line, LineSound.PLAYED) }
         soundApp = app
         setSound(line, LineSound.PLAYING)
-        val kept = playOut(source, song, app, start, end, following)
+        val kept = playOut(source, song, app, window, following)
         packageName?.let { traits.keeps(it, kept) }
         step("${packageName ?: "the app"} ${if (kept) "played the line" else "paused itself"}")
         setSound(line, if (kept) LineSound.PLAYED else LineSound.LOADING)
         return kept
     }
 
-    /** Once [app] says it's at [start], lets it play to [end] and pauses it; false when it paused itself on the way. */
-    private suspend fun playOut(source: PlaybackSource, song: MusicMetadata, app: String?, start: Long, end: Long, following: () -> Following?): Boolean {
-        withTimeoutOrNull(SEEK_WAIT_MS) { while (following()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
-        return playsUntil(end, end - start + SEEK_WAIT_MS, following).also { source.playPause(song, false, app) }
+    /** Once [app] says it's at the line, lets it play to the end of [window] and pauses it; false when it paused itself on the way. */
+    private suspend fun playOut(source: PlaybackSource, song: MusicMetadata, app: String?, window: LineWindow, following: () -> Following?): Boolean {
+        withTimeoutOrNull(LineWindow.SEEK_WAIT_MS) { while (following()?.clock?.positionAt(now())?.let(window::holds) != true) delay(SOUND_CHECK_MS) }
+        var paused = false
+        withTimeoutOrNull(window.patience) { paused = pausedBefore(window, following) }
+        source.playPause(song, false, app)
+        return !paused
     }
 
-    /** Waits up to [within] for the app to play to [end], false if it paused itself on the way, as YouTube Music without Premium does. */
-    private suspend fun playsUntil(end: Long, within: Long, following: () -> Following?): Boolean {
+    /** Watches the app play to the end of [window]; true if it paused itself on the way, as YouTube Music without Premium does. */
+    private suspend fun pausedBefore(window: LineWindow, following: () -> Following?): Boolean {
         var started = false
         var pausedSince: Long? = null
-        return withTimeoutOrNull(within) {
-            while ((following()?.clock?.positionAt(now()) ?: end) < end) {
-                val playing = following()?.clock?.playing != false
-                started = started || playing
-                pausedSince = if (playing) null else pausedSince ?: now()
-                if (started && pausedSince?.let { now() - it >= PAUSED_FOR_MS } == true) return@withTimeoutOrNull false
-                delay(SOUND_CHECK_MS)
-            }
-            true
-        } ?: true
+        while (!window.over(following()?.clock?.positionAt(now()) ?: window.end)) {
+            val playing = following()?.clock?.playing != false
+            started = started || playing
+            pausedSince = if (playing) null else pausedSince ?: now()
+            if (started && lasted(pausedSince, now(), PAUSED_FOR_MS)) return true
+            delay(SOUND_CHECK_MS)
+        }
+        return false
     }
 
     /** [app] plays the song and won't move in it, as Spotify's free plan: that's remembered, and it's paused, for the next app to play the line. */
     private fun stuck(source: PlaybackSource, song: MusicMetadata, app: String?, following: Following?) {
-        (following?.appPackage ?: app)?.let { traits.seeks(it, false) }
-        step("${following?.appPackage ?: app ?: "the app"} plays and does not move")
+        val name = following?.appPackage ?: app
+        name?.let { traits.seeks(it, false) }
+        step("${name ?: "the app"} plays and does not move")
         if (following?.clock?.playing == true) source.playPause(song, false, app)
     }
 
@@ -339,7 +338,7 @@ internal class PracticeCards(
      */
     private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, latest: () -> Following?, onStuck: (Following?) -> Unit): Boolean {
         var opened = openedOnOwnLink(source, song, app)
-        val asked = !opened && asked(source, song, app) { link -> source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link).also { opened = it } }
+        val asked = !opened && asked(source, song, app) { link -> opened = source.openSong(MusicService.YOUTUBE_MUSIC.packageName, link) }
         val wait = MoveWait()
         val canSeek = (asked || opened) && waitUntilItMoves(source, opened, latest, wait)
         if (opened && !wait.cameBack) source.comesBack()
@@ -354,7 +353,7 @@ internal class PracticeCards(
     }
 
     /** Waits for the app to offer a seek; false when time runs out, or when it plays a moment and still doesn't, as it never will. */
-    private suspend fun waitUntilItMoves(source: PlaybackSource, opened: Boolean, latest: () -> Following?, wait: MoveWait): Boolean =
+    private suspend fun waitUntilItMoves(source: PlaybackSource, opened: Boolean, latest: () -> Following?, wait: MoveWait): Boolean {
         withTimeoutOrNull(songLoadMs) {
             while (latest()?.canSeek != true) {
                 wait.playingSince = if (opened && latest()?.clock?.playing == true) wait.playingSince ?: now() else null
@@ -363,11 +362,12 @@ internal class PracticeCards(
                     source.comesBack()
                     wait.cameBack = true
                 }
-                if (wait.playingSince?.let { now() - it >= STUCK_AFTER_MS } == true) return@withTimeoutOrNull false
+                if (lasted(wait.playingSince, now(), STUCK_AFTER_MS)) break
                 delay(SOUND_CHECK_MS)
             }
-            true
-        } == true
+        }
+        return latest()?.canSeek == true
+    }
 
     /** Whether [app], one that plays nothing asked of it but each song's own link, was opened on [song]'s. */
     private suspend fun openedOnOwnLink(source: PlaybackSource, song: MusicMetadata, app: String?): Boolean {
@@ -381,7 +381,7 @@ internal class PracticeCards(
      * which wouldn't play it. An app that can't be woken in the background is left to [open] on the song, as it
      * is with no app to ask at all, and left again once it has it, unless it only plays in front.
      */
-    private suspend fun asked(source: PlaybackSource, song: MusicMetadata, app: String?, open: (String) -> Boolean): Boolean {
+    private suspend fun asked(source: PlaybackSource, song: MusicMetadata, app: String?, open: (String) -> Unit): Boolean {
         val from = app?.takeIf { MusicService.ofPackage(it)?.playsAskedSongs != false }
         val link = youTubeMusicLink(song, from)
         val asking = from ?: MusicService.YOUTUBE_MUSIC.packageName.takeIf { link != null }
@@ -480,10 +480,6 @@ internal class PracticeCards(
     private companion object {
         /** How long a song the music app has already takes to be found. */
         const val FIND_SONG_MS = 400L
-        /** How long the music app has to say it went where it was sent. */
-        const val SEEK_WAIT_MS = 3_000L
-        /** How far before a line the app may say it is, having gone there, as apps round where they are. */
-        const val SEEK_SLACK_MS = 1_500L
         const val SOUND_CHECK_MS = 50L
         /** How long a song plays with no seek offered before the app's taken not to offer one. */
         const val STUCK_AFTER_MS = 1_000L

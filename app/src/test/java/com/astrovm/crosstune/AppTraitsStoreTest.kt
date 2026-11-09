@@ -19,6 +19,7 @@ class AppTraitsStoreTest {
     @Test
     fun anAppNotSeenHasNothingKnownAboutIt() {
         assertEquals(AppTraits(), store.of("com.example"))
+        assertEquals(null, store.of("com.example").keeps)
         assertFalse(store.of("com.example").works)
         assertFalse(store.of("com.example").fails)
     }
@@ -51,6 +52,7 @@ class AppTraitsStoreTest {
         // Seen again, it's remembered as of then.
         store.keeps("a", false)
         assertEquals(AppTraits(seeks = true, keeps = false), store.of("a"))
+        assertEquals(false, store.of("a").keeps)
     }
 
     @Test

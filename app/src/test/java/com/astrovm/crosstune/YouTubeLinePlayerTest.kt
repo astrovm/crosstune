@@ -26,6 +26,11 @@ class YouTubeLinePlayerTest {
     }
 
     @Test
+    fun theBoxIsBlackWhileTheVideoHasntShownYet() {
+        assertEquals(android.graphics.Color.BLACK, shadowOf(web).backgroundColor)
+    }
+
+    @Test
     fun aVideoIsLoadedOnceAndItsNextLinesAreOnlyToldToThePage() {
         player.show("abc", 10_000, 15_000, 200_000, play = false) { ends += it }
         val loaded = shadowOf(web).lastLoadDataWithBaseURL

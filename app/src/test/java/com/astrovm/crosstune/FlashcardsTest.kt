@@ -80,6 +80,7 @@ class FlashcardsTest {
 
     /** Put back after a test that sets the device to a TV. */
     private val realPhone = MainActivity.phoneFactory
+    private val realLinePlayer = MainActivity.linePlayerFactory
     private var controller: ActivityController<MainActivity>? = null
 
     @Before
@@ -106,8 +107,13 @@ class FlashcardsTest {
         MainActivity.lookupDispatcher = Dispatchers.IO
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
-        MainActivity.linePlayerFactory = ::YouTubeLinePlayer
+        MainActivity.linePlayerFactory = realLinePlayer
         MainActivity.phoneFactory = realPhone
+    }
+
+    @Test
+    fun theSmallPlayerIsMadeOfAYouTubePage() {
+        assertTrue(realLinePlayer(app) is YouTubeLinePlayer)
     }
 
     // region helpers
