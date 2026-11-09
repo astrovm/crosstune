@@ -229,14 +229,17 @@ internal class PracticeCards(
         if (!now) return true.also { setSound(line, LineSound.PLAYED) }
         soundApp = app
         setSound(line, LineSound.PLAYING)
-        // Once the app says it's there, it plays to the end of the line.
-        withTimeoutOrNull(SEEK_WAIT_MS) { while (following()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
-        val kept = playsUntil(end, end - start + SEEK_WAIT_MS, following)
-        source.playPause(song, false, app)
+        val kept = playOut(source, song, app, start, end, following)
         packageName?.let { traits.keeps(it, kept) }
         step("${packageName ?: "the app"} ${if (kept) "played the line" else "paused itself"}")
         setSound(line, if (kept) LineSound.PLAYED else LineSound.LOADING)
         return kept
+    }
+
+    /** Once [app] says it's at [start], lets it play to [end] and pauses it; false when it paused itself on the way. */
+    private suspend fun playOut(source: PlaybackSource, song: MusicMetadata, app: String?, start: Long, end: Long, following: () -> Following?): Boolean {
+        withTimeoutOrNull(SEEK_WAIT_MS) { while (following()?.clock?.positionAt(now())?.let { it >= start - SEEK_SLACK_MS && it < end } != true) delay(SOUND_CHECK_MS) }
+        return playsUntil(end, end - start + SEEK_WAIT_MS, following).also { source.playPause(song, false, app) }
     }
 
     /** Waits up to [within] for the app to play to [end], false if it paused itself on the way, as YouTube Music without Premium does. */
