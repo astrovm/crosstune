@@ -2,7 +2,7 @@
 """The emulators Crosstune is tested on, made from emulators.json, so a wiped machine gets them back.
 
   python3 scripts/emulator/emulator.py create [NAME...] [--replace]   # the image and the emulator, safe to run twice
-  python3 scripts/emulator/emulator.py start NAME [--window]          # private sound, hardware graphics, waits for boot
+  python3 scripts/emulator/emulator.py start NAME [--window]          # private sound, hardware graphics, cold boot, waits for boot
   python3 scripts/emulator/emulator.py apps NAME                      # opens each missing app's Play page, one tap each
   python3 scripts/emulator/emulator.py check [NAME...]                # says what's missing, and fails if anything is
 
@@ -168,14 +168,18 @@ def start(name, window):
     if image_in_avd(name) is None:
         die(f"There's no {name} yet. Run: python3 {sys.argv[0]} create {name}")
     options, env = sound_options(window)
+    # Quick Boot would load the last saved snapshot, and that rolls the disk back to the day it was
+    # saved: every app and sign-in since is gone. So boot cold, and drop the old snapshot so nothing
+    # else that starts this emulator without flags can load it either.
+    shutil.rmtree(avd_dir(name) / "snapshots" / "default_boot", ignore_errors=True)
     log_path = avd_dir(name) / "started.log"
     with log_path.open("w") as log:
         emulator = subprocess.Popen(
-            [tool("emulator/emulator"), "-avd", name, "-port", str(DECLARED[name]["port"]), "-gpu", "host", *options],
+            [tool("emulator/emulator"), "-avd", name, "-port", str(DECLARED[name]["port"]), "-gpu", "host", "-no-snapshot", *options],
             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env={**os.environ, **env})
     deadline = time.monotonic() + BOOT_SECONDS
     while shell(name, "getprop", "sys.boot_completed") != "1":
-        if emulator.poll() not in (None, 0):
+        if emulator.poll() is not None:
             die(f"{name} stopped while starting:\n{log_path.read_text()[-1500:]}")
         if time.monotonic() > deadline:
             die(f"{name} didn't finish starting in {BOOT_SECONDS} s. Its log: {log_path}")
