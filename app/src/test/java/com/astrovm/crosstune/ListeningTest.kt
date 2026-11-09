@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 
 import androidx.lifecycle.ViewModelProvider
 
+import org.json.JSONObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -2681,6 +2682,22 @@ class ListeningTest {
             val at = controllerModel().uiState.following!!.clock.positionAt(SystemClock.elapsedRealtime())
             assertTrue(at.toString(), at in 9_000..11_500)
         }
+    }
+
+    @Test
+    fun aReportOnWordsPutInTimeFromAGuessSaysTheLeadGuessed() {
+        val hearing = FakeHearing()
+        val phone = videoWithWords(hearing)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+        // Heard 10 seconds into the video's lead, once: a guess, not yet confirmed by three hearings.
+        hearIntro(phone, hearing, 0..0)
+        waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
+        composeRule.runOnIdle { controllerModel().syncLine(0) }
+        composeRule.runOnIdle { controllerModel().sendReport("") }
+        waitUntil(TIMEOUT_MS) { fake.requestedUrls.contains(ReportSender.URL) }
+        val song = JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)]).getJSONObject("song")
+        assertEquals(10_000.0, song.getDouble("leadMs"), 1_500.0)
+        assertFalse(song.getString("log").contains("lead unavailable"))
     }
 
     @Test
