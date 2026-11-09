@@ -229,6 +229,8 @@ class ReadingsTest {
         over("気に入る", "けいる", Ruby("気に入", "けい"), Ruby("る"))
         over("切り取り線", "きとせん", Ruby("切り取り線", "きとせん"))
         over("思って", "おもえて", Ruby("思っ", "おもえ"), Ruby("て"))
+        over("思ッテ", "おもえて", Ruby("思ッ", "おもえ"), Ruby("テ"))
+        over("行ってる", "いえてる", Ruby("行っ", "いえ"), Ruby("てる"))
         over("思って出", "おもえてで", Ruby("思っ", "おもえ"), Ruby("て"), Ruby("出", "で"))
         over("思って出", "おもったで", Ruby("思", "おも"), Ruby("っ"), Ruby("て出", "たで"))
         // Nothing to read it over.

@@ -54,17 +54,17 @@ internal object Furigana {
             }
         }
 
-        /** A kana found in the reading, left out at the edge, or grouped with a following kanji. */
+        /** A kana found in the reading, left out at the edge, or grouped with the kanji after it. */
         private fun written(i: Int, at: Int): Plan {
-            val run = runs[i]
-            val found = spelledAt(run, at).takeIf { it.isNotEmpty() }?.let { then(i + 1, at + run.length, it, run.length) } ?: NONE
+            val c = runs[i].single()
+            val found = spelledAt(c, at)?.let { then(i + 1, at + 1, listOf(it), 1) } ?: NONE
+            // Left out at the end, the kana after it are left out too: if one of them were read as written, this one would be too.
             val left = when {
-                runs.take(i).all { Readings.isKana(it.first()) } -> then(i + 1, at, listOf(Ruby(run)), 0)
+                runs.take(i).all { Readings.isKana(it.first()) } -> then(i + 1, at, listOf(Ruby(c.toString())), 0)
                 runs.drop(i).all { Readings.isKana(it.first()) } -> then(runs.size, at, listOf(Ruby(runs.drop(i).joinToString(""))), 0)
                 else -> NONE
             }
-            val grouped = if (runs.drop(i).any { !Readings.isKana(it.first()) }) kanji(i, at) else NONE
-            return listOf(found, left, grouped).maxWith(order)
+            return listOf(found, left, kanji(i, at)).maxWith(order)
         }
 
         /** A group containing kanji, read as far as [kana] goes. */
@@ -84,24 +84,19 @@ internal object Furigana {
         }
 
         /**
-         * [run] as found in the reading from [at]: as written, with what each kana that isn't said
-         * as written is said as over it on its own. Nothing when it isn't found there.
+         * [c] as found in the reading at [at]: as written, or with what it's said as over it when it
+         * isn't said as written. Nothing when it isn't found there.
          */
-        private fun spelledAt(run: String, at: Int): List<Ruby> {
-            val parts = mutableListOf<Ruby>()
-            for (k in run.indices) {
-                // Past the reading's end, the run isn't in it.
-                val said = sounds.getOrNull(at + k) ?: return emptyList()
-                val written = sound(run[k])
-                val before = sounds.getOrNull(at + k - 1)
-                when {
-                    written == said || stretched(written, before) == stretched(said, before) || "$said$written" in SAID_AS ->
-                        if (parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + run[k]) else parts += Ruby(run[k].toString())
-                    "$written$said" in SAID_AS -> parts += Ruby(run[k].toString(), kana.substring(at + k, at + k + 1))
-                    else -> return emptyList()
-                }
+        private fun spelledAt(c: Char, at: Int): Ruby? {
+            // Past the reading's end, it isn't in it.
+            val said = sounds.getOrNull(at) ?: return null
+            val written = sound(c)
+            val before = sounds.getOrNull(at - 1)
+            return when {
+                written == said || stretched(written, before) == stretched(said, before) || "$said$written" in SAID_AS -> Ruby(c.toString())
+                "$written$said" in SAID_AS -> Ruby(c.toString(), kana.substring(at, at + 1))
+                else -> null
             }
-            return parts
         }
     }
 
