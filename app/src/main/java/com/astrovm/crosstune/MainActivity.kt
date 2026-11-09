@@ -757,8 +757,7 @@ class MainActivity : ComponentActivity() {
         onStopListeningAlong = viewModel::stopListeningAlong,
         // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
         onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
-        // Allowed in one tap, which only the activity looks up again when it resumes, the card knows it now.
-        onAllowFloat = { if (!viewModel.fixInOneTap(OneTapFix.FLOAT) { viewModel.setCanFloatOverApps(true) }) viewModel.fixSteps(listOf(Need.Float)) },
+        onAllowFloat = viewModel::allowFloat,
         onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
         onOpenAppInfo = { openAppInfo() },
         onThemeChange = ::selectTheme,

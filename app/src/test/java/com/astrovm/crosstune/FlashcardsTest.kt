@@ -911,6 +911,41 @@ class FlashcardsTest {
         assertEquals(2, phone.cameBack)
     }
 
+    @Test
+    fun withoutShowingOverOtherAppsACardPlaysItsLineHereAndSaysWhatTheMusicAppNeeds() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        saved("""{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""")
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com" && "Another" in FakeSpotify.bodyOf(request)) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Another"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                "playlistItemData":{"videoId":"another0000"}}}]}""")
+            else FakeSpotify.html(request, "{}")
+        }
+        // YouTube Music can't be woken, so it would have to be opened, over the card, which Crosstune couldn't come back from.
+        phone.running = setOf("com.spotify.music")
+        phone.comesBackByItself = false
+        launch()
+        practiseAll(1)
+        // The line plays here, at once, rather than after the 12 s the app opened behind would have waited.
+        waitUntil { practice().video == "another0000" }
+        assertTrue(phone.opened.isEmpty())
+        assertEquals(0, phone.cameBack)
+        // And the card says, plainly, what the music app needs, with the way to allow it.
+        waitUntil { shown(string(R.string.practice_float_allow)) }
+        assertTrue(composeRule.onAllNodes(hasTestTag(PRACTICE_COME_BACK_TAG) and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG))).fetchSemanticsNodes().isNotEmpty())
+        composeRule.onAllNodes(hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))).onFirst().performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(Need.Float), model().uiState.fixes?.steps)
+        // Back from the steps, it's still asked until it's allowed, then gone.
+        model().closeFixes()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.practice_float_allow)))
+        model().setCanFloatOverApps(true)
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.practice_float_allow)))
+    }
+
     /** One saved line from Spotify, and YouTube Music having a video of its song. */
     private fun spotifyFreeHasTheCard() {
         saved("""{"text":"One","title":"Other","artist":"Band","box":1,"start":5000,"end":9000,"app":"com.spotify.music"}""")

@@ -2882,6 +2882,14 @@ internal class MainViewModel(
         uiState = uiState.copy(fixes = Fixes(list = true), oneTapFailed = false)
     }
 
+    /**
+     * Lets Crosstune show over other apps, so a card comes back over the music app it opens: in one tap with Shizuku or
+     * root, which only the activity would look up again as it resumes, so it's known now; otherwise the steps show how.
+     */
+    fun allowFloat() {
+        if (!fixInOneTap(OneTapFix.FLOAT) { setCanFloatOverApps(true) }) fixSteps(listOf(Need.Float))
+    }
+
     /** The steps of [needs], one at a time, from the list or wherever they're needed. */
     fun fixSteps(needs: List<Need>) {
         uiState = uiState.copy(fixes = Fixes(list = uiState.fixes?.list == true, steps = needs))
