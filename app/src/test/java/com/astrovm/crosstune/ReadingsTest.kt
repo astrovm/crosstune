@@ -579,8 +579,8 @@ class ReadingsTest {
     }
 
     @Test
-    fun aKanaThatTheDictionaryTakesForAWordAndAnOldEndingIsOneModernWord() {
-        // ふ and ひ after a verb's stem of one kana say う and い only when the stem has kanji: ふふ is a laugh, not ふ and an old ending.
+    fun aFuOrHiAfterKanaAloneIsNotAnOldEnding() {
+        // ふ and ひ say う and い only after a kanji: ふふ is a laugh, not ふ and an old ending.
         listOf("ふふ" to "fufu", "ひふ" to "hifu").forEach { (text, romaji) ->
             assertEquals(emptyList<String>(), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
             assertEquals(romaji, Readings.of(listOf(text), Script.JAPANESE).single().romanized.replace(" ", ""))

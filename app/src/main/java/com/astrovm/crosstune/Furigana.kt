@@ -67,29 +67,34 @@ internal object Furigana {
         var sure = false
         var at = 0
         while (at < text.length) {
-            val c = text[at]
-            val before = text.getOrNull(at - 1)
-            val contracted = CONTRACTED.entries.firstOrNull { text.startsWith(it.key, at) }
-            val said = when {
-                contracted != null -> contracted.value
-                c == 'ゐ' -> "い"
-                c == 'ゑ' -> "え"
-                before != null && c == 'ひ' -> "い"
-                before != null && c == 'ふ' -> "う"
-                before != null && c == 'へ' && Readings.isHan(before) -> "え"
-                else -> null
-            }
-            if (said != null) {
+            val change = changeAt(text, at)
+            val said = change?.said ?: text[at].toString()
+            if (change != null) {
                 if (first < 0) first = at
-                if (contracted == null && c in "ひふへ") plain += out.length
-                if (contracted != null) pairs += at
-                if (contracted != null || c in "ゐゑ" || (before != null && (Readings.isHan(before) || before == 'い'))) sure = true
+                sure = sure || change.sure
+                if (change.length > 1) pairs += at else if (text[at] in "ひふへ") plain += out.length
             }
-            repeat((said ?: c.toString()).length) { origins += at }
-            out.append(said ?: c)
-            at += if (contracted != null) contracted.key.length else 1
+            repeat(said.length) { origins += at }
+            out.append(said)
+            at += change?.length ?: 1
         }
         return if (sure && first >= 0) Today(out.toString(), origins, plain, pairs, first) else null
+    }
+
+    /** What the old kana at [at] in a text is said as, [length] letters of the text; [sure] when only old kana can be spelled so. */
+    private class Change(val said: String, val length: Int, val sure: Boolean)
+
+    private fun changeAt(text: String, at: Int): Change? {
+        val c = text[at]
+        val before = text.getOrNull(at - 1)
+        val contracted = CONTRACTED.entries.firstOrNull { text.startsWith(it.key, at) }
+        return when {
+            contracted != null -> Change(contracted.value, contracted.key.length, true)
+            c in "ゐゑ" -> Change(ENDINGS_SAID.getValue(c.toString()), 1, true)
+            before != null && c in "ひふ" -> Change(ENDINGS_SAID.getValue(c.toString()), 1, Readings.isHan(before) || before == 'い')
+            before != null && c == 'へ' && Readings.isHan(before) -> Change("え", 1, true)
+            else -> null
+        }
     }
 
     /** Whether [surface] is written in hiragana alone, with old kana in it: いふ, まゐる, てふてふ. */
@@ -128,8 +133,8 @@ internal object Furigana {
         return at == surface.length && to == modern.length && modern != surface
     }
 
-    /** How the old ending of a verb, ゐ, ゑ, ひ or ふ, is said when the dictionary leaves it a word of its own: 恋ひ is こい, 住まゐ すまい. */
-    val ENDINGS_SAID = mapOf("ゐ" to "い", "ゑ" to "え", "ひ" to "い", "ふ" to "う")
+    /** How ゐ, ゑ, ひ and ふ are said, as in 恋ひ, こい, and 住まゐ, すまい. */
+    private val ENDINGS_SAID = mapOf("ゐ" to "い", "ゑ" to "え", "ひ" to "い", "ふ" to "う")
 
     /** Old kana said another way, as in [SAID_AS] but only the pairs a word in old kana is spelled with. */
     private val OLD_SAID_AS = setOf("ゐい", "ゑえ", "ひい", "ふう", "ほお")

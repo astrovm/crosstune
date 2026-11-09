@@ -178,19 +178,11 @@ internal object Readings {
 
     /** The pieces of a [word] in old kana as the words it is today, when the dictionary knows them. */
     private fun modernPiece(word: List<Piece>): List<Piece>? {
-        val spelling = word.all { piece -> piece.surface.all { isHan(it) || isKana(it) } && piece.kind != "記号" }
-        val text = word.joinToString("") { it.surface }
-        // One piece the dictionary already reads as old kana, 思ふ as おもう, is left as it is.
-        if (!spelling || (word.size == 1 && word[0].kana != text && spelledToday(text, word[0].kana, word[0].said) != null)) return null
-        val today = Furigana.byRule(text) ?: return null
-        // The change is in the first piece, or just after it, as ゐ is after ま in まゐる: but not after a particle, in 待つてゐた.
-        val first = word[0]
-        if (today.first > first.surface.length || (today.first == first.surface.length && first.kind in setOf("助詞", "助動詞"))) return null
+        val today = ruledToday(word) ?: return null
         val tokens = tokenizer.tokenize(today.text)
         // A word starting with a ひ, ふ or へ that was changed is a modern word: 一人ひとり is not 一人いとり.
         if (tokens.any { !it.isKnown || it.reading == "*" || it.position in today.plain }) return null
-        val start = word.last().end - text.length
-        // And so does a contracted pair that ends in the start of a longer word, て and ふたり in 来てふたり.
+        // And so is a contracted pair that ends in the start of a longer word, て and ふたり in 来てふたり.
         val starts = word.runningFold(0) { at, piece -> at + piece.surface.length }
         if (today.contracted.any { pair -> word.indices.any { starts[it] == pair + 1 && word[it].surface.length > 1 } }) return null
         // A contracted pair stays whole: けふ is not き and ょう, and てふてふ is not ちょうちょ and う, but ちょうちょう.
@@ -198,17 +190,37 @@ internal object Readings {
             if (token.position > 0 && today.origins[token.position] == today.origins[token.position - 1]) words.last() += token else words += mutableListOf(token)
             words
         }
-        return words.map { group ->
-            val head = group.first()
-            val from = today.origins[head.position]
-            val to = group.last().let { it.position + it.surface.length }.let { if (it == today.text.length) text.length else today.origins[it] }
-            val spoken = group.map { it.pronunciation?.takeIf { sound -> sound != "*" } }
-            Piece(
-                text.substring(from, to), group.joinToString("") { hiragana(it.reading) }, head.partOfSpeechLevel1, head.partOfSpeechLevel2,
-                head.baseForm?.takeIf { it != "*" } ?: head.surface, spoken.takeIf { null !in it }?.joinToString("")?.let { longVowels(hiragana(it)) }, start + to,
-                today = group.joinToString("") { it.surface }
-            )
-        }
+        val text = word.joinToString("") { it.surface }
+        return words.map { group -> todayPiece(group, today, text, word.last().end - text.length) }
+    }
+
+    /** The spelling by rule of a [word] in old kana, when the dictionary doesn't already read it so and the change starts in its first piece. */
+    private fun ruledToday(word: List<Piece>): Furigana.Today? {
+        val text = word.joinToString("") { it.surface }
+        val first = word[0]
+        val kana = word.all { piece -> piece.surface.all { isHan(it) || isKana(it) } && piece.kind != "記号" }
+        // One piece the dictionary already reads as old kana, 思ふ as おもう, is left as it is.
+        val read = word.size == 1 && first.kana != text && spelledToday(text, first.kana, first.said) != null
+        if (!kana || read) return null
+        val today = Furigana.byRule(text) ?: return null
+        // The change is in the first piece, or just after it, as ゐ is after ま in まゐる: but not after a particle, in 待つてゐた.
+        val late = today.first > first.surface.length || (today.first == first.surface.length && first.kind in GRAMMAR)
+        return today.takeUnless { late }
+    }
+
+    private val GRAMMAR = setOf("助詞", "助動詞")
+
+    /** The piece for a [group] of tokens of the spelling [today] of [text], as it's written in the line, which [start]s where it does. */
+    private fun todayPiece(group: List<com.atilika.kuromoji.ipadic.Token>, today: Furigana.Today, text: String, start: Int): Piece {
+        val head = group.first()
+        val from = today.origins[head.position]
+        val to = group.last().let { it.position + it.surface.length }.let { if (it == today.text.length) text.length else today.origins[it] }
+        val spoken = group.map { it.pronunciation?.takeIf { sound -> sound != "*" } }
+        return Piece(
+            text.substring(from, to), group.joinToString("") { hiragana(it.reading) }, head.partOfSpeechLevel1, head.partOfSpeechLevel2,
+            head.baseForm?.takeIf { it != "*" } ?: head.surface, spoken.takeIf { null !in it }?.joinToString("")?.let { longVowels(hiragana(it)) }, start + to,
+            today = group.joinToString("") { it.surface }
+        )
     }
 
     /** The most pieces a word in old kana is split into: 思 ひ 出, 植 ゑ る, て ふ て ふ. */
@@ -476,9 +488,6 @@ internal object Readings {
                     out += Piece("は", "は", "助詞", "係助詞")
                     out += Piece(piece.surface.drop(1), piece.surface.drop(1), "助詞", "終助詞")
                 }
-                // The dictionary leaves the old ending of a verb a word of its own, 恋 and ひ, 住ま and ゐ: it's said with it.
-                last != null && piece.surface in Furigana.ENDINGS_SAID && endsOldVerb(last) ->
-                    out[out.lastIndex] = Piece(last.surface + piece.surface, last.kana + piece.kana, last.kind, last.subkind, last.base, last.said + Furigana.ENDINGS_SAID.getValue(piece.surface), piece.end)
                 last?.surface == "違" && piece.surface.first() in "くか" -> {
                     out[out.lastIndex] = last.read("ちが")
                     out += piece
@@ -488,12 +497,6 @@ internal object Readings {
         }
         return out
     }
-
-    /**
-     * Whether [piece] is a noun ending in kanji or a verb's stem, which an old ending, 恋|ひ or 住ま|ゐ, goes on. A stem of one kana
-     * is not: ふふ and ひふ are modern words, not ふ and ひ with an old ending.
-     */
-    private fun endsOldVerb(piece: Piece) = (piece.kind == "動詞" && (piece.surface.length > 1 || isHan(piece.surface.last()))) || (piece.kind == "名詞" && isHan(piece.surface.last()))
 
     /** Whether [piece] is a counter [one], いち, runs into: one kanji starting with k, s, t or h. */
     private fun counted(one: Piece, piece: Piece) = one.kana == "いち" && one.subkind in NUMBERS && piece.surface.length == 1 &&
