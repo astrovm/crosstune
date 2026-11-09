@@ -348,7 +348,11 @@ tasks.withType<Test>().configureEach {
     // didn't expect looks to the app like the network failing, and the test passes on without checking what it means to.
     val threadsDied = mutableSetOf<String>()
     addTestOutputListener { test, output ->
-        if (output.message.contains("Exception in thread \"")) threadsDied += "${test.className}.${test.name}"
+        val who = "${test.className}.${test.name}"
+        if (output.message.contains("Exception in thread \"")) threadsDied += who
+        // Said as it happens, with its stack: runTest reports a coroutine that leaked its exception in the next
+        // test it starts, and a failed test hides this output from the log, so only this names the one that leaked.
+        if (who in threadsDied) logger.lifecycle("$who: ${output.message.trimEnd()}")
     }
     doLast {
         if (threadsDied.isNotEmpty()) throw GradleException("A thread died on an exception during ${threadsDied.sorted().joinToString()}")
