@@ -36,6 +36,9 @@ class LinesTest(unittest.TestCase):
             "# J-Total widths, in thousandths of a digit", "# Chromium 123", "# font 1"
         ])
 
+    def test_only_installed_fonts_are_recorded(self):
+        self.assertEqual(w.installed_fonts("fonts-one 1 installed\nfonts-two 2 not-installed\n"), ["fonts-one 1"])
+
 
 class SpansTest(unittest.TestCase):
     def test_the_controls_above_ascii_are_left_out(self):

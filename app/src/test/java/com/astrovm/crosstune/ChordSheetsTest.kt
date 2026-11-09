@@ -359,6 +359,15 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalCollapsesSpacesAcrossInlineTags() {
+        val sheet = " </tt><tt> ${jTotal("Am7")} ${jTotal("G")}<br>目　と"
+        assertEquals(
+            listOf(SheetLine("目　と", listOf(Chord(0, "Am7"), Chord(2, "G")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
     fun jTotalsChordsPastTheWordsEndLandAtTheEndAndWordsWithNoChordsStay() {
         assertEquals(
             listOf(SheetLine("川の道", listOf(Chord(3, "Am"))), SheetLine("朝の光 2", emptyList())),

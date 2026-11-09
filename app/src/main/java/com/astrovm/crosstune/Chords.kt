@@ -96,6 +96,7 @@ internal object ChordSheets {
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
     private val splitChord = Regex("""^([^<]+)</a>(?:on([A-G][#b]?))?""")
     private val markup = Regex("""<[^>]+>""")
+    private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^>]+>""", RegexOption.IGNORE_CASE)
     private val sourceSpace = Regex("""[ \t\r\n]+""")
 
     private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
@@ -137,7 +138,7 @@ internal object ChordSheets {
      * no column, and a link split by a <br> still names the chord on the next line.
      */
     fun fromJTotal(sheet: String): List<SheetLine> {
-        val lines = sheet.split(jTotalLineEnd).map { it.replace(sourceSpace, " ").trim(' ') }
+        val lines = sheet.split(jTotalLineEnd).map { it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ").trim(' ') }
             .filter { it.replace(markup, "").trim(' ').isNotEmpty() }
         val result = mutableListOf<SheetLine>()
         var index = 0

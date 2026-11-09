@@ -4,9 +4,16 @@
 # Unicode 15.0.0
 # fonts-dejavu-core 2.37-8
 # fonts-dejavu-mono 2.37-8
+# fonts-freefont-ttf 20211204+svn4273-2
+# fonts-ipafont-gothic 00303-21ubuntu1
+# fonts-liberation 1:2.1.5-3
 # fonts-noto-cjk 1:20230817+repack1-3
+# fonts-noto-color-emoji 2.047-0ubuntu0.24.04.1
 # fonts-noto-core 20201225-2
 # fonts-noto-mono 20201225-2
+# fonts-tlwg-loma-otf 1:0.7.3-1
+# fonts-unifont 1:15.1.01-1build1
+# fonts-wqy-zenhei 0.9.45-8
 # Inconsolata v37 (Google Fonts), SHA-256: vi=a554042f62cd6e6723d2d80826d7d4051f81036014e028c85cf4f57dea25cf41, ext=9650fe3e6dc3721080a25b2ae1edff2486bfd78fc03b2d36a909998d940e4e2b, latin=9d5a0480d2bd3e43b124bf8f36782c8fc079f9f8b023c672bff67e9ceffc236b
 # MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans
 A0-AC 1000

@@ -92,6 +92,11 @@ def header(environment):
     return ["# J-Total widths, in thousandths of a digit", *[f"# {entry}" for entry in environment]]
 
 
+def installed_fonts(packages):
+    """List installed font packages, including those in the base image."""
+    return [line.removesuffix(" installed") for line in packages.splitlines() if line.endswith(" installed")]
+
+
 def measure(out):
     """Inside the container: the width of every letter, in thousandths of a digit. Writes JSON to `out`."""
     from playwright.sync_api import sync_playwright
@@ -111,10 +116,10 @@ def measure(out):
             f"Unicode {unicodedata.unidata_version}",
         ]
         packages = subprocess.check_output(
-            ['dpkg-query', '-W', '-f=${Package} ${Version}\\n', 'fonts-noto-cjk', 'fonts-noto-core', 'fonts-noto-mono', 'fonts-dejavu-core', 'fonts-dejavu-mono'],
+            ['dpkg-query', '-W', '-f=${Package} ${Version} ${db:Status-Status}\\n', 'fonts-*'],
             text=True,
-        ).splitlines()
-        environment.extend(packages)
+        )
+        environment.extend(installed_fonts(packages))
         environment.append('Inconsolata v37 (Google Fonts), SHA-256: ' + ', '.join(
             f'{name}={hashlib.sha256(Path(f"/fonts/inconsolata-{name}.woff2").read_bytes()).hexdigest()}' for name in FONTS
         ))
