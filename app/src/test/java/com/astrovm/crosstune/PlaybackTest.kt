@@ -43,6 +43,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -1496,6 +1497,29 @@ class PlaybackTest {
         assertEquals(8, loaded?.width)
         // With none at all, there's none.
         shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Other Song", "Some Singer", album = "Best Of", at = PLAYED_AT + 1))
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun filesWithTheSameTitleUseTheirOwnCovers() {
+        allow()
+        sounding()
+        val first = player("com.example.first", "First", "Fake Song", "")
+        val second = player("com.example.second", "Second", "Fake Song", "")
+        val red = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+        val blue = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
+        shadowOf(first).setMetadata(MediaMetadata.Builder(first.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, red).build())
+        shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, blue).build())
+        shadowOf(sessions).addController(first)
+        val firstCover = playback.nowPlaying()?.metadata?.artworkUrl
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(second)
+        val secondCover = playback.nowPlaying()?.metadata?.artworkUrl
+        assertNotNull(firstCover)
+        assertNotNull(secondCover)
+        assertNotEquals(firstCover, secondCover)
+        shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, null).build())
         assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
     }
 

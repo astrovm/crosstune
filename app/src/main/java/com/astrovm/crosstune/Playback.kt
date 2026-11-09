@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -725,7 +726,7 @@ internal class MediaSessionPlayback(
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, named)
+            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
         val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
@@ -743,15 +744,21 @@ internal class MediaSessionPlayback(
      * The cover the app shows, when it gives no link to one, e.g. YouTube Music for a song no other
      * store has: kept as a file with the covers downloaded, once a song, so it shows like those.
      */
-    private fun ownCover(metadata: MediaMetadata, song: MusicMetadata): String? {
-        val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes("${song.title}\n${song.artist}".toByteArray())}.jpg")
+    private fun ownCover(metadata: MediaMetadata): String? {
+        val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
+        val bytes = runCatching {
+            ByteArrayOutputStream().use { output ->
+                if (cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, output)) output.toByteArray() else null
+            }
+        }.getOrNull() ?: return null
+        val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes(bytes)}.jpg")
         if (!file.isFile) {
-            val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
             // Written aside and moved in once whole, so one cut short isn't the song's cover from then on.
             val part = File(file.path + ".part")
             val saved = runCatching {
                 file.parentFile?.mkdirs()
-                part.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) } && part.renameTo(file)
+                part.writeBytes(bytes)
+                part.renameTo(file)
             }.getOrDefault(false)
             if (!saved) {
                 part.delete()
