@@ -32,6 +32,17 @@ class JTotalWidthsTest {
     }
 
     @Test
+    fun theControlsBetweenAsciiAndTheFirstRunAreNotListed() {
+        // U+0080 is the first code point the table could list, and it lists none up to U+009F.
+        assertEquals(2000, JTotalWidths.of(0x80))
+        assertEquals(2000, JTotalWidths.of(0x9F))
+        // The first run starts right after, and a run counts to its last code point.
+        assertEquals(1000, JTotalWidths.of(0xA0))
+        assertEquals(1000, JTotalWidths.of(0xAC))
+        assertEquals(0, JTotalWidths.of(0xAD))
+    }
+
+    @Test
     fun aLetterThatIsNotListedIsTwoColumns() {
         // Between runs, and past the last one.
         assertEquals(2000, JTotalWidths.of('あ'.code))
