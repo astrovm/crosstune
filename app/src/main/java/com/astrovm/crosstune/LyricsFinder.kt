@@ -1360,7 +1360,7 @@ internal class LyricsFinder(
         if (SongNames.saysAnotherVersion(title, song.title, song.artist)) return false
         val wanted = SongNames.normalize(song.title)
         val alternate = SongNames.normalize(parts.groupValues[2])
-        if (wanted.isEmpty() || wanted.any { it !in 'a'..'z' && it !in '0'..'9' }) return false
+        if (!GENIUS_LATIN_NAME.matches(wanted)) return false
         if (wanted == alternate) return true
         return wanted.length in GENIUS_FUZZY_LENGTH..GENIUS_MAX_TITLE && SongNames.distance(wanted, alternate) == 1
     }
@@ -1604,6 +1604,7 @@ internal class LyricsFinder(
         private val MOVEMENT_INDEX = Regex("""(^|:\s*)(\d{1,2}|[IVXLCDM]{1,7})\.(?=\s)""", RegexOption.IGNORE_CASE)
         private const val GENIUS_FUZZY_LENGTH = 7
         private const val GENIUS_MAX_TITLE = 256
+        private val GENIUS_LATIN_NAME = Regex("[a-z0-9]+")
         private val GENIUS_ALTERNATE_TITLE = Regex("""([^()]+)\s*\(([^()]+)\)""")
         const val GENIUS_URL = "https://genius.com/"
         const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
