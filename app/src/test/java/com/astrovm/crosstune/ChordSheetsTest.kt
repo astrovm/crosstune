@@ -405,6 +405,13 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalDoesNotTrimBracketsInTheMonospaceStack() {
+        val sheet = "\u3000${jTotal("C")}<br>」\u3000い"
+        assertEquals(2, ChordSheets.fromJTotal(sheet).single().chords.single().at)
+        assertEquals(1, ChordSheets.fromJTotal(sheet, monospace = true).single().chords.single().at)
+    }
+
+    @Test
     fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
         val sheet = "<a href='song-e.html'>Easy version</a><br>${jTotal("C")}<br>abcd"
         assertEquals(

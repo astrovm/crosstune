@@ -226,7 +226,9 @@ internal object ChordSheets {
 
     private fun widthAt(text: String, index: Int, monospace: Boolean): Int {
         val width = JTotalWidths.of(text.codePointAt(index), monospace)
-        return if (width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
+        // Chromium trims only with a font that has the narrow forms. Measured in the container, the Japanese
+        // font that `monospace` falls back to has none, so a page in that stack never trims.
+        return if (!monospace && width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
     }
 
     /** A two-column bracket or stop that the browser draws at one because of the letter beside it. */
