@@ -34,9 +34,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
  * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
- * 4, as Qobuz's songs are found in the phone's own store, whose numbers open where the US store's may not.
+ * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length.
  */
-internal const val MATCH_VERSION = 4
+internal const val MATCH_VERSION = 5
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -879,7 +879,7 @@ internal class ExactMatcher(
         // "Band - Topic", "BandVEVO".
         val uploader = SongNames.normalize(SongNames.withoutArticle(row.details.first()))
         val own = names.artists.flatMap(SongNames::artists).any { it == uploader || uploader.startsWith(it) && uploader.removePrefix(it) in CHANNEL_SUFFIXES }
-        return own || names.artists.any { artistIn(it, row.name) } && sameLength(row, names)
+        return own || names.artists.any { artistIn(it, row.name) } && row.lengthMs != null && names.lengthsMs.isNotEmpty() && sameLength(row, names)
     }
 
     /**

@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import unicodedata
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -30,7 +31,7 @@ OUT = ROOT / "build" / "reports"
 SAVED = OUT / "reports.json"
 CHECK = OUT / "check"
 WRANGLER = ROOT / "report" / "wrangler.jsonc"
-COLUMNS = "id, at, version, android, title, artist, app, timed, synced, sung, length_ms, source, problem, comment"
+COLUMNS = "id, at, version, android, title, artist, app, timed, synced, sung, length_ms, source, problem, comment, app_package, speed, lead_ms, early_ms, timing_log"
 # Every column but `timing`, which is long and only says where lines were moved.
 READ = f"select {COLUMNS} from reports order by id"
 # Asked in the same batch, so it counts the table the rows were read from.
@@ -57,14 +58,25 @@ def whole_table(answer):
     return rows
 
 
-def pull(run=subprocess.run):
+# Cloudflare sometimes refuses a read once and takes the same one a moment later: 1 of 32 pulls in a row
+# got error 7403, "account invalid or unauthorized", and the other 31 read the table. Only reads are asked,
+# so asking again is safe.
+WAITS = (2, 5)
+
+
+def pull(run=subprocess.run, sleep=time.sleep):
     """Saves every report in the table, or saves nothing and exits with why: the last pull's table goes first, as it would pass for this one's."""
     SAVED.unlink(missing_ok=True)
     database, account = wrangler_config(WRANGLER.read_text())
-    done = run(
-        ["npx", "--yes", "cf@latest", "d1", "query", database, "--sql", f"{COUNT}; {READ}"],
-        cwd=WRANGLER.parent, env={**os.environ, "CLOUDFLARE_ACCOUNT_ID": account}, capture_output=True, text=True,
-    )
+    for wait in (*WAITS, None):
+        done = run(
+            ["npx", "--yes", "cf@latest", "d1", "query", database, "--sql", f"{COUNT}; {READ}"],
+            cwd=WRANGLER.parent, env={**os.environ, "CLOUDFLARE_ACCOUNT_ID": account}, capture_output=True, text=True,
+        )
+        if done.returncode == 0 or wait is None:
+            break
+        print(f"cf failed, asking again in {wait} s: {done.stderr.strip()[-200:]}", file=sys.stderr)
+        sleep(wait)
     if done.returncode != 0:
         # cf uses a token in its environment over its login, and a helper's may be for other things.
         token = "\nCLOUDFLARE_API_TOKEN is set here, and cf uses it instead of its login: unset it, or let it read D1." if "CLOUDFLARE_API_TOKEN" in os.environ and re.search(r"\b40[13]\b", done.stderr) else ""

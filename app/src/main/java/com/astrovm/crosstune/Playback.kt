@@ -27,7 +27,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.Log
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -52,6 +51,12 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
     fun positionAt(nowMs: Long): Long = if (playing) positionMs + ((nowMs - atMs) * speed).toLong() else positionMs
 }
 
+/** The clock the timing log last had from an app, so what the app says again to the same effect isn't kept over what's new. */
+internal class NotedClock {
+    @Volatile
+    var clock: PlaybackClock? = null
+}
+
 /**
  * An app's clock can be a moment behind the song, as YouTube Music's often is, by over a second
  * after a pause. The song plays on from where it really is, so the words would come in late.
@@ -67,6 +72,8 @@ internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val spee
 internal class SteadyClock(
     /** The app's clock that's late, if Crosstune saw it fall behind; see [LateClock]. */
     private val late: LateClock?,
+    /** What the timing log last had of the app's clock, shared by every follower of it, as each one hears the same. */
+    private val noted: NotedClock = NotedClock(),
     /** Told of a clock the app fell behind on. */
     private val learn: (LateClock) -> Unit
 ) {
@@ -76,7 +83,16 @@ internal class SteadyClock(
     private var stopped = 0L
 
     fun of(clock: PlaybackClock): PlaybackClock = steady(clock).also {
-        if (Log.isLoggable(TIMING_LOG, Log.DEBUG)) Log.d(TIMING_LOG, "said ${clock.positionMs} at ${clock.atMs} playing ${clock.playing}, kept ${it.positionMs} at ${it.atMs}")
+        if (isNews(clock)) {
+            noted.clock = clock
+            TimingLog.note("said ${clock.positionMs} at ${clock.atMs} playing ${clock.playing} speed ${clock.speed}, kept ${it.positionMs} at ${it.atMs}")
+        }
+    }
+
+    /** Whether [clock] says something the last one noted didn't: it plays or stops, changes speed, or is somewhere else than that one was going. */
+    private fun isNews(clock: PlaybackClock): Boolean {
+        val was = noted.clock ?: return true
+        return was.playing != clock.playing || was.speed != clock.speed || abs(was.positionAt(clock.atMs) - clock.positionMs) > SAME_CLOCK_NOTE_MS
     }
 
     private fun steady(clock: PlaybackClock): PlaybackClock {
@@ -295,6 +311,7 @@ internal class MediaSessionPlayback(
     private val handler = Handler(Looper.getMainLooper())
     /** The clock each app, by package, last fell behind on. */
     private val late = ConcurrentHashMap<String, LateClock>()
+    private val notedClocks = ConcurrentHashMap<String, NotedClock>()
     /** Replaced each time Crosstune moves a song, so a move a moment back isn't taken for a stale clock. */
     @Volatile
     private var moves = Any()
@@ -372,7 +389,7 @@ internal class MediaSessionPlayback(
     }.distinctUntilChanged()
 
     /** [app]'s clock kept steady; see [SteadyClock]. With no app, there's nothing to keep. */
-    private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get)) { if (app != null) late[app] = it }
+    private fun steadyClock(app: String?) = SteadyClock(app?.let(late::get), notedClocks.getOrPut(app.orEmpty(), ::NotedClock)) { if (app != null) late[app] = it }
 
     /**
      * The app playing [song], among all that have it: one playing it beats one paused on it. It's the
@@ -871,6 +888,9 @@ internal const val STALE_CLOCK_MS = 2_000L
 
 /** A clock said this little behind is just how long saying it took, as YouTube Music says a song starts twice within a tenth or so. */
 internal const val SAYING_MS = 300L
+
+/** An app saying where it is to within this of where it was going is saying the same, and the timing log keeps it once. */
+private const val SAME_CLOCK_NOTE_MS = 20L
 
 /** Longer than any free YouTube Music ad: the longest seen was 2:14. */
 internal const val LONGEST_AD_MS = 150_000L

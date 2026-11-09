@@ -45,6 +45,8 @@ test("a report is kept, with only what a report has", async () => {
   assert.deepEqual(e.saved[0].values, [
     "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937, "letras, timed by lrclib",
     JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late", null,
+    // An app from before reports about timing sends none of what they add.
+    null, null, null, null, null,
   ]);
   // The address only counts against the limit.
   assert.deepEqual(e.keys, ["203.0.113.7"]);
@@ -54,7 +56,7 @@ test("a report is kept, with only what a report has", async () => {
 test("a report about the app, with no song, is kept too", async () => {
   const e = env();
   assert.equal((await worker.fetch(post({ version: "2.12.0", comment: "Hi" }), e)).status, 204);
-  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", null]);
+  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", ...Array(6).fill(null)]);
 });
 
 test("anything else is turned away, and nothing kept", async () => {
@@ -74,7 +76,7 @@ test("anything else is turned away, and nothing kept", async () => {
 
 test("too much is turned away before it's read", async () => {
   const e = env();
-  const big = { ...song, comment: "x".repeat(40 * 1024) };
+  const big = { ...song, comment: "x".repeat(60 * 1024) };
   assert.equal((await worker.fetch(post(big), e)).status, 413);
   // Even when it says it's small.
   assert.equal((await worker.fetch(post(big, { headers: { "Content-Length": "10" } }), e)).status, 413);
@@ -120,5 +122,55 @@ test("a problem the app found by itself says which, and one it doesn't know is n
   const e = env();
   await worker.fetch(post({ version: "2.12.0", problem: "no_lyrics", song: { title: "Demo", artist: "Band" } }), e);
   await worker.fetch(post({ version: "2.12.0", problem: "<script>", song: { title: "Demo", artist: "Band" } }), e);
-  assert.deepEqual(e.saved.map((it) => it.values.at(-1)), ["no_lyrics", null]);
+  assert.deepEqual(e.saved.map((it) => it.values[12]), ["no_lyrics", null]);
+});
+
+/** A report about the words' timing, as the app sends it, with what it adds. */
+const timing = {
+  ...song,
+  problem: "timed_by_hand",
+  song: {
+    ...song.song,
+    appPackage: "org.kde.kdeconnect_tp", speed: 1, leadMs: -1450, earlyMs: 400,
+    log: "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000",
+  },
+};
+
+test("a report about timing keeps the app followed, its speed, the lead and the log", async () => {
+  const e = env();
+  assert.equal((await worker.fetch(post(timing), e)).status, 204);
+  assert.deepEqual(e.saved[0].values.slice(12), [
+    "timed_by_hand", "org.kde.kdeconnect_tp", 1, -1450, 400,
+    "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000",
+  ]);
+  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log\) VALUES \((\?, ){17}\?\)$/);
+});
+
+test("what timing adds that isn't what it should be is left out, and the rest is kept", () => {
+  const odd = (extra) => readReport(JSON.stringify({ version: "2.22.3", song: { title: "Demo", artist: "Band", ...extra } }));
+  assert.equal(odd({ appPackage: "not a package" }).appPackage, null);
+  assert.equal(odd({ appPackage: "com.spotify.music" }).appPackage, "com.spotify.music");
+  assert.equal(odd({ appPackage: 7 }).appPackage, null);
+  assert.equal(odd({ speed: 1.100000023841858 }).speed, 1.1);
+  assert.equal(odd({ speed: 0 }).speed, null);
+  assert.equal(odd({ speed: 99 }).speed, null);
+  assert.equal(odd({ speed: "1" }).speed, null);
+  assert.equal(odd({ leadMs: 1.5 }).leadMs, null);
+  assert.equal(odd({ leadMs: 25 * 60 * 60 * 1000 }).leadMs, null);
+  assert.equal(odd({ earlyMs: -300 }).earlyMs, -300);
+  assert.equal(odd({ log: "  " }).timingLog, null);
+  assert.equal(odd({ log: { not: "text" } }).timingLog, null);
+  // A log the app bounds is kept whole; a longer one is cut, not turned away.
+  assert.equal(odd({ log: "x".repeat(8192) }).timingLog.length, 8192);
+  assert.equal(odd({ log: "é".repeat(9000) }).timingLog.length, 8192);
+});
+
+test("a report about timing the size the app bounds it to is kept", async () => {
+  const e = env();
+  // 120 notes of 300 characters, cut to the 8000 the app sends, with the longest comment and 20 lines put in time.
+  const log = Array.from({ length: 26 }, (_, i) => `${i}`.padEnd(299, "x")).join("\n").slice(0, 8000);
+  const lines = Array.from({ length: 20 }, () => ({ line: "y".repeat(300), timedMs: 1, heardMs: 2 }));
+  const big = { ...timing, comment: "c".repeat(2000), song: { ...timing.song, log, timing: lines } };
+  assert.equal((await worker.fetch(post(big), e)).status, 204);
+  assert.equal(e.saved[0].values.at(-1), log);
 });

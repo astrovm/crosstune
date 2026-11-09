@@ -309,7 +309,7 @@
     <string name="report_problem_text">Zły tekst, złe tempo lub coś innego. Opisz, co jest nie tak, i wyślij.</string>
     <string name="report_by_email">E-mail</string>
     <string name="report_comment">Co jest nie tak? (opcjonalnie)</string>
-    <string name="report_what_goes">Wysyła utwór, synchronizację tekstu i wersję aplikacji. Czyta to tylko twórca Crosstune.</string>
+    <string name="report_what_goes">Wysyła utwór, synchronizację tekstu i wersję aplikacji. Czyta to tylko twórca Crosstune. Przy problemie z synchronizacją wysyła też aplikację odtwarzacza, jej prędkość, o ile tekst wyprzedza piosenkę i notatki o synchronizacji z ostatniej minuty.</string>
     <string name="report_send">Wyślij</string>
     <string name="report_sent">Wysłano. Dziękujemy!</string>
     <string name="report_failed">Nie udało się wysłać. Sprawdź połączenie i spróbuj ponownie.</string>
