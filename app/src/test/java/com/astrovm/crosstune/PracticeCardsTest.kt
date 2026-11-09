@@ -948,7 +948,8 @@ class PracticeCardsTest {
         keep(keptFromSpotify, types = hearIt)
         installed(spotify, morphe)
         appPlays(spotify, canSeek = false)
-        appPlays(morphe)
+        // At 1x: where it says it played the line from is checked, and a faster clock would multiply how late a busy machine gets there.
+        appPlays(morphe, speed = 1f)
         cards().start(null, before = null)
         waitFor("the line is over") { practice?.sound == LineSound.PLAYED }
         assertEquals(
@@ -1239,7 +1240,8 @@ class PracticeCardsTest {
         val tidal = MusicService.TIDAL.packageName
         installed(tidal, ytMusic, preferred = Destination.Service(MusicService.TIDAL))
         appPlays(tidal, speed = 1f)
-        appPlays(ytMusic)
+        // At 1x: where it says it played the line from is checked, and a faster clock would multiply how late a busy machine gets there.
+        appPlays(ytMusic, speed = 1f)
         // As TIDAL with no account: its preview is over before the line, and it plays the next song, which isn't the card's.
         val flow = playback.appPlaying.getValue(tidal)
         playback.onPlay = { app, play -> if (app == tidal && play) flow.value = null }
@@ -1372,16 +1374,17 @@ class PracticeCardsTest {
         youTubeHasTheSong()
         keep(line())
         installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
-        appPlays(ytMusic)
+        // At 1x: where it says it played the line from is checked, and a faster clock would multiply how late a busy machine gets there.
+        appPlays(ytMusic, speed = 1f)
         val flow = playback.appPlaying.getValue(ytMusic)
         val song = flow.value
         // The app is in an ad as the card's shown, so it's still getting to the line when the card is turned.
-        flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 5f, playing = false), ad = true)
+        flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = false), ad = true)
         val cards = cards()
         cards.start(null, before = null)
         Thread.sleep(300)
         cards.turn()
-        flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 5f, playing = false))
+        flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = false))
         waitFor("it played the line") { traits.of(ytMusic).works && practice?.sound == LineSound.PLAYED }
         // Sent there paused, then played once turned, and paused again at the line's end.
         assertEquals(listOf(false, true, false), playback.plays.toList())
