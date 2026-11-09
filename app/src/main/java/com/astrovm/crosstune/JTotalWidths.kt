@@ -22,7 +22,9 @@ internal object JTotalWidths {
     // The file is read the first time a sheet needs a width, not when the app starts. It is looked up
     // by its whole path: the build may move the class to another package, and not the file.
     private val runs: Runs by lazy {
-        val lines = checkNotNull(JTotalWidths::class.java.getResourceAsStream(RESOURCE)).bufferedReader().use { it.readLines() }
+        val lines = checkNotNull(JTotalWidths::class.java.getResourceAsStream(RESOURCE)).bufferedReader().use {
+            it.readLines().filterNot { line -> line.startsWith('#') }
+        }
         val ranges = lines.map { it.substringBefore(' ') }
         Runs(
             first = ranges.map { it.substringBefore('-').toInt(16) }.toIntArray(),

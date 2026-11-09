@@ -343,6 +343,22 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalsBrokenSourceLineLandsWhereTheLivePageDoes() {
+        // IGNITE: Chromium collapses the source newlines to spaces, it does not break the line.
+        val sheet = "　　　　${jTotal("F")}　　　　　　 \n" +
+            "                        ${jTotal("G")}　　　　 \n" +
+            "                        ${jTotal("Em")}　　　${jTotal("Am")}　　　/ \n" +
+            "                        ${jTotal("Am")} \n                        /<br>\n" +
+            "                        迷わずに今　矛盾だらけの世界を　その手で撃ち放て<br>"
+        assertEquals(
+            listOf(SheetLine("迷わずに今　矛盾だらけの世界を　その手で撃ち放て", listOf(
+                Chord(4, "F"), Chord(11, "G"), Chord(16, "Em"), Chord(20, "Am"), Chord(24, "Am")
+            ))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
     fun jTotalsChordsPastTheWordsEndLandAtTheEndAndWordsWithNoChordsStay() {
         assertEquals(
             listOf(SheetLine("川の道", listOf(Chord(3, "Am"))), SheetLine("朝の光 2", emptyList())),

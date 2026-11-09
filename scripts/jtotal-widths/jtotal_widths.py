@@ -19,6 +19,7 @@ The table ends up in app/src/main/resources/com/astrovm/crosstune/jtotal-widths.
 line: `FIRST[-LAST] WIDTH`, code points in hex.
 """
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -86,6 +87,11 @@ def lines(table):
     return [f"{a:X} {w}" if a == b else f"{a:X}-{b:X} {w}" for a, b, w in table]
 
 
+def header(environment):
+    """Record the browser and fonts that actually made these widths."""
+    return ["# J-Total widths, in thousandths of a digit", *[f"# {entry}" for entry in environment]]
+
+
 def measure(out):
     """Inside the container: the width of every letter, in thousandths of a digit. Writes JSON to `out`."""
     from playwright.sync_api import sync_playwright
@@ -99,6 +105,20 @@ def measure(out):
     widths = {}
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
+        environment = [
+            f"Chromium {browser.version}",
+            f"Playwright {subprocess.check_output(['pip', 'show', 'playwright'], text=True).split('Version: ', 1)[1].splitlines()[0]}",
+            f"Unicode {unicodedata.unidata_version}",
+        ]
+        packages = subprocess.check_output(
+            ['dpkg-query', '-W', '-f=${Package} ${Version}\\n', 'fonts-noto-cjk', 'fonts-noto-core', 'fonts-noto-mono', 'fonts-dejavu-core', 'fonts-dejavu-mono'],
+            text=True,
+        ).splitlines()
+        environment.extend(packages)
+        environment.append('Inconsolata v37 (Google Fonts), SHA-256: ' + ', '.join(
+            f'{name}={hashlib.sha256(Path(f"/fonts/inconsolata-{name}.woff2").read_bytes()).hexdigest()}' for name in FONTS
+        ))
+        environment.append('MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans')
         page = browser.new_page(viewport={"width": 1200, "height": 800})
         for start in range(0, len(codes), BATCH):
             rows = "".join(f'<div><tt data-c="{c}">あ<s>{chr(c)}</s>あ</tt></div>' for c in codes[start:start + BATCH])
@@ -117,7 +137,7 @@ def measure(out):
             }"""))
         browser.close()
     nothing = [c for c in codes if unassigned(c)]
-    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing}), encoding="utf-8")
+    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing, "environment": environment}), encoding="utf-8")
 
 
 def cache():
@@ -141,7 +161,7 @@ def in_container():
     )
     raw = json.loads((work / "raw.json").read_text(encoding="utf-8"))
     widths = {int(c): w for c, w in raw["widths"].items()}
-    return "\n".join(lines(runs(widths, set(raw["nothing"])))) + "\n"
+    return "\n".join(header(raw["environment"]) + lines(runs(widths, set(raw["nothing"])))) + "\n"
 
 
 def main(argv):

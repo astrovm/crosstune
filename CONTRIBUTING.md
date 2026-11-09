@@ -61,7 +61,7 @@ The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site
 
 ## Chord sheet widths
 
-Chords from J-Total sit over the letter they sit over on J-Total's page, and that page draws letters at widths that aren't whole columns (U+0132 is 1.470 columns, U+0133 is 0.888). [`jtotal-widths.txt`](app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt) is what Chromium measures for each letter with the page's own CSS and fonts, and `ChordSheets` places chords by it. Remake it with `python3 scripts/jtotal-widths/jtotal_widths.py generate`, which measures in a container (it needs podman and downloads the three Inconsolata files once); `check` says whether the table still matches what the browser draws. Widths come from the container's Noto fonts, so a machine with other Japanese fonts draws some scripts differently.
+Chords from J-Total sit over the letter they sit over on J-Total's page, and that page draws letters at widths that aren't whole columns (U+0132 is 1.470 columns, U+0133 is 0.888). [`jtotal-widths.txt`](app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt) is what Chromium measures for each letter with the page's own CSS and fonts, and `ChordSheets` places chords by it. Its header records the browser, font packages, aliases and Inconsolata file hashes used. Remake it with `python3 scripts/jtotal-widths/jtotal_widths.py generate`, which measures in a container (it needs podman and downloads the three Inconsolata files once); `check` says whether the table still matches what the browser draws. Widths come from the container's Noto fonts, so a machine with other Japanese fonts draws some scripts differently.
 
 ## Reports
 
