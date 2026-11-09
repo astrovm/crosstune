@@ -326,6 +326,7 @@
     <string name="lyrics_katakana_as_hiragana">Katakana em hiragana</string>
     <string name="lyrics_translation">Tradução</string>
     <string name="lyrics_translation_failed">Não foi possível traduzir agora.</string>
+    <string name="lyrics_chords_failed">Não foi possível carregar os acordes.</string>
     <string name="lyrics_chords">Acordes</string>
     <string name="lyrics_capo">Capotraste %1$d</string>
     <string name="setting_translate_into">Traduzir para</string>

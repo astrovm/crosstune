@@ -4799,7 +4799,7 @@ class ListeningTest {
                 else -> words(request)
             }
         }
-        // A site that won't answer shows nothing; switched off and on, it's asked again.
+        // A site that won't answer is said, not taken for no chords; switched off and on, it's asked again.
         studyMenu()
         click(string(R.string.lyrics_chords))
         assertTrue(prefs().getBoolean("lyrics_chords", false))
@@ -4820,6 +4820,91 @@ class ListeningTest {
         click(string(R.string.lyrics_chords))
         waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") != null }
         assertEquals(asked, fake.requestedUrls.size)
+    }
+
+    /** Ultimate Guitar's pages for Demo's chords, down while [up] says so. The other sites have none. */
+    private fun chordSitesThatAreUp(up: () -> Boolean): (okhttp3.Request) -> okhttp3.Response? {
+        val page = { content: String ->
+            val store = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject(content)))).toString()
+            """<div class="js-store" data-content="${store.replace("&", "&amp;").replace("\"", "&quot;")}"></div>"""
+        }
+        return { request ->
+            when (request.url.host) {
+                "www.ufret.jp" -> FakeSpotify.html(request, "")
+                "www.ultimate-guitar.com" -> if (up()) {
+                    FakeSpotify.html(request, page("""{"results":[{"song_name":"Demo","artist_name":"Band","type":"Chords","votes":5,"tab_url":"https://tabs.ultimate-guitar.com/tab/demo-1"}]}"""))
+                } else {
+                    throw IOException("offline")
+                }
+                "tabs.ultimate-guitar.com" -> FakeSpotify.html(
+                    request,
+                    page("""{"tab_view":{"meta":{"capo":0},"wiki_tab":{"content":"[ch]G[/ch]      [ch]C[/ch]\nWalking down the river road\n[ch]D[/ch]\nSinging to the morning light"}}}""")
+                )
+                else -> null
+            }
+        }
+    }
+
+    @Test
+    fun chordsThatCouldntBeLoadedSayWhyAndTryAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var up = false
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { up })
+        // The words are there without chords; only saying so tells that from a song with none.
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_chords_failed)) }
+        assertNull(chordsOver("Walking down the river road"))
+        assertTrue(shown(string(R.string.retry_button)))
+        up = true
+        click(string(R.string.retry_button))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
+    }
+
+    @Test
+    fun chordsSwitchedOffAfterTheyCouldntBeLoadedStopSayingSo() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { false })
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_chords_failed)) }
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { !shown(string(R.string.lyrics_chords_failed)) }
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
+    }
+
+    @Test
+    fun offlineTheChordsThatCouldntBeLoadedSaySoAndComeOnceTheInternetIsBack() {
+        val connection = FakeConnection(online = false)
+        MainActivity.connectionFactory = { connection }
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var up = false
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { up })
+        // The bar says it's offline; the words say what that cost, with nothing to tap: they come back by themselves.
+        waitUntil(TIMEOUT_MS) { shown(string(R.string.lyrics_chords_failed)) }
+        assertTrue(described(string(R.string.offline)))
+        assertFalse(shown(string(R.string.retry_button)))
+        up = true
+        connection.online.value = true
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
+    }
+
+    @Test
+    fun chordsNoSiteHasAreNotACouldntLoad() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        // Every site answers, and none has a sheet for the song.
+        val chordHosts = setOf("www.cifraclub.com.br", "solr.sscdn.co", "acordes.lacuerda.net", "www.ufret.jp")
+        val noResults = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject("""{"results":[]}""")))).toString()
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request ->
+            when (request.url.host) {
+                "www.ultimate-guitar.com" -> FakeSpotify.html(request, """<div class="js-store" data-content="${noResults.replace("&", "&amp;").replace("\"", "&quot;")}"></div>""")
+                in chordHosts -> FakeSpotify.html(request, "")
+                else -> null
+            }
+        })
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { controllerModel().uiState.chords.tried } }
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
     }
 
     @Test

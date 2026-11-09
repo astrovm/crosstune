@@ -346,6 +346,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                 onAbout = { openTab(SongTab.MEANING) }, onPlayer = actions.onLyricsToPlayer, onAboutFocus = { infoFocused = it }, info = info
             )
             TranslationStatus(state.learning, state.offline, actions)
+            ChordsStatus(state.chords, state.offline, actions)
             CapoStatus(state.chords)
             MicrophoneStatus(state.error == AppError.MICROPHONE, actions)
             // Timed words with no music app to say where the song is: on top, how they can follow one. Even
@@ -1225,6 +1226,30 @@ private fun TranslationStatus(learning: Learning, offline: Boolean, actions: Scr
             IconButton(onClick = actions.onRetryTranslation) {
                 Icon(painterResource(R.drawable.ic_refresh), contentDescription = stringResource(R.string.lyrics_translation_failed), tint = MaterialTheme.colorScheme.primary)
             }
+        }
+    }
+}
+
+/**
+ * That the chords couldn't be looked up, in words: plain words alone look like a song with no
+ * chords, and the offline icon doesn't say what failed. Offline they're looked up again once the
+ * internet is back, so there's nothing to tap.
+ */
+@Composable
+private fun ChordsStatus(chords: ChordsState, offline: Boolean, actions: ScreenActions) {
+    AnimatedVisibility(visible = chords.on && chords.failed, enter = Motion.appear, exit = Motion.disappear) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).semantics { liveRegion = LiveRegionMode.Polite }
+        ) {
+            Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Text(
+                stringResource(R.string.lyrics_chords_failed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(start = 12.dp).padding(vertical = 12.dp)
+            )
+            if (!offline) TextButton(onClick = actions.onRetryChords) { Text(stringResource(R.string.retry_button)) }
         }
     }
 }

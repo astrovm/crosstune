@@ -303,4 +303,33 @@ class ChordsScreenTest {
         composeRule.waitUntil(5_000) { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(ChordsShown), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_capo, 2)).fetchSemanticsNodes().isEmpty() }
     }
+
+    @Test
+    fun chordsThatCouldntBeLookedUpSaySoInWordsAndOfferToTryAgain() {
+        var asked = 0
+        var chords by mutableStateOf(ChordsState(on = true, loading = true))
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions(onRetryChords = { asked++ })) } }
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertDoesNotExist()
+        // A site that wouldn't answer is said, which plain words alone don't: they look like a song with no chords.
+        chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        composeRule.onNodeWithText(string(R.string.retry_button)).performClick()
+        assertEquals(1, asked)
+        // Looked up again, or switched off, there's nothing left to say.
+        chords = ChordsState(on = true, loading = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_failed)).fetchSemanticsNodes().isEmpty() }
+        chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        chords = ChordsState(on = false, failed = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_failed)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun offlineTheFailedChordsAreSaidWithNothingToTap() {
+        val chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords).copy(offline = true), ScreenActions()) } }
+        // The bar says it's offline; this says what that cost. They come back with the internet, so there's no button.
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        composeRule.onNodeWithText(string(R.string.retry_button)).assertDoesNotExist()
+    }
 }
