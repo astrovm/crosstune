@@ -274,18 +274,23 @@ internal object MetadataParsers {
     /**
      * The song a player names. One that names no artist, as Android's "<unknown>" for a file with none,
      * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
-     * Without both there's no song to look up by name.
+     * A title alone still identifies what is playing, even if it cannot say who made it.
      */
     fun playerSong(title: String, artist: String): MusicMetadata? =
-        (spotifyPageSplitAtItsDash(title, artist) ?: if (noOneArtist.matches(artist.trim())) youtubeVideo(title, "") else MusicMetadata(title, artist))
-            ?.takeIf { it.title.isNotBlank() && it.artist.isNotBlank() && !namesAFile(it) }
+        (spotifyPageSplitAtItsDash(title, artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
+            ?.let { if (noArtist(it.artist)) it.copy(artist = "") else it }
+            ?.takeIf { it.title.isNotBlank() && !namesAFile(it) }
+
+    fun noArtist(artist: String) = artist.isBlank() || noOneArtist.matches(artist.trim())
+
+    private val audioExtension = Regex("""\.(?:mp3|m4a|aac|flac|ogg|opus|wav|wma|aiff|ape)$""", RegexOption.IGNORE_CASE)
 
     /** A browser playing a bare file names it by its address, under its site, e.g. "example.com/song.mp3" by "example.com". */
     private fun namesAFile(song: MusicMetadata) = '.' in song.artist && song.title.startsWith("${song.artist}/")
 
     /** No artist, or a compilation's many, as music stores and taggers name them in the app's languages. */
     private val noOneArtist = Regex(
-        """<unknown>|various(?: artists?)?|v\.?\s?a\.?|v/a|varios(?: artistas)?|vários artistas|verschiedene(?: interpreten| künstler)?|""" +
+        """<unknown>|unknown(?: artist)?|various(?: artists?)?|v\.?\s?a\.?|v/a|varios(?: artistas)?|vários artistas|verschiedene(?: interpreten| künstler)?|""" +
             """artistes (?:divers|variés)|artisti vari|diverse artiesten|różni wykonawcy|çeşitli sanatçılar|разные исполнители|""" +
             """विभिन्न कलाकार|berbagai artis|ヴァリアス・アーティスト|여러 아티스트|群星|羣星""",
         RegexOption.IGNORE_CASE

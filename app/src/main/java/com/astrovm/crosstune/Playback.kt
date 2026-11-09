@@ -818,7 +818,10 @@ internal class MediaSessionPlayback(
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
     private fun MediaController.isVideo(): Boolean =
         metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
-            MusicService.ofPackage(packageName).let { it == null || it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC }
+            MusicService.ofPackage(packageName).let {
+                it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC ||
+                    (it == null && !MetadataParsers.noArtist(metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()))
+            }
 
     /**
      * A session left behind, e.g. a browser tab that once played: it says it plays, but not where,
