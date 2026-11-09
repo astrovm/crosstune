@@ -98,8 +98,9 @@ internal object ChordSheets {
     private val markup = Regex("""<[^>]+>""")
     private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^>]+>""", RegexOption.IGNORE_CASE)
     private val sourceSpace = Regex("""[ \t\r\n]+""")
-    private val spacesAcrossTags = Regex(""" ((?:<[^>]+>)+) +""")
-    private val leadingSpaceInTags = Regex("""^((?:<[^>]+>)+) +""")
+    private val nameThenBreak = Regex("""(<a [^>]*cd/[^>]*>[^<]*[^<\s][^<]*)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
+    private val spacesAndTags = Regex("""(?: |<[^>]+>)+""")
+    private val oneSpaceOrTag = Regex(""" |<[^>]+>""")
     private val commentedStyle = Regex("""<!--\s*<style\b[^>]*>.*?</style>\s*-->""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val styleBlock = Regex("""<style\b[^>]*>(.*?)</style>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val cssComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
@@ -143,19 +144,29 @@ internal object ChordSheets {
     }
 
     /**
+     * The line as a browser draws its spaces: all the spaces and tags in a row are one space, and
+     * none at the start of the line. The tags stay where they were, as a link can start or end in
+     * the space.
+     */
+    private fun collapseSpaces(line: String): String = line.replace(spacesAndTags) { run ->
+        var spaced = run.range.first == 0
+        run.value.replace(oneSpaceOrTag) {
+            if (it.value != " ") it.value else if (spaced) "" else " ".also { spaced = true }
+        }
+    }.trim(' ')
+
+    /**
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
      * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
      * first takes one. A full-width bracket or stop is two as well, except where the browser draws
      * it at one. A letter in neither font is as wide as the browser's fallback draws it, and a chord
      * goes over the letter that starts nearest where it is. Only a <br> ends a line, and spaces count as
      * a browser counts them, as its source wraps anywhere. Tags are not drawn: an empty link adds
-     * no column, and a link split by a <br> still names the chord on the next line.
+     * no column, and a link split by a <br> names the chord on the line its name is on.
      */
     fun fromJTotal(sheet: String, monospace: Boolean = false): List<SheetLine> {
-        val lines = sheet.split(jTotalLineEnd).map {
-            it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ").trim(' ')
-                .replace(spacesAcrossTags, " $1").replace(leadingSpaceInTags, "$1")
-        }
+        // A chord link can end after the break that follows its name: the name is still on its line.
+        val lines = sheet.replace(nameThenBreak, "$1$3$2").split(jTotalLineEnd).map { collapseSpaces(it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ")) }
             .filter { it.replace(markup, "").trim(' ').isNotEmpty() }
         val result = mutableListOf<SheetLine>()
         var index = 0

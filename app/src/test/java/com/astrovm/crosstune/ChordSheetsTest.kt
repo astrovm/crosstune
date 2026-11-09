@@ -386,6 +386,25 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalCountsOneSpaceForSpacesAndEmptyLinksInARow() {
+        // A browser draws the space, the empty link and the spaces after it as one space.
+        val sheet = "${jTotal("D")} <a href='../../../cd/A.html'> \n </a> \u3000\u3000${jTotal("Em")}<br>あいうえおかき"
+        assertEquals(
+            listOf(SheetLine("あいうえおかき", listOf(Chord(0, "D"), Chord(3, "Em")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalKeepsAChordWhoseLinkClosesAfterTheBreakOnTheLineOfItsName() {
+        val sheet = "${jTotal("F")}\u3000 <a href='../../../cd/C.html'>C<br>\n </a><br>あいうえお"
+        assertEquals(
+            listOf(SheetLine("あいうえお", listOf(Chord(0, "F"), Chord(2, "C")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
     fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
         val sheet = "<a href='song-e.html'>Easy version</a><br>${jTotal("C")}<br>abcd"
         assertEquals(
