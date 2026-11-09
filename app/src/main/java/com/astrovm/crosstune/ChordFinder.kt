@@ -306,9 +306,8 @@ internal class ChordFinder(
         return code in 0xFF01..0xFF0F || code in 0xFF1A..0xFF20 || code in 0xFF3B..0xFF40 || code in 0xFF5B..0xFF5E
     }
 
-    private suspend fun chordWikiPause() {
-        if (chordWikiPauseMs > 0) delay(chordWikiPauseMs)
-    }
+    // delay() of nothing returns at once, so a pause of none needs no check of its own.
+    private suspend fun chordWikiPause() = delay(chordWikiPauseMs)
 
     /** [song]'s title, or the Japanese one it's known by when the one given isn't. */
     private suspend fun chordWikiTitle(song: MusicMetadata, otherNames: suspend () -> OtherNames): String {

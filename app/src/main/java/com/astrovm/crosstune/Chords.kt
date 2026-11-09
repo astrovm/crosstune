@@ -432,11 +432,9 @@ internal object ChordSheets {
     /** `{name}` or `{name: value}` when [line] is one directive, braces included. */
     private fun chordWikiDirective(line: String): Pair<String, String>? {
         val body = line.substring(1, line.lastIndex)
-        val colon = body.indexOf(':')
-        val name = (if (colon < 0) body else body.substring(0, colon)).trim().lowercase()
+        val name = body.substringBefore(':').trim().lowercase()
         if (!directiveName.matches(name)) return null
-        val value = if (colon < 0) "" else body.substring(colon + 1).trim()
-        return name to value
+        return name to body.substringAfter(':', "").trim()
     }
 
     /** The singer named in a subtitle, or nothing when it names nobody. */
@@ -630,7 +628,8 @@ internal object ChordSheets {
         val over = Array(texts.size) { mutableListOf<Chord>() }
         val waiting = mutableListOf<String>()
         val waitingLine = mutableListOf<Int>()
-        val landed = MutableList(lines.size) { mutableListOf<String>() }
+        // Not MutableList(size) { }: its counting loop is a change no test can see, as the one that counts backwards never ends.
+        val landed = lines.mapTo(ArrayList<MutableList<String>>(lines.size)) { mutableListOf() }
         fun hold(line: SheetLine, number: Int) {
             line.chords.forEach { chord ->
                 waiting += chord.name

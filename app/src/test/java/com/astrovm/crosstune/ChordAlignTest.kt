@@ -81,6 +81,17 @@ class ChordAlignTest {
     }
 
     @Test
+    fun aLineWhoseHalfThatLinedUpStartsAtTheVeryFirstLetterOfTheWordsStillKeepsAllItsChords() {
+        // The first letter of the words is the 0th: it counts as lined up like any other, or the line is a letter short of half.
+        val aligned = ChordSheets.align(
+            sheet(SheetLine("abcdexxxxx", listOf(Chord(8, "D"))), SheetLine(second, listOf(Chord(0, "G")))),
+            listOf(first, second)
+        )
+        assertEquals(5, aligned.lines[0].matched)
+        assertEquals(listOf("D"), aligned.lines[0].drawn)
+    }
+
+    @Test
     fun aLongLineWithLessThanHalfItsLettersLinedUpKeepsOnlyTheChordsPlayedOnThem() {
         val aligned = ChordSheets.align(
             sheet(SheetLine(first, listOf(Chord(0, "G"))), SheetLine("klmnxxxxxx", listOf(Chord(1, "A"), Chord(6, "B")))),

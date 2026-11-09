@@ -2050,7 +2050,7 @@ private fun chordedWords(line: LyricLine, text: String, written: AnnotatedString
  * Where each chord's name goes over [words]: over its letter, on the row it's on, moved right past
  * the one before so none overlap, and back left from the edge, the ones before it with it, to fit.
  */
-private fun chordPlaces(chords: List<Chord>, widths: List<Float>, words: TextLayoutResult, width: Float, gap: Float): List<Offset> {
+internal fun chordPlaces(chords: List<Chord>, widths: List<Float>, words: TextLayoutResult, width: Float, gap: Float): List<Offset> {
     val rows = chords.map { words.getLineForOffset(it.at.coerceIn(0, words.layoutInput.text.length)) }
     val natural = chords.map { words.getHorizontalPosition(it.at.coerceIn(0, words.layoutInput.text.length), usePrimaryDirection = true) }
     val xs = spreadChords(natural, rows, widths, width, gap)
