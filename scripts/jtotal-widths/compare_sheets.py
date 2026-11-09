@@ -273,7 +273,7 @@ def draw(directory):
             if "<!--HPSTART-->" not in raw:
                 continue
             text = re.sub(r'<link href="/ssi_dat/dat_st.css[^>]*>', lambda _: "<style>" + css + "</style>", raw)
-            text = re.sub(r"(?is)<script.*?</script>", "", text)
+            text = re.sub(r"(?is)<script\b.*?</script[^>]*>", "", text)
             text = re.sub(r"(?i)charset=.?[A-Za-z_0-9-]+.?", 'charset="utf-8"', text)
             text = text.replace("</head>", "<style>" + faces + " *{font-size:40px !important}</style></head>", 1)
             Path("/tmp/sheet.html").write_text(text, encoding="utf-8")
