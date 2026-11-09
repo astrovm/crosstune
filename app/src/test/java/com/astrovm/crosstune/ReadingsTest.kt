@@ -152,9 +152,9 @@ class ReadingsTest {
         // A kana that is also in the reading is looked for again where the first try leaves nothing for the rest.
         assertEquals(listOf(Ruby("切", "き"), Ruby("り"), Ruby("取", "と"), Ruby("り"), Ruby("線", "せん")), Readings.furigana("切り取り線", "きりとりせん"))
         assertEquals(listOf(Ruby("気", "き"), Ruby("に"), Ruby("入", "い"), Ruby("る")), Readings.furigana("気に入る", "きにいる"))
-        // Kana that don't match its reading can't be told apart from the kanji: one reading over the lot.
-        assertEquals(listOf(Ruby("飛び立つ", "ゆく")), Readings.furigana("飛び立つ", "ゆく"))
-        assertEquals(listOf(Ruby("飛び立つ", "とべばたつ")), Readings.furigana("飛び立つ", "とべばたつ"))
+        // A reading that isn't this word's: the kana at its ends are left out of it, and the rest is one group.
+        assertEquals(listOf(Ruby("飛び立", "ゆく"), Ruby("つ")), Readings.furigana("飛び立つ", "ゆく"))
+        assertEquals(listOf(Ruby("飛び立", "とべばた"), Ruby("つ")), Readings.furigana("飛び立つ", "とべばたつ"))
         // Kanji alone, or none, have nothing to split around.
         assertEquals(listOf(Ruby("東京", "とうきょう")), Readings.furigana("東京", "とうきょう"))
         assertEquals(listOf(Ruby("2人", "ふたり")), Readings.furigana("2人", "ふたり"))
@@ -173,7 +173,58 @@ class ReadingsTest {
         // Chinese and kanji alone are as they were.
         val pinyin = listOf(Ruby("我", "wǒ"), Ruby("爱", "ài"))
         assertEquals(pinyin, Readings.rubied(pinyin))
-        assertEquals(listOf(Ruby("飛び立つ", "ゆく")), Readings.rubied(listOf(Ruby("飛び立つ", "ゆく"))))
+        assertEquals(listOf(Ruby("飛び立", "ゆく"), Ruby("つ")), Readings.rubied(listOf(Ruby("飛び立つ", "ゆく"))))
+        // What it made is as it should be, so it is left as it is.
+        assertEquals(listOf(Ruby("飛び立", "ゆく"), Ruby("つ")), Readings.rubied(listOf(Ruby("飛び立", "ゆく"), Ruby("つ"))))
+    }
+
+    @Test
+    fun aReadingThatSpellsTheKanaAnotherWayStillGoesOverTheKanjiOnly() {
+        fun over(surface: String, reading: String, vararg parts: Ruby) = assertEquals("$surface $reading", parts.toList(), Readings.furigana(surface, reading))
+        // Katakana for hiragana and small kana for big ones, and the other way round.
+        over("飛び立つ", "トビタツ", Ruby("飛", "ト"), Ruby("び"), Ruby("立", "タ"), Ruby("つ"))
+        over("食べちゃう", "たべちやう", Ruby("食", "た"), Ruby("べちゃう"))
+        over("行つて", "いって", Ruby("行", "い"), Ruby("つて"))
+        over("行って", "いつて", Ruby("行", "い"), Ruby("って"))
+        // The old kana: ゐ, ゑ, ひ, ほ, ふ and ヲ, said い, え, い, お, う and お; づ and ぢ said ず and じ.
+        over("住まゐ", "すまい", Ruby("住", "す"), Ruby("まゐ"))
+        over("植ゑる", "うえる", Ruby("植", "う"), Ruby("ゑる"))
+        over("思ひ出", "おもいで", Ruby("思", "おも"), Ruby("ひ"), Ruby("出", "で"))
+        over("遠ほい", "とおい", Ruby("遠", "と"), Ruby("ほい"))
+        over("言ふ", "ゆう", Ruby("言", "ゆ"), Ruby("ふ"))
+        over("愛ヲ", "あいお", Ruby("愛", "あい"), Ruby("ヲ"))
+        over("近づく", "ちかずく", Ruby("近", "ちか"), Ruby("づく"))
+        over("恥ぢる", "はじる", Ruby("恥", "は"), Ruby("ぢる"))
+        // A kana said as it's not written: は, へ and ヶ.
+        over("今日は", "こんにちわ", Ruby("今日", "こんにち"), Ruby("は"))
+        over("山へ", "やまえ", Ruby("山", "やま"), Ruby("へ"))
+        over("3ヶ月", "さんかげつ", Ruby("3", "さん"), Ruby("ヶ"), Ruby("月", "げつ"))
+        over("3ヶ所", "さんかしょ", Ruby("3", "さん"), Ruby("ヶ"), Ruby("所", "しょ"))
+        // A long vowel drawn out as ー, or spelled with the vowel that follows, in the word or in the reading.
+        over("凄ーい", "すごおい", Ruby("凄", "すご"), Ruby("ーい"))
+        over("凄おい", "すごーい", Ruby("凄", "すご"), Ruby("おい"))
+        over("思う", "おもー", Ruby("思", "おも"), Ruby("う"))
+        over("通う", "かよう", Ruby("通", "かよ"), Ruby("う"))
+        over("遠い", "とおい", Ruby("遠", "とお"), Ruby("い"))
+        over("大きい", "おおきー", Ruby("大", "おお"), Ruby("きい"))
+        over("先生ぇ", "せんせい", Ruby("先生", "せんせ"), Ruby("ぇ"))
+        over("今日は", "きょうは", Ruby("今日", "きょう"), Ruby("は"))
+    }
+
+    @Test
+    fun whenTheReadingDoesNotHaveTheKanaTheyAreLeftOutOfItAndNeverRepeated() {
+        fun over(surface: String, reading: String, vararg parts: Ruby) = assertEquals("$surface $reading", parts.toList(), Readings.furigana(surface, reading))
+        // At the start of a word, at its end, and both.
+        over("お茶", "ちゃ", Ruby("お"), Ruby("茶", "ちゃ"))
+        over("食べる", "たべ", Ruby("食", "たべ"), Ruby("べる"))
+        over("お願い", "ねがえ", Ruby("お"), Ruby("願", "ねがえ"), Ruby("い"))
+        // In the middle, between kanji, it can't be left out of the one reading, but what's found around it is.
+        over("気に入る", "けいる", Ruby("気に入", "けい"), Ruby("る"))
+        over("切り取り線", "きとせん", Ruby("切り取り線", "きとせん"))
+        over("思って", "おもえて", Ruby("思", "おもえて"), Ruby("って"))
+        // Nothing to read it over.
+        over("ひらがな", "ゆく", Ruby("ひらがな"))
+        over("東京", "", Ruby("東京"))
     }
 
     @Test

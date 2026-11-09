@@ -44,6 +44,17 @@ class SavedLinesEdgesTest {
     }
 
     @Test
+    fun aLineKeptWithItsReadingOverKanaItSpellsAnotherWayLoadsWithItOverTheKanjiOnly() {
+        val old = SavedLine(
+            "今日はお茶", reading = "こんにちわおちゃ", title = "Demo", artist = "Band",
+            ruby = listOf(Ruby("今日は", "こんにちわ"), Ruby("お茶", "ちゃ"))
+        )
+        SavedLinesStore(prefs).addAll(listOf(old))
+        val loaded = SavedLinesStore(prefs).load().single()
+        assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("はお"), Ruby("茶", "ちゃ")), loaded.ruby)
+    }
+
+    @Test
     fun aLineInLatinLettersIsTheOneTypedWhenAskedSoAndTheOneSaidOtherwise() {
         val line = SavedLine("先生", romanized = "sensee", typed = "sensei", title = "Demo", artist = "Band")
         assertEquals("sensei", line.latin(typed = true))
