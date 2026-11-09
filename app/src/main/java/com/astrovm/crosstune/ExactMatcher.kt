@@ -8,6 +8,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -507,8 +508,12 @@ internal class ExactMatcher(
         val tries = CoroutineScope(currentCoroutineContext().minusKey(Job) + Job())
         try {
             val first = tries.async { qobuzTry(other, song) }
+            val wait = tries.async { delay(timeoutMs) }
             // Null for a try that failed too: then the second goes out at once.
-            val answer = withTimeoutOrNull(timeoutMs) { first.await() } ?: run {
+            val answer = select<Answer?> {
+                first.onAwait { it }
+                wait.onAwait { null }
+            } ?: run {
                 val second = tries.async { qobuzTry(other, song) }
                 select<Answer?> {
                     first.onAwait { it ?: second.await() }
