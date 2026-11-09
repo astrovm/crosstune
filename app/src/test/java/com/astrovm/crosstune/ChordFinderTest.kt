@@ -1987,6 +1987,13 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun theCharacterAfterTheTildeIsNotPunctuationAndStaysAsItIs() {
+        // DEL is the one past the last of the punctuation. Its fullwidth twin would be a bracket.
+        val tried = editsTried("川~\u007F道")
+        assertTrue(tried.toString(), "川～\u007F道" in tried)
+    }
+
+    @Test
     fun fullWidthPunctuationIsWrittenBackAtEachEndOfEachRangeAndLettersAndDigitsAreNot() {
         // ！ ／, ： ＠, ［ ｀ and ｛ ～ are the first and last of the four ranges. Beside them are letters and digits, ｟ and a gap that aren't punctuation.
         val tried = editsTried("川ＡＺａｚ０９｟\uFF00！／：＠［｀｛～道")
