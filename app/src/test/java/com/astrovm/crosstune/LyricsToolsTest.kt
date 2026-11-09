@@ -11,6 +11,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -519,9 +521,229 @@ class LyricsToolsTest {
         composeRule.onAllNodes(hasContentDescription(learn))[0].assertIsNotFocused()
     }
 
+    private val offer get() = string(R.string.auto_report_offer)
+
+    private fun offers() = composeRule.onAllNodes(hasText(offer)).fetchSemanticsNodes().size
+
+    private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+
+    private fun yes() = composeRule.onAllNodes(hasText(string(R.string.auto_report_yes)))[0]
+
+    private fun notNow() = composeRule.onAllNodes(hasContentDescription(string(R.string.auto_report_not_now)))[0]
+
+    /** The sync tool on, then [fix] done with it, then the tool off again and the bar left to go. */
+    private fun fixedByHand(fix: () -> Unit) {
+        touch()
+        composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_sync)))[0].performClick()
+        passes(1)
+        fix()
+        passes(1)
+        composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_sync_done)))[0].performClick()
+        passes(SHOWN_MS + FADE_MS + 1_000)
+        assertFalse(described(learn))
+    }
+
+    @Test
+    fun aLineTappedIntoTimeKeepsItsOfferOnScreenAfterTheBarGoes() {
+        phone = Phone.OTHER
+        openLyrics()
+        fixedByHand { line("Demo two").performClick() }
+        assertEquals(1, offers())
+        // Answered where it is, it goes, and the bar stays away.
+        yes().performClick()
+        passes(1)
+        assertEquals(0, offers())
+        assertFalse(described(learn))
+        assertEquals(true, prefs().getBoolean("auto_reports", false))
+    }
+
+    @Test
+    fun allTheWordsMovedByTheArrowsKeepTheOfferOnScreenAfterTheBarGoes() {
+        phone = Phone.OTHER
+        openLyrics()
+        fixedByHand { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_sync_later)))[0].performClick() }
+        assertEquals(1, offers())
+        // The bar coming back for a touch brings no second one.
+        touch()
+        assertTrue(described(learn))
+        assertEquals(1, offers())
+    }
+
+    @Test
+    fun theOfferIsAskedOnceInOnePlaceAsTheBarComesAndGoes() {
+        phone = Phone.OTHER
+        openLyrics()
+        touch()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(1)
+        val top = composeRule.onAllNodes(hasText(offer))[0].getUnclippedBoundsInRoot().top
+        assertEquals(1, offers())
+        passes(SHOWN_MS - 1_000)
+        assertEquals(1, offers())
+        passes(1_000 + FADE_MS)
+        // The bar is gone and the offer didn't move for it, which would put it under a finger.
+        assertFalse(described(learn))
+        assertEquals(1, offers())
+        assertEquals(top, composeRule.onAllNodes(hasText(offer))[0].getUnclippedBoundsInRoot().top)
+        touch()
+        assertEquals(1, offers())
+        assertEquals(top, composeRule.onAllNodes(hasText(offer))[0].getUnclippedBoundsInRoot().top)
+    }
+
+    @Test
+    fun theOfferComingInDoesntMoveTheBarsTools() {
+        phone = Phone.OTHER
+        openLyrics()
+        touch()
+        val before = composeRule.onAllNodes(hasContentDescription(learn))[0].getUnclippedBoundsInRoot()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(1)
+        assertEquals(1, offers())
+        assertEquals(before, composeRule.onAllNodes(hasContentDescription(learn))[0].getUnclippedBoundsInRoot())
+        // Over the bar, not over where its tools are.
+        assertTrue(composeRule.onAllNodes(hasText(offer))[0].getUnclippedBoundsInRoot().bottom <= before.top)
+    }
+
+    @Test
+    fun theOfferStaysWhileTheWordsAreSeenAndGoesWhenTheyAreLeft() {
+        phone = Phone.OTHER
+        openLyrics()
+        touch()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(SHOWN_MS * 4)
+        assertEquals(1, offers())
+        composeRule.runOnIdle { model().dismissLyrics() }
+        passes(1)
+        assertEquals(0, offers())
+    }
+
+    @Test
+    fun theOfferWaitsWhileAMenuIsOpenSoItDoesntPushItUpUnderAFinger() {
+        phone = Phone.OTHER
+        openLyrics()
+        touch()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(1)
+        composeRule.onAllNodes(hasContentDescription(learn))[0].performClick()
+        passes(1)
+        assertEquals(0, offers())
+        // The menu closed, it's there, as it was.
+        composeRule.onAllNodes(hasContentDescription(learn))[0].performClick()
+        passes(1)
+        assertEquals(1, offers())
+    }
+
+    @Test
+    fun theOfferTakesNoTapAsItComesInSoOneAimedAtTheBarNeverLandsOnYes() {
+        phone = Phone.OTHER
+        openLyrics()
+        touch()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(300)
+        yes().performClick()
+        notNow().performClick()
+        passes(1)
+        assertEquals(1, offers())
+        assertFalse(prefs().contains("auto_reports"))
+        assertEquals(0, prefs().getInt("auto_reports_closes", 0))
+        // Once it's in, it takes them.
+        passes(OFFER_ARMED_MS)
+        yes().performClick()
+        passes(1)
+        assertEquals(0, offers())
+        assertEquals(true, prefs().getBoolean("auto_reports", false))
+    }
+
+    @Test
+    fun theOfferClosedIsNotNowAndSavesNoAnswer() {
+        phone = Phone.OTHER
+        openLyrics()
+        touch()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(OFFER_ARMED_MS)
+        notNow().performClick()
+        passes(1)
+        assertEquals(0, offers())
+        assertFalse(prefs().contains("auto_reports"))
+        assertEquals(1, prefs().getInt("auto_reports_closes", 0))
+    }
+
+    @Test
+    fun theOfferOverTheBiggestFontStillShowsItsWordsAndButtonsAboveTheBar() {
+        phone = Phone.OTHER
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        try {
+            openLyrics()
+            touch()
+            composeRule.runOnIdle { model().nudgeSync(500) }
+            passes(OFFER_ARMED_MS)
+            val root = composeRule.onRoot().getUnclippedBoundsInRoot()
+            val box = composeRule.onAllNodes(hasText(offer))[0]
+            box.assertIsDisplayed()
+            yes().assertIsDisplayed()
+            notNow().assertIsDisplayed()
+            val bounds = box.getUnclippedBoundsInRoot()
+            val bar = composeRule.onAllNodes(hasContentDescription(learn))[0].getUnclippedBoundsInRoot()
+            assertTrue("$bounds is over the bar at $bar", bounds.bottom <= bar.top)
+            assertTrue("$bounds is wider than the screen $root", bounds.left >= 0.dp && bounds.right <= root.right)
+            // The words keep most of the screen.
+            assertTrue("$bounds takes too much of $root", bounds.bottom - bounds.top <= (root.bottom - root.top) / 4)
+            // The buttons are under the words, not squeezed beside them.
+            assertTrue(yes().getUnclippedBoundsInRoot().top >= bounds.top + 1.dp)
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
+    fun onATvTheOfferTakesNoFocusAndAnsweringLeavesTheRemoteOnTheBar() {
+        openLyrics()
+        waitUntil { onTheBar() }
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(1)
+        assertEquals(1, offers())
+        // Not pulled off where the remote was: it's on the bar, where the song's other tools are.
+        assertTrue(onTheBar())
+        // Up from the bar reaches the offer, and its button answers.
+        composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionUp) }
+        passes(OFFER_ARMED_MS)
+        assertFalse(onTheBar())
+        composeRule.onAllNodes(isFocused())[0].performKeyInput { pressKey(Key.DirectionCenter) }
+        passes(1)
+        assertEquals(0, offers())
+        // The remote goes back to the bar, not nowhere.
+        assertTrue(onTheBar())
+    }
+
+    @Test
+    fun onATvTheOfferComingInLeavesTheRemoteOnTheLineItWasOn() {
+        openLyrics()
+        waitUntil { onTheBar() }
+        line("Demo two").requestFocus()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(1)
+        assertEquals(1, offers())
+        line("Demo two").assertIsFocused()
+    }
+
+    @Test
+    fun onATvWhileTheBarIsAwayTheOfferStaysAndAKeyBringsTheBarBackWithTheRemote() {
+        openLyrics()
+        line("Demo two").requestFocus()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        awayFromTheTools()
+        assertEquals(1, offers())
+        line("Demo two").assertIsFocused()
+        line("Demo two").performKeyInput { pressKey(Key.DirectionRight) }
+        passes(1)
+        assertTrue(onTheBar())
+        assertEquals(1, offers())
+    }
+
     private companion object {
         const val TIMEOUT_MS = 10_000L
         const val SHOWN_MS = 5_000L
+        const val OFFER_ARMED_MS = 500L
         const val FADE_MS = 500L
     }
 }

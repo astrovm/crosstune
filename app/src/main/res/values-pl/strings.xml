@@ -314,8 +314,9 @@
     <string name="report_sent">Wysłano. Dziękujemy!</string>
     <string name="report_failed">Nie udało się wysłać. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="auto_report_offer">Zgłaszać takie problemy automatycznie?</string>
+    <string name="auto_report_offer_words_off">Tekst tego utworu był przesunięty. Zgłaszać takie przypadki automatycznie?</string>
     <string name="auto_report_yes">Tak</string>
-    <string name="auto_report_no">Nie, dziękuję</string>
+    <string name="auto_report_not_now">Nie teraz</string>
     <string name="singing_model_offer">Dopasowanie tekstu do śpiewu wymaga pobrania 32 MB.</string>
     <string name="singing_model_failed">Pobieranie 32 MB nie zostało ukończone.</string>
     <string name="singing_model_download">Pobierz</string>

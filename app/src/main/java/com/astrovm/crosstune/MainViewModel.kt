@@ -39,6 +39,8 @@ import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal sealed interface Effect {
     /**
@@ -3093,9 +3095,6 @@ internal class MainViewModel(
         uiState = uiState.copy(report = null)
     }
 
-    /** What the offer to report problems by itself was made for, to be sent if it's taken. */
-    private var offeredFor: SongProblem? = null
-
     /** Whether the words shown were put in time by hand, rather than moved to the singing heard. */
     private var timedByHand = false
 
@@ -3107,12 +3106,23 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         when (autoReports.allowed) {
             true -> reportProblem(song, problem)
-            null -> if (problem.offered) {
-                offeredFor = problem
-                uiState = uiState.copy(reportOffer = true)
-            }
+            null -> offerToReport(problem)
             false -> Unit
         }
+    }
+
+    /**
+     * The user is asked once an app session, so a problem found when it was asked already waits for the
+     * next. Another found while the offer is on screen goes with it, and Yes sends every one it's for.
+     */
+    private fun offerToReport(problem: SongProblem) {
+        if (uiState.reportOffer) {
+            uiState = uiState.copy(reportOfferFor = uiState.reportOfferFor + problem)
+            return
+        }
+        if (!autoReports.mayAsk()) return
+        autoReports.asked()
+        uiState = uiState.copy(reportOfferFor = setOf(problem))
     }
 
     private fun reportProblem(song: MusicMetadata, problem: SongProblem) {
@@ -3135,8 +3145,37 @@ internal class MainViewModel(
     private fun leaveWords() {
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
         timedByHand = false
-        offeredFor = null
-        uiState = uiState.copy(reportOffer = false)
+        uiState = uiState.copy(reportOfferFor = emptySet())
+    }
+
+    /**
+     * Words put in time by hand are reported once they're left, so a report on them is kept owed, whatever the
+     * user said about reports: it stays on the phone. Android may end the app before the words are left, and
+     * the yes may come after.
+     */
+    private fun keepOwed() {
+        val song = uiState.lyricsFor ?: return
+        val sender = reports ?: return
+        if (!timedByHand) return
+        autoReports.owe(song, reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).json())
+    }
+
+    /** Held while reports owed go, so a start and a yes close together don't send one twice. */
+    private val owedGoing = Mutex()
+
+    /**
+     * Each report owed goes, once a song, and is dropped when it got there; one that didn't waits for the next
+     * time. Words still in front of the user are left out: they may be put in time some more, and go once they're left.
+     */
+    private fun sendOwed() {
+        val sender = reports ?: return
+        if (autoReports.allowed != true) return
+        viewModelScope.launch {
+            owedGoing.withLock {
+                val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
+                autoReports.owed().filter { it.key != inFront }.forEach { if (sender.send(it.json)) autoReports.paid(it) }
+            }
+        }
     }
 
     /** Fetches the speech model offered, on any network, then hears the singing again with it. */
@@ -3159,14 +3198,24 @@ internal class MainViewModel(
         uiState = uiState.copy(singingModel = null)
     }
 
-    /** Problems found from now on are reported by itself, or never, and the one offered for goes too. */
+    /** Problems found from now on are reported by itself, or never, and those offered for go too. */
     fun allowAutoReports(allowed: Boolean) {
         autoReports.allowed = allowed
-        uiState = uiState.copy(autoReports = allowed, reportOffer = false)
-        val offered = offeredFor
-        offeredFor = null
-        // The words put in time by hand go once they're left.
-        if (allowed && offered != null && offered != SongProblem.TIMED_BY_HAND) problemFound(offered)
+        val offered = uiState.reportOfferFor
+        uiState = uiState.copy(autoReports = allowed, reportOfferFor = emptySet())
+        if (!allowed) return
+        // The words put in time by hand go once they're left; those of other songs, put in time before, go now.
+        (offered - SongProblem.TIMED_BY_HAND).forEach(::problemFound)
+        sendOwed()
+    }
+
+    /**
+     * The offer closed for now, not as a no: it isn't made again this app session, and the third close
+     * is a no for good. Settings still has the switch.
+     */
+    fun closeAutoReportOffer() {
+        autoReports.closed()
+        uiState = uiState.copy(autoReports = autoReports.allowed, reportOfferFor = emptySet())
     }
 
     /**
@@ -3186,6 +3235,7 @@ internal class MainViewModel(
     fun resetSync() {
         val song = uiState.lyricsFor ?: return
         timedByHand = false
+        autoReports.owedNothing(song)
         // Undone while the singing was being heard through the song, it isn't heard on.
         if (liningUp) {
             liningUp = false
@@ -3223,6 +3273,7 @@ internal class MainViewModel(
         placeHeard()
         uiState = uiState.copy(lyricsSynced = true, lyricsOffTake = false)
         keepInTime()
+        keepOwed()
         return true
     }
 
@@ -3248,6 +3299,7 @@ internal class MainViewModel(
         keepInTime()
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)
+        keepOwed()
     }
 
     /** [points] put in time from a video's guessed lead, as they are without it: where they're kept, as next time nothing's heard yet. */
@@ -4558,6 +4610,11 @@ internal class MainViewModel(
     fun showError(error: AppError) {
         retryListens = false
         uiState = uiState.copy(isLoading = false, isMatching = false, error = error, canRetry = false, handingOff = false)
+    }
+
+    init {
+        // Last, once everything it reads is there: a report owed from before the app was ended goes at each start the user lets reports go.
+        sendOwed()
     }
 
     companion object {

@@ -704,6 +704,7 @@ class MainActivity : ComponentActivity() {
         onSendReport = viewModel::sendReport,
         onCloseReport = viewModel::closeReport,
         onAllowAutoReports = viewModel::allowAutoReports,
+        onCloseAutoReportOffer = viewModel::closeAutoReportOffer,
         onFetchSingingModel = viewModel::fetchSingingModel,
         onCloseSingingModel = viewModel::closeSingingModel,
         onReadingsChange = viewModel::setReadings,

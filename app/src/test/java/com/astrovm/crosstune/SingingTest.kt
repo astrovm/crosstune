@@ -9,7 +9,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -601,7 +605,7 @@ class SingingTest {
     }
 
     @Test
-    fun wordsHeardOffAreReportedWhenProblemsAreButNeverAskedAbout() {
+    fun wordsHeardOffAreReportedWhenProblemsAreAllowedWithoutAsking() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         // A second off is already off.
         singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
@@ -610,6 +614,9 @@ class SingingTest {
         waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
         val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
         assertEquals("sung_off", sent.getString("problem"))
+        assertFalse(offerShown())
+        // Moved by what was sung, not put in time by hand, so nothing is owed to be sent later.
+        assertEquals(0, owed())
         // Words heard off are a problem with their timing, so it says how it went, though nothing was put in time by hand.
         val song = sent.getJSONObject("song")
         assertTrue(song.has("earlyMs"))
@@ -621,17 +628,101 @@ class SingingTest {
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
     }
 
+    /** How many timing reports are owed, kept to be sent once the words are left, or at the next start. */
+    private fun owed() = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]")).length()
+
+    private fun offerShown() = listOf(R.string.auto_report_offer, R.string.auto_report_offer_words_off).any { composeRule.onAllNodes(hasText(app.getString(it))).fetchSemanticsNodes().isNotEmpty() }
+
     @Test
-    fun wordsHeardOffNeverOfferToReportWhenTheUserHasntSaid() {
-        TimingLog.clear()
+    fun wordsHeardOffOfferToReportWhenTheUserHasntSaidAndYesSendsThisOne() {
         singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
         openLyrics()
         plays(positionMs = 1_000)
-        // The words were moved by what was sung: that's when they'd have been offered.
-        waitUntil { "lines in time" in TimingLog.lastMinute() }
+        waitUntil { model().uiState.reportOffer }
+        composeRule.waitForIdle()
+        assertTrue(offerShown())
+        // Nothing goes before the user says so.
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+        composeRule.onNodeWithText(app.getString(R.string.auto_report_yes)).performClick()
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        assertEquals("sung_off", org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)]).getString("problem"))
+        assertFalse(offerShown())
+        assertEquals(true, prefs().getBoolean("auto_reports", false))
+        // Once a song: heard again, it doesn't go again.
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun wordsHeardOffAndTheOfferClosedSendNothingNorAskAgainThisSession() {
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.reportOffer }
+        composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+        composeRule.onNodeWithContentDescription(app.getString(R.string.auto_report_not_now)).performClick()
+        composeRule.waitForIdle()
+        assertFalse(offerShown())
+        // Not now isn't a no: nothing is saved as the answer, and nothing is sent.
+        assertFalse(prefs().contains("auto_reports"))
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+        // Heard off again, not asked again until the app starts anew.
+        plays(positionMs = 20_000)
         composeRule.waitForIdle()
         assertFalse(model().uiState.reportOffer)
-        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+    }
+
+    @Test
+    fun theOfferForWordsHeardOffOverTheBiggestFontInGermanFitsAboveTheBar() {
+        org.robolectric.RuntimeEnvironment.setQualifiers("+de")
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        try {
+            singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+            openLyrics()
+            plays(positionMs = 1_000)
+            waitUntil { model().uiState.reportOffer }
+            composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+            composeRule.waitForIdle()
+            val words = app.getString(R.string.auto_report_offer_words_off)
+            assertTrue(words, words.startsWith("Der Text"))
+            val box = composeRule.onNodeWithText(words)
+            box.assertIsDisplayed()
+            composeRule.onNodeWithText(app.getString(R.string.auto_report_yes)).assertIsDisplayed()
+            composeRule.onNodeWithContentDescription(app.getString(R.string.auto_report_not_now)).assertIsDisplayed()
+            val bounds = box.getUnclippedBoundsInRoot()
+            val root = composeRule.onRoot().getUnclippedBoundsInRoot()
+            assertTrue("$bounds is wider than the screen $root", bounds.left >= 0.dp && bounds.right <= root.right)
+            assertTrue("$bounds takes too much of $root", bounds.bottom - bounds.top <= (root.bottom - root.top) / 4)
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
+    fun theOfferForWordsHeardOffStaysOnScreenWhileTheBarIsAway() {
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.reportOffer }
+        // The words glide, and the bar leaves them to it; the offer isn't something to find by touching the screen.
+        composeRule.mainClock.advanceTimeBy(6_000)
+        composeRule.waitForIdle()
+        assertFalse(composeRule.onAllNodes(hasContentDescription(app.getString(R.string.lyrics_learn))).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(offerShown())
+    }
+
+    @Test
+    fun wordsHeardALittleOffDontOfferToReport() {
+        singing.answer = { sung(-600) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.lyricsSynced }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.reportOffer)
+        assertFalse(offerShown())
     }
 
     @Test
@@ -1292,5 +1383,6 @@ class SingingTest {
         const val TIMEOUT_MS = 10_000L
         const val SHIFT_MS = -1_300L
         const val FAR_MS = 4_000L
+        const val OFFER_ARMED_MS = 500L
     }
 }

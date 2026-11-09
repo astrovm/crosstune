@@ -314,8 +314,9 @@
     <string name="report_sent">भेज दिया। धन्यवाद!</string>
     <string name="report_failed">भेजा नहीं जा सका। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>
     <string name="auto_report_offer">ऐसी समस्याओं की रिपोर्ट अपने-आप करें?</string>
+    <string name="auto_report_offer_words_off">इस गाने के बोल सही समय पर नहीं थे। ऐसे मामलों की रिपोर्ट अपने-आप करें?</string>
     <string name="auto_report_yes">हाँ</string>
-    <string name="auto_report_no">नहीं, धन्यवाद</string>
+    <string name="auto_report_not_now">अभी नहीं</string>
     <string name="singing_model_offer">बोल को गाने के साथ मिलाने के लिए 32 MB डाउनलोड करना होगा।</string>
     <string name="singing_model_failed">32 MB का डाउनलोड पूरा नहीं हुआ।</string>
     <string name="singing_model_download">डाउनलोड करें</string>

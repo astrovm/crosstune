@@ -314,8 +314,9 @@
     <string name="report_sent">Gesendet. Danke!</string>
     <string name="report_failed">Senden fehlgeschlagen. Prüfe deine Verbindung und versuche es noch mal.</string>
     <string name="auto_report_offer">Probleme wie dieses automatisch melden?</string>
+    <string name="auto_report_offer_words_off">Der Text dieses Songs war versetzt. Solche Fälle automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>
-    <string name="auto_report_no">Nein danke</string>
+    <string name="auto_report_not_now">Nicht jetzt</string>
     <string name="singing_model_offer">Damit sich der Liedtext nach dem Gesang richtet, ist ein Download von 32 MB nötig.</string>
     <string name="singing_model_failed">Der Download von 32 MB wurde nicht fertig.</string>
     <string name="singing_model_download">Herunterladen</string>

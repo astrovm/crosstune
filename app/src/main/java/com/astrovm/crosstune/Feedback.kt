@@ -148,9 +148,12 @@ internal class ReportSender(
     private val url: String = URL
 ) {
     /** Whether [report] got there. */
-    suspend fun send(report: Report): Boolean = withContext(ioDispatcher) {
+    suspend fun send(report: Report): Boolean = send(report.json())
+
+    /** Whether a report that was kept as its [json], what [Report.json] said, got there. */
+    suspend fun send(json: String): Boolean = withContext(ioDispatcher) {
         try {
-            client.newCall(Request.Builder().url(url).post(report.json().toRequestBody(JSON)).build()).execute().use { it.isSuccessful }
+            client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { it.isSuccessful }
         } catch (_: IOException) {
             false
         }

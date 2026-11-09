@@ -314,8 +314,9 @@
     <string name="report_sent">Envoyé. Merci !</string>
     <string name="report_failed">Échec de l\'envoi. Vérifiez votre connexion et réessayez.</string>
     <string name="auto_report_offer">Signaler automatiquement les problèmes comme celui-ci ?</string>
+    <string name="auto_report_offer_words_off">Les paroles de ce morceau étaient décalées. Signaler automatiquement les cas comme celui-ci ?</string>
     <string name="auto_report_yes">Oui</string>
-    <string name="auto_report_no">Non merci</string>
+    <string name="auto_report_not_now">Pas maintenant</string>
     <string name="singing_model_offer">Caler les paroles sur le chant nécessite un téléchargement de 32 Mo.</string>
     <string name="singing_model_failed">Le téléchargement de 32 Mo n\'a pas abouti.</string>
     <string name="singing_model_download">Télécharger</string>

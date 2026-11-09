@@ -314,8 +314,9 @@
     <string name="report_sent">Отправлено. Спасибо!</string>
     <string name="report_failed">Не удалось отправить. Проверьте подключение и попробуйте снова.</string>
     <string name="auto_report_offer">Сообщать о таких проблемах автоматически?</string>
+    <string name="auto_report_offer_words_off">Текст этой песни не совпадал по времени. Сообщать о таких случаях автоматически?</string>
     <string name="auto_report_yes">Да</string>
-    <string name="auto_report_no">Нет, спасибо</string>
+    <string name="auto_report_not_now">Не сейчас</string>
     <string name="singing_model_offer">Чтобы подстроить текст под пение, нужно скачать 32 МБ.</string>
     <string name="singing_model_failed">Загрузка 32 МБ не завершилась.</string>
     <string name="singing_model_download">Скачать</string>

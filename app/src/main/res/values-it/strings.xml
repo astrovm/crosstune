@@ -315,8 +315,9 @@
     <string name="report_sent">Inviato. Grazie!</string>
     <string name="report_failed">Invio non riuscito. Controlla la connessione e riprova.</string>
     <string name="auto_report_offer">Segnalare automaticamente problemi come questo?</string>
+    <string name="auto_report_offer_words_off">Il testo di questo brano era sfasato. Segnalare automaticamente casi come questo?</string>
     <string name="auto_report_yes">Sì</string>
-    <string name="auto_report_no">No, grazie</string>
+    <string name="auto_report_not_now">Non ora</string>
     <string name="singing_model_offer">Per allineare il testo al canto serve un download di 32 MB.</string>
     <string name="singing_model_failed">Il download di 32 MB non è terminato.</string>
     <string name="singing_model_download">Scarica</string>
