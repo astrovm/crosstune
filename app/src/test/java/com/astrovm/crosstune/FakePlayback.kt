@@ -145,9 +145,9 @@ internal class FakePlayback : PlaybackSource {
         return true
     }
 
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
-        // An app that can't be, with a link only it has, leaves no other to ask.
-        if (!canPlaySongs || (app != null && link != null && running?.contains(app) == false)) return false
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
+        // An app that can't be, with a link only it has, or for a card that follows it alone, leaves no other to ask.
+        if (!canPlaySongs || (app != null && (link != null || !orLastPlayed) && running?.contains(app) == false)) return false
         if (mustStart && !startsInBackground) return false.also { onlyInFront = true }
         songsAsked += song to app
         linksAsked += link

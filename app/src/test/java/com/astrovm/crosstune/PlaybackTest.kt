@@ -2246,6 +2246,11 @@ class PlaybackTest {
         assertEquals(emptyList<String>(), asked())
         assertTrue(playback.playSong(song, youTubeMusic))
         assertEquals(listOf(byName), asked())
+        // For a practice card, which follows the app it names alone, no other is asked for it; with none named, the one that played last still is.
+        assertFalse(playback.playSong(song, youTubeMusic, orLastPlayed = false))
+        assertEquals(emptyList<String>(), asked())
+        assertTrue(playback.playSong(song, null, orLastPlayed = false))
+        assertEquals(listOf(byName), asked())
         // An app running isn't woken; with no app given, none is.
         woken.clear()
         // Another app than YouTube Music has no use for the link, so it's asked by name.

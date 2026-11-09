@@ -156,9 +156,9 @@ internal class MainViewModel(
                 return source.openSong(app, link).also { if (!it) uncover() }
             }
 
-            override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
+            override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
                 qobuzNumbers?.off()
-                return source.playSong(song, app, link, mustStart)
+                return source.playSong(song, app, link, mustStart, orLastPlayed)
             }
 
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.

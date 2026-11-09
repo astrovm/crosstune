@@ -1347,6 +1347,26 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun anAppOpenedOnceAskingItGaveNothingIsNotKeptPausedWhileItPlaysTheLine() {
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        installed(ytMusic, morphe, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC, build = morphe))
+        playback.access = true
+        playback.running = emptySet()
+        val flow = MutableStateFlow<Following?>(null)
+        playback.appPlaying[morphe] = flow
+        cards().start(null, before = null)
+        waitFor("it was opened") { playback.opened.isNotEmpty() }
+        // Opened at the line, it plays there and can move.
+        flow.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 1f), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
+        waitFor("the line is heard") { practice?.sound == LineSound.PLAYING }
+        // Asked first, and kept stopped once that gave nothing, it's let go when opened: the line goes on.
+        Thread.sleep(300)
+        assertEquals(true, flow.value?.clock?.playing)
+        assertEquals(LineSound.PLAYING, practice?.sound)
+    }
+
+    @Test
     fun anAppThatErrsEachTimeItsAskedIsAskedTwiceAndThenThePlayerPlaysTheLine() {
         youTubeHasTheSong()
         keep(line(), types = hearIt)
@@ -1723,6 +1743,46 @@ class PracticeCardsTest {
         // TIDAL, stopped on its way to its next song, starts it while Morphe plays the line: it's still kept paused.
         flow.value = Following(PlaybackClock(0, System.currentTimeMillis(), 1f), "Music", canSeek = true, appPackage = tidal, durationMs = 200_000)
         waitFor("it's paused again") { flow.value?.clock?.playing == false }
+    }
+
+    @Test
+    fun anAppAskedFromBehindThatStartsOnceGivenUpOnIsKeptPaused() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line())
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        playback.access = true
+        playback.startsInBackground = false
+        val flow = MutableStateFlow<Following?>(null)
+        playback.appPlaying[tidal] = flow
+        cards().start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $tidal", "$tidal did not move to the line", "the YouTube player"), steps())
+        // As TIDAL woken cold: it starts the song from its start a second after it's given up on.
+        flow.value = Following(PlaybackClock(0, System.currentTimeMillis(), 1f), "Music", canSeek = true, appPackage = tidal, durationMs = 200_000)
+        waitFor("it's paused") { flow.value?.clock?.playing == false }
+    }
+
+    @Test
+    fun aCardDoesNotWaitOnAnAppThatCantBeAskedWhileAnotherPlays() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line())
+        val tidal = MusicService.TIDAL.packageName
+        val qobuz = MusicService.QOBUZ.packageName
+        installed(qobuz, preferred = Destination.Service(MusicService.QOBUZ))
+        // TIDAL plays something else; Qobuz isn't running and can't be woken.
+        appPlays(tidal)
+        playback.running = setOf(tidal)
+        playback.appPlaying[qobuz] = MutableStateFlow(null)
+        val started = System.currentTimeMillis()
+        cards().start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $qobuz", "$qobuz did not move to the line", "the YouTube player"), steps())
+        // Not swapped for TIDAL, which would play the song while the card waits on Qobuz until it gives up.
+        assertTrue(playback.songsAsked.isEmpty())
+        assertTrue(System.currentTimeMillis() - started < MainViewModel.LOAD_SONG_MS)
     }
 
     @Test

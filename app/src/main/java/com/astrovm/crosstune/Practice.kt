@@ -477,7 +477,10 @@ internal class PracticeCards(
         if (ownLink != null && !opens) return false.also { leaveOut(app) }
         hush(source, at != null)
         var opened = app?.let { ownLink?.let { link -> source.openSong(it, link) } } == true
-        val asked = !opened && asked(source, song, app, at) { asking, link -> if (opens) opened = source.openSong(asking, link) else leaveOut(asking) }
+        val asked = !opened && asked(source, song, app, at) { asking, link ->
+            // Kept stopped once asking it gave nothing, it's let play when it's opened instead.
+            if (opens) { letGo(asking); opened = source.openSong(asking, link) } else leaveOut(asking)
+        }
         val wait = MoveWait()
         val canSeek = (asked || opened) && waitUntilItMoves(source, opened, latest, wait)
         if (opened && !wait.cameBack) source.comesBack()
@@ -543,7 +546,13 @@ internal class PracticeCards(
         // Sent to where the line is, YouTube Music, and Morphe's build of it, start there: the song's start is never heard.
         val link = youTubeMusicLink(song, from)?.let { link -> at?.let { "$link&t=${it / 1_000}" } ?: link }
         val asking = from ?: MusicService.YOUTUBE_MUSIC.packageName
-        return source.playSong(song, asking.takeIf { from != null || link != null }, link, mustStart = true).also { if (!it && link != null) open(asking, link) }
+        val target = asking.takeIf { from != null || link != null }
+        // Followed alone, it's the app asked: another one, playing, would be taken for it, and the card would wait on the one followed.
+        return source.playSong(song, target, link, mustStart = true, orLastPlayed = false).also { started ->
+            // Given up on, it may still start a moment later, as TIDAL woken cold does: it's kept stopped, unless it's opened next.
+            if (!started && target != null) stopIn(source, song, target, target)
+            if (!started && link != null) open(asking, link)
+        }
     }
 
     /** [song]'s link on YouTube Music when that's the app to ask, or may be; null when it isn't, or isn't there. */

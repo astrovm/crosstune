@@ -236,11 +236,12 @@ internal interface PlaybackSource {
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
      * [link] there when it's known. Not running, [app] is woken in the background to; with no [link],
-     * the music app that last played is asked when [app] can't be. False with no app to ask, and, when
-     * [mustStart], when the app says it can't play it or hasn't started within a couple of seconds, as
-     * YouTube Music in the background without Premium: the caller then opens the song in the app.
+     * the music app that last played is asked when [app] can't be, unless not [orLastPlayed], as a practice
+     * card follows [app] alone. False with no app to ask, and, when [mustStart], when the app says it can't
+     * play it or hasn't started within a couple of seconds, as YouTube Music in the background without
+     * Premium: the caller then opens the song in the app.
      */
-    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null, mustStart: Boolean = false): Boolean
+    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null, mustStart: Boolean = false, orLastPlayed: Boolean = true): Boolean
 
     /**
      * Opens [app] on a song's [link], for when it isn't running and so has nothing to ask in the
@@ -512,13 +513,13 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
         val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
         val asked = apps.firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
-            ?: apps.takeIf { link == null }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            ?: apps.takeIf { link == null && (app == null || orLastPlayed) }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
             ?: return false
         return watchStart(asked, mustStart) { ask(asked, song, link) }
     }
