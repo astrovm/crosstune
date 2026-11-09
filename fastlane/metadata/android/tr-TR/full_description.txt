@@ -15,7 +15,7 @@ Bir müzik servisinden bağlantı alın, aynı şarkıyı favori uygulamanızda 
 <li>Bağlantı okunamadı mı? Geldiği uygulamada açın, arama metnini kopyalayın veya arama bağlantısını paylaşın.</li>
 <li>Bağlantı yerine şarkının adını yazarak şarkıyı bulun. Çal, sizi Crosstune'da tutar: alttaki çubuk neyin çaldığını gösterir, oynatıcıda sıradakiler, tekrarlama, beğenme ve uyku zamanlayıcısı vardır, oynatıcı ile sözler arasında kaydırırsınız.</li>
 <li>Zamanlı sözler: müzik uygulamanı takip eder ya da seninle birlikte dinler, diğer uygulamaların üzerinde yüzer ve arkada MilkDrop görselleriyle akar. Yanlış sözler ya da zamanlama mı var? Sözlerden tek dokunuşla bildir: şarkı ve zamanlaması yalnızca geliştiriciye gider.</li>
-<li>Kana, pinyin, romaji ve çevirilerle kelimeleri öğren. Alıştırma kartlarının her yüzünde ne gösterileceğini seçin. Tek bir satırdan birden çok kart türü oluşturun, her birinin kendi takvimi olsun. Sırası gelenleri her gün hatırlatır. Kart, müzik uygulamasını yalnızca Crosstune üstte gösterilebildiğinde açar; o zamana kadar satır kartta çalar.</li>
+<li>Kana, pinyin, romaji ve çevirilerle kelimeleri öğren. Alıştırma kartlarının her yüzünde ne gösterileceğini seçin. Tek bir satırdan birden çok kart türü oluşturun, her birinin kendi takvimi olsun. Sırası gelenleri her gün hatırlatır. Crosstune üstte gösterilene dek satır kartta çalar.</li>
 <li>Şarkıları baştan sona çevirmek, satırları açıklamak, öğrenmeye değer kelimeleri bulmak ve şarkıları tarif ederek aramak için ücretli ChatGPT planınla giriş yap.</li>
 <li>Android TV'de de kumandayla çalışır.</li>
 <li>Android 12 ve sonrasında Material You renkleri.</li>
