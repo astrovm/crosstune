@@ -747,9 +747,9 @@ internal class MediaSessionPlayback(
     private fun ownCover(metadata: MediaMetadata): String? {
         val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
         val bytes = runCatching {
-            ByteArrayOutputStream().use { output ->
-                if (cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, output)) output.toByteArray() else null
-            }
+            // Memory only, so there's nothing to close.
+            val output = ByteArrayOutputStream()
+            if (cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, output)) output.toByteArray() else null
         }.getOrNull() ?: return null
         val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes(bytes)}.jpg")
         if (!file.isFile) {
