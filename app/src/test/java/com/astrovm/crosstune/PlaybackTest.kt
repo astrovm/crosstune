@@ -43,6 +43,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -937,12 +938,11 @@ class PlaybackTest {
     }
 
     @Test
-    fun onlyAnAppPlayingASongWithItsArtistNamesIt() {
+    fun onlyAnAppPlayingSomethingNamesIt() {
         allow()
         sounding()
-        // Paused, with no artist, with no title, with no song at all, or Crosstune itself: none are a song playing.
+        // Paused, with no title, with no metadata, or Crosstune itself: none are a song playing.
         shadowOf(sessions).addController(player("com.paused", "Paused", "Something Else", "Someone", state = PlaybackState.STATE_PAUSED))
-        shadowOf(sessions).addController(player("com.noartist", "No Artist", "A Voice Memo", null))
         shadowOf(sessions).addController(player("com.notitle", "No Title", "", "Someone"))
         shadowOf(sessions).addController(MediaController(app, MediaSession(app, "com.nothing").sessionToken).also { shadowOf(it).setPackageName("com.nothing") })
         shadowOf(sessions).addController(player(app.packageName, "Crosstune", "Its Own Preview", "Someone"))
@@ -950,6 +950,25 @@ class PlaybackTest {
 
         shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", album = "After Hours"))
         assertEquals(song, playback.nowPlaying()?.metadata)
+    }
+
+    @Test
+    fun localFilesWithThinTagsStillCountAsPlaying() {
+        allow()
+        sounding()
+        for ((input, expected) in listOf(
+            Triple("org.videolan.vlc", "Fake Artist - Fake Song.mp3", null) to MusicMetadata("Fake Song", "Fake Artist"),
+            Triple("org.videolan.vlc", "Fake Song", "Unknown Artist") to MusicMetadata("Fake Song", ""),
+            Triple("com.sec.android.app.music", "Fake Artist - Fake Song", "<unknown>") to MusicMetadata("Fake Song", "Fake Artist"),
+            Triple("com.maxmpz.audioplayer", "Fake Song", "") to MusicMetadata("Fake Song", ""),
+            Triple("com.example.player", "Fake Artist - Fake Song.FLAC", "unknown") to MusicMetadata("Fake Song", "Fake Artist"),
+            Triple("com.example.player", "Unknown Artist - Fake Song.ogg", null) to MusicMetadata("Fake Song", "")
+        )) {
+            val (packageName, title, artist) = input
+            ShadowMediaSessionManager.reset()
+            shadowOf(sessions).addController(player(packageName, "Player", title, artist))
+            assertEquals(title, expected, playback.nowPlaying()?.metadata)
+        }
     }
 
     @Test
@@ -1415,12 +1434,12 @@ class PlaybackTest {
     }
 
     @Test
-    fun aFileOfNoArtistIsNoSongAndACompilationsIsReadFromItsTitle() {
+    fun aFileOfNoArtistPlaysWithoutOneAndACompilationsIsReadFromItsTitle() {
         allow()
         sounding()
-        // Android's word for a file with no artist is no artist (#591).
+        // Android's word for a file with no artist is no artist (#591), but the file still plays (#780).
         shadowOf(sessions).addController(player("com.other.player", "Other", "Your FYP, but make it a playlist (256k)", "<unknown>", album = "Downloads"))
-        assertNull(playback.nowPlaying())
+        assertEquals(MusicMetadata("Your FYP, but make it a playlist (256k)", ""), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
         // A compilation's file names its artist in the title, whatever the language it says so in.
         for (various in listOf("Various Artists", "Varios Artistas", "VA")) {
             ShadowMediaSessionManager.reset()
@@ -1428,10 +1447,10 @@ class PlaybackTest {
             assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
             assertEquals(MusicMetadata("Provision", "Vanishing Point"), playback.recording(MusicMetadata("Provision", "Vanishing Point"))?.copy(lengthMs = null, recordingId = null))
         }
-        // With no artist in its title either, it's no song to look up.
+        // With no artist in its title either, it plays, but there's nobody to name.
         ShadowMediaSessionManager.reset()
         shadowOf(sessions).addController(player("com.other.player", "Other", "Provision", "Various Artists", album = "Metal Compilation"))
-        assertNull(playback.nowPlaying())
+        assertEquals(MusicMetadata("Provision", ""), playback.nowPlaying()?.metadata?.copy(lengthMs = null))
     }
 
     @Test
@@ -1483,6 +1502,29 @@ class PlaybackTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun filesWithTheSameTitleUseTheirOwnCovers() {
+        allow()
+        sounding()
+        val first = player("com.example.first", "First", "Fake Song", "")
+        val second = player("com.example.second", "Second", "Fake Song", "")
+        val red = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
+        val blue = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLUE) }
+        shadowOf(first).setMetadata(MediaMetadata.Builder(first.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, red).build())
+        shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, blue).build())
+        shadowOf(sessions).addController(first)
+        val firstCover = playback.nowPlaying()?.metadata?.artworkUrl
+        ShadowMediaSessionManager.reset()
+        shadowOf(sessions).addController(second)
+        val secondCover = playback.nowPlaying()?.metadata?.artworkUrl
+        assertNotNull(firstCover)
+        assertNotNull(secondCover)
+        assertNotEquals(firstCover, secondCover)
+        shadowOf(second).setMetadata(MediaMetadata.Builder(second.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, null).build())
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun aCoverThatCouldntBeKeptIsntTakenForOneTheNextTime() {
         allow()
         sounding()
@@ -1497,6 +1539,19 @@ class PlaybackTest {
         val cover = playback.nowPlaying()?.metadata?.artworkUrl!!
         val loaded = runBlocking { ArtworkLoader(FakeSpotify().client(), Dispatchers.Unconfined, File(app.cacheDir, ARTWORK_DIR)).load(cover) }
         assertEquals(8, loaded?.width)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aCoverIsNotReturnedWhenItsFileCannotBeWritten() {
+        allow()
+        sounding()
+        val controller = player("com.example.player", "Player", "Fake Song", "")
+        val cover = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+        shadowOf(controller).setMetadata(MediaMetadata.Builder(controller.metadata).putBitmap(MediaMetadata.METADATA_KEY_ART, cover).build())
+        shadowOf(sessions).addController(controller)
+        File(app.cacheDir, ARTWORK_DIR).writeText("not a directory")
+        assertNull(playback.nowPlaying()?.metadata?.artworkUrl)
     }
 
     @Test

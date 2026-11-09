@@ -172,6 +172,20 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun aPlayerWithAThinTagStillNamesWhatItPlays() {
+        // A title alone plays, by no artist rather than an invented one (#780).
+        for (artist in listOf("", "  ", "<unknown>", "Unknown Artist", "unknown")) assertEquals(artist, MusicMetadata("Fake Song", ""), MetadataParsers.playerSong("Fake Song", artist))
+        // The artist is read from the title when it holds one, the file's extension left off.
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist - Fake Song.mp3", ""))
+        assertEquals(MusicMetadata("Fake Song", "Fake Artist"), MetadataParsers.playerSong("Fake Artist - Fake Song.FLAC", "Unknown Artist"))
+        // A placeholder named in the title is no artist either.
+        assertEquals(MusicMetadata("Fake Song", ""), MetadataParsers.playerSong("Unknown Artist - Fake Song.ogg", ""))
+        // No title, no song.
+        assertNull(MetadataParsers.playerSong("", "Fake Artist"))
+        assertNull(MetadataParsers.playerSong("  ", ""))
+    }
+
+    @Test
     fun onlyAVideoThatSaysItsMusicIsASong() {
         assertNull(MetadataParsers.musicVideo("A New Approach To An Ancient Linux Terminal Problem", "Brodie Robertson"))
         assertNull(MetadataParsers.musicVideo("My Morning Routine (4K)", "Someone"))

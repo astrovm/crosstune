@@ -91,6 +91,7 @@ const nothing = () =>
     ["https://music.youtube.com/youtubei/v1/", { contentType: "application/json", body: "{}" }],
     ["https://music.163.com/", { contentType: "application/json", body: '{"result":{"songs":[]},"code":200}' }],
     ["https://solr.sscdn.co/", { contentType: "text/javascript", body: 'LetrasSug({"response":{"docs":[]}})' }],
+    ["https://genius.com/api/search/multi", { contentType: "application/json", body: '{"response":{"sections":[]}}' }],
   ]);
 
 async function extensionId(from) {
@@ -228,6 +229,20 @@ try {
     await waitForMessage(panel, "No lyrics for this song");
     assert.equal(await panel.locator("#action").isVisible(), false);
     await both(panel, "no-lyrics");
+  });
+
+  await step("Genius: its words appear when the other sources have none", async () => {
+    lyricsSites = nothing();
+    lyricsSites.set("https://genius.com/api/search/multi", {
+      contentType: "application/json",
+      body: JSON.stringify({ response: { sections: [{ hits: [{ type: "song", result: { title: "Paper Boats", artist_names: "River Band", path: "/river-band-paper-boats-lyrics" } }] }] } }),
+    });
+    lyricsSites.set("https://genius.com/river-band-paper-boats-lyrics", {
+      contentType: "text/html", body: '<div data-lyrics-container="true">Paper Boats Lyrics<br>[Verse]<br>Paper boats along the river</div>',
+    });
+    await music.evaluate(() => window.say("Paper Boats", "River Band"));
+    await waitForWords(panel, FIRST_LINE);
+    assert.ok(asked.some((url) => url.startsWith("https://genius.com/river-band-paper-boats-lyrics")));
   });
 
   await step("an instrumental: it says so", async () => {
