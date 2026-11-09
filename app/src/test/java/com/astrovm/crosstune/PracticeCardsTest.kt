@@ -923,7 +923,16 @@ class PracticeCardsTest {
         waitFor("it works") { traits.of(ytMusic).works }
     }
 
-    /** What the card said about finding its sound, when the log was asked for. */
+    /**
+     * Turns a card the player has, which plays its line again there. In the app, a tap to grade comes after that's begun, on
+     * the same thread; here, graded at once, that replay could land on the next card instead.
+     */
+    private fun turnInThePlayer(cards: PracticeCards) {
+        val shown = player.shown.size
+        cards.turn()
+        waitFor("the line plays again") { player.shown.size > shown }
+    }
+
     /**
      * The steps a card logged. Where an app played the line from is as far as its clock ran between being sent there and
      * asked to play, real time a busy machine stretches: within what the card takes as the line's start, it reads as the start.
@@ -1003,7 +1012,7 @@ class PracticeCardsTest {
         waitFor("the player is on the line") { player.shown.isNotEmpty() }
         assertEquals(1, playback.opened.size)
         assertEquals(AppTraits(), traits.of(MusicService.SPOTIFY.packageName))
-        cards.turn()
+        turnInThePlayer(cards)
         cards.grade(Grade.GOOD)
         waitFor("the next line") { player.shown.size >= 3 }
         assertEquals(1, playback.opened.size)
@@ -1474,7 +1483,7 @@ class PracticeCardsTest {
         assertTrue(playback.opened.isEmpty())
         // Allowed, the next card opens Spotify, which wasn't put aside for the session.
         playback.comesBackByItself = true
-        cards.turn()
+        turnInThePlayer(cards)
         cards.grade(Grade.GOOD)
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         assertEquals(spotify, playback.opened.single().first)
