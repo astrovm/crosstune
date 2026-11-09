@@ -449,29 +449,36 @@ class ReadingsTest {
         assertNull(modern("思ひ出", ""))
     }
 
+    private fun modernKana(surface: String, vararg forms: String) = Furigana.modernKana(surface, forms.toList())
+
     @Test
     fun aWordInOldKanaAloneIsSpelledTodayByTheFormThatSaysItAlike() {
         // The dictionary form's reading, the way it's said, and the old kana joined to the one before it.
-        assertEquals("いう", Furigana.modernKana("いふ", "イウ"))
-        assertEquals("まいる", Furigana.modernKana("まゐる", "マイル"))
-        assertEquals("ちょうちょう", Furigana.modernKana("てふてふ", "チョウチョウ"))
-        assertEquals("きょう", Furigana.modernKana("けふ", "キョウ"))
-        assertEquals("ぎょうぎ", Furigana.modernKana("げふぎ", "ぎょうぎ"))
-        assertEquals("いい", Furigana.modernKana("いひ", "いい"))
-        assertEquals("あうぎ", Furigana.modernKana("あふぎ", "あうぎ"))
-        assertEquals("まいり", Furigana.modernKana("まゐり", "マイリ"))
+        assertEquals("いう", modernKana("いふ", "イウ"))
+        assertEquals("まいる", modernKana("まゐる", "マイル"))
+        assertEquals("ちょうちょう", modernKana("てふてふ", "チョウチョウ"))
+        assertEquals("きょう", modernKana("けふ", "キョウ"))
+        assertEquals("ぎょうぎ", modernKana("げふぎ", "ぎょうぎ"))
+        assertEquals("いい", modernKana("いひ", "いい"))
+        assertEquals("あうぎ", modernKana("あふぎ", "あうぎ"))
+        assertEquals("まいり", modernKana("まゐり", "マイリ"))
         // The next form is tried when the first doesn't say it alike: ー for a long vowel, or the form of another word.
-        assertEquals("いう", Furigana.modernKana("いふ", "ユー", "イウ"))
-        assertNull(Furigana.modernKana("いふ", "ユー"))
-        assertNull(Furigana.modernKana("いひ", "イウ"))
-        assertNull(Furigana.modernKana("とこ", "トコロ"))
-        assertNull(Furigana.modernKana("ひとり", "ヒトリ"))
+        assertEquals("いう", modernKana("いふ", "ユー", "イウ"))
+        assertNull(modernKana("いふ", "ユー"))
+        assertNull(modernKana("いひ", "イウ"))
+        assertNull(modernKana("とこ", "トコロ"))
+        assertNull(modernKana("ひとり", "ヒトリ"))
         // Only a word in hiragana with old kana in it has one.
-        assertNull(Furigana.modernKana("思ひ出", "オモイデ"))
-        assertNull(Furigana.modernKana("いう", "イウ"))
-        assertNull(Furigana.modernKana("いふ"))
-        assertNull(Furigana.modernKana("いふ", "イウエ"))
-        assertNull(Furigana.modernKana("いふう", "イウ"))
+        assertNull(modernKana("思ひ出", "オモイデ"))
+        assertNull(modernKana("いう", "イウ"))
+        assertNull(modernKana("いふ"))
+        assertNull(modernKana("いふ", "イウエ"))
+        assertNull(modernKana("いふう", "イウ"))
+        // Hiragana is ぁ to ゖ, both ends in.
+        assertEquals(true, Furigana.inOldKana("ぁひゖ"))
+        assertEquals(false, Furigana.inOldKana("ひ\u3097"))
+        assertEquals(false, Furigana.inOldKana("\u3040ひ"))
+        assertEquals(false, Furigana.inOldKana("あい"))
     }
 
     @Test

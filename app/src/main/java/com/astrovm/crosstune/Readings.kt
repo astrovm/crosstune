@@ -222,7 +222,7 @@ internal object Readings {
     /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
     private fun keptWhole(a: List<Piece>, b: List<Piece>): Boolean {
         val whole = b.singleOrNull() ?: return false
-        return a.size > 1 && (whole.surface.any(::isHan) || Furigana.modernKana(whole.surface, *listOfNotNull(whole.listed, whole.spoken).toTypedArray()) != null)
+        return a.size > 1 && (whole.surface.any(::isHan) || Furigana.modernKana(whole.surface, listOfNotNull(whole.listed, whole.spoken)) != null)
     }
 
     /**
@@ -369,7 +369,7 @@ internal object Readings {
         /** Where it ends in the line. */
         val end: Int = 0,
         /** Whether the dictionary has no reading for it. */
-        val unread: Boolean = false,
+        private val unread: Boolean = false,
         /** The reading of its dictionary form, when the dictionary says it. */
         val listed: String? = null
     ) {
@@ -563,7 +563,7 @@ internal object Readings {
             val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
             Word(
                 text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base, typed = romaji(typed, typed = true),
-                modern = Furigana.modern(text, kana, said) ?: if (Furigana.inOldKana(text)) Furigana.modernKana(text, said, *listedForm(text)) else null
+                modern = Furigana.modern(text, kana, said) ?: if (Furigana.inOldKana(text)) Furigana.modernKana(text, listOf(said) + listedForm(text)) else null
             )
         }
         else -> segments(line).map { text ->
@@ -577,8 +577,8 @@ internal object Readings {
     }
 
     /** The reading of the dictionary form UniDic has for [text], when it takes it for one word: いふ has イウ. */
-    private fun listedForm(text: String): Array<String> =
-        uniDic?.tokenize(text)?.singleOrNull()?.lemmaReadingForm?.takeIf { it != "*" }?.let { arrayOf(it) } ?: emptyArray()
+    private fun listedForm(text: String): List<String> =
+        listOfNotNull(uniDic?.tokenize(text)?.singleOrNull()?.lemmaReadingForm?.takeIf { it != "*" })
 
     /** The words between [line]'s spaces and marks, or, in Chinese, between its words. */
     private fun segments(line: String): List<String> {

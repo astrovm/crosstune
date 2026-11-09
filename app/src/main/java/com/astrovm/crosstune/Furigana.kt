@@ -55,7 +55,7 @@ internal object Furigana {
      * where old kana is said another way, so a different word of the same sound, とこ for ところ, or
      * a long vowel marked ー, names nothing wrong. Null if none does.
      */
-    fun modernKana(surface: String, vararg forms: String): String? {
+    fun modernKana(surface: String, forms: List<String>): String? {
         if (!inOldKana(surface)) return null
         return forms.map(Readings::hiragana).firstOrNull { spelled(surface, it) }
     }
