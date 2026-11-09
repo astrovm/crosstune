@@ -225,6 +225,15 @@ class LinkInterceptionTest {
     }
 
     @Test
+    @Config(sdk = [31])
+    fun fromAndroid12OnAnAppThatVerifiedTheLinksIsSeen() {
+        // Android 12 is the first to say which app opens a link; it's read there too, not only on later ones.
+        installApp(MusicService.SPOTIFY)
+        FakeDomainVerification.installPerPackage(app) { mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) }
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.linkState().blockingApps(setOf(MusicService.SPOTIFY)))
+    }
+
+    @Test
     fun anAppBlocksTheLinksOfAnotherServiceItAlsoClaims() {
         installApp(MusicService.YOUTUBE_MUSIC)
         FakeDomainVerification.installPerPackage(app) {

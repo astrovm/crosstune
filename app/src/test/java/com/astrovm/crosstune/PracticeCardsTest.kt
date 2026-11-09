@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ApplicationProvider
+import kotlin.concurrent.thread
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -1294,6 +1295,74 @@ class PracticeCardsTest {
         waitFor("it was opened") { playback.opened.isNotEmpty() }
         assertEquals(morphe, playback.opened.first().first)
         assertEquals(listOf<String?>(morphe), playback.followedApps.take(1))
+    }
+
+    @Test
+    fun anAppThatErrsEachTimeItsAskedIsAskedTwiceAndThenThePlayerPlaysTheLine() {
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        appPlays(ytMusic)
+        val flow = playback.appPlaying.getValue(ytMusic)
+        val ready = flow.value
+        // Each time it's asked to play, it errs, and is soon back, paused at the song's start.
+        playback.onPlay = { app, play ->
+            if (app == ytMusic && play) {
+                flow.value = null
+                thread {
+                    Thread.sleep(150)
+                    flow.value = ready?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 5f, playing = false))
+                }
+            }
+        }
+        cards().start(null, before = null)
+        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        assertEquals(listOf(10_000L, 10_000L), playback.seeks.toList())
+        assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
+    }
+
+    @Test
+    fun anAppInAnAdIsNotTakenToBeAtTheLineBeforeItsSentThere() {
+        youTubeHasTheSong()
+        keep(line())
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        appPlays(ytMusic)
+        val flow = playback.appPlaying.getValue(ytMusic)
+        val song = flow.value
+        // An ad under the song's name, which the app says is paused right where the line is.
+        flow.value = song?.copy(clock = PlaybackClock(10_000, System.currentTimeMillis(), 1f, playing = false), ad = true)
+        cards().start(null, before = null)
+        Thread.sleep(500)
+        assertTrue(playback.seeks.isEmpty())
+        assertEquals(AppTraits(), traits.of(ytMusic))
+        assertEquals(LineSound.LOADING, practice?.sound)
+        flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = false))
+        waitFor("it's at the line") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(10_000L), playback.seeks.toList())
+        assertEquals(AppTraits(seeks = true), traits.of(ytMusic))
+    }
+
+    @Test
+    fun aCardTurnedWhileItsAppGetsToTheLinePlaysItThere() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line())
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        appPlays(ytMusic)
+        val flow = playback.appPlaying.getValue(ytMusic)
+        val song = flow.value
+        // The app is in an ad as the card's shown, so it's still getting to the line when the card is turned.
+        flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 5f, playing = false), ad = true)
+        val cards = cards()
+        cards.start(null, before = null)
+        Thread.sleep(300)
+        cards.turn()
+        flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 5f, playing = false))
+        waitFor("it played the line") { traits.of(ytMusic).works && practice?.sound == LineSound.PLAYED }
+        // Sent there paused, then played once turned, and paused again at the line's end.
+        assertEquals(listOf(false, true, false), playback.plays.toList())
+        assertEquals(listOf("trying $ytMusic", "$ytMusic played the line from 0 ms"), steps())
+        assertTrue(player.shown.isEmpty())
     }
 }
 

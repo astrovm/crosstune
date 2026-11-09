@@ -36,6 +36,17 @@ class LineWindowTest {
     }
 
     @Test
+    fun anAppIsNearTheLineWithinWhatAppsRoundOffEitherSide() {
+        val window = LineWindow.of(line(), lead = 0)
+        assertTrue(window.near(10_000 - LineWindow.SEEK_SLACK_MS))
+        assertTrue(window.near(10_000 + LineWindow.SEEK_SLACK_MS))
+        assertFalse(window.near(10_000 - LineWindow.SEEK_SLACK_MS - 1))
+        assertFalse(window.near(10_000 + LineWindow.SEEK_SLACK_MS + 1))
+        // Back at the song's start, as after an error, it isn't.
+        assertFalse(window.near(0))
+    }
+
+    @Test
     fun aLineIsOverAtItsEndNotBefore() {
         val window = LineWindow(10_000, 16_000)
         assertFalse(window.over(15_999))

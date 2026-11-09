@@ -295,18 +295,21 @@ internal class PracticeCards(
      * for a moment, as YouTube Music without Premium pauses itself behind Crosstune, errs, or goes on to another song or
      * somewhere else in it; or when the line hasn't ended in its time.
      */
-    private suspend fun playsThrough(window: LineWindow, following: () -> Following?): Boolean = withTimeoutOrNull(window.patience) {
-        var offSince: Long? = null
-        var at = following()?.clock?.positionAt(now())
-        while (at == null || !window.over(at)) {
-            val onLine = following()?.clock?.playing == true && at != null && window.holds(at)
-            offSince = if (onLine) null else offSince ?: now()
-            if (lasted(offSince, now(), PAUSED_FOR_MS)) return@withTimeoutOrNull false
-            delay(SOUND_CHECK_MS)
-            at = following()?.clock?.positionAt(now())
+    private suspend fun playsThrough(window: LineWindow, following: () -> Following?): Boolean {
+        var over = false
+        withTimeoutOrNull(window.patience) {
+            var offSince: Long? = null
+            while (!lasted(offSince, now(), PAUSED_FOR_MS)) {
+                val clock = following()?.clock
+                val at = clock?.positionAt(now())
+                over = at != null && window.over(at)
+                if (over) break
+                offSince = if (clock?.playing == true && at != null && window.holds(at)) null else offSince ?: now()
+                delay(SOUND_CHECK_MS)
+            }
         }
-        true
-    } ?: false
+        return over
+    }
 
     /** Stops [packageName], [app] as it said it is, once a line asked of it didn't play: the song, or one it went on into. */
     private fun stopIn(source: PlaybackSource, song: MusicMetadata, app: String?, packageName: String?) {
