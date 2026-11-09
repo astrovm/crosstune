@@ -82,8 +82,14 @@ internal class FakePlayback : PlaybackSource {
     /** Runs when an app is asked to play, for a test to have the app do as it would, e.g. pause itself. */
     var onPlay: (String?, Boolean) -> Unit = { _, _ -> }
 
-    /** Whether the app goes where it's sent, and plays or pauses when asked, saying so as it does; false as one that ignores it. */
-    var obeys = true
+    /**
+     * Whether the app goes where it's sent, and plays or pauses when asked, saying so as it does, as a real one does. Off,
+     * it only ever says what a test has it say, as one that ignores what it's asked, or for a test that says it all itself.
+     */
+    var obeys = false
+
+    /** The clock the app says where it is on, as the code under test reads it. */
+    var clock: () -> Long = System::currentTimeMillis
 
     /** What [app] plays, as followed: its own when a test has it apart, else [playing]. */
     private fun flowOf(app: String?) = app?.let(appPlaying::get) ?: playing
@@ -92,7 +98,7 @@ internal class FakePlayback : PlaybackSource {
     private fun moved(app: String?, positionMs: (PlaybackClock, Long) -> Long, playing: (PlaybackClock) -> Boolean) {
         val flow = flowOf(app)
         val now = flow.value ?: return
-        val at = System.currentTimeMillis()
+        val at = clock()
         if (obeys) flow.value = now.copy(clock = PlaybackClock(positionMs(now.clock, at), at, now.clock.speed, playing(now.clock)))
     }
 

@@ -75,7 +75,12 @@ class FlashcardsTest {
 
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
-    private val phone = FakePlayback().apply { access = true }
+    private val phone = FakePlayback().apply {
+        access = true
+        // A card's app says it's at the line once it's sent there, on the phone's clock, as the card waits for it to.
+        obeys = true
+        clock = SystemClock::elapsedRealtime
+    }
     private val linePlayer = FakeLinePlayer(app)
 
     /** Put back after a test that sets the device to a TV. */
@@ -777,9 +782,9 @@ class FlashcardsTest {
         waitUntil { practice().sound == LineSound.PLAYED }
         click(string(R.string.practice_show))
         waitUntil { practice().sound == LineSound.PLAYING }
-        // The app lets the song go before the next card, of the same song, so it loads again.
-        phone.playing.value = null
+        // The line plays out; then the app lets the song go before the next card, of the same song, so it loads again.
         waitUntil { practice().sound == LineSound.PLAYED }
+        phone.playing.value = null
         // Four grades, as Anki has them.
         listOf(R.string.practice_again, R.string.practice_hard, R.string.practice_good, R.string.practice_easy).forEach { assertTrue(shown(string(it))) }
         click(string(R.string.practice_good))

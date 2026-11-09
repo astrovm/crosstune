@@ -221,29 +221,45 @@ internal class PracticeCards(
      */
     private suspend fun playLine(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, play: Boolean, following: () -> Following?): Boolean {
         val packageName = app ?: following()?.appPackage
-        val name = packageName ?: "the app"
         val window = LineWindow.of(line, lead = if (following()?.video == true) line.leadMs else 0L)
-        val turned = { uiState.practice?.turned == true }
-        var playing = play || turned()
-        var at = reach(source, song, app, window, playing, following)
-        // Turned while the app got there, it plays now.
-        if (at != null && !playing && turned()) {
-            playing = true
-            at = reach(source, song, app, window, true, following)
-        }
-        if (at == null) {
-            packageName?.let { if (playing) traits.keeps(it, false) else traits.seeks(it, false) }
-            stopIn(source, song, app, packageName)
-            return false.also { step("$name did not ${if (playing) "play" else "get to"} the line") }
-        }
+        val (at, playing) = reachAsAsked(source, song, app, window, play, following)
+        if (at == null) return notThere(source, song, app, packageName, playing)
         packageName?.let { traits.seeks(it, true) }
         if (!playing) return true.also { setSound(line, LineSound.PLAYED) }
+        return playedOut(source, song, line, app, packageName, window, following).also { kept ->
+            step(if (kept) "${packageName ?: "the app"} played the line from ${signed(at - window.start)} ms" else "${packageName ?: "the app"} stopped playing the line")
+        }
+    }
+
+    /**
+     * Gets [app] to [window], playing when [play] or the card's turned; turned while it got there, it plays now. Where it
+     * said it was, null when it never did, and whether it was asked to play.
+     */
+    private suspend fun reachAsAsked(source: PlaybackSource, song: MusicMetadata, app: String?, window: LineWindow, play: Boolean, following: () -> Following?): Pair<Long?, Boolean> {
+        val turned = { uiState.practice?.turned == true }
+        val playing = play || turned()
+        val at = reach(source, song, app, window, playing, following)
+        if (at == null || playing || !turned()) return at to playing
+        return reach(source, song, app, window, true, following) to true
+    }
+
+    /** [packageName] didn't get to the line, or play it once there: it's remembered, and stopped, for the next app. */
+    private fun notThere(source: PlaybackSource, song: MusicMetadata, app: String?, packageName: String?, playing: Boolean): Boolean {
+        packageName?.let { if (playing) traits.keeps(it, false) else traits.seeks(it, false) }
+        stopIn(source, song, app, packageName)
+        step("${packageName ?: "the app"} did not ${if (playing) "play" else "get to"} the line")
+        return false
+    }
+
+    /** Lets [app], at the line and playing, play [window] out, then pauses it; whether it did, which is remembered. */
+    private suspend fun playedOut(
+        source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, packageName: String?, window: LineWindow, following: () -> Following?
+    ): Boolean {
         soundApp = app
         setSound(line, LineSound.PLAYING)
         val kept = playsThrough(window, following)
         if (kept) source.playPause(song, false, app) else stopIn(source, song, app, packageName)
         packageName?.let { traits.keeps(it, kept) }
-        step(if (kept) "$name played the line from ${signed(at - window.start)} ms" else "$name stopped playing the line")
         setSound(line, if (kept) LineSound.PLAYED else LineSound.LOADING)
         return kept
     }

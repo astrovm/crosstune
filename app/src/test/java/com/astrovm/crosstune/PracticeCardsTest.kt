@@ -23,7 +23,7 @@ import org.robolectric.shadows.ShadowLog
 @RunWith(RobolectricTestRunner::class)
 class PracticeCardsTest {
     private val screen = mutableStateOf(UiState())
-    private val playback = FakePlayback()
+    private val playback = FakePlayback().apply { obeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val store = SavedLinesStore(ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("practice-cards", Context.MODE_PRIVATE))
 
