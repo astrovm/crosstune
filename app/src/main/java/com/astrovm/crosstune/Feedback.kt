@@ -39,9 +39,24 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import kotlin.math.roundToLong
 
 /** A line put in time by hand: where the words had it, [timedMs], and where it's heard, [heardMs]. */
 internal data class HandTiming(val line: String, val timedMs: Long, val heardMs: Long)
+
+/**
+ * What a report about the words' timing carries beyond the lines put in time: why they may have been off.
+ * [appPackage] is the app that was followed, as Android names it, and [speed] how fast it said it played;
+ * [leadMs] how far ahead of the song Crosstune took that app to be, when it knew, and [earlyMs] how far
+ * ahead of the voice it lit each line; and [log] the last minute of its timing log ([TimingLog]).
+ */
+internal data class PlayerTiming(
+    val appPackage: String?,
+    val speed: Float?,
+    val leadMs: Long?,
+    val earlyMs: Long,
+    val log: String
+)
 
 /**
  * A problem to report from app [version], about [song]'s words when there's one: whether they're
@@ -49,7 +64,7 @@ internal data class HandTiming(val line: String, val timedMs: Long, val heardMs:
  * or an email, for the user to say what's wrong and send; or sent as it is, with the user's
  * [comment], how long the recording the words are timed for is, [lengthMs], whether they were
  * lined up to the singing, [sung], and each line put in time by hand, [timing]. One Crosstune
- * sends by itself says which [problem] it found.
+ * sends by itself says which [problem] it found. One about timing also has the [player] it followed.
  */
 internal data class Report(
     val version: String,
@@ -64,7 +79,8 @@ internal data class Report(
     val timing: List<HandTiming> = emptyList(),
     val problem: SongProblem? = null,
     /** Where the words came from, and their timing when it was borrowed. */
-    val source: String? = null
+    val source: String? = null,
+    val player: PlayerTiming? = null
 ) {
     val title: String get() = song?.let { "Lyrics of ${it.title} by ${it.artist}" }.orEmpty()
 
@@ -97,10 +113,20 @@ internal data class Report(
                 put("sung", sung)
                 lengthMs?.let { ms -> put("lengthMs", ms) }
                 source?.let { put("source", it) }
+                player?.let { putPlayer(it) }
                 if (timing.isNotEmpty()) put("timing", JSONArray(timing.map { line -> JSONObject().put("line", line.line).put("timedMs", line.timedMs).put("heardMs", line.heardMs) }))
             })
         }
     }.toString()
+
+    private fun JSONObject.putPlayer(player: PlayerTiming) {
+        player.appPackage?.let { put("appPackage", it) }
+        // Whole hundredths, as a Float's own digits (1.100000023841858) say nothing more.
+        player.speed?.let { put("speed", (it * 100.0).roundToLong() / 100.0) }
+        player.leadMs?.let { put("leadMs", it) }
+        put("earlyMs", player.earlyMs)
+        player.log.takeIf { it.isNotEmpty() }?.let { put("log", it) }
+    }
 
     fun emailUrl(): String = "mailto:$EMAIL?subject=${Uri.encode(title.ifEmpty { "Crosstune" })}&body=${Uri.encode(body)}"
 

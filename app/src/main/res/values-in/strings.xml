@@ -309,7 +309,7 @@
     <string name="report_problem_text">Lirik salah, waktu tidak pas, atau hal lain. Jelaskan masalahnya, lalu kirim.</string>
     <string name="report_by_email">Email</string>
     <string name="report_comment">Apa yang salah? (opsional)</string>
-    <string name="report_what_goes">Mengirim lagu, waktu liriknya, dan versi aplikasi. Hanya developer Crosstune yang membacanya.</string>
+    <string name="report_what_goes">Mengirim lagu, waktu liriknya, dan versi aplikasi. Hanya developer Crosstune yang membacanya. Untuk masalah waktu, juga mengirim aplikasi pemutar, kecepatannya, seberapa awal kata muncul, dan catatan waktu semenit terakhir.</string>
     <string name="report_send">Kirim</string>
     <string name="report_sent">Terkirim. Terima kasih!</string>
     <string name="report_failed">Gagal mengirim. Periksa koneksimu dan coba lagi.</string>

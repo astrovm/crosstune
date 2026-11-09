@@ -309,7 +309,7 @@
     <string name="report_problem_text">가사 오류, 싱크 문제 등 무엇이든요. 무엇이 잘못됐는지 적어서 보내 주세요.</string>
     <string name="report_by_email">이메일</string>
     <string name="report_comment">무엇이 문제인가요? (선택)</string>
-    <string name="report_what_goes">곡, 가사 타이밍, 앱 버전을 보내요. Crosstune 개발자만 읽어요.</string>
+    <string name="report_what_goes">곡, 가사 타이밍, 앱 버전을 보내요. Crosstune 개발자만 읽어요. 타이밍 문제는 재생 앱, 재생 속도, 가사가 얼마나 앞서 보이는지, 마지막 1분의 타이밍 기록도 보내요.</string>
     <string name="report_send">보내기</string>
     <string name="report_sent">보냈어요. 감사합니다!</string>
     <string name="report_failed">보내지 못했어요. 연결을 확인하고 다시 시도하세요.</string>

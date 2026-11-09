@@ -610,10 +610,28 @@ class SingingTest {
         waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
         val sent = org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)])
         assertEquals("sung_off", sent.getString("problem"))
+        // Words heard off are a problem with their timing, so it says how it went, though nothing was put in time by hand.
+        val song = sent.getJSONObject("song")
+        assertTrue(song.has("earlyMs"))
+        assertFalse(song.has("timing"))
+        assertTrue(song.getString("log"), song.getString("log").contains("lines in time"))
         // Moved by the singing, not by hand, so leaving them sends nothing more.
         composeRule.runOnIdle { model().dismissLyrics() }
         composeRule.waitForIdle()
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun wordsHeardOffNeverOfferToReportWhenTheUserHasntSaid() {
+        TimingLog.clear()
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        // The words were moved by what was sung: that's when they'd have been offered.
+        waitUntil { "lines in time" in TimingLog.lastMinute() }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.reportOffer)
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
     }
 
     @Test

@@ -2,14 +2,17 @@
 // hand. Nothing here posts anywhere public: a comment, or a song, may say something personal by
 // mistake. The IP address only counts reports against the limit; it isn't kept.
 
-/** More than a report with a long comment and every line put in time by hand needs. */
-const MAX_BYTES = 32 * 1024;
+/** More than a report with a long comment, every line put in time by hand and a minute of timing log needs. */
+const MAX_BYTES = 48 * 1024;
 
 /** The longest each text may be, in characters. */
-const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, source: 100, comment: 2000, line: 300 };
+const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, source: 100, comment: 2000, line: 300, appPackage: 150, log: 8192 };
 
 /** The problems the app finds with a song by itself, and reports when the user lets it. */
 const PROBLEMS = new Set(["no_lyrics", "no_timing", "timed_by_hand", "sung_off", "no_chords"]);
+
+/** What Android allows a package to be named: dotted words of letters, digits and underscores. */
+const PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
 /** The most lines put in time by hand a report carries. */
 const MAX_POINTS = 300;
@@ -30,10 +33,11 @@ export default {
     const report = readReport(text);
     if (!report) return status(400);
     await env.DB.prepare(
-      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       report.version, report.android, report.title, report.artist, report.app,
-      report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem
+      report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
+      report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog
     ).run();
     return status(204);
   },
@@ -68,6 +72,7 @@ export function readReport(text) {
     // A problem it doesn't know is one the user sent, as far as it can tell.
     problem: PROBLEMS.has(json.problem) ? json.problem : null,
     title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, source: null, timing: null,
+    appPackage: null, speed: null, leadMs: null, earlyMs: null, timingLog: null,
   };
   if (song) {
     report.title = textOf(song.title, LIMITS.title);
@@ -79,6 +84,13 @@ export function readReport(text) {
     report.sung = flag(song.sung);
     report.lengthMs = wholeMs(song.lengthMs);
     report.source = textOf(song.source, LIMITS.source);
+    // What a report about the words' timing adds: which app was followed, and how it went. Old apps send none.
+    const appPackage = textOf(song.appPackage, LIMITS.appPackage);
+    report.appPackage = appPackage !== null && PACKAGE.test(appPackage) ? appPackage : null;
+    report.speed = speedOf(song.speed);
+    report.leadMs = signedMs(song.leadMs);
+    report.earlyMs = signedMs(song.earlyMs);
+    report.timingLog = textOf(song.log, LIMITS.log);
     const timing = timingOf(song.timing);
     if (timing === undefined) return null;
     report.timing = timing;
@@ -106,6 +118,16 @@ function wholeMs(value) {
   return Number.isInteger(value) && value >= 0 && value <= 24 * 60 * 60 * 1000 ? value : null;
 }
 
+/** [value] as milliseconds, before or after: a whole number no more than a day off. */
+function signedMs(value) {
+  return Number.isInteger(value) && Math.abs(value) <= 24 * 60 * 60 * 1000 ? value : null;
+}
+
+/** [value] as a playback speed in hundredths, when it's one a player could have. */
+function speedOf(value) {
+  return typeof value === "number" && value > 0 && value <= 16 ? Math.round(value * 100) / 100 : null;
+}
+
 /**
  * The lines put in time by hand, as JSON, each with where the words had it and where it's heard:
  * null when there are none, undefined when they aren't lines put in time.
@@ -117,7 +139,7 @@ function timingOf(value) {
   for (const point of value) {
     if (!isObject(point)) return undefined;
     const timedMs = wholeMs(point.timedMs);
-    const heardMs = Number.isInteger(point.heardMs) && Math.abs(point.heardMs) <= 24 * 60 * 60 * 1000 ? point.heardMs : null;
+    const heardMs = signedMs(point.heardMs);
     if (timedMs === null || heardMs === null) return undefined;
     points.push({ line: textOf(point.line, LIMITS.line), timedMs, heardMs });
   }

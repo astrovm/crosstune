@@ -309,7 +309,7 @@
     <string name="report_problem_text">Paroles fausses, mauvais timing ou autre chose. Dites ce qui ne va pas, puis envoyez.</string>
     <string name="report_by_email">E-mail</string>
     <string name="report_comment">Qu\'est-ce qui ne va pas ? (facultatif)</string>
-    <string name="report_what_goes">Envoie le morceau, la synchronisation de ses paroles et la version de l\'app. Seul le développeur de Crosstune le lit.</string>
+    <string name="report_what_goes">Envoie le morceau, la synchronisation de ses paroles et la version de l\'app. Seul le développeur de Crosstune le lit. Pour un souci de synchronisation, il envoie aussi l\'app de lecture, sa vitesse, l\'avance des paroles et la dernière minute de notes de synchronisation.</string>
     <string name="report_send">Envoyer</string>
     <string name="report_sent">Envoyé. Merci !</string>
     <string name="report_failed">Échec de l\'envoi. Vérifiez votre connexion et réessayez.</string>
