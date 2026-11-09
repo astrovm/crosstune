@@ -115,7 +115,7 @@ internal class FakePlayback : PlaybackSource {
         onPlay(app, play)
     }
 
-    /** Each app paused whatever it played, by package. */
+    /** Each app paused whatever it played, by package, once per pause: an app a card stopped is paused again while it's kept so. */
     val pausedApps: MutableList<String> = CopyOnWriteArrayList()
 
     override fun pauseApp(app: String) {

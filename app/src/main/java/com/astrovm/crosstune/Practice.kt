@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -117,6 +118,9 @@ internal class PracticeCards(
 
     /** The apps that failed a card since Crosstune started, by package, so the next card doesn't wait on them again. */
     private val unusable = mutableSetOf<String>()
+
+    /** Apps a card stopped, kept paused a moment, see [keepStopped], by package. */
+    private val keptStopped = ConcurrentHashMap<String, Job>()
 
     /** The app the card's line plays in, for the pause that stops it. */
     private var soundApp: String? = null
@@ -341,7 +345,31 @@ internal class PracticeCards(
 
     /** Stops [packageName], [app] as it said it is, once a line asked of it didn't play: the song, or one it went on into. */
     private fun stopIn(source: PlaybackSource, song: MusicMetadata, app: String?, packageName: String?) {
-        if (packageName != null) source.pauseApp(packageName) else source.playPause(song, false, app)
+        if (packageName == null) return source.playPause(song, false, app)
+        source.pauseApp(packageName)
+        keepStopped(source, packageName)
+    }
+
+    /**
+     * Keeps [packageName] paused a moment, [KEEP_STOPPED_MS]: stopped as it goes on to its next song, as TIDAL past its 30 s
+     * preview, it doesn't hear the pause, and starts that song a second later. Followed again, it's let go, see [letGo].
+     */
+    private fun keepStopped(source: PlaybackSource, packageName: String) {
+        keptStopped.remove(packageName)?.cancel()
+        keptStopped[packageName] = scope.launch {
+            withTimeoutOrNull(KEEP_STOPPED_MS) {
+                while (true) {
+                    delay(SOUND_CHECK_MS)
+                    source.pauseApp(packageName)
+                }
+            }
+        }
+    }
+
+    /** Lets [packageName] play again, or every app kept paused when it's null, as the song followed may then be in any of them. */
+    private fun letGo(packageName: String?) {
+        if (packageName != null) keptStopped.remove(packageName)?.cancel()
+        else keptStopped.values.toList().also { keptStopped.clear() }.forEach(Job::cancel)
     }
 
     /** [app] plays the song and won't move in it, as Spotify's free plan: that's remembered, and it's paused, for the next app to play the line. */
@@ -408,6 +436,8 @@ internal class PracticeCards(
         source: PlaybackSource, song: MusicMetadata, app: String?, only: String? = null, at: Long? = null,
         onStuck: (Following?) -> Unit = {}, block: suspend (() -> Following?) -> Unit
     ): Boolean = coroutineScope {
+        // What it follows may be an app a card stopped a moment ago: it's let play.
+        letGo(only ?: app)
         var latest: Following? = null
         val following = launch {
             source.follow(song, only).collect {
@@ -597,6 +627,8 @@ internal class PracticeCards(
         /** How long a song the music app has already takes to be found. */
         const val FIND_SONG_MS = 400L
         const val SOUND_CHECK_MS = 50L
+        /** How long an app a card stopped is kept paused: TIDAL started its next song 1.7 s after it was paused. */
+        const val KEEP_STOPPED_MS = 5_000L
         /** How long a song plays with no seek offered before the app's taken not to offer one. */
         const val STUCK_AFTER_MS = 1_000L
         /** How many apps a card tries before the small player, so a phone full of music apps doesn't make it wait on all of them. */

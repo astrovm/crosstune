@@ -1210,7 +1210,7 @@ class PracticeCardsTest {
         assertEquals(listOf("trying $ytMusic", "$ytMusic did not play the line", "the YouTube player"), steps())
         assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
         // What it may still play is paused.
-        assertEquals(listOf(ytMusic), playback.pausedApps.toList())
+        assertEquals(listOf(ytMusic), playback.pausedApps.distinct())
     }
 
     @Test
@@ -1229,7 +1229,7 @@ class PracticeCardsTest {
         waitFor("the player takes over") { player.shown.isNotEmpty() }
         assertEquals(emptyList<String>(), playedSteps())
         assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
-        assertEquals(listOf(ytMusic), playback.pausedApps.toList())
+        assertEquals(listOf(ytMusic), playback.pausedApps.distinct())
     }
 
     @Test
@@ -1249,7 +1249,7 @@ class PracticeCardsTest {
         waitFor("the next app played the line") { "$ytMusic played the line from its start" in steps() }
         assertEquals(listOf("trying $tidal", "$tidal did not play the line", "trying $ytMusic", "$ytMusic played the line from its start"), steps())
         // The other song TIDAL went on to isn't left playing.
-        assertEquals(listOf(tidal), playback.pausedApps.toList())
+        assertEquals(listOf(tidal), playback.pausedApps.distinct())
         assertEquals(AppTraits(keeps = false), traits.of(tidal))
         assertTrue(player.shown.isEmpty())
     }
@@ -1304,7 +1304,7 @@ class PracticeCardsTest {
         waitFor("the player has the line") { practice?.video == "demo0000000" }
         assertEquals(LineSound.PLAYED, practice?.sound)
         assertEquals(AppTraits(seeks = false), traits.of(ytMusic))
-        assertEquals(listOf(ytMusic), playback.pausedApps.toList())
+        assertEquals(listOf(ytMusic), playback.pausedApps.distinct())
     }
 
     @Test
@@ -1557,6 +1557,41 @@ class PracticeCardsTest {
         val heardFor = System.currentTimeMillis() - movedAt
         // Not the 1.5 s an app that only pauses a moment is given: what it plays would be heard all that time.
         assertTrue("it played elsewhere $heardFor ms", heardFor < 1_500)
+    }
+
+    @Test
+    fun anAppStoppedOnItsWayToItsNextSongIsKeptPausedWhenItStartsIt() {
+        val (tidal, flow) = tidalGoesOnToItsNextSong()
+        // As TIDAL: the pause came while it was between songs, so it starts the next one anyway, a moment later.
+        flow.value = Following(PlaybackClock(0, System.currentTimeMillis(), 1f), "Music", canSeek = true, appPackage = tidal, durationMs = 200_000)
+        waitFor("it's paused again") { flow.value?.clock?.playing == false }
+    }
+
+    @Test
+    fun anAppKeptPausedIsLetPlayWhatPlayedBeforePractice() {
+        val (tidal, flow) = tidalGoesOnToItsNextSong()
+        // Done, what played before goes on in whichever app has it, here TIDAL, which is then left to play.
+        tidalCards.backToBefore()
+        flow.value = Following(PlaybackClock(0, System.currentTimeMillis(), 1f), "Music", canSeek = true, appPackage = tidal, durationMs = 200_000)
+        Thread.sleep(300)
+        assertEquals(true, flow.value?.clock?.playing)
+    }
+
+    private lateinit var tidalCards: PracticeCards
+
+    /** TIDAL, asked to play a card's line, goes on to its next song instead, and is stopped: its package and what it plays. */
+    private fun tidalGoesOnToItsNextSong(): Pair<String, MutableStateFlow<Following?>> {
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        appPlays(tidal, speed = 1f)
+        val flow = playback.appPlaying.getValue(tidal)
+        playback.onPlay = { app, play -> if (app == tidal && play) flow.value = null }
+        tidalCards = cards()
+        tidalCards.start(null, before = Before(MusicMetadata("Before", "Band"), 4_000, null))
+        waitFor("it's stopped") { playback.pausedApps.isNotEmpty() }
+        return tidal to flow
     }
 }
 
