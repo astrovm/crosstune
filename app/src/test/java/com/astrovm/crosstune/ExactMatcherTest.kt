@@ -1761,15 +1761,26 @@ class ExactMatcherTest {
     @Test
     fun qobuzsOtherStoreIsAskedOnceWhenTheFirstTryAnswersInTime() {
         // Answered a little after it was asked, not at once, so a second that went out the moment the first was waited on shows.
-        // On threads of its own: on the test's single one a second try never gets to ask before it's called off, and wouldn't show.
         val (matcher, asked) = slowQobuz(1_000, qobuzAfter(150), qobuzAfter(0))
         val started = System.nanoTime()
-        assertEquals("https://play.qobuz.com/track/625089", runBlocking(Dispatchers.Default) { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
+        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
         // Handed over when the first answers, not once the wait is over, which a lookup that only looks at the wait does too, with its second try called off before it asks.
         assertTrue((System.nanoTime() - started) / 1_000_000 < 900)
         // Past the wait for the first, a second would have gone out.
         Thread.sleep(1_300)
         assertEquals(1, asked.get())
+    }
+
+    @Test
+    fun qobuzsOtherStoreSendsNoSecondTryTheMomentTheFirstAnswers() {
+        // A second try that goes out is called off the moment the lookup is done, and whether it got to ask first depends on
+        // which thread got there first, so one lookup may not show it. Many on threads of their own do.
+        val lookups = 100
+        val (matcher, asked) = slowQobuz(1_000, qobuzAfter(0))
+        runBlocking(Dispatchers.Default) {
+            repeat(lookups) { assertEquals("https://play.qobuz.com/track/625089", matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber)) }
+        }
+        assertEquals(lookups, asked.get())
     }
 
     @Test
