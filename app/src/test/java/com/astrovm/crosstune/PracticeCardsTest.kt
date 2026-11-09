@@ -906,7 +906,7 @@ class PracticeCardsTest {
      * What the card said about finding its sound, when the log was asked for. Where an app played the line from is
      * its clock when it was asked: a few ms on from the line's start on a slow machine, so it always reads 0.
      */
-    private fun steps(): List<String> = ShadowLog.getLogsForTag(CHAIN_LOG).map { it.msg.replace(Regex("from [+-]?\\d+ ms"), "from 0 ms") }
+    private fun steps(): List<String> = ShadowLog.getLogsForTag(CHAIN_LOG).map { it.msg.replace(Regex("from \\+?\\d{1,2} ms"), "from 0 ms") }
 
     @Test
     fun theStepsOfACardAreLoggedOnlyWhenTheLogIsAskedFor() {
