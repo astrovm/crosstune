@@ -1498,6 +1498,16 @@ class PlaybackTest {
     }
 
     @Test
+    fun anAppAskedForIsTheOnlyOneControlledEvenWhenAnotherPlaysTheSong() {
+        allow()
+        shadowOf(sessions).addController(player("com.spotify.music", "Spotify", "Blinding Lights", "The Weeknd", state = PlaybackState.STATE_PAUSED))
+        shadowOf(sessions).addController(player("com.google.android.apps.youtube.music", "YouTube Music", "Blinding Lights", "The Weeknd", album = "After Hours"))
+        assertEquals("com.spotify.music", playback.appFor(song, app = "com.spotify.music")?.packageName)
+        assertEquals("com.google.android.apps.youtube.music", playback.appFor(song, app = "com.google.android.apps.youtube.music")?.packageName)
+        assertNull(playback.appFor(song, app = "com.example.other"))
+    }
+
+    @Test
     @Config(shadows = [AppAsked::class])
     fun aLineTappedMovesTheAppThere() {
         allow()

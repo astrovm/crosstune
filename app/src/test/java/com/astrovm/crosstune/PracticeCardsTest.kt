@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
 
 /** The cards of a practice session on their own: what each ask does, and does nothing about, when there's nothing to act on. */
 @RunWith(RobolectricTestRunner::class)
@@ -605,6 +607,54 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun aSpotifySongThatOffersASeekAfterAMomentOfPlayingIsMovedAndNotGivenUp() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        // It plays a moment without a seek, as a session does before it has said what it can do, and then offers one.
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), 20f), "Spotify", canSeek = false, appPackage = spotify)
+        Thread.sleep(300)
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), 20f), "Spotify", canSeek = true, appPackage = spotify)
+        waitFor("the line is reached") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf(10_000L), playback.seeks.toList())
+        assertEquals(1, playback.cameBack)
+        assertEquals(AppTraits(seeks = true), traits.of(spotify).copy(keeps = null))
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun aVideosLeadMovesWhereTheLineEndsToo() {
+        youTubeHasTheSong()
+        keep(line(lead = 5_000), types = hearIt)
+        installed(morphe)
+        // A video with 5 s before the song: the line is 15 s to 20 s into it, and takes a second to be over at five times the speed.
+        playback.access = true
+        playback.appPlaying[morphe] = MutableStateFlow(Following(PlaybackClock(15_000, System.currentTimeMillis(), 5f), "Music", canSeek = true, appPackage = morphe, video = true, durationMs = 200_000))
+        cards().start(null, before = null)
+        waitFor("it's asked to play") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
+        assertEquals(listOf(15_000L), playback.seeks.toList())
+        Thread.sleep(300)
+        assertEquals(LineSound.PLAYING, practice?.sound)
+        waitFor("the line is over") { practice?.sound == LineSound.PLAYED }
+    }
+
+    @Test
+    fun aCardInThePlayerOnlyPlaysOnceItIsTurnedOrPlayedAtOnce() {
+        keep(line())
+        youTubeHasTheSong()
+        playback.access = true
+        playback.canPlaySongs = false
+        val cards = cards(songLoadMs = 300)
+        cards.start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        assertFalse(player.shown.last().play)
+        cards.turn()
+        waitFor("it plays") { player.shown.last().play }
+    }
+
+    @Test
     fun aVideoOpenedOnItsLinkSeeksPastItsLead() {
         spotifyHasTheSong()
         // The line is 10 s into the song, and the video has 2 s before the song. The open path's follow is what says so.
@@ -787,8 +837,7 @@ class PracticeCardsTest {
         // Turned, the line plays there, and that it keeps playing is remembered, too.
         playback.appPlaying.getValue(morphe).value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 20f), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
         cards.turn()
-        waitFor("it's remembered") { traits.of(morphe).works }
-        assertEquals(LineSound.PLAYED, practice?.sound)
+        waitFor("it's remembered and the line is over") { traits.of(morphe).works && practice?.sound == LineSound.PLAYED }
         assertTrue(playback.playedApps.zip(playback.plays).contains(morphe to true))
         assertTrue(player.shown.isEmpty())
         // Spotify isn't followed again for the card.
@@ -849,6 +898,141 @@ class PracticeCardsTest {
         waitFor("it works") { traits.of(ytMusic).works }
     }
 
+    /** What the card said about finding its sound, when the log was asked for. */
+    private fun steps(): List<String> = ShadowLog.getLogsForTag(CHAIN_LOG).map { it.msg }
+
+    @Test
+    fun theStepsOfACardAreLoggedOnlyWhenTheLogIsAskedFor() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(keptFromSpotify, types = hearIt)
+        installed(spotify, morphe)
+        appPlays(spotify, canSeek = false)
+        appPlays(morphe)
+        cards().start(null, before = null)
+        waitFor("the line is over") { practice?.sound == LineSound.PLAYED }
+        assertEquals(emptyList<String>(), steps())
+    }
+
+    @Test
+    fun aCardLogsEachAppItTriesAndWhatCameOfIt() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(keptFromSpotify, types = hearIt)
+        installed(spotify, morphe)
+        appPlays(spotify, canSeek = false)
+        appPlays(morphe)
+        cards().start(null, before = null)
+        waitFor("the line is over") { practice?.sound == LineSound.PLAYED }
+        assertEquals(
+            listOf("trying $spotify", "$spotify plays and does not move", "$spotify did not move to the line", "trying $morphe", "$morphe played the line"),
+            steps()
+        )
+    }
+
+    @Test
+    fun aCardLogsAnAppThatPausedItselfAndThePlayerThatTookOver() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        installed(morphe)
+        appPlays(morphe, speed = 1f)
+        val flow = playback.appPlaying.getValue(morphe)
+        cards().start(null, before = null)
+        waitFor("the line plays in the app") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
+        Thread.sleep(100)
+        flow.value = Following(PlaybackClock(10_100, System.currentTimeMillis(), 1f, playing = false), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
+        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $morphe", "$morphe paused itself", "the YouTube player"), steps())
+    }
+
+    @Test
+    fun aCardLogsThatItHasNoSoundAndAnAppThatWasNeverThere() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        keep(line())
+        // Nothing is playing and nothing is asked for, so the app never moves, and YouTube has no video.
+        playback.access = true
+        playback.canPlaySongs = false
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("no sound") { practice?.sound == LineSound.NONE }
+        assertEquals(listOf("trying any app", "any app did not move to the line", "no sound"), steps())
+    }
+
+    @Test
+    fun anAppThatKeepsPlayingIsUsedForTheNextCardToo() {
+        youTubeHasTheSong()
+        keep(line("One"), line("Two"), types = hearIt)
+        installed(morphe)
+        appPlays(morphe)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the first line is over") { practice?.sound == LineSound.PLAYED }
+        assertEquals(AppTraits(seeks = true, keeps = true), traits.of(morphe))
+        cards.turn()
+        cards.grade(Grade.GOOD)
+        waitFor("the second line is played in the app, too") { playback.followedApps.count { it == morphe } == 2 && practice?.sound == LineSound.PLAYED }
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun anAppThatPausesAMomentIsStillPlayingTheLine() {
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        installed(morphe)
+        appPlays(morphe, speed = 5f)
+        val flow = playback.appPlaying.getValue(morphe)
+        cards().start(null, before = null)
+        waitFor("the line plays in the app") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
+        // It stops for a moment, much less than it takes to be sure it won't go on, and then goes on.
+        Thread.sleep(100)
+        val at = flow.value!!.clock.positionAt(System.currentTimeMillis())
+        flow.value = Following(PlaybackClock(at, System.currentTimeMillis(), 5f, playing = false), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
+        Thread.sleep(400)
+        flow.value = Following(PlaybackClock(at, System.currentTimeMillis(), 5f), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
+        waitFor("the line is over") { practice?.sound == LineSound.PLAYED }
+        assertEquals(AppTraits(seeks = true, keeps = true), traits.of(morphe))
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun anAppThatHasntStartedYetIsNotTakenForOneThatStopped() {
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        installed(morphe)
+        // Paused where the line starts for longer than a stop is waited for, since it hasn't played yet; then it plays.
+        appPlays(morphe, speed = 5f)
+        val flow = playback.appPlaying.getValue(morphe)
+        flow.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 5f, playing = false), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
+        cards().start(null, before = null)
+        waitFor("the line is asked of the app") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
+        Thread.sleep(1_800L)
+        flow.value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 5f), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
+        waitFor("the line is over") { practice?.sound == LineSound.PLAYED }
+        assertEquals(AppTraits(seeks = true, keeps = true), traits.of(morphe))
+    }
+
+    @Test
+    fun theAppTheUserPrefersIsTriedEvenWhenItsServiceHasNoLinkForTheSong() {
+        keep(line(), types = hearIt)
+        installed(spotify)
+        appPlays(spotify)
+        cards().start(null, before = null)
+        waitFor("the line is over") { practice?.sound == LineSound.PLAYED }
+        assertEquals(listOf<String?>(spotify), playback.followedApps.distinct())
+    }
+
+    @Test
+    fun withAnotherKindOfDestinationAnAppIsTriedOnlyWhenItHasTheSong() {
+        youTubeHasTheSong()
+        keep(line(), types = hearIt)
+        installed(spotify, preferred = Destination.Alternative(Frontend.entries.first()))
+        appPlays(spotify)
+        cards().start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        assertTrue(playback.followedApps.isEmpty())
+    }
+
     @Test
     fun anAppWithoutTheSongIsNotTriedUnlessItIsPreferredOrKeptTheLine() {
         youTubeHasTheSong()
@@ -903,3 +1087,6 @@ class PracticeCardsTest {
 }
 
 private const val SPOTIFY_ID = "1demoAAAAAAAAAAAAAAAAA"
+
+/** The log tag a card's steps go to when it's asked for, which `adb shell setprop` names. */
+private const val CHAIN_LOG = "CrosstuneChain"

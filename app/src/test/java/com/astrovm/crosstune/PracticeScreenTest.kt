@@ -161,9 +161,24 @@ class PracticeScreenTest {
 
     @Test
     fun aCardWhoseSoundIsGoingThroughThePlayerDoesNotNameTheMusicApp() {
-        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.nothing")
+        installMusicApp()
+        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
         withPlayer(Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING, video = "abc"))
-        composeRule.onNodeWithText(string(R.string.practice_loading, "com.example.nothing")).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertDoesNotExist()
+    }
+
+    @Test
+    fun whileTheMusicAppGetsThereItIsNamedWithItsIcon() {
+        installMusicApp()
+        val loading = line.copy(cardType = HEAR_TYPE, app = "com.example.music")
+        show(UiState(practice = Practice(queue = listOf(loading), total = 2, sound = LineSound.LOADING), cardTypes = hearing))
+        composeRule.onNodeWithText(string(R.string.practice_loading, "Example Music")).assertExists()
+    }
+
+    /** A music app on the phone, so a card can name it. */
+    private fun installMusicApp() {
+        val info = android.content.pm.ApplicationInfo().apply { packageName = "com.example.music"; nonLocalizedLabel = "Example Music" }
+        org.robolectric.Shadows.shadowOf(context.packageManager).installPackage(android.content.pm.PackageInfo().apply { packageName = "com.example.music"; applicationInfo = info })
     }
 
     @Test
