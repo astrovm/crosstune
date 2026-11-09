@@ -20,7 +20,7 @@ export const API_HOSTS = [
  * Lyrics sites a browser may only read with leave. LRCLIB and Letras's search answer any web page
  * (they send "access-control-allow-origin: *"), so they need none, and aren't asked for it.
  */
-export const LYRICS_HOSTS = ["music.163.com", "www.letras.com"] as const;
+export const LYRICS_HOSTS = ["music.163.com", "www.letras.com", "genius.com"] as const;
 
 /** Spotify's short links come from subdomains such as "abc.spotify.link". */
 export const WILDCARD_HOSTS = ["*.spotify.link"] as const;
