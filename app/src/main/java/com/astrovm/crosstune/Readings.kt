@@ -45,7 +45,15 @@ internal val List<Ruby>.kana: String get() = joinToString("") { it.reading ?: it
  * A word of a line: as written, how it reads when that isn't plain from it, and what to look up
  * for its meaning, e.g. 分かる for 分かった; its Latin letters as it's said, and as it's [typed].
  */
-internal data class Word(val text: String, val reading: String? = null, val romanized: String? = null, val lookup: String = text, val typed: String? = romanized)
+internal data class Word(
+    val text: String,
+    val reading: String? = null,
+    val romanized: String? = null,
+    val lookup: String = text,
+    val typed: String? = romanized,
+    /** How it's spelled today, when it's written in old kana, 思い出 for 思ひ出; the lyric keeps what it says. */
+    val modern: String? = null
+)
 
 /**
  * Romaji as it's [said] and as it's [typed], the one picked, typed when [typedFirst], first; the
@@ -538,7 +546,10 @@ internal object Readings {
             // Kana reads as written; the reading's only worth showing for kanji.
             val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
             val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
-            Word(text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base, typed = romaji(typed, typed = true))
+            Word(
+                text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base, typed = romaji(typed, typed = true),
+                modern = Furigana.modern(text, kana, said)
+            )
         }
         else -> segments(line).map { text ->
             when (script) {

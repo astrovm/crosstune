@@ -369,6 +369,7 @@
     <string name="lyrics_line_saved">Salvata</string>
     <string name="lyrics_word_failed">Impossibile trovare il significato ora.</string>
     <string name="lyrics_word_unknown">Nessuna voce di dizionario per questa parola.</string>
+    <string name="lyrics_word_modern">Grafia antica di %1$s</string>
     <string name="lyrics_words_to_know_failed">Impossibile trovare le parole da sapere.</string>
     <string name="lyrics_save_word">Salva %1$s</string>
     <string name="lyrics_word_saved">%1$s salvata</string>

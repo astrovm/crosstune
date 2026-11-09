@@ -368,6 +368,7 @@
     <string name="lyrics_line_saved">Zapisany</string>
     <string name="lyrics_word_failed">Nie udało się teraz znaleźć znaczenia.</string>
     <string name="lyrics_word_unknown">Brak hasła w słowniku dla tego słowa.</string>
+    <string name="lyrics_word_modern">Dawna pisownia słowa %1$s</string>
     <string name="lyrics_words_to_know_failed">Nie udało się znaleźć słów do poznania.</string>
     <string name="lyrics_save_word">Zapisz %1$s</string>
     <string name="lyrics_word_saved">Zapisano %1$s</string>

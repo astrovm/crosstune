@@ -368,6 +368,7 @@
     <string name="lyrics_line_saved">Сохранено</string>
     <string name="lyrics_word_failed">Сейчас не удалось найти значение.</string>
     <string name="lyrics_word_unknown">Для этого слова нет словарной статьи.</string>
+    <string name="lyrics_word_modern">Старое написание слова %1$s</string>
     <string name="lyrics_words_to_know_failed">Не удалось найти слова.</string>
     <string name="lyrics_save_word">Сохранить %1$s</string>
     <string name="lyrics_word_saved">%1$s сохранено</string>

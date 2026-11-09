@@ -368,6 +368,7 @@
     <string name="lyrics_line_saved">Bewaard</string>
     <string name="lyrics_word_failed">Kon de betekenis nu niet vinden.</string>
     <string name="lyrics_word_unknown">Geen woordenboekvermelding voor dit woord.</string>
+    <string name="lyrics_word_modern">Oude spelling van %1$s</string>
     <string name="lyrics_words_to_know_failed">Kon de woorden om te kennen niet vinden.</string>
     <string name="lyrics_save_word">%1$s bewaren</string>
     <string name="lyrics_word_saved">%1$s bewaard</string>

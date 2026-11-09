@@ -423,6 +423,45 @@ class ReadingsTest {
     }
 
     @Test
+    fun aWordInOldKanaSaysHowItIsSpelledToday() {
+        fun modern(surface: String, reading: String, said: String? = null) = Furigana.modern(surface, *listOfNotNull(reading, said).toTypedArray())
+        // ゐ and ゑ, and ひ, ふ and ほ said い, う and お.
+        assertEquals("住まい", modern("住まゐ", "すまい"))
+        assertEquals("植える", modern("植ゑる", "うえる"))
+        assertEquals("思い出", modern("思ひ出", "おもいで"))
+        assertEquals("言う", modern("言ふ", "ゆう"))
+        assertEquals("遠おい", modern("遠ほい", "トオイ"))
+        assertEquals("言い", modern("言ひ", "いい"))
+        // Said the other way round, when the first reading has no old kana to find.
+        assertEquals("思い出", modern("思ひ出", "おもひで", "おもいで"))
+        // A modern spelling has none to name, ヶ and the particles は and へ included.
+        assertNull(modern("思い出", "おもいで"))
+        assertNull(modern("三ヶ月", "さんかげつ"))
+        assertNull(modern("今日は", "こんにちわ"))
+        assertNull(modern("都へ", "みやこえ"))
+        // As written and said alike, a ひ stays: 日々 has none, and a reading that isn't the word's names nothing.
+        assertNull(modern("ひとり", "ひとり"))
+        assertNull(modern("思ひ出", "ゆく"))
+        assertNull(modern("思ひ出", ""))
+    }
+
+    @Test
+    fun aWordCarriesItsModernSpellingOnlyWhenItIsWrittenInOldKana() {
+        assertNull(Readings.words("夜空に、分かった!", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
+        // The shipped dictionary says 思ひ出 as it's sung. It splits 住まゐ, so only the ゐ is named.
+        assertEquals("思い出", Readings.words("思ひ出", Script.JAPANESE).single().modern)
+        assertEquals(listOf(null, "い"), Readings.words("住まゐ", Script.JAPANESE).map { it.modern })
+        TestUniDic.reading {
+            assertEquals("思い出", Readings.words("思ひ出", Script.JAPANESE).single().modern)
+            assertEquals("言う", Readings.words("言ふ", Script.JAPANESE).single().modern)
+            assertEquals("言い", Readings.words("言ひ", Script.JAPANESE).single().modern)
+            assertEquals("植える", Readings.words("植ゑる", Script.JAPANESE).single().modern)
+            // Its lookup and the lyric's own text keep what is written.
+            assertEquals(Word("思ひ出", "おもいで", "omoide", "思ひ出", "omoide", "思い出"), Readings.words("思ひ出", Script.JAPANESE).single())
+        }
+    }
+
+    @Test
     fun aLineSplitsIntoWordsToLookUp() {
         assertEquals(
             listOf(Word("夜空", "よぞら", "yozora", "夜空"), Word("に", null, "ni", "に"), Word("分かった", "わかった", "wakatta", "分かる")),

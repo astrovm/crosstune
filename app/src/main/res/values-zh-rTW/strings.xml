@@ -368,6 +368,7 @@
     <string name="lyrics_line_saved">已儲存</string>
     <string name="lyrics_word_failed">暫時找不到它的意思。</string>
     <string name="lyrics_word_unknown">字典裡沒有這個詞。</string>
+    <string name="lyrics_word_modern">%1$s的舊寫法</string>
     <string name="lyrics_words_to_know_failed">找不到要學的詞。</string>
     <string name="lyrics_save_word">儲存%1$s</string>
     <string name="lyrics_word_saved">已儲存%1$s</string>

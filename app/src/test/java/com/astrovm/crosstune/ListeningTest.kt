@@ -5489,6 +5489,23 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { shown("[사랑해]") }
     }
 
+    @Test
+    fun aWordInOldKanaSaysHowItIsSpelledTodayWhileTheLyricKeepsItsOwn() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
+        wordsOf(null, "思ひ出")
+        waitUntil(TIMEOUT_MS) { readingShown("おも") }
+        click(string(R.string.lyrics_learn))
+        composeRule.onAllNodesWithTag(LYRIC_LINE_TAG)[0].performClick()
+        composeRule.waitForIdle()
+        val line = androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG)
+        waitUntil(TIMEOUT_MS) { runCatching { composeRule.onNode(line).performFirstLinkClick() }.isSuccess }
+        waitForText(string(R.string.lyrics_word_modern, "思い出"))
+        // The card names it; the lyric above it is as it was sent.
+        assertTrue(shown("思ひ出"))
+    }
+
     private companion object {
         const val TIMEOUT_MS = 5_000L
 

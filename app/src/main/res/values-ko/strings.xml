@@ -368,6 +368,7 @@
     <string name="lyrics_line_saved">저장됨</string>
     <string name="lyrics_word_failed">지금은 뜻을 찾을 수 없습니다.</string>
     <string name="lyrics_word_unknown">이 단어의 사전 항목이 없어요.</string>
+    <string name="lyrics_word_modern">%1$s의 옛 표기</string>
     <string name="lyrics_words_to_know_failed">알아둘 단어를 찾지 못했어요.</string>
     <string name="lyrics_save_word">%1$s 저장</string>
     <string name="lyrics_word_saved">%1$s 저장됨</string>

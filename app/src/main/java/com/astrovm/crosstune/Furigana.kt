@@ -25,6 +25,27 @@ internal object Furigana {
         return if (plan.kept < 0) listOf(Ruby(surface)) else plan.parts
     }
 
+    /**
+     * [surface] spelled the modern way, if it has old kana in it: ゐ, ゑ, ひ, ふ and ほ written for い,
+     * え, い, う and お, as 思ひ出 is 思い出. Each reading in [kana] is tried in turn, as one tokenizer
+     * spells a long vowel or a kana another way than the next. Null when no kana is old, and for ヶ and
+     * the particles は and へ, which are modern writing.
+     */
+    fun modern(surface: String, vararg kana: String): String? {
+        if (surface.none { it in OLD }) return null
+        for (reading in kana) {
+            val parts = over(surface, reading)
+            if (parts.any { it.reading != null && it.text in OLD_KANA }) {
+                return parts.joinToString("") { if (it.reading != null && it.text in OLD_KANA) Readings.hiragana(it.reading) else it.text }
+            }
+        }
+        return null
+    }
+
+    /** The kana only the old spelling writes for another sound. */
+    private const val OLD = "ゐゑひふほヰヱ"
+    private val OLD_KANA = OLD.map(Char::toString).toSet()
+
     /** A way to lay the reading along the runs from some point on: [parts] of it, and how many kana of the word it finds in the reading. */
     private class Plan(val kept: Int, val parts: List<Ruby>)
 

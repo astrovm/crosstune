@@ -389,6 +389,7 @@
     <string name="lyrics_line_saved">Saved</string>
     <string name="lyrics_word_failed">Couldn\'t find its meaning just now.</string>
     <string name="lyrics_word_unknown">No dictionary entry for this word.</string>
+    <string name="lyrics_word_modern">Old spelling of %1$s</string>
     <string name="lyrics_words_to_know_failed">Couldn\'t find the words to know.</string>
     <string name="lyrics_save_word">Save %1$s</string>
     <string name="lyrics_word_saved">%1$s saved</string>
