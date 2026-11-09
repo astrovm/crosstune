@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# Every checkout prints Git's hint to name the initial branch. This is what it asks for.
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 # A newer push to the same pull request makes an in-progress run pointless; manual runs always finish.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
