@@ -29,6 +29,12 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import org.robolectric.annotation.Resetter
+import org.robolectric.shadows.ShadowWebView
+import android.webkit.RoboCookieManager
 import java.io.IOException
 import java.time.Duration
 
@@ -345,6 +351,7 @@ class ChordWikiTest {
     }
 
     @Test
+    @Config(shadows = [StopCountingWebView::class])
     fun closingTheLookupRemovesThePage() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val root = activity.window.decorView as ViewGroup
@@ -352,9 +359,47 @@ class ChordWikiTest {
         shadowOf(Looper.getMainLooper()).idle()
         val web = findWeb(root)
         job.cancel()
-        shadowOf(Looper.getMainLooper()).idle()
+        // On the main thread already, so it goes at once: put off to a later turn, it would put itself off again, for good.
         assertNull(web.parent)
+        shadowOf(Looper.getMainLooper()).idle()
         assertTrue(shadowOf(web).wasDestroyCalled())
+        assertTrue((shadowOf(web) as StopCountingWebView).stopped)
+    }
+
+    @Test
+    @Config(shadows = [FlushCountingCookies::class])
+    fun aFinishedLookupSavesTheCookiesItWasGiven() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val done = open(activity, gapMs = 20, waitMs = 10_000)
+        val web = findWeb(activity.window.decorView)
+        assertEquals(0, FlushCountingCookies.flushes)
+        answer(web, page(source = "[C]川の道", hasEditor = true))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(30))
+        assertEquals("[C]川の道", done.within().getOrThrow())
+        // A check the page passed for us is kept for the next lookup, not lost with the process.
+        assertEquals(1, FlushCountingCookies.flushes)
+    }
+
+    @Test
+    fun aPictureIsToldByWhatTheRequestAsksForAndNotOnlyByItsAddress() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        CoroutineScope(Dispatchers.Main).launch {
+            ChordWikiBrowser(activity, gapMs = 20, waitMs = 10_000, loadPictures = false).page("https://ja.chordwiki.org/wiki.cgi?c=edit")
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        val web = findWeb(activity.window.decorView)
+        val client = shadowOf(web).webViewClient
+        fun skipped(url: String, accept: String?) = client.shouldInterceptRequest(web, resource(url, accept)) != null
+        // No file name to go by.
+        assertTrue(skipped("https://ja.chordwiki.org/cover?id=3", "image/avif,image/webp,*/*"))
+        assertTrue(skipped("https://ja.chordwiki.org/face?id=3", "font/woff2"))
+        // The name is enough, in capitals and with a query after it.
+        assertTrue(skipped("https://ja.chordwiki.org/LOGO.PNG?v=2", "*/*"))
+        assertTrue(skipped("https://ja.chordwiki.org/face.woff", null))
+        // A page that merely accepts pictures among other things is the page. A request that says nothing is not skipped.
+        assertFalse(skipped("https://ja.chordwiki.org/wiki.cgi?c=edit", "text/html,application/xhtml+xml,image/avif,image/webp,*/*;q=0.8"))
+        assertFalse(skipped("https://ja.chordwiki.org/site.css", null))
+        assertFalse(skipped("https://ja.chordwiki.org/app.js", "*/*"))
     }
 
     /**
@@ -443,13 +488,13 @@ class ChordWikiTest {
         assertNull(findWebOrNull(root))
     }
 
-    private fun resource(url: String, accept: String): WebResourceRequest = object : WebResourceRequest {
+    private fun resource(url: String, accept: String?): WebResourceRequest = object : WebResourceRequest {
         override fun getUrl() = Uri.parse(url)
         override fun isForMainFrame() = false
         override fun isRedirect() = false
         override fun hasGesture() = false
         override fun getMethod() = "GET"
-        override fun getRequestHeaders() = mapOf("Accept" to accept)
+        override fun getRequestHeaders() = if (accept == null) emptyMap() else mapOf("Accept" to accept)
     }
 
     private fun open(activity: Activity, gapMs: Long, waitMs: Long, now: () -> Long = { 0L }): CompletableDeferred<Result<String>> {
@@ -490,6 +535,40 @@ class ChordWikiTest {
             fail()
         } catch (e: IOException) {
             assertTrue(e.message, part in e.message!!)
+        }
+    }
+}
+
+/** A web view that remembers it was told to stop loading, which Robolectric's doesn't. */
+@Implements(WebView::class)
+class StopCountingWebView : ShadowWebView() {
+    var stopped = false
+
+    @Implementation
+    fun stopLoading() {
+        stopped = true
+    }
+}
+
+/** A cookie jar that counts how often it was saved to disk, which Robolectric's doesn't. */
+@Implements(CookieManager::class)
+class FlushCountingCookies {
+    companion object {
+        var flushes = 0
+        private val jar = object : RoboCookieManager() {
+            override fun flush() {
+                flushes++
+            }
+        }
+
+        @Implementation
+        @JvmStatic
+        fun getInstance(): CookieManager = jar
+
+        @Resetter
+        @JvmStatic
+        fun reset() {
+            flushes = 0
         }
     }
 }

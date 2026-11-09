@@ -341,9 +341,8 @@ private fun chordWikiTitles(title: String): List<String> = listOf(title, title.r
 private val CREDIT = Regex("""\s*[（(]\s*(?:歌|唄|作詞|作曲|編曲|原曲)[^）)]*[）)]\s*$""")
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
-    val tab = line.indexOf('\t')
-    if (tab <= 0) return null
-    return chordWikiHit(line.substring(0, tab), line.substring(tab + 1))
+    val (text, href) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return null
+    return chordWikiHit(text, href)
 }
 
 private fun chordWikiHit(text: String, href: String): ChordWikiHit? {

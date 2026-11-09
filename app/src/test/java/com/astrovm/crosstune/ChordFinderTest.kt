@@ -1807,6 +1807,23 @@ Singing to the morning light</div>"""
     }
 
     @Test
+    fun theFirstAndLastOfTheHalfwidthPunctuationAreWrittenFullwidthToo() {
+        // "!" and "~" are the ends of the ASCII punctuation, and each has a fullwidth twin.
+        noOtherChordSites()
+        val half = "!夢~"
+        val full = "！夢～"
+        val answer = chords(MusicMetadata(half, "歌組雪月花"), japanese, withWiki(ChordWikiPages { url ->
+            val decoded = java.net.URLDecoder.decode(url, "UTF-8")
+            when {
+                "search.html" in url -> ""
+                decoded.contains("t=$full") -> chordPro.replace("川の道", full)
+                else -> ""
+            }
+        }))
+        assertEquals(chordWikiViewUrl(full), (answer as? ChordFinder.Chords.Found)?.sheet?.url)
+    }
+
+    @Test
     fun aFullwidthBangStillOpensTheHalfwidthChordWikiPage() {
         // The name we're given uses the fullwidth bang. ChordWiki's page uses the halfwidth one.
         // The search lists nothing, so the edit page of the halfwidth name is the sheet.

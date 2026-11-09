@@ -35,6 +35,13 @@ class ChordSpreadTest {
     }
 
     @Test
+    fun aRowThatIsALittleTightSharesWhatIsLeftEvenlyBetweenItsGaps() {
+        // Three chords 20 wide leave 6 of a 66 wide row, for the 2 gaps between them: 3 each, under the 4 asked.
+        val xs = spreadChords(listOf(0f, 0f, 0f), listOf(0, 0, 0), listOf(20f, 20f, 20f), 66f, 4f)
+        assertEquals(listOf(0f, 23f, 46f), xs)
+    }
+
+    @Test
     fun aRowOfChordsWiderThanTheLineKeepsTheirOrder() {
         val widths = List(4) { 30f }
         val xs = spreadChords(List(4) { 0f }, List(4) { 0 }, widths, 100f, 4f)
