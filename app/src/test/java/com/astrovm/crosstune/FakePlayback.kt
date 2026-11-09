@@ -182,6 +182,11 @@ internal class FakePlayback : PlaybackSource {
         if (!onlyInFront) cameBack++
     }
 
+    /** Whether Crosstune may show over other apps, so it comes back over one it opened by itself. */
+    var comesBackByItself = true
+
+    override fun comesBackByItself() = comesBackByItself
+
     override fun skip(song: MusicMetadata, next: Boolean) {
         skips += next
     }

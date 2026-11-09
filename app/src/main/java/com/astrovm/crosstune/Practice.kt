@@ -125,6 +125,21 @@ internal class PracticeCards(
     private val lengths = mutableMapOf<Pair<String, String>, Long>()
 
     /**
+     * While an app opened or asked for the card's song is on its way to the line, it's paused as soon as it plays: it starts
+     * the song from its start, which isn't the line, and on a card's front hearing the line is the answer. Off once it's sent there.
+     */
+    @Volatile
+    private var hushed = false
+
+    /** When the app [hushed] first played the song, paused then; null until it has. */
+    @Volatile
+    private var hushedAt: Long? = null
+
+    /** An app was left out of this card's chain as opening it would have covered the card for good: see [Practice.cantComeBack]. */
+    @Volatile
+    private var leftOut = false
+
+    /**
      * Practises the lines due, each song's together; or only [song]'s, all of them when none is due,
      * to learn it. The music app goes back to [before] once done.
      */
@@ -161,7 +176,10 @@ internal class PracticeCards(
         soundJob?.cancel()
         soundJob = scope.launch {
             val song = MusicMetadata(line.title, line.artist)
-            if (!inBestApp(source, song, line, play)) inYouTube(line, play)
+            leftOut = false
+            val inApp = inBestApp(source, song, line, play)
+            if (leftOut) uiState.practice?.let { uiState = uiState.copy(practice = it.copy(cantComeBack = true)) }
+            if (!inApp) inYouTube(line, play)
         }
     }
 
@@ -206,10 +224,14 @@ internal class PracticeCards(
      */
     private suspend fun inMusicApp(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, play: Boolean): Boolean {
         var kept = true
+        val wasLeftOut = leftOut
+        leftOut = false
         val moved = inApp(source, song, app, only = app, onStuck = { following -> stuck(source, song, app, following) }) { following ->
             kept = playLine(source, song, line, app, play, following)
         }
-        if (!moved || !kept) app?.let(unusable::add)
+        // Left out only for want of showing over other apps, it's tried again once that's allowed.
+        if ((!moved || !kept) && !leftOut) app?.let(unusable::add)
+        leftOut = leftOut || wasLeftOut
         if (!moved) step("${app ?: "any app"} did not move to the line")
         return moved && kept
     }
@@ -221,7 +243,9 @@ internal class PracticeCards(
      */
     private suspend fun playLine(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, play: Boolean, following: () -> Following?): Boolean {
         val packageName = app ?: following()?.appPackage
-        val window = LineWindow.of(line, lead = if (following()?.video == true) line.leadMs else 0L)
+        // What the app plays may end before the line does, as TIDAL's 30 s preview without an account: it's paused at its end, before it goes on to its next song.
+        val window = LineWindow.of(line, lead = if (following()?.video == true) line.leadMs else 0L).within(following()?.durationMs)
+            ?: return notThere(source, song, app, packageName, play || uiState.practice?.turned == true)
         val (at, playing) = reachAsAsked(source, song, app, window, play, following)
         if (at == null) return notThere(source, song, app, packageName, playing)
         packageName?.let { traits.seeks(it, true) }
@@ -278,6 +302,7 @@ internal class PracticeCards(
                 val latest = following()
                 val ready = latest != null && latest.canSeek && !latest.ad
                 if (ready && !wasReady && asks < ASKS) {
+                    hushed = false
                     source.seekTo(song, window.start, app)
                     source.playPause(song, play, app)
                     asks++
@@ -300,11 +325,12 @@ internal class PracticeCards(
         withTimeoutOrNull(window.patience) {
             var offSince: Long? = null
             while (!lasted(offSince, now(), PAUSED_FOR_MS)) {
-                val clock = following()?.clock
-                val at = clock?.positionAt(now())
-                over = at != null && window.over(at)
+                // Gone from the song, as to the next one, it's stopped now rather than heard a moment: no pause comes back from that.
+                val clock = (following() ?: break).clock
+                val at = clock.positionAt(now())
+                over = window.over(at)
                 if (over) break
-                offSince = if (clock?.playing == true && at != null && window.holds(at)) null else offSince ?: now()
+                offSince = if (clock.playing && window.holds(at)) null else offSince ?: now()
                 delay(SOUND_CHECK_MS)
             }
         }
@@ -380,7 +406,14 @@ internal class PracticeCards(
     ): Boolean = coroutineScope {
         var latest: Following? = null
         val following = launch {
-            source.follow(song, only).collect { latest = it; it?.durationMs?.let { length -> lengths[song.title to song.artist] = length } }
+            source.follow(song, only).collect {
+                latest = it
+                it?.durationMs?.let { length -> lengths[song.title to song.artist] = length }
+                if (hushed && it?.clock?.playing == true) {
+                    hushedAt = hushedAt ?: now()
+                    source.playPause(song, false, only)
+                }
+            }
         }
         try {
             val ready: suspend () -> Unit = { while (latest?.canSeek != true) delay(SOUND_CHECK_MS) }
@@ -390,6 +423,7 @@ internal class PracticeCards(
             if (there) block { latest } else if (found) onStuck(latest)
             there
         } finally {
+            hushed = false
             following.cancel()
         }
     }
@@ -400,8 +434,14 @@ internal class PracticeCards(
      * seek, and sending one errors the player, so once that song plays and still can't be moved, [onStuck] hears of it.
      */
     private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, latest: () -> Following?, onStuck: (Following?) -> Unit): Boolean {
-        var opened = openedOnOwnLink(source, song, app)
-        val asked = !opened && asked(source, song, app) { asking, link -> opened = source.openSong(asking, link) }
+        hushed = true
+        hushedAt = null
+        // Opened, an app covers the card, and without showing over other apps Crosstune can't come back, nor open the next app from behind it.
+        val opens = source.comesBackByItself()
+        val ownLink = ownLinkOf(song, app)
+        if (ownLink != null && !opens) return false.also { leaveOut(app) }
+        var opened = app?.let { ownLink?.let { link -> source.openSong(it, link) } } == true
+        val asked = !opened && asked(source, song, app) { asking, link -> if (opens) opened = source.openSong(asking, link) else leaveOut(asking) }
         val wait = MoveWait()
         val canSeek = (asked || opened) && waitUntilItMoves(source, opened, latest, wait)
         if (opened && !wait.cameBack) source.comesBack()
@@ -415,11 +455,18 @@ internal class PracticeCards(
         var cameBack = false
     }
 
+    /** [app] would have to be opened, which would cover the card for good: it's left out, and the card says why. */
+    private fun leaveOut(app: String?) {
+        leftOut = true
+        step("${app ?: "the app"} would cover the card")
+    }
+
     /** Waits for the app to offer a seek; false when time runs out, or when it plays a moment and still doesn't, as it never will. */
     private suspend fun waitUntilItMoves(source: PlaybackSource, opened: Boolean, latest: () -> Following?, wait: MoveWait): Boolean {
         withTimeoutOrNull(songLoadMs) {
             while (latest()?.canSeek != true) {
-                wait.playingSince = if (opened && latest()?.clock?.playing == true) wait.playingSince ?: now() else null
+                // Once it played, it's paused at once, see [hushed]: how long it then goes without offering a seek still counts.
+                if (opened) wait.playingSince = wait.playingSince ?: hushedAt
                 // It's playing, so there's nothing more to see there: back to the card, without waiting to be sure.
                 if (wait.playingSince != null && !wait.cameBack) {
                     source.comesBack()
@@ -432,10 +479,10 @@ internal class PracticeCards(
         return latest()?.canSeek == true
     }
 
-    /** Whether [app], one that plays nothing asked of it but each song's own link, was opened on [song]'s. */
-    private suspend fun openedOnOwnLink(source: PlaybackSource, song: MusicMetadata, app: String?): Boolean {
-        val service = app?.let(MusicService::ofPackage)?.takeIf { !it.playsAskedSongs && it.playsSongBySong } ?: return false
-        return matcher.find(service, song)?.let { source.openSong(app, it) } == true
+    /** [song]'s own link in [app], when that's an app that plays nothing asked of it but each song's own link. */
+    private suspend fun ownLinkOf(song: MusicMetadata, app: String?): String? {
+        val service = app?.let(MusicService::ofPackage)?.takeIf { !it.playsAskedSongs && it.playsSongBySong } ?: return null
+        return matcher.find(service, song)
     }
 
     /**

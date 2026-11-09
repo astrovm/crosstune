@@ -251,6 +251,12 @@ internal interface PlaybackSource {
     /** Brings Crosstune back to the front, over the app [openSong] opened, unless it only plays in front. */
     fun comesBack()
 
+    /**
+     * Whether Crosstune can [comesBack] by itself over an app [openSong] opened: Android lets it only once it may show
+     * over other apps. Without that, the app stays in front, and Crosstune, behind it, can't open another either.
+     */
+    fun comesBackByItself(): Boolean
+
     /** Whether the phone is in use, its screen on and unlocked, so an app [openSong] opens comes to the front now. */
     fun unlocked(): Boolean
 
@@ -585,8 +591,10 @@ internal class MediaSessionPlayback(
         if (opened?.let(onlyInFront::contains) == true) return
         val back = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         runCatching { context.startActivity(back) }
-        if (!Settings.canDrawOverlays(context)) context.noticeToReturn(back)
+        if (!comesBackByItself()) context.noticeToReturn(back)
     }
+
+    override fun comesBackByItself(): Boolean = Settings.canDrawOverlays(context)
 
     // Without the user's say-so Android shows none, and says so by throwing.
     override fun nowPlaying(): Heard.Song? {
