@@ -4,6 +4,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.ForwardingSource
@@ -1758,11 +1759,43 @@ class ExactMatcherTest {
 
     @Test
     fun qobuzsOtherStoreIsAskedOnceWhenTheFirstTryAnswersInTime() {
-        val (matcher, asked) = slowQobuz(200, qobuzAfter(0), qobuzAfter(0))
+        // Answered a little after it was asked, not at once, so a second that went out the moment the first was waited on shows.
+        val (matcher, asked) = slowQobuz(1_000, qobuzAfter(150), qobuzAfter(0))
         assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
         // Past the wait for the first, a second would have gone out.
-        Thread.sleep(500)
+        Thread.sleep(1_300)
         assertEquals(1, asked.get())
+    }
+
+    @Test
+    fun qobuzsOtherStoreTakesTheFirstTrysAnswerWhenItComesBeforeTheSecondsAndDoesntWaitForTheSecond() {
+        val (matcher, _) = slowQobuz(200, qobuzAfter(600), qobuzAfter(4_000))
+        val started = System.nanoTime()
+        assertEquals("https://play.qobuz.com/track/625089", runBlocking { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) })
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 2_500)
+    }
+
+    @Test
+    fun qobuzsOtherStoreCallsOffTheTriesStillOnTheirWayWhenItIsDone() {
+        // A try waiting on the store goes on reading unless it's called off, and cost the phone its data for nothing.
+        val calledOff = CopyOnWriteArrayList<Boolean>()
+        fake.handler = { request -> Thread.sleep(1_200); FakeSpotify.html(request, qobuzItem("Song", "Band • Album", "625089")) }
+        // Ahead of the fake, which answers without passing the request on.
+        val client = fake.client().newBuilder().apply {
+            interceptors().add(0, Interceptor { chain ->
+                // A call called off fails instead of answering, so this looks at it either way.
+                try {
+                    chain.proceed(chain.request())
+                } finally {
+                    calledOff += chain.call().isCanceled()
+                }
+            })
+        }.build()
+        val matcher = ExactMatcher(client, "US", timeoutMs = 100)
+        assertNull(runBlocking { kotlinx.coroutines.withTimeoutOrNull(400) { matcher.otherQobuzLink(MusicMetadata("Song", "Band"), usNumber) } })
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (calledOff.size < 2 && System.nanoTime() < deadline) Thread.sleep(50)
+        assertEquals(listOf(true, true), calledOff.toList())
     }
 
     @Test
