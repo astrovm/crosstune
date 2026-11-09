@@ -30,6 +30,7 @@ import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
@@ -257,6 +258,12 @@ internal interface PlaybackSource {
      */
     fun comesBackByItself(): Boolean
 
+    /**
+     * Mutes the phone's music, [on], while an app is on its way to a card's line, as it may play a moment of
+     * something else before it's paused, or lets it be heard again. Music the user muted is left so.
+     */
+    fun quiet(on: Boolean)
+
     /** Whether the phone is in use, its screen on and unlocked, so an app [openSong] opens comes to the front now. */
     fun unlocked(): Boolean
 
@@ -326,6 +333,11 @@ internal class MediaSessionPlayback(
     /** The app [openSong] last opened. */
     @Volatile
     private var opened: String? = null
+    private val preferences = context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    init {
+        quiet(false)
+    }
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 
@@ -595,6 +607,13 @@ internal class MediaSessionPlayback(
     }
 
     override fun comesBackByItself(): Boolean = Settings.canDrawOverlays(context)
+
+    override fun quiet(on: Boolean) {
+        // Kept, so music muted by Crosstune when it stopped on the way isn't left muted: the next start lets it be heard.
+        if (on == preferences.getBoolean(QUIETED_KEY, false) || on && audio.isStreamMute(AudioManager.STREAM_MUSIC)) return
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, if (on) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0)
+        preferences.edit { putBoolean(QUIETED_KEY, on) }
+    }
 
     // Without the user's say-so Android shows none, and says so by throwing.
     override fun nowPlaying(): Heard.Song? {
@@ -880,6 +899,9 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
+
+/** Whether the phone's music is muted by Crosstune, see [PlaybackSource.quiet]. */
+internal const val QUIETED_KEY = "quieted_music"
 
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
 internal const val LEFT_BEHIND_MS = 10 * 60_000L

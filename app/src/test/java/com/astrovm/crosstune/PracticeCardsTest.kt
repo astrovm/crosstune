@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ApplicationProvider
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
@@ -269,6 +271,7 @@ class PracticeCardsTest {
         cards.stop()
         assertNull(practice)
         assertEquals(listOf(false), playback.plays)
+        assertFalse(playback.quiet)
         // Stopped, a card that's no longer shown isn't touched by the sound it was after.
         Thread.sleep(600)
         assertNull(practice)
@@ -854,6 +857,8 @@ class PracticeCardsTest {
         assertTrue(playback.playedApps.zip(playback.plays).contains(spotify to false))
         assertEquals(AppTraits(seeks = false), traits.of(spotify))
         assertEquals(AppTraits(seeks = true), traits.of(morphe))
+        // Both already had the song, neither opened nor asked for it: the music was never muted.
+        assertTrue(playback.quiets.isEmpty())
         // Turned, the line plays there, and that it keeps playing is remembered, too.
         playback.appPlaying.getValue(morphe).value = Following(PlaybackClock(10_000, System.currentTimeMillis(), 20f), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
         cards.turn()
@@ -1444,7 +1449,12 @@ class PracticeCardsTest {
         playback.access = true
         // What had been asked of it when it was first paused.
         var seeksAtFirstPause: Int? = null
-        playback.onPlay = { _, play -> if (!play) seeksAtFirstPause = seeksAtFirstPause ?: playback.seeks.size }
+        // Whether its music was muted each time it was paused, or played.
+        val quietAt = CopyOnWriteArrayList<Pair<Boolean, Boolean>>()
+        playback.onPlay = { _, play ->
+            if (!play) seeksAtFirstPause = seeksAtFirstPause ?: playback.seeks.size
+            quietAt += play to playback.quiet
+        }
         cards().start(null, before = null)
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         // Opened cold, it starts the song from its start, not yet able to move.
@@ -1458,6 +1468,39 @@ class PracticeCardsTest {
         waitFor("it plays the line") { playback.plays.contains(true) }
         assertEquals(listOf(10_000L), playback.seeks.toList())
         assertEquals(listOf(false, true), playback.plays.take(2))
+        // Muted from before it was opened until it said it plays the line: the song's start was never heard.
+        assertEquals(listOf(false to true, true to true), quietAt.take(2))
+        waitFor("the line is heard") { !playback.quiet }
+        assertEquals(listOf(true, false), playback.quiets.toList())
+    }
+
+    @Test
+    fun anAppThatPlaysOnAMomentWhenPausedIsHeardOnlyOncePausedAtTheLine() {
+        spotifyHasTheSong()
+        keep(keptFromSpotify)
+        playback.access = true
+        // As Morphe just opened, it goes on playing however it's paused.
+        val ignoresPauses = AtomicBoolean(true)
+        playback.onPlay = { _, play ->
+            if (!play && ignoresPauses.get()) playback.playing.value = playback.playing.value?.let { following ->
+                val now = System.currentTimeMillis()
+                following.copy(clock = PlaybackClock(following.clock.positionAt(now), now))
+            }
+        }
+        cards().start(null, before = null)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        assertTrue(playback.quiet)
+        playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis()), "Spotify", canSeek = true, appPackage = spotify, durationMs = 200_000)
+        waitFor("it's sent to the line") { playback.seeks.isNotEmpty() }
+        // At the line but still playing it, on a card's front, where hearing it is the answer: muted still.
+        Thread.sleep(300)
+        assertTrue(playback.playing.value!!.clock.playing)
+        assertTrue(playback.quiet)
+        ignoresPauses.set(false)
+        playback.playing.value = playback.playing.value!!.copy(clock = PlaybackClock(10_000, System.currentTimeMillis(), playing = false))
+        waitFor("the line is ready") { practice?.sound == LineSound.PLAYED }
+        assertFalse(playback.quiet)
+        assertEquals(listOf(true, false), playback.quiets.toList())
     }
 
     @Test
@@ -1474,6 +1517,8 @@ class PracticeCardsTest {
         assertEquals(false, playback.plays.first())
         assertEquals(AppTraits(seeks = false), traits.of(spotify))
         assertTrue(playback.seeks.isEmpty())
+        // Muted while it was tried, and heard again for the player.
+        assertEquals(listOf(true, false), playback.quiets.toList())
     }
 
     @Test

@@ -132,6 +132,28 @@ class PlaybackTest {
     }
 
     @Test
+    fun musicMutedForACardIsHeardAgainAndAMuteTheUserMadeIsTheirs() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        playback.quiet(true)
+        assertTrue(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+        playback.quiet(false)
+        assertFalse(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+        // Muted by the user, it's left so, both ways.
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        playback.quiet(true)
+        playback.quiet(false)
+        assertTrue(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+    }
+
+    @Test
+    fun musicLeftMutedWhenCrosstuneStoppedOnTheWayIsHeardAtTheNextStart() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        playback.quiet(true)
+        MediaSessionPlayback(app, now = { NOW })
+        assertFalse(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+    }
+
+    @Test
     fun thePhoneIsUnlockedWithItsScreenOnAndNoLockShowing() {
         assertTrue(playback.unlocked())
         shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(true)

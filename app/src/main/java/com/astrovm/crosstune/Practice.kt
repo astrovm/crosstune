@@ -252,6 +252,8 @@ internal class PracticeCards(
             ?: return notThere(source, song, app, packageName, play || uiState.practice?.turned == true)
         val (at, playing) = reachAsAsked(source, song, app, window, play, following)
         if (at == null) return notThere(source, song, app, packageName, playing)
+        // At the line, it's heard from there.
+        source.quiet(false)
         packageName?.let { traits.seeks(it, true) }
         if (!playing) return true.also { setSound(line, LineSound.PLAYED) }
         return playedOut(source, song, line, app, packageName, window, following).also { kept ->
@@ -458,6 +460,7 @@ internal class PracticeCards(
             there
         } finally {
             hushed = false
+            source.quiet(false)
             following.cancel()
         }
     }
@@ -474,6 +477,8 @@ internal class PracticeCards(
         val opens = source.comesBackByItself()
         val ownLink = ownLinkOf(song, app)
         if (ownLink != null && !opens) return false.also { leaveOut(app) }
+        // Opened or asked, an app may play a moment of the song's start, or of what it played before, before it's paused: none of it's heard.
+        if (at != null) source.quiet(true)
         var opened = app?.let { ownLink?.let { link -> source.openSong(it, link) } } == true
         val asked = !opened && asked(source, song, app, at) { asking, link -> if (opens) opened = source.openSong(asking, link) else leaveOut(asking) }
         val wait = MoveWait()

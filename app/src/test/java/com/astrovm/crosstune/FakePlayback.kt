@@ -41,6 +41,11 @@ internal class FakePlayback : PlaybackSource {
     val opened: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
     /** How many times Crosstune came back to the front. */
     var cameBack = 0
+    /** Whether the phone's music is muted for a card, see [quiet]. */
+    @Volatile
+    var quiet = false
+    /** Each time the music was muted (true) or let be heard again (false). */
+    val quiets: MutableList<Boolean> = CopyOnWriteArrayList()
     private val songs = MutableStateFlow<Heard.Song?>(null)
     var onThePhone: Heard.Song?
         get() = songs.value
@@ -186,6 +191,12 @@ internal class FakePlayback : PlaybackSource {
     var comesBackByItself = true
 
     override fun comesBackByItself() = comesBackByItself
+
+    override fun quiet(on: Boolean) {
+        if (on == quiet) return
+        quiet = on
+        quiets += on
+    }
 
     override fun skip(song: MusicMetadata, next: Boolean) {
         skips += next
