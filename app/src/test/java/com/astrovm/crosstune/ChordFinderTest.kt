@@ -188,9 +188,9 @@ Singing to the morning light</div>"""
     }
 
     /** J-Total's page, in Shift_JIS as it serves them, saying nothing of that. */
-    private fun jTotalPage(request: Request, page: String) = okhttp3.Response.Builder()
+    private fun jTotalPage(request: Request, page: String, charset: String = "Shift_JIS") = okhttp3.Response.Builder()
         .request(request).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
-        .body(page.toByteArray(java.nio.charset.Charset.forName("Shift_JIS")).toResponseBody("text/html".toMediaType()))
+        .body(page.toByteArray(java.nio.charset.Charset.forName(charset)).toResponseBody("text/html".toMediaType()))
         .build()
 
     /** A song in J-Total's results. */
@@ -208,7 +208,7 @@ Singing to the morning light</div>"""
                 request.url.host == "www.ultimate-guitar.com" -> FakeSpotify.html(request, ugSearch())
                 request.url.host != "music.j-total.net" -> FakeSpotify.html(request, "")
                 path == "/db/search.cgi" -> jTotalPage(request, searches.entries.firstOrNull { "word=${java.net.URLEncoder.encode(it.key, "Shift_JIS")}&" in request.url.encodedQuery.orEmpty() }?.value.orEmpty())
-                else -> jTotalPage(request, pages[path].orEmpty())
+                else -> jTotalPage(request, pages[path].orEmpty(), charset = "windows-31j")
             }
         }
     }
@@ -229,6 +229,15 @@ Singing to the morning light</div>"""
         assertTrue(fake.requestedUrls.any { it.startsWith("https://music.j-total.net/db/search.cgi") && "word=%90%EC%82%CC%93%B9" in it })
         // Its easier version comes after, and another song is never read.
         assertFalse(fake.requestedUrls.any { it.endsWith("kawa/003.html") })
+    }
+
+    @Test
+    fun jTotalsPageIsReadAsABrowserReadsShiftJis() {
+        // The circled number and the wave dash are Windows-31J's. Java's Shift_JIS has none of the first.
+        val words = "好きと①った～"
+        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to jTotalSong("${"x".repeat(14)}$jTotalChord", words)))
+        val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
+        assertEquals(words, found.sheet.lines.single().text)
     }
 
     @Test
