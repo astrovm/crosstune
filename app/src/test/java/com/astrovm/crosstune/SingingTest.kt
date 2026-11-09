@@ -89,7 +89,7 @@ class SingingTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -182,7 +182,7 @@ class SingingTest {
         assertEquals(0L, firstLineMs())
         assertEquals(1, singing.hears)
         // Opened again, the song's words were heard already.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         openLyrics()
         plays(positionMs = 200)
         composeRule.waitForIdle()

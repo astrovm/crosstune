@@ -168,6 +168,8 @@ class MainViewModelTest {
         assertEquals(0, done)
         assertEquals(ChatGptState(), model.uiState.chatGpt)
         assertNull(prefs().getString("chatgpt_model", null))
+        // No small player was given, so a card has none to show.
+        assertNull(model.linePlayerView())
     }
 
     @Test
@@ -1392,7 +1394,7 @@ class MainViewModelTest {
         val playback = FakePlayback().apply { access = true }
         val answers = MutableSharedFlow<Following?>(extraBufferCapacity = 1)
         val source = object : PlaybackSource by playback {
-            override fun follow(song: MusicMetadata): Flow<Following?> = answers
+            override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = answers
         }
         val model = ytMusicModel(source)
         val effects = mutableListOf<Effect>()
@@ -1708,6 +1710,17 @@ class MainViewModelTest {
         model.resolveTypedInput()
         until("looked the playlist up") { model.uiState.result?.tracks?.size == 2 && !model.uiState.isLoading }
         return model
+    }
+
+    @Test
+    fun everyMusicAppOnThePhoneIsKnownToThePracticeOfCards() {
+        shadowOf(app.packageManager).installPackage(installedApp("com.spotify.music", "Spotify"))
+        shadowOf(app.packageManager).installPackage(installedApp("app.morphe.android.apps.youtube.music", "Morphe"))
+        val model = model(playback = FakePlayback())
+        model.refreshSystemState()
+        idle()
+        until("the apps are read") { model.uiState.musicApps.size == 2 }
+        assertEquals(setOf("com.spotify.music", "app.morphe.android.apps.youtube.music"), model.uiState.musicApps.toSet())
     }
 
     @Test

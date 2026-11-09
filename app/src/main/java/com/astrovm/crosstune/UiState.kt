@@ -176,6 +176,8 @@ internal data class UiState(
     /** False until there's an app songs play in: the only music app, or the first one picked on a song. */
     val hasDefault: Boolean = true,
     val installed: Set<MusicService> = emptySet(),
+    /** Every package a music app is installed under, as many as a service has; see [LinkState.apps]. */
+    val musicApps: List<String> = emptyList(),
     /** Each source's hosts Android doesn't let Crosstune open yet, or null before Android 12, which can't tell. */
     val unapprovedHosts: Map<MusicService, List<String>>? = null,
     /** Crosstune's own links are set to open in the browser, so none reach it; see [LinkState.ownLinksOff]. */
@@ -406,6 +408,8 @@ internal data class Practice(
     val missed: Int = 0,
     val turned: Boolean = false,
     val sound: LineSound = LineSound.NONE,
+    /** The YouTube video the card's line plays from, in the small player on it, when the music app can't move to the line; null when the app plays it. */
+    val video: String? = null,
     /** The last card's line shown, for the song practice left off in. */
     val lastSong: SavedLine? = null,
     /** What the music app played before, to go back to once done. */
@@ -414,7 +418,7 @@ internal data class Practice(
     val line: SavedLine? get() = queue.firstOrNull()
 }
 
-/** How a card's line sounds: not at all, on its way in the music app, playing, or ready to play (again). */
+/** How a card's line sounds: not at all, on its way in the music app or the small player, playing, or ready to play (again). */
 internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }
 
 /** A [song] the music app [app] played, at [positionMs], before practice took it over. */

@@ -31,7 +31,9 @@ internal data class LinkState(
      * Whether Crosstune's own "Open by default" is set to "In your browser", which sends every
      * link elsewhere however many are allowed. Android hides the allowed links meanwhile.
      */
-    val ownLinksOff: Boolean = false
+    val ownLinksOff: Boolean = false,
+    /** Every package a music app is installed under, builds patched from one too, not only the first of each service. */
+    val apps: List<String> = emptyList()
 ) {
     /**
      * Installed apps that claim links Crosstune is set to intercept, each with whether it still
@@ -82,34 +84,39 @@ internal class LinkInterception(private val context: Context) {
     }
 
     /** Services whose app is installed, or a build patched from it, so setup can suggest them first. */
-    fun installedServices(): Set<MusicService> = MusicService.entries.filter { installedPackage(it) != null }.toSet()
+    fun installedServices(): Set<MusicService> = MusicService.entries.filter { installedPackages(it).isNotEmpty() }.toSet()
 
-    /** The package [service]'s app is installed under: its own, a patched build's, or, on a TV, YouTube's for YouTube Music. */
-    private fun installedPackage(service: MusicService): String? = service.appPackages.firstOrNull { packageName ->
-        try {
-            context.packageManager.getPackageInfo(packageName, 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
-        }
-    }
+    /**
+     * Every package [service]'s app is installed under: its own, builds patched from it, and, on a TV, YouTube's for
+     * YouTube Music. A patched YouTube or YouTube Music Crosstune has no name for is found by the links it opens, as
+     * patchers name them alike; see [MusicService.ofPackage].
+     */
+    private fun installedPackages(service: MusicService): List<String> =
+        (service.appPackages.filter(::isInstalled) + patchedBuildsOpening(service)).distinct()
+
+    /** The builds of YouTube or YouTube Music, whatever their names, that open [service]'s links. */
+    private fun patchedBuildsOpening(service: MusicService): List<String> =
+        if (service != MusicService.YOUTUBE && service != MusicService.YOUTUBE_MUSIC) emptyList()
+        else appsOpening(HOSTS.getValue(service)).filter { MusicService.ofPackage(it) == service }
 
     /**
      * Everything Android says about apps and links, read in one go. It takes many slow calls to
      * the system, so it's read away from the main thread and each call is made only once.
      */
     fun linkState(): LinkState {
-        val packages = MusicService.entries.mapNotNull { service -> installedPackage(service)?.let { service to it } }.toMap()
-        val installed = packages.keys
-        val serviceApps = packages.mapValues { appFor(it.value) }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return LinkState(serviceApps, null, null)
+        val all = MusicService.entries.associateWith(::installedPackages).filterValues { it.isNotEmpty() }
+        val installed = all.keys
+        val serviceApps = all.mapValues { appFor(it.value.first()) }
+        val apps = all.values.flatten().distinct()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return LinkState(serviceApps, null, null, apps = apps)
         val own = ownState()
         val hosts = own?.hostToStateMap
         return LinkState(
             serviceApps,
             unapprovedHosts = hosts?.let(::unapprovedFrom),
             claimingAppsBySource = claimingAppsBySource(installed),
-            ownLinksOff = own?.isLinkHandlingAllowed == false
+            ownLinksOff = own?.isLinkHandlingAllowed == false,
+            apps = apps
         )
     }
 

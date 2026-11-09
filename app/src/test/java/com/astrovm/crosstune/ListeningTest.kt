@@ -153,7 +153,7 @@ class ListeningTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         // Anything still listening hears the end.
         microphone.end()
         MainActivity.httpClientFactory = ::httpClient
@@ -274,7 +274,7 @@ class ListeningTest {
         composeRule.waitForIdle()
         assertFalse(barShown())
         // Kept for the next launch, and back on, it shows again.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         composeRule.waitForIdle()
         assertFalse(barShown())
@@ -892,7 +892,7 @@ class ListeningTest {
         demoCard()
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
-        controller?.pause()?.stop()?.destroy()
+        controller?.destroyAndSettle()
         launch()
         recognize()
         waitForText("Demo")
@@ -1171,7 +1171,7 @@ class ListeningTest {
         assertEquals("package:${app.packageName}", settings.dataString)
 
         // Tapped again later, Android won't ask, so the steps to its page show instead.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         val next = launch()
         recognize()
         waitForText(string(R.string.fix_mic_title))
@@ -1276,7 +1276,7 @@ class ListeningTest {
         launch(Intent(MainActivity.ACTION_LISTEN).setClassName(app, MainActivity.LISTEN_ALIAS))
         waitForText(string(R.string.listening_text))
         waitUntil(TIMEOUT_MS) { microphone.opened == 1 }
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // MainActivity itself is exported; asked directly, it doesn't listen.
         microphone = FakeMicrophone()

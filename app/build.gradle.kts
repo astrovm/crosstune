@@ -130,6 +130,8 @@ kover {
                 // The MilkDrop visuals' native library and GL thread need a GPU, which unit tests
                 // don't have; they're checked on a phone. What they're told to do is tested.
                 classes("com.astrovm.crosstune.NativeMilkdrop*", "com.astrovm.crosstune.GlThread", "com.astrovm.crosstune.MilkdropView*", "com.astrovm.crosstune.MilkdropBehind*")
+                // The small YouTube player is a WebView loading YouTube's own page, which unit tests can't run; it's checked on a phone. The page it loads is tested.
+                classes("com.astrovm.crosstune.YouTubeLinePlayer*")
                 // Shizuku runs on a phone, where it's checked; what it's told to run is tested.
                 classes("com.astrovm.crosstune.ShizukuShell*")
                 // Root runs su, which only a rooted phone has, and none at hand is; what it's told to run is tested.
@@ -300,7 +302,7 @@ val songCheck = tasks.register<Test>("songCheck") {
 // before it was all there, and so ran on Android's empty stubs instead. One configuration each, as
 // Gradle would otherwise keep only the newest of one library's versions.
 val robolectricRuntimes = files(
-    listOf("9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "14-robolectric-10818077-i7", "16-robolectric-13921718-i7").map {
+    listOf("9-robolectric-4913185-2-i7", "10-robolectric-5803371-i7", "11-robolectric-6757853-i7", "12-robolectric-7732740-i7", "12.1-robolectric-8229987-i7", "13-robolectric-9030017-i7", "14-robolectric-10818077-i7", "16-robolectric-13921718-i7").map {
         configurations.detachedConfiguration(dependencies.create("org.robolectric:android-all-instrumented:$it")).apply { isTransitive = false }
     }
 )

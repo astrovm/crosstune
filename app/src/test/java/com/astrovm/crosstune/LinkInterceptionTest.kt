@@ -146,6 +146,61 @@ class LinkInterceptionTest {
         assertEquals("app.revanced.android.apps.youtube.music", interception.linkState().serviceApps[MusicService.YOUTUBE_MUSIC]?.packageName)
     }
 
+    @Test
+    fun aBuildPatchedUnderANameNobodyKnowsIsFoundByTheLinksItOpens() {
+        val fork = "org.example.android.apps.youtube.music"
+        val plainYouTube = "org.example.android.youtube"
+        shadowOf(app).checkActivities(true)
+        listOf(fork, plainYouTube).forEach { name ->
+            shadowOf(app.packageManager).installPackage(installedApp(name, name))
+            val opens = ComponentName(name, "$name.UrlActivity")
+            shadowOf(app.packageManager).addActivityIfNotPresent(opens)
+            shadowOf(app.packageManager).addIntentFilterForActivity(
+                opens, IntentFilter(Intent.ACTION_VIEW).apply {
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    addDataScheme("https")
+                    addDataAuthority("music.youtube.com", null)
+                    addDataAuthority("www.youtube.com", null)
+                    addDataAuthority("youtu.be", null)
+                }
+            )
+        }
+        // An app of some other service that opens no such link is not mistaken for one.
+        shadowOf(app.packageManager).installPackage(installedApp("org.example.player", "Player"))
+        assertEquals(setOf(MusicService.YOUTUBE_MUSIC, MusicService.YOUTUBE), interception.installedServices())
+        val state = interception.linkState()
+        assertEquals(fork, state.serviceApps[MusicService.YOUTUBE_MUSIC]?.packageName)
+        assertEquals(plainYouTube, state.serviceApps[MusicService.YOUTUBE]?.packageName)
+        assertEquals(listOf(fork, plainYouTube), state.apps)
+    }
+
+    @Test
+    fun everyBuildOfAServiceIsListedAsAMusicAppAndNoneTwice() {
+        shadowOf(app.packageManager).installPackage(installedApp("com.spotify.music", "Spotify"))
+        shadowOf(app.packageManager).installPackage(installedApp("app.morphe.android.apps.youtube.music", "Morphe"))
+        shadowOf(app.packageManager).installPackage(installedApp("com.google.android.apps.youtube.music", "YouTube Music"))
+        assertEquals(
+            setOf("com.spotify.music", "app.morphe.android.apps.youtube.music", "com.google.android.apps.youtube.music"),
+            interception.linkState().apps.toSet()
+        )
+        assertEquals(3, interception.linkState().apps.size)
+        assertTrue(LinkState(emptyMap(), null, null).apps.isEmpty())
+    }
+
+    @Test
+    fun aPackageNamedAsPatchersNameThemIsTheServiceItIsPatchedFrom() {
+        assertEquals(MusicService.YOUTUBE_MUSIC, MusicService.ofPackage("app.morphe.android.apps.youtube.music"))
+        assertEquals(MusicService.YOUTUBE_MUSIC, MusicService.ofPackage("org.example.android.apps.youtube.music"))
+        assertEquals(MusicService.YOUTUBE, MusicService.ofPackage("app.morphe.android.youtube"))
+        assertEquals(MusicService.YOUTUBE, MusicService.ofPackage("org.example.android.youtube"))
+        assertEquals(MusicService.SPOTIFY, MusicService.ofPackage("com.spotify.music"))
+        // Neither another app of YouTube's, nor no app, is one.
+        assertNull(MusicService.ofPackage("com.google.android.apps.youtube.kids"))
+        assertNull(MusicService.ofPackage("org.example.player"))
+        assertNull(MusicService.ofPackage(null))
+    }
+
     private fun linkApp(service: MusicService) = LinkApp(service.packageName, app.getString(service.labelRes))
 
     private fun installApp(service: MusicService) =
@@ -167,6 +222,15 @@ class LinkInterceptionTest {
         assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.linkState().blockingApps(sources))
         // A service Crosstune isn't intercepting is none of its business.
         assertEquals(emptySet<LinkApp>(), interception.linkState().blockingApps(setOf(MusicService.TIDAL)))
+    }
+
+    @Test
+    @Config(sdk = [31])
+    fun fromAndroid12OnAnAppThatVerifiedTheLinksIsSeen() {
+        // Android 12 is the first to say which app opens a link; it's read there too, not only on later ones.
+        installApp(MusicService.SPOTIFY)
+        FakeDomainVerification.installPerPackage(app) { mapOf("open.spotify.com" to DomainVerificationUserState.DOMAIN_STATE_VERIFIED) }
+        assertEquals(setOf(linkApp(MusicService.SPOTIFY)), interception.linkState().blockingApps(setOf(MusicService.SPOTIFY)))
     }
 
     @Test

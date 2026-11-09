@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import org.json.JSONArray
 import java.text.Normalizer
+import kotlin.math.abs
 
 /** A chord played from letter [at] of a line. */
 internal data class Chord(val at: Int, val name: String)
@@ -130,7 +131,8 @@ internal object ChordSheets {
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
      * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
      * first takes one. A full-width bracket or stop is two as well, except where the browser draws
-     * it at one. Only a <br> ends a line, and spaces count as
+     * it at one. A letter in neither font is as wide as the browser's fallback draws it, and a chord
+     * goes over the letter that starts nearest where it is. Only a <br> ends a line, and spaces count as
      * a browser counts them, as its source wraps anywhere. Tags are not drawn: an empty link adds
      * no column, and a link split by a <br> still names the chord on the next line.
      */
@@ -172,29 +174,30 @@ internal object ChordSheets {
     }
 
     /**
-     * How wide [text] is in the font the page asks for, as Chromium draws it. Inconsolata, named
-     * first, draws its own letters at one column and its combining marks at none. The Japanese
-     * monospace font under it draws half-width kana at one, the two half-width voice marks at none,
-     * and Japanese at two. A full-width bracket or stop is two, then one where Chromium's default
-     * `text-spacing-trim: normal` kerns it. That follows the CSS Text 4 classes: a closing mark
+     * How wide [text] is in the font the page asks for, as Chromium draws it, in thousandths of a
+     * column ([JTotalWidths]). A letter takes the width of the font it is drawn from: Inconsolata's
+     * own at one column, the Japanese monospace font's at one or two, and any other from a proportional
+     * font, at whatever it measures. A full-width bracket or stop is two, then one where Chromium's
+     * default `text-spacing-trim: normal` kerns it. That follows the CSS Text 4 classes: a closing mark
      * before a closing mark, a middle dot or an ideographic space, and an opening mark after those
      * or after a closing mark. For Japanese, and on an untagged page, the full-width colon and
      * semicolon are middle dots and the stops are closing marks. A right quote trims the closing
      * mark before it and not the opening mark after it: Inconsolata draws that quote at one column.
-     * Measured on the page's font.
+     * A letter outside the Basic Multilingual Plane is one letter, not two halves.
      */
-    private fun columns(text: String) = text.indices.sumOf { columnsAt(text, it) }
-
-    private fun columnsAt(text: String, index: Int): Int {
-        val width = columnsOf(text[index])
-        return if (width == 2 && trimmed(text, index)) 1 else width
+    private fun columns(text: String): Int {
+        var total = 0
+        var index = 0
+        while (index < text.length) {
+            total += widthAt(text, index)
+            index += Character.charCount(text.codePointAt(index))
+        }
+        return total
     }
 
-    private fun columnsOf(letter: Char): Int = when {
-        letter in zeroWidth -> 0
-        letter.code <= 0xFF || inconsolataOne.any { letter in it } -> 1
-        letter in '\uFF61'..'\uFF9D' -> 1
-        else -> 2
+    private fun widthAt(text: String, index: Int): Int {
+        val width = JTotalWidths.of(text.codePointAt(index))
+        return if (width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
     }
 
     /** A two-column bracket or stop that the browser draws at one because of the letter beside it. */
@@ -233,104 +236,29 @@ internal object ChordSheets {
 
     private val rightQuotes = setOf('\u2019', '\u201D')
 
-    /** Letters with no advance: Inconsolata's combining marks, the half-width voice marks, and spaces the browser drops. */
-    private val zeroWidth = setOf(
-        '\u0300', '\u0301', '\u0303', '\u0304', '\u0308', '\u0309', '\u0323',
-        '\u200B', '\uFEFF', '\uFF9E', '\uFF9F',
-    )
-
     /**
-     * Letters Inconsolata draws at one column, above Latin-1. These are the glyphs in the font
-     * files the page's stylesheet loads, measured in Chromium: each is one column wide there.
-     */
-    private val inconsolataOne = listOf(
-        '\u0100'..'\u0131',
-        '\u0134'..'\u0148',
-        '\u014A'..'\u017E',
-        '\u018F'..'\u018F',
-        '\u0192'..'\u0192',
-        '\u0198'..'\u0198',
-        '\u01A0'..'\u01A1',
-        '\u01AF'..'\u01B0',
-        '\u01B8'..'\u01B9',
-        '\u01C7'..'\u01C9',
-        '\u01E6'..'\u01E7',
-        '\u01EA'..'\u01EB',
-        '\u01FA'..'\u021B',
-        '\u022A'..'\u022D',
-        '\u0230'..'\u0233',
-        '\u0237'..'\u0237',
-        '\u024D'..'\u024D',
-        '\u0259'..'\u0259',
-        '\u027B'..'\u027B',
-        '\u0298'..'\u0298',
-        '\u029A'..'\u029A',
-        '\u02B9'..'\u02BC',
-        '\u02BE'..'\u02BF',
-        '\u02C6'..'\u02CC',
-        '\u02DA'..'\u02DA',
-        '\u02DC'..'\u02DD',
-        '\u1E08'..'\u1E09',
-        '\u1E0C'..'\u1E0F',
-        '\u1E14'..'\u1E17',
-        '\u1E1C'..'\u1E1D',
-        '\u1E20'..'\u1E21',
-        '\u1E24'..'\u1E25',
-        '\u1E2A'..'\u1E2B',
-        '\u1E2E'..'\u1E2F',
-        '\u1E36'..'\u1E37',
-        '\u1E3A'..'\u1E3B',
-        '\u1E42'..'\u1E49',
-        '\u1E4C'..'\u1E53',
-        '\u1E5A'..'\u1E5B',
-        '\u1E5E'..'\u1E69',
-        '\u1E6C'..'\u1E6F',
-        '\u1E78'..'\u1E7B',
-        '\u1E80'..'\u1E85',
-        '\u1E8E'..'\u1E8F',
-        '\u1E92'..'\u1E93',
-        '\u1E97'..'\u1E97',
-        '\u1E9E'..'\u1E9E',
-        '\u1EA0'..'\u1EF9',
-        '\u2009'..'\u2009',
-        '\u2013'..'\u2014',
-        '\u2018'..'\u201A',
-        '\u201C'..'\u201E',
-        '\u2020'..'\u2020',
-        '\u2022'..'\u2022',
-        '\u2026'..'\u2026',
-        '\u2032'..'\u2033',
-        '\u2039'..'\u203A',
-        '\u2044'..'\u2044',
-        '\u20A1'..'\u20A1',
-        '\u20A3'..'\u20A4',
-        '\u20A6'..'\u20A7',
-        '\u20A9'..'\u20A9',
-        '\u20AB'..'\u20AD',
-        '\u20B1'..'\u20B2',
-        '\u20B5'..'\u20B5',
-        '\u20B9'..'\u20BA',
-        '\u20BC'..'\u20BD',
-        '\u2113'..'\u2113',
-        '\u2122'..'\u2122',
-        '\u2191'..'\u2191',
-        '\u2193'..'\u2193',
-        '\u2212'..'\u2212',
-        '\u2215'..'\u2215',
-        '\uFFFD'..'\uFFFD',
-    )
-
-    /**
-     * The first letter of [words] that starts at or after [column]. Widths use the whole line, so a
-     * bracket can see the punctuation beside it.
+     * The letter of [words] whose start is nearest [column], the later one when two are as near: a
+     * chord over the middle of a wide letter is read as the next. Widths use the whole line, so a
+     * bracket can see the punctuation beside it. Letters that start in the same place, as a mark with
+     * no width does, give the first. The end of the line is where a chord past the last letter goes.
      */
     private fun letterAt(words: String, column: Int): Int {
-        var total = 0
-        for (index in words.indices) {
-            if (total >= column) return index
-            total += columnsAt(words, index)
+        var best = 0
+        var bestStart = 0
+        var bestDistance = Int.MAX_VALUE
+        var start = 0
+        var index = 0
+        while (true) {
+            val distance = abs(start - column)
+            if (distance < bestDistance || (distance == bestDistance && start > bestStart)) {
+                best = index
+                bestStart = start
+                bestDistance = distance
+            }
+            if (index >= words.length) return best
+            start += widthAt(words, index)
+            index += Character.charCount(words.codePointAt(index))
         }
-        return words.length
     }
 
     /** A ChordPro directive name, as `{title:…}` and `{start_of_tab}` write it. */
