@@ -4934,6 +4934,28 @@ class ListeningTest {
     }
 
     @Test
+    fun chordsSwitchedOffWhileBeingLookedUpAreLookedUpWhenSwitchedOnAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        val held = CountDownLatch(1)
+        var hold = true
+        val sites = chordSitesThatAreUp { true }
+        // Ultimate Guitar is slow to answer the first time.
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request ->
+            if (hold && request.url.host == "www.ultimate-guitar.com") held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            sites(request)
+        })
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { controllerModel().uiState.chords.loading } }
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.loading })
+        // The lookup that was cancelled doesn't count: switched on again, the chords are asked for.
+        hold = false
+        held.countDown()
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+    }
+
+    @Test
     fun noChordsFoundAreLookedForAgainWhenSwitchedOffAndOn() {
         prefs().edit().putBoolean("lyrics_chords", true).commit()
         var listed = false
