@@ -973,6 +973,22 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun aThirdPartyVideoNeedsKnownMatchingLengths() {
+        val song = MusicMetadata("A Cruel Angel's Thesis", "高橋洋子")
+        // Recorded search row for the piano upload, with a fake channel and video ID.
+        val title = "高橋洋子「残酷な天使のテーゼ」/ A  Cruel Angel’s Thesis"
+        fun find(details: String, apple: Map<String, String>): String? {
+            namesAndTabs(videos = listOf(youTubeMusicRow(title, details, videoId = "piano000000")), apple = apple)
+            return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
+        }
+        val known = mapOf("AR" to appleSong("A Cruel Angel's Thesis", "高橋洋子", 239_000))
+        assertNull(find("Fan • 1.4K views • 3:59", emptyMap()))
+        assertNull(find("Fan • 1.4K views", known))
+        assertNull(find("Fan • 1.4K views • 4:30", known))
+        assertEquals("https://music.youtube.com/watch?v=piano000000", find("Fan • 1.4K views • 3:59", known))
+    }
+
+    @Test
     fun aSongOnlyPutUpByOthersIsFoundAsTheUploadThatPlaysIt() {
         val song = MusicMetadata("Owaranai Uta", "THE BLUE HEARTS")
         val apple = mapOf("AR" to appleSong("Owaranai Uta", "THE BLUE HEARTS", 184_000))
@@ -1004,9 +1020,9 @@ class ExactMatcherTest {
         // Not naming the artist, or saying more than the song outside brackets, is no match.
         assertNull(finds(youTubeMusicRow("Owaranai Uta with lyrics", "Fan • 1K views • 3:04", videoId = "noartist000")))
         assertNull(finds(youTubeMusicRow("THE BLUE HEARTS - Owaranai Uta Guitar Lesson Part 2", "Fan • 1K views • 3:04", videoId = "lesson00000")))
-        // Not known to Apple, Deezer says how long it is; and unknown anywhere, the length isn't held against it.
+        // Not known to Apple, Deezer says how long it is; unknown anywhere, another channel's video isn't taken.
         assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000"), deezer = """[{"title":"Owaranai Uta","artist":{"name":"THE BLUE HEARTS"},"duration":184}]""", names = emptyMap()))
-        assertEquals("https://music.youtube.com/watch?v=long0000000", finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000"), names = emptyMap()))
+        assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000"), names = emptyMap()))
         // Apple without its length leaves it to Deezer; an hour-long video is far from it too.
         assertEquals("https://music.youtube.com/watch?v=lyrics00000", finds(lyrics, deezer = """[{"title":"Owaranai Uta","artist":{"name":"THE BLUE HEARTS"},"duration":184}]""", names = mapOf("AR" to """{"trackId":7,"trackName":"Owaranai Uta","artistName":"THE BLUE HEARTS"}""")))
         assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 1:03:04", videoId = "hour0000000")))
@@ -1046,7 +1062,7 @@ class ExactMatcherTest {
     fun aVideoSayingMoreInAnotherScriptIsAnotherSong() {
         val song = MusicMetadata("桜", "Band")
         fun finds(name: String, channel: String = "Band - Topic"): String? {
-            namesAndTabs(videos = listOf(youTubeMusicRow(name, "$channel • 1K views • 4:00", videoId = "video000000")))
+            namesAndTabs(videos = listOf(youTubeMusicRow(name, "$channel • 1K views • 4:00", videoId = "video000000")), apple = mapOf("AR" to appleSong("桜", "Band", 240_000)))
             return runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) }
         }
         assertNull(finds("桜の雨"))
@@ -1086,13 +1102,13 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, song) })
         namesAndTabs(videos = listOf(youTubeMusicRow("YOASOBI - 夜に駆ける", "Fan • 1K views • 4:21", videoId = "yoru0000000")))
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata("夜", "YOASOBI")) })
-        // A video that doesn't say how long it is isn't held to the song's length.
+        // A video from another channel must say how long it is.
         namesAndTabs(
             videos = listOf(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views", videoId = "nolength000")),
             apple = mapOf("US" to appleSong("Owaranai Uta", "THE BLUE HEARTS", 184_000))
         )
         fake.requestedUrls.clear()
-        assertEquals("https://music.youtube.com/watch?v=nolength000", runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
+        assertNull(runBlocking { matcher("US").find(MusicService.YOUTUBE_MUSIC, song) })
         // From the US, a song Apple doesn't have is asked about once there.
         namesAndTabs()
         fake.requestedUrls.clear()
@@ -1117,7 +1133,7 @@ class ExactMatcherTest {
         // On YouTube it opens there.
         assertEquals("https://www.youtube.com/watch?v=demo0000000", runBlocking { matcher().find(MusicService.YOUTUBE, demo) })
 
-        // Someone else's upload counts when the title names the artist; a live take is another recording.
+        // Without a known length, someone else's upload isn't enough to identify the recording.
         youTubeMusicTabs(
             songs = emptyList(),
             videos = listOf(
@@ -1125,7 +1141,7 @@ class ExactMatcherTest {
                 youTubeMusicRow("Tiny Band - Bedroom Demo [Lyrics]", "Fan Channel • 50 views • 3:00", videoId = "upload00000")
             )
         )
-        assertEquals("https://music.youtube.com/watch?v=upload00000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
         // The artist's own channel by what YouTube calls it, though the title names only the song.
         youTubeMusicTabs(songs = emptyList(), videos = listOf(youTubeMusicRow("Bedroom Demo", "Tiny Band - Topic • 20 views • 3:00", videoId = "topic000000")))
         assertEquals("https://music.youtube.com/watch?v=topic000000", runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, demo) })
