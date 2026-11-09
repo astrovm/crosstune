@@ -4889,13 +4889,11 @@ class ListeningTest {
         assertFalse(shown(string(R.string.lyrics_chords_failed)))
     }
 
-    @Test
-    fun chordsNoSiteHasAreNotACouldntLoad() {
-        prefs().edit().putBoolean("lyrics_chords", true).commit()
-        // Every site answers, and none has a sheet for the song.
+    /** Every chord site answers, and none has a sheet for Demo. */
+    private fun chordSitesWithNone(): (okhttp3.Request) -> okhttp3.Response? {
         val chordHosts = setOf("www.cifraclub.com.br", "acordes.lacuerda.net", "www.ufret.jp")
         val noResults = org.json.JSONObject().put("store", org.json.JSONObject().put("page", org.json.JSONObject().put("data", org.json.JSONObject("""{"results":[]}""")))).toString()
-        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request ->
+        return { request ->
             when (request.url.host) {
                 "www.ultimate-guitar.com" -> FakeSpotify.html(request, """<div class="js-store" data-content="${noResults.replace("&", "&amp;").replace("\"", "&quot;")}"></div>""")
                 // The other names U-FRET asks for, with none.
@@ -4906,10 +4904,50 @@ class ListeningTest {
                 in chordHosts -> FakeSpotify.html(request, "")
                 else -> null
             }
-        })
+        }
+    }
+
+    @Test
+    fun chordsNoSiteHasAreNotACouldntLoad() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesWithNone())
         waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { controllerModel().uiState.chords.tried } }
         assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
         assertFalse(shown(string(R.string.lyrics_chords_failed)))
+    }
+
+    @Test
+    fun chordsFoundStayWhenSwitchedOffAndOnAndAreNotLookedUpAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var up = true
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = chordSitesThatAreUp { up })
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
+        // Were they asked for again now, the sites that are down would take the chords away.
+        up = false
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == null }
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { !controllerModel().uiState.chords.loading } }
+        assertEquals(listOf("G", "C"), chordsOver("Walking down the river road"))
+        assertFalse(shown(string(R.string.lyrics_chords_failed)))
+    }
+
+    @Test
+    fun noChordsFoundAreLookedForAgainWhenSwitchedOffAndOn() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        var listed = false
+        val none = chordSitesWithNone()
+        val some = chordSitesThatAreUp { true }
+        wordsOf(null, "Walking down the river road\\nSinging to the morning light", sites = { request -> if (listed) some(request) else none(request) })
+        waitUntil(TIMEOUT_MS) { composeRule.runOnIdle { controllerModel().uiState.chords.tried } }
+        assertNull(chordsOver("Walking down the river road"))
+        // A site has the song's chords by now: switched off and on, they're found.
+        listed = true
+        studyMenu()
+        click(string(R.string.lyrics_chords))
+        click(string(R.string.lyrics_chords))
+        waitUntil(TIMEOUT_MS) { chordsOver("Walking down the river road") == listOf("G", "C") }
     }
 
     @Test

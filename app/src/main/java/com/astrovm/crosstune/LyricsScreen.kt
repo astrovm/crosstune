@@ -160,6 +160,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -1233,9 +1234,11 @@ private fun TranslationStatus(learning: Learning, offline: Boolean, actions: Scr
 /**
  * That the chords couldn't be looked up, in words: plain words alone look like a song with no
  * chords, and the offline icon doesn't say what failed. Offline they're looked up again once the
- * internet is back, so there's nothing to tap.
+ * internet is back, so there's nothing to tap. It only hands what it's given to AnimatedVisibility,
+ * which does its own recomposing, so it needs no scope of its own to skip or restart.
  */
 @Composable
+@NonRestartableComposable
 private fun ChordsStatus(chords: ChordsState, offline: Boolean, actions: ScreenActions) {
     AnimatedVisibility(visible = chords.on && chords.failed, enter = Motion.appear, exit = Motion.disappear) {
         Row(

@@ -3935,13 +3935,14 @@ internal class MainViewModel(
 
     /**
      * Shows the song's chords over its words, from now on, or stops, and stops looking them up.
-     * Switched on again, a song with none found is looked up again.
+     * Switched on again, a song with no sheet, none found or a site that wouldn't answer, is looked up again.
+     * A sheet is only ever there once looked up, so it alone says there's nothing to ask again.
      */
     fun setChords(on: Boolean) {
         preferences.edit { putBoolean(KEY_CHORDS, on) }
         if (!on) chordsJob?.cancel()
         val chords = uiState.chords
-        uiState = uiState.copy(chords = chords.copy(on = on, loading = on && chords.loading, tried = chords.tried && chords.sheet != null, failed = false))
+        uiState = uiState.copy(chords = chords.copy(on = on, loading = on && chords.loading, tried = chords.sheet != null, failed = false))
         chords()
     }
 
