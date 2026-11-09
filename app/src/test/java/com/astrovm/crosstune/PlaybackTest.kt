@@ -2059,6 +2059,19 @@ class PlaybackTest {
     }
 
     @Test
+    fun withNoAppToAskTheOneThatPlayedLastIsAskedWhereverItIsListed() = runBlocking {
+        allow()
+        // The one that played last plays still, so it's started at once; one paused since earlier would never start.
+        val last = { player("com.spotify.music", "Spotify", "Other", "Band", at = PLAYED_AT) }
+        val earlier = { player("com.example.player", "Player", "Other", "Band", state = PlaybackState.STATE_PAUSED, at = PLAYED_AT - 1) }
+        for (listed in listOf(listOf(earlier, last), listOf(last, earlier))) {
+            shadowOf(sessions).clearControllers()
+            listed.forEach { shadowOf(sessions).addController(it()) }
+            assertTrue(playback.playSong(song, null, mustStart = true))
+        }
+    }
+
+    @Test
     fun whatAnAppPlaysIsFollowedWithItsPlaceInItsQueue() {
         val music = MusicService.YOUTUBE_MUSIC.packageName
         val seen = mutableListOf<AppPlays?>()
