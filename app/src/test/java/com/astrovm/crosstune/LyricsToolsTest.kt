@@ -98,7 +98,7 @@ class LyricsToolsTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         shadowOf(app.getSystemService(AccessibilityManager::class.java)).setTouchExplorationEnabled(false)
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
