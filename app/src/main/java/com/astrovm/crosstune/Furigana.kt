@@ -2,14 +2,15 @@ package com.astrovm.crosstune
 
 /**
  * Where the reading of a Japanese word goes when the word has kana among its kanji: over the
- * kanji, and never over the kana, which are read as they're written.
+ * kanji, and over a kana only when it isn't said as it's written.
  *
  * The word is cut into runs, kanji and kana in turn (飛 び 立 つ), and its reading is laid along
  * them: each run of kana has to be found in the reading, and what's left between two of them is
  * the reading of the kanji there. A reading often spells those kana another way than the word
- * does, and they still count as found: katakana for hiragana, small kana for big ones, the old ゐ
- * and ゑ, a long vowel drawn out or spelled out (おう, おお, おー), ふ said う, and は, へ and を said
- * わ, え and お.
+ * does, and they still count as found. Katakana for hiragana, small kana for big ones, ぢ, づ and
+ * を, and a long vowel drawn out or spelled out (おう, おお, おー) are said as they're written, so
+ * nothing goes over them. The old ゐ and ゑ, ヶ, ふ said う, ひ said い, ほ said お, and は and へ
+ * said わ and え are not, so each gets what it's said as over it: い over ひ in 思ひ出.
  */
 internal object Furigana {
 
@@ -54,8 +55,8 @@ internal object Furigana {
         /** The run of kana at [i]: found in the reading, or, at the start or the end of the word, not in it. */
         private fun written(i: Int, at: Int): Plan {
             val run = runs[i]
-            val found = spelledAt(run, at)?.let { then(i + 1, it, Ruby(run), run.length) } ?: NONE
-            val left = if (i == 0 || i == runs.lastIndex) then(i + 1, at, Ruby(run), 0) else NONE
+            val found = spelledAt(run, at)?.let { then(i + 1, at + run.length, it, run.length) } ?: NONE
+            val left = if (i == 0 || i == runs.lastIndex) then(i + 1, at, listOf(Ruby(run)), 0) else NONE
             return listOf(found, left).maxBy { it.kept }
         }
 
@@ -63,32 +64,41 @@ internal object Furigana {
         private fun kanji(i: Int, at: Int): Plan {
             val plans = (i until runs.size step 2).flatMap { j ->
                 (at + 1..kana.length).map { end ->
-                    then(j + 1, end, Ruby(runs.subList(i, j + 1).joinToString(""), kana.substring(at, end)), 0)
+                    then(j + 1, end, listOf(Ruby(runs.subList(i, j + 1).joinToString(""), kana.substring(at, end))), 0)
                 }
             }
             return plans.maxByOrNull { it.kept } ?: NONE
         }
 
-        /** [part], and then the best of the rest of the runs from the [next]th, if it can be done. */
-        private fun then(next: Int, at: Int, part: Ruby, kept: Int): Plan {
+        /** [parts], and then the best of the rest of the runs from the [next]th, if it can be done. */
+        private fun then(next: Int, at: Int, parts: List<Ruby>, kept: Int): Plan {
             val rest = best(next, at)
-            return if (rest.kept < 0) NONE else Plan(rest.kept + kept, listOf(part) + rest.parts)
+            return if (rest.kept < 0) NONE else Plan(rest.kept + kept, parts + rest.parts)
         }
 
-        /** Where the reading is when [run] is found in it from [at], if it is. */
-        private fun spelledAt(run: String, at: Int): Int? {
-            val end = at + run.length
-            val same = end <= kana.length && run.indices.all { same(sound(run[it]), sounds[at + it], sounds.getOrNull(at + it - 1)) }
-            return end.takeIf { same }
+        /**
+         * [run] as found in the reading from [at], if it is: as written, with what each kana that
+         * isn't said as written is said as over it on its own.
+         */
+        private fun spelledAt(run: String, at: Int): List<Ruby>? {
+            if (at + run.length > kana.length) return null
+            val parts = mutableListOf<Ruby>()
+            for (k in run.indices) {
+                val said = sounds[at + k]
+                val written = sound(run[k])
+                when {
+                    written == said || stretched(written, sounds.getOrNull(at + k - 1)) == stretched(said, sounds.getOrNull(at + k - 1)) || "$said$written" in SAID_AS ->
+                        if (parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + run[k]) else parts += Ruby(run[k].toString())
+                    "$written$said" in SAID_AS -> parts += Ruby(run[k].toString(), kana.substring(at + k, at + k + 1))
+                    else -> return null
+                }
+            }
+            return parts
         }
     }
 
-    /** [c] as kana are told apart here: in hiragana, with the small and the old ones as their big and new ones. */
+    /** [c] as kana are told apart here: in hiragana, with the small ones as their big ones and the ones said alike as one. */
     private fun sound(c: Char): Char = FOLDED[Readings.hiragana(c.toString())[0]] ?: Readings.hiragana(c.toString())[0]
-
-    /** Whether the written kana [written] is the one [said] says, after the kana [before] it. */
-    private fun same(written: Char, said: Char, before: Char?): Boolean =
-        written == said || "$written$said" in SAID_AS || stretched(written, before) == stretched(said, before)
 
     /** A long vowel is one sound, however it's spelled: the mark ー, or the vowel that follows [before], あ, い, う, え or お. */
     private fun stretched(c: Char, before: Char?): Char {
@@ -96,14 +106,18 @@ internal object Furigana {
         return if (c == 'ー' || (row != null && c in STRETCHES.getValue(row))) 'ー' else c
     }
 
-    /** The small kana and the old ones, as the kana they're said as. */
+    /** The small kana, and the ones said alike, as the one kana they're said as. */
     private val FOLDED = mapOf(
         'ぁ' to 'あ', 'ぃ' to 'い', 'ぅ' to 'う', 'ぇ' to 'え', 'ぉ' to 'お', 'っ' to 'つ', 'ゃ' to 'や', 'ゅ' to 'ゆ', 'ょ' to 'よ', 'ゎ' to 'わ',
-        'ゐ' to 'い', 'ゑ' to 'え', 'を' to 'お', 'ぢ' to 'じ', 'づ' to 'ず'
+        'を' to 'お', 'ぢ' to 'じ', 'づ' to 'ず'
     )
 
-    /** Kana written one way and said another, both ways round: ヶ is か, が or こ; は, へ, ふ, ひ and ほ as they're said in a word. */
-    private val SAID_AS = listOf("ゖか", "ゖが", "ゖこ", "ゕか", "ゕが", "ゕこ", "はわ", "へえ", "ふう", "ひい", "ほお").flatMap { listOf(it, it.reversed()) }.toSet()
+    /**
+     * Kana written one way, first, and said another: ヶ is か, が or こ; the old ゐ and ゑ; は, へ, ふ,
+     * ひ and ほ as they're said in a word. A reading that spells it the way it's written the other way
+     * round, は for a written わ, still says it as written.
+     */
+    private val SAID_AS = setOf("ゖか", "ゖが", "ゖこ", "ゕか", "ゕが", "ゕこ", "ゐい", "ゑえ", "はわ", "へえ", "ふう", "ひい", "ほお")
 
     /** The kana of each vowel's column, by that vowel. */
     private val ROWS = mapOf(

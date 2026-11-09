@@ -251,7 +251,7 @@ class PracticeScreenTest {
 
     @Test
     fun aWordKeptWithAReadingThatSpellsItsKanaAnotherWayShowsItOverItsKanjiOnly() {
-        assertEquals(listOf("こんにち"), readingsOver(SavedLine("今日は", reading = "こんにちわ", title = "T", artist = "A")))
+        assertEquals(listOf("こんにち", "わ"), readingsOver(SavedLine("今日は", reading = "こんにちわ", title = "T", artist = "A")))
     }
 
     private fun readingFields(onSave: (List<String>) -> Unit = {}, onCancel: () -> Unit = {}) {

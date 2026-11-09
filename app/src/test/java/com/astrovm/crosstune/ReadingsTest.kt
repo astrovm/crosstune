@@ -179,27 +179,31 @@ class ReadingsTest {
     }
 
     @Test
-    fun aReadingThatSpellsTheKanaAnotherWayStillGoesOverTheKanjiOnly() {
+    fun aReadingThatSpellsTheKanaAnotherWayGoesOverTheKanjiAndOverTheKanaNotSaidAsWritten() {
         fun over(surface: String, reading: String, vararg parts: Ruby) = assertEquals("$surface $reading", parts.toList(), Readings.furigana(surface, reading))
         // Katakana for hiragana and small kana for big ones, and the other way round.
         over("飛び立つ", "トビタツ", Ruby("飛", "ト"), Ruby("び"), Ruby("立", "タ"), Ruby("つ"))
         over("食べちゃう", "たべちやう", Ruby("食", "た"), Ruby("べちゃう"))
         over("行つて", "いって", Ruby("行", "い"), Ruby("つて"))
         over("行って", "いつて", Ruby("行", "い"), Ruby("って"))
-        // The old kana: ゐ, ゑ, ひ, ほ, ふ and ヲ, said い, え, い, お, う and お; づ and ぢ said ず and じ.
-        over("住まゐ", "すまい", Ruby("住", "す"), Ruby("まゐ"))
-        over("植ゑる", "うえる", Ruby("植", "う"), Ruby("ゑる"))
-        over("思ひ出", "おもいで", Ruby("思", "おも"), Ruby("ひ"), Ruby("出", "で"))
-        over("遠ほい", "とおい", Ruby("遠", "と"), Ruby("ほい"))
-        over("言ふ", "ゆう", Ruby("言", "ゆ"), Ruby("ふ"))
+        // The old kana aren't read as written, so what they're said as goes over them: ゐ, ゑ, ひ, ほ and ふ said い, え, い, お and う.
+        over("住まゐ", "すまい", Ruby("住", "す"), Ruby("ま"), Ruby("ゐ", "い"))
+        over("植ゑる", "うえる", Ruby("植", "う"), Ruby("ゑ", "え"), Ruby("る"))
+        over("思ひ出", "おもいで", Ruby("思", "おも"), Ruby("ひ", "い"), Ruby("出", "で"))
+        over("遠ほい", "トオイ", Ruby("遠", "ト"), Ruby("ほ", "オ"), Ruby("い"))
+        over("言ふ", "ゆう", Ruby("言", "ゆ"), Ruby("ふ", "う"))
+        // ヲ, づ and ぢ are said as written: お, ず and じ.
         over("愛ヲ", "あいお", Ruby("愛", "あい"), Ruby("ヲ"))
         over("近づく", "ちかずく", Ruby("近", "ちか"), Ruby("づく"))
         over("恥ぢる", "はじる", Ruby("恥", "は"), Ruby("ぢる"))
-        // A kana said as it's not written: は, へ and ヶ.
-        over("今日は", "こんにちわ", Ruby("今日", "こんにち"), Ruby("は"))
-        over("山へ", "やまえ", Ruby("山", "やま"), Ruby("へ"))
-        over("3ヶ月", "さんかげつ", Ruby("3", "さん"), Ruby("ヶ"), Ruby("月", "げつ"))
-        over("3ヶ所", "さんかしょ", Ruby("3", "さん"), Ruby("ヶ"), Ruby("所", "しょ"))
+        // A kana said as it's not written: は, へ and ヶ, with what it's said as over it.
+        over("今日は", "こんにちわ", Ruby("今日", "こんにち"), Ruby("は", "わ"))
+        over("山へ", "やまえ", Ruby("山", "やま"), Ruby("へ", "え"))
+        over("3ヶ月", "さんかげつ", Ruby("3", "さん"), Ruby("ヶ", "か"), Ruby("月", "げつ"))
+        over("3ヶ所", "さんがしょ", Ruby("3", "さん"), Ruby("ヶ", "が"), Ruby("所", "しょ"))
+        over("一ヶ月", "いっこげつ", Ruby("一", "いっ"), Ruby("ヶ", "こ"), Ruby("月", "げつ"))
+        // Spelled the way it's written, the other way round, it's still read as written.
+        over("今日わ", "こんにちは", Ruby("今日", "こんにち"), Ruby("わ"))
         // A long vowel drawn out as ー, or spelled with the vowel that follows, in the word or in the reading.
         over("凄ーい", "すごおい", Ruby("凄", "すご"), Ruby("ーい"))
         over("凄おい", "すごーい", Ruby("凄", "すご"), Ruby("おい"))

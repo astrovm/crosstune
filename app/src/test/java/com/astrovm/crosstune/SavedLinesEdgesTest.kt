@@ -51,7 +51,7 @@ class SavedLinesEdgesTest {
         )
         SavedLinesStore(prefs).addAll(listOf(old))
         val loaded = SavedLinesStore(prefs).load().single()
-        assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("はお"), Ruby("茶", "ちゃ")), loaded.ruby)
+        assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("は", "わ"), Ruby("お"), Ruby("茶", "ちゃ")), loaded.ruby)
     }
 
     @Test

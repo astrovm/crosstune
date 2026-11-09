@@ -9,7 +9,8 @@ import java.io.File
 
 /**
  * Furigana over every Japanese line the tests keep (the fixtures, and the lyrics the tests quote):
- * no reading may sit over a kana that is written in its word. It lists the words and lines that
+ * no reading may sit over a kana that is said as it's written. A kana said another way, ひ said
+ * い, has what it's said as over it on its own, and that's the only reading over kana. It lists the words and lines that
  * still have one, so a change to how readings are laid over a word shows in numbers, not in one
  * example. Real lyrics, one line each, in `app/build/sweep/lines.txt` are swept too when it's there:
  * they're people's songs, so they stay out of git.
@@ -33,9 +34,12 @@ class ReadingsSweepTest {
 
     private fun japanese(lines: List<String>) = lines.filter { line -> line.any(Readings::isHan) && line.any(Readings::isKana) }
 
-    /** The words of [lines] that have a reading over kana, by line. */
+    /** The words of [lines] with a reading over kana said as written, by line. */
     private fun covering(lines: List<String>): Map<String, List<Ruby>> = lines.associateWith { line ->
-        Readings.of(listOf(line), Script.JAPANESE)[0].parts.filter { it.reading != null && it.text.any(Readings::isKana) }
+        Readings.of(listOf(line), Script.JAPANESE)[0].parts.filter { part ->
+            val reading = part.reading
+            reading != null && part.text.any(Readings::isKana) && (part.text.length > 1 || Readings.hiragana(part.text) == Readings.hiragana(reading))
+        }
     }.filterValues { it.isNotEmpty() }
 
     private fun sweep(name: String, lines: List<String>): Map<String, List<Ruby>> {

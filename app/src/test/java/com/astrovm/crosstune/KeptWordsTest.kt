@@ -56,7 +56,7 @@ class KeptWordsTest {
     fun readingsKeptOverKanaTheySpellAnotherWayReadBackOverTheKanjiOnly() {
         val today = all.copy(learning = all.learning.copy(lines = listOf(LineReading(listOf(Ruby("今日は", "こんにちわ")), "こんにちわ", "konnichiwa"))))
         val back = KeptWords.from(today.json())!!
-        assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("は")), back.learning.lines.single().parts)
+        assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("は", "わ")), back.learning.lines.single().parts)
     }
 
     @Test
