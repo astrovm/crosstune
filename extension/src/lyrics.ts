@@ -1,5 +1,5 @@
 // Finds a song's words. Ported from the app's LyricsFinder.kt: the same places in the same order,
-// matched by the same names (LRCLIB, then YouTube Music, then NetEase, then Letras), and the same
+// matched by the same names (LRCLIB, then YouTube Music, then NetEase, then Letras, then Genius), and the same
 // "none" versus "wouldn't answer". Left out: what needs the app or a dictionary, like covers borrowing
 // the original's words, Japanese in romaji, sentence case and fixing timing by listening.
 
@@ -15,7 +15,7 @@ export interface Line {
   text: string;
 }
 
-export type Source = "lrclib" | "youtube_music" | "netease" | "letras";
+export type Source = "lrclib" | "youtube_music" | "netease" | "letras" | "genius";
 
 export type Lyrics =
   /** The words, and [lines] with when each is sung, when they're timed for a recording [lengthMs] long. */
@@ -396,6 +396,49 @@ async function fromLetras(song: Song, fetcher: Fetcher): Promise<Lyrics> {
   }
 }
 
+// Genius
+
+async function fromGenius(song: Song, fetcher: Fetcher): Promise<Lyrics> {
+  try {
+    const search = await fetcher(`https://genius.com/api/search/multi?${new URLSearchParams({ q: `${song.title} ${song.artist}` })}`);
+    if (!search.ok) return { kind: "unavailable" };
+    const sections = obj(obj(JSON.parse(search.text))?.["response"])?.["sections"];
+    if (!Array.isArray(sections)) return { kind: "unavailable" };
+    const credit = withGuests(song.artist, song.title);
+    const match = objects(sections).flatMap((section) => objects(section["hits"]))
+      .filter((hit) => str(hit["type"]) === "song").map((hit) => obj(hit["result"]))
+      .find((row) => row !== undefined && sameVersion(song.title, str(row["title"])) &&
+        [str(row["artist_names"]), str(row["primary_artist_names"])].some((artist) => artist !== "" && artistInside(artist, credit)));
+    if (match === undefined) return { kind: "none" };
+    if (match["instrumental"] === true) return { kind: "instrumental" };
+    const path = str(match["path"]);
+    if (!path.startsWith("/") || path.startsWith("//")) return { kind: "none" };
+    const page = await fetcher(`https://genius.com${path}`);
+    if (!page.ok) return { kind: "unavailable" };
+    const boxes: string[] = [];
+    const start = /<div\b[^>]*data-lyrics-container="true"[^>]*>/g;
+    for (let box = start.exec(page.text); box !== null; box = start.exec(page.text)) {
+      let depth = 0;
+      letrasBox.lastIndex = box.index;
+      let end = page.text.length;
+      for (let tag = letrasBox.exec(page.text); tag !== null; tag = letrasBox.exec(page.text)) {
+        depth += tag[0] === "</div>" ? -1 : 1;
+        if (depth === 0) { end = tag.index; break; }
+      }
+      boxes.push(page.text.slice(box.index + box[0].length, end));
+      start.lastIndex = end;
+    }
+    const text = decodeEntities(boxes.join("\n").replace(letrasBreak, "\n").replace(letrasTag, ""));
+    const lines = text.split("\n").map((line) => line.trim());
+    if (lines[0]?.startsWith(str(match["title"])) && lines[0].includes(" Lyrics")) lines.shift();
+    const words = lines.filter((line) => !/^\[[^\]]*]$/.test(line)).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    return words === "" ? { kind: "none" } : { kind: "found", words, lines: [], source: "genius" };
+  } catch (error) {
+    if (error instanceof Unreachable || error instanceof SyntaxError) return { kind: "unavailable" };
+    throw error;
+  }
+}
+
 // All together
 
 function isFollowing(answer: Lyrics, song: Song): boolean {
@@ -420,6 +463,7 @@ async function underName(song: Song, fetcher: Fetcher, pause: (ms: number) => Pr
   if (isFollowing(answers.at(-1) as Lyrics, song)) return answers.at(-1) as Lyrics;
   // Letras's words are untimed, so they can't better any.
   if (!answers.some((answer) => answer.kind === "found")) answers.push(await fromLetras(song, fetcher));
+  if (!answers.some((answer) => answer.kind === "found")) answers.push(await fromGenius(song, fetcher));
   return best(answers, song);
 }
 

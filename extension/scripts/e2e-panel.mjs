@@ -91,6 +91,7 @@ const nothing = () =>
     ["https://music.youtube.com/youtubei/v1/", { contentType: "application/json", body: "{}" }],
     ["https://music.163.com/", { contentType: "application/json", body: '{"result":{"songs":[]},"code":200}' }],
     ["https://solr.sscdn.co/", { contentType: "text/javascript", body: 'LetrasSug({"response":{"docs":[]}})' }],
+    ["https://genius.com/api/search/multi", { contentType: "application/json", body: '{"response":{"sections":[]}}' }],
   ]);
 
 async function extensionId(from) {

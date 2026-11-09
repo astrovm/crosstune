@@ -21,6 +21,7 @@ const nothing: [string, Answer][] = [
   [YTM_SEARCH, "{}"],
   [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
   [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+  ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
 ];
 
 const find = (song: Song, net: Internet): Promise<Lyrics> => findLyrics(song, net.fetch, { pause: async () => {} });
@@ -131,6 +132,7 @@ test("NetEase's own note for an instrumental says it has no words", async () => 
     [NETEASE_SEARCH, fixture("netease-search.json")],
     [NETEASE_LYRIC, JSON.stringify({ lrc: { lyric: "[00:01.00]纯音乐，请欣赏" }, code: 200 })],
     [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+    ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
   ]);
   assert.deepEqual(await find(AFRICA, net), { kind: "instrumental" });
 });
@@ -142,6 +144,7 @@ function netEaseLyric(lyric: string): Internet {
     [NETEASE_SEARCH, fixture("netease-search.json")],
     [NETEASE_LYRIC, JSON.stringify({ lrc: { lyric }, code: 200 })],
     [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+    ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
   ]);
 }
 
@@ -243,6 +246,7 @@ test("a title with a tag is looked for again without it", async () => {
     [YTM_SEARCH, "{}"],
     [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
     [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+    ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
   ]);
   assert.equal(found(await find({ title: "Africa (Radio Session)", artist: "Toto" }, net)).words, "The words");
 });
@@ -282,4 +286,15 @@ test("timed lines: several stamps, an offset, and word stamps", () => {
     { timeMs: 62_000, text: "Later" },
     { timeMs: 89_500, text: "Words [in brackets] stay" },
   ]);
+});
+
+test("Genius supplies untimed words when the other sites have none", async () => {
+  const song = { title: "Paper Boats", artist: "River Band" };
+  const search = { response: { sections: [{ hits: [{ type: "song", result: { title: song.title, artist_names: song.artist, path: "/River-band-paper-boats-lyrics" } }] }] } };
+  const net = internet([
+    ["https://genius.com/api/search/multi", JSON.stringify(search)],
+    ...nothing,
+    ["https://genius.com/River-band-paper-boats-lyrics", '<div data-lyrics-container="true">Paper Boats Lyrics<br>[Verse 1]<br>Paper boats<br><a>along</a> the river</div>'],
+  ]);
+  assert.deepEqual(await find(song, net), { kind: "found", words: "Paper boats\nalong the river", lines: [], source: "genius" });
 });
