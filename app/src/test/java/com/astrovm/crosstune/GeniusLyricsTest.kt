@@ -6,6 +6,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,6 +101,50 @@ class GeniusLyricsTest {
         // A title in another script has no Latin spelling to compare.
         respond(search(hit(title = "별빛 (Byeolbit)", artists = korean)))
         assertEquals(Lyrics.None, lookup(of = MusicMetadata("별빛", song.artist)))
+    }
+
+    @Test
+    fun aLatinNameOnlyPassesForTheSongWhenItIsTheSameWithinOneLetterAndTheLengthsAllowIt() {
+        val korean = "걷는 사람 (The Walkers)"
+        fun found(wanted: String, genius: String): Boolean {
+            respond(search(hit(title = "별빛 ($genius)", artists = korean)))
+            return lookup(of = MusicMetadata(wanted, song.artist)) is Lyrics.Found
+        }
+        // Every kind of letter and digit a title can have, and its first and last: a, z, 0 and 9.
+        assertTrue(found("Azaz 0909", "Azaz 0909"))
+        assertTrue(found("Azaz 0909 b", "Azaz 0909 c"))
+        // From 7 letters on, one letter off is a typo: from 6 down, it is another name.
+        assertTrue(found("abcdefg", "abcdefh"))
+        assertFalse(found("abcdef", "abcdeg"))
+        // One letter missing or one more is a typo as well; two are not.
+        assertTrue(found("abcdefgh", "abcdefg"))
+        assertTrue(found("abcdefgh", "abcdefghi"))
+        assertFalse(found("abcdefgh", "abcdef"))
+        assertFalse(found("abcdefgh", "abcdefghij"))
+        // And up to 256 letters long.
+        assertTrue(found("a".repeat(256), "a".repeat(255) + "b"))
+        assertFalse(found("a".repeat(257), "a".repeat(256) + "b"))
+        // A name with no letters or digits is no name to compare.
+        assertFalse(found("?!", "!?"))
+        // A name in Latin letters before the brackets is not a name in another script.
+        respond(search(hit(title = "Moonlight (River Road)", artists = korean)))
+        assertEquals(Lyrics.None, lookup())
+        // Its own script's part saying it is another version of the song.
+        respond(search(hit(title = "별빛 Live (River Road)", artists = korean)))
+        assertEquals(Lyrics.None, lookup())
+    }
+
+    @Test
+    fun aSearchWithNoSongOfTheArtistsIsAnAnswerEvenWhenNoOtherServiceGivesOne() {
+        // Everything is down but Genius, which answers that it has no such song, and LRCLIB, which comes back once Genius has been asked.
+        fake.handler = { request ->
+            when {
+                request.url.host == "genius.com" -> FakeSpotify.html(request, search(hit(title = "Other")))
+                request.url.host == "lrclib.net" && fake.requestedUrls.any { "genius.com/api/search" in it } -> FakeSpotify.html(request, "[]")
+                else -> throw IOException("offline")
+            }
+        }
+        assertEquals(Lyrics.None, lookup())
     }
 
     @Test

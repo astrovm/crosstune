@@ -418,7 +418,7 @@ function geniusAlternateTitle(song: Song, title: string): boolean {
   const alternate = normalize(parts[2] ?? "");
   if (!/^[a-z0-9]+$/.test(wanted)) return false;
   if (wanted === alternate) return true;
-  return wanted.length >= GENIUS_FUZZY_LENGTH && wanted.length <= GENIUS_MAX_TITLE && Math.abs(alternate.length - wanted.length) <= 1 && distance(wanted, alternate) === 1;
+  return wanted.length >= GENIUS_FUZZY_LENGTH && wanted.length <= GENIUS_MAX_TITLE && distance(wanted, alternate) === 1;
 }
 
 async function fromGenius(song: Song, fetcher: Fetcher): Promise<Lyrics> {

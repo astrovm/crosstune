@@ -951,7 +951,7 @@ internal class LyricsFinder(
     private suspend fun wordless(recording: Recording?, metadata: MusicMetadata): Boolean =
         if (recording != null) recording.genre in WORDLESS_GENRES else artistGenre(metadata.artist) in WORDLESS_ARTIST_GENRES
 
-    /** The genre the US iTunes Store files [artist] under, or null when it has no one by that name, or won't answer. */
+    /** The genre the US iTunes Store files [artist] under: null when it has no one by that name, or won't answer, and blank when it names none. */
     private suspend fun artistGenre(artist: String): String? = try {
         val search = ITUNES_SEARCH_URL.toHttpUrl().newBuilder()
             .addQueryParameter("term", artist)
@@ -960,7 +960,7 @@ internal class LyricsFinder(
             .addQueryParameter("limit", "10")
             .build()
         val artists = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
-        artists.firstOrNull { SongNames.sameArtist(it.optString("artistName"), artist) }?.optString("primaryGenreName")?.takeIf { it.isNotEmpty() }
+        artists.firstOrNull { SongNames.sameArtist(it.optString("artistName"), artist) }?.optString("primaryGenreName")
     } catch (_: IOException) {
         null
     } catch (_: JSONException) {
@@ -1362,8 +1362,7 @@ internal class LyricsFinder(
         val alternate = SongNames.normalize(parts.groupValues[2])
         if (wanted.isEmpty() || wanted.any { it !in 'a'..'z' && it !in '0'..'9' }) return false
         if (wanted == alternate) return true
-        return wanted.length in GENIUS_FUZZY_LENGTH..GENIUS_MAX_TITLE && alternate.length in (wanted.length - 1)..(wanted.length + 1) &&
-            SongNames.distance(wanted, alternate) == 1
+        return wanted.length in GENIUS_FUZZY_LENGTH..GENIUS_MAX_TITLE && SongNames.distance(wanted, alternate) == 1
     }
 
     /**
