@@ -659,6 +659,8 @@ class LyricsToolsTest {
         openLyrics()
         touch()
         composeRule.runOnIdle { model().nudgeSync(500) }
+        // Its wait starts in the frame it comes in, which the first pass is.
+        passes(1)
         passes(OFFER_ARMED_MS)
         notNow().performClick()
         passes(1)
