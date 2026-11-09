@@ -736,27 +736,7 @@ private fun LyricsActions(
                         shadowElevation = 6.dp,
                         modifier = Modifier.onSizeChanged { barHeight = maxOf(barHeight, it.height) }
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
-                            // Offline, what needs the internet waits for it: said once, here, rather than by each part failing.
-                            if (state.offline) Offline(Modifier.size(48.dp))
-                            if (state.lyrics.isNotEmpty()) {
-                                BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, selected = menu == BarMenu.LEARN, onClick = { onMenuChange(if (menu == BarMenu.LEARN) null else BarMenu.LEARN) })
-                            }
-                            // The song's lines are learned, and lines kept are studied.
-                            if (state.lyrics.isNotEmpty()) {
-                                BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
-                            }
-                            VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, hears = state.visualsPlay.hears, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
-                            // Floating shows the line being sung, which only timed words have.
-                            if (state.lyricLines.isNotEmpty()) {
-                                IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
-                            }
-                            // Putting the words in time needs to know where the song is.
-                            if (state.lyricLines.isNotEmpty() && state.following != null) {
-                                LitButton(syncing, R.drawable.ic_timer, stringResource(R.string.lyrics_sync), onClick = onSync)
-                            }
-                            SyncSource(state, actions)
-                        }
+                        BarTools(state, actions, syncing, menu, onMenuChange, onSync, focus)
                     }
                 }
             }
@@ -765,6 +745,40 @@ private fun LyricsActions(
 }
 
 private enum class BarMenu { LEARN, STUDY, VISUALS }
+
+/** The bar's tools in a row: what helps read the words, the visuals, floating, putting them in time, and what they follow. */
+@Composable
+private fun BarTools(
+    state: UiState,
+    actions: ScreenActions,
+    syncing: Boolean,
+    menu: BarMenu?,
+    onMenuChange: (BarMenu?) -> Unit,
+    onSync: () -> Unit,
+    focus: FocusRequester
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
+        // Offline, what needs the internet waits for it: said once, here, rather than by each part failing.
+        if (state.offline) Offline(Modifier.size(48.dp))
+        if (state.lyrics.isNotEmpty()) {
+            BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, selected = menu == BarMenu.LEARN, onClick = { onMenuChange(if (menu == BarMenu.LEARN) null else BarMenu.LEARN) })
+        }
+        // The song's lines are learned, and lines kept are studied.
+        if (state.lyrics.isNotEmpty()) {
+            BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
+        }
+        VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, hears = state.visualsPlay.hears, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
+        // Floating shows the line being sung, which only timed words have.
+        if (state.lyricLines.isNotEmpty()) {
+            IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+        }
+        // Putting the words in time needs to know where the song is.
+        if (state.lyricLines.isNotEmpty() && state.following != null) {
+            LitButton(syncing, R.drawable.ic_timer, stringResource(R.string.lyrics_sync), onClick = onSync)
+        }
+        SyncSource(state, actions)
+    }
+}
 
 /**
  * Over the bar's place, the problem the words shown have, offered to be reported by itself from now on,
