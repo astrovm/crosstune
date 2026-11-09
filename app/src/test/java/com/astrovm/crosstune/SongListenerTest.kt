@@ -16,6 +16,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -470,6 +471,83 @@ class SongListenerTest {
     private fun music(seconds: Int, rateHz: Int = 48_000) = Random(7).let { random -> ByteArray(seconds * rateHz) { (random.nextInt(40, 216)).toByte() } }
 
     @Test
+    fun shortSoundsDoNotMakeThePhoneShareItsSound() {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("short-sounds", Context.MODE_PRIVATE)
+        for (durationMs in listOf(10, 100, 300)) {
+            preferences.edit().clear().commit()
+            clock = 0
+            val sound = ByteArray(48_000 * 3) { 128.toByte() }
+            music(1).copyInto(sound, 48_000 / 2, 0, durationMs * 48)
+            val tap = PlayingTap(sound) { clock }
+            val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+            assertEquals("$durationMs ms blip", 0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
+            assertFalse("$durationMs ms blip was saved as shared sound", preferences.getBoolean(PlayedSound.KEY_SHARES, false))
+        }
+    }
+
+    /** What [PlayedSound] gives for a phone that plays [sound] from the start, and whether it then keeps that the phone shares its sound. */
+    private fun heardAndShared(name: String, sound: ByteArray, max: Int): Pair<ShortArray, Boolean> {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences(name, Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        clock = 0
+        val tap = PlayingTap(sound) { clock }
+        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        val heard = played.open()!!.use { all(it, max = max) }
+        return heard to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
+    }
+
+    @Test
+    fun clicksTypedAtAKeyboardsPaceDoNotAddUpToSound() {
+        // 50 ms clicks, 200 ms apart, for the whole probe.
+        val sound = ByteArray(48_000 * 3) { 128.toByte() }
+        for (click in 0 until 15) music(1).copyInto(sound, 4_800 + click * 9_600, 0, 2_400)
+        val (heard, shared) = heardAndShared("clicks", sound, 16_000)
+        assertEquals(0, heard.size)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun soundThatBreaksOffForMoreThanARestIsNotOneSound() {
+        // 600 ms of sound, 100 ms of quiet, again and again: never a second of it in one go.
+        val sound = ByteArray(48_000 * 3) { 128.toByte() }
+        for (burst in 0 until 4) music(1).copyInto(sound, burst * 33_600, 0, 28_800)
+        val (heard, shared) = heardAndShared("bursts", sound, 16_000)
+        assertEquals(0, heard.size)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun musicWithRestsInItIsOneSoundAndMarksThePhoneAsSharingItsSound() {
+        // 30 ms of quiet every 400 ms.
+        val sound = music(3)
+        for (rest in 0 until 7) sound.fill(128.toByte(), rest * 19_200 + 9_600, rest * 19_200 + 11_040)
+        val (heard, shared) = heardAndShared("rests", sound, 16_000)
+        assertEquals(16_000, heard.size)
+        assertTrue(shared)
+    }
+
+    @Test
+    fun musicThatStartsJustBeforeTheProbeGivesUpStillCounts() {
+        // 1.9 s of silence, 100 ms before it would have given up.
+        val sound = ByteArray(91_200) { 128.toByte() } + music(3)
+        val (heard, shared) = heardAndShared("late", sound, 40_000)
+        assertEquals(40_000, heard.size)
+        assertTrue(heard.copyOfRange(0, 30_000).all { it == 0.toShort() })
+        assertTrue(heard.copyOfRange(31_000, 40_000).any { it != 0.toShort() })
+        assertTrue(shared)
+    }
+
+    @Test
+    fun anOldSharingDecisionDoesNotSkipTheNewProbe() {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("old-sharing", Context.MODE_PRIVATE)
+        preferences.edit().clear().putBoolean("sound_shared", true).commit()
+        clock = 0
+        val tap = PlayingTap(ByteArray(48_000 * 3) { 128.toByte() }) { clock }
+        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        assertEquals(0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
+    }
+
+    @Test
     fun thePhonesOwnSoundIsHeardWhole() {
         val sound = music(3)
         clock = 100
@@ -563,7 +641,7 @@ class SongListenerTest {
     fun aPhoneThatHasSharedItsSoundIsntCountedOutByAQuietStart() {
         // A phone that shared its sound once does again, so a video's silent start isn't heard by the microphone.
         clock = 0
-        val taps = ArrayDeque(listOf(PlayingTap(music(1)) { clock }, PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }))
+        val taps = ArrayDeque(listOf(PlayingTap(music(2)) { clock }, PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }))
         val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("played", Context.MODE_PRIVATE)
         fun sound() = PlayedSound({ taps.removeFirst() }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
         assertTrue(sound().open()!!.use { all(it, max = 8_000) }.any { it != 0.toShort() })
