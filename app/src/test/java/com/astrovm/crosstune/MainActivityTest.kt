@@ -145,7 +145,7 @@ class MainActivityTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -392,7 +392,7 @@ class MainActivityTest {
         waitUntil { fake.requestedUrls.isNotEmpty() }
         assertOnlyCoverSearches()
         val entry = HistoryStore(prefs()).load().first()
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(entry.link.url)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals("player://search/A%20Song%20Example%20Band", nextStartedActivity()!!.dataString)
@@ -412,7 +412,7 @@ class MainActivityTest {
         assertOnlyCoverSearches()
         val saved = HistoryStore(prefs()).load().first()
         assertEquals(MusicMetadata("A Song", "Example Band"), saved.metadata)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch(Intent(MainActivity.ACTION_OPEN_RECENT).setData(Uri.parse(saved.link.url)))
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals(opened.dataString, nextStartedActivity()!!.dataString)
@@ -452,7 +452,7 @@ class MainActivityTest {
                     assertEquals(service.packageName, sent.`package`)
                     assertTrue("${service.name}, card=$card, $title: ${sent.toUri(0)}", sent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
                     assertTrue(sent.dataString.orEmpty().contains(title.replace(" ", "%20")))
-                    controller!!.pause().stop().destroy()
+                    controller!!.destroyAndSettle()
                 }
             }
         }
@@ -492,7 +492,7 @@ class MainActivityTest {
             assertEquals(tidal, search.`package`)
             assertTrue(search.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
             assertEquals(0, search.flags and Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            controller!!.pause().stop().destroy()
+            controller!!.destroyAndSettle()
         }
     }
 
@@ -579,7 +579,7 @@ class MainActivityTest {
 
         // Opened again from Recent, it already has its cover.
         fake.requestedUrls.clear()
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         val url = HistoryStore(prefs()).load().first().link.url
         launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)).putExtra(MainActivity.EXTRA_SHOW_SONG, true))
         waitForText("A Song")
@@ -688,7 +688,7 @@ class MainActivityTest {
         }
         assertTrue(prefs().getBoolean("links_in_crosstune", false))
         assertFalse(prefs().getBoolean("play_right_away", true))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         val activity = launch(
             Intent(Intent.ACTION_SEND).apply {
@@ -700,14 +700,14 @@ class MainActivityTest {
         assertTextShown(string(R.string.open_in_deezer))
         assertFalse(activity.isFinishing)
         assertNull(nextStartedActivity())
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // Tapped links too.
         val tapped = launch(trackLink())
         waitForText("Shown First")
         assertFalse(tapped.isFinishing)
         assertNull(nextStartedActivity())
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // An "Open in" app picked in the share sheet still opens right away.
         launch(
@@ -733,7 +733,7 @@ class MainActivityTest {
         waitForText("Right Away")
         assertTrue(phone.songsAsked.isEmpty())
         assertNull(nextStartedActivity())
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         shadowOf(app.packageManager).installPackage(installedApp(deezer, "Deezer"))
         val activity = launch(trackLink())
@@ -800,7 +800,7 @@ class MainActivityTest {
             prefs().edit().remove("links_in_crosstune").remove("play_right_away").remove("ask_each_time").remove("show_song_first")
                 .apply { before.forEach { (key, on) -> putBoolean(key, on) } }.commit()
             launch()
-            controller!!.pause().stop().destroy()
+            controller!!.destroyAndSettle()
             return prefs().getBoolean("links_in_crosstune", false) to prefs().getBoolean("play_right_away", false)
         }
         assertEquals(false to true, migrated("setup_complete" to false))
@@ -819,7 +819,7 @@ class MainActivityTest {
         fun migrated(linksInCrosstune: Boolean, exact: Boolean): Boolean {
             prefs().edit().putBoolean("links_in_crosstune", linksInCrosstune).putBoolean("play_right_away", true).putBoolean("exact_match", exact).commit()
             launch()
-            controller!!.pause().stop().destroy()
+            controller!!.destroyAndSettle()
             assertFalse(prefs().contains("exact_match"))
             return prefs().getBoolean("play_right_away", false)
         }
@@ -850,12 +850,12 @@ class MainActivityTest {
         assertEquals("YOUTUBE_MUSIC", prefs().getString("default_target", null))
         // The app's own links go straight to it again.
         assertFalse(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         val activity = launch(trackLink())
         waitUntil { activity.isFinishing }
         assertEquals(MusicService.YOUTUBE_MUSIC.packageName, nextStartedActivity()!!.`package`)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // Shown here first again, they come here again too.
         launch()
@@ -1374,7 +1374,7 @@ class MainActivityTest {
         resolveTyped("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")
         waitForText("First Song")
         assertTextAbsent(string(R.string.play_all_button))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         shadowOf(app.packageManager).installPackage(installedApp(tidal, "TIDAL"))
         launch()
@@ -2157,7 +2157,7 @@ class MainActivityTest {
         wakes.assertIsOn()
         assertTrue(prefs().getBoolean(MainViewModel.KEY_WAKES_FOR_NEXT_SONG, false))
         // Set, it stays so the next time Crosstune opens.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         openAdvanced()
@@ -3391,7 +3391,7 @@ class MainActivityTest {
     fun selectedTargetSurvivesRelaunch() {
         launch()
         chooseDefault(string(R.string.target_youtube))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         respondWithTrack("Remembered", "Artist · Song")
         launch()
@@ -3742,7 +3742,7 @@ class MainActivityTest {
         launch()
         resolveTyped("https://music.youtube.com/watch?v=sPmul8b17AU")
         click(string(R.string.clear_button))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         MainActivity.lookAheadLyrics = true
         launch()
@@ -3835,7 +3835,7 @@ class MainActivityTest {
         resolveTyped(link)
         // Side by side: one starts where the other ends.
         assertTrue(bounds(open).left >= bounds(play).right)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         RuntimeEnvironment.setFontScale(2f)
         try {
             launch()
@@ -3866,7 +3866,7 @@ class MainActivityTest {
         waitUntil { shadowOf(app).peekNextStartedActivity() != null }
         assertEquals(spotify, nextStartedActivity()!!.`package`)
         // A link that comes in to play right away shows here with the search, asking Spotify for nothing.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         prefs().edit().putBoolean("links_in_crosstune", true).putBoolean("play_right_away", true).commit()
         launch(Intent(Intent.ACTION_VIEW, Uri.parse(link)))
         waitUntil { composeRule.onAllNodes(hasContentDescription(search) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -3887,7 +3887,7 @@ class MainActivityTest {
         launch()
         resolveTyped(link)
         assertTrue(composeRule.onAllNodes(hasContentDescription(play)).fetchSemanticsNodes().isEmpty())
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         shadowOf(app.packageManager).installPackage(installedApp(youTubeMusic, "YouTube Music"))
         launch()
         resolveTyped(link)
@@ -5101,7 +5101,7 @@ class MainActivityTest {
         assertTrue(prefs().getBoolean("pure_black", false))
 
         // Kept for the next launch.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithContentDescription(string(R.string.palette_ocean)).performScrollTo().assertIsSelected()
@@ -5135,6 +5135,27 @@ class MainActivityTest {
         click(string(R.string.setting_translate_into))
         assertTextShown("🇦🇷")
         assertTextShown("🇯🇵")
+    }
+
+    /** Signs in with ChatGPT and closes the screen with the browser still open; whether the sign-in's service was stopped by then. */
+    private fun serviceStoppedOnceClosedLeftSigningIn(settle: Boolean): Boolean {
+        val openAi = FakeOpenAi(System::currentTimeMillis)
+        fake.handler = { request -> openAi.answer(request) ?: FakeSpotify.html(request, "") }
+        installActivity(ComponentName("com.example.browser", "com.example.browser.Browser"), browserFilter())
+        File(app.noBackupFilesDir, "chatgpt.json").delete()
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        launch()
+        click(string(R.string.settings_button))
+        composeRule.onNodeWithText(string(R.string.chatgpt_continue)).performScrollTo().performClick()
+        waitUntil { shadowOf(app).peekNextStartedActivity() != null }
+        if (settle) controller!!.destroyAndSettle() else controller!!.pause().stop().destroy()
+        return generateSequence { shadowOf(app).nextStoppedService }.any { it.component?.className == ChatGptSignInService::class.java.name }
+    }
+
+    /** Left to finish after the screen's gone, it ended while the next test was being set up, and failed that one (Issue #805). */
+    @Test
+    fun aSignInLeftInTheBrowserIsOverOnceTheScreenIsSettled() {
+        assertTrue(serviceStoppedOnceClosedLeftSigningIn(settle = true))
     }
 
     @Test
@@ -5214,7 +5235,7 @@ class MainActivityTest {
         assertEquals("https://chatgpt.com/settings/usage", nextStartedActivity()!!.dataString)
 
         // Signed in still when Crosstune's opened again.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(FakeOpenAi.EMAIL).performScrollTo()
@@ -5271,7 +5292,7 @@ class MainActivityTest {
 
         // Kept for the next launch.
         pick(string(R.string.theme_dark))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.theme_dark)).assertExists()
@@ -5632,7 +5653,7 @@ class MainActivityTest {
             click(string(R.string.setting_show_in_crosstune_first))
             click(string(R.string.setting_play_right_away))
         }
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         fake.requestedUrls.clear()
         val restored = launch()
         assertFalse(ViewModelProvider(restored)[MainViewModel::class.java].uiState.exactMatch)
@@ -5959,7 +5980,7 @@ class MainActivityTest {
         click(string(R.string.retry_button))
         // The retried request keeps the original intent's behaviour and opens the search.
         waitUntil { activity.isFinishing }
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         fake.handler = { request -> FakeSpotify.html(request, "", code = 404) }
         launch()
@@ -6006,7 +6027,7 @@ class MainActivityTest {
         resolveTyped(TRACK_ID)
         click(string(R.string.clear_button))
         resolveTyped(OTHER_TRACK_ID)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         launch()
         assertTextShown(string(R.string.history_title))
@@ -6219,7 +6240,7 @@ class MainActivityTest {
         click(string(R.string.back_button))
         assertTextShown(string(R.string.rule_opens_in, "Apple Music"))
         click(string(R.string.back_button))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://youtu.be/4NRXx6U8ABQ")))
         waitUntil { activity.isFinishing }
@@ -6395,7 +6416,7 @@ class MainActivityTest {
         assertTextShown(string(R.string.rule_opens_in, "Spotify"))
         assertEquals(Destination.Service(MusicService.SPOTIFY), DestinationStore(prefs()).rule(Frontend.INVIDIOUS))
         click(string(R.string.back_button))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         fake.handler = { request ->
             FakeSpotify.html(request, """{"title":"The Weeknd - Blinding Lights (Official Video)","author_name":"TheWeekndVEVO"}""")
@@ -6427,7 +6448,7 @@ class MainActivityTest {
         // and is dropped once it isn't music.
         assertTrue(fake.requestedUrls.any { it.startsWith("https://music.youtube.com/") })
 
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // Opening links in Crosstune, it goes to YouTube all the same, rather than to a card.
         linksShowHere()
@@ -6458,7 +6479,7 @@ class MainActivityTest {
         assertFalse(prefs().getBoolean("only_music_videos", true))
         click(string(R.string.back_button))
         click(string(R.string.back_button))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         fake.requestedUrls.clear()
         launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=jNQXAC9IVRw")))
@@ -6648,7 +6669,7 @@ class MainActivityTest {
 
         // Coming back later leaves the user's choices alone.
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, false)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         assertFalse(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
     }
@@ -6680,7 +6701,7 @@ class MainActivityTest {
         assertTextShown(string(R.string.ask_links_gets))
 
         // Still asked next time, until something's been opened.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         assertTextShown(string(R.string.ask_links_gets))
     }
@@ -7203,7 +7224,7 @@ class MainActivityTest {
         // Links going straight to it, its own stay there.
         assertFalse(LinkInterception(app).isEnabled(MusicService.DEEZER))
         assertTrue(LinkInterception(app).isEnabled(MusicService.SPOTIFY))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // An app picked already stays, though another's the only one now.
         freshInstall()
@@ -7211,7 +7232,7 @@ class MainActivityTest {
         prefs().edit().putBoolean("setup_complete", false).commit()
         launch()
         assertEquals(Destination.Service(MusicService.TIDAL), DestinationStore(prefs()).defaultDestination())
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // With two, it's left to the first one picked on a song.
         freshInstall()
@@ -7250,7 +7271,7 @@ class MainActivityTest {
         launch()
         waitUntil(TIMEOUT_MS) { DestinationStore(prefs()).hasDefault() }
         assertTrue(LinkInterception(app).isEnabled(MusicService.YOUTUBE_MUSIC))
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // Going straight to the app, Crosstune would only hand YouTube Music its own links back.
         freshInstall()
@@ -7397,7 +7418,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.fix_all))
 
         // Done with, Crosstune stops watching.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         assertNull(shell.changed)
     }
 
@@ -7465,7 +7486,7 @@ class MainActivityTest {
         assertTrue(phone.songsAsked.isEmpty())
         assertNull(nextStartedActivity())
         assertFalse(activity.isFinishing)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // History from that link must not be mistaken for an install from before sources were asked.
         LinkInterception(app).setEnabled(MusicService.SPOTIFY, false)
@@ -7540,7 +7561,7 @@ class MainActivityTest {
         waitUntil { fake.requestedUrls.size == 1 }
         val saved = Bundle()
         controller!!.saveInstanceState(saved)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         release.countDown()
 
         // A new controller has a new ViewModel, as after Android ends the process.
@@ -7559,7 +7580,7 @@ class MainActivityTest {
         resolveTyped()
         val saved = Bundle()
         controller!!.saveInstanceState(saved)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         val restored = Robolectric.buildActivity(MainActivity::class.java, Intent(Intent.ACTION_MAIN).setClass(app, MainActivity::class.java))
             .setup(saved)
@@ -7578,7 +7599,7 @@ class MainActivityTest {
         controller!!.windowFocusChanged(false)
         val saved = Bundle()
         controller!!.saveInstanceState(saved)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         val restored = Robolectric.buildActivity(MainActivity::class.java, pasteIntent()).setup(saved)
         controller = restored
@@ -7646,7 +7667,7 @@ class MainActivityTest {
         respondWithTrack("Remembered", "Artist · Song")
         launch()
         resolveTyped()
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         fake.handler = { throw IOException("offline") }
         val activity = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://open.spotify.com/track/$OTHER_TRACK_ID")))
@@ -7730,7 +7751,7 @@ class MainActivityTest {
         resolveTyped()
         waitForDestinationReady()
         val requests = fake.requestedUrls.size
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         val activity = launch()
         val model = ViewModelProvider(activity)[MainViewModel::class.java]
 
@@ -7925,7 +7946,7 @@ class MainActivityTest {
         assertEquals(cover, HistoryStore(prefs()).load().first().metadata.artworkUrl)
 
         // A video no song matches, like a tutorial, keeps its own picture.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         HistoryStore(prefs()).clear()
         File(app.cacheDir, "lookups.json").delete()
         respond("""{"data":[{"title":"Blinding Lights","artist":{"name":"Someone Else"},"album":{"cover_big":"$cover"}}]}""")
@@ -8010,7 +8031,7 @@ class MainActivityTest {
         launch()
         resolveTyped()
         waitForDestinationReady()
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         val requests = fake.requestedUrls.size
 
         val activity = launch(trackLink())
@@ -8034,7 +8055,7 @@ class MainActivityTest {
         waitForDestinationReady()
         // Matching failed, so the song is saved with Deezer's search page.
         assertEquals(false, HistoryStore(prefs()).load().single().destinationLinks["DEEZER"]?.exact)
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // Shared again once the network is back, it opens the song itself rather than the search.
         deezerDown = false
@@ -8051,7 +8072,7 @@ class MainActivityTest {
         launch()
         resolveTyped()
         waitForDestinationReady()
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         val requests = fake.requestedUrls.size
         fake.handler = { throw IOException("offline") }
 
@@ -8082,7 +8103,7 @@ class MainActivityTest {
         val saved = HistoryStore(prefs()).load().single().destinationLinks
         assertEquals("https://music.youtube.com/watch?v=kept", saved.getValue("YOUTUBE_MUSIC").url)
         saved["frontend:INVIDIOUS"]?.let { assertTrue(it.url, it.url.startsWith("https://inv.example.org/")) }
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
 
         // A browser to open the new site in.
         installActivity(ComponentName("com.example.browser", "com.example.browser.Main"), browserFilter())
@@ -8176,7 +8197,7 @@ class MainActivityTest {
         assertTextAbsent(string(R.string.notice_update, "99.0.0"))
         click(string(R.string.back_button))
 
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         launch()
         composeRule.waitForIdle()
         assertTextAbsent(string(R.string.notice_update, "99.0.0"))

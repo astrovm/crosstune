@@ -87,7 +87,7 @@ class FlashcardsTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO

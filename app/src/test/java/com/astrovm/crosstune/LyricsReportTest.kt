@@ -90,7 +90,7 @@ class LyricsReportTest {
 
     @After
     fun tearDown() {
-        runCatching { controller?.pause()?.stop()?.destroy() }
+        controller?.destroyAndSettle()
         MainActivity.httpClientFactory = ::httpClient
         MainActivity.systemDispatcher = Dispatchers.Default
         MainActivity.lookupDispatcher = Dispatchers.IO
@@ -299,7 +299,7 @@ class LyricsReportTest {
         settled()
         assertEquals(emptyList<String>(), problems())
         // Nor is it offered, while the user hasn't said.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         prefs().edit().remove("auto_reports").commit()
         openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_instrumental))).fetchSemanticsNodes().isNotEmpty() }
         settled()
@@ -316,7 +316,7 @@ class LyricsReportTest {
         assertFalse(shown(offer))
         assertEquals(false, model().uiState.autoReports)
         // Another song with a problem, words with no timing this time.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
@@ -335,7 +335,7 @@ class LyricsReportTest {
         assertFalse(shown(offer))
         assertFalse(sentReports().single().getJSONObject("song").getBoolean("timed"))
         // Once a song: shown again, it doesn't go again.
-        controller!!.pause().stop().destroy()
+        controller!!.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         openLyrics { shown("Plain one") }
@@ -385,7 +385,7 @@ class LyricsReportTest {
         waitUntil { problems() == listOf("no_timing") }
         reportsDown = false
         repeat(2) {
-            controller!!.pause().stop().destroy()
+            controller!!.destroyAndSettle()
             File(app.cacheDir, "lyrics.json").delete()
             File(app.cacheDir, "kept_words.json").delete()
             openLyrics { shown("Plain one") }
