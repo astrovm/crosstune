@@ -561,9 +561,12 @@ internal object Readings {
             // Kana reads as written; the reading's only worth showing for kanji.
             val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
             val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
+            val base = word.first { it.kind != "記号" }.base
+            val modern = spelledToday(text, kana, said)
+            // A translator knows 云う, and takes 云ふ for a name: a word in old kana is asked for as it's spelled today.
             Word(
-                text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base, typed = romaji(typed, typed = true),
-                modern = Furigana.modern(text, kana, said) ?: if (Furigana.inOldKana(text)) Furigana.modernKana(text, listOf(said) + listedForm(text)) else null
+                text, kana.takeIf { it != text }, romaji(said), lookup = if (modern == null) base else modernBase(base), typed = romaji(typed, typed = true),
+                modern = modern
             )
         }
         else -> segments(line).map { text ->
@@ -574,6 +577,16 @@ internal object Readings {
                 else -> Word(text, null, latin(text))
             }
         }
+    }
+
+    /** [text] spelled the modern way, if it has old kana in it, from its reading [kana] and how it's [said]. */
+    private fun spelledToday(text: String, kana: String, said: String): String? =
+        Furigana.modern(text, kana, said) ?: if (Furigana.inOldKana(text)) Furigana.modernKana(text, listOf(said) + listedForm(text)) else null
+
+    /** The dictionary form [base] of a word in old kana, spelled the modern way: 云ふ is 云う. As it is when no spelling is found. */
+    private fun modernBase(base: String): String {
+        val pieces = pieces(base)
+        return spelledToday(base, pieces.joinToString("") { it.kana }, pieces.joinToString("") { it.said }) ?: base
     }
 
     /** The reading of the dictionary form UniDic has for [text], when it takes it for one word: いふ has イウ. */

@@ -482,6 +482,36 @@ class ReadingsTest {
     }
 
     @Test
+    fun aWordInOldKanaIsLookedUpBySpellingToday() {
+        fun lookups(line: String) = Readings.words(line, Script.JAPANESE).map { it.lookup }
+        // A translator knows 云う, and gives 云ふ as Yumfu: the word is asked for as it's spelled today.
+        assertEquals(listOf("思う"), lookups("思ひ出"))
+        assertEquals(listOf("住む"), lookups("住まゐ"))
+        assertEquals(listOf("いる"), lookups("ゐる"))
+        assertEquals(listOf("いる"), lookups("ゐた"))
+        // The lyric's own text is what's written.
+        assertEquals(listOf("思ひ出"), Readings.words("思ひ出", Script.JAPANESE).map { it.text })
+        TestUniDic.reading {
+            assertEquals(listOf("云う"), lookups("云ふ"))
+            assertEquals(listOf("言う"), lookups("言ふ"))
+            assertEquals(listOf("言う"), lookups("言ひ"))
+            assertEquals(listOf("思い出"), lookups("思ひ出"))
+            assertEquals(listOf("思う"), lookups("思ひ出して"))
+            assertEquals(listOf("恋"), lookups("恋ひ"))
+            assertEquals(listOf("植える"), lookups("植ゑる"))
+            assertEquals(listOf("きょう"), lookups("けふ"))
+            assertEquals(listOf("ちょうちょう"), lookups("てふてふ"))
+            assertEquals(listOf("まいる"), lookups("まゐる"))
+            assertEquals(listOf("いう"), lookups("いふ"))
+        }
+        // A modern word, or one with old kana in no word of its own, is asked for as it is, ひ and ふ and ほ in it or not.
+        assertEquals(listOf("夜空", "に", "分かる"), lookups("夜空に分かった"))
+        assertEquals(listOf("思い出"), lookups("思い出"))
+        assertEquals(listOf("ひとり"), lookups("ひとり"))
+        TestUniDic.reading { assertEquals(listOf("言う", "ふたり"), lookups("言う ふたり")) }
+    }
+
+    @Test
     fun aWordCarriesItsModernSpellingOnlyWhenItIsWrittenInOldKana() {
         assertNull(Readings.words("夜空に、分かった!", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
         // The shipped dictionary says 思ひ出 as it's sung. It splits the old ending off 恋ひ and 住まゐ, which is said with its word.
@@ -513,7 +543,7 @@ class ReadingsTest {
             assertNull(Readings.words("いう", Script.JAPANESE).single().modern)
             assertNull(Readings.words("ふたり", Script.JAPANESE).single().modern)
             // Its lookup and the lyric's own text keep what is written.
-            assertEquals(Word("思ひ出", "おもいで", "omoide", "思ひ出", "omoide", "思い出"), Readings.words("思ひ出", Script.JAPANESE).single())
+            assertEquals(Word("思ひ出", "おもいで", "omoide", "思い出", "omoide", "思い出"), Readings.words("思ひ出", Script.JAPANESE).single())
         }
     }
 

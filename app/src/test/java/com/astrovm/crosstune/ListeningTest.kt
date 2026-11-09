@@ -5491,7 +5491,7 @@ class ListeningTest {
 
     @Test
     fun aWordInOldKanaSaysHowItIsSpelledTodayWhileTheLyricKeepsItsOwn() {
-        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        prefs().edit().putBoolean("lyrics_readings", true).putBoolean("lyrics_translation", true).commit()
         TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
         MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
         wordsOf(null, "思ひ出")
@@ -5503,6 +5503,8 @@ class ListeningTest {
         val word = hasText("思") and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(STUDY_LINE_TAG))
         waitUntil(TIMEOUT_MS) { runCatching { composeRule.onAllNodes(word).onFirst().performFirstLinkClick() }.isSuccess }
         waitForText(string(R.string.lyrics_word_modern, "思い出"))
+        // Its meaning is asked for in today's spelling (the fake answers a word in brackets): the translator knows 思い出, not 思ひ出.
+        waitUntil(TIMEOUT_MS) { shown("[思い出]") }
         // The card names it; the lyric above it is as it was sent.
         assertTrue(shown("思ひ出"))
     }
