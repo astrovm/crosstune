@@ -45,6 +45,53 @@ internal object Furigana {
         return null
     }
 
+    /**
+     * [text] spelled today, by rule, with where each of its letters comes from in [text] ([origins], a contracted pair
+     * giving the same origin to each letter it makes), the places in [text] where a ひ, ふ or へ was changed ([plain]),
+     * where a pair like けふ starts ([contracted]), and where the first change is ([first]).
+     */
+    class Today(val text: String, val origins: List<Int>, val plain: List<Int>, val contracted: List<Int>, val first: Int)
+
+    /**
+     * [text] spelled the modern way by rule, when it can only be old kana: ゐ and ゑ, which no modern word has; け, て and the
+     * like with ふ, said きょう and ちょう; and ふ, ひ and へ right after a kanji, said う, い and え,
+     * 云ふ, 思ひ出, 耐へ. In kana alone, ふ and ひ are only taken for old kana after い, いふ and いひ: modern words have them too, ふふ.
+     * Null when nothing changes. The caller checks that the result is a word.
+     */
+    fun byRule(text: String): Today? {
+        val out = StringBuilder()
+        val origins = mutableListOf<Int>()
+        val plain = mutableListOf<Int>()
+        val pairs = mutableListOf<Int>()
+        var first = -1
+        var sure = false
+        var at = 0
+        while (at < text.length) {
+            val c = text[at]
+            val before = text.getOrNull(at - 1)
+            val contracted = CONTRACTED.entries.firstOrNull { text.startsWith(it.key, at) }
+            val said = when {
+                contracted != null -> contracted.value
+                c == 'ゐ' -> "い"
+                c == 'ゑ' -> "え"
+                before != null && c == 'ひ' -> "い"
+                before != null && c == 'ふ' -> "う"
+                before != null && c == 'へ' && Readings.isHan(before) -> "え"
+                else -> null
+            }
+            if (said != null) {
+                if (first < 0) first = at
+                if (contracted == null && c in "ひふへ") plain += out.length
+                if (contracted != null) pairs += at
+                if (contracted != null || c in "ゐゑ" || (before != null && (Readings.isHan(before) || before == 'い'))) sure = true
+            }
+            repeat((said ?: c.toString()).length) { origins += at }
+            out.append(said ?: c)
+            at += if (contracted != null) contracted.key.length else 1
+        }
+        return if (sure && first >= 0) Today(out.toString(), origins, plain, pairs, first) else null
+    }
+
     /** Whether [surface] is written in hiragana alone, with old kana in it: いふ, まゐる, てふてふ. */
     fun inOldKana(surface: String) = surface.any { it in OLD } && surface.all { it in 'ぁ'..'ゖ' }
 

@@ -500,14 +500,12 @@ class ReadingsTest {
         inBoth(listOf("いる"), "ゐた")
         // The lyric's own text is what's written.
         assertEquals(listOf("思ひ出"), Readings.words("思ひ出", Script.JAPANESE).map { it.text })
-        // With UniDic's own words for what IPADIC splits.
-        TestUniDic.reading {
-            assertEquals(listOf("植える"), lookups("植ゑる"))
-            assertEquals(listOf("きょう"), lookups("けふ"))
-            assertEquals(listOf("ちょうちょ"), lookups("てふてふ"))
-            assertEquals(listOf("まいる"), lookups("まゐる"))
-            assertEquals(listOf("いう"), lookups("いふ"))
-        }
+        // What IPADIC splits, or reads as written, is the word its spelling today is.
+        inBoth(listOf("植える"), "植ゑる")
+        inBoth(listOf("きょう"), "けふ")
+        inBoth(listOf("ちょうちょ"), "てふてふ")
+        inBoth(listOf("まいる"), "まゐる")
+        inBoth(listOf("いう"), "いふ")
         // A modern word, or one with old kana in no word of its own, is asked for as it is, ひ and ふ and ほ in it or not.
         inBoth(listOf("夜空", "に", "分かる"), "夜空に分かった")
         inBoth(listOf("思い出"), "思い出")
@@ -516,19 +514,131 @@ class ReadingsTest {
     }
 
     @Test
+    fun aWordInOldKanaIsReadAsTheWordItsSpellingTodayIsWithOrWithoutUniDic() {
+        // Text, reading, spelling today, and the word it is looked up as: the same from either dictionary.
+        val words = listOf(
+            listOf("けふ", "きょう", "きょう", "きょう"),
+            listOf("まゐる", "まいる", "まいる", "まいる"),
+            listOf("植ゑる", "うえる", "植える", "植える"),
+            listOf("いふ", "いう", "いう", "いう"),
+            listOf("てふてふ", "ちょうちょう", "ちょうちょう", "ちょうちょ"),
+            listOf("ゐた", "いた", "いた", "いる"),
+            listOf("嫌ひ", "きらい", "嫌い", "嫌う"),
+            listOf("耐へない", "たえない", "耐えない", "耐える"),
+            listOf("超へられぬ", "こえられぬ", "超えられぬ", "超える"),
+            listOf("逢ひたい", "あいたい", "逢いたい", "逢う"),
+            listOf("使ふ", "つかう", "使う", "使う"),
+            listOf("笑ひ", "わらい", "笑い", "笑い"),
+            listOf("思ひ出", "おもいで", "思い出", "思い出")
+        )
+        fun check() = words.forEach { (text, reading, modern, lookup) ->
+            val word = Readings.words(text, Script.JAPANESE).single()
+            assertEquals(text, listOf(text, reading, modern, lookup), listOf(word.text, word.reading, word.modern, word.lookup))
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun aWordInOldKanaIsSaidAndShownTheWayItsSpellingTodayIsSaid() {
+        fun line(text: String) = Readings.of(listOf(text), Script.JAPANESE).single()
+        // 云ふ is うん and ふ to IPADIC: it's said いう, with い over the kanji.
+        line("云ふ").let {
+            assertEquals(listOf(Ruby("云", "い"), Ruby("ふ", "う")), it.parts)
+            assertEquals("いう", it.kana)
+            assertEquals("iu", it.romanized)
+            assertEquals("iu", it.typed)
+        }
+        // 思ひ出 is the same line with or without UniDic: the kanji's readings, and い over ひ.
+        val omoide = listOf(Ruby("思", "おも"), Ruby("ひ", "い"), Ruby("出", "で"))
+        assertEquals(omoide, line("思ひ出").parts)
+        assertEquals("omoide", line("思ひ出").romanized)
+        TestUniDic.reading { assertEquals(omoide, line("思ひ出").parts) }
+        // The lyric's words are the ones it has, as the dictionary splits what is around them.
+        assertEquals("matsute itanda yo", line("待つてゐたんだよ").romanized)
+        assertEquals(listOf("kyoo", "ame"), line("けふ 雨").romanized.split(" ").map { it.replace("kyou", "kyoo") }.take(2))
+    }
+
+    @Test
+    fun aModernLineHasNoWordInOldKana() {
+        // Modern kana the old spellings share: ひ, ふ and ほ, へ and は after kanji or kana, and words IPADIC splits oddly.
+        val lines = listOf(
+            "ふふ、ひとひら舞い落ちる", "あひるが泳ぐ", "おふろに入ろう", "きほんは大事", "にほんの夜明け", "いまはまだ", "これはなに", "それはね秘密", "海へ行こう",
+            "家へ帰る道", "君へ", "空へ飛び立つ", "夢へ向かって", "あふれる想い", "ほほえむ君", "ひふがきれい", "くふうして生きる", "たいへんだ", "ふたりでひとり",
+            "ひとりぼっち", "ふゆのひ", "ほしがふる夜", "はるのかぜ", "ふわふわ", "ひらひら", "へへへ", "ほほほ", "ふーん", "あしたへ", "明日へ続く", "未来へ", "どこへ行くの",
+            "ここへおいで", "では、また", "には負けない", "とは言えない", "ふとした瞬間", "おもいで", "思い出の場所", "笑い声", "使う", "言う", "会う", "買う", "洗う",
+            "歌う", "植える", "考える", "迎える", "ふれあい", "ひかり", "ほのお", "へんじ", "はなびら", "いふく", "ひふく", "ふふふ", "ほおずき", "ふうせん", "ゆうひ",
+            "ふたたび", "ひかりへ", "ひとへ", "きみへ", "愛してる、ふたりへ", "ほほ", "一人ひとり", "二人ふたり", "手ふり", "君のひ", "来てふたり", "見てふと"
+        )
+        fun noWordInOldKana() = lines.forEach { line ->
+            assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern })
+            assertEquals(line, line, Readings.of(listOf(line), Script.JAPANESE).single().parts.joinToString("") { it.text })
+        }
+        noWordInOldKana()
+        TestUniDic.reading { noWordInOldKana() }
+    }
+
+    @Test
+    fun aKanaThatTheDictionaryTakesForAWordAndAnOldEndingIsOneModernWord() {
+        // ふ and ひ after a verb's stem of one kana say う and い only when the stem has kanji: ふふ is a laugh, not ふ and an old ending.
+        listOf("ふふ" to "fufu", "ひふ" to "hifu").forEach { (text, romaji) ->
+            assertEquals(emptyList<String>(), Readings.words(text, Script.JAPANESE).mapNotNull { it.modern })
+            assertEquals(romaji, Readings.of(listOf(text), Script.JAPANESE).single().romanized.replace(" ", ""))
+        }
+    }
+
+    @Test
+    fun aLineWithLettersTheDictionaryTakesForMarksStillSplitsIntoWords() {
+        // Hangul in a Japanese line is a word of marks: it looks itself up.
+        val words = Readings.words("사랑 愛", Script.JAPANESE)
+        assertTrue(words.any { it.text.contains("愛") })
+        assertTrue(words.any { it.text.contains("사랑") && it.lookup.contains("사랑") })
+    }
+
+    @Test
+    fun aWordIsSpelledTodayByRuleOnlyWhereItCanOnlyBeOldKana() {
+        fun today(text: String) = Furigana.byRule(text)?.text
+        // ゐ and ゑ, and a contraction like けふ, are old wherever they are.
+        assertEquals("いる", today("ゐる"))
+        assertEquals("うえる", today("うゑる"))
+        assertEquals("きょう", today("けふ"))
+        assertEquals("ちょうちょう", today("てふてふ"))
+        assertEquals("ぎょうぎ", today("げふぎ"))
+        // ひ, ふ and へ after kanji say い, う and え.
+        assertEquals("思い出", today("思ひ出"))
+        assertEquals("云う", today("云ふ"))
+        assertEquals("耐え", today("耐へ"))
+        assertEquals("海え", today("海へ"))
+        // In kana alone, only after い: modern words have them too.
+        assertEquals("いう", today("いふ"))
+        assertEquals("いい", today("いひ"))
+        listOf("ふふ", "ひふ", "あひる", "おふろ", "ひとり", "海を", "ほほ", "かへる", "へへ", "思い出", "いま").forEach { assertNull(it, today(it)) }
+        // Where each letter comes from, which ones were a ひ, ふ or へ said another way, and where the first change is.
+        val omoide = requireNotNull(Furigana.byRule("思ひ出"))
+        assertEquals(listOf(0, 1, 2), omoide.origins)
+        assertEquals(listOf(1), omoide.plain)
+        assertEquals(1, omoide.first)
+        val kyou = requireNotNull(Furigana.byRule("今日けふ"))
+        assertEquals(listOf(0, 1, 2, 2, 2), kyou.origins)
+        assertEquals(emptyList<Int>(), kyou.plain)
+        assertEquals(listOf(2), kyou.contracted)
+        assertEquals(2, kyou.first)
+    }
+
+    @Test
     fun aWordCarriesItsModernSpellingOnlyWhenItIsWrittenInOldKana() {
         assertNull(Readings.words("夜空に、分かった!", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
         // The shipped dictionary says 思ひ出 as it's sung. It splits the old ending off 恋ひ and 住まゐ, which is said with its word.
         assertEquals("思い出", Readings.words("思ひ出", Script.JAPANESE).single().modern)
         Readings.words("恋ひ", Script.JAPANESE).single().let {
-            assertEquals(listOf("恋ひ", "こいひ", "恋う", "恋い"), listOf(it.text, it.reading, it.lookup, it.modern))
+            assertEquals(listOf("恋ひ", "こい", "恋う", "恋い"), listOf(it.text, it.reading, it.lookup, it.modern))
         }
         assertEquals("住まい", Readings.words("住まゐ", Script.JAPANESE).single().modern)
         assertEquals("sumai", Readings.words("住まゐ", Script.JAPANESE).single().romanized)
         // An ending of its own with a particle between is no ending: it's a word of its own.
         assertEquals(listOf("恋", "を", "ひ"), Readings.words("恋 を ひ", Script.JAPANESE).map { it.text })
-        assertEquals(listOf("ま", "ゐる"), Readings.words("まゐる", Script.JAPANESE).map { it.text })
-        assertEquals(listOf(null, "いる"), Readings.words("まゐる", Script.JAPANESE).map { it.modern })
+        assertEquals(listOf("まゐる"), Readings.words("まゐる", Script.JAPANESE).map { it.text })
+        assertEquals(listOf("まいる"), Readings.words("まゐる", Script.JAPANESE).map { it.modern })
         assertEquals("いい", Readings.words("いひ", Script.JAPANESE).single().modern)
         assertNull(Readings.words("ふたりでほしい", Script.JAPANESE).firstNotNullOfOrNull { it.modern })
         TestUniDic.reading {
