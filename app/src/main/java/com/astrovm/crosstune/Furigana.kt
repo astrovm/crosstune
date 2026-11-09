@@ -82,19 +82,22 @@ internal object Furigana {
          */
         private fun spelledAt(run: String, at: Int): List<Ruby> {
             val parts = mutableListOf<Ruby>()
+            var found = true
             for (k in run.indices) {
-                // Past the reading's end, the run isn't in it.
-                val said = sounds.getOrNull(at + k) ?: return emptyList()
+                val said = sounds.getOrNull(at + k)
                 val written = sound(run[k])
                 val before = sounds.getOrNull(at + k - 1)
                 when {
+                    // Past the reading's end, the run isn't in it.
+                    said == null -> found = false
                     written == said || stretched(written, before) == stretched(said, before) || "$said$written" in SAID_AS ->
                         if (parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + run[k]) else parts += Ruby(run[k].toString())
                     "$written$said" in SAID_AS -> parts += Ruby(run[k].toString(), kana.substring(at + k, at + k + 1))
-                    else -> return emptyList()
+                    else -> found = false
                 }
+                if (!found) break
             }
-            return parts
+            return if (found) parts else emptyList()
         }
     }
 
