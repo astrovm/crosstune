@@ -83,6 +83,34 @@ class TimingLogTest {
     }
 
     @Test
+    fun anAppSayingTheSameAgainIsNotedOnce() {
+        val clocks = SteadyClock(null) {}
+        val playing = PlaybackClock(10_000, 999_000)
+        clocks.of(playing)
+        // Going on as it was, a few ms off, and a paused clock said over and over.
+        clocks.of(PlaybackClock(10_503, 999_500 + 5))
+        clocks.of(PlaybackClock(10_510, 999_510))
+        assertEquals(1, TimingLog.lastMinute().lines().size)
+        // Somewhere else, stopped, then the same stop said again, then going again at another speed.
+        clocks.of(PlaybackClock(15_000, 999_600))
+        clocks.of(PlaybackClock(15_100, 999_700, playing = false))
+        clocks.of(PlaybackClock(15_100, 999_700, playing = false))
+        clocks.of(PlaybackClock(15_100, 999_900, speed = 1.5f))
+        assertEquals(4, TimingLog.lastMinute().lines().size)
+    }
+
+    @Test
+    fun everyoneFollowingAnAppNotesItsClockOnce() {
+        val noted = NotedClock()
+        val one = SteadyClock(null, noted) {}
+        val another = SteadyClock(null, noted) {}
+        val said = PlaybackClock(10_000, 999_000, playing = false)
+        one.of(said)
+        another.of(said)
+        assertEquals(1, TimingLog.lastMinute().lines().size)
+    }
+
+    @Test
     fun clearForgetsEverything() {
         TimingLog.note("something")
         TimingLog.clear()
