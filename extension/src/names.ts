@@ -149,3 +149,42 @@ export function wordsMatch(one: string, other: string): boolean {
   if (shorter.size === 0 || (shorter.size < 2 && shorter.size !== longer.size)) return false;
   return [...shorter].every((word) => longer.has(word));
 }
+
+/** Words a video's title has when it's another version of the song, or not the song at all. */
+const VERSION_WORDS = new Set([
+  "cover", "covers", "covered", "karaoke", "live", "unplugged", "mtv", "vivo", "directo", "session", "sessions",
+  "concert", "tour", "remix", "mix", "instrumental", "inst", "acoustic", "acustico", "piano", "guitar",
+  "bass", "drum", "drums", "chords", "tab", "tabs", "tutorial", "lesson", "practice", "reaction", "slowed",
+  "reverb", "sped", "nightcore", "8d", "demo", "medley", "mashup", "amv", "mmd", "ver", "tribute", "ktv",
+  "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox",
+]);
+
+/** The same, as other scripts write them, found anywhere in a title. */
+const VERSION_MARKS = [
+  "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
+  "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방",
+].map(normalize);
+
+/**
+ * [name] says it's another version of [title] by [artist]: a cover, karaoke, live, a remix… unless
+ * the song's own name says so, "Bzrp Music Sessions" or "Little Mix".
+ */
+export function saysAnotherVersion(name: string, title: string, artist: string): boolean {
+  const own = new Set([...words(title), ...words(artist)]);
+  if ([...words(name)].some((word) => !own.has(word) && VERSION_WORDS.has(word))) return true;
+  const letters = normalize(name);
+  return VERSION_MARKS.some((mark) => letters.includes(mark) && !normalize(title).includes(mark) && !normalize(artist).includes(mark));
+}
+
+/** How many letters to change to make [one] into [other]. */
+export function distance(one: string, other: string): number {
+  let previous = Array.from({ length: other.length + 1 }, (_, j) => j);
+  for (let i = 0; i < one.length; i++) {
+    const row = [i + 1];
+    for (let j = 0; j < other.length; j++) {
+      row.push(Math.min((previous[j + 1] ?? 0) + 1, (row[j] ?? 0) + 1, (previous[j] ?? 0) + (one[i] === other[j] ? 0 : 1)));
+    }
+    previous = row;
+  }
+  return previous[other.length] ?? 0;
+}

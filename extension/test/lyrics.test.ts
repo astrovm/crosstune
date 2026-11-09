@@ -21,6 +21,7 @@ const nothing: [string, Answer][] = [
   [YTM_SEARCH, "{}"],
   [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
   [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+  ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
 ];
 
 const find = (song: Song, net: Internet): Promise<Lyrics> => findLyrics(song, net.fetch, { pause: async () => {} });
@@ -131,6 +132,7 @@ test("NetEase's own note for an instrumental says it has no words", async () => 
     [NETEASE_SEARCH, fixture("netease-search.json")],
     [NETEASE_LYRIC, JSON.stringify({ lrc: { lyric: "[00:01.00]纯音乐，请欣赏" }, code: 200 })],
     [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+    ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
   ]);
   assert.deepEqual(await find(AFRICA, net), { kind: "instrumental" });
 });
@@ -142,6 +144,7 @@ function netEaseLyric(lyric: string): Internet {
     [NETEASE_SEARCH, fixture("netease-search.json")],
     [NETEASE_LYRIC, JSON.stringify({ lrc: { lyric }, code: 200 })],
     [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+    ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
   ]);
 }
 
@@ -243,6 +246,7 @@ test("a title with a tag is looked for again without it", async () => {
     [YTM_SEARCH, "{}"],
     [NETEASE_SEARCH, '{"result":{"songs":[]},"code":200}'],
     [LETRAS_SEARCH, 'LetrasSug({"response":{"docs":[]}})'],
+    ["https://genius.com/api/search/multi", '{"response":{"sections":[]}}'],
   ]);
   assert.equal(found(await find({ title: "Africa (Radio Session)", artist: "Toto" }, net)).words, "The words");
 });
@@ -282,4 +286,94 @@ test("timed lines: several stamps, an offset, and word stamps", () => {
     { timeMs: 62_000, text: "Later" },
     { timeMs: 89_500, text: "Words [in brackets] stay" },
   ]);
+});
+
+test("Genius supplies untimed words when the other sites have none", async () => {
+  const song = { title: "Paper Boats", artist: "River Band" };
+  const search = { response: { sections: [{ hits: [{ type: "song", result: { title: song.title, artist_names: song.artist, path: "/River-band-paper-boats-lyrics" } }] }] } };
+  const net = internet([
+    ["https://genius.com/api/search/multi", JSON.stringify(search)],
+    ...nothing,
+    ["https://genius.com/River-band-paper-boats-lyrics", '<div data-lyrics-container="true">Paper Boats Lyrics<br>[Verse 1]<br>Paper boats<br><a>along</a> the river</div>'],
+  ]);
+  assert.deepEqual(await find(song, net), { kind: "found", words: "Paper boats\nalong the river", lines: [], source: "genius" });
+});
+
+test("Genius's language menu and page name are not words", async () => {
+  const song = { title: "Paper Boats", artist: "River Band" };
+  const search = { response: { sections: [{ hits: [{ type: "song", result: { title: song.title, artist_names: song.artist, path: "/River-band-paper-boats-lyrics" } }] }] } };
+  const net = internet([
+    ["https://genius.com/api/search/multi", JSON.stringify(search)],
+    ...nothing,
+    [
+      "https://genius.com/River-band-paper-boats-lyrics",
+      '<div data-lyrics-container="true"><div data-exclude-from-selection="true" class="Header"><div><button><span>Translations</span></button><span>Romanization</span></div><h2>Paper Boats Lyrics</h2></div>[Note]<br>[Verse 1]<br>Paper boats<div data-exclude-from-selection="true"></div><br>along the river</div>',
+    ],
+  ]);
+  assert.deepEqual(await find(song, net), { kind: "found", words: "Paper boats\nalong the river", lines: [], source: "genius" });
+});
+
+test("Genius rejects other artists, versions and paths outside its site", async () => {
+  const hit = (title: string, artist: string, path: string) => ({ type: "song", result: { title, artist_names: artist, path } });
+  const search = { response: { sections: [{ hits: [hit("Paper Boats", "Another Band", "/wrong"), hit("Paper Boats (Live)", "River Band", "/live"), hit("Paper Boats", "River Band", "//elsewhere.invalid/")] }] } };
+  const net = internet([["https://genius.com/api/search/multi", JSON.stringify(search)], ...nothing]);
+  assert.deepEqual(await find({ title: "Paper Boats", artist: "River Band" }, net), { kind: "none" });
+  assert.ok(!net.asked.some((url) => url.includes("elsewhere.invalid")));
+});
+
+test("Genius joins nested boxes, decodes entities, and removes verse headings", async () => {
+  const hit = { type: "song", result: { title: "Paper Boats", artist_names: "River Band", path: "/paper-boats" } };
+  const net = internet([
+    ["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits: [hit] }] } })],
+    ["https://genius.com/paper-boats", '<div data-lyrics-container="true">Paper Boats Lyrics<br>[Verse]<br>River &amp; rain<div>flow</div></div><div>Footer</div><div data-lyrics-container="true">Home<br>[Outro]</div>'],
+    ...nothing,
+  ]);
+  assert.equal(found(await find({ title: "Paper Boats", artist: "River Band" }, net)).words, "River & rainflow\nHome");
+});
+
+test("Genius can mark a song instrumental and handles a failed page", async () => {
+  const hit = (instrumental: boolean) => ({ type: "song", result: { title: "Paper Boats", artist_names: "River Band", path: "/paper-boats", instrumental } });
+  const net = (instrumental: boolean) => internet([
+    ["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits: [hit(instrumental)] }] } })],
+    ["https://genius.com/paper-boats", { status: 403 }], ...nothing,
+  ]);
+  const song = { title: "Paper Boats", artist: "River Band" };
+  assert.deepEqual(await find(song, net(true)), { kind: "instrumental" });
+  assert.deepEqual(await find(song, net(false)), { kind: "none" });
+});
+
+test("a Genius result cannot redirect the request through a backslash path", async () => {
+  const hit = { type: "song", result: { title: "Paper Boats", artist_names: "River Band", path: "/\\elsewhere.invalid/" } };
+  const net = internet([["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits: [hit] }] } })], ...nothing]);
+  assert.deepEqual(await find({ title: "Paper Boats", artist: "River Band" }, net), { kind: "none" });
+  assert.equal(net.asked.length, 5);
+});
+
+test("Genius's title in the song's own script is matched by the Latin name after it", async () => {
+  const page = '<div data-lyrics-container="true">Paper Boats Lyrics<br>Paper boats along the river</div>';
+  const hit = (title: string, artist: string, path: string) => ({ type: "song", result: { title, artist_names: artist, path } });
+  const asked = (hits: unknown[]) => internet([
+    ["https://genius.com/api/search/multi", JSON.stringify({ response: { sections: [{ hits }] } })],
+    ["https://genius.com/paper", page], ["https://genius.com/other", page], ...nothing,
+  ]);
+  const song = { title: "Paper Boats", artist: "River Band" };
+  const credited = "강물 (River Band)";
+  // The same name, and the same name with a letter misspelled, as Genius spells it.
+  assert.equal(found(await find(song, asked([hit("종이배 (Paper Boats)", credited, "/paper")]))).source, "genius");
+  assert.equal(found(await find(song, asked([hit("종이배 (Paper Boots)", credited, "/paper")]))).source, "genius");
+  const none = async (hits: unknown[]) => assert.deepEqual(await find(song, asked(hits)), { kind: "none" });
+  // Two letters off, or the artist is someone else's, or the title is in Latin letters already.
+  await none([hit("종이배 (Paper Boxes)", credited, "/paper")]);
+  await none([hit("종이배 (Paper Boots)", "Another Band", "/paper")]);
+  await none([hit("Paper Boots (Remix)", credited, "/paper")]);
+  // Another version, whatever the script.
+  await none([hit("종이배 Live (Paper Boots)", credited, "/paper")]);
+  // Two different songs can't both be it.
+  await none([hit("종이배 (Paper Boots)", credited, "/paper"), hit("종이배 둘 (Paper Boats)", credited, "/other")]);
+  // A title short enough that one letter makes another word is matched only as written.
+  const short = { title: "Boat", artist: "River Band" };
+  assert.deepEqual(await find(short, asked([hit("배 (Boot)", credited, "/paper")])), { kind: "none" });
+  assert.equal(found(await find(short, asked([hit("배 (Boat)", credited, "/paper")]))).source, "genius");
+  // A title with letters other than a to z can't be told apart one letter at a time.
+  assert.deepEqual(await find({ title: "Paper Boats 舟", artist: "River Band" }, asked([hit("종이배 (Paper Boats 舟)", credited, "/paper")])), { kind: "none" });
 });

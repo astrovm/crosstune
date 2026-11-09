@@ -16,10 +16,15 @@ class WordlessSongTest {
     private fun store(genre: String, title: String = song.title) =
         """{"results":[{"trackId":7,"trackName":"$title","artistName":"Fake Trio","trackTimeMillis":200000,"primaryGenreName":"$genre"}]}"""
 
-    private fun respond(storeAnswer: String, genius: String = "{}") {
+    private fun artists(genre: String, name: String = "Fake Trio") = """{"results":[{"artistName":"$name","primaryGenreName":"$genre"}]}"""
+
+    private val noArtists = """{"results":[]}"""
+
+    /** The store answers a search for artists with [artistAnswer] and every other with [storeAnswer]. */
+    private fun respond(storeAnswer: String, genius: String = "{}", artistAnswer: String = noArtists) {
         fake.handler = { request ->
             when (request.url.host) {
-                "itunes.apple.com" -> FakeSpotify.html(request, storeAnswer)
+                "itunes.apple.com" -> FakeSpotify.html(request, if (request.url.queryParameter("entity") == "musicArtist") artistAnswer else storeAnswer)
                 "lrclib.net" -> FakeSpotify.html(request, "[]")
                 "genius.com" -> FakeSpotify.html(request, genius)
                 else -> FakeSpotify.html(request, "{}")
@@ -34,7 +39,9 @@ class WordlessSongTest {
     }
 
     /** Store searches for this song. A search for who first sang a title doesn't name the artist. */
-    private fun storeSearches() = fake.requestedUrls.count { "itunes.apple.com/search" in it && "Fake%20Trio" in it }
+    private fun storeSearches() = fake.requestedUrls.count { "itunes.apple.com/search" in it && "entity=song" in it && "Fake%20Trio" in it }
+
+    private fun artistSearches() = fake.requestedUrls.count { "itunes.apple.com/search" in it && "entity=musicArtist" in it }
 
     private fun storeLookups() = fake.requestedUrls.count { "itunes.apple.com/lookup" in it }
 
@@ -167,7 +174,7 @@ class WordlessSongTest {
         val lookups = storeLookups()
         fake.handler = { request ->
             when (request.url.host) {
-                "itunes.apple.com" -> FakeSpotify.html(request, store("Classical", "Fake Piece: I. Andante"))
+                "itunes.apple.com" -> FakeSpotify.html(request, if (request.url.queryParameter("entity") == "musicArtist") noArtists else store("Classical", "Fake Piece: I. Andante"))
                 "lrclib.net" -> FakeSpotify.html(request, "[]")
                 else -> FakeSpotify.html(request, "{}")
             }
@@ -200,6 +207,75 @@ class WordlessSongTest {
         fake.handler = { request ->
             when {
                 request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, store("Jazz"))
+                request.url.host == "genius.com" && request.url.encodedPath == "/api/search/multi" -> FakeSpotify.html(request, hit)
+                request.url.host == "genius.com" -> FakeSpotify.html(request, """<div data-lyrics-container="true">Rain falls down</div>""")
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        assertEquals(Lyrics.Found("Rain falls down", source = LyricsFinder.GENIUS), lookup())
+    }
+
+    @Test
+    fun anUnlistedSongOfAnArtistTheStoreFilesWhereOnlyInstrumentalsAreIsAnInstrumental() {
+        for (genre in listOf("Classical", "New Age", "Jazz", "Latin Jazz", "Bop", "Mainstream Jazz")) {
+            respond(noArtists, artistAnswer = artists(genre))
+            assertEquals(genre, Lyrics.Instrumental, lookup())
+        }
+        // The artist may be written a little differently, and is the one of several the store lists.
+        fake.requestedUrls.clear()
+        respond(noArtists, artistAnswer = """{"results":[{"artistName":"Someone Else","primaryGenreName":"Pop"},{"artistName":"The Fake Trio","primaryGenreName":"Classical"}]}""")
+        assertEquals(Lyrics.Instrumental, lookup())
+        // The store is asked about the artist by name, in the US store, once.
+        val asked = fake.requestedUrls.filter { "entity=musicArtist" in it }
+        assertEquals(1, asked.size)
+        assertEquals(true, "term=Fake%20Trio" in asked.single() && "country=us" in asked.single())
+    }
+
+    @Test
+    fun anUnlistedSongOfAnyOtherArtistIsOneNotFound() {
+        for (genre in listOf("Pop", "Hip-Hop/Rap", "Latin", "Folk", "")) {
+            respond(noArtists, artistAnswer = artists(genre))
+            assertEquals(genre, Lyrics.None, lookup())
+        }
+        respond(noArtists)
+        assertEquals(Lyrics.None, lookup())
+        // Another artist's genre is not this one's.
+        respond(noArtists, artistAnswer = artists("Classical", name = "Someone Else"))
+        assertEquals(Lyrics.None, lookup())
+        respond(noArtists, artistAnswer = "{}")
+        assertEquals(Lyrics.None, lookup())
+    }
+
+    @Test
+    fun anArtistTheStoreWontAnswerForLeavesTheSongNotFound() {
+        fake.handler = { request ->
+            when {
+                request.url.host == "itunes.apple.com" && request.url.queryParameter("entity") == "musicArtist" -> throw java.io.IOException("offline")
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, noArtists)
+                request.url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        assertEquals(Lyrics.None, lookup())
+        respond(noArtists, artistAnswer = "not json")
+        assertEquals(Lyrics.None, lookup())
+    }
+
+    @Test
+    fun theArtistIsOnlyAskedAboutWhenTheStoreDoesNotListTheSong() {
+        respond(store("Pop"), artistAnswer = artists("Classical"))
+        assertEquals(Lyrics.None, lookup())
+        // Listed under a genre of its own, the song's genre wins over the artist's.
+        assertEquals(0, artistSearches())
+    }
+
+    @Test
+    fun wordsFoundForAnUnlistedSongAreNeverHiddenByTheArtistsGenre() {
+        val hit = """{"response":{"sections":[{"hits":[{"type":"song","result":{"title":"Rain Piano","artist_names":"Fake Trio","primary_artist_names":"Fake Trio","path":"/Fake-trio-rain-piano-lyrics"}}]}]}}"""
+        fake.handler = { request ->
+            when {
+                request.url.host == "itunes.apple.com" -> FakeSpotify.html(request, if (request.url.queryParameter("entity") == "musicArtist") artists("Classical") else noArtists)
                 request.url.host == "genius.com" && request.url.encodedPath == "/api/search/multi" -> FakeSpotify.html(request, hit)
                 request.url.host == "genius.com" -> FakeSpotify.html(request, """<div data-lyrics-container="true">Rain falls down</div>""")
                 request.url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
