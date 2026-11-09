@@ -91,10 +91,10 @@ internal object ChordSheets {
     private val jTotalLineEnd = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
 
     /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
-    private val jTotalChord = Regex("""<a [^>]*>([^<]+)</a>(?:on([A-G][#b]?))?""")
+    private val jTotalChord = Regex("""<a [^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
 
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
-    private val splitChord = Regex("""^([^<]+)</a>(?:on([A-G][#b]?))?""")
+    private val splitChord = Regex("""^([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
     private val markup = Regex("""<[^>]+>""")
     private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^>]+>""", RegexOption.IGNORE_CASE)
     private val sourceSpace = Regex("""[ \t\r\n]+""")

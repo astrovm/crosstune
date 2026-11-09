@@ -377,6 +377,15 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalIgnoresAChordLinkWithOnlyWhitespace() {
+        val sheet = "${jTotal("C")}<a href='empty'> \n </a> ${jTotal("G")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C"), Chord(2, "G")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
     fun jTotalsChordsPastTheWordsEndLandAtTheEndAndWordsWithNoChordsStay() {
         assertEquals(
             listOf(SheetLine("川の道", listOf(Chord(3, "Am"))), SheetLine("朝の光 2", emptyList())),
