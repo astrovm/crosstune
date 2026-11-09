@@ -140,6 +140,7 @@ class ListeningTest {
         MainActivity.soundTapFactory = { null }
         // Visuals are on from the start; the tests about turning them on start with them off.
         prefs().edit().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).putBoolean(KEY_ASKED_RETURN, true).commit()
+        TimingLog.clear()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "sung_readings.json").delete()
@@ -2112,6 +2113,8 @@ class ListeningTest {
         }
         assertNotNull(ShazamGapStore(prefs()).load(52_000, "longer"))
         assertTrue(controllerModel().uiState.listeningAlong)
+        // What it learnt goes in the timing log for a report about the timing.
+        assertTrue(TimingLog.lastMinute(), Regex("gap -?\\d+ to match longer").containsMatchIn(TimingLog.lastMinute()))
     }
 
     @Test
@@ -2389,6 +2392,7 @@ class ListeningTest {
         // Heard going slower than the recording the words are timed for, the lines past the one put in time go on at its pace...
         hearsAt(hearing, 200_000, 0.9f)
         composeRule.runOnIdle { assertEquals(40_000 / 0.9, wordsSpan().toDouble(), 1.0) }
+        assertTrue(TimingLog.lastMinute(), Regex("pace 1\\.11\\d* from speed 0\\.9\\d* player speed 1\\.0").containsMatchIn(TimingLog.lastMinute()))
         // ...until the video's speed, once enough hearings agree, is taken off its clock: it's the clock that goes at it then.
         repeat(2) { hearsAt(hearing, 200_000, 0.9f) }
         composeRule.runOnIdle { assertEquals(0.9f, controllerModel().uiState.following!!.clock.speed, 0.001f) }
@@ -2666,6 +2670,7 @@ class ListeningTest {
         hearIntro(phone, hearing, 0..0)
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
         composeRule.runOnIdle { controllerModel().syncLine(0) }
+        assertTrue(TimingLog.lastMinute(), Regex("lead guessed -?\\d+").containsMatchIn(TimingLog.lastMinute()))
         // Heard again, 16 seconds ahead this time: the words stay where they were put.
         composeRule.runOnIdle {
             phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime()))
@@ -2688,6 +2693,7 @@ class ListeningTest {
         hearIntro(phone, hearing, 0..2)
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.single().leadMs in 9_000..11_000 }
         assertEquals(controllerModel().uiState.savedLines, SavedLinesStore(prefs()).load())
+        assertTrue(TimingLog.lastMinute(), Regex("lead -?\\d+ from hearing at").containsMatchIn(TimingLog.lastMinute()))
     }
 
     @Test

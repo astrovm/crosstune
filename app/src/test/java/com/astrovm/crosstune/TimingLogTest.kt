@@ -111,6 +111,35 @@ class TimingLogTest {
     }
 
     @Test
+    fun theCharacterBoundKeepsAMinuteThatFillsItExactly() {
+        // 80 lines of 99 characters and their line break are exactly 8,000.
+        val note = "x".repeat(99 - "1000000 ".length)
+        repeat(TimingLog.MAX_CHARS / 100) { TimingLog.note(note) }
+        val full = TimingLog.lastMinute()
+        assertEquals(TimingLog.MAX_CHARS / 100, full.lines().size)
+        assertEquals(TimingLog.MAX_CHARS - 1, full.length)
+        // One more and the oldest goes.
+        TimingLog.note(note)
+        assertEquals(TimingLog.MAX_CHARS / 100, TimingLog.lastMinute().lines().size)
+    }
+
+    @Test
+    fun aClockIsOnlyNewWhenItIsMoreThanAFewMsFromWhereItWasGoing() {
+        fun noted(positionMs: Long): Int {
+            TimingLog.clear()
+            val clocks = SteadyClock(null) {}
+            clocks.of(PlaybackClock(10_000, 999_000))
+            clocks.of(PlaybackClock(positionMs, 999_500))
+            return TimingLog.lastMinute().lines().size
+        }
+        // Going on, it'd be at 10,500 now.
+        assertEquals(1, noted(10_520))
+        assertEquals(2, noted(10_521))
+        assertEquals(1, noted(10_480))
+        assertEquals(2, noted(10_479))
+    }
+
+    @Test
     fun clearForgetsEverything() {
         TimingLog.note("something")
         TimingLog.clear()

@@ -279,6 +279,25 @@ class LyricsReportTest {
         assertEquals("YouTube Music", sentReport().getJSONObject("song").getString("app"))
     }
 
+    @Test
+    fun wordsTimedBeforeAnyAppWasFollowedAskForItWhenReportedAndSayHowItPlays() {
+        // Without access nothing was followed while the words were put in time, so the report finds the app itself.
+        playback.access = false
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        playback.access = true
+        playback.playing.value = Following(
+            PlaybackClock(0, SystemClock.elapsedRealtime(), speed = 1.25f, playing = false), "KDE Connect", canSeek = true, appPackage = "org.kde.kdeconnect_tp"
+        )
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        val song = sentReport().getJSONObject("song")
+        assertEquals("KDE Connect", song.getString("app"))
+        assertEquals("org.kde.kdeconnect_tp", song.getString("appPackage"))
+        assertEquals(1.25, song.getDouble("speed"), 0.0)
+    }
+
     /** Followed in KDE Connect, which says the song plays at [speed], the words open. */
     private fun followedInKdeConnect(speed: Float) {
         playback.playing.value = Following(
@@ -309,6 +328,8 @@ class LyricsReportTest {
         assertFalse(song.has("leadMs"))
         val log = song.getString("log")
         assertTrue(log, Regex("""\d+ lines in time 0>500""").containsMatchIn(log))
+        // Which line was lit, when, and where the player's clock had the song then.
+        assertTrue(log, Regex("""lit -?\d+ at \d+ pos \d+""").containsMatchIn(log))
         assertFalse(log, "a moment later" in log)
         // Only positions, times and speeds: nothing of the song or the user.
         assertFalse(log, listOf("Demo", "Band", "KDE", "kdeconnect").any { it in log })

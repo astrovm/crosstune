@@ -622,6 +622,19 @@ class SingingTest {
     }
 
     @Test
+    fun wordsHeardOffNeverOfferToReportWhenTheUserHasntSaid() {
+        TimingLog.clear()
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        // The words were moved by what was sung: that's when they'd have been offered.
+        waitUntil { "lines in time" in TimingLog.lastMinute() }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.reportOffer)
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+    }
+
+    @Test
     fun wordsHeardALittleOffArentReported() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         singing.answer = { sung(-600) }
