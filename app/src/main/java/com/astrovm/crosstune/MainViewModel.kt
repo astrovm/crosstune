@@ -2475,10 +2475,12 @@ internal class MainViewModel(
             val first = heardTo == null
             heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
             if (shift == null) {
+                TimingLog.note("sung nothing to place, clock sure $clockSure")
                 if (singingTries >= SINGING_TRIES) return
                 continue
             }
             singingTries = 0
+            TimingLog.note("sung $shift off, clock sure $clockSure, first $first")
             if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
             else if (placeForGood(song, lines, sung, clock, shown, shift, first)) return
         }
@@ -2567,12 +2569,17 @@ internal class MainViewModel(
      * so it's heard on through the song. Lines heard but none told where, the first is [shift] off.
      * Heard [WORDS_OFF_MS] off or more, it's the words that are off, not the clock, so what's heard
      * this time is kept, and they start where they're sung next time; still unsure, it isn't done.
+     * That's a problem found too: a song is mostly picked up playing, the words opened after it started.
      */
     private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
         heardThisTime = true
         val placed = SungAlignment.linesMs(sung, clock::positionAt, shown, shift).ifEmpty { mapOf(shown.indexOfFirst { it.timeMs + shift >= clock.positionAt(sung.startedAtMs) }.coerceAtLeast(0) to null) }
         val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
-        if (abs(shift) >= WORDS_OFF_MS) return setSync(song, heard)
+        if (abs(shift) >= WORDS_OFF_MS) {
+            // The words kept so for the first time are a problem found, as those heard off with the clock sure are.
+            if (syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
+            return setSync(song, heard)
+        }
         heardPoints = heard
         showPoints()
     }

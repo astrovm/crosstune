@@ -729,6 +729,42 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpPartwayWordsHeardFarOffOfferToReportOnce() {
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { model().uiState.reportOffer }
+        composeRule.waitForIdle()
+        assertEquals(setOf(SongProblem.SUNG_OFF), model().uiState.reportOfferFor)
+        assertTrue(offerShown())
+        assertFalse(fake.requestedUrls.contains(ReportSender.URL))
+    }
+
+    @Test
+    fun pickedUpPartwayWordsHeardFarOffAreReportedOnceWhenAllowed() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { fake.requestedUrls.contains(ReportSender.URL) }
+        assertEquals("sung_off", org.json.JSONObject(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)]).getString("problem"))
+        // Kept by then, so placing them again from the same while sends nothing more.
+        waitUntil { prefs().contains("lyrics_sync") }
+        composeRule.waitForIdle()
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
+    }
+
+    @Test
+    fun pickedUpPartwayWordsHeardALittleOffDontOfferToReport() {
+        singing.answer = { sung(MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears == 1 && model().uiState.lyricLines[2].timeMs == 6_000 + MainViewModel.SUNG_OFF_MS }
+        composeRule.waitForIdle()
+        assertFalse(model().uiState.reportOffer)
+    }
+
+    @Test
     fun wordsHeardALittleOffDontOfferToReport() {
         singing.answer = { sung(-600) }
         openLyrics()
