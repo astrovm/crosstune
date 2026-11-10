@@ -36,7 +36,8 @@ class SungReadingsTest {
     private fun site(rows: List<Pair<String, String>>, pages: Map<String, String>, failing: Boolean = false): (Request) -> Response = { request ->
         if (failing) throw IOException("offline")
         when (request.url.encodedPath) {
-            "/search" -> FakeSpotify.html(request, search(rows))
+            // As UtaTen does, it answers a search with nothing unless it says it came from its own pages.
+            "/search" -> FakeSpotify.html(request, if (request.header("Referer") == "https://utaten.com/") search(rows) else "")
             in pages.keys -> FakeSpotify.html(request, pages.getValue(request.url.encodedPath))
             else -> FakeSpotify.html(request, "", code = 404)
         }
@@ -130,6 +131,25 @@ class SungReadingsTest {
         assertTrue(fake.requestedUrls.any { "title=Night%20Town" in it })
         // The singer's own, though listed second.
         assertTrue(fake.requestedUrls.none { "/lyric/zz0002/" in it })
+    }
+
+    @Test
+    fun aSongIsLookedUpWithoutItsExclamationMarkAsTheSiteMayWriteItOtherwise() {
+        // UtaTen writes ！ where the song's name has !, and finds nothing by the one it doesn't write.
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath == "/search" && request.url.queryParameter("title") == "夜の都会" ->
+                    FakeSpotify.html(request, search(listOf("/lyric/ab0001/" to "Band")))
+                request.url.encodedPath == "/search" -> FakeSpotify.html(request, search(emptyList()))
+                else -> FakeSpotify.html(request, page)
+            }
+        }
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(song = MusicMetadata("夜の都会!", "Band")).orEmpty())
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(song = MusicMetadata("夜の都会？", "Band")).orEmpty())
+        // A title that is only the mark is not looked up as a blank name.
+        fake.requestedUrls.clear()
+        assertEquals(emptyList<ReadingFix>(), ask(song = MusicMetadata("!", "Band")))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("title").isNullOrEmpty() })
     }
 
     @Test
