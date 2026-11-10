@@ -200,6 +200,15 @@ class UnsungTest {
     }
 
     @Test
+    fun withNoSoundToHearItIsReportedAsItAlwaysWas() {
+        // The phone turned all the way down gives no sound: neither a voice nor music without one.
+        singing.noSound = true
+        openLyrics()
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
     fun withoutTheMicrophoneItIsReportedAsItAlwaysWas() {
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
         openLyrics()
@@ -329,6 +338,11 @@ class UnsungTest {
 
         override val missesModel get() = missing
 
+        @Volatile
+        var noSound = false
+
+        override val heardNoSound get() = noSound
+
         override suspend fun fetchModel() = false
 
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
@@ -337,7 +351,7 @@ class UnsungTest {
             before()
             // A while takes time to hear, in which what the music app says gets through.
             yield()
-            return if (missing) null else heard
+            return if (missing || noSound) null else heard
         }
     }
 

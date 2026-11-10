@@ -285,6 +285,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
      */
     private inner class Replayed(private val heard: Map<Int, Map<Long, List<Pair<Long, String>>>>) : SingingHearing {
         override val missesModel = false
+        override val heardNoSound = false
         private var whiles = 0
 
         override suspend fun fetchModel() = true

@@ -2471,7 +2471,10 @@ internal class MainViewModel(
         if (SongNames.manySongs(song)) return
         // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
         if (!likelyInstrumental && autoReports.allowed == false) return
-        if (singing != null && shownPlayed && mayCalibrate()) {
+        val canHear = singing != null && shownPlayed && mayCalibrate()
+        // Noted, as a report of no words then says how it came to be one.
+        TimingLog.note("no words, likely instrumental $likelyInstrumental, a voice ${if (canHear) "is listened for" else "can't be heard"}")
+        if (canHear) {
             unsung = Unsung(song, likelyInstrumental)
             hearVoice()
         } else if (!likelyInstrumental) {
@@ -2494,9 +2497,11 @@ internal class MainViewModel(
             while (heard.tries < VOICE_TRIES) {
                 if (heard.tries > 0) delay(VOICE_PAUSE_MS)
                 val sung = hearing.hear(null, null)
+                TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
-                // Without the speech model nothing can be heard, so it's as if it couldn't be.
-                if (sung?.sings == true || (sung == null && hearing.missesModel)) return@launch voiceHeard(heard, sung != null)
+                // Without the speech model, or with no sound to hear, as from a phone turned all the way down, nothing can be heard, so it's as if it couldn't be.
+                val couldNotHear = sung == null && (hearing.missesModel || hearing.heardNoSound)
+                if (sung?.sings == true || couldNotHear) return@launch voiceHeard(heard, sung != null)
                 heard = heard.copy(tries = heard.tries + 1)
                 unsung = heard
             }

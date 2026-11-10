@@ -72,6 +72,12 @@ internal interface SingingHearing {
     /** Whether the last try heard nothing for want of the speech model, which wasn't fetched then, e.g. on mobile data. */
     val missesModel: Boolean
 
+    /**
+     * Whether the last try heard no sound at all: the phone is turned all the way down, or the music
+     * app keeps its sound to itself. Nothing can be told of the song from that, a voice or none.
+     */
+    val heardNoSound: Boolean
+
     /** Fetches the speech model now, on any network; whether it's here after. */
     suspend fun fetchModel(): Boolean
 }
@@ -105,6 +111,10 @@ internal class SingingListener(
     override var missesModel = false
         private set
 
+    @Volatile
+    override var heardNoSound = false
+        private set
+
     override suspend fun fetchModel(): Boolean = fetch() != null
 
     override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
@@ -131,6 +141,9 @@ internal class SingingListener(
                 } ?: return null
                 )
         }
+        // No sound at all has no words to hear, so the speech model isn't run on it.
+        heardNoSound = heard.second.all { it.toInt() == 0 }
+        if (heardNoSound) return null
         keepTo?.let { File(it, "heard-${heard.first}.pcm").writeBytes(ByteBuffer.allocate(heard.second.size * 2).order(ByteOrder.LITTLE_ENDIAN).apply { asShortBuffer().put(heard.second) }.array()) }
         val words = words(file, heard.second, language) ?: return null
         return Sung(heard.first, words)

@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -581,6 +582,22 @@ class SungWordsTest {
         assertNull(words.samples)
         // It's the model that was missed, so it can be offered.
         assertTrue(listener.missesModel)
+    }
+
+    @Test
+    fun noSoundAtAllIsNotListenedTo() = runBlocking {
+        // A phone turned all the way down gives only zeros.
+        val microphone = FakeMicrophone().apply { repeat(SingingListener.SECONDS) { playSecond(0) }; play(SingingListener.SECONDS.toDouble()) }
+        val words = FakeWords(listOf(HeardWord("Oh", 320)))
+        val listener = listener(microphone, hearing = words)
+        assertNull(listener.hear(null, null))
+        assertTrue(listener.heardNoSound)
+        assertFalse(listener.missesModel)
+        // The speech model wasn't run on it.
+        assertNull(words.samples)
+        // Sound again, it's heard as ever.
+        assertNotNull(listener.hear(null, null))
+        assertFalse(listener.heardNoSound)
     }
 
     @Test
