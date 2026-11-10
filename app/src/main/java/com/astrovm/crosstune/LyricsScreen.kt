@@ -2511,16 +2511,7 @@ internal fun WordCard(
                         Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
                     }
                 }
-                // A reading that's wrong is marked by a flag in the card's corner, out of the words' way.
-                if (onWrongReading != null && shown.isNotEmpty()) {
-                    IconButton(
-                        onClick = onWrongReading,
-                        // Its edge where the card's words end, rather than the touch target's.
-                        modifier = Modifier.offset(x = 12.dp, y = (-8).dp).then(flag?.let { Modifier.focusRequester(it) } ?: Modifier)
-                    ) {
-                        AppIcon(R.drawable.ic_flag, contentDescription = stringResource(R.string.reading_wrong), modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                ReadingFlag(onWrongReading, shown.isNotEmpty(), flag)
             }
             // The lyric keeps its old spelling; the card says how it's written today.
             word.modern?.let { Text(stringResource(R.string.lyrics_word_modern, it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -2538,6 +2529,20 @@ internal fun WordCard(
             } else {
                 Text(stringResource(R.string.lyrics_word_unknown), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+/** A flag in the card's corner when [onWrongReading] is set and the word [hasReading] to mark. */
+@Composable
+private fun ReadingFlag(onWrongReading: (() -> Unit)?, hasReading: Boolean, flag: FocusRequester?) {
+    if (onWrongReading != null && hasReading) {
+        IconButton(
+            onClick = onWrongReading,
+            // Its edge where the card's words end, rather than the touch target's.
+            modifier = Modifier.offset(x = 12.dp, y = (-8).dp).then(flag?.let { Modifier.focusRequester(it) } ?: Modifier)
+        ) {
+            AppIcon(R.drawable.ic_flag, contentDescription = stringResource(R.string.reading_wrong), modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
