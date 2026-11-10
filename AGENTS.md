@@ -26,7 +26,7 @@ Results land in `app/build/test-results/testDebugUnitTest/*.xml`, coverage in `a
 The most common defect here is a change that works where you tested it and is missing elsewhere. Before calling it done, check:
 
 - **Strings.** Spanish uses Argentine voseo.
-- **Docs.** README's feature list, `site/strings/` and the store text in `fastlane/` describe what the app does. Keep them matching, in every language.
+- **Docs.** README's feature list, `site/strings/` and the store text in `fastlane/` describe what the app does. Keep them matching, in every language. The site's cards and the store text say what a feature is for, in a line. How it works, its limits and its permissions go in the README. Never add a sentence to a card or to the store text for a fix.
 - **Privacy.** Anything that changes what leaves the phone, or where it goes, changes README's Privacy section and the privacy page (`privacy_body` in every `site/strings/` file) too.
 - **Known issues.** A bug, limit or unchecked case you know of and aren't fixing in this PR gets a GitHub issue, linked from the PR. A note in a PR body or a comment alone gets lost.
 
