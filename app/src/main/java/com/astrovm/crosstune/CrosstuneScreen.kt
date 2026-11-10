@@ -280,6 +280,8 @@ internal data class ScreenActions(
     val onSendReport: (comment: String) -> Unit = {},
     /** The report written, sent or not. */
     val onCloseReport: () -> Unit = {},
+    /** The reading shown for a word, in a line, marked wrong, with the right one when the user says it. */
+    val onReportReading: (word: Word, index: Int, right: String) -> Unit = { _, _, _ -> },
     /** Problems Crosstune finds with songs reported by itself from now on, or not. */
     val onAllowAutoReports: (Boolean) -> Unit = {},
     /** The offer to do so closed for now, not as a no. */

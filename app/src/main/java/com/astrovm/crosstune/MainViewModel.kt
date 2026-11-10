@@ -3200,6 +3200,23 @@ internal class MainViewModel(
         }
     }
 
+    /**
+     * Sends that the reading shown for [word], in line [index], is wrong, with the [right] one when the
+     * user says it: only that, the line and the song. [UiState.report] says how it goes.
+     */
+    fun reportReading(word: Word, index: Int, right: String) {
+        val sender = reports ?: return
+        val song = uiState.lyricsFor ?: return
+        val script = uiState.learning.script ?: return
+        val line = wordLines().getOrNull(index) ?: return
+        val report = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
+        uiState = uiState.copy(report = ReportStatus.SENDING)
+        viewModelScope.launch {
+            val sent = sender.send(report)
+            uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
+        }
+    }
+
     fun closeReport() {
         uiState = uiState.copy(report = null)
     }

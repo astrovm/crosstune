@@ -95,7 +95,7 @@ internal data class SavedLine(
         val fixes = shown.indices.mapNotNull { index ->
             val given = readings.getOrNull(index) ?: return@mapNotNull null
             val fixed = given.trim()
-            if (fixed == shown[index].reading) null else ReadingFix(0, shown[index].text, fixed)
+            if (fixed == shown[index].reading) null else ReadingFix(0, shown[index].text, fixed, Reader.USER)
         }
         val read = Readings.corrected(listOf(LineReading(parts, reading ?: text, romanized.orEmpty(), typed ?: romanized.orEmpty())), fixes).first()
         if (read.parts == parts) return this
@@ -300,7 +300,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                     .put("explanation", line.explanation).put("interval", line.interval).put("ease", line.ease).put("step", line.step).put("due", line.due)
                     .put("start", line.startMs).put("end", line.endMs).put("lead", line.leadMs).put("app", line.app)
                     .put("artwork", line.artworkUrl).put("line", line.line).put("typed", line.typed)
-                    .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) }) })
+                    .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { part -> JSONArray().put(part.text).put(part.reading ?: JSONObject.NULL).also { array -> part.by?.let { array.put(it.key) } } }) })
                     .apply { if (line.readByHand) put("byHand", true) }
                     .apply { if (line.reviews.isNotEmpty()) put("reviews", reviewsJson(line.reviews)) }
             )
@@ -311,9 +311,12 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     private fun JSONObject.text(name: String): String? = optString(name).takeIf { has(name) && it.isNotEmpty() }
 
-    /** The pieces of a line with their readings, as [text, reading or null] each; kept over kana among kanji, they're moved off them. */
+    /**
+     * The pieces of a line with their readings, as [text, reading or null] each, then what put the reading right
+     * when something did; kept over kana among kanji, they're moved off them.
+     */
     private fun JSONObject.ruby(): List<Ruby>? = optJSONArray("ruby")?.let { array ->
-        (0 until array.length()).mapNotNull { index -> array.optJSONArray(index)?.let { Ruby(it.optString(0), it.optString(1).takeIf { _ -> !it.isNull(1) }) } }
+        (0 until array.length()).mapNotNull { index -> array.optJSONArray(index)?.let { Ruby(it.optString(0), it.optString(1).takeIf { _ -> !it.isNull(1) }, Reader.of(it.optString(2))) } }
     }?.takeIf { it.isNotEmpty() }?.let(Readings::rubied)
 
     /** The days it waits, or, saved before Anki's way, as long as its old box did. */
