@@ -127,6 +127,10 @@ box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
 if [[ -n ${SYNCREPLAY_DIR:-} ]]; then
     box+=(-v "$SYNCREPLAY_DIR:$SYNCREPLAY_DIR" -e "SYNCREPLAY_DIR=$SYNCREPLAY_DIR")
 fi
+# So are SongCheck's, as songs' words are people's and stay out of every checkout (scripts/readingsaudit).
+if [[ -n ${SONGCHECK_DIR:-} ]]; then
+    box+=(-v "$SONGCHECK_DIR:$SONGCHECK_DIR")
+fi
 # A worktree keeps its Git data in the main checkout, which may be somewhere else.
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
 # The same key as builds outside the box, so its APKs install over theirs.

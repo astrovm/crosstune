@@ -57,9 +57,9 @@ internal object MetadataParsers {
         RegexOption.IGNORE_CASE
     )
 
-    /** What a title may end on after its song: "- Lyrics |HD|", a bare "HD" or "4K". */
+    /** What a title may end on after its song: "- Lyrics |HD|", a bare "Lyrics", "HD" or "4K". */
     private val trailingQualityRegex = Regex(
-        """(?:\s*[|\-–]\s*lyrics?\s*(?:\|?\s*(?:hd|4k)\s*\|?)?|\s+(?:full\s+)?(?:hd|hq|4k))\s*$""",
+        """(?:(?:\s*[|\-–]\s*|\s+)lyrics?\s*(?:\|?\s*(?:hd|4k)\s*\|?)?|\s+(?:full\s+)?(?:hd|hq|4k))\s*$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -315,10 +315,10 @@ internal object MetadataParsers {
         // Topic channels title songs by name alone, so a dash there is part of it, e.g. "Song - Remastered 2011";
         // anywhere, a dash before only such a tag is.
         val tagOnly = SongNames.withoutEditionTag(rawTitle) != rawTitle && " - " !in SongNames.withoutEditionTag(rawTitle)
-        val separator = if (channel.endsWith(" - Topic") || tagOnly) -1 else artistSeparator(rawTitle)
-        if (separator <= 0) return MusicMetadata(rawTitle, author)
-        val left = rawTitle.substring(0, separator).trim()
-        val right = rawTitle.substring(separator + 3).trim()
+        val separator = if (channel.endsWith(" - Topic") || tagOnly) null else artistSeparatorRange(rawTitle)
+        if (separator == null) return MusicMetadata(rawTitle, author)
+        val left = rawTitle.substring(0, separator.first).trim()
+        val right = rawTitle.substring(separator.last + 1).trim()
         // One song by two names, as YouTube Music titles Japanese ones, "プラスティック・ラブ - Plastic Love": by the channel.
         // Two sounds are enough here, as "アイドル - Idol", since a dash pairing them is already a sign.
         if (SongNames.soundsAlike(right, left, TWO_NAMES_SOUNDS) || SongNames.soundsAlike(left, right, TWO_NAMES_SOUNDS)) return MusicMetadata(rawTitle, author)
@@ -347,6 +347,21 @@ internal object MetadataParsers {
     private const val TWO_NAMES_SOUNDS = 2
 
     private val JAPANESE = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA)
+
+    /**
+     * Where "Artist - Song" splits, as [artistSeparator] finds, or else at a dash typed right after the
+     * artist, "Artist- Song", as uploads often have it; not at one inside a name, as "Jay-Z".
+     */
+    private fun artistSeparatorRange(title: String): IntRange? {
+        val spaced = artistSeparator(title)
+        if (spaced > 0) return spaced until spaced + SEPARATOR_WIDTH
+        return gluedDash.findAll(title).singleOrNull()?.range
+    }
+
+    /** A dash after a name's last letter and before a space, "Artist- Song"; one in a name has none after it. */
+    private val gluedDash = Regex("""(?<=[\p{L}\p{N}.])[-–—]\s+(?=\S)""")
+
+    private const val SEPARATOR_WIDTH = 3
 
     /** Where "Artist - Song" splits, but not at a dash inside brackets: "NOFX [Reggae & Ska - 2014 Mixtape]" is one name. */
     private fun artistSeparator(title: String): Int {

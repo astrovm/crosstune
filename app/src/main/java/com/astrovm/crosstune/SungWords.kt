@@ -40,6 +40,22 @@ internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>) {
                 !sound && word.text.any { it.isLetterOrDigit() }
             }?.atMs
         }
+
+    /**
+     * Whether someone's heard singing: a voice, and not one word said over and over, as the speech
+     * model makes of rain, waves or other noise with no one in it.
+     */
+    val sings: Boolean
+        get() {
+            val voiceAt = voiceAtMs ?: return false
+            val said = words.filter { it.atMs >= voiceAt }.map { word -> word.text.filter(Char::isLetterOrDigit).lowercase() }.filter(String::isNotEmpty)
+            return said.size < LOOPED_WORDS || said.distinct().size > 1
+        }
+
+    private companion object {
+        /** A word heard this many times, and no other, is the speech model going round on noise. */
+        const val LOOPED_WORDS = 3
+    }
 }
 
 /** Hears the words of the song the phone plays now; null when it can't, or heard none. */
@@ -55,6 +71,12 @@ internal interface SingingHearing {
 
     /** Whether the last try heard nothing for want of the speech model, which wasn't fetched then, e.g. on mobile data. */
     val missesModel: Boolean
+
+    /**
+     * Whether the last try heard no sound at all: the phone is turned all the way down, or the music
+     * app keeps its sound to itself. Nothing can be told of the song from that, a voice or none.
+     */
+    val heardNoSound: Boolean
 
     /** Fetches the speech model now, on any network; whether it's here after. */
     suspend fun fetchModel(): Boolean
@@ -89,11 +111,17 @@ internal class SingingListener(
     override var missesModel = false
         private set
 
+    @Volatile
+    override var heardNoSound = false
+        private set
+
     override suspend fun fetchModel(): Boolean = fetch() != null
 
     override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
-        val recording = withContext(recordDispatcher) { sound.open() } ?: return null
+        val recording = withContext(recordDispatcher) { sound.open() }
+        heardNoSound = recording == null
+        if (recording == null) return null
         val (file, heard) = recording.use {
             // The model first, so what's heard is fresh when it's listened to.
             val file = model()
@@ -112,9 +140,13 @@ internal class SingingListener(
                     // Sound that ended before them has none to hear again.
                     again.cancel()
                     heard
-                } ?: return null
+                    // A phone turned all the way down may give no recording at all, as its silence isn't taken for sound.
+                } ?: return null.also { heardNoSound = true }
                 )
         }
+        // No sound at all has no words to hear, so the speech model isn't run on it.
+        heardNoSound = heard.second.all { it.toInt() == 0 }
+        if (heardNoSound) return null
         keepTo?.let { File(it, "heard-${heard.first}.pcm").writeBytes(ByteBuffer.allocate(heard.second.size * 2).order(ByteOrder.LITTLE_ENDIAN).apply { asShortBuffer().put(heard.second) }.array()) }
         val words = words(file, heard.second, language) ?: return null
         return Sung(heard.first, words)

@@ -58,7 +58,7 @@ class WordlessSongTest {
                 else -> FakeSpotify.html(request, "{}")
             }
         }
-        assertEquals(played, Lyrics.Instrumental, lyrics(played))
+        assertEquals(played, Lyrics.LikelyInstrumental, lyrics(played))
         assertEquals(played, before + 2, storeSearches())
     }
 
@@ -84,7 +84,7 @@ class WordlessSongTest {
     fun aSongOfAnInstrumentalGenreWithNoWordsAnywhereIsAnInstrumental() {
         for (genre in listOf("Classical", "New Age", "Jazz", "Latin Jazz", "Bop")) {
             respond(store(genre))
-            assertEquals(genre, Lyrics.Instrumental, lookup())
+            assertEquals(genre, Lyrics.LikelyInstrumental, lookup())
         }
     }
 
@@ -116,7 +116,7 @@ class WordlessSongTest {
             }
         }
         val before = storeSearches()
-        assertEquals(Lyrics.Instrumental, lyrics(played))
+        assertEquals(Lyrics.LikelyInstrumental, lyrics(played))
         assertEquals(before + 2, storeSearches())
     }
 
@@ -132,7 +132,7 @@ class WordlessSongTest {
                 else -> FakeSpotify.html(request, "{}")
             }
         }
-        assertEquals(Lyrics.Instrumental, lyrics(played))
+        assertEquals(Lyrics.LikelyInstrumental, lyrics(played))
         assertEquals(before + 1, storeSearches())
     }
 
@@ -220,16 +220,26 @@ class WordlessSongTest {
     fun anUnlistedSongOfAnArtistTheStoreFilesWhereOnlyInstrumentalsAreIsAnInstrumental() {
         for (genre in listOf("Classical", "New Age", "Jazz", "Latin Jazz", "Bop", "Mainstream Jazz")) {
             respond(noArtists, artistAnswer = artists(genre))
-            assertEquals(genre, Lyrics.Instrumental, lookup())
+            assertEquals(genre, Lyrics.LikelyInstrumental, lookup())
         }
         // The artist may be written a little differently, and is the one of several the store lists.
         fake.requestedUrls.clear()
         respond(noArtists, artistAnswer = """{"results":[{"artistName":"Someone Else","primaryGenreName":"Pop"},{"artistName":"The Fake Trio","primaryGenreName":"Classical"}]}""")
-        assertEquals(Lyrics.Instrumental, lookup())
+        assertEquals(Lyrics.LikelyInstrumental, lookup())
         // The store is asked about the artist by name, in the US store, once.
         val asked = fake.requestedUrls.filter { "entity=musicArtist" in it }
         assertEquals(1, asked.size)
         assertEquals(true, "term=Fake%20Trio" in asked.single() && "country=us" in asked.single())
+    }
+
+    @Test
+    fun anArtistsNamesakesGoByTheGenreMostOfThemShare() {
+        // A DJ of the same name listed first is one of several; most of them play jazz.
+        respond(noArtists, artistAnswer = """{"results":[{"artistName":"Fake Trio","primaryGenreName":"Dance"},{"artistName":"Fake Trio","primaryGenreName":"Jazz"},{"artistName":"Someone Else","primaryGenreName":"Pop"},{"artistName":"Fake Trio","primaryGenreName":"Jazz"}]}""")
+        assertEquals(Lyrics.LikelyInstrumental, lookup())
+        // As many sung as not, the first listed goes.
+        respond(noArtists, artistAnswer = """{"results":[{"artistName":"Fake Trio","primaryGenreName":"Dance"},{"artistName":"Fake Trio","primaryGenreName":"Jazz"}]}""")
+        assertEquals(Lyrics.None, lookup())
     }
 
     @Test

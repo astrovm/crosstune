@@ -26,6 +26,21 @@ class SongSearcherTest {
 
     private fun found(query: String) = runBlocking { SongSearcher(fake.client(), country = "AR").search(query) }
 
+    /** Deezer rows in this order. An earlier row ranks higher, so that order holds when each title matches the query as much. */
+    private fun deezer(vararg songs: Pair<String, String>): String =
+        songs.mapIndexed { index, (title, artist) ->
+            """{"id":${index + 1},"title":"$title","rank":${100 - index},"artist":{"name":"$artist"}}"""
+        }.joinToString(",", """{"data":[""", """]}""")
+
+    /**
+     * [ahead] are what Deezer listed first. [song] is the artist's own, listed after them.
+     * The search should lead with [song] and still keep the others, in the order they came.
+     */
+    private fun assertLeads(query: String, song: Pair<String, String>, vararg ahead: Pair<String, String>) {
+        respond(deezer(*(ahead.toList() + song).toTypedArray()))
+        assertEquals(listOf(song) + ahead.toList(), found(query).map { it.title to it.artist })
+    }
+
     private val cover = "https://cdn-images.dzcdn.net/images/cover/abc/500x500-80-0-0.jpg"
 
     @Test
@@ -229,4 +244,87 @@ class SongSearcherTest {
         )
         fake.delayMillis = 0
     }
+
+    @Test
+    fun theArtistsSongLeadsWhenKaraokeAndCoversWereListedFirst() {
+        // As the services answer for "Lemon" and the artist in Japanese: Deezer's karaoke,
+        // music box and piano, then Apple's own recording of the song.
+        respond(
+            deezer(
+                "Lemon Key+2(原曲歌手:米津玄師)[ガイド無しカラオケ]" to "歌っちゃ王",
+                "Lemon (Piano Version)" to "Piano Echoes",
+                "Lemon (オルゴール)" to "angel music box",
+                "Lemon (米津玄師)" to "コロムビアオルゴール"
+            ),
+            """{"results":[
+                {"trackName":"Lemon","artistName":"Kenshi Yonezu","trackViewUrl":"https://music.apple.com/us/song/1"},
+                {"trackName":"Paper Flower","artistName":"Kenshi Yonezu","trackViewUrl":"https://music.apple.com/us/song/2"}
+            ]}"""
+        )
+        assertEquals(
+            listOf(
+                "Lemon" to "Kenshi Yonezu",
+                "Paper Flower" to "Kenshi Yonezu",
+                "Lemon Key+2(原曲歌手:米津玄師)[ガイド無しカラオケ]" to "歌っちゃ王",
+                "Lemon (米津玄師)" to "コロムビアオルゴール",
+                "Lemon (Piano Version)" to "Piano Echoes",
+                "Lemon (オルゴール)" to "angel music box"
+            ),
+            found("Lemon 米津玄師").map { it.title to it.artist }
+        )
+    }
+
+    @Test
+    fun anotherRecordingFollowsTheArtistsOwnSong() {
+        assertLeads("Song", "Song" to "Artist", "Song (Piano Version)" to "Piano Echoes")
+        assertLeads("Song", "Song" to "Artist", "Song (In the Style of Artist)" to "Cover Band")
+        assertLeads("Song", "Song" to "Artist", "Song Originally Performed By Artist" to "Cover Band")
+        assertLeads("Song", "Song" to "Artist", "Song originally by Artist" to "Cover Band")
+        assertLeads("Song", "Song" to "Artist", "Song (原曲歌手:誰か)" to "Artist")
+        assertLeads("花束を君に", "花束を君に" to "宇多田ヒカル", "花束を君に (宇多田ヒカル)" to "コロムビアオルゴール")
+        assertLeads("粉雪", "粉雪" to "レミオロメン", "粉雪（オルゴール）" to "Band")
+        assertLeads("Lemon", "Lemon" to "Kenshi Yonezu", "Lemon" to "Columbia Music Box")
+        assertLeads("Song", "Song" to "Artist", "Song KARAOKE guide" to "Band")
+        assertLeads("粉雪", "粉雪" to "レミオロメン", "粉雪" to "Orgel Sound")
+        assertLeads("Группа крови", "Группа крови" to "Кино", "Группа крови караоке" to "Кино")
+        assertLeads("노래", "노래" to "아이유", "노래（노래방）" to "아이유")
+        assertLeads("노래", "노래" to "아이유", "노래（커버）" to "아이유")
+        assertLeads("Song", "Song" to "Artist", "Song +3Key" to "Band")
+        assertLeads("Song", "Song" to "Artist", "Song Key-1" to "Band")
+        assertLeads("チェリー", "チェリー" to "スピッツ", "チェリー REMAKE" to "Yuzu")
+    }
+
+    @Test
+    fun aSongWhoseOwnNameUsesThoseWordsStaysFirst() {
+        // The word is the song's name, so the row is that song.
+        assertEquals("Piano Man" to "Billy Joel", foundTitles("Piano Man", "Piano Man" to "Billy Joel", "Other" to "Band").first())
+        assertEquals("Live and Let Die" to "Paul McCartney", foundTitles("Live and Let Die", "Live and Let Die" to "Paul McCartney", "Other" to "Band").first())
+        assertEquals("Karaoke" to "Band", foundTitles("Karaoke", "Karaoke" to "Band", "Other" to "Person").first())
+        assertEquals("Remake" to "Band", foundTitles("Remake", "Remake" to "Band", "Other" to "Person").first())
+    }
+
+    @Test
+    fun aLatinSearchStillLeadsWithTheSameSong() {
+        respond(
+            deezer(
+                "Lemon Kenshi Yonezu (Karaoke)" to "Someone",
+                "Lemon" to "Kenshi Yonezu"
+            ),
+            """{"results":[{"trackName":"Yesterday","artistName":"The Beatles"}]}"""
+        )
+        assertEquals(
+            listOf(
+                "Lemon" to "Kenshi Yonezu",
+                "Yesterday" to "The Beatles",
+                "Lemon Kenshi Yonezu (Karaoke)" to "Someone"
+            ),
+            found("Lemon Kenshi Yonezu").map { it.title to it.artist }
+        )
+    }
+
+    private fun foundTitles(query: String, vararg rows: Pair<String, String>) =
+        run {
+            respond(deezer(*rows))
+            found(query).map { it.title to it.artist }
+        }
 }

@@ -5235,6 +5235,10 @@ class ListeningTest {
     fun wordsKeptBeforeTheLookupWasFixedAreLookedUpAgain() = keptBeforeAFix("[${LyricsFinder.CACHE_VERSION}, ", "[${LyricsFinder.CACHE_VERSION - 1}, ")
 
     @Test
+    fun wordsKeptBeforeTheirReadingsWereFixedAreWorkedOutAgain() =
+        keptBeforeAFix("[${LyricsFinder.CACHE_VERSION}, ${Readings.VERSION}, ", "[${LyricsFinder.CACHE_VERSION}, ${Readings.VERSION - 1}, ")
+
+    @Test
     fun wordsKeptBeforeChatGptWasAskedToTranslateAnotherWayAreWorkedOutAgain() =
         keptBeforeAFix(", $TRANSLATION_VERSION, null]", ", ${TRANSLATION_VERSION - 1}, null]")
 

@@ -371,6 +371,10 @@ class LiveChordSweepTest {
                         lyricsStatus = "instrumental"
                         emptyList()
                     }
+                    LyricsFinder.Lyrics.LikelyInstrumental -> {
+                        lyricsStatus = "likely instrumental"
+                        emptyList()
+                    }
                     LyricsFinder.Lyrics.None -> {
                         lyricsStatus = "none"
                         emptyList()
