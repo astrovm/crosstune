@@ -118,8 +118,9 @@ class FollowsTheSongTest {
     fun theBarsLineShowsHowFarTheSongIsAndMovesOnAsItPlays() {
         following = pausedAt(0)
         bar()
-        // 200 s long, so the line takes steps of 400 ms. Partway into one, it shows where that step started.
-        playsFrom(100_150)
+        // 200 s long, so the line takes steps of 400 ms. Partway into one, from when the song played on,
+        // it shows where that step started.
+        playsFrom(100_350)
         assertPlayed(100_000, of = 200_000)
         // Into the next step, it moves on with it.
         passes(400)
@@ -152,11 +153,11 @@ class FollowsTheSongTest {
     fun thePlayersClockShowsTheSecondTheSongIsInAndTicksOnTheNext() {
         following = pausedAt(0)
         player()
-        // Almost at the end of the second second, it's still that one.
-        playsFrom(1_990)
+        // Late in the second second, it's still that one.
+        playsFrom(1_950)
         assertTrue(exists("0:01"))
-        // The next starts as the song gets there.
-        passes(160)
+        // The next shows as soon as the song gets there.
+        passes(150)
         assertTrue(exists("0:02"))
         passesAskingRarely(2_000)
         assertTrue(exists("0:04"))
