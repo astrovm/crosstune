@@ -1,10 +1,11 @@
-Practice cards play their line in your music app or a small YouTube player.
-More songs get lyrics from Genius; wordless ones say so.
-A music file with no artist tag counts as playing.
+Practice cards play their line in your music app or on YouTube.
+More lyrics from Genius; wordless songs say so.
+A file with no artist tag counts as playing.
 YouTube covers no longer pass for the song.
-Furigana goes over kana not read as written, like い over ひ in 思ひ出.
+Furigana over kana not read as written: い over ひ in 思ひ出.
+Old kana like けふ shows today's spelling.
+Reminders still come without exact alarms.
 J-Total chords sit over the right letter.
 Chords say when they couldn't load.
 Qobuz finds songs with a slash.
-Timing reports carry the music app and its speed.
 Asks to report problems where you see them.
