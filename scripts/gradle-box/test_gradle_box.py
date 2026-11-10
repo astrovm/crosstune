@@ -1,4 +1,5 @@
 """Runs gradle-box.sh for real, with a stand-in podman that says what it was asked and waits when told."""
+import hashlib
 import os
 import stat
 import subprocess
@@ -10,6 +11,16 @@ from pathlib import Path
 BOX = Path(__file__).with_name("gradle-box.sh")
 ROOT = Path(__file__).resolve().parents[2]
 FAKE_PODMAN = """#!/bin/sh
+if [ "$1" = "image" ]; then
+    if [ -n "$FAKE_NO_IMAGE" ]; then
+        exit 1
+    fi
+    exit 0
+fi
+if [ "$1" = "build" ]; then
+    echo "$$ $*" >> "$FAKE_DIR/asked"
+    exit "${FAKE_BUILD_EXIT:-0}"
+fi
 echo "$$ $*" >> "$FAKE_DIR/asked"
 if [ -n "$FAKE_DOWNLOADS" ]; then
     for arg in "$@"; do
@@ -60,6 +71,10 @@ class GradleBoxTest(unittest.TestCase):
             },
         )
 
+    def image(self):
+        digest = hashlib.sha256((BOX.parent / "Containerfile").read_bytes()).hexdigest()
+        return f"localhost/crosstune-gradle-box:{digest}"
+
     def asked(self):
         path = self.dir / "asked"
         return path.read_text().splitlines() if path.exists() else []
@@ -102,15 +117,32 @@ class GradleBoxTest(unittest.TestCase):
         self.assertIn(f"-v {ROOT}:{ROOT}", command)
         self.assertIn(f"-w {ROOT}", command)
         self.assertIn("--memory-swap", command)
-        git = subprocess.check_output(
-            ["bash", "-c", 'readlink -f "$(command -v git)"'],
-            text=True,
-            env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}"},
-        ).strip()
-        self.assertIn(f"-v {git}:/usr/bin/git:ro", command)
+        self.assertIn(self.image(), command)
+        self.assertNotIn("/usr/bin/git", command)
         self.assertTrue(command.endswith("./gradlew --no-daemon :app:assembleDebug --stacktrace"), command)
         mounted = [part.split(":")[0] for part in command.split() if part.startswith("/") and ":" in part]
         self.assertNotIn(str(self.home), mounted)
+        self.assertEqual([line for line in self.asked() if " build " in f" {line} "], [])
+
+    def test_builds_the_image_when_it_is_missing(self):
+        box = self.start("a", "help", FAKE_NO_IMAGE="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        build, run = self.asked()
+        self.assertIn("build", build.split())
+        self.assertIn(self.image(), build)
+        self.assertIn(str(BOX.parent / "Containerfile"), build)
+        self.assertIn(self.image(), run)
+        self.assertNotIn("/usr/bin/git", run)
+        self.assertIn("image built in", output)
+
+    def test_a_failed_image_build_does_not_start_gradle(self):
+        box = self.start("a", "help", FAKE_NO_IMAGE="1", FAKE_BUILD_EXIT="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertNotEqual(box.returncode, 0, output)
+        self.assertEqual(len(self.asked()), 1)
+        self.assertIn("build", self.asked()[0].split())
+        self.assertNotIn("gradlew", output)
 
     def test_the_real_debug_key_goes_in_read_only_when_there_is_one(self):
         key = self.home / ".android" / "debug.keystore"

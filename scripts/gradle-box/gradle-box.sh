@@ -3,8 +3,9 @@
 #
 #   scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*LyricsFinderTest*'
 #
-# The container sees this checkout, the Android SDK read-only, the host Git and the debug key, and
-# not the rest of $HOME. Builds wait in line for a slot, first come first served, and say how many
+# The container sees this checkout, the Android SDK read-only and the debug key, and not the rest
+# of $HOME. Git comes from the image (eclipse-temurin:25-jdk plus Git), so whisper.cpp can read its
+# commit on Linux and on a Mac. Builds wait in line for a slot, first come first served, and say how many
 # are ahead: waiting is normal, not a hang. Each slot keeps its Gradle home, so a new worktree
 # downloads nothing again.
 #
@@ -25,8 +26,12 @@
 # An older seed or a lowered limit can still leave the cache over target.
 set -euo pipefail
 
-image=docker.io/library/eclipse-temurin:25-jdk
-root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
+here=$(dirname "${BASH_SOURCE[0]}")
+containerfile=$here/Containerfile
+# The tag is a hash of the Containerfile. A change builds a new image. A match reuses the old one.
+image_id=$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$containerfile")
+image=localhost/crosstune-gradle-box:$image_id
+root=$(git -C "$here" rev-parse --show-toplevel)
 common=$(cd "$root" && cd "$(git rev-parse --git-common-dir)" && pwd)
 state=${GRADLE_BOX_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/crosstune-gradle-box}
 sdk=${ANDROID_HOME:-$HOME/Android/Sdk}
@@ -36,6 +41,22 @@ if [[ ! -d $sdk ]]; then
     echo "gradle-box: no Android SDK at $sdk, set ANDROID_HOME" >&2
     exit 1
 fi
+
+# Git is in the image. Hold the lock only for the build, so a Gradle slot stays free meanwhile.
+ensure_box_image() {
+    mkdir -p "$state"
+    exec 8>"$state/image.lock"
+    flock 8
+    if ! nice -n 10 podman image exists "$image"; then
+        echo "gradle-box: building $image" >&2
+        local start
+        start=$(date +%s)
+        nice -n 10 podman build -t "$image" -f "$containerfile" "$(dirname "$containerfile")"
+        echo "gradle-box: image built in $(( $(date +%s) - start ))s" >&2
+    fi
+    exec 8>&-
+}
+ensure_box_image
 
 memory=${GRADLE_BOX_MEMORY:-16}
 ram=$(awk '/^MemTotal/ { print int($2 / 1048576 + 0.5) }' /proc/meminfo)
@@ -110,10 +131,6 @@ fi
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
-# whisper.cpp records its commit. This image has no Git. The host Git is one program, and this image
-# already has the libraries it needs, so the program file is enough.
-git_bin=$(readlink -f "$(command -v git)")
-box+=(-v "$git_bin:/usr/bin/git:ro")
 
 if [[ -d $seed/modules-2 ]]; then
     touch "$seed"
