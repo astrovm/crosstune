@@ -1744,20 +1744,21 @@ Singing to the morning light</div>"""
             ChordFinder.Chords.WikiCheck,
             chords(kawa, japanese, withWiki(ChordWikiPages {
                 checks++
-                throw IOException(CHORD_WIKI_NEEDS_A_PERSON)
+                throw ChordWikiStopped(ChordWikiCheck.INTERACTIVE)
             }))
         )
         assertEquals(1, checks)
         assertEquals(
             ChordFinder.Chords.WikiTimedOut,
-            chords(kawa, japanese, withWiki(ChordWikiPages { throw IOException(CHORD_WIKI_CHECK_UNFINISHED) }))
+            chords(kawa, japanese, withWiki(ChordWikiPages { throw ChordWikiStopped(ChordWikiCheck.AUTOMATIC) }))
         )
         // A page that comes back unreadable is a site that wouldn't answer too, not a crash.
         assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese, withWiki(ChordWikiPages { throw JSONException("unreadable page") })))
         // Words of a check aren't sung, and a page that never arrives isn't "no chords" when the sites did answer.
         assertEquals(ChordFinder.Chords.None, chords(kawa, japanese, withWiki(ChordWikiPages { "Just a moment. Nothing like the song." })))
         val slow = withWiki(ChordWikiPages { delay(1_000); chordPro })
-        assertEquals(ChordFinder.Chords.WikiTimedOut, runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 40) })
+        // Out of time with no check seen is not said to be the check.
+        assertEquals(ChordFinder.Chords.Unavailable, runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 40) })
     }
 
     @Test

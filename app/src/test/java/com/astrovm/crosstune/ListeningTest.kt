@@ -4932,12 +4932,12 @@ class ListeningTest {
                         1 -> {
                             entered.countDown()
                             held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                            throw IOException(CHORD_WIKI_CHECK_UNFINISHED)
+                            throw ChordWikiStopped(ChordWikiCheck.AUTOMATIC)
                         }
                         2 -> {
                             enteredAgain.countDown()
                             heldAgain.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                            throw IOException(CHORD_WIKI_NEEDS_A_PERSON)
+                            throw ChordWikiStopped(ChordWikiCheck.INTERACTIVE)
                         }
                         else -> chordPro
                     }

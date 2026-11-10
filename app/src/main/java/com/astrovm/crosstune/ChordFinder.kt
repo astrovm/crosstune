@@ -208,11 +208,10 @@ internal class ChordFinder(
         if (looked == null || looked.isFailure) {
             val error = looked?.exceptionOrNull()
             note("wiki ${if (looked == null) "timeout" else "error: ${error?.message}"}")
-            // The same words the browser throws. A check is given up, not answered.
-            val wiki = when {
-                looked == null -> WikiMiss.TIMED_OUT
-                error?.message == CHORD_WIKI_NEEDS_A_PERSON -> WikiMiss.CHECK
-                error?.message == CHORD_WIKI_CHECK_UNFINISHED -> WikiMiss.TIMED_OUT
+            // Only a check the browser saw is said as one. A lookup that just ran out of time may not have met one.
+            val wiki = when ((error as? ChordWikiStopped)?.check) {
+                ChordWikiCheck.INTERACTIVE -> WikiMiss.CHECK
+                ChordWikiCheck.AUTOMATIC -> WikiMiss.TIMED_OUT
                 else -> null
             }
             return Tried(null, true, wiki)
