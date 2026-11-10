@@ -1,7 +1,9 @@
 A practice card plays its line in your best music app, or in a small YouTube player.
-A card only says it played a line when it did.
+More songs get lyrics from Genius, and more wordless ones say so.
+A music file with no artist tag counts as playing.
+A cover no longer passes for the song on YouTube.
 Furigana goes over kana not read as written, like い over ひ in 思ひ出.
 J-Total chords sit over the right letter.
+Chords say when they couldn't load.
 Qobuz finds songs with a slash in the name.
-A ChatGPT sign-in file that can't be read no longer crashes the app.
-Timing reports carry the music app, its speed and Crosstune's timing notes.
+Timing reports carry the music app and its speed.
