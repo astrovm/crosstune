@@ -5,7 +5,7 @@ What the Chrome Web Store, Firefox Add-ons and Edge Add-ons ask for, ready to pa
 - `listing.json`: each language's summary and description. The release sends Firefox Add-ons its copy each time; Chrome's and Edge's are pasted into their dashboards.
 - Screenshots: `npm run screenshots` draws two 1280×800 ones per language in `dist/screenshots/`: opening a link, and the lyrics panel.
 - Icon: `icons/icon-128.png`. Small promo tile (440×280) and others are optional.
-- Privacy policy: https://crosstune.4st.li/privacy/
+- Privacy policy: https://crosstune.cc/privacy/
 - Homepage and support: https://github.com/astrovm/crosstune
 - Category: Chrome **Entertainment**, Firefox **Photos, Music & Videos**, Edge **Entertainment**.
 

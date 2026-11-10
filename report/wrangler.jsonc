@@ -1,13 +1,13 @@
 // The Worker that keeps reports from the app. Deploy with `npx wrangler deploy` from this folder; the table is in schema.sql.
 {
   "name": "crosstune-report",
-  // The account that holds 4st.li, which the custom domain needs.
-  "account_id": "862d327a982abfbbcd56c2ea3f4060d8",
+  // The Crosstune account, which holds crosstune.cc: the custom domain needs it.
+  "account_id": "5867485fc33b00a06f7cd703ef6f6a8e",
   "main": "worker.js",
   "compatibility_date": "2026-10-01",
-  "routes": [{ "pattern": "report.crosstune.4st.li", "custom_domain": true }],
+  "routes": [{ "pattern": "report.crosstune.cc", "custom_domain": true }],
   "workers_dev": false,
-  "d1_databases": [{ "binding": "DB", "database_name": "crosstune-reports", "database_id": "73c76fad-9834-4472-a9cf-baab6886d88c" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "crosstune-reports", "database_id": "32bacd15-c579-48a2-b33f-45386f78903f" }],
   // A few reports a minute from one address is plenty for people; more is someone flooding it.
   "ratelimits": [{ "name": "LIMIT", "namespace_id": "3921", "simple": { "limit": 5, "period": 60 } }],
   // Clears out reports past the days they're kept.

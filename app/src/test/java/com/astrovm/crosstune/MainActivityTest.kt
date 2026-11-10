@@ -3043,7 +3043,7 @@ class MainActivityTest {
         click(string(R.string.settings_button))
         composeRule.onNodeWithText(string(R.string.privacy_policy)).performScrollTo().performClick()
 
-        assertEquals("https://crosstune.4st.li/es/privacy/", nextStartedActivity()!!.dataString)
+        assertEquals("https://crosstune.cc/es/privacy/", nextStartedActivity()!!.dataString)
     }
 
     @Test
@@ -3106,7 +3106,7 @@ class MainActivityTest {
 
         val started = nextStartedActivity()
         assertEquals(Intent.ACTION_VIEW, started!!.action)
-        assertEquals("https://crosstune.4st.li/privacy/", started.dataString)
+        assertEquals("https://crosstune.cc/privacy/", started.dataString)
     }
 
     @Test

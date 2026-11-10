@@ -35,17 +35,24 @@ class YouTubeLinePlayerTest {
         player.show("abc", 10_000, 15_000, 200_000, play = false) { ends += it }
         val loaded = shadowOf(web).lastLoadDataWithBaseURL
         assertEquals(LinePlayerPage.BASE_URL, loaded.baseUrl)
-        assertEquals(LinePlayerPage.html("abc", LinePlayerPage.call(10_000, 15_000, 200_000, false)), loaded.data)
+        // The page asks for its line as it starts, so it's the one asked for last, even by a card turned while it loaded.
+        assertEquals(LinePlayerPage.html("abc", LinePlayerPage.LATEST), loaded.data)
+        assertEquals(LinePlayerPage.call(10_000, 15_000, 200_000, false), latest())
         assertEquals("text/html", loaded.mimeType)
         assertEquals("utf-8", loaded.encoding)
         // The same video again is told the line, not loaded again.
         player.show("abc", 20_000, 25_000, 200_000, play = true) { ends += it }
-        assertEquals(LinePlayerPage.call(20_000, 25_000, 200_000, true), shadowOf(web).lastEvaluatedJavascript)
+        assertEquals("if (typeof line == 'function') " + LinePlayerPage.call(20_000, 25_000, 200_000, true), shadowOf(web).lastEvaluatedJavascript)
+        assertEquals(LinePlayerPage.call(20_000, 25_000, 200_000, true), latest())
         assertEquals(loaded, shadowOf(web).lastLoadDataWithBaseURL)
         // Another video is loaded.
         player.show("xyz", 1_000, 2_000, null, play = true) { ends += it }
-        assertEquals(LinePlayerPage.html("xyz", LinePlayerPage.call(1_000, 2_000, null, true)), shadowOf(web).lastLoadDataWithBaseURL.data)
+        assertEquals(LinePlayerPage.html("xyz", LinePlayerPage.LATEST), shadowOf(web).lastLoadDataWithBaseURL.data)
+        assertEquals(LinePlayerPage.call(1_000, 2_000, null, true), latest())
     }
+
+    /** What the page gets when it asks the app for its line. */
+    private fun latest(): Any? = shadowOf(web).getJavascriptInterface("Line").let { page -> page.javaClass.getMethod("latest").apply { isAccessible = true }.invoke(page) }
 
     @Test
     fun pausingTellsThePageToPauseIfItHasWoken() {

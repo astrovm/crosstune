@@ -41,8 +41,13 @@ export default {
     if (url.pathname !== "/reports") return status(404);
     if (request.method !== "POST") return status(405);
     if (Number(request.headers.get("Content-Length") ?? 0) > MAX_BYTES) return status(413);
-    const { success } = await env.LIMIT.limit({ key: request.headers.get("CF-Connecting-IP") ?? "" });
-    if (!success) return status(429);
+    // A report the old address passes on (forward.js) was counted there, against its sender's own
+    // address. From here they all come from Cloudflare's, and would count as one sender.
+    const passedOn = !!env.FORWARD_KEY && request.headers.get("X-Crosstune-Passed-On") === env.FORWARD_KEY;
+    if (!passedOn) {
+      const { success } = await env.LIMIT.limit({ key: request.headers.get("CF-Connecting-IP") ?? "" });
+      if (!success) return status(429);
+    }
     const text = await request.text();
     if (new TextEncoder().encode(text).length > MAX_BYTES) return status(413);
     const report = readReport(text);

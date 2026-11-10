@@ -44,7 +44,13 @@ class LinePlayerPageTest {
     }
 
     @Test
+    fun aLineAskedToPlayWhileItWasStillGettingReadyIsPlayedOnceItIs() {
+        // YouTube's player drops a play asked for within about 0.3 s of the cue, which left a card turned fast with a still picture.
+        assertTrue(LinePlayerPage.html("abc", "").contains("onStateChange: function(e) { if (e.data == YT.PlayerState.CUED && want && want.play) go(); }"))
+    }
+
+    @Test
     fun theBaseAddressIsNotYouTubesOwnWhichRefusesToPlayInAnApp() {
-        assertEquals("https://crosstune.app", LinePlayerPage.BASE_URL)
+        assertEquals("https://crosstune.cc", LinePlayerPage.BASE_URL)
     }
 }
