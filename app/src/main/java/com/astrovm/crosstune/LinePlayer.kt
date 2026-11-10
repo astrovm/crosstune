@@ -67,6 +67,8 @@ internal object LinePlayerPage {
             playerVars: {controls: 0, playsinline: 1, rel: 0, fs: 0, disablekb: 1, iv_load_policy: 3, autoplay: 0},
             events: {
               onReady: function() { ready = true; if (want) go(); },
+              // A card turned as its line was still getting ready: the player drops a play asked for then, so it's asked again once ready.
+              onStateChange: function(e) { if (e.data == YT.PlayerState.CUED && want && want.play) go(); },
               onError: function() { Line.failed(); }
             }
           });
