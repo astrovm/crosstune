@@ -1557,7 +1557,8 @@ class PracticeCardsTest {
         // Muted from before it was opened until it said it plays the line: the song's start was never heard.
         assertEquals(listOf(false to true, true to true), quietAt.take(2))
         // Heard while it plays the line, not only once it's over.
-        waitFor("the line is heard") { !playback.quiet }
+        // The song is unmuted, then the card says it plays. On a busy machine those two are a moment apart.
+        waitFor("the line is heard") { !playback.quiet && practice?.sound == LineSound.PLAYING }
         assertEquals(LineSound.PLAYING, practice?.sound)
         assertEquals(listOf(true, false), playback.quiets.toList())
     }
