@@ -103,6 +103,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -791,14 +792,19 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
 }
 
 /**
- * How far into the song a music app is, as a thin line. By itself, so the song's place moving draws
- * only this line again, and never the bar's name, cover and buttons.
+ * How far into the song a music app is, as a thin line. It moves a step at a time, each about as wide
+ * as the eye can tell on so thin a line, and it's a layer of its own read only where it's drawn: the
+ * song moving on draws this line again, and never the bar's name, cover and buttons, or the screen.
  */
 @Composable
 private fun PlayedSoFar(following: Following, duration: Long) {
-    val position = rememberPosition(following) ?: 0L
-    LinearProgressIndicator(progress = { (position.toFloat() / duration).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(2.dp))
+    val step = (duration / PLAYED_STEPS).coerceAtLeast(POSITION_STEP_MS)
+    val position = whilePlaying(following, step, { it - it % step + step }) { it - it % step }
+    LinearProgressIndicator(progress = { (position.value.toFloat() / duration).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(2.dp).graphicsLayer())
 }
+
+/** How many steps the bar's line takes through a song. */
+private const val PLAYED_STEPS = 500
 
 /**
  * What the user sees while a link from another app is on its way out: the song once known, where

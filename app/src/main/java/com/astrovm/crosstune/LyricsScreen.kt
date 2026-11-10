@@ -164,6 +164,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -2025,19 +2026,25 @@ private fun alignment(centered: Boolean) = if (centered) TextAlign.Center else T
  * lines: when it changes, they're asked afresh.
  */
 @Composable
-internal fun <T> rememberWhilePlaying(following: Following?, of: Any?, changesAt: (Long) -> Long?, at: (Long) -> T): T? {
-    if (following == null) return null
+internal fun <T> rememberWhilePlaying(following: Following?, of: Any?, changesAt: (Long) -> Long?, at: (Long) -> T): T? =
+    following?.let { whilePlaying(it, of, changesAt, at).value }
+
+/**
+ * [rememberWhilePlaying] as a state, for what's only drawn from it: read where it's drawn, a change
+ * draws that again and nothing is composed again.
+ */
+@Composable
+internal fun <T> whilePlaying(following: Following, of: Any?, changesAt: (Long) -> Long?, at: (Long) -> T): State<T> {
     val latest by rememberUpdatedState(at)
     val change by rememberUpdatedState(changesAt)
     fun now() = latest(following.clock.positionAt(SystemClock.elapsedRealtime()))
-    val value by produceState(now(), following, of) {
+    return produceState(now(), following, of) {
         value = now()
         while (true) {
             delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { change(it) } ?: break)
             value = now()
         }
     }
-    return value
 }
 
 /** Where the song is while [following] it, to the [POSITION_STEP_MS], which is as fine as a bar or clock shows; null while not. */
