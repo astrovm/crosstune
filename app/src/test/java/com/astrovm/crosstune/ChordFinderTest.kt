@@ -12,6 +12,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -1722,6 +1723,8 @@ Singing to the morning light</div>"""
             ChordFinder.Chords.Unavailable,
             chords(kawa, japanese, withWiki(ChordWikiPages { throw IOException("ChordWiki asked for a check a person has to click") }))
         )
+        // A page that comes back unreadable is a site that wouldn't answer too, not a crash.
+        assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese, withWiki(ChordWikiPages { throw JSONException("unreadable page") })))
         // Words of a check aren't sung, and a page that never arrives isn't "no chords" when the sites did answer.
         assertEquals(ChordFinder.Chords.None, chords(kawa, japanese, withWiki(ChordWikiPages { "Just a moment. Nothing like the song." })))
         val slow = withWiki(ChordWikiPages { delay(1_000); chordPro })

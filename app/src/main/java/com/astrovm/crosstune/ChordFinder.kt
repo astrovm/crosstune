@@ -177,6 +177,8 @@ internal class ChordFinder(
                 Result.success(readChordWiki(song, otherNames, fits))
             } catch (e: IOException) {
                 Result.failure(e)
+            } catch (e: JSONException) {
+                Result.failure(e)
             }
         }
         if (looked == null || looked.isFailure) {

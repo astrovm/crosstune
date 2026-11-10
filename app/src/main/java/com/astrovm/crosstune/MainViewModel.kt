@@ -879,7 +879,7 @@ internal class MainViewModel(
 
     /**
      * The phone reaching the internet, or not. Back online, what couldn't be done without it is done
-     * now: the link looked up, the song heard named, the words, their translation and the songs of a
+     * now: the link looked up, the song heard named, the words, their translation, their chords and the songs of a
      * name. The song heard is named from the sound heard then, not listened for again, as what plays
      * now may be another one.
      */
@@ -899,6 +899,7 @@ internal class MainViewModel(
         if (uiState.heardWaits) nameHeld()
         if (uiState.lyricsFailed) showLyrics()
         if (uiState.learning.translationFailed) retryTranslation()
+        if (uiState.chords.failed) retryChords()
         uiState.songSearchQuery.takeIf { it.isNotEmpty() && uiState.songSearch.isEmpty() && !uiState.isSearchingSongs }?.let(::searchSongs)
     }
 
@@ -3919,20 +3920,29 @@ internal class MainViewModel(
         chordsJob = viewModelScope.launch {
             uiState = uiState.copy(chords = uiState.chords.copy(loading = true))
             val answer = finder.chordsOf(song, lines)
-            uiState = uiState.copy(chords = uiState.chords.copy(loading = false, tried = true, sheet = (answer as? ChordFinder.Chords.Found)?.sheet))
+            uiState = uiState.copy(
+                chords = uiState.chords.copy(loading = false, tried = true, sheet = (answer as? ChordFinder.Chords.Found)?.sheet, failed = answer == ChordFinder.Chords.Unavailable)
+            )
             if (answer == ChordFinder.Chords.None) problemFound(SongProblem.NO_CHORDS)
         }
     }
 
+    /** Looks the chords up again, after a site wouldn't answer. */
+    fun retryChords() {
+        uiState = uiState.copy(chords = uiState.chords.copy(tried = false, failed = false))
+        chords()
+    }
+
     /**
      * Shows the song's chords over its words, from now on, or stops, and stops looking them up.
-     * Switched on again, a song with none found is looked up again.
+     * Switched on again, a song with no sheet, none found or a site that wouldn't answer, is looked up again.
+     * A sheet is only ever there once looked up, so it alone says there's nothing to ask again.
      */
     fun setChords(on: Boolean) {
         preferences.edit { putBoolean(KEY_CHORDS, on) }
         if (!on) chordsJob?.cancel()
         val chords = uiState.chords
-        uiState = uiState.copy(chords = chords.copy(on = on, loading = on && chords.loading, tried = chords.tried && chords.sheet != null))
+        uiState = uiState.copy(chords = chords.copy(on = on, loading = on && chords.loading, tried = chords.sheet != null, failed = false))
         chords()
     }
 
