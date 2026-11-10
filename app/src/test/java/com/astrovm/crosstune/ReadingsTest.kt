@@ -692,9 +692,9 @@ class ReadingsTest {
             assertEquals("逢い", Readings.words("逢ひ", Script.JAPANESE).single().modern)
             assertNull(Readings.words("いう", Script.JAPANESE).single().modern)
             assertNull(Readings.words("ふたり", Script.JAPANESE).single().modern)
-            // Its lookup and the lyric's own text keep what is written. What read it is the shipped dictionary.
+            // Its lookup and the lyric's own text keep what is written. UniDic kept the word whole, so it read the kanji.
             assertEquals(
-                Word("思ひ出", "おもいで", "omoide", "思い出", "omoide", by = listOf(Reader.IPADIC), modern = "思い出"),
+                Word("思ひ出", "おもいで", "omoide", "思い出", "omoide", by = listOf(Reader.UNIDIC), modern = "思い出"),
                 Readings.words("思ひ出", Script.JAPANESE).single()
             )
         }
