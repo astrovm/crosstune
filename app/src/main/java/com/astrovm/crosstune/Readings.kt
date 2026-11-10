@@ -651,13 +651,11 @@ internal object Readings {
 
     /**
      * [text] spelled the modern way, if it has old kana in it, from its reading [kana] and how it's [said]. In kana alone, the
-     * reading of IPADIC is not enough: it takes the くふ of くふうして for the verb 食ふ. UniDic, or a rule, is.
+     * reading of IPADIC is not enough: it takes the くふ of くふうして for the verb 食ふ. Only UniDic's listing of the word is.
+     * (Where a rule says it, the word's pieces carry it, see [modernPieces].)
      */
-    private fun spelledToday(text: String, kana: String, said: String): String? = when {
-        !Furigana.inOldKana(text) -> Furigana.modern(text, kana, said)
-        Furigana.byRule(text) != null -> Furigana.modernKana(text, listOf(kana, said) + listedForm(text))
-        else -> Furigana.modernKana(text, listedForm(text))
-    }
+    private fun spelledToday(text: String, kana: String, said: String): String? =
+        if (Furigana.inOldKana(text)) Furigana.modernKana(text, listedForm(text)) else Furigana.modern(text, kana, said)
 
     /** The reading of the dictionary form UniDic has for [text], when it takes it for one word: いふ has イウ. */
     private fun listedForm(text: String): List<String> =
