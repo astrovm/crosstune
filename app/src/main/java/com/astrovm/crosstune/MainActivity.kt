@@ -895,18 +895,22 @@ class MainActivity : ComponentActivity() {
         // Opened, before Android 12 it's no longer known whether they're allowed, until a test link says.
         if (need == Need.Links) viewModel.dismissLinkSettingsHelper()
         if (need == Need.Float) floatOnceAllowed = true
-        val open: Context.() -> Unit = when (need) {
-            is Need.StopApp -> fun Context.() = openLinkSettingsOf(need.app.packageName)
-            Need.Links -> fun Context.() = openLinkSettingsOf(packageName)
-            Need.Microphone -> Context::openAppInfo
-            Need.Follow -> (viewModel.uiState.phone == Phone.TV).let { tv -> fun Context.() = openNotificationAccess(tv) }
-            Need.Float -> Context::openOverlaySettings
-        }
+        val open = pageFor(need)
         // Without picture-in-picture, the steps wait here in Crosstune.
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return open()
         GuideActivity.host = guideHost
         guideOpens = open
         startActivity(Intent(this, GuideActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** Android's page for [need]. Alarms and reminders are the user's to allow, so that page is asked for by name. */
+    private fun pageFor(need: Need): Context.() -> Unit = when (need) {
+        is Need.StopApp -> fun Context.() = openLinkSettingsOf(need.app.packageName)
+        Need.Links -> fun Context.() = openLinkSettingsOf(packageName)
+        Need.Microphone -> Context::openAppInfo
+        Need.Follow -> (viewModel.uiState.phone == Phone.TV).let { tv -> fun Context.() = openNotificationAccess(tv) }
+        Need.Float -> Context::openOverlaySettings
+        Need.Exact -> fun Context.() { tryStartActivity(PracticeReminders(this).exactPage) }
     }
 
     /** What Android's page the guide floats over is, opened from it or, without one, from here. */

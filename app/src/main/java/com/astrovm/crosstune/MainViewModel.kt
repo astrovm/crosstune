@@ -3616,8 +3616,10 @@ internal class MainViewModel(
         refreshReminder()
     }
 
-    /** What may have changed in Android's settings, whether it lets them show. */
+    /** What may have changed in Android's settings: whether it lets them show, and whether the exact minute is still allowed. */
     fun refreshReminder() {
+        // Opened after a revoke, or after the exact minute was allowed again, the alarm is set the best way still allowed.
+        reminders?.arm()
         uiState = uiState.copy(reminder = reminders?.state ?: uiState.reminder)
     }
 
