@@ -342,6 +342,10 @@ class ReminderBellTest {
         controller?.pause()?.resume()
         waitUntil { !model().uiState.reminder.late }
         assertTrue(model().uiState.reminder.exact)
+        // Coming back is what sets it again. Saying it is on time is not enough.
+        val set = alarms.scheduledAlarms
+        assertEquals(2, set.size)
+        assertEquals(1, set.count { it.windowLengthMs == 0L })
     }
 
     @Test

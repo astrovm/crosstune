@@ -417,7 +417,7 @@ private fun Need.gets(): Int? = when (this) {
 @StringRes
 private fun Need.problem(): Int? = if (this == Need.Exact) R.string.practice_reminder_late else null
 
-private fun Need.icon(): Int = when (this) {
+internal fun Need.icon(): Int = when (this) {
     Need.Microphone -> R.drawable.ic_recognize
     Need.Float -> R.drawable.ic_float
     Need.Exact -> R.drawable.ic_notifications_on

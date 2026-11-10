@@ -408,6 +408,13 @@ class FixStepsTest {
         assertEquals("exact", Need.Exact.key)
         assertEquals(false, state.done(Need.Float))
         assertEquals(true, state.done(Need.Exact))
+        // The late reminder is the bell. The other rows keep their own pictures.
+        assertEquals(R.drawable.ic_notifications_on, Need.Exact.icon())
+        assertEquals(R.drawable.ic_recognize, Need.Microphone.icon())
+        assertEquals(R.drawable.ic_float, Need.Float.icon())
+        assertEquals(R.drawable.ic_lyrics, Need.Follow.icon())
+        assertEquals(R.drawable.ic_lyrics, Need.Links.icon())
+        assertEquals(R.drawable.ic_lyrics, Need.StopApp(spotify).icon())
     }
 
     @Test

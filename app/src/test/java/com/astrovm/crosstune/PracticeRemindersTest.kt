@@ -286,6 +286,28 @@ class PracticeRemindersTest {
         assertTrue(reminders.state.exact)
     }
 
+    /**
+     * Android 12 is the first one that asks, so the spare starts on that version, not the one after.
+     * Robolectric has no jar for it, so only the number is set. Exact is allowed, which is when the spare is set.
+     */
+    @Test
+    fun onAndroidTwelveItselfTheExactMinuteKeepsASpare() {
+        val was = Build.VERSION.SDK_INT
+        ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", Build.VERSION_CODES.S)
+        try {
+            ShadowAlarmManager.setCanScheduleExactAlarms(true)
+            reminders.sessionDone()
+            reminders.turn(true)
+            val set = alarms.scheduledAlarms
+            assertEquals(2, set.size)
+            assertEquals(1, set.count { it.windowLengthMs == 0L })
+            assertEquals(1, set.count { it.windowLengthMs != 0L })
+            assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
+        } finally {
+            ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", was)
+        }
+    }
+
     /** Android 12 is the first one that asks, so the boundary is its own version. Robolectric has no jar for it, so only the number is set. */
     @Test
     fun onAndroidTwelveItselfExactIsTheUsersToAllow() {
