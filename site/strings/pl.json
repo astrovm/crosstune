@@ -49,7 +49,7 @@
     ],
     [
       "Ucz się tekstu",
-      "Kana, pinyin, romaji i tłumaczenia. Potem ćwicz każdy wiersz w najlepszej z Twoich aplikacji muzycznych, która może tam przejść, albo w małym odtwarzaczu YouTube na karcie, gdy żadna nie może, z codziennym przypomnieniem o tym, co czeka. Gdy fiszka otwiera aplikację muzyczną, stuknij powiadomienie, by wrócić, chyba że Crosstune może być nad nią."
+      "Kana, pinyin, romaji i tłumaczenia. Potem ćwicz każdy wiersz w najlepszej z Twoich aplikacji muzycznych, która może tam przejść, albo w małym odtwarzaczu YouTube na karcie, gdy żadna nie może, z codziennym przypomnieniem o tym, co czeka. Fiszka otwiera aplikację muzyczną, gdy Crosstune może wyświetlać się nad innymi aplikacjami, więc sam wraca; do tego czasu wiersz gra na samej fiszce."
     ],
     [
       "ChatGPT, jeśli go masz",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "Rozszerzenie Crosstune do Chrome, Edge, Brave i Firefoksa otwiera klikane linki do muzyki w serwisie wybranym w jego opcjach. Patrzy tylko na strony obsługiwanych serwisów muzycznych. Żeby rozpoznać utwór, album lub wykonawcę z linku, pobiera publiczną stronę lub publiczne API serwisu źródłowego. Żeby otworzyć sam element, wysyła tytuł i wykonawcę do wyszukiwarki serwisu docelowego, a dla Spotify do ListenBrainz, tak jak aplikacja. Pokazuje też w panelu bocznym tekst tego, co gra, odczytując tytuł i wykonawcę ze strony serwisu muzycznego. Tylko gdy ten panel jest otwarty, wysyła je do LRCLIB, YouTube Music, NetEase Cloud Music i Letras, żeby znaleźć tekst, tak jak aplikacja. Film, który nie mówi, że jest muzyką, nie jest wyszukiwany. Jego ustawienia zostają w przeglądarce na Twoim komputerze. Nie ma konta, reklam ani analityki i nic nie wysyła deweloperowi."
+      "Rozszerzenie Crosstune do Chrome, Edge, Brave i Firefoksa otwiera klikane linki do muzyki w serwisie wybranym w jego opcjach. Patrzy tylko na strony obsługiwanych serwisów muzycznych. Żeby rozpoznać utwór, album lub wykonawcę z linku, pobiera publiczną stronę lub publiczne API serwisu źródłowego. Żeby otworzyć sam element, wysyła tytuł i wykonawcę do wyszukiwarki serwisu docelowego, a dla Spotify do ListenBrainz, tak jak aplikacja. Pokazuje też w panelu bocznym tekst tego, co gra, odczytując tytuł i wykonawcę ze strony serwisu muzycznego. Tylko gdy ten panel jest otwarty, wysyła je do Genius, LRCLIB, YouTube Music, NetEase Cloud Music i Letras, żeby znaleźć tekst, tak jak aplikacja. Film, który nie mówi, że jest muzyką, nie jest wyszukiwany. Jego ustawienia zostają w przeglądarce na Twoim komputerze. Nie ma konta, reklam ani analityki i nic nie wysyła deweloperowi."
     ],
     [
       "h2",

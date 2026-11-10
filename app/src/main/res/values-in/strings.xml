@@ -326,6 +326,7 @@
     <string name="lyrics_katakana_as_hiragana">Katakana sebagai hiragana</string>
     <string name="lyrics_translation">Terjemahan</string>
     <string name="lyrics_translation_failed">Tidak bisa menerjemahkan sekarang.</string>
+    <string name="lyrics_chords_failed">Kord tidak bisa dimuat.</string>
     <string name="lyrics_chords">Kord</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Terjemahkan ke</string>
@@ -392,6 +393,7 @@
     <string name="practice_fix_reading">Perbaiki bacaan</string>
     <string name="learn_song_times">Dinyanyikan %1$d kali</string>
     <string name="learn_song_new_words">Ada kata untuk dipelajari</string>
+    <string name="practice_float_allow">Aplikasi musik Anda bisa memutar baris setelah Crosstune diizinkan tampil di atas aplikasi lain</string>
     <string name="practice_play">Putar baris</string>
     <string name="practice_stop">Hentikan baris</string>
     <string name="practice_loading">Membuka di %1$s</string>

@@ -296,6 +296,58 @@ class LyricsReportTest {
         assertEquals("KDE Connect", song.getString("app"))
         assertEquals("org.kde.kdeconnect_tp", song.getString("appPackage"))
         assertEquals(1.25, song.getDouble("speed"), 0.0)
+        assertTrue(song.getString("log").contains("lead unavailable: no player followed"))
+    }
+
+    @Test
+    fun uncalibratedVideoSaysWhyNoLeadWasUsed() {
+        openLyrics()
+        playback.playing.value = Following(
+            PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "Video", canSeek = true, video = true
+        )
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().sendReport("") }
+        waitUntil { sentReports().isNotEmpty() }
+        val song = sentReport().getJSONObject("song")
+        assertFalse(song.has("leadMs"))
+        assertTrue(song.getString("log").contains("lead unavailable: video not calibrated"))
+    }
+
+    @Test
+    fun timingReportKeepsThePlayerAndLeadFromTheLastCorrection() {
+        openLyrics()
+        followedInKdeConnect(1.25f)
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        playback.playing.value = Following(
+            PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "Video", canSeek = true, appPackage = "example.video", video = true
+        )
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { model().sendReport("") }
+        waitUntil { sentReports().isNotEmpty() }
+        val song = sentReport().getJSONObject("song")
+        assertEquals("KDE Connect", song.getString("app"))
+        assertEquals("org.kde.kdeconnect_tp", song.getString("appPackage"))
+        assertEquals(1.25, song.getDouble("speed"), 0.0)
+        assertEquals(0L, song.getLong("leadMs"))
+    }
+
+    @Test
+    fun aLearnedLeadIsReportedForAudioAndVideoPlayers() {
+        openLyrics()
+        val song = model().uiState.lyricsFor ?: error("No song")
+        prefs().edit().putString("video_timing", JSONObject().put(RecordingKey.of(song), 2_000).toString()).commit()
+        listOf(false, true).forEach { video ->
+            playback.playing.value = Following(
+                PlaybackClock(10_000, SystemClock.elapsedRealtime(), playing = false), "Player", canSeek = true,
+                video = video, durationMs = 70_000
+            )
+            composeRule.waitForIdle()
+            composeRule.runOnIdle { model().nudgeSync(500) }
+            composeRule.runOnIdle { model().sendReport("") }
+            waitUntil { sentReports().size == if (video) 2 else 1 }
+            assertEquals(2_000L, sentReport().getJSONObject("song").getLong("leadMs"))
+        }
     }
 
     /** Followed in KDE Connect, which says the song plays at [speed], the words open. */
@@ -324,8 +376,8 @@ class LyricsReportTest {
         assertEquals("org.kde.kdeconnect_tp", song.getString("appPackage"))
         assertEquals(1.25, song.getDouble("speed"), 0.0)
         assertEquals(LINES_EARLY_MS, song.getLong("earlyMs"))
-        // Nothing says how far ahead a player is until it's heard, so nothing is guessed.
-        assertFalse(song.has("leadMs"))
+        // An audio player without a learned lead is followed on its own clock.
+        assertEquals(0L, song.getLong("leadMs"))
         val log = song.getString("log")
         // Stamped with the phone's clock, which isn't at nothing.
         assertTrue(log, Regex("""(?m)^[1-9]\d* lines in time 0>500""").containsMatchIn(log))

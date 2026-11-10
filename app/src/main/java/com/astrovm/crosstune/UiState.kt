@@ -413,7 +413,12 @@ internal data class Practice(
     /** The last card's line shown, for the song practice left off in. */
     val lastSong: SavedLine? = null,
     /** What the music app played before, to go back to once done. */
-    val before: Before? = null
+    val before: Before? = null,
+    /**
+     * A music app that might have played a line was left out, as opening it would have covered the card, and Crosstune
+     * can't come back over it until it may show over other apps: the card says so, until that's allowed.
+     */
+    val cantComeBack: Boolean = false
 ) {
     val line: SavedLine? get() = queue.firstOrNull()
 }
@@ -437,12 +442,16 @@ internal data class LineExplanation(val index: Int, val text: String = "", val d
     val mayAskAgain get() = failed || limitReached
 }
 
-/** A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were found. */
+/**
+ * A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were
+ * found. [failed] when a site wouldn't answer, so there may still be some: not the same as none.
+ */
 internal data class ChordsState(
     val on: Boolean = false,
     val loading: Boolean = false,
     val tried: Boolean = false,
-    val sheet: ChordSheet? = null
+    val sheet: ChordSheet? = null,
+    val failed: Boolean = false
 ) {
     /** For another song's words, or the same words written otherwise: switched on as it was, nothing looked up yet. */
     fun fresh() = ChordsState(on = on)

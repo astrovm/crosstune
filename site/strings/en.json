@@ -49,7 +49,7 @@
     ],
     [
       "Learn the words",
-      "Kana, pinyin, romaji and translations. Then practice each line in the best of your music apps that can move there, or in a small YouTube player on the card when none can, with a daily reminder of what's due. When a card opens the music app, a notification tap returns you, unless Crosstune may show over other apps."
+      "Kana, pinyin, romaji and translations. Then practice each line in the best of your music apps that can move there, or in a small YouTube player on the card when none can, with a daily reminder of what's due. A card opens your music app once Crosstune may show over other apps, so it comes back by itself; until then, the line plays right on the card."
     ],
     [
       "ChatGPT, if you have it",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "Crosstune's browser extension, for Chrome, Edge, Brave and Firefox, opens the music links you click in the service you pick in its options. It looks only at pages on the music sites it supports. To name a link's song, album or artist, it requests the source service's public page or public API. To open the item itself, it sends the title and artist to the destination's search, or to ListenBrainz for Spotify, as the app does. It also shows the lyrics of what's playing in a side panel, reading the song's title and artist from the music site's page. Only while that panel is open, it sends them to LRCLIB, YouTube Music, NetEase Cloud Music and Letras to find the words, as the app does. A video that doesn't say it's music isn't looked up. Its settings stay in the browser on your computer. It has no account, advertising or analytics, and sends nothing to the developer."
+      "Crosstune's browser extension, for Chrome, Edge, Brave and Firefox, opens the music links you click in the service you pick in its options. It looks only at pages on the music sites it supports. To name a link's song, album or artist, it requests the source service's public page or public API. To open the item itself, it sends the title and artist to the destination's search, or to ListenBrainz for Spotify, as the app does. It also shows the lyrics of what's playing in a side panel, reading the song's title and artist from the music site's page. Only while that panel is open, it sends them to Genius, LRCLIB, YouTube Music, NetEase Cloud Music and Letras to find the words, as the app does. A video that doesn't say it's music isn't looked up. Its settings stay in the browser on your computer. It has no account, advertising or analytics, and sends nothing to the developer."
     ],
     [
       "h2",

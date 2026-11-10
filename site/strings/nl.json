@@ -49,7 +49,7 @@
     ],
     [
       "Leer de tekst",
-      "Kana, pinyin, romaji en vertalingen. Oefen daarna elke regel in de beste van je muziek-apps die erheen kan, of in een kleine YouTube-speler op de kaart als geen enkele dat kan, met een dagelijkse herinnering aan wat klaarstaat. Opent een kaart de muziek-app, tik de melding om terug te gaan, tenzij Crosstune erboven mag."
+      "Kana, pinyin, romaji en vertalingen. Oefen daarna elke regel in de beste van je muziek-apps die erheen kan, of in een kleine YouTube-speler op de kaart als geen enkele dat kan, met een dagelijkse herinnering aan wat klaarstaat. Een kaart opent je muziek-app zodra Crosstune vóór andere apps mag worden weergegeven, zodat hij vanzelf terugkomt; tot dan speelt de regel gewoon op de kaart."
     ],
     [
       "ChatGPT, als je het hebt",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "De browserextensie van Crosstune, voor Chrome, Edge, Brave en Firefox, opent muzieklinks waarop je klikt in de dienst die je in de opties kiest. Ze kijkt alleen naar pagina's van de muzieksites die ze ondersteunt. Om het nummer, album of de artiest van een link te kennen, vraagt ze de openbare pagina of openbare API van de bron op. Om het item zelf te openen, stuurt ze titel en artiest naar de zoekfunctie van de bestemming, of naar ListenBrainz voor Spotify, net als de app. Ze toont ook de songtekst van wat er speelt in een zijpaneel, en leest daarvoor titel en artiest van de pagina van de muzieksite. Alleen zolang dat paneel open is, stuurt ze die naar LRCLIB, YouTube Music, NetEase Cloud Music en Letras om de tekst te vinden, net als de app. Een video die niet zegt dat hij muziek is, wordt niet opgezocht. Haar instellingen blijven in de browser op je computer. Ze heeft geen account, advertenties of analyse en stuurt niets naar de ontwikkelaar."
+      "De browserextensie van Crosstune, voor Chrome, Edge, Brave en Firefox, opent muzieklinks waarop je klikt in de dienst die je in de opties kiest. Ze kijkt alleen naar pagina's van de muzieksites die ze ondersteunt. Om het nummer, album of de artiest van een link te kennen, vraagt ze de openbare pagina of openbare API van de bron op. Om het item zelf te openen, stuurt ze titel en artiest naar de zoekfunctie van de bestemming, of naar ListenBrainz voor Spotify, net als de app. Ze toont ook de songtekst van wat er speelt in een zijpaneel, en leest daarvoor titel en artiest van de pagina van de muzieksite. Alleen zolang dat paneel open is, stuurt ze die naar Genius, LRCLIB, YouTube Music, NetEase Cloud Music en Letras om de tekst te vinden, net als de app. Een video die niet zegt dat hij muziek is, wordt niet opgezocht. Haar instellingen blijven in de browser op je computer. Ze heeft geen account, advertenties of analyse en stuurt niets naar de ontwikkelaar."
     ],
     [
       "h2",

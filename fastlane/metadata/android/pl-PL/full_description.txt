@@ -15,7 +15,7 @@ Ktoś przysyła Ci link z jednego serwisu muzycznego, a Ty słuchasz w innym. Kl
 <li>Nie da się odczytać linku? Otwórz go w aplikacji, z której pochodzi, skopiuj tekst wyszukiwania lub udostępnij link wyszukiwania.</li>
 <li>Znajdź utwór, wpisując jego nazwę zamiast linku. Odtwarzanie zostawia Cię w Crosstune: pasek na dole pokazuje, co gra, odtwarzacz pokazuje, co gra następne, i ma Powtarzaj, Polub i wyłącznik czasowy, a między odtwarzaczem i tekstem przesuwasz palcem.</li>
 <li>Teksty w rytm: podążają za Twoją aplikacją muzyczną albo słuchają razem z Tobą, unoszą się nad innymi aplikacjami i grają z wizualizacjami MilkDrop w tle. Złe słowa lub tempo? Zgłoś to jednym dotknięciem z tekstu: utwór i jego tempo trafią prywatnie do dewelopera.</li>
-<li>Ucz się słów dzięki kanie, pinyinowi, romaji i tłumaczeniom. Wybierz strony fiszki. Kilka rodzajów fiszek z wiersza, każdy z własnym planem. Codzienne przypomnienie. Gdy fiszka otwiera aplikację, stuknij powiadomienie, by wrócić, chyba że Crosstune jest nad nią.</li>
+<li>Ucz się słów dzięki kanie, pinyinowi, romaji i tłumaczeniom. Wybierz strony fiszki. Kilka rodzajów fiszek z wiersza, każdy z własnym planem. Codzienne przypomnienie. Fiszka otwiera aplikację tylko, gdy Crosstune może być nad nią; do tego czasu wiersz gra na fiszce.</li>
 <li>Zaloguj się płatnym planem ChatGPT, by tłumaczyć całe utwory, wyjaśniać wiersze, znajdować słowa warte nauki i szukać utworów po opisie.</li>
 <li>Też na Android TV.</li>
 <li>Kolory Material You (Android 12+).</li>
