@@ -8,7 +8,7 @@ Clone with `git clone --recurse-submodules`, or run `git submodule update --init
 
 The submodules stay untouched. Where projectM or whisper.cpp print a warning when built, [`app/src/main/cpp/patch.cmake`](app/src/main/cpp/patch.cmake) fixes a copy in the build folder, and stops the build if an update moved the text it replaces. Drop each fix once the submodule has it.
 
-CI logs have no warnings: one that shows up is a bug to fix, never to hide. Gradle is held at 9.7 in [`renovate.json`](.github/renovate.json) while Kover's release has no fix for Gradle 9.8's `Configuration.setVisible` deprecation ([Kover issue 836](https://github.com/Kotlin/kotlinx-kover/issues/836)).
+CI logs have no warnings: one that shows up is a bug to fix, never to hide. Gradle is 9.9.0. Kover 0.9.11 still calls `Configuration.setVisible`, which Gradle 9.8 deprecated and Gradle 11 will remove. The fix is on Kover's main branch ([PR 838](https://github.com/Kotlin/kotlinx-kover/pull/838), [issue 836](https://github.com/Kotlin/kotlinx-kover/issues/836)) and not in a release. Renovate does not hold Gradle back.
 
 You need the Android SDK and JDK 17 or newer; CI builds with JDK 25. When building from the command line, set `sdk.dir=/path/to/Android/Sdk` in `local.properties`.
 
@@ -17,7 +17,7 @@ You need the Android SDK and JDK 17 or newer; CI builds with JDK 25. When buildi
 ./gradlew :app:ci              # the same checks CI runs
 ```
 
-`scripts/gradle-box/gradle-box.sh` runs any of these in a container instead, with only the checkout, the SDK and the debug key in it. Several checkouts on one machine take turns, and it says how many builds are ahead of yours. Downloads are kept and shared, so a new worktree or an empty slot doesn't fetch them again. It needs podman.
+`scripts/gradle-box/gradle-box.sh` runs any of these in a container instead, with only the checkout, the SDK, the host Git and the debug key in it. Several checkouts on one machine take turns, and it says how many builds are ahead of yours. Downloads are kept and shared, so a new worktree or an empty slot doesn't fetch them again. It needs podman.
 
 `:app:ci` runs the Robolectric tests with a 100% line and 88% branch coverage gate, lint, [detekt](https://detekt.dev)'s checks for tangled logic, and the debug and minified release builds. Reports go to `app/build/reports/`. CI runs the tests, lint and builds as parallel jobs, and skips them for pull requests that only change text and tools around the app: README, this file, `AGENTS.md`, `LICENSE`, `docs/`, `fastlane/`, `screenshots/`, `site/`, `report/`, `extension/`, and the site, shots, recording, visuals and build box scripts. The tests of the release, shots, visuals and build box scripts (`test_*.py` next to them) and of the report Worker run either way.
 

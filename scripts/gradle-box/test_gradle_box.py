@@ -102,6 +102,12 @@ class GradleBoxTest(unittest.TestCase):
         self.assertIn(f"-v {ROOT}:{ROOT}", command)
         self.assertIn(f"-w {ROOT}", command)
         self.assertIn("--memory-swap", command)
+        git = subprocess.check_output(
+            ["bash", "-c", 'readlink -f "$(command -v git)"'],
+            text=True,
+            env={**os.environ, "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}"},
+        ).strip()
+        self.assertIn(f"-v {git}:/usr/bin/git:ro", command)
         self.assertTrue(command.endswith("./gradlew --no-daemon :app:assembleDebug --stacktrace"), command)
         mounted = [part.split(":")[0] for part in command.split() if part.startswith("/") and ":" in part]
         self.assertNotIn(str(self.home), mounted)

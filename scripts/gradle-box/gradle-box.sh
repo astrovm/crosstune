@@ -3,9 +3,10 @@
 #
 #   scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*LyricsFinderTest*'
 #
-# The container sees this checkout, the Android SDK read-only and the debug key, and not the rest of
-# $HOME. Builds wait in line for a slot, first come first served, and say how many are ahead: waiting
-# is normal, not a hang. Each slot keeps its Gradle home, so a new worktree downloads nothing again.
+# The container sees this checkout, the Android SDK read-only, the host Git and the debug key, and
+# not the rest of $HOME. Builds wait in line for a slot, first come first served, and say how many
+# are ahead: waiting is normal, not a hang. Each slot keeps its Gradle home, so a new worktree
+# downloads nothing again.
 #
 # The first build to succeed keeps its downloads in seed/, which every later build reads, read-only,
 # through Gradle's GRADLE_RO_DEP_CACHE, so a slot starting empty downloads only what's new since. To
@@ -109,6 +110,10 @@ fi
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
+# whisper.cpp records its commit. This image has no Git. The host Git is one program, and this image
+# already has the libraries it needs, so the program file is enough.
+git_bin=$(readlink -f "$(command -v git)")
+box+=(-v "$git_bin:/usr/bin/git:ro")
 
 if [[ -d $seed/modules-2 ]]; then
     touch "$seed"
