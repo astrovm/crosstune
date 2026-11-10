@@ -157,7 +157,12 @@ jobs:
             -signedjar "Crosstune-$TAG.aab" \
             bundle/release/app-release.aab \
             "$RELEASE_KEY_ALIAS"
-          jarsigner -verify "Crosstune-$TAG.aab"
+          # Verify against the upload key in this keystore. A check with no keystore uses the
+          # public CA store, and warns because an Android upload key is self-signed.
+          jarsigner -verify \
+            -keystore "$keystore" \
+            -storepass:env RELEASE_KEYSTORE_PASSWORD \
+            "Crosstune-$TAG.aab"
           certs="$("$apksigner" -J-enable-native-access=ALL-UNNAMED verify --print-certs "$out")"
           echo "$certs"
           # apksigner labels the line "Signer #1" or "V3.0 Signer" depending on the signature schemes used.

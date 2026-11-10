@@ -15,8 +15,28 @@ internal enum class Script(val glyph: String) {
     JAPANESE("日"), CHINESE("中"), KOREAN("한"), CYRILLIC("Я"), GREEK("Ω"), ARABIC("ع"), HEBREW("א"), INDIC("अ"), THAI("ก")
 }
 
-/** A piece of a line, with how it's read when that isn't plain from it, e.g. kanji with their kana. */
-internal data class Ruby(val text: String, val reading: String? = null)
+/**
+ * What gave a word its reading, as a report on a wrong one names it by [key]: for Japanese, the
+ * dictionaries on the phone, IPADIC and UniDic, Crosstune's own rules (二人 as ふたり, 側 as そば),
+ * the lyrics' own reading in brackets, UtaTen's sung readings, ChatGPT's, or the user's own on a
+ * kept line; for Chinese, Android's pinyin; for Korean, Crosstune's romaja; for the rest, Android's
+ * Latin letters.
+ */
+internal enum class Reader(val key: String) {
+    IPADIC("ipadic"), UNIDIC("unidic"), RULES("crosstune_rules"), LYRICS("lyrics_ruby"), SUNG("utaten"), CHATGPT("chatgpt"), USER("user"),
+    PINYIN("android_pinyin"), ROMAJA("crosstune_romaja"), LATIN("android_latin");
+
+    companion object {
+        /** The reader named [key], as kept on disk; null for one this version doesn't know. */
+        fun of(key: String): Reader? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/**
+ * A piece of a line, with how it's read when that isn't plain from it, e.g. kanji with their kana;
+ * [by] whatever put that reading right, when something did after the line was read.
+ */
+internal data class Ruby(val text: String, val reading: String? = null, val by: Reader? = null)
 
 /**
  * How a line reads: in [parts], each piece with its reading over it; [reading] the whole line as
@@ -43,7 +63,8 @@ internal val List<Ruby>.kana: String get() = joinToString("") { it.reading ?: it
 
 /**
  * A word of a line: as written, how it reads when that isn't plain from it, and what to look up
- * for its meaning, e.g. 分かる for 分かった; its Latin letters as it's said, and as it's [typed].
+ * for its meaning, e.g. 分かる for 分かった; its Latin letters as it's said, and as it's [typed];
+ * what read it, [by], the first what read its kanji; and [modern], how it's spelled today when it's written in old kana.
  */
 internal data class Word(
     val text: String,
@@ -51,6 +72,7 @@ internal data class Word(
     val romanized: String? = null,
     val lookup: String = text,
     val typed: String? = romanized,
+    val by: List<Reader> = emptyList(),
     /** How it's spelled today, when it's written in old kana, 思い出 for 思ひ出; the lyric keeps what it says. */
     val modern: String? = null
 )
@@ -62,8 +84,11 @@ internal data class Word(
 internal fun bothRomaji(said: String?, typed: String?, typedFirst: Boolean): List<String> =
     (if (typedFirst) listOf(typed, said) else listOf(said, typed)).filterNotNull().filter(String::isNotBlank).distinct()
 
-/** A reading put right: on line [line], from 0, [kanji] reads [reading], in hiragana. */
-internal data class ReadingFix(val line: Int, val kanji: String, val reading: String)
+/** How a word reads as its details show it: its reading, then its romaji as said and typed, the typed first when [typedFirst]. */
+internal fun Word.shown(typedFirst: Boolean): List<String> = (listOfNotNull(reading) + bothRomaji(romanized, typed, typedFirst)).distinct()
+
+/** A reading put right [by] something: on line [line], from 0, [kanji] reads [reading], in hiragana. */
+internal data class ReadingFix(val line: Int, val kanji: String, val reading: String, val by: Reader)
 
 /** Readings of lyrics in Japanese, Chinese and Korean, and Latin letters for other scripts, all worked out on the phone. */
 internal object Readings {
@@ -239,7 +264,8 @@ internal object Readings {
             token.writtenBaseForm.takeIf { it != "*" } ?: surface,
             said?.let(::hiragana),
             token.position + token.surface.length,
-            unread = said == null
+            unread = said == null,
+            reader = Reader.UNIDIC
         )
     }
 
@@ -336,13 +362,14 @@ internal object Readings {
             while (at + surface.length < reading.end) left.removeFirst().let { surface += it.surface; kana += it.kana }
             val after = surface.drop(reading.end - at)
             if (after.any(::isHan)) {
-                out += Piece(surface.take(reading.end - at), reading.kana, first.kind, first.subkind)
+                out += Piece(surface.take(reading.end - at), reading.kana, first.kind, first.subkind, reader = Reader.LYRICS)
                 // The rest as the dictionary read the word, ごえ of 歌声, when it read the kanji so too; and
                 // as the lyrics read it, when they give a reading for it too, 声（こえ）.
-                left.addFirst(Piece(after, if (kana.startsWith(reading.kana)) kana.drop(reading.kana.length) else together(pieces(after)).joinToString("") { it.kana }, first.kind, first.subkind))
+                val rest = if (kana.startsWith(reading.kana)) listOf(first) else together(pieces(after))
+                left.addFirst(Piece(after, if (kana.startsWith(reading.kana)) kana.drop(reading.kana.length) else rest.joinToString("") { it.kana }, first.kind, first.subkind, reader = rest.first().reader))
                 at = reading.end
             } else {
-                out += Piece(surface, reading.kana + hiragana(after), first.kind, first.subkind, first.base)
+                out += Piece(surface, reading.kana + hiragana(after), first.kind, first.subkind, first.base, reader = Reader.LYRICS)
                 at += surface.length
             }
         }
@@ -440,6 +467,8 @@ internal object Readings {
         val end: Int = 0,
         /** Whether the dictionary has no reading for it. */
         private val unread: Boolean = false,
+        /** What read it. */
+        val reader: Reader = Reader.IPADIC,
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
         val today: String? = null
     ) {
@@ -449,11 +478,11 @@ internal object Readings {
         /** A prefix or suffix of kanji with no word to be one of: a suffix fixes to a noun before it, [before]. */
         fun strayAffix(before: Piece?) = surface.any(::isHan) && (kind == "接頭詞" || (subkind == "接尾" && before?.kind != "名詞"))
 
-        /** It read [kana], as a word of [kind] and [subkind] when that changes too. */
-        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end)
+        /** It read [kana] by Crosstune's own rules, as a word of [kind] and [subkind] when that changes too. */
+        fun read(kana: String, kind: String = this.kind, subkind: String = this.subkind) = Piece(surface, kana, kind, subkind, base, null, end, reader = Reader.RULES, today = today)
 
         /** It read [kana], and said [said]. */
-        fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end)
+        fun reading(kana: String, said: String) = Piece(surface, kana, kind, subkind, base, said, end, reader = reader, today = today)
 
         /** How it's said, for romaji, so it's sung right: sensee, not sensei; the particles は and へ are wa and e. */
         val said get() = if (kind == "助詞") particle ?: kana else spoken ?: kana
@@ -476,13 +505,13 @@ internal object Readings {
             val last = out.lastOrNull()
             val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
             when {
-                word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般")
-                last != null && counted(last, piece) -> out[out.lastIndex] = Piece(last.surface + piece.surface, "いっ" + plosive(piece.kana), "名詞", "一般")
+                word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
+                last != null && counted(last, piece) -> out[out.lastIndex] = Piece(last.surface + piece.surface, "いっ" + plosive(piece.kana), "名詞", "一般", reader = Reader.RULES)
                 piece.surface == "側" && (last == null || !sideOf(last)) -> out += piece.read("そば", "名詞", "一般")
                 // Before a space, IPADIC takes はね after a noun for a verb, 跳ね: it's 僕らは and ね.
                 last?.kind == "名詞" && piece.kind == "動詞" && piece.surface.length == 2 && piece.surface[0] == 'は' && piece.surface[1] in ENDINGS -> {
-                    out += Piece("は", "は", "助詞", "係助詞")
-                    out += Piece(piece.surface.drop(1), piece.surface.drop(1), "助詞", "終助詞")
+                    out += Piece("は", "は", "助詞", "係助詞", reader = Reader.RULES)
+                    out += Piece(piece.surface.drop(1), piece.surface.drop(1), "助詞", "終助詞", reader = Reader.RULES)
                 }
                 last?.surface == "違" && piece.surface.first() in "くか" -> {
                     out[out.lastIndex] = last.read("ちが")
@@ -533,7 +562,7 @@ internal object Readings {
         }
         if (wanted.isEmpty() || wanted == old || wanted.any { it !in 'ぁ'..'ゟ' }) return parts
         // Only where those kanji are: another word read the same, e.g. a く of 君 in くん, stays.
-        return parts.map { if (it.text == fix.kanji && it.reading == old) it.copy(reading = wanted) else it }
+        return parts.map { if (it.text == fix.kanji && it.reading == old) it.copy(reading = wanted, by = fix.by) else it }
     }
 
     /**
@@ -621,10 +650,10 @@ internal object Readings {
         Script.JAPANESE -> japaneseWords(line, askToday = true)
         else -> segments(line).map { text ->
             when (script) {
-                Script.CHINESE -> chinese(text).let { Word(text, it.reading, null) }
-                Script.KOREAN -> Word(text, null, romaja(text))
+                Script.CHINESE -> chinese(text).let { Word(text, it.reading, null, by = listOf(Reader.PINYIN)) }
+                Script.KOREAN -> Word(text, null, romaja(text), by = listOf(Reader.ROMAJA))
                 null -> Word(text)
-                else -> Word(text, null, latin(text))
+                else -> Word(text, null, latin(text), by = listOf(Reader.LATIN))
             }
         }
     }
@@ -641,12 +670,14 @@ internal object Readings {
         // Kana reads as written; the reading's only worth showing for kanji.
         val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
         val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
+        // What read its kanji, or, for kana, what split it, which says how its particles read.
+        val by = (word.filter { piece -> piece.surface.any(::isHan) }.ifEmpty { word }).map { it.reader }.distinct()
         // Letters the dictionary takes for marks, as Hangul in a Japanese line, are a word of marks: it looks itself up.
         val base = (word.firstOrNull { it.kind != "記号" } ?: word.first()).base
         val modern = spelledToday(text, kana, said) ?: word.joinToString("") { it.today ?: it.surface }.trim { !it.isLetterOrDigit() }.takeIf { it != text }
         // A translator knows 云う, and takes 云ふ for a name.
         val lookup = if (modern == null || !askToday) base else japaneseWords(modern, askToday = false).firstOrNull()?.lookup ?: base
-        Word(text, kana.takeIf { it != text }, romaji(said), lookup = lookup, typed = romaji(typed, typed = true), modern = modern)
+        Word(text, kana.takeIf { it != text }, romaji(said), lookup = lookup, typed = romaji(typed, typed = true), by = by, modern = modern)
     }
 
     /**
@@ -660,6 +691,42 @@ internal object Readings {
     /** The reading of the dictionary form UniDic has for [text], when it takes it for one word: いふ has イウ. */
     private fun listedForm(text: String): List<String> =
         listOfNotNull(uniDic?.tokenize(text)?.singleOrNull()?.lemmaReadingForm?.takeIf { it != "*" })
+
+    /**
+     * [words] of a line as they show over its [parts]: a Japanese word whose kanji were put right
+     * after the line was read, by UtaTen or ChatGPT, reads as the line does, so a word reads as it
+     * shows over the line, and says what put it right.
+     */
+    fun asShown(words: List<Word>, parts: List<Ruby>): List<Word> {
+        if (parts.none { it.by != null }) return words
+        val text = parts.joinToString("") { it.text }
+        var from = 0
+        return words.map { word ->
+            val at = text.indexOf(word.text, from).takeIf { it >= 0 } ?: return@map word
+            from = at + word.text.length
+            readOver(word, at, parts) ?: word
+        }
+    }
+
+    /** [word], at [at] in the line, read as the [parts] over it are, when one of them was put right and none runs past it. */
+    private fun readOver(word: Word, at: Int, parts: List<Ruby>): Word? {
+        val end = at + word.text.length
+        val kana = StringBuilder()
+        val by = mutableListOf<Reader>()
+        var start = 0
+        for (part in parts) {
+            val stop = start + part.text.length
+            if (stop > at && start < end) {
+                if (part.reading != null && (start < at || stop > end)) return null
+                kana.append(part.reading ?: part.text.substring(maxOf(at, start) - start, minOf(end, stop) - start))
+                part.by?.let(by::add)
+            }
+            start = stop
+        }
+        if (by.isEmpty()) return null
+        val read = hiragana(kana.toString())
+        return word.copy(reading = read, romanized = romaji(longVowels(read)), typed = romaji(read, typed = true), by = by.distinct())
+    }
 
     /** The words between [line]'s spaces and marks, or, in Chinese, between its words. */
     private fun segments(line: String): List<String> {
@@ -693,7 +760,7 @@ internal object Readings {
      * was laid over the whole of 飛び立: they show right without being read again.
      */
     fun rubied(parts: List<Ruby>): List<Ruby> = joined(
-        parts.flatMap { if (it.reading != null && it.text.any(::isKana)) furigana(it.text, it.reading) else listOf(it) }
+        parts.flatMap { part -> if (part.reading != null && part.text.any(::isKana)) furigana(part.text, part.reading).map { it.copy(by = part.by.takeIf { _ -> it.reading != null }) } else listOf(part) }
     )
 
     /** The word [text] with its [reading] over its kanji only, as one line's parts. */
