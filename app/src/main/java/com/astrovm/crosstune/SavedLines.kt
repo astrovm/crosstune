@@ -25,9 +25,17 @@ internal data class SavedLine(
     val step: Int = 0,
     /** When it's next practised, in milliseconds since 1970; 0, right away. */
     val due: Long = 0,
-    /** Where it's sung in the song, from its start to the next line's, to play it again; null when not timed. */
+    /** Where it's sung, to play it again; null when not timed. */
     val startMs: Long? = null,
+    /**
+     * Where the words of it end, when the words say so, or else where the next line starts.
+     * The last line, with no next one, is given a few seconds. Null when not timed.
+     */
     val endMs: Long? = null,
+    /** Where the next line starts, when one does, so play stops there instead of running into it. */
+    val nextMs: Long? = null,
+    /** How long the recording the words were timed on lasts, when that's known. */
+    val lengthMs: Long? = null,
     /** How far a video the app played had the song in, so it's played from the same place. */
     val leadMs: Long = 0,
     /** The app it played in, by package, which plays it again. */
@@ -205,7 +213,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             val text = json.optString("text").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
-                json.interval(), json.optInt("ease", START_EASE), json.optInt("step"), json.optLong("due"), json.time("start"), json.time("end"), json.optLong("lead"), json.text("app"), json.text("artwork"),
+                json.interval(), json.optInt("ease", START_EASE), json.optInt("step"), json.optLong("due"), json.time("start"), json.time("end"), json.time("next"), json.span("length"), json.optLong("lead"), json.text("app"), json.text("artwork"),
                 json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed"), json.reviews()
             )
         })
@@ -257,9 +265,15 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         return save(kept)
     }
 
-    /** Puts timing, the app and the cover on [line], kept before without them, or [again] over its timing, for the next time it's practised. */
+    /**
+     * Puts timing, the app and the cover on [line], kept before without them, or [again] over its timing, for the next time it's practised.
+     * A length it already has stays when the new timing has none, so a later look at the words does not forget the recording.
+     */
     fun timed(line: SavedLine, again: Boolean = false): List<SavedLine> = update(line) {
-        if (again || !it.timed) it.copy(startMs = line.startMs, endMs = line.endMs, leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl) else it
+        if (again || !it.timed) it.copy(
+            startMs = line.startMs, endMs = line.endMs, nextMs = line.nextMs, lengthMs = line.lengthMs ?: it.lengthMs,
+            leadMs = line.leadMs, app = line.app ?: it.app, artworkUrl = it.artworkUrl ?: line.artworkUrl
+        ) else it
     }
 
     /** Keeps each line kept as the first of [changes] as the second, practised as far as it had been. */
@@ -298,7 +312,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                 JSONObject().put("text", line.text).put("reading", line.reading).put("romanized", line.romanized)
                     .put("translation", line.translation).put("title", line.title).put("artist", line.artist)
                     .put("explanation", line.explanation).put("interval", line.interval).put("ease", line.ease).put("step", line.step).put("due", line.due)
-                    .put("start", line.startMs).put("end", line.endMs).put("lead", line.leadMs).put("app", line.app)
+                    .put("start", line.startMs).put("end", line.endMs).put("next", line.nextMs).put("length", line.lengthMs).put("lead", line.leadMs).put("app", line.app)
                     .put("artwork", line.artworkUrl).put("line", line.line).put("typed", line.typed)
                     .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { part -> JSONArray().put(part.text).put(part.reading ?: JSONObject.NULL).also { array -> part.by?.let { array.put(it.key) } } }) })
                     .apply { if (line.readByHand) put("byHand", true) }
@@ -334,6 +348,9 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     }
 
     private fun JSONObject.time(name: String): Long? = if (has(name)) optLong(name, -1).takeIf { it >= 0 } else null
+
+    /** A recording's length in ms, when one was kept. 0 is not a song. */
+    private fun JSONObject.span(name: String): Long? = time(name)?.takeIf { it > 0 }
 
     companion object {
         private const val KEY = "saved_lines"

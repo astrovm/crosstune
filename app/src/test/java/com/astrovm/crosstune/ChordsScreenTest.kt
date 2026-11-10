@@ -330,6 +330,31 @@ class ChordsScreenTest {
     }
 
     @Test
+    fun chordWikiCheckThatDoesntFinishSaysWhichAndOffersToTryAgain() {
+        var asked = 0
+        var chords by mutableStateOf(ChordsState(on = true, loading = true))
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions(onRetryChords = { asked++ })) } }
+        // Still looking: neither reason is said yet.
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_timeout)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_check)).assertDoesNotExist()
+        chords = ChordsState(on = true, tried = true, failed = true, failure = ChordFailure.WIKI_TIMEOUT)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_timeout)).assertExists()
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.retry_button)).performClick()
+        assertEquals(1, asked)
+        // The other reason replaces it. There is no control that answers the check.
+        chords = ChordsState(on = true, loading = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_wiki_timeout)).fetchSemanticsNodes().isEmpty() }
+        chords = ChordsState(on = true, tried = true, failed = true, failure = ChordFailure.WIKI_CHECK)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_check)).assertExists()
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_wiki_timeout)).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.retry_button)).performClick()
+        assertEquals(2, asked)
+        chords = ChordsState(on = false, failed = true, failure = ChordFailure.WIKI_CHECK)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_wiki_check)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
     fun offlineTheFailedChordsAreSaidWithNothingToTap() {
         val chords = ChordsState(on = true, tried = true, failed = true)
         composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords).copy(offline = true), ScreenActions()) } }

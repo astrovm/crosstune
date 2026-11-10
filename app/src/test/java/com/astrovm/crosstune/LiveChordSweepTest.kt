@@ -405,6 +405,9 @@ class LiveChordSweepTest {
                         }
                         ChordFinder.Chords.None -> result = "None"
                         ChordFinder.Chords.Unavailable -> result = "Unavailable"
+                        // The check is still a site that didn't answer. The sweep keeps both kinds.
+                        ChordFinder.Chords.WikiTimedOut -> result = "WikiTimedOut"
+                        ChordFinder.Chords.WikiCheck -> result = "WikiCheck"
                     }
                 }
             } catch (e: Exception) {

@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
@@ -134,7 +135,7 @@ class MainActivity : ComponentActivity() {
                     chatGpt = chatGpt,
                     tutor = tutor,
                     // Each song's chords are kept, so a song played again needs no lookup.
-                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300), chordWiki = ChordWikiBrowser(this@MainActivity)),
+                    chordFinder = ChordFinder(client, cache = cache("chords.json", maxEntries = 300), chordWiki = chordWikiFactory(this@MainActivity)),
                     lyricsLanguage = lyricsLanguageFactory?.invoke() ?: AndroidLyricsLanguage(applicationContext),
                     oneTap = OneTapSetup(applicationContext, shellFactory()),
                     // Each song's sung readings are kept, so a song read again needs no lookup.
@@ -376,6 +377,13 @@ class MainActivity : ComponentActivity() {
 
         @VisibleForTesting
         internal var httpClientFactory: () -> OkHttpClient = ::httpClient
+
+        /**
+         * ChordWiki's pages. The phone's web view reads them. A test answers instead, and still
+         * does not solve a check a person has to do.
+         */
+        @VisibleForTesting
+        internal var chordWikiFactory: (Activity) -> ChordWikiPages = { activity -> ChordWikiBrowser(activity) }
 
         /** Where Android is asked about apps and links; tests run it in step with the screen. */
         @VisibleForTesting

@@ -332,6 +332,8 @@
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
     <string name="lyrics_chords_failed">Akorlar yüklenemedi.</string>
+    <string name="lyrics_chords_wiki_timeout">ChordWiki denetimi bitmedi.</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki, bir kişinin yapması gereken bir denetim istedi.</string>
     <string name="lyrics_chords">Akorlar</string>
     <string name="lyrics_capo">Kapo %1$d</string>
     <string name="setting_translate_into">Şu dile çevir</string>

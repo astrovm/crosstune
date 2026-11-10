@@ -404,7 +404,8 @@ internal class PracticeCards(
         step("the YouTube player")
         val (video, expectedMs) = clip
         val start = line.startMs ?: 0L
-        val end = (line.endMs ?: start) + MainViewModel.LINE_TAIL_MS
+        // Stop at the next line when it starts inside the tail, so that line is not heard.
+        val end = LineWindow.playedUntil(start, line.endMs ?: start, line.nextMs)
         val now = play || uiState.practice?.turned == true
         val practice = uiState.practice?.takeIf { it.line?.isSame(line) == true } ?: return
         uiState = uiState.copy(practice = practice.copy(video = video, sound = if (now) LineSound.PLAYING else LineSound.PLAYED))
@@ -416,7 +417,8 @@ internal class PracticeCards(
     /** The video that plays [line]'s song, with how long the song is when known, or null when there's none that's the song. */
     private suspend fun videoOf(line: SavedLine): Pair<String, Long?>? {
         val song = MusicMetadata(line.title, line.artist)
-        val expectedMs = lengths[line.title to line.artist]
+        // The length kept with the line is the recording the words were timed on. This session's is only a stand-in.
+        val expectedMs = line.lengthMs ?: lengths[line.title to line.artist]
         val music = matcher.find(MusicService.YOUTUBE_MUSIC, song)
         // Any other video is taken only when it's as long as the song, which has to be known to tell.
         val link = music ?: expectedMs?.let { matcher.find(MusicService.YOUTUBE, song) }
