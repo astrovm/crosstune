@@ -412,6 +412,62 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalsReferenceMarkFollowsTheScriptBesideItOnTheMonospaceStack() {
+        // Measured in Chromium on the monospace stack: U+203B is 2.000 columns or 1.650.
+        // A chord over the middle of a two-column mark lands on the later letter.
+        // abc is three columns. On the main stack あ is 2.000, so the chord ties and lands on い.
+        // On the monospace stack あ is 2.050. The narrow mark also lands on い. The wide mark lands on あ.
+        val narrow = "abc${jTotal("C")}<br>※あいう"
+        assertEquals(2, ChordSheets.fromJTotal(narrow).single().chords.single().at)
+        assertEquals(2, monoAt(narrow))
+        // Kana on the chord line, or on the line above a blank break, keeps the wide mark.
+        assertEquals(1, monoAt("abc${jTotal("C")}よ<br>※あいう"))
+        assertEquals(1, monoAt("abc${jTotal("D")}よ<br><br>※あいう"))
+        assertEquals(2, monoAt("abc${jTotal("D")}<br><br>※あいう"))
+        // Latin, an ideographic space, then kana. A kana line above the same words keeps the narrow mark.
+        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※A\u3000ああ"))
+        assertEquals(4, monoAt("abcdef${jTotal("C")}よ<br>※A\u3000ああ"))
+        assertEquals(6, monoAt("abcdefghi${jTotal("C")}<br>※It's\u3000あ"))
+        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※A1\u3000あ"))
+        assertEquals(3, monoAt("abcdefg${jTotal("C")}<br>※Ａ\u3000ああ"))
+        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※A \u3000ああ"))
+        assertEquals(5, monoAt("abcdefg${jTotal("C")}<br>※A\u3000Bあ"))
+        // The same script on both sides is wide. Kana then kanji is narrow. Both Han blocks count.
+        assertEquals(3, monoAt("abcde${jTotal("C")}よ<br>※恋ああ"))
+        assertEquals(2, monoAt("abcde${jTotal("C")}字<br>※恋ああ"))
+        assertEquals(2, monoAt("abcde${jTotal("C")}\u3400<br>※恋ああ"))
+        assertEquals(2, monoAt("abcde${jTotal("C")}\uF900<br>※恋ああ"))
+        assertEquals(1, monoAt("abc${jTotal("C")}ｶ<br>※あいう"))
+        assertEquals(1, monoAt("abc${jTotal("C")}\u31F0<br>※あいう"))
+        // The letter touching the mark wins over the line above.
+        assertEquals(2, monoAt("abcde${jTotal("C")}<br>恋※ああ"))
+        assertEquals(2, monoAt("abcd${jTotal("C")}<br>ｶ※あいう"))
+        assertEquals(2, monoAt("abcd${jTotal("C")}<br>あ ※Bあ"))
+        assertEquals(3, monoAt("abcdefg${jTotal("C")}<br>（※印あ"))
+        assertEquals(2, monoAt("abcde${jTotal("C")}<br>\u3000※あいう"))
+        // A mark at the end of a line that leads with an ideographic space.
+        // Kana with no Latin after it stays wide when the line above is kana too.
+        assertEquals(3, monoAt("abcdef${jTotal("C")}よ<br>\u3000あ…※"))
+        assertEquals(7, monoAt("abcdefghij${jTotal("C")}<br>\u3000このnew※"))
+        assertEquals(14, monoAt("abcdefghijkよよ${jTotal("C")}よ<br>\u3000ĲLovin' you…※"))
+        assertEquals(11, monoAt("\u2103abcdefghijk${jTotal("C")}<br>\u3000glory days※"))
+        // No script yet: kana after the mark is wide, Latin after it is narrow.
+        // The main stack keeps the table width of 2.000, so the same Latin line lands one letter later.
+        val latinAfter = "※${jTotal("C")}<br>\u0132bcdef"
+        assertEquals(2, ChordSheets.fromJTotal(latinAfter).single().chords.single().at)
+        assertEquals(1, monoAt(latinAfter))
+        assertEquals(3, monoAt("※あ${jTotal("C")}<br>あ\u0132bc"))
+        // The chord's own letters are the script of the line above the words.
+        assertEquals(1, monoAt("よ<br>※${jTotal("C")}\u3000あ<br>\u0132bcdef"))
+        assertEquals(2, monoAt("※${jTotal("C")}\u3000あ<br>\u0132bcdef"))
+        // D is one column. A wide mark then puts C past the last letter. A narrow mark would stop on c.
+        val split = "${jTotal("D")}あ※${jTotal("C")}<br>あ\u0132bc"
+        assertEquals(listOf(0, 4), ChordSheets.fromJTotal(split, monospace = true).single().chords.map { it.at })
+    }
+
+    private fun monoAt(sheet: String) = ChordSheets.fromJTotal(sheet, monospace = true).last().chords.last().at
+
+    @Test
     fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
         val sheet = "<a href='song-e.html'>Easy version</a><br>${jTotal("C")}<br>abcd"
         assertEquals(

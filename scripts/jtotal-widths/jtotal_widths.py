@@ -17,6 +17,9 @@ give other widths for the scripts they draw differently, and the app can only fo
 
 The table ends up in app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt, one run per
 line: `FIRST[-LAST] WIDTH`, code points in hex.
+
+U+203B on the monospace stack is not one width. ChordSheets uses 1.650 or 2.000 columns from the
+script beside the mark, including the line above. The table keeps the Japanese-context width, 2.000.
 """
 import argparse
 import hashlib

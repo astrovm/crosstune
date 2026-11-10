@@ -160,9 +160,11 @@ internal object ChordSheets {
      * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
      * first takes one. A full-width bracket or stop is two as well, except where the browser draws
      * it at one. A letter in neither font is as wide as the browser's fallback draws it, and a chord
-     * goes over the letter that starts nearest where it is. Only a <br> ends a line, and spaces count as
-     * a browser counts them, as its source wraps anywhere. Tags are not drawn: an empty link adds
-     * no column, and a link split by a <br> names the chord on the line its name is on.
+     * goes over the letter that starts nearest where it is. On the monospace stack, the reference
+     * mark is 1.650 columns or 2.000. The script beside it chooses, and the line above counts.
+     * Only a <br> ends a line, and spaces count as a browser counts them, as its source wraps anywhere.
+     * Tags are not drawn: an empty link adds no column, and a link split by a <br> names the chord
+     * on the line its name is on.
      */
     fun fromJTotal(sheet: String, monospace: Boolean = false): List<SheetLine> {
         // A chord link can end after the break that follows its name: the name is still on its line.
@@ -170,37 +172,66 @@ internal object ChordSheets {
             .filter { it.replace(markup, "").trim(' ').isNotEmpty() }
         val result = mutableListOf<SheetLine>()
         var index = 0
+        // The last kana, kanji, or Latin letter on an earlier line. A blank line leaves it as it was.
+        var previous: NeighbourScript? = null
         while (index < lines.size) {
             val line = lines[index++]
+            val visible = line.replace(markup, "")
             if (!jTotalChord.containsMatchIn(line) && !splitChord.containsMatchIn(line)) {
-                result += SheetLine(line.replace(markup, ""), emptyList())
+                result += SheetLine(visible, emptyList())
+                previous = carriedScript(visible, previous)
                 continue
             }
             val chords = mutableListOf<Pair<Int, String>>()
             var column = 0
             var from = 0
+            var used = 0
+            // Widths of a gap use the whole line, so a reference mark can see the letters past the chord.
+            fun widen(raw: String): Int {
+                val piece = raw.replace(markup, "")
+                val width = columns(piece, monospace, previous, visible, used)
+                used += piece.length
+                return width
+            }
             // The opening tag stayed on the previous line, so this one starts at the chord's name.
             splitChord.find(line)?.let { split ->
                 val (name, bass) = split.destructured
                 chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
-                column += columns(split.value.replace(markup, ""), monospace)
+                column += widen(split.value)
                 from = split.range.last + 1
             }
             jTotalChord.findAll(line).forEach { match ->
                 val (name, bass) = match.destructured
-                column += columns(line.substring(from, match.range.first).replace(markup, ""), monospace)
+                column += widen(line.substring(from, match.range.first))
                 chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
-                column += columns(match.value.replace(markup, ""), monospace)
+                column += widen(match.value)
                 from = match.range.last + 1
             }
+            // The chord names count. The words under them then see that script.
+            val over = carriedScript(visible, previous)
             val words = lines.getOrNull(index)?.takeUnless {
                 jTotalChord.containsMatchIn(it) || splitChord.containsMatchIn(it)
             }?.replace(markup, "")
-            if (words != null) index++
-            result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at, monospace), name) })
+            result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at, monospace, over), name) })
+            previous = over
+            if (words != null) {
+                index++
+                previous = carriedScript(words, over)
+            }
         }
         return result
     }
+
+    /** A neighbour that changes the width of U+203B. Digits and punctuation have none. */
+    private enum class NeighbourScript { LATIN, KANA, HAN }
+
+    /** U+203B. The width table records the Japanese context, which is two columns. */
+    private const val REFERENCE_MARK = 0x203B
+
+    /** What Chromium draws for U+203B on the monospace stack when the neighbour is not Japanese. */
+    private const val REFERENCE_NARROW = 1650
+
+    private const val REFERENCE_WIDE = 2 * JTotalWidths.COLUMN
 
     /**
      * How wide [text] is in the font the page asks for, as Chromium draws it, in thousandths of a
@@ -213,22 +244,165 @@ internal object ChordSheets {
      * semicolon are middle dots and the stops are closing marks. A right quote trims the closing
      * mark before it and not the opening mark after it: Inconsolata draws that quote at one column.
      * A letter outside the Basic Multilingual Plane is one letter, not two halves.
+     * [line] is the whole line and [origin] is where [text] starts in it, so a reference mark can see
+     * the letters on either side. [previous] is the script of the line above.
      */
-    private fun columns(text: String, monospace: Boolean): Int {
+    private fun columns(text: String, monospace: Boolean, previous: NeighbourScript?, line: String, origin: Int): Int {
         var total = 0
         var index = 0
         while (index < text.length) {
-            total += widthAt(text, index, monospace)
+            total += widthAt(text, index, monospace, previous, line, origin + index)
             index += Character.charCount(text.codePointAt(index))
         }
         return total
     }
 
-    private fun widthAt(text: String, index: Int, monospace: Boolean): Int {
-        val width = JTotalWidths.of(text.codePointAt(index), monospace)
+    private fun widthAt(text: String, index: Int, monospace: Boolean, previous: NeighbourScript?, line: String, lineIndex: Int): Int {
+        val codePoint = text.codePointAt(index)
+        // The piece is what a bracket trims against. The whole line is what a reference mark reads.
+        if (monospace && codePoint == REFERENCE_MARK) return referenceMarkWidth(line, lineIndex, previous)
+        val width = JTotalWidths.of(codePoint, monospace)
         // Chromium trims only with a font that has the narrow forms. Measured in the container, the Japanese
         // font that `monospace` falls back to has none, so a page in that stack never trims.
         return if (!monospace && width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
+    }
+
+    /**
+     * How wide U+203B is on the monospace stack. WenQuanYi draws it at two columns after kana or
+     * kanji. Noto Sans draws it at 1.650 after Latin. The line above supplies the script when this
+     * line has none yet. [previous] is that script.
+     */
+    private fun referenceMarkWidth(text: String, index: Int, previous: NeighbourScript?): Int {
+        if (wideNeighbour(codeBefore(text, index))) return REFERENCE_WIDE
+        val next = scriptAfter(text, index + 1)
+        val prior = scriptBefore(text, index) ?: previous
+        if (latinSpaceThenKana(text, index + 1) && prior != NeighbourScript.KANA && prior != NeighbourScript.HAN) return REFERENCE_WIDE
+        if (startsWithIdeograph(text, index) && next == null) return trailingReferenceWidth(text, index, previous)
+        if (prior == null) return if (next == NeighbourScript.KANA || next == NeighbourScript.HAN) REFERENCE_WIDE else REFERENCE_NARROW
+        if (prior == next && prior != NeighbourScript.LATIN) return REFERENCE_WIDE
+        return REFERENCE_NARROW
+    }
+
+    /** The code point before [index], skipping spaces. -1 when the line has none. */
+    private fun codeBefore(text: String, index: Int): Int {
+        var cursor = index
+        while (cursor > 0) {
+            val codePoint = text.codePointBefore(cursor)
+            cursor -= Character.charCount(codePoint)
+            if (codePoint != ' '.code && codePoint != '\t'.code) return codePoint
+        }
+        return -1
+    }
+
+    private fun wideNeighbour(codePoint: Int): Boolean {
+        val script = neighbourScript(codePoint)
+        return script == NeighbourScript.KANA || script == NeighbourScript.HAN || fullwidthNeighbour(codePoint)
+    }
+
+    /** Full-width punctuation and the ideographic space. They are not a script. */
+    private fun fullwidthNeighbour(codePoint: Int): Boolean {
+        if (codePoint in 0x3000..0x303F) return true
+        return codePoint in 0xFF00..0xFF0F || codePoint in 0xFF1A..0xFF20 ||
+            codePoint in 0xFF3B..0xFF40 || codePoint in 0xFF5B..0xFF60
+    }
+
+    private fun neighbourScript(codePoint: Int): NeighbourScript? {
+        if (codePoint in 'A'.code..'Z'.code || codePoint in 'a'.code..'z'.code) return NeighbourScript.LATIN
+        if (codePoint in 0xFF21..0xFF3A || codePoint in 0xFF41..0xFF5A) return NeighbourScript.LATIN
+        if (codePoint in 0x3040..0x30FF || codePoint in 0x31F0..0x31FF || codePoint in 0xFF66..0xFF9D) return NeighbourScript.KANA
+        if (codePoint in 0x3400..0x9FFF || codePoint in 0xF900..0xFAFF) return NeighbourScript.HAN
+        return null
+    }
+
+    private fun scriptBefore(text: String, end: Int): NeighbourScript? {
+        var script: NeighbourScript? = null
+        var index = 0
+        while (index < end) {
+            neighbourScript(text.codePointAt(index))?.let { script = it }
+            index += Character.charCount(text.codePointAt(index))
+        }
+        return script
+    }
+
+    private fun scriptAfter(text: String, start: Int): NeighbourScript? {
+        var index = start
+        while (index < text.length) {
+            neighbourScript(text.codePointAt(index))?.let { return it }
+            index += Character.charCount(text.codePointAt(index))
+        }
+        return null
+    }
+
+    /** [previous], then the last strong letter of [text]. */
+    private fun carriedScript(text: String, previous: NeighbourScript?): NeighbourScript? =
+        scriptBefore(text, text.length) ?: previous
+
+    /**
+     * Latin letters, then an ideographic space, then kana or kanji. An apostrophe inside the Latin
+     * run stays in the run. A Latin letter after the space ends it.
+     */
+    private fun latinSpaceThenKana(text: String, from: Int): Boolean {
+        var seenLatin = false
+        var seenSpace = false
+        var index = from
+        while (index < text.length) {
+            val codePoint = text.codePointAt(index)
+            index += Character.charCount(codePoint)
+            if (codePoint == ' '.code || codePoint == '\t'.code) continue
+            if (continuesLatinRun(codePoint, seenLatin)) {
+                if (seenSpace) return false
+                seenLatin = true
+                continue
+            }
+            if (codePoint == '\u3000'.code && seenLatin) {
+                seenSpace = true
+                continue
+            }
+            val script = neighbourScript(codePoint)
+            return seenSpace && (script == NeighbourScript.KANA || script == NeighbourScript.HAN)
+        }
+        return false
+    }
+
+    private fun continuesLatinRun(codePoint: Int, seenLatin: Boolean): Boolean {
+        if (neighbourScript(codePoint) == NeighbourScript.LATIN || Character.isDigit(codePoint)) return true
+        return seenLatin && asciiPunctuation(codePoint)
+    }
+
+    private fun asciiPunctuation(codePoint: Int) =
+        codePoint in 0..127 && codePoint != ' '.code && codePoint != '\t'.code && !Character.isLetterOrDigit(codePoint)
+
+    /** [text] before [index] starts with an ideographic space, once ASCII spaces are gone. */
+    private fun startsWithIdeograph(text: String, index: Int) =
+        text.substring(0, index).trim(' ', '\t').startsWith('\u3000')
+
+    /** A reference mark at the end of a line that starts with an ideographic space. */
+    private fun trailingReferenceWidth(text: String, index: Int, previous: NeighbourScript?): Int {
+        if (kanaOrHanThenLatin(text, index)) return REFERENCE_NARROW
+        if (!kanaOrHanBefore(text, index) && (previous == NeighbourScript.KANA || previous == NeighbourScript.HAN)) return REFERENCE_NARROW
+        return REFERENCE_WIDE
+    }
+
+    private fun kanaOrHanThenLatin(text: String, end: Int): Boolean {
+        var seen = false
+        var index = 0
+        while (index < end) {
+            val script = neighbourScript(text.codePointAt(index))
+            if (script == NeighbourScript.KANA || script == NeighbourScript.HAN) seen = true
+            else if (script == NeighbourScript.LATIN && seen) return true
+            index += Character.charCount(text.codePointAt(index))
+        }
+        return false
+    }
+
+    private fun kanaOrHanBefore(text: String, end: Int): Boolean {
+        var index = 0
+        while (index < end) {
+            val script = neighbourScript(text.codePointAt(index))
+            if (script == NeighbourScript.KANA || script == NeighbourScript.HAN) return true
+            index += Character.charCount(text.codePointAt(index))
+        }
+        return false
     }
 
     /** A two-column bracket or stop that the browser draws at one because of the letter beside it. */
@@ -273,7 +447,7 @@ internal object ChordSheets {
      * bracket can see the punctuation beside it. Letters that start in the same place, as a mark with
      * no width does, give the first. The end of the line is where a chord past the last letter goes.
      */
-    private fun letterAt(words: String, column: Int, monospace: Boolean): Int {
+    private fun letterAt(words: String, column: Int, monospace: Boolean, previous: NeighbourScript?): Int {
         var best = 0
         var bestStart = 0
         var bestDistance = Int.MAX_VALUE
@@ -287,7 +461,7 @@ internal object ChordSheets {
                 bestDistance = distance
             }
             if (index >= words.length) return best
-            start += widthAt(words, index, monospace)
+            start += widthAt(words, index, monospace, previous, words, index)
             index += Character.charCount(words.codePointAt(index))
         }
     }
