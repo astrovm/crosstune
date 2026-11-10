@@ -326,6 +326,7 @@
     <string name="lyrics_katakana_as_hiragana">Katakana als hiragana</string>
     <string name="lyrics_translation">Vertaling</string>
     <string name="lyrics_translation_failed">Kon nu niet vertalen.</string>
+    <string name="lyrics_chords_failed">De akkoorden konden niet worden geladen.</string>
     <string name="lyrics_chords">Akkoorden</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Vertalen naar</string>
@@ -391,6 +392,7 @@
     <string name="practice_fix_reading">Lezing verbeteren</string>
     <string name="learn_song_times">%1$d keer gezongen</string>
     <string name="learn_song_new_words">Heeft woorden om te leren</string>
+    <string name="practice_float_allow">Je muziek-app kan regels afspelen zodra Crosstune vóór andere apps mag worden weergegeven</string>
     <string name="practice_play">Regel afspelen</string>
     <string name="practice_stop">Regel stoppen</string>
     <string name="practice_loading">Openen in %1$s</string>

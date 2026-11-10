@@ -326,6 +326,7 @@
     <string name="lyrics_katakana_as_hiragana">片假名显示为平假名</string>
     <string name="lyrics_translation">翻译</string>
     <string name="lyrics_translation_failed">暂时无法翻译。</string>
+    <string name="lyrics_chords_failed">无法加载和弦。</string>
     <string name="lyrics_chords">和弦</string>
     <string name="lyrics_capo">变调夹 %1$d</string>
     <string name="setting_translate_into">翻译成</string>
@@ -391,6 +392,7 @@
     <string name="practice_fix_reading">修改读音</string>
     <string name="learn_song_times">唱了 %1$d 次</string>
     <string name="learn_song_new_words">有要学的词</string>
+    <string name="practice_float_allow">允许 Crosstune 显示在其他应用的上层后，音乐应用就能播放这些行</string>
     <string name="practice_play">播放这一行</string>
     <string name="practice_stop">停止这一行</string>
     <string name="practice_loading">正在 %1$s 中打开</string>

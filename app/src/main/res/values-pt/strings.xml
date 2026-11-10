@@ -326,6 +326,7 @@
     <string name="lyrics_katakana_as_hiragana">Katakana em hiragana</string>
     <string name="lyrics_translation">Tradução</string>
     <string name="lyrics_translation_failed">Não foi possível traduzir agora.</string>
+    <string name="lyrics_chords_failed">Não foi possível carregar os acordes.</string>
     <string name="lyrics_chords">Acordes</string>
     <string name="lyrics_capo">Capotraste %1$d</string>
     <string name="setting_translate_into">Traduzir para</string>
@@ -391,6 +392,7 @@
     <string name="practice_fix_reading">Corrigir leitura</string>
     <string name="learn_song_times">Cantada %1$d vezes</string>
     <string name="learn_song_new_words">Tem palavras para saber</string>
+    <string name="practice_float_allow">Seu app de música pode tocar as linhas quando o Crosstune puder se sobrepor a outros apps</string>
     <string name="practice_play">Ouvir a linha</string>
     <string name="practice_stop">Parar a linha</string>
     <string name="practice_loading">Abrindo no %1$s</string>

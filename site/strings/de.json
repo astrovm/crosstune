@@ -49,7 +49,7 @@
     ],
     [
       "Lerne die Texte",
-      "Kana, Pinyin, Romaji und Übersetzungen. Dann übe jede Zeile in der besten deiner Musik-Apps, die dorthin springen kann, sonst in einem kleinen YouTube-Player auf der Karte, mit einer täglichen Erinnerung an fällige Karten. Wenn eine Karte die Musik-App öffnet, tippe auf die Mitteilung, es sei denn, Crosstune darf darüber liegen."
+      "Kana, Pinyin, Romaji und Übersetzungen. Dann übe jede Zeile in der besten deiner Musik-Apps, die dorthin springen kann, sonst in einem kleinen YouTube-Player auf der Karte, mit einer täglichen Erinnerung an fällige Karten. Eine Karte öffnet deine Musik-App, sobald Crosstune über anderen Apps eingeblendet werden darf, damit es von selbst zurückkommt; bis dahin spielt die Zeile direkt auf der Karte."
     ],
     [
       "ChatGPT, wenn du es hast",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "Die Browsererweiterung von Crosstune für Chrome, Edge, Brave und Firefox öffnet Musik-Links, die du anklickst, in dem Dienst, den du in ihren Optionen wählst. Sie sieht sich nur Seiten der unterstützten Musikseiten an. Um Song, Album oder Künstler eines Links zu erkennen, ruft sie die öffentliche Seite oder öffentliche API des Ursprungsdienstes ab. Um den Eintrag selbst zu öffnen, sendet sie Titel und Künstler an die Suche des Zieldienstes, bei Spotify an ListenBrainz, wie die App. Sie zeigt außerdem den Songtext zu dem, was gerade läuft, in einer Seitenleiste und liest Titel und Künstler dafür von der Seite der Musikseite. Nur solange diese Leiste offen ist, sendet sie beides an LRCLIB, YouTube Music, NetEase Cloud Music und Letras, um den Text zu finden, wie die App. Nach einem Video, das nicht sagt, dass es Musik ist, wird nicht gesucht. Ihre Einstellungen bleiben im Browser auf deinem Computer. Sie hat kein Konto, keine Werbung und keine Analyse und sendet nichts an den Entwickler."
+      "Die Browsererweiterung von Crosstune für Chrome, Edge, Brave und Firefox öffnet Musik-Links, die du anklickst, in dem Dienst, den du in ihren Optionen wählst. Sie sieht sich nur Seiten der unterstützten Musikseiten an. Um Song, Album oder Künstler eines Links zu erkennen, ruft sie die öffentliche Seite oder öffentliche API des Ursprungsdienstes ab. Um den Eintrag selbst zu öffnen, sendet sie Titel und Künstler an die Suche des Zieldienstes, bei Spotify an ListenBrainz, wie die App. Sie zeigt außerdem den Songtext zu dem, was gerade läuft, in einer Seitenleiste und liest Titel und Künstler dafür von der Seite der Musikseite. Nur solange diese Leiste offen ist, sendet sie beides an Genius, LRCLIB, YouTube Music, NetEase Cloud Music und Letras, um den Text zu finden, wie die App. Nach einem Video, das nicht sagt, dass es Musik ist, wird nicht gesucht. Ihre Einstellungen bleiben im Browser auf deinem Computer. Sie hat kein Konto, keine Werbung und keine Analyse und sendet nichts an den Entwickler."
     ],
     [
       "h2",

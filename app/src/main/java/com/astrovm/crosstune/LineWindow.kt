@@ -19,12 +19,25 @@ internal data class LineWindow(val start: Long, val end: Long) {
     /** The app has played the line out. */
     fun over(position: Long) = position >= end
 
+    /**
+     * The window in what the app plays when that's [lengthMs] long: ending a moment before its end, so the app is paused before
+     * it goes on to its next song, or null when the line starts past that, as what plays is shorter than the song, e.g. a preview.
+     * Unchanged when the length isn't known.
+     */
+    fun within(lengthMs: Long?): LineWindow? {
+        val last = lengthMs?.takeIf { it > 0 }?.minus(END_GUARD_MS) ?: return this
+        return if (start >= last) null else copy(end = minOf(end, last))
+    }
+
     /** How long to give an app that says it's playing the line to get to its end: the line itself, and the time it takes to say where it is. */
     val patience get() = end - start + SEEK_WAIT_MS
 
     companion object {
         /** How long the music app has to say it went where it was sent. */
         const val SEEK_WAIT_MS = 3_000L
+
+        /** How long before what it plays ends an app is paused, so it doesn't start its next song first: a few looks at where it is. */
+        const val END_GUARD_MS = 300L
 
         /** How far from a line's start the app may say it is, having gone there, as apps round where they are. */
         const val SEEK_SLACK_MS = 1_500L

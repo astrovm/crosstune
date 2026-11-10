@@ -1,4 +1,4 @@
-// The Worker that keeps reports from the app. Deploy with `cf deploy` from this folder; the table is in schema.sql.
+// The Worker that keeps reports from the app. Deploy with `npx wrangler deploy` from this folder; the table is in schema.sql.
 {
   "name": "crosstune-report",
   // The account that holds 4st.li, which the custom domain needs.

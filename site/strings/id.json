@@ -49,7 +49,7 @@
     ],
     [
       "Pelajari liriknya",
-      "Kana, pinyin, romaji, dan terjemahan. Lalu latih setiap baris di aplikasi musikmu yang terbaik dan bisa pindah ke sana, atau di pemutar YouTube kecil pada kartu jika tidak ada, dengan pengingat harian untuk kartu yang sudah waktunya. Jika kartu membuka aplikasi musik, ketuk notifikasi untuk kembali, kecuali Crosstune boleh tampil di atasnya."
+      "Kana, pinyin, romaji, dan terjemahan. Lalu latih setiap baris di aplikasi musikmu yang terbaik dan bisa pindah ke sana, atau di pemutar YouTube kecil pada kartu jika tidak ada, dengan pengingat harian untuk kartu yang sudah waktunya. Kartu membuka aplikasi musikmu setelah Crosstune boleh tampil di atas aplikasi lain, agar bisa kembali sendiri; sampai saat itu, baris diputar langsung di kartu."
     ],
     [
       "ChatGPT, kalau kamu punya",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "Ekstensi browser Crosstune, untuk Chrome, Edge, Brave, dan Firefox, membuka link musik yang kamu klik di layanan yang kamu pilih di opsinya. Ia hanya melihat halaman di situs musik yang didukungnya. Untuk mengenali lagu, album, atau artis dari link, ia meminta halaman publik atau API publik layanan asal. Untuk membuka item itu sendiri, ia mengirim judul dan artis ke pencarian layanan tujuan, atau ke ListenBrainz untuk Spotify, seperti aplikasinya. Ia juga menampilkan lirik lagu yang sedang diputar di panel samping, dengan membaca judul dan artis dari halaman situs musik. Hanya selama panel itu terbuka, ia mengirimnya ke LRCLIB, YouTube Music, NetEase Cloud Music, dan Letras untuk mencari liriknya, seperti aplikasinya. Video yang tidak menyebut dirinya musik tidak dicari. Setelannya tetap di browser di komputermu. Ia tidak punya akun, iklan, atau analitik, dan tidak mengirim apa pun ke pengembang."
+      "Ekstensi browser Crosstune, untuk Chrome, Edge, Brave, dan Firefox, membuka link musik yang kamu klik di layanan yang kamu pilih di opsinya. Ia hanya melihat halaman di situs musik yang didukungnya. Untuk mengenali lagu, album, atau artis dari link, ia meminta halaman publik atau API publik layanan asal. Untuk membuka item itu sendiri, ia mengirim judul dan artis ke pencarian layanan tujuan, atau ke ListenBrainz untuk Spotify, seperti aplikasinya. Ia juga menampilkan lirik lagu yang sedang diputar di panel samping, dengan membaca judul dan artis dari halaman situs musik. Hanya selama panel itu terbuka, ia mengirimnya ke Genius, LRCLIB, YouTube Music, NetEase Cloud Music, dan Letras untuk mencari liriknya, seperti aplikasinya. Video yang tidak menyebut dirinya musik tidak dicari. Setelannya tetap di browser di komputermu. Ia tidak punya akun, iklan, atau analitik, dan tidak mengirim apa pun ke pengembang."
     ],
     [
       "h2",

@@ -343,6 +343,95 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalsBrokenSourceLineLandsWhereTheLivePageDoes() {
+        // IGNITE: Chromium collapses the source newlines to spaces, it does not break the line.
+        val sheet = "　　　　${jTotal("F")}　　　　　　 \n" +
+            "                        ${jTotal("G")}　　　　 \n" +
+            "                        ${jTotal("Em")}　　　${jTotal("Am")}　　　/ \n" +
+            "                        ${jTotal("Am")} \n                        /<br>\n" +
+            "                        迷わずに今　矛盾だらけの世界を　その手で撃ち放て<br>"
+        assertEquals(
+            listOf(SheetLine("迷わずに今　矛盾だらけの世界を　その手で撃ち放て", listOf(
+                Chord(4, "F"), Chord(11, "G"), Chord(16, "Em"), Chord(20, "Am"), Chord(24, "Am")
+            ))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalCollapsesSpacesAcrossInlineTags() {
+        val sheet = " </tt><tt> ${jTotal("Am7")} ${jTotal("G")}<br>目　と"
+        assertEquals(
+            listOf(SheetLine("目　と", listOf(Chord(0, "Am7"), Chord(2, "G")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalCollapsesSpacesInsideChordLinks() {
+        val sheet = "<a href='../../../cd/C.html'> C</a> ${jTotal("F")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C"), Chord(2, "F")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalIgnoresAChordLinkWithOnlyWhitespace() {
+        val sheet = "${jTotal("C")}<a href='../../../cd/C.html'> \n </a> ${jTotal("G")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "C"), Chord(2, "G")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalCountsOneSpaceForSpacesAndEmptyLinksInARow() {
+        // A browser draws the space, the empty link and the spaces after it as one space.
+        val sheet = "${jTotal("D")} <a href='../../../cd/A.html'> \n </a> \u3000\u3000${jTotal("Em")}<br>あいうえおかき"
+        assertEquals(
+            listOf(SheetLine("あいうえおかき", listOf(Chord(0, "D"), Chord(3, "Em")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalKeepsAChordWhoseLinkClosesAfterTheBreakOnTheLineOfItsName() {
+        val sheet = "${jTotal("F")}\u3000 <a href='../../../cd/C.html'>C<br>\n </a><br>あいうえお"
+        assertEquals(
+            listOf(SheetLine("あいうえお", listOf(Chord(0, "F"), Chord(2, "C")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalDoesNotTrimBracketsInTheMonospaceStack() {
+        val sheet = "\u3000${jTotal("C")}<br>」\u3000い"
+        assertEquals(2, ChordSheets.fromJTotal(sheet).single().chords.single().at)
+        assertEquals(1, ChordSheets.fromJTotal(sheet, monospace = true).single().chords.single().at)
+    }
+
+    @Test
+    fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
+        val sheet = "<a href='song-e.html'>Easy version</a><br>${jTotal("C")}<br>abcd"
+        assertEquals(
+            listOf(SheetLine("Easy version", emptyList()), SheetLine("abcd", listOf(Chord(0, "C")))),
+            ChordSheets.fromJTotal(sheet)
+        )
+    }
+
+    @Test
+    fun jTotalUsesTheLastActiveTtFontRule() {
+        val normal = "<style>tt { font-family: 'Inconsolata', sans-serif; }</style>"
+        val mono = "<style><!-- tt { font-family: 'Inconsolata', monospace; } --></style>"
+        assertEquals(false, ChordSheets.jTotalMonospace(""))
+        assertEquals(false, ChordSheets.jTotalMonospace("$normal<!-- $mono -->"))
+        assertEquals(true, ChordSheets.jTotalMonospace(normal + mono))
+        assertEquals(false, ChordSheets.jTotalMonospace(mono + normal))
+        assertEquals(false, ChordSheets.jTotalMonospace(normal + "<style>/* tt { font-family: 'Inconsolata', monospace; } */</style>"))
+    }
+
+    @Test
     fun jTotalsChordsPastTheWordsEndLandAtTheEndAndWordsWithNoChordsStay() {
         assertEquals(
             listOf(SheetLine("川の道", listOf(Chord(3, "Am"))), SheetLine("朝の光 2", emptyList())),

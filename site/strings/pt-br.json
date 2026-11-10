@@ -49,7 +49,7 @@
     ],
     [
       "Aprenda a letra",
-      "Kana, pinyin, romaji e traduções. Depois pratique cada linha no melhor dos seus apps de música que puder ir até ela, ou num player pequeno do YouTube no cartão quando nenhum puder, com um lembrete diário do que está na hora. Se um cartão abre o app de música, toque na notificação para voltar, salvo se o Crosstune puder ficar por cima."
+      "Kana, pinyin, romaji e traduções. Depois pratique cada linha no melhor dos seus apps de música que puder ir até ela, ou num player pequeno do YouTube no cartão quando nenhum puder, com um lembrete diário do que está na hora. Um cartão abre seu app de música quando o Crosstune pode se sobrepor a outros apps, para voltar sozinho; até lá, a linha toca no próprio cartão."
     ],
     [
       "ChatGPT, se você tiver",
@@ -171,7 +171,7 @@
     ],
     [
       "p",
-      "A extensão do Crosstune para Chrome, Edge, Brave e Firefox abre os links de música em que você clica no serviço escolhido nas opções dela. Ela só olha páginas dos sites de música que suporta. Para saber qual música, álbum ou artista é um link, ela pede a página pública ou a API pública do serviço de origem. Para abrir o próprio item, envia o título e o artista para a busca do serviço de destino, ou para o ListenBrainz no caso do Spotify, como o app. Ela também mostra a letra do que está tocando em um painel lateral, lendo o título e o artista na página do site de música. Só enquanto esse painel está aberto, ela os envia para LRCLIB, YouTube Music, NetEase Cloud Music e Letras para encontrar a letra, como o app. Um vídeo que não diz que é música não é procurado. As configurações ficam no navegador do seu computador. Ela não tem conta, anúncios nem análises, e não envia nada ao desenvolvedor."
+      "A extensão do Crosstune para Chrome, Edge, Brave e Firefox abre os links de música em que você clica no serviço escolhido nas opções dela. Ela só olha páginas dos sites de música que suporta. Para saber qual música, álbum ou artista é um link, ela pede a página pública ou a API pública do serviço de origem. Para abrir o próprio item, envia o título e o artista para a busca do serviço de destino, ou para o ListenBrainz no caso do Spotify, como o app. Ela também mostra a letra do que está tocando em um painel lateral, lendo o título e o artista na página do site de música. Só enquanto esse painel está aberto, ela os envia para Genius, LRCLIB, YouTube Music, NetEase Cloud Music e Letras para encontrar a letra, como o app. Um vídeo que não diz que é música não é procurado. As configurações ficam no navegador do seu computador. Ela não tem conta, anúncios nem análises, e não envia nada ao desenvolvedor."
     ],
     [
       "h2",

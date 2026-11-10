@@ -91,12 +91,28 @@ internal object ChordSheets {
     private val jTotalLineEnd = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
 
     /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
-    private val jTotalChord = Regex("""<a [^>]*>([^<]+)</a>(?:on([A-G][#b]?))?""")
+    private val jTotalChord = Regex("""<a [^>]*cd/[^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
 
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
-    private val splitChord = Regex("""^([^<]+)</a>(?:on([A-G][#b]?))?""")
+    private val splitChord = Regex("""^([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
     private val markup = Regex("""<[^>]+>""")
+    private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^>]+>""", RegexOption.IGNORE_CASE)
     private val sourceSpace = Regex("""[ \t\r\n]+""")
+    private val nameThenBreak = Regex("""(<a [^>]*cd/[^>]*>[^<]*[^<\s][^<]*)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
+    private val spacesAndTags = Regex("""(?: |<[^>]+>)+""")
+    private val oneSpaceOrTag = Regex(""" |<[^>]+>""")
+    private val commentedStyle = Regex("""<!--\s*<style\b[^>]*>.*?</style>\s*-->""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val styleBlock = Regex("""<style\b[^>]*>(.*?)</style>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val cssComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+    private val ttRule = Regex("""(?:^|[}\s>])tt\s*\{([^}]*)\}""", RegexOption.IGNORE_CASE)
+    private val fontFamily = Regex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
+
+    /** J-Total's last tt rule selects one of its two font stacks. */
+    fun jTotalMonospace(page: String): Boolean {
+        val css = styleBlock.findAll(page.replace(commentedStyle, "")).joinToString("\n") { it.groupValues[1] }.replace(cssComment, "")
+        val family = ttRule.findAll(css).mapNotNull { fontFamily.find(it.groupValues[1])?.groupValues?.get(1) }.lastOrNull()
+        return family?.replace("'", "\"")?.replace(" ", "")?.equals("\"Inconsolata\",monospace", ignoreCase = true) == true
+    }
 
     private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
@@ -128,23 +144,36 @@ internal object ChordSheets {
     }
 
     /**
+     * The line as a browser draws its spaces: all the spaces and tags in a row are one space, and
+     * none at the start of the line. The tags stay where they were, as a link can start or end in
+     * the space.
+     */
+    private fun collapseSpaces(line: String): String = line.replace(spacesAndTags) { run ->
+        var spaced = run.range.first == 0
+        run.value.replace(oneSpaceOrTag) {
+            if (it.value != " ") it.value else if (spaced) "" else " ".also { spaced = true }
+        }
+    }.trim(' ')
+
+    /**
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
      * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
      * first takes one. A full-width bracket or stop is two as well, except where the browser draws
      * it at one. A letter in neither font is as wide as the browser's fallback draws it, and a chord
      * goes over the letter that starts nearest where it is. Only a <br> ends a line, and spaces count as
      * a browser counts them, as its source wraps anywhere. Tags are not drawn: an empty link adds
-     * no column, and a link split by a <br> still names the chord on the next line.
+     * no column, and a link split by a <br> names the chord on the line its name is on.
      */
-    fun fromJTotal(sheet: String): List<SheetLine> {
-        val lines = sheet.split(jTotalLineEnd).map { it.replace(sourceSpace, " ").trim(' ') }
+    fun fromJTotal(sheet: String, monospace: Boolean = false): List<SheetLine> {
+        // A chord link can end after the break that follows its name: the name is still on its line.
+        val lines = sheet.replace(nameThenBreak, "$1$3$2").split(jTotalLineEnd).map { collapseSpaces(it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ")) }
             .filter { it.replace(markup, "").trim(' ').isNotEmpty() }
         val result = mutableListOf<SheetLine>()
         var index = 0
         while (index < lines.size) {
             val line = lines[index++]
             if (!jTotalChord.containsMatchIn(line) && !splitChord.containsMatchIn(line)) {
-                result += SheetLine(line, emptyList())
+                result += SheetLine(line.replace(markup, ""), emptyList())
                 continue
             }
             val chords = mutableListOf<Pair<Int, String>>()
@@ -153,22 +182,22 @@ internal object ChordSheets {
             // The opening tag stayed on the previous line, so this one starts at the chord's name.
             splitChord.find(line)?.let { split ->
                 val (name, bass) = split.destructured
-                chords += column to if (bass.isEmpty()) name else "$name/$bass"
-                column += columns(split.value.replace(markup, ""))
+                chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
+                column += columns(split.value.replace(markup, ""), monospace)
                 from = split.range.last + 1
             }
             jTotalChord.findAll(line).forEach { match ->
                 val (name, bass) = match.destructured
-                column += columns(line.substring(from, match.range.first).replace(markup, ""))
-                chords += column to if (bass.isEmpty()) name else "$name/$bass"
-                column += columns(match.value.replace(markup, ""))
+                column += columns(line.substring(from, match.range.first).replace(markup, ""), monospace)
+                chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
+                column += columns(match.value.replace(markup, ""), monospace)
                 from = match.range.last + 1
             }
             val words = lines.getOrNull(index)?.takeUnless {
                 jTotalChord.containsMatchIn(it) || splitChord.containsMatchIn(it)
-            }
+            }?.replace(markup, "")
             if (words != null) index++
-            result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at), name) })
+            result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at, monospace), name) })
         }
         return result
     }
@@ -185,19 +214,21 @@ internal object ChordSheets {
      * mark before it and not the opening mark after it: Inconsolata draws that quote at one column.
      * A letter outside the Basic Multilingual Plane is one letter, not two halves.
      */
-    private fun columns(text: String): Int {
+    private fun columns(text: String, monospace: Boolean): Int {
         var total = 0
         var index = 0
         while (index < text.length) {
-            total += widthAt(text, index)
+            total += widthAt(text, index, monospace)
             index += Character.charCount(text.codePointAt(index))
         }
         return total
     }
 
-    private fun widthAt(text: String, index: Int): Int {
-        val width = JTotalWidths.of(text.codePointAt(index))
-        return if (width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
+    private fun widthAt(text: String, index: Int, monospace: Boolean): Int {
+        val width = JTotalWidths.of(text.codePointAt(index), monospace)
+        // Chromium trims only with a font that has the narrow forms. Measured in the container, the Japanese
+        // font that `monospace` falls back to has none, so a page in that stack never trims.
+        return if (!monospace && width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
     }
 
     /** A two-column bracket or stop that the browser draws at one because of the letter beside it. */
@@ -242,7 +273,7 @@ internal object ChordSheets {
      * bracket can see the punctuation beside it. Letters that start in the same place, as a mark with
      * no width does, give the first. The end of the line is where a chord past the last letter goes.
      */
-    private fun letterAt(words: String, column: Int): Int {
+    private fun letterAt(words: String, column: Int, monospace: Boolean): Int {
         var best = 0
         var bestStart = 0
         var bestDistance = Int.MAX_VALUE
@@ -256,7 +287,7 @@ internal object ChordSheets {
                 bestDistance = distance
             }
             if (index >= words.length) return best
-            start += widthAt(words, index)
+            start += widthAt(words, index, monospace)
             index += Character.charCount(words.codePointAt(index))
         }
     }
