@@ -45,6 +45,9 @@ class ClassifyTest(unittest.TestCase):
             "(Use `node --trace-deprecation ...` to show where the warning was created)",
             "Interpreted diagnostic query \"Extraction warnings\" (cpp/diagnostics/extraction-warnings)",
             "Tests passed.",
+            "HEAD is now at 626c07c ci: clear the warnings our code and config leave in CI logs",
+            "Switched to a new branch 'ci/no-warnings'",
+            "[build-stdout] [INFO] Extracted file /x/scripts/ci-warnings/ci_warnings.py in 3ms",
         ]:
             with self.subTest(message):
                 self.assertIsNone(ci_warnings.classify(message))

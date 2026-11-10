@@ -47,7 +47,8 @@ KINDS = [
     ("compiler", re.compile(r":\d+(:\d+)?: warning: |^warning: ")),
     ("lint", re.compile(r"^Lint found .*\d+ warnings?|: Warning: .*\[\w+\]$")),
     ("jvm", re.compile(r"^WARNING: ")),
-    ("other", re.compile(r"(?i)\bwarn(ing)?s?\b|\bdeprecat")),
+    # A level or a label, not the word: a branch, a file or a commit can be named "no-warnings".
+    ("other", re.compile(r"\[WARN(ING)?\]|\bWARN(ING)?\b|\b[Ww]arning: |\b[Dd]eprecated\b")),
 ]
 
 # Lines that say "warning" without being one: the Gradle 10 summary's second line, counts of
