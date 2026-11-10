@@ -19,6 +19,7 @@ The table ends up in app/src/main/resources/com/astrovm/crosstune/jtotal-widths.
 line: `FIRST[-LAST] WIDTH`, code points in hex.
 """
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -29,6 +30,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1] if len(HERE.parents) > 1 else HERE  # in the container the script sits at /script
 TABLE = REPO / "app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt"
+MONO_TABLE = TABLE.with_name("jtotal-widths-mono.txt")
 IMAGE = "localhost/crosstune-jtotal-widths"
 
 # Google Fonts' Inconsolata v37, in the three files J-Total's stylesheet asks for, with their ranges.
@@ -48,6 +50,7 @@ FONTS = {
     ),
 }
 STACK = '"Inconsolata","MS Gothic","Hiragino Kaku Gothic","Monaco",sans-serif'
+MONO_STACK = '"Inconsolata",monospace'
 
 # Where lyrics can have letters: all of the Basic Multilingual Plane above Latin-1's controls, and emoji.
 SPANS = ((0x80, 0xD7FF), (0xE000, 0xFFFD), (0x1F000, 0x1FAFF))
@@ -86,7 +89,17 @@ def lines(table):
     return [f"{a:X} {w}" if a == b else f"{a:X}-{b:X} {w}" for a, b, w in table]
 
 
-def measure(out):
+def header(environment):
+    """Record the browser and fonts that actually made these widths."""
+    return ["# J-Total widths, in thousandths of a digit", *[f"# {entry}" for entry in environment]]
+
+
+def installed_fonts(packages):
+    """List installed font packages, including those in the base image."""
+    return [line.removesuffix(" installed") for line in packages.splitlines() if line.endswith(" installed")]
+
+
+def measure(out, stack=STACK):
     """Inside the container: the width of every letter, in thousandths of a digit. Writes JSON to `out`."""
     from playwright.sync_api import sync_playwright
 
@@ -94,11 +107,26 @@ def measure(out):
         f'@font-face {{ font-family:"Inconsolata"; src:url("file:///fonts/inconsolata-{name}.woff2") format("woff2"); unicode-range:{span}; }}\n'
         for name, (_, span) in FONTS.items()
     )
-    head = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>\n{faces}tt {{ font-family:{STACK}; font-size:40px; line-height:1; white-space:pre; }}\ndiv {{ margin:0; }}\n</style></head><body>'
+    head = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>\n{faces}tt {{ font-family:{stack}; font-size:40px; line-height:1; white-space:pre; }}\ndiv {{ margin:0; }}\n</style></head><body>'
     codes = spans_codes()
     widths = {}
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
+        environment = [
+            f"Font stack {stack}",
+            f"Chromium {browser.version}",
+            f"Playwright {subprocess.check_output(['pip', 'show', 'playwright'], text=True).split('Version: ', 1)[1].splitlines()[0]}",
+            f"Unicode {unicodedata.unidata_version}",
+        ]
+        packages = subprocess.check_output(
+            ['dpkg-query', '-W', '-f=${Package} ${Version} ${db:Status-Status}\\n', 'fonts-*'],
+            text=True,
+        )
+        environment.extend(installed_fonts(packages))
+        environment.append('Inconsolata v37 (Google Fonts), SHA-256: ' + ', '.join(
+            f'{name}={hashlib.sha256(Path(f"/fonts/inconsolata-{name}.woff2").read_bytes()).hexdigest()}' for name in FONTS
+        ))
+        environment.append('MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans')
         page = browser.new_page(viewport={"width": 1200, "height": 800})
         for start in range(0, len(codes), BATCH):
             rows = "".join(f'<div><tt data-c="{c}">あ<s>{chr(c)}</s>あ</tt></div>' for c in codes[start:start + BATCH])
@@ -117,7 +145,7 @@ def measure(out):
             }"""))
         browser.close()
     nothing = [c for c in codes if unassigned(c)]
-    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing}), encoding="utf-8")
+    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing, "environment": environment}), encoding="utf-8")
 
 
 def cache():
@@ -125,8 +153,8 @@ def cache():
     return (mnt if mnt.is_dir() else Path.home() / ".cache/agent-cache") / "crosstune-jtotal-widths"
 
 
-def in_container():
-    """Measures in the container and gives back the table text it makes."""
+def container():
+    """Downloads Inconsolata once, builds the image, and gives back the folder that holds the fonts' work files."""
     work = cache()
     (work / "fonts").mkdir(parents=True, exist_ok=True)
     for name, (url, _) in FONTS.items():
@@ -134,31 +162,39 @@ def in_container():
         if not font.exists():
             font.write_bytes(urllib.request.urlopen(url, timeout=60).read())
     subprocess.run(["podman", "build", "-t", IMAGE, "-f", str(HERE / "Containerfile"), str(HERE)], check=True)
+    return work
+
+
+def in_container(mono=False):
+    """Measures in the container and gives back the table text it makes."""
+    work = container()
     subprocess.run(
         ["podman", "run", "--rm", "-v", f"{work}:/work", "-v", f"{work / 'fonts'}:/fonts:ro", "-v", f"{HERE}:/script:ro",
-         IMAGE, "python3", "/script/jtotal_widths.py", "measure", "/work/raw.json"],
+         IMAGE, "python3", "/script/jtotal_widths.py", "measure", "/work/raw.json", *(["--mono"] if mono else [])],
         check=True,
     )
     raw = json.loads((work / "raw.json").read_text(encoding="utf-8"))
     widths = {int(c): w for c, w in raw["widths"].items()}
-    return "\n".join(lines(runs(widths, set(raw["nothing"])))) + "\n"
+    return "\n".join(header(raw["environment"]) + lines(runs(widths, set(raw["nothing"])))) + "\n"
 
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("command", choices=("generate", "check", "measure"))
     parser.add_argument("out", nargs="?")
+    parser.add_argument("--mono", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "measure":
-        measure(args.out)
+        measure(args.out, MONO_STACK if args.mono else STACK)
         return 0
-    text = in_container()
+    tables = [(TABLE, in_container()), (MONO_TABLE, in_container(mono=True))]
     if args.command == "generate":
-        TABLE.parent.mkdir(parents=True, exist_ok=True)
-        TABLE.write_text(text, encoding="utf-8")
-        print(f"{TABLE.relative_to(REPO)}: {len(text.splitlines())} runs")
+        for table, text in tables:
+            table.parent.mkdir(parents=True, exist_ok=True)
+            table.write_text(text, encoding="utf-8")
+            print(f"{table.relative_to(REPO)}: {len(text.splitlines())} lines")
         return 0
-    if TABLE.read_text(encoding="utf-8") == text:
+    if all(table.read_text(encoding="utf-8") == text for table, text in tables):
         print("the table is what the browser measures")
         return 0
     print("the table differs from the browser: run `generate` and look at the diff", file=sys.stderr)

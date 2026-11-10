@@ -62,6 +62,13 @@ private val jTotalSheet = Regex("""<!--HPSTART-->(.*?)<!--HPEND-->""", RegexOpti
 private val J_TOTAL_CHARSET = Charset.forName("Shift_JIS")
 
 /**
+ * A sheet's page as a browser reads it. Browsers read Shift_JIS as Windows-31J, which has the circled
+ * numbers and Roman numerals J-Total's sheets use, and the wave dash it draws; Java's Shift_JIS has
+ * no place for them and gives back "\uFFFD".
+ */
+private val J_TOTAL_PAGE_CHARSET = runCatching { Charset.forName("windows-31j") }.getOrDefault(J_TOTAL_CHARSET)
+
+/**
  * A song's chords, from the sites guitarists share them on: U-FRET, which has most Japanese songs,
  * J-Total, which has the older ones, Ultimate Guitar, which has most others, Cifra Club, which has
  * the Portuguese ones, and LaCuerda, which has the Spanish ones. A sheet only counts when its words
@@ -524,8 +531,9 @@ internal class ChordFinder(
 
     private suspend fun searchJTotal(song: MusicMetadata, names: List<String>, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(names, { name -> jTotalSheets(song, name) }, fits) { url ->
-            val sheet = jTotalSheet.firstGroup(fetch(url, charset = J_TOTAL_CHARSET) { code, _ -> code == 404 }) ?: return@firstSheet null
-            ChordSheet(ChordSheets.fromJTotal(unescape(sheet)), site = ChordSite.J_TOTAL, url = url)
+            val page = fetch(url, charset = J_TOTAL_PAGE_CHARSET) { code, _ -> code == 404 }
+            val sheet = jTotalSheet.firstGroup(page) ?: return@firstSheet null
+            ChordSheet(ChordSheets.fromJTotal(unescape(sheet), ChordSheets.jTotalMonospace(page)), site = ChordSite.J_TOTAL, url = url)
         }
 
     /** The pages of J-Total's sheets of [name]: by the artist first, and its easier versions after its own. */

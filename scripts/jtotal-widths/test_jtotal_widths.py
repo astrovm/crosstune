@@ -31,6 +31,14 @@ class LinesTest(unittest.TestCase):
     def test_a_run_of_one_is_one_code_point(self):
         self.assertEqual(w.lines([[0x133, 0x133, 888], [0x1E00, 0x1E9F, 1000]]), ["133 888", "1E00-1E9F 1000"])
 
+    def test_header_records_the_environment_as_comments(self):
+        self.assertEqual(w.header(["Chromium 123", "font 1"]), [
+            "# J-Total widths, in thousandths of a digit", "# Chromium 123", "# font 1"
+        ])
+
+    def test_only_installed_fonts_are_recorded(self):
+        self.assertEqual(w.installed_fonts("fonts-one 1 installed\nfonts-two 2 not-installed\n"), ["fonts-one 1"])
+
 
 class SpansTest(unittest.TestCase):
     def test_the_controls_above_ascii_are_left_out(self):
