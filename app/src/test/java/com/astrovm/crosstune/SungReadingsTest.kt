@@ -36,7 +36,8 @@ class SungReadingsTest {
     private fun site(rows: List<Pair<String, String>>, pages: Map<String, String>, failing: Boolean = false): (Request) -> Response = { request ->
         if (failing) throw IOException("offline")
         when (request.url.encodedPath) {
-            "/search" -> FakeSpotify.html(request, search(rows))
+            // As UtaTen does, it answers a search with nothing unless it says it came from its own pages.
+            "/search" -> FakeSpotify.html(request, if (request.header("Referer") == "https://utaten.com/") search(rows) else "")
             in pages.keys -> FakeSpotify.html(request, pages.getValue(request.url.encodedPath))
             else -> FakeSpotify.html(request, "", code = 404)
         }

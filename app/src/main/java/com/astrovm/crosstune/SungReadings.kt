@@ -81,7 +81,8 @@ internal class SungReadings(
     }
 
     private suspend fun get(url: String): String {
-        val request = Request.Builder().url(url).header("User-Agent", BROWSER).get().build()
+        // Its search answers nothing to a request that doesn't say it came from its own pages.
+        val request = Request.Builder().url(url).header("User-Agent", BROWSER).header("Referer", "$SITE_URL/").get().build()
         return client.newCall(request).answer(ioDispatcher) { response ->
             if (!response.isSuccessful) throw IOException("UtaTen returned ${response.code}")
             response.body.stringAtMost()
@@ -103,8 +104,11 @@ internal class SungReadings(
         /** How many of UtaTen's pages are read at most for a song. */
         const val MAX_PAGES = 3
 
-        /** Bumped when what was found before should be looked up again: 2 for songs a phone's pages found nothing for. */
-        const val CACHE_VERSION = 2
+        /**
+         * Bumped when what was found before should be looked up again: 2 for songs a phone's pages found nothing for,
+         * 3 for those its search answered with nothing, as it does without a Referer.
+         */
+        const val CACHE_VERSION = 3
 
         /** It answers a browser; a computer's, as a phone's gets pages laid out otherwise, which say nothing here. */
         const val BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
