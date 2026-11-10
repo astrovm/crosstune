@@ -702,6 +702,7 @@ class MainActivity : ComponentActivity() {
         onResetSync = viewModel::resetSync,
         onSendReport = viewModel::sendReport,
         onCloseReport = viewModel::closeReport,
+        onReportReading = viewModel::reportReading,
         onAllowAutoReports = viewModel::allowAutoReports,
         onCloseAutoReportOffer = viewModel::closeAutoReportOffer,
         onFetchSingingModel = viewModel::fetchSingingModel,

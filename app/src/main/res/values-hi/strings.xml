@@ -313,6 +313,9 @@
     <string name="report_send">भेजें</string>
     <string name="report_sent">भेज दिया। धन्यवाद!</string>
     <string name="report_failed">भेजा नहीं जा सका। अपना कनेक्शन जाँचें और फिर कोशिश करें।</string>
+    <string name="reading_wrong">गलत उच्चारण</string>
+    <string name="reading_right">सही उच्चारण (वैकल्पिक)</string>
+    <string name="reading_what_goes">शब्द, दिखाया गया उच्चारण, उसकी पंक्ति, गाने का नाम और ऐप व Android के वर्ज़न भेजता है। इसे सिर्फ़ Crosstune का डेवलपर पढ़ता है।</string>
     <string name="auto_report_offer">ऐसी समस्याओं की रिपोर्ट अपने-आप करें?</string>
     <string name="auto_report_offer_words_off">इस गाने के बोल सही समय पर नहीं थे। ऐसे मामलों की रिपोर्ट अपने-आप करें?</string>
     <string name="auto_report_yes">हाँ</string>

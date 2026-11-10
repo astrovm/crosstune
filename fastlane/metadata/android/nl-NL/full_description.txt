@@ -14,7 +14,7 @@ Krijg je een link van een muziekdienst, dan opent hetzelfde nummer in je favorie
 <li>Herkent een nummer in de buurt: Crosstune luistert zelf, of opent Shazam of de nummerzoekfunctie van Google. Opent ook Shazam-links en nummers gedeeld vanuit Now Playing op je Pixel.</li>
 <li>Kan een link niet worden gelezen? Open hem in de app waar hij vandaan komt, kopieer de zoektekst of deel een zoeklink.</li>
 <li>Vind een nummer door de naam te typen in plaats van een link. Afspelen houdt je in Crosstune: een balk onderaan toont wat speelt, de speler toont wat hierna komt en heeft Herhalen, Vind ik leuk en een slaaptimer, en je veegt tussen speler en tekst.</li>
-<li>Teksten in de maat: ze volgen je muziekapp of luisteren mee, zweven boven andere apps en lopen met MilkDrop-visuals erachter. Verkeerde woorden of timing? Meld het met één tik vanuit de tekst: het nummer en de timing gaan privé naar de ontwikkelaar.</li>
+<li>Teksten in de maat: ze volgen je muziekapp of luisteren mee, zweven boven andere apps en lopen met MilkDrop-visuals erachter. Verkeerde woorden, timing of uitspraak? Meld het met één tik in de tekst of op het woord: het gaat privé naar de ontwikkelaar.</li>
 <li>Leer de woorden met kana, pinyin, romaji en vertalingen. Kies wat elke kaartkant toont. Meerdere soorten kaarten per regel, elk met een eigen schema. Een dagelijkse herinnering. Een kaart opent de muziekapp pas als Crosstune erboven mag; tot dan speelt de regel op de kaart.</li>
 <li>Log in met je betaalde ChatGPT-abonnement om hele nummers te vertalen, regels uit te leggen, woorden te vinden die het leren waard zijn en nummers te zoeken door ze te beschrijven.</li>
 <li>Ook op Android TV.</li>

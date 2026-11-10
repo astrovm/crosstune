@@ -73,9 +73,9 @@ class SungReadingsTest {
     fun eachLineTakesTheReadingsOfTheLineMostLikeItThere() {
         val fixes = SungReadings.matched(lines, read(), SungReadings.linesOf(page))
         // 都会の夜が is written otherwise there, のよるが, but reads alike; the kanji it has are taken.
-        assertTrue(ReadingFix(0, "都会", "まち") in fixes)
-        assertTrue(ReadingFix(2, "存在", "こと") in fixes)
-        assertTrue(ReadingFix(3, "光", "ひか") in fixes)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in fixes)
+        assertTrue(ReadingFix(2, "存在", "こと", Reader.SUNG) in fixes)
+        assertTrue(ReadingFix(3, "光", "ひか", Reader.SUNG) in fixes)
         // Only kanji in the line, each in its own line.
         assertTrue(fixes.none { it.line == 1 })
         assertTrue(fixes.none { it.line == 3 && it.kanji == "夜" })
@@ -99,7 +99,7 @@ class SungReadingsTest {
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
         val cache = LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)
         val fixes = ask(cache)!!
-        assertTrue(ReadingFix(0, "都会", "まち") in fixes)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in fixes)
         val search = fake.requestedUrls.first().toHttpUrl()
         assertEquals("utaten.com", search.host)
         assertEquals("Band", search.queryParameter("artist_name"))
@@ -126,7 +126,7 @@ class SungReadingsTest {
                 else -> FakeSpotify.html(request, other)
             }
         }
-        assertTrue(ReadingFix(0, "都会", "まち") in ask()!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask()!!)
         assertTrue(fake.requestedUrls.any { "title=Night%20Town" in it })
         // The singer's own, though listed second.
         assertTrue(fake.requestedUrls.none { "/lyric/zz0002/" in it })
@@ -169,7 +169,7 @@ class SungReadingsTest {
         // Kept from before, but kept wrong, it's asked again.
         runBlocking { cache.put("utaten|${SungReadings.CACHE_VERSION}|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}", "not json") }
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
-        assertTrue(ReadingFix(0, "都会", "まち") in ask(cache)!!)
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(cache)!!)
     }
 
     @Test
@@ -177,7 +177,7 @@ class SungReadingsTest {
         val theirs = SungReadings.linesOf(page)
         // The dictionary read fewer lines than there are: the rest are compared as written.
         val fixes = SungReadings.matched(lines, read(lines.take(1)), theirs)
-        assertTrue(ReadingFix(2, "存在", "こと") in fixes)
+        assertTrue(ReadingFix(2, "存在", "こと", Reader.SUNG) in fixes)
         assertEquals(emptyList<ReadingFix>(), SungReadings.matched(lines, read(), emptyList()))
     }
 
@@ -188,6 +188,6 @@ class SungReadingsTest {
         val parts = SungReadings.linesOf(there).single()
         assertEquals(listOf(Ruby("", "ひ"), Ruby("星", "ほし"), Ruby("が"), Ruby("ラ", "ら"), Ruby("月", "つき")), parts)
         val fixes = SungReadings.matched(listOf("星がラ"), read(listOf("星がラ")), listOf(parts))
-        assertEquals(listOf(ReadingFix(0, "星", "ほし")), fixes)
+        assertEquals(listOf(ReadingFix(0, "星", "ほし", Reader.SUNG)), fixes)
     }
 }

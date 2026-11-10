@@ -25,7 +25,8 @@ class KeptWordsTest {
         syncPoints = listOf(SyncPoint(1_000, 1_250)),
         learning = Learning(
             script = Script.JAPANESE,
-            lines = listOf(LineReading(listOf(Ruby("晴", "は"), Ruby("れた")), "はれた", "hareta", typed = "hareta")),
+            // A reading UtaTen put right says so again.
+            lines = listOf(LineReading(listOf(Ruby("晴", "は"), Ruby("れた"), Ruby("日", "ひ", Reader.SUNG), Ruby("に")), "はれたひに", "hareta hi ni", typed = "hareta hi ni")),
             translations = listOf("On a sunny day", null),
             fromRomaji = true
         ),
@@ -57,6 +58,12 @@ class KeptWordsTest {
         val today = all.copy(learning = all.learning.copy(lines = listOf(LineReading(listOf(Ruby("今日は", "こんにちわ")), "こんにちわ", "konnichiwa"))))
         val back = KeptWords.from(today.json())!!
         assertEquals(listOf(Ruby("今日", "こんにち"), Ruby("は", "わ")), back.learning.lines.single().parts)
+    }
+
+    @Test
+    fun aReadingPutRightByWhatThisVersionDoesntKnowReadsBackAsTheDictionarys() {
+        val back = KeptWords.from(all.json().replace("\"utaten\"", "\"klingon\""))!!
+        assertEquals(Ruby("日", "ひ"), back.learning.lines.single().parts[2])
     }
 
     @Test

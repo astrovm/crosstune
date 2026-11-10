@@ -39,5 +39,26 @@ CREATE TABLE IF NOT EXISTS reports (
   timing_log TEXT,
   -- Which recording a timing kept from an earlier version was for, when the app knew: "SPOTIFY:id".
   -- Added after, before the Worker that fills it is deployed: ALTER TABLE reports ADD COLUMN recording TEXT;
-  recording TEXT
+  recording TEXT,
+  -- A reading the user marked wrong, on the word itself (problem "wrong_reading"). Added after, in this
+  -- order, before the Worker that fills them is deployed (other reports send none, so they stay NULL):
+  --   ALTER TABLE reports ADD COLUMN lyric_line TEXT;
+  --   ALTER TABLE reports ADD COLUMN word TEXT;
+  --   ALTER TABLE reports ADD COLUMN reading_shown TEXT;
+  --   ALTER TABLE reports ADD COLUMN reader TEXT;
+  --   ALTER TABLE reports ADD COLUMN language TEXT;
+  --   ALTER TABLE reports ADD COLUMN right_reading TEXT;
+  -- The line the word is in, as the lyrics write it.
+  lyric_line TEXT,
+  -- The word as written: "君".
+  word TEXT,
+  -- How the word's details read it, each way it shows, " / " between: "くん / kun".
+  reading_shown TEXT,
+  -- What read it, "+" between when more than one did: "ipadic", "unidic", "crosstune_rules", "lyrics_ruby",
+  -- "utaten", "chatgpt", "android_pinyin", "crosstune_romaja", "android_latin".
+  reader TEXT,
+  -- The script it was read in: "japanese", "chinese", "korean", "cyrillic", and so on.
+  language TEXT,
+  -- The right reading, when the user typed it.
+  right_reading TEXT
 );
