@@ -2480,29 +2480,42 @@ internal class MainViewModel(
      */
     private fun hearUntimed(hearing: SingingHearing, song: MusicMetadata) {
         val words = found?.words ?: return
-        if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || shazamLeads || nextPaused || !mayCalibrate()) return
-        if (appFollowing?.let { it.app != null && it.clock.playing } != true) return
+        if (!mayHearUntimed()) return
         val store = heardUntimed?.let(::HeardSongs)
         singingJob = viewModelScope.launch {
             // Shown from what was kept, what was heard before isn't loaded yet.
             if (heardStretches.isEmpty()) heardStretches = store?.load(song, words).orEmpty()
             // A few whiles in a row with nothing sung heard, it's let be till the app's clock starts or jumps.
             while (!heardEnough(song) && singingTries < SINGING_TRIES) {
-                val clock = appFollowing?.clock?.takeIf { it.playing } ?: return@launch
-                singingTries++
-                val sung = hearOnce(hearing, uiState.lyrics.lines(), null) ?: return@launch
-                // Moved, paused or gone on meanwhile, what was heard can't be placed; timed words found meanwhile go by their own timing.
-                val playing = appFollowing?.clock?.takeIf { it.playing } ?: return@launch
-                if (uiState.lyricsFor != song || found?.words != words || foundLines.isNotEmpty() || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
-                if (sung.words.isNotEmpty()) singingTries = 0
-                val from = clock.positionAt(sung.startedAtMs)
-                val heard = sung.words.filter { it.atMs >= 0 }.map { it.text to clock.positionAt(sung.startedAtMs + it.atMs) }
-                heardStretches = heardStretches + HeardStretch(from, from + SingingListener.SECONDS * 1000L, heard)
+                val heard = hearStretch(hearing, song, words) ?: return@launch
+                heardStretches = heardStretches + heard
                 store?.save(song, words, heardStretches)
                 timeByEar(song)
                 timeSavedLines(song, again = true)
             }
         }
+    }
+
+    /** Whether the words found with no timing may be heard now: nothing else hears, and a music app on the phone plays them. */
+    private fun mayHearUntimed(): Boolean {
+        val busy = singingJob?.isActive == true || singingTries >= SINGING_TRIES
+        if (busy || shazamLeads || nextPaused) return false
+        return mayCalibrate() && appFollowing?.let { it.app != null && it.clock.playing } == true
+    }
+
+    /** The next while of [song] heard, in song time by the app's clock; null when nothing could be heard, or it can't be placed. */
+    private suspend fun hearStretch(hearing: SingingHearing, song: MusicMetadata, words: String): HeardStretch? {
+        val clock = appFollowing?.clock?.takeIf { it.playing } ?: return null
+        singingTries++
+        val sung = hearOnce(hearing, uiState.lyrics.lines(), null) ?: return null
+        // Moved, paused or gone on meanwhile, what was heard can't be placed; timed words found meanwhile go by their own timing.
+        val playing = appFollowing?.clock?.takeIf { it.playing } ?: return null
+        val same = uiState.lyricsFor == song && found?.words == words && foundLines.isEmpty()
+        if (!same || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return null
+        if (sung.words.isNotEmpty()) singingTries = 0
+        val from = clock.positionAt(sung.startedAtMs)
+        val heard = sung.words.filter { it.atMs >= 0 }.map { it.text to clock.positionAt(sung.startedAtMs + it.atMs) }
+        return HeardStretch(from, from + SingingListener.SECONDS * 1000L, heard)
     }
 
     /**
