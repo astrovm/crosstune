@@ -66,4 +66,22 @@ class LineWindowTest {
         assertTrue(lasted(4_000, now = 5_000, atLeast = 1_000))
         assertTrue(lasted(1_000, now = 5_000, atLeast = 1_000))
     }
+
+    @Test
+    fun aLineEndsBeforeWhatTheAppPlaysDoes() {
+        val window = LineWindow(10_000, 16_000)
+        // Longer than the line: as it is.
+        assertEquals(window, window.within(200_000))
+        assertEquals(window, window.within(16_000 + LineWindow.END_GUARD_MS))
+        // Ending within it: the line ends a moment before, so the app is paused before going on.
+        assertEquals(LineWindow(10_000, 15_000 - LineWindow.END_GUARD_MS), window.within(15_000))
+        // Over by the line's start, or right at it: there's no line there to play.
+        assertEquals(null, window.within(10_000 + LineWindow.END_GUARD_MS))
+        assertEquals(LineWindow(10_000, 10_001), window.within(10_001 + LineWindow.END_GUARD_MS))
+        assertEquals(null, window.within(8_000))
+        // Not known, or said as nothing: as it is.
+        assertEquals(window, window.within(null))
+        assertEquals(window, window.within(0))
+        assertEquals(LineWindow(0, 1), LineWindow(0, 1).within(1 + LineWindow.END_GUARD_MS))
+    }
 }

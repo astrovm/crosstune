@@ -413,7 +413,12 @@ internal data class Practice(
     /** The last card's line shown, for the song practice left off in. */
     val lastSong: SavedLine? = null,
     /** What the music app played before, to go back to once done. */
-    val before: Before? = null
+    val before: Before? = null,
+    /**
+     * A music app that might have played a line was left out, as opening it would have covered the card, and Crosstune
+     * can't come back over it until it may show over other apps: the card says so, until that's allowed.
+     */
+    val cantComeBack: Boolean = false
 ) {
     val line: SavedLine? get() = queue.firstOrNull()
 }

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.pinch
@@ -43,11 +44,13 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.isNotEnabled
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -114,6 +117,7 @@ class FlashcardsTest {
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
         MainActivity.linePlayerFactory = realLinePlayer
         MainActivity.phoneFactory = realPhone
+        MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
     }
 
     @Test
@@ -817,8 +821,8 @@ class FlashcardsTest {
         }
         launch()
         practiseAll(5)
-        // YouTube Music ignores being asked by name, so it's given the song's link there.
-        for ((title, link) in listOf("Other" to "https://music.youtube.com/watch?v=other000000", "Another" to "https://music.youtube.com/watch?v=another0000")) {
+        // YouTube Music ignores being asked by name, so it's given the song's link there, at the line: 5 s in.
+        for ((title, link) in listOf("Other" to "https://music.youtube.com/watch?v=other000000&t=5", "Another" to "https://music.youtube.com/watch?v=another0000&t=5")) {
             waitUntil { phone.songsAsked.lastOrNull()?.first?.title == title }
             assertEquals(link, phone.linksAsked.last())
             appHas(title, atMs = 0, app = youTubeMusic)
@@ -845,7 +849,7 @@ class FlashcardsTest {
         click(string(R.string.practice_good))
         waitUntil { phone.songsAsked.size == 5 }
         assertEquals(MusicMetadata("Fifth", "Band") to youTubeMusic, phone.songsAsked.last())
-        assertEquals("https://music.youtube.com/watch?v=fifth000000", phone.linksAsked.last())
+        assertEquals("https://music.youtube.com/watch?v=fifth000000&t=5", phone.linksAsked.last())
     }
 
     @Test
@@ -865,7 +869,7 @@ class FlashcardsTest {
         practiseAll(1)
         waitUntil { phone.songsAsked.isNotEmpty() }
         assertEquals(MusicMetadata("Other", "Band") to youTubeMusic, phone.songsAsked.single())
-        assertEquals("https://music.youtube.com/watch?v=other000000", phone.linksAsked.single())
+        assertEquals("https://music.youtube.com/watch?v=other000000&t=5", phone.linksAsked.single())
         appHas("Other", atMs = 0, app = youTubeMusic)
         waitUntil { practice().sound == LineSound.PLAYED }
     }
@@ -891,7 +895,7 @@ class FlashcardsTest {
         launch()
         practiseAll(2)
         waitUntil { phone.opened.isNotEmpty() }
-        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=another0000", phone.opened.single())
+        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=another0000&t=5", phone.opened.single())
         assertTrue(phone.songsAsked.isEmpty())
         appHas("Another", atMs = 0, app = youTubeMusic)
         // Once it has the song, Crosstune's back in front, with the line ready.
@@ -904,11 +908,74 @@ class FlashcardsTest {
         phone.canPlaySongs = false
         phone.running = emptySet()
         waitUntil { phone.opened.size == 2 }
-        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000", phone.opened.last())
+        assertEquals(youTubeMusic to "https://music.youtube.com/watch?v=other000000&t=5", phone.opened.last())
         // Never getting there, Crosstune still comes back, and YouTube plays the line in the player.
         pass(MainViewModel.LOAD_SONG_MS + 1_000)
         waitUntil { practice().video == "other000000" }
         assertEquals(2, phone.cameBack)
+    }
+
+    @Test
+    fun withoutShowingOverOtherAppsACardPlaysItsLineHereAndSaysWhatTheMusicAppNeeds() {
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        saved("""{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""")
+        youTubeMusicHasAnother()
+        // YouTube Music can't be woken, so it would have to be opened, over the card, which Crosstune couldn't come back from.
+        phone.running = setOf("com.spotify.music")
+        phone.comesBackByItself = false
+        launch()
+        practiseAll(1)
+        // The line plays here, at once, rather than after the 12 s the app opened behind would have waited.
+        waitUntil { practice().video == "another0000" }
+        assertTrue(phone.opened.isEmpty())
+        assertEquals(0, phone.cameBack)
+        // And the card says, plainly, what the music app needs, with the way to allow it.
+        waitUntil { shown(string(R.string.practice_float_allow)) }
+        assertTrue(composeRule.onAllNodes(hasTestTag(PRACTICE_COME_BACK_TAG) and hasAnyAncestor(hasTestTag(PRACTICE_CARD_TAG)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        composeRule.onAllNodes(hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG)), useUnmergedTree = true).onFirst().performClick()
+        composeRule.waitForIdle()
+        assertEquals(listOf(Need.Float), model().uiState.fixes?.steps)
+        // Back from the steps, it's still asked until it's allowed, then gone.
+        model().closeFixes()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.practice_float_allow)))
+        model().setCanFloatOverApps(true)
+        composeRule.waitForIdle()
+        assertFalse(shown(string(R.string.practice_float_allow)))
+    }
+
+    @Test
+    fun theCardsAllowOfferWaitsWhileShizukuAllowsIt() {
+        // Shizuku asks the user first, and they haven't answered yet.
+        val shell = FakeShell().apply { answer = CompletableDeferred() }
+        MainActivity.shellFactory = { listOf(shell) }
+        val youTubeMusic = MusicService.YOUTUBE_MUSIC.packageName
+        saved("""{"text":"One","title":"Another","artist":"Band","box":1,"start":5000,"end":9000,"app":"$youTubeMusic"}""")
+        youTubeMusicHasAnother()
+        phone.running = setOf("com.spotify.music")
+        phone.comesBackByItself = false
+        launch()
+        practiseAll(1)
+        waitUntil { shown(string(R.string.practice_float_allow)) }
+        val allow = hasText(string(R.string.allow_button)) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))
+        composeRule.onAllNodes(allow, useUnmergedTree = true).onFirst().performClick()
+        composeRule.waitForIdle()
+        assertEquals(OneTapFix.FLOAT, model().uiState.fixingInOneTap)
+        // Tapped once, it can't be again while it's being allowed.
+        val waiting = isNotEnabled() and hasAnyDescendant(hasText(string(R.string.allow_button))) and hasAnyAncestor(hasTestTag(PRACTICE_COME_BACK_TAG))
+        waitUntil { composeRule.onAllNodes(waiting, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        shell.answer.complete(Unit)
+    }
+
+    /** YouTube Music has "Another" by Band, as the video another0000. */
+    private fun youTubeMusicHasAnother() {
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com" && "Another" in FakeSpotify.bodyOf(request)) FakeSpotify.html(request, """{"contents":[{"musicResponsiveListItemRenderer":{
+                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Another"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:00"}]}}}],
+                "playlistItemData":{"videoId":"another0000"}}}]}""")
+            else FakeSpotify.html(request, "{}")
+        }
     }
 
     /** One saved line from Spotify, and YouTube Music having a video of its song. */

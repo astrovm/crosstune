@@ -260,16 +260,6 @@ class MainActivity : ComponentActivity() {
         if (showHowToCover) viewModel.playResult() else askToReturn { viewModel.playResult() }
     }
 
-    /**
-     * Practises [song], or everything due when [all], once the way back has been asked about.
-     * A card with no place in the song never opens the music app, so it isn't asked.
-     */
-    private fun practiceOrReturn(song: MusicMetadata?, all: Boolean) {
-        val lines = viewModel.uiState.savedLines
-        val its = if (all) lines else lines.filter { song?.let(it::isOf) == true }
-        val go = { viewModel.startPractice(song.takeUnless { all }) }
-        if (its.any { it.timed }) askToReturn(go) else go()
-    }
 
     /** Asks for that notice while this screen is still in front, then does [then]. A second tap waits with the first. */
     private fun askToReturn(then: () -> Unit) {
@@ -718,9 +708,9 @@ class MainActivity : ComponentActivity() {
         onToggleSavedLine = viewModel::toggleSavedLine,
         onLookUpWord = viewModel::lookUpWord,
         onExplainLine = viewModel::explainLine,
-        onStartPractice = { practiceOrReturn(null, all = true) },
-        onPractiseSong = { viewModel.uiState.lyricsFor?.let { practiceOrReturn(it, all = false) } },
-        onPractiseSongOf = { song -> practiceOrReturn(song, all = false) },
+        onStartPractice = { viewModel.startPractice() },
+        onPractiseSong = { viewModel.uiState.lyricsFor?.let { viewModel.startPractice(it) } },
+        onPractiseSongOf = { song -> viewModel.startPractice(song) },
         onReadCardAs = viewModel::readCardAs,
         onTurnPractice = viewModel::turnPractice,
         onGradePractice = viewModel::gradePractice,
@@ -768,6 +758,7 @@ class MainActivity : ComponentActivity() {
         onStopListeningAlong = viewModel::stopListeningAlong,
         // With Shizuku or root, in one tap, as in setup; otherwise, or once it couldn't, the steps.
         onAllowFollowing = { if (!viewModel.fixInOneTap(OneTapFix.FOLLOW)) viewModel.fixSteps(listOf(Need.Follow)) },
+        onAllowFloat = viewModel::allowFloat,
         onOpenFollowAccess = { openNotificationAccess(viewModel.uiState.phone == Phone.TV) },
         onOpenAppInfo = { openAppInfo() },
         onThemeChange = ::selectTheme,

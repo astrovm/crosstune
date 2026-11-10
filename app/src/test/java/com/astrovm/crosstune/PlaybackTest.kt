@@ -133,6 +133,28 @@ class PlaybackTest {
     }
 
     @Test
+    fun musicMutedForACardIsHeardAgainAndAMuteTheUserMadeIsTheirs() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        playback.quiet(true)
+        assertTrue(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+        playback.quiet(false)
+        assertFalse(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+        // Muted by the user, it's left so, both ways.
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+        playback.quiet(true)
+        playback.quiet(false)
+        assertTrue(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+    }
+
+    @Test
+    fun musicLeftMutedWhenCrosstuneStoppedOnTheWayIsHeardAtTheNextStart() {
+        val audio = app.getSystemService(AudioManager::class.java)
+        playback.quiet(true)
+        MediaSessionPlayback(app, now = { NOW })
+        assertFalse(audio.isStreamMute(AudioManager.STREAM_MUSIC))
+    }
+
+    @Test
     fun thePhoneIsUnlockedWithItsScreenOnAndNoLockShowing() {
         assertTrue(playback.unlocked())
         shadowOf(app.getSystemService(KeyguardManager::class.java)).setKeyguardLocked(true)
@@ -2092,6 +2114,19 @@ class PlaybackTest {
     }
 
     @Test
+    fun withNoAppToAskTheOneThatPlayedLastIsAskedWhereverItIsListed() = runBlocking {
+        allow()
+        // The one that played last plays still, so it's started at once; one paused since earlier would never start.
+        val last = { player("com.spotify.music", "Spotify", "Other", "Band", at = PLAYED_AT) }
+        val earlier = { player("com.example.player", "Player", "Other", "Band", state = PlaybackState.STATE_PAUSED, at = PLAYED_AT - 1) }
+        for (listed in listOf(listOf(earlier, last), listOf(last, earlier))) {
+            shadowOf(sessions).clearControllers()
+            listed.forEach { shadowOf(sessions).addController(it()) }
+            assertTrue(playback.playSong(song, null, mustStart = true))
+        }
+    }
+
+    @Test
     fun whatAnAppPlaysIsFollowedWithItsPlaceInItsQueue() {
         val music = MusicService.YOUTUBE_MUSIC.packageName
         val seen = mutableListOf<AppPlays?>()
@@ -2278,6 +2313,11 @@ class PlaybackTest {
         assertFalse(playback.playSong(song, youTubeMusic, link))
         assertEquals(emptyList<String>(), asked())
         assertTrue(playback.playSong(song, youTubeMusic))
+        assertEquals(listOf(byName), asked())
+        // For a practice card, which follows the app it names alone, no other is asked for it; with none named, the one that played last still is.
+        assertFalse(playback.playSong(song, youTubeMusic, orLastPlayed = false))
+        assertEquals(emptyList<String>(), asked())
+        assertTrue(playback.playSong(song, null, orLastPlayed = false))
         assertEquals(listOf(byName), asked())
         // An app running isn't woken; with no app given, none is.
         woken.clear()

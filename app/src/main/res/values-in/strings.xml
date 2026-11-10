@@ -392,6 +392,7 @@
     <string name="practice_fix_reading">Perbaiki bacaan</string>
     <string name="learn_song_times">Dinyanyikan %1$d kali</string>
     <string name="learn_song_new_words">Ada kata untuk dipelajari</string>
+    <string name="practice_float_allow">Aplikasi musik Anda bisa memutar baris setelah Crosstune diizinkan tampil di atas aplikasi lain</string>
     <string name="practice_play">Putar baris</string>
     <string name="practice_stop">Hentikan baris</string>
     <string name="practice_loading">Membuka di %1$s</string>

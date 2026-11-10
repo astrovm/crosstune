@@ -392,6 +392,7 @@
     <string name="practice_fix_reading">Corrigir leitura</string>
     <string name="learn_song_times">Cantada %1$d vezes</string>
     <string name="learn_song_new_words">Tem palavras para saber</string>
+    <string name="practice_float_allow">Seu app de música pode tocar as linhas quando o Crosstune puder se sobrepor a outros apps</string>
     <string name="practice_play">Ouvir a linha</string>
     <string name="practice_stop">Parar a linha</string>
     <string name="practice_loading">Abrindo no %1$s</string>

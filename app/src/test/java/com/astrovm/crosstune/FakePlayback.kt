@@ -41,6 +41,11 @@ internal class FakePlayback : PlaybackSource {
     val opened: MutableList<Pair<String, String>> = CopyOnWriteArrayList()
     /** How many times Crosstune came back to the front. */
     var cameBack = 0
+    /** Whether the phone's music is muted for a card, see [quiet]. */
+    @Volatile
+    var quiet = false
+    /** Each time the music was muted (true) or let be heard again (false). */
+    val quiets: MutableList<Boolean> = CopyOnWriteArrayList()
     private val songs = MutableStateFlow<Heard.Song?>(null)
     var onThePhone: Heard.Song?
         get() = songs.value
@@ -115,7 +120,7 @@ internal class FakePlayback : PlaybackSource {
         onPlay(app, play)
     }
 
-    /** Each app paused whatever it played, by package. */
+    /** Each app paused whatever it played, by package, once per pause: an app a card stopped is paused again while it's kept so. */
     val pausedApps: MutableList<String> = CopyOnWriteArrayList()
 
     override fun pauseApp(app: String) {
@@ -140,9 +145,9 @@ internal class FakePlayback : PlaybackSource {
         return true
     }
 
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
-        // An app that can't be, with a link only it has, leaves no other to ask.
-        if (!canPlaySongs || (app != null && link != null && running?.contains(app) == false)) return false
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
+        // An app that can't be, with a link only it has, or for a card that follows it alone, leaves no other to ask.
+        if (!canPlaySongs || (app != null && (link != null || !orLastPlayed) && running?.contains(app) == false)) return false
         if (mustStart && !startsInBackground) return false.also { onlyInFront = true }
         songsAsked += song to app
         linksAsked += link
@@ -180,6 +185,17 @@ internal class FakePlayback : PlaybackSource {
 
     override fun comesBack() {
         if (!onlyInFront) cameBack++
+    }
+
+    /** Whether Crosstune may show over other apps, so it comes back over one it opened by itself. */
+    var comesBackByItself = true
+
+    override fun comesBackByItself() = comesBackByItself
+
+    override fun quiet(on: Boolean) {
+        if (on == quiet) return
+        quiet = on
+        quiets += on
     }
 
     override fun skip(song: MusicMetadata, next: Boolean) {

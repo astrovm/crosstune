@@ -2546,61 +2546,25 @@ class MainActivityTest {
     }
 
     @Test
-    fun practiceAsksOnceForANotificationThatBringsTheCardBack() {
+    fun practiceAsksForNoNotificationAsACardNeverLeavesForAnAppItCantComeBackFrom() {
         ShadowSettings.setCanDrawOverlays(false)
-        // Timed, so practising it may open the music app. An untimed card stays here and isn't asked.
-        prefs().edit().putString("saved_lines", """[{"text":"Night sky","translation":"Cielo","title":"Demo","artist":"Band","start":0,"end":1000}]""").remove(KEY_ASKED_RETURN).commit()
-        launch()
-        val practice = "${string(R.string.saved_practice)}, ${string(R.string.practice_due, 1)}"
-        click(practice)
-        assertTextShown(string(R.string.practice_all_songs))
-        // The list stays here. A song is what leaves, and it waits until the question is answered.
-        click("Demo")
-        val asked = shadowOf(controller!!.get()).lastRequestedPermission
-        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
-        assertEquals("android.content.pm.action.REQUEST_PERMISSIONS", nextStartedActivity()!!.action)
-        val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
-        assertNull(model.uiState.practice)
-        // Tapped again while Android is still asking, it doesn't leave and it doesn't ask twice.
-        click("Demo")
-        assertNull(model.uiState.practice)
-        assertNull(shadowOf(app).peekNextStartedActivity())
-        // Turned down, a notice already up is dropped. Back is what remains.
-        postReturnNotice()
-        controller!!.get().answer(asked, android.content.pm.PackageManager.PERMISSION_DENIED)
-        composeRule.waitForIdle()
-        assertTrue(app.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
-        assertNotNull(model.uiState.practice)
-        click(string(R.string.floating_close))
-        composeRule.waitForIdle()
-        if (composeRule.onAllNodesWithText(string(R.string.practice_all_songs)).fetchSemanticsNodes().isEmpty()) click(practice)
-        click(string(R.string.practice_all_songs))
-        assertNull(shadowOf(app).peekNextStartedActivity())
-    }
-
-    @Test
-    fun practiceAsksForEveryTimedCardAndNotForAnotherSong() {
-        ShadowSettings.setCanDrawOverlays(false)
-        // One song leaves. The other never does, so practising that one is not asked, and practising all of them is.
+        // Without showing over other apps, a card plays its line here rather than open the music app, so there's nothing to come back from.
         prefs().edit().putString(
             "saved_lines",
             """[{"text":"Night","translation":"Noche","title":"Timed","artist":"Band","start":0,"end":1000},{"text":"Day","translation":"Dia","title":"Loose","artist":"Band"}]"""
         ).remove(KEY_ASKED_RETURN).commit()
         launch()
         val practice = "${string(R.string.saved_practice)}, ${string(R.string.practice_due, 2)}"
-        click(practice)
-        assertTextShown(string(R.string.practice_all_songs))
-        click("Loose")
         val model = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
-        assertNull(shadowOf(app).peekNextStartedActivity())
-        assertNotNull(model.uiState.practice)
-        click(string(R.string.floating_close))
-        composeRule.waitForIdle()
-        if (composeRule.onAllNodesWithText(string(R.string.practice_all_songs)).fetchSemanticsNodes().isEmpty()) click(practice)
-        click(string(R.string.practice_all_songs))
-        val asked = shadowOf(controller!!.get()).lastRequestedPermission
-        assertEquals(android.Manifest.permission.POST_NOTIFICATIONS, asked.requestedPermissions.single())
-        assertNull(model.uiState.practice)
+        listOf("Timed", string(R.string.practice_all_songs)).forEach { song ->
+            if (composeRule.onAllNodesWithText(string(R.string.practice_all_songs)).fetchSemanticsNodes().isEmpty()) click(practice)
+            click(song)
+            assertNotNull(model.uiState.practice)
+            assertNull(shadowOf(controller!!.get()).lastRequestedPermission)
+            click(string(R.string.floating_close))
+            composeRule.waitForIdle()
+        }
+        assertFalse(prefs().getBoolean(KEY_ASKED_RETURN, false))
     }
 
     @Test

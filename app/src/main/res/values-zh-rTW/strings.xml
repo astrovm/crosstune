@@ -392,6 +392,7 @@
     <string name="practice_fix_reading">修改讀音</string>
     <string name="learn_song_times">唱了 %1$d 次</string>
     <string name="learn_song_new_words">有要學的詞</string>
+    <string name="practice_float_allow">允許 Crosstune 重疊顯示於其他應用程式上方後，音樂應用程式就能播放這些行</string>
     <string name="practice_play">播放這一行</string>
     <string name="practice_stop">停止這一行</string>
     <string name="practice_loading">正在 %1$s 中開啟</string>
