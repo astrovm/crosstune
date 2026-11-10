@@ -1541,6 +1541,9 @@ class PracticeCardsTest {
             if (!play) seeksAtFirstPause = seeksAtFirstPause ?: playback.seeks.size
             quietAt += play to playback.quiet
         }
+        // The card says the line plays before the sound comes out, so it must already say so as the sound is let out.
+        var soundAtUnmute: LineSound? = null
+        playback.onQuiet = { on -> if (!on) soundAtUnmute = practice?.sound }
         cards().start(null, before = null)
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         // Opened cold, it starts the song from its start, not yet able to move.
@@ -1559,6 +1562,7 @@ class PracticeCardsTest {
         assertEquals(listOf(false to true, true to true), quietAt.take(2))
         // Heard while it plays the line, not only once it's over. The screen state follows the sound.
         waitFor("the line is heard") { !playback.quiet && practice?.sound == LineSound.PLAYING }
+        assertEquals(LineSound.PLAYING, soundAtUnmute)
         assertEquals(LineSound.PLAYING, practice?.sound)
         assertEquals(listOf(true, false), playback.quiets.toList())
     }

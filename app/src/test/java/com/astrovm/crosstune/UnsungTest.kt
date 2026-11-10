@@ -229,6 +229,50 @@ class UnsungTest {
     }
 
     @Test
+    fun outOfSightTheListenStopsAndGoesOnOnceTheWordsAreBack() {
+        singing.answers = listOf(music)
+        openLyrics()
+        waitUntil { singing.hears == 1 }
+        model().pauseFollowingNext()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        // Out of sight, a while already started is not heard out.
+        assertEquals(1, singing.hears)
+        assertEquals(emptyList<String>(), problems())
+        model().resumeFollowingNext()
+        repeat(MainViewModel.VOICE_TRIES) { passes(MainViewModel.VOICE_PAUSE_MS) }
+        waitUntil { singing.hears == MainViewModel.VOICE_TRIES }
+        assertEquals(MainViewModel.VOICE_TRIES, singing.hears)
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun leavingTheWordsStopsTheListen() {
+        singing.answers = listOf(music, voice)
+        openLyrics()
+        waitUntil { singing.hears == 1 }
+        model().dismissLyrics()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertEquals(1, singing.hears)
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun withoutTheMicrophoneAListenThatWasWaitingDoesNotGoOn() {
+        singing.answers = listOf(music, voice)
+        // Paused as it's heard, so that while ends and the next one has to be allowed again.
+        singing.before = { playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true) }
+        openLyrics()
+        waitUntil { singing.hears == 1 }
+        passes(1)
+        singing.before = {}
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        plays()
+        passes(MainViewModel.VOICE_PAUSE_MS * 2)
+        assertEquals(1, singing.hears)
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
     fun aMedleyOrAWholeConcertHasNoOneSongsWordsToMiss() {
         title = "Live 2007 (Recital Completo)"
         openLyrics()

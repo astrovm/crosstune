@@ -100,6 +100,41 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aBlankPartInALabelsTitleIsSkippedAndTheSongIsStillFound() {
+        fake.handler = { request ->
+            val url = request.url
+            val said = url.queryParameter("q")
+            val track = url.queryParameter("track_name") to url.queryParameter("artist_name")
+            when {
+                url.host != "lrclib.net" -> FakeSpotify.html(request, "{}")
+                said == "Fake Tune Fake Singer" || track == "Fake Tune" to "Fake Singer" -> FakeSpotify.html(request, "[${answer("Fake Tune", "Fake Singer", "Words of Fake Tune")}]")
+                // A blank part would ask for the song with no singer, and that answer is no use.
+                said == "Fake Tune" || said?.endsWith(" ") == true -> FakeSpotify.html(request, "", code = 503)
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        assertEquals("Words of Fake Tune", words(MusicMetadata("Fake Tune |  | Fake Singer", "Fake Label")))
+    }
+
+    @Test
+    fun aTitleThatNamesTheSingerFirstSkipsADifferentSong() {
+        fake.handler = { request ->
+            val url = request.url
+            val said = url.queryParameter("q")
+            val track = url.queryParameter("track_name") to url.queryParameter("artist_name")
+            when {
+                url.host != "lrclib.net" -> FakeSpotify.html(request, "{}")
+                // Another song comes back first. It is not this one, so its words stay out.
+                said == "Fake Singer Fake Tune" -> FakeSpotify.html(request, "[${answer("Other Tune", "Other Band", "Words of Other")},${answer("Fake Tune", "Fake Singer", "Words of Fake Tune")}]")
+                track == "Fake Tune" to "Fake Singer" -> FakeSpotify.html(request, "[${answer("Fake Tune", "Fake Singer", "Words of Fake Tune")}]")
+                track == "Other Tune" to "Other Band" -> FakeSpotify.html(request, "[${answer("Other Tune", "Other Band", "Words of Other")}]")
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        assertEquals("Words of Fake Tune", words(MusicMetadata("Fake Singer | Fake Tune", "Fake Label")))
+    }
+
+    @Test
     fun aSearchLrclibWontAnswerLeavesTheSongWithoutWords() {
         fake.handler = { request ->
             val url = request.url

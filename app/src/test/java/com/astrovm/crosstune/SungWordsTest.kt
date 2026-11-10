@@ -764,11 +764,14 @@ class SungWordsTest {
     fun aVoiceIsHeardSingingUnlessTheModelGoesRoundOnOneWord() {
         fun sung(vararg words: String) = Sung(0, words.mapIndexed { at, text -> HeardWord(text, at * 500L) })
         assertTrue(sung("(upbeat music)", "Hold", "the", "light").sings)
-        // Three words is a little singing, even all the same.
+        // Two of one word is a little singing.
         assertTrue(sung("Oh,", "oh,").sings)
         // Music alone, or rain heard as one word over and over, is no one singing.
         assertFalse(sung("[Music]").sings)
         assertFalse(sung("(rain)", "H3B", "H3B", "H3B", "H3B").sings)
+        // Three of one word is the model going round. A mark between them is not another word.
+        assertFalse(sung("H3B", "H3B", "H3B").sings)
+        assertFalse(sung("H3B", "...", "H3B", "H3B").sings)
         assertFalse(sung().sings)
     }
 }

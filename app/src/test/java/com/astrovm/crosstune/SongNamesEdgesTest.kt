@@ -94,6 +94,9 @@ class SongNamesEdgesTest {
         assertTrue(many("First Song / Second Song / Third Song"))
         assertTrue(many("Summer_Vibes_Playlist_🎧", "<unknown>"))
         assertTrue(many("Top 20 Hits of the Year"))
+        // Ten is many. Nine is a song's own name, as "99 Red Balloons" is.
+        assertTrue(many("Top 10 Hits"))
+        assertFalse(many("Top 9 Hits"))
         assertTrue(many("✿_30__Fake_Party_Audios_✿"))
         assertTrue(many("Grandes Éxitos: 15 Canciones de Fake Band"))
         // A number that counts something else, or few songs, is one song's name.
