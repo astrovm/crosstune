@@ -690,6 +690,42 @@ class MainViewModelTest {
     }
 
     @Test
+    fun theNextLineOfASavedLineIsTheNextOneSungLater() {
+        // Two lines with one time, as a line and its echo are: the next one starts later, not at once.
+        val echo = """[{"trackName":"Hush","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] One\n[00:10.00] Two\n[00:10.00] Echo\n[00:20.00] Three"}]"""
+        val model = lyricsModel(FakePlayback(), answer = echo)
+        assertEquals(listOf(0L, 10_000L, 10_000L, 20_000L), model.uiState.lyricLines.map { it.timeMs })
+        model.toggleSavedLine(1)
+        val two = model.uiState.savedLines.single()
+        assertEquals("Two", two.text)
+        assertEquals(20_000L, two.nextMs)
+        assertEquals(20_000L, two.endMs)
+    }
+
+    @Test
+    fun aLineTimedAgainKeepsItsIntroOnlyWithNoAppPlayingIt() {
+        // Kept from a video whose song starts 3 s in, before the words had times.
+        val kept = SavedLine("Two", translation = null, title = "Hush", artist = "Band", leadMs = 3_000, app = "com.video")
+        SavedLinesStore(prefs()).addAll(listOf(kept))
+        val alone = lyricsModel(FakePlayback(), app = null)
+        val timed = alone.uiState.savedLines.single()
+        assertEquals(10_000L, timed.startMs)
+        assertEquals(3_000L, timed.leadMs)
+        assertEquals("com.video", timed.app)
+
+        // The words are put in time by hand while a music app plays them. It has no intro, so
+        // the line is the app's now, and starts where the words say.
+        prefs().edit().remove("saved_lines").commit()
+        SavedLinesStore(prefs()).addAll(listOf(kept))
+        val inApp = lyricsModel(FakePlayback())
+        assertEquals(3_000L, inApp.uiState.savedLines.single().leadMs)
+        inApp.syncLine(1)
+        val moved = inApp.uiState.savedLines.single()
+        assertEquals(0L, moved.leadMs)
+        assertEquals("com.spotify", moved.app)
+    }
+
+    @Test
     fun wordsWithoutTimingCantBeMovedOrRepeated() {
         val playback = FakePlayback()
         val model = lyricsModel(playback, answer = """[{"trackName":"Hush","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
