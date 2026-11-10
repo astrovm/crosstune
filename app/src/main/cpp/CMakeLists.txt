@@ -78,9 +78,13 @@ if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
     set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     # ggml bakes its commit into the library, as short as the clone allows: 7 letters in a shallow
     # clone, 8 in a full one. Always 12, so any clone builds the same APK, as F-Droid checks.
-    set(ENV{GIT_CONFIG_COUNT} 1)
+    # The build box runs Git as another user. Git would then call a clean tree dirty, and bake
+    # "-dirty" into the library. minimal checks size and time only, which still sees a real edit.
+    set(ENV{GIT_CONFIG_COUNT} 2)
     set(ENV{GIT_CONFIG_KEY_0} core.abbrev)
     set(ENV{GIT_CONFIG_VALUE_0} 12)
+    set(ENV{GIT_CONFIG_KEY_1} core.checkStat)
+    set(ENV{GIT_CONFIG_VALUE_1} minimal)
     # whisper.cpp asks for CMake 3.5, which CMake 4 warns it will drop. Its build works the same with
     # the policies of 3.10, the oldest CMake doesn't warn about, so it's told to use those.
     set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
