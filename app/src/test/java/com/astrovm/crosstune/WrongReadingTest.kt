@@ -83,8 +83,12 @@ class WrongReadingTest {
     fun aWordsReadingIsMarkedWrongWithTheRightOneAndSent() {
         open(with(Word("花", "か", "ka", by = listOf(Reader.IPADIC))))
         flag.performClick()
-        // The word and how it read, so it's plain which is sent, and what goes with it.
+        // Said what it's about, by its flag and its title; then the word and how it read, so it's plain which
+        // is sent, and what goes with it.
+        compose.onNode(hasTestTag(REPORT_ICON_TAG), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText(flagLabel) and hasClickAction().not()).assertExists()
         compose.onNode(hasTestTag(WRONG_READING_TAG) and hasText("花  か  ka")).assertExists()
+        compose.onNode(hasSetTextAction() and hasText("Right reading (optional)")).assertExists()
         compose.onNodeWithText("Sends the word, the reading shown, its line, the song's name and the app and Android versions. Only Crosstune's developer reads it.").assertExists()
         compose.onNode(hasSetTextAction()).performTextInput("はな")
         send.performClick()

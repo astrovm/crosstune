@@ -70,6 +70,17 @@ class ReadersTest {
     }
 
     @Test
+    fun wordsSideBySideEachTakeOnlyTheReadingOverThem() {
+        // No kana between them: what ends where the next word starts is the word before's, and the other way round.
+        val words = listOf(Word("君", "くん", "kun"), Word("花", "か", "ka"))
+        val parts = listOf(Ruby("君", "きみ", Reader.CHATGPT), Ruby("花", "ばな", Reader.SUNG))
+        assertEquals(
+            listOf(Word("君", "きみ", "kimi", by = listOf(Reader.CHATGPT)), Word("花", "ばな", "bana", by = listOf(Reader.SUNG))),
+            Readings.asShown(words, parts)
+        )
+    }
+
+    @Test
     fun aReadingPutRightKeepsWhatPutItRightWhenItsKanaAreMovedOff() {
         // Kept over the kana among a word's kanji, as it once was, its kanji keep it.
         assertEquals(listOf(Ruby("飛", "と", Reader.SUNG), Ruby("び"), Ruby("立", "た", Reader.SUNG), Ruby("つ")), Readings.rubied(listOf(Ruby("飛び立つ", "とびたつ", Reader.SUNG))))

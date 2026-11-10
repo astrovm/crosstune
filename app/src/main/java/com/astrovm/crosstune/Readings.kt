@@ -387,7 +387,7 @@ internal object Readings {
         /** Where it ends in the line. */
         val end: Int = 0,
         /** Whether the dictionary has no reading for it. */
-        val unread: Boolean = false,
+        private val unread: Boolean = false,
         /** What read it. */
         val reader: Reader = Reader.IPADIC
     ) {

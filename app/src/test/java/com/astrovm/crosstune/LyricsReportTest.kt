@@ -14,6 +14,12 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.performFirstLinkClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
@@ -589,11 +595,26 @@ class LyricsReportTest {
     fun aWrongReadingIsSentWithOnlyTheSongTheLineTheWordAndHowItRead() {
         // Sent only when the user taps Send: whatever they said about reports sent by themselves.
         prefs().edit().putBoolean("auto_reports", false).commit()
+        // Off the main thread, as on a phone, so it can be caught on its way.
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        reportsHeld = CountDownLatch(1)
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空\n[00:10.00] 星の海"}]""")
-        openLyrics { model().uiState.learning.lines.isNotEmpty() }
-        val word = Readings.words("星の海", Script.JAPANESE).first()
-        composeRule.runOnIdle { model().reportReading(word, 1, " ほし ") }
-        waitUntil { model().uiState.report == ReportStatus.SENT }
+        openLyrics { model().uiState.learning.lines.isNotEmpty() && shown("星の海") }
+        // The line held, its first word tapped, and the flag on it.
+        composeRule.onAllNodes(hasText("星の海", substring = true))[0].performSemanticsAction(SemanticsActions.OnLongClick)
+        waitUntil { runCatching { composeRule.onAllNodes(hasText("星")).onLast().performFirstLinkClick() }.isSuccess }
+        val flag = hasContentDescription(string(R.string.reading_wrong)) and hasClickAction()
+        waitUntil { composeRule.onAllNodes(flag).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(flag).performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput(" ほし ")
+        val send = composeRule.onNode(hasText(string(R.string.report_send)) and hasClickAction())
+        send.performClick()
+        // On its way, it can't be sent twice.
+        waitUntil { model().uiState.report == ReportStatus.SENDING }
+        send.assertIsNotEnabled()
+        reportsHeld!!.countDown()
+        waitUntil { model().uiState.report == null && !shown(string(R.string.reading_what_goes)) }
+        assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
         val sent = sentReport()
         assertEquals(listOf("android", "problem", "reading", "song", "version"), sent.keys().asSequence().sorted().toList())
         assertEquals("wrong_reading", sent.getString("problem"))

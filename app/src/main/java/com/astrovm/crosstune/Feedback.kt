@@ -146,15 +146,15 @@ internal data class Report(
  * when the user taps Send, with nothing but what's here.
  */
 internal data class ReadingReport(
-    val version: String,
-    val song: MusicMetadata,
-    val source: String?,
-    val line: String,
-    val word: Word,
-    val shown: List<String>,
-    val script: Script,
-    val right: String = "",
-    val android: String = "${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})"
+    private val version: String,
+    private val song: MusicMetadata,
+    private val source: String?,
+    private val line: String,
+    private val word: Word,
+    private val shown: List<String>,
+    private val script: Script,
+    private val right: String = "",
+    private val android: String = "${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})"
 ) {
     fun json(): String = JSONObject().apply {
         put("version", version)
@@ -287,6 +287,9 @@ internal fun WrongReadingDialog(word: Word, shown: List<String>, status: ReportS
 /** The word and its reading in [WrongReadingDialog], for tests. */
 internal const val WRONG_READING_TAG = "wrong_reading"
 
+/** The icon that says what a report sent in one tap is about, for tests. */
+internal const val REPORT_ICON_TAG = "report_icon"
+
 /**
  * A report sent in one tap, after what the user may say in [content], [title]d, with [whatGoes]:
  * [status] is how it's going. Sent, it says so and closes; failed, it says so and stays.
@@ -316,7 +319,7 @@ private fun SendDialog(
     ScreenAlert(
         onDismissRequest = onDismiss,
         opener = opener,
-        icon = { AppIcon(icon, contentDescription = null) },
+        icon = { AppIcon(icon, contentDescription = null, modifier = Modifier.testTag(REPORT_ICON_TAG)) },
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

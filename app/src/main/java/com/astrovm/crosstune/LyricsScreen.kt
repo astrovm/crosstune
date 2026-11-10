@@ -2269,9 +2269,9 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     val learning = state.learning
     val reading = learning.lines.getOrNull(index)
     // Japanese loads its dictionary the first time, a moment better spent away from the screen.
-    val read by produceState(emptyList<Word>(), text, learning.script) { value = withContext(Dispatchers.Default) { Readings.words(text, learning.script) } }
+    val words by produceState(emptyList<Word>(), text, learning.script) { value = withContext(Dispatchers.Default) { Readings.words(text, learning.script) } }
     // Each word read as it shows over the line, once UtaTen or ChatGPT put a reading right.
-    val words = remember(read, reading) { reading?.let { Readings.asShown(read, it.parts) } ?: read }
+    val shownWords = remember(words, reading) { reading?.let { Readings.asShown(words, it.parts) } ?: words }
     // A word whose reading is being marked wrong, and the flag to give the remote back to.
     var markingWrong by remember { mutableStateOf<Word?>(null) }
     val flag = remember { FocusRequester() }
@@ -2287,7 +2287,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             // over the kanji, as in the lyrics.
             val parts = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } }
             if (parts != null) {
-                TappableRubyLine(parts, words, state.word?.word, learning.readingScale) { actions.onLookUpWord(it, index) }
+                TappableRubyLine(parts, shownWords, state.word?.word, learning.readingScale) { actions.onLookUpWord(it, index) }
             } else {
                 TappableLine(text.ifBlank { "♪" }, words, state.word?.word) { actions.onLookUpWord(it, index) }
             }

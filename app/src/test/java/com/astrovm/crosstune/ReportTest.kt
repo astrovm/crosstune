@@ -8,6 +8,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import java.io.IOException
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.asResponseBody
+import okio.Buffer
+import okio.ForwardingSource
+import okio.buffer
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -169,5 +175,23 @@ class ReportTest {
         assertEquals(marked.json(), fake.requestBodies.single())
         code = 503
         assertFalse(sender.send(marked))
+    }
+
+    @Test
+    fun aReportSentLetsGoOfItsConnection() = runBlocking {
+        val fake = FakeSpotify()
+        var closed = false
+        // The box's answer, which holds the connection until it's closed.
+        fake.handler = { request ->
+            val answer = object : ForwardingSource(Buffer()) {
+                override fun close() {
+                    closed = true
+                    super.close()
+                }
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(204).message("No Content").body(answer.buffer().asResponseBody(null, 0)).build()
+        }
+        assertTrue(ReportSender(fake.client(), "2.25.0", Dispatchers.Unconfined).send(marked))
+        assertTrue(closed)
     }
 }
