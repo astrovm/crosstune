@@ -45,9 +45,49 @@ internal class SongSearcher(
                 found.filter { song -> Readings.pinyinLetters(SongNames.bareTitle(song.title))?.let { it in typed } == true }
             }
             val songs = pinyin.await() + deezer.await() + itunes.await()
-            // Each service's own repeated name is one song.
+            // Each service's own repeated name is one song. A karaoke, a cover, a music box
+            // or a piano version goes after the artist's own song. Deezer lists those first
+            // when the artist is written in their own script, and Apple already has the song.
             songs.distinctBy { SongNames.normalize(it.title) + "|" + SongNames.normalize(it.artist) }
+                .sortedBy { anotherRecording(it) }
         }
+    }
+
+    /**
+     * A row that is not the singer's own recording. Deezer matches the artist inside these
+     * titles, and some music-box rows put that only in the artist credit.
+     */
+    private fun anotherRecording(song: MusicMetadata): Boolean {
+        if (creditsTheOriginal(song.title)) return true
+        if (taggedAsAnotherVersion(song.title)) return true
+        if (markedRecording(song.title) || markedRecording(song.artist)) return true
+        if (KEY_CHANGE.containsMatchIn(song.title)) return true
+        return remakeOfAnotherSong(song.title)
+    }
+
+    /** "Originally Performed by" names the singer and not the people on the row. */
+    private fun creditsTheOriginal(title: String): Boolean =
+        SongNames.coverOf(title) != null || ORIGINAL_CREDIT.containsMatchIn(title)
+
+    /** A tag the title adds, "(Piano Version)" or "[カラオケ]". The song's own name does not count. */
+    private fun taggedAsAnotherVersion(title: String): Boolean =
+        SongNames.saysAnotherVersion(title, SongNames.bareTitle(title), "")
+
+    /**
+     * The same marks when they sit in the artist credit, or in fullwidth brackets.
+     * Those stay part of the bare title, so the tag check does not see them.
+     * A song whose whole name is one mark, "Karaoke", stays.
+     */
+    private fun markedRecording(text: String): Boolean {
+        val named = SongNames.normalize(text)
+        if (RECORDING_MARKS.any { named == it }) return false
+        return RECORDING_MARKS.any { it in named }
+    }
+
+    /** "Cherry REMAKE" is another recording. A song whose name is "Remake" is not. */
+    private fun remakeOfAnotherSong(title: String): Boolean {
+        if ("remake" !in SongNames.words(title)) return false
+        return SongNames.normalize(SongNames.bareTitle(title)) != "remake"
     }
 
     /** What [find] found, or nothing when the service is unreachable or sends back rubbish. */
@@ -133,5 +173,19 @@ internal class SongSearcher(
 
         /** Enough to fill the list, few enough that neither service is asked for a page nobody reads. */
         const val LIMIT = 20
+
+        /** The singer named in the title, with no brackets around the phrase. */
+        val ORIGINAL_CREDIT = Regex("""originally\s+(?:performed\s+)?by|原曲歌手""", RegexOption.IGNORE_CASE)
+
+        /** A karaoke key change, "+3Key" or "Key-1", which those catalogues add to the title. */
+        val KEY_CHANGE = Regex("""[+-]\d+\s*key\b|\bkey\s*[+-]\d+""", RegexOption.IGNORE_CASE)
+
+        /**
+         * What a row says when it is not that singer's recording, in the scripts those
+         * catalogues use. Matched on the letters left after [SongNames.normalize].
+         */
+        val RECORDING_MARKS = listOf(
+            "オルゴール", "orgel", "musicbox", "karaoke", "караоке", "노래방", "커버"
+        ).map(SongNames::normalize)
     }
 }
