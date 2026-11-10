@@ -45,6 +45,9 @@ private val netEaseCredit = Regex(
     RegexOption.IGNORE_CASE
 )
 
+/** What parts a title's words. */
+private val whitespace = Regex("""\s+""")
+
 /** What a contributor ends a song with, not sung: "END", "THE END", "music...". */
 private val closingFiller = Regex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)""", RegexOption.IGNORE_CASE)
 
@@ -509,6 +512,12 @@ internal class LyricsFinder(
         /** The service says the song has no words: it's an instrumental. */
         data object Instrumental : Lyrics
 
+        /**
+         * No service has words, and the store files the song under a genre that has none: most likely an
+         * instrumental, though no service says so, and a singer in that genre may still sing it.
+         */
+        data object LikelyInstrumental : Lyrics
+
         /** The service wouldn't answer, or was too slow: worth saying rather than claiming none. */
         data object Unavailable : Lyrics
     }
@@ -536,7 +545,7 @@ internal class LyricsFinder(
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) } }
         val lookup = Answers()
-        val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
+        val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
         if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true) }
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
@@ -736,7 +745,41 @@ internal class LyricsFinder(
 
     /** With no words of its own for a cover, the words of the song it covers. */
     private suspend fun Best.orOriginal(metadata: MusicMetadata, timeoutMs: Long): Best =
-        if (lyrics is Lyrics.None || lyrics is Lyrics.Instrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
+        if (lyrics is Lyrics.None || lyrics is Lyrics.Instrumental || lyrics is Lyrics.LikelyInstrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
+
+    /**
+     * With no words under the names given, the words of the song a video's title names by itself, when
+     * its channel isn't the artist: "Artist Song" by a fan's channel, or a label's "Song | Singer | Film".
+     */
+    private suspend fun Best.orNamedInTitle(metadata: MusicMetadata, timeoutMs: Long): Best {
+        if (lyrics !is Lyrics.None) return this
+        val names = withTimeoutOrNull(timeoutMs) { namedInTitle(metadata) } ?: return this
+        return (anywhere(names, timeoutMs) as? Lyrics.Found)?.let(::Best) ?: this
+    }
+
+    /**
+     * The song and artist [metadata]'s title names, as LRCLIB has them: the whole title as one of its
+     * artists' names then one of their songs, or the other way around, or, for a title in parts apart by
+     * bars, its first part and another, one the song and the other the artist. Null when none is, or the
+     * title is one word.
+     */
+    private suspend fun namedInTitle(metadata: MusicMetadata): MusicMetadata? {
+        val parts = metadata.title.split(TITLE_BAR).map(String::trim).filter(String::isNotEmpty)
+        // A title of one word can't name both an artist and a song, so LRCLIB isn't asked again for it.
+        if (parts.size < 2 && metadata.title.trim().split(whitespace).size < 2) return null
+        val asks = if (parts.size > 1) parts.drop(1).take(MAX_TITLE_PARTS).map { listOf(parts.first(), it) } else listOf(listOf(metadata.title))
+        for (ask in asks) {
+            val answers = try {
+                answersFor(ask.joinToString(" "))
+            } catch (_: IOException) {
+                null
+            } catch (_: JSONException) {
+                null
+            } ?: return null
+            answers.firstOrNull { it.namedBy(ask) }?.let { return metadata.copy(title = it.title, artist = it.artist, url = null, recordingId = null) }
+        }
+        return null
+    }
 
     /**
      * The words of the song [cover] covers, by its first singer: timed only when that recording is as
@@ -818,6 +861,7 @@ internal class LyricsFinder(
         first is Lyrics.Found -> first
         second is Lyrics.Found -> second
         first is Lyrics.Instrumental || second is Lyrics.Instrumental -> Lyrics.Instrumental
+        first is Lyrics.LikelyInstrumental || second is Lyrics.LikelyInstrumental -> Lyrics.LikelyInstrumental
         first is Lyrics.None || second is Lyrics.None -> Lyrics.None
         else -> Lyrics.Unavailable
     }
@@ -939,8 +983,8 @@ internal class LyricsFinder(
         // more, as they took a while. Still busy, it isn't known that the song has none.
         val last = if (first !is Lyrics.Unavailable || best !is Lyrics.None) best else fromLrclib(metadata, timeoutMs)
         // No service has words for a song the store files as classical or jazz, and a note hears nothing sung either:
-        // it's an instrumental, which isn't a problem to report. Words anywhere still win, as above.
-        return if (last is Lyrics.None && wordless(recording, metadata)) Lyrics.Instrumental else last
+        // it's most likely an instrumental, which isn't a problem to report, unless someone's heard singing it. Words anywhere still win, as above.
+        return if (last is Lyrics.None && wordless(recording, metadata)) Lyrics.LikelyInstrumental else last
     }
 
     /**
@@ -960,7 +1004,8 @@ internal class LyricsFinder(
             .addQueryParameter("limit", "10")
             .build()
         val artists = (parse(search.toString()) as? JSONObject)?.optJSONArray("results")?.let { list -> (0 until list.length()).mapNotNull { list.optJSONObject(it) } }.orEmpty()
-        artists.firstOrNull { SongNames.sameArtist(it.optString("artistName"), artist) }?.optString("primaryGenreName")
+        // Namesakes go by the genre most of them share, as a DJ of a jazz trumpeter's name may be listed first; the first listed among equals.
+        artists.filter { SongNames.sameArtist(it.optString("artistName"), artist) }.groupingBy { it.optString("primaryGenreName") }.eachCount().maxByOrNull { it.value }?.key
     } catch (_: IOException) {
         null
     } catch (_: JSONException) {
@@ -1484,6 +1529,13 @@ internal class LyricsFinder(
         return (0 until list.length()).mapNotNull { index -> Answer.of(list.optJSONObject(index)) }
     }
 
+    /** What LRCLIB found for the words [said], wherever in a song's names they are; null as [answersFor]. */
+    private suspend fun answersFor(said: String): List<Answer>? {
+        val url = SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("q", said).build()
+        val list = parse(url.toString()) as? JSONArray ?: return null
+        return (0 until list.length()).mapNotNull { index -> Answer.of(list.optJSONObject(index)) }
+    }
+
     /**
      * NetEase's answer, asked once in a lookup: it's asked for the words it times word by word and
      * again under the song's names. LRCLIB isn't kept so, as its answer can be that it's busy.
@@ -1530,7 +1582,19 @@ internal class LyricsFinder(
     }
 
     /** One answer: whose song it claims to be, and its words. */
-    private class Answer(private val title: String, private val artist: String, private val json: JSONObject) {
+    private class Answer(val title: String, val artist: String, private val json: JSONObject) {
+        /**
+         * Whether [said], a title in one piece, is this answer's artist and song together, either way
+         * around; or, in two pieces, one is its song and the other its artist.
+         */
+        fun namedBy(said: List<String>): Boolean {
+            val (first, second) = said.first() to said.last()
+            if (said.size > 1) return (SongNames.same(title, first) && SongNames.sameArtist(artist, second)) || (SongNames.same(title, second) && SongNames.sameArtist(artist, first))
+            val whole = SongNames.normalize(first)
+            val (song, by) = SongNames.normalize(title) to SongNames.normalize(artist)
+            return song.isNotEmpty() && by.isNotEmpty() && (whole == by + song || whole == song + by)
+        }
+
         fun plain(): String? = (json.opt("plainLyrics") as? String)?.let(::withoutNamesHeader)?.trim()?.takeIf { it.isNotEmpty() }
 
         /** Whether it says the song has no words. */
@@ -1578,6 +1642,12 @@ internal class LyricsFinder(
         const val TRIES = 5
 
         const val SEARCH_URL = "https://lrclib.net/api/search"
+
+        /** What a label's video title puts between its song, singers, film and more. */
+        private const val TITLE_BAR = " | "
+
+        /** How many of a title's other parts are asked about with its first, as its artist; the song's singers come early. */
+        private const val MAX_TITLE_PARTS = 3
         const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
         const val ITUNES_LOOKUP_URL = "https://itunes.apple.com/lookup"
         const val LETRAS_URL = "https://www.letras.com/"

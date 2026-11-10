@@ -1400,6 +1400,11 @@ class SingingTest {
 
         override val missesModel get() = missing
 
+        @Volatile
+        var noSound = false
+
+        override val heardNoSound get() = noSound
+
         override suspend fun fetchModel(): Boolean {
             fetches++
             return fetched()

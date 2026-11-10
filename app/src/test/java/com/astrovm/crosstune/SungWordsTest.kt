@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -584,6 +585,36 @@ class SungWordsTest {
     }
 
     @Test
+    fun noSoundAtAllIsNotListenedTo() = runBlocking {
+        // A phone turned all the way down gives only zeros.
+        val microphone = FakeMicrophone().apply { repeat(SingingListener.SECONDS) { playSecond(0) }; play(SingingListener.SECONDS.toDouble()) }
+        val words = FakeWords(listOf(HeardWord("Oh", 320)))
+        val listener = listener(microphone, hearing = words)
+        assertNull(listener.hear(null, null))
+        assertTrue(listener.heardNoSound)
+        assertFalse(listener.missesModel)
+        // The speech model wasn't run on it.
+        assertNull(words.samples)
+        // Sound again, it's heard as ever.
+        assertNotNull(listener.hear(null, null))
+        assertFalse(listener.heardNoSound)
+    }
+
+    @Test
+    fun aPhoneThatGivesNoRecordingHasNoSoundToHearEither() = runBlocking {
+        // It won't share its sound at all.
+        val unshared = listener(FakeMicrophone(works = false))
+        assertNull(unshared.hear(null, null))
+        assertTrue(unshared.heardNoSound)
+        // Or its sound ends before a while is in, as silence that isn't taken for sound does.
+        val short = listener(FakeMicrophone().apply { play(1.0); end(); play(SingingListener.SECONDS.toDouble()) })
+        assertNull(short.hear(null, null))
+        assertTrue(short.heardNoSound)
+        assertNotNull(short.hear(null, null))
+        assertFalse(short.heardNoSound)
+    }
+
+    @Test
     fun theModelIsMissedOnlyWhenItWasWantedAndWasntThere() = runBlocking {
         // A phone that won't share its sound never got as far as wanting it.
         val silent = listener(FakeMicrophone(works = false), model = null)
@@ -758,5 +789,20 @@ class SungWordsTest {
     fun theModelIsWhisperCppsTinyOne() {
         assertEquals("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin", WhisperModel.URL)
         assertEquals("818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7", WhisperModel.SHA256)
+    }
+
+    @Test
+    fun aVoiceIsHeardSingingUnlessTheModelGoesRoundOnOneWord() {
+        fun sung(vararg words: String) = Sung(0, words.mapIndexed { at, text -> HeardWord(text, at * 500L) })
+        assertTrue(sung("(upbeat music)", "Hold", "the", "light").sings)
+        // Two of one word is a little singing.
+        assertTrue(sung("Oh,", "oh,").sings)
+        // Music alone, or rain heard as one word over and over, is no one singing.
+        assertFalse(sung("[Music]").sings)
+        assertFalse(sung("(rain)", "H3B", "H3B", "H3B", "H3B").sings)
+        // Three of one word is the model going round. A mark between them is not another word.
+        assertFalse(sung("H3B", "H3B", "H3B").sings)
+        assertFalse(sung("H3B", "...", "H3B", "H3B").sings)
+        assertFalse(sung().sings)
     }
 }

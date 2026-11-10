@@ -1894,6 +1894,12 @@ internal class MainViewModel(
 
     private var nextJob: Job? = null
 
+    /** A song with no words found, still to be heard for a voice: whether it's taken for an instrumental, and the whiles heard so far. */
+    private data class Unsung(val song: MusicMetadata, val likelyInstrumental: Boolean, val tries: Int = 0)
+
+    private var unsung: Unsung? = null
+    private var voiceJob: Job? = null
+
     /** Hearing the words sung, to line them up; [singingTries] since the app's clock last started or jumped. */
     private var singingJob: Job? = null
     private var singingTries = 0
@@ -1972,6 +1978,7 @@ internal class MainViewModel(
         stopFollowing()
         foundLines = emptyList()
         found = null
+        unsung = null
         restored = null
         syncPoints = emptyList()
         wordsPace = 1.0
@@ -2009,9 +2016,13 @@ internal class MainViewModel(
                             if (usesChatGpt()) romanizedScript(answer.words)?.let { writeInOwnScript(song, it) }
                         }
                         // No words were shown while looking, so there's none to clear.
-                        LyricsFinder.Lyrics.None -> problemFound(SongProblem.NO_LYRICS)
+                        LyricsFinder.Lyrics.None -> noWordsFound(song, likelyInstrumental = false)
                         // Having no words is what an instrumental is, not a problem.
                         LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyricsInstrumental = true)
+                        LyricsFinder.Lyrics.LikelyInstrumental -> {
+                            uiState = uiState.copy(lyricsInstrumental = true)
+                            noWordsFound(song, likelyInstrumental = true)
+                        }
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {
@@ -2430,6 +2441,7 @@ internal class MainViewModel(
      * it, lined up otherwise, with nothing put in time by hand, and Crosstune in sight with the words.
      */
     private fun hearSinging() {
+        hearVoice()
         val hearing = singing ?: return
         val song = uiState.lyricsFor ?: return
         val lines = foundLines
@@ -2446,6 +2458,69 @@ internal class MainViewModel(
                 doubtTiming(false)
             }
         }
+    }
+
+    /**
+     * No words found for [song]. Many songs in one, a medley or a whole concert, have no one song's words
+     * to miss. Only a song someone sings has words to miss, so one the phone plays is heard first, while
+     * Crosstune can hear it: rain, or a piece no store lists, has none. Taken for an instrumental
+     * [likelyInstrumental] by its genre alone, a voice heard says it's sung after all. Not heard, as when
+     * it plays elsewhere, it's reported as it always was.
+     */
+    private fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
+        if (SongNames.manySongs(song)) return
+        // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
+        if (!likelyInstrumental && autoReports.allowed == false) return
+        val canHear = singing != null && shownPlayed && mayCalibrate()
+        // Noted, as a report of no words then says how it came to be one.
+        TimingLog.note("no words, likely instrumental $likelyInstrumental, a voice ${if (canHear) "is listened for" else "can't be heard"}")
+        if (canHear) {
+            unsung = Unsung(song, likelyInstrumental)
+            hearVoice()
+        } else if (!likelyInstrumental) {
+            problemFound(SongProblem.NO_LYRICS)
+        }
+    }
+
+    /**
+     * Hears the song with no words found for a voice, a while at a time, [VOICE_TRIES] whiles apart
+     * through it, as the speech model misses one in four. Heard sung, it has words no one has, which is
+     * a problem found; heard nothing sung all along, it has none to find. Only while the music app on the
+     * phone plays it and Crosstune is in sight; a while heard as it stops is heard again once it plays.
+     */
+    private fun hearVoice() {
+        val hearing = singing ?: return
+        val waiting = unsung ?: return
+        if (!mayHearVoice(waiting.song)) return
+        voiceJob = viewModelScope.launch {
+            var heard = waiting
+            while (heard.tries < VOICE_TRIES) {
+                if (heard.tries > 0) delay(VOICE_PAUSE_MS)
+                val sung = hearing.hear(null, null)
+                TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
+                if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
+                // Without the speech model, or with no sound to hear, as from a phone turned all the way down, nothing can be heard, so it's as if it couldn't be.
+                val couldNotHear = sung == null && (hearing.missesModel || hearing.heardNoSound)
+                if (sung?.sings == true || couldNotHear) return@launch voiceHeard(heard, sung != null)
+                heard = heard.copy(tries = heard.tries + 1)
+                unsung = heard
+            }
+            unsung = null
+        }
+    }
+
+    /** Whether [song], with no words found, may be heard for a voice now: shown, played by a music app on the phone, Crosstune in sight. */
+    private fun mayHearVoice(song: MusicMetadata): Boolean {
+        if (voiceJob?.isActive == true || shazamLeads || nextPaused) return false
+        if (!mayCalibrate() || uiState.lyricsFor != song) return false
+        return uiState.following?.let { it.app != null && it.clock.playing } == true
+    }
+
+    /** [heard] was heard sung, or [sung] false, couldn't be heard at all: its missing words are a problem, as they always were. */
+    private fun voiceHeard(heard: Unsung, sung: Boolean) {
+        unsung = null
+        if (sung && heard.likelyInstrumental) uiState = uiState.copy(lyricsInstrumental = false)
+        if (sung || !heard.likelyInstrumental) problemFound(SongProblem.NO_LYRICS)
     }
 
     /** Hears the singing a while at a time, through the song, and puts the words where it's heard. */
@@ -2837,6 +2912,7 @@ internal class MainViewModel(
         nextJob = null
         // Out of sight, the singing isn't heard either, until it's back.
         singingJob?.cancel()
+        voiceJob?.cancel()
     }
 
     fun resumeFollowingNext() {
@@ -2859,6 +2935,7 @@ internal class MainViewModel(
         followJob = null
         singingJob?.cancel()
         singingJob = null
+        voiceJob?.cancel()
         singingTries = 0
         clockSure = false
         lastAppClock = null
@@ -4033,7 +4110,8 @@ internal class MainViewModel(
             uiState = uiState.copy(
                 chords = uiState.chords.copy(loading = false, tried = true, sheet = (answer as? ChordFinder.Chords.Found)?.sheet, failed = answer == ChordFinder.Chords.Unavailable)
             )
-            if (answer == ChordFinder.Chords.None) problemFound(SongProblem.NO_CHORDS)
+            // Many songs in one have no one sheet to miss.
+            if (answer == ChordFinder.Chords.None && !SongNames.manySongs(song)) problemFound(SongProblem.NO_CHORDS)
         }
     }
 
@@ -4801,6 +4879,12 @@ internal class MainViewModel(
 
         /** How much faster or slower than the recording it matched Shazam must hear one for it to go on at its own pace: less is as near as Shazam tells. */
         const val MIN_SKEW = 1f / 256
+
+        /** Whiles a song with no words found is heard for a voice, at most: one in four is heard as music alone, and four rarely all are. */
+        const val VOICE_TRIES = 4
+
+        /** The pause between them, so they're heard across the song, a verse apart, rather than all in its intro. */
+        const val VOICE_PAUSE_MS = 20_000L
 
         /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
         const val SINGING_TRIES = 3

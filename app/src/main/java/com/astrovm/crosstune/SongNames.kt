@@ -148,6 +148,43 @@ internal object SongNames {
         "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방"
     ).map(::normalize)
 
+    /**
+     * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,
+     * a whole concert or album played as one, a playlist or compilation, "50 Viral Audios", or three or
+     * more songs named apart by slashes.
+     */
+    fun manySongs(song: MusicMetadata): Boolean {
+        val names = "${song.title} ${song.artist}"
+        val words = wordList(names)
+        if (words.any { it in MANY_SONGS_WORDS } || MANY_SONGS_MARKS.any { it in normalize(names) } || countsSongs(words)) return true
+        return wholeShow.containsMatchIn(names) || song.title.split(" / ").count { it.isNotBlank() } >= MIN_SONGS_IN_A_TITLE
+    }
+
+    /** Whether [words] count songs, as "Top 20 Hits" or "50 Viral TikTok Audios" do: many of them, a few words on. */
+    private fun countsSongs(words: List<String>): Boolean = words.indices.any { at ->
+        (words[at].toIntOrNull() ?: 0) >= MIN_SONGS_COUNTED && words.subList(at + 1, minOf(words.size, at + 1 + COUNTED_WITHIN)).any { it in SONGS_COUNTED }
+    }
+
+    private val MANY_SONGS_WORDS = setOf(
+        "medley", "medleys", "mashup", "megamix", "potpourri", "popurri", "popurris", "enganchados",
+        "playlist", "playlists", "compilation", "compilacion", "compilado", "compilacao", "recopilacion"
+    )
+
+    /** What a count of many songs counts. */
+    private val SONGS_COUNTED = setOf("songs", "hits", "audios", "tracks", "canciones", "temas", "exitos", "musicas", "cancoes", "chansons", "titres", "lieder")
+    private const val MIN_SONGS_COUNTED = 10
+    private const val COUNTED_WITHIN = 3
+    private val MANY_SONGS_MARKS = listOf("メドレー", "串烧", "串燒", "메들리").map(::normalize)
+
+    /** A whole show or album as one, in the languages its uploads are named in: "Full Concert", "(Recital Completo)". */
+    private val wholeShow = Regex(
+        """(?<![\p{L}\p{N}])(?:(?:full|complete|whole|entire)\s+(?:concert|show|album|live\s+show|set)|""" +
+            """(?:concierto|recital|show|[áa]lbum|disco|concerto|konzert|concert)\s+(?:completo|completa|entero|inteiro|integral|komplett|complet|intero))(?![\p{L}\p{N}])""",
+        RegexOption.IGNORE_CASE
+    )
+
+    private const val MIN_SONGS_IN_A_TITLE = 3
+
     /** Words in a tag that make it another recording, though it also says it's remastered or in mono. */
     private val OTHER_RECORDING = setOf("live", "remix", "acoustic", "demo", "instrumental", "unplugged", "karaoke", "cover", "session", "sessions")
 

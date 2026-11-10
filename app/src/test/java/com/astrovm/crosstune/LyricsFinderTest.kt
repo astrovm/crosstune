@@ -61,6 +61,97 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(song))
     }
 
+    /** LRCLIB, which has [songs], by song and artist, each with its own words, and finds them by any of their words. */
+    private fun lrclibHas(vararg songs: Pair<String, String>, searches: MutableList<String> = mutableListOf()) {
+        fun json(found: List<Pair<String, String>>) = found.joinToString(",", "[", "]") { (title, artist) -> answer(title, artist, "Words of $title") }
+        fake.handler = { request ->
+            val url = request.url
+            val said = url.queryParameter("q")
+            FakeSpotify.html(request, when {
+                url.host != "lrclib.net" -> "{}"
+                said != null -> json(songs.filter { (title, artist) -> said.split(' ').all { it in "$title $artist" } }).also { searches += said }
+                else -> json(songs.filter { it == url.queryParameter("track_name") to url.queryParameter("artist_name") })
+            })
+        }
+    }
+
+    @Test
+    fun aVideosTitleThatNamesTheArtistAndSongFindsTheirWords() {
+        lrclibHas("夜の歌" to "FakeBand", "Lonely Road" to "Other Singer")
+        // A fan's upload, by a channel that isn't the artist, either way around.
+        assertEquals("Words of 夜の歌", words(MusicMetadata("FakeBand 夜の歌", "Fan Pics")))
+        assertEquals("Words of 夜の歌", words(MusicMetadata("夜の歌 FakeBand", "Fan Pics")))
+        // A song LRCLIB has by that name alone is someone else's: the title isn't theirs and their song.
+        assertEquals(Lyrics.None, found(MusicMetadata("Lonely Road", "Fan Pics")))
+        assertEquals(Lyrics.None, found(MusicMetadata("Lonely Road Other", "Fan Pics")))
+    }
+
+    @Test
+    fun aLabelsTitleInPartsFindsTheSongByWhicheverPartIsItsSinger() {
+        val searches = mutableListOf<String>()
+        lrclibHas("Fake Tune" to "Fake Singer", "Fake Tune" to "Fake Film", searches = searches)
+        assertEquals("Words of Fake Tune", words(MusicMetadata("Fake Tune | Fake Singer | Some Film | Old Song", "Fake Label")))
+        // The singer named after the film is found too; one past the parts asked about isn't.
+        lrclibHas("Fake Tune" to "Fake Singer", searches = searches)
+        assertEquals("Words of Fake Tune", words(MusicMetadata("Fake Tune | Other Film | Fake Singer", "Fake Label")))
+        searches.clear()
+        assertEquals(Lyrics.None, found(MusicMetadata("Fake Tune | A | B | C | Fake Singer", "Fake Label")))
+        assertEquals(listOf("Fake Tune A", "Fake Tune B", "Fake Tune C"), searches)
+    }
+
+    @Test
+    fun aBlankPartInALabelsTitleIsSkippedAndTheSongIsStillFound() {
+        fake.handler = { request ->
+            val url = request.url
+            val said = url.queryParameter("q")
+            val track = url.queryParameter("track_name") to url.queryParameter("artist_name")
+            when {
+                url.host != "lrclib.net" -> FakeSpotify.html(request, "{}")
+                said == "Fake Tune Fake Singer" || track == "Fake Tune" to "Fake Singer" -> FakeSpotify.html(request, "[${answer("Fake Tune", "Fake Singer", "Words of Fake Tune")}]")
+                // A blank part would ask for the song with no singer, and that answer is no use.
+                said == "Fake Tune" || said?.endsWith(" ") == true -> FakeSpotify.html(request, "", code = 503)
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        assertEquals("Words of Fake Tune", words(MusicMetadata("Fake Tune |  | Fake Singer", "Fake Label")))
+    }
+
+    @Test
+    fun aTitleThatNamesTheSingerFirstSkipsADifferentSong() {
+        fake.handler = { request ->
+            val url = request.url
+            val said = url.queryParameter("q")
+            val track = url.queryParameter("track_name") to url.queryParameter("artist_name")
+            when {
+                url.host != "lrclib.net" -> FakeSpotify.html(request, "{}")
+                // Another song comes back first. It is not this one, so its words stay out.
+                said == "Fake Singer Fake Tune" -> FakeSpotify.html(request, "[${answer("Other Tune", "Other Band", "Words of Other")},${answer("Fake Tune", "Fake Singer", "Words of Fake Tune")}]")
+                track == "Fake Tune" to "Fake Singer" -> FakeSpotify.html(request, "[${answer("Fake Tune", "Fake Singer", "Words of Fake Tune")}]")
+                track == "Other Tune" to "Other Band" -> FakeSpotify.html(request, "[${answer("Other Tune", "Other Band", "Words of Other")}]")
+                else -> FakeSpotify.html(request, "[]")
+            }
+        }
+        assertEquals("Words of Fake Tune", words(MusicMetadata("Fake Singer | Fake Tune", "Fake Label")))
+    }
+
+    @Test
+    fun aSearchLrclibWontAnswerLeavesTheSongWithoutWords() {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.queryParameter("q") != null -> FakeSpotify.html(request, "", code = 503)
+                url.host == "lrclib.net" -> FakeSpotify.html(request, "[]")
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        assertEquals(Lyrics.None, found(MusicMetadata("FakeBand 夜の歌", "Fan Pics")))
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.queryParameter("q") != null) "{\"message\":\"busy\"}" else "[]") }
+        assertEquals(Lyrics.None, found(MusicMetadata("FakeBand 夜の歌", "Fan Pics")))
+        // An answer cut short is no answer either.
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.queryParameter("q") != null) "[{\"trackName\":" else "[]") }
+        assertEquals(Lyrics.None, found(MusicMetadata("FakeBand 夜の歌", "Fan Pics")))
+    }
+
     @Test
     fun timestampsAfterTheRecordingEndsAreNotTaken() {
         respond("[${lasting(answer("Song", "Band", "Readable words", synced = "[01:10.00]Too late"), 50.0)}]")
