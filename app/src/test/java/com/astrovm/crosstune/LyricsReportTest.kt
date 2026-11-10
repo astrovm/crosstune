@@ -181,6 +181,8 @@ class LyricsReportTest {
     }
 
     /** What the last report sent said. */
+    private val LOCAL_BOX = "http://127.0.0.1:8787/reports"
+
     private fun sentReport() = JSONObject(fake.requestBodies[fake.requestedUrls.indexOfLast { it == ReportSender.URL }])
 
     @Test
@@ -207,6 +209,29 @@ class LyricsReportTest {
         val opened = generateSequence { shadowOf(app).nextStartedActivity }.map { it.action }.toList()
         assertFalse(opened.any { it == Intent.ACTION_SENDTO || it == Intent.ACTION_VIEW })
         assertNull(model().uiState.report)
+    }
+
+    @Test
+    fun aTestBuildSendsToTheLocalAddressItsToldAndTheAppPeopleInstallNever() {
+        val flags = app.applicationInfo.flags
+        org.robolectric.shadows.ShadowSystemProperties.override("debug.crosstune.report_url", LOCAL_BOX)
+        try {
+            app.applicationInfo.flags = flags or android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+            report()
+            click(string(R.string.report_send))
+            waitUntil { !shown(string(R.string.report_what_goes)) }
+            assertEquals(listOf(LOCAL_BOX), fake.requestedUrls.filter { "/reports" in it })
+            controller?.destroyAndSettle()
+            controller = null
+            app.applicationInfo.flags = flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE.inv()
+            report()
+            click(string(R.string.report_send))
+            waitUntil { !shown(string(R.string.report_what_goes)) }
+            assertEquals(listOf(LOCAL_BOX, ReportSender.URL), fake.requestedUrls.filter { "/reports" in it })
+        } finally {
+            app.applicationInfo.flags = flags
+            org.robolectric.shadows.ShadowSystemProperties.override("debug.crosstune.report_url", "")
+        }
     }
 
     @Test
