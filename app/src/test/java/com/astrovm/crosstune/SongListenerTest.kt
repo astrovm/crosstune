@@ -454,7 +454,20 @@ class SongListenerTest {
     }
 
     private var clock = 0L
-    private fun played(tap: SoundTap?, every: Long = PlayedSound.POLL_MS) = PlayedSound({ tap }, now = { clock }, sleep = { clock += every })
+
+    /** Waits in the current listen. A real probe gives up after 400. Far past that, the listen is stuck. */
+    private var waits = 0
+
+    private fun waitFor(every: Long) {
+        clock += every
+        waits += 1
+        check(waits <= 4_000) { "the listen did not finish" }
+    }
+
+    private fun played(tap: SoundTap?, every: Long = PlayedSound.POLL_MS): PlayedSound {
+        waits = 0
+        return PlayedSound({ tap }, now = { clock }, sleep = { waitFor(every) })
+    }
 
     /** All [recording] gives, [count] samples asked for at a time, until it gives no more or [max]. */
     private fun all(recording: Recording, count: Int = 1_600, max: Int = 32_000): ShortArray {
@@ -479,7 +492,8 @@ class SongListenerTest {
             val sound = ByteArray(48_000 * 3) { 128.toByte() }
             music(1).copyInto(sound, 48_000 / 2, 0, durationMs * 48)
             val tap = PlayingTap(sound) { clock }
-            val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+            waits = 0
+            val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
             assertEquals("$durationMs ms blip", 0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
             assertFalse("$durationMs ms blip was saved as shared sound", preferences.getBoolean(PlayedSound.KEY_SHARES, false))
         }
@@ -491,7 +505,8 @@ class SongListenerTest {
         preferences.edit().clear().commit()
         clock = 0
         val tap = PlayingTap(sound) { clock }
-        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        waits = 0
+        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
         val heard = played.open()!!.use { all(it, max = max) }
         return heard to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
     }
@@ -559,7 +574,8 @@ class SongListenerTest {
         val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences(name, Context.MODE_PRIVATE)
         preferences.edit().clear().commit()
         clock = 0
-        val played = PlayedSound({ SampleTap(samples, size) }, preferences, now = { clock }, sleep = { clock += size.toLong() })
+        waits = 0
+        val played = PlayedSound({ SampleTap(samples, size) }, preferences, now = { clock }, sleep = { waitFor(size.toLong()) })
         val got = played.open()!!.use { it.read(ShortArray(8), 0, 8) }
         return got to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
     }
@@ -620,7 +636,8 @@ class SongListenerTest {
         preferences.edit().clear().putBoolean("sound_shared", true).commit()
         clock = 0
         val tap = PlayingTap(ByteArray(48_000 * 3) { 128.toByte() }) { clock }
-        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        waits = 0
+        val played = PlayedSound({ tap }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
         assertEquals(0, played.open()!!.use { it.read(ShortArray(1), 0, 1) })
     }
 
@@ -666,7 +683,8 @@ class SongListenerTest {
         clock = 100
         val tap = PlayingTap(sound) { clock }
         // A clock that's behind: the reads overlap by more than it says, so where they match is looked for.
-        val heard = PlayedSound({ tap }, now = { 0L }, sleep = { clock += 1 }).open()!!.use { all(it, max = 3_200) }
+        waits = 0
+        val heard = PlayedSound({ tap }, now = { 0L }, sleep = { waitFor(1) }).open()!!.use { all(it, max = 3_200) }
         assertEquals(3_200, heard.size)
         assertEquals(sixteenKilohertz(sound, 100, 3_200), heard.toList())
     }
@@ -720,7 +738,10 @@ class SongListenerTest {
         clock = 0
         val taps = ArrayDeque(listOf(PlayingTap(music(2)) { clock }, PlayingTap(ByteArray(48_000 * 5) { 128.toByte() }) { clock }))
         val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("played", Context.MODE_PRIVATE)
-        fun sound() = PlayedSound({ taps.removeFirst() }, preferences, now = { clock }, sleep = { clock += PlayedSound.POLL_MS })
+        fun sound(): PlayedSound {
+            waits = 0
+            return PlayedSound({ taps.removeFirst() }, preferences, now = { clock }, sleep = { waitFor(PlayedSound.POLL_MS) })
+        }
         assertTrue(sound().open()!!.use { all(it, max = 8_000) }.any { it != 0.toShort() })
         // Even after Crosstune starts again.
         clock = 0
