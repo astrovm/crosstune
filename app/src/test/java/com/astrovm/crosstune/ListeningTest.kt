@@ -91,6 +91,7 @@ import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -177,6 +178,7 @@ class ListeningTest {
         FloatingLyricsService.host = null
         ShadowSettings.setCanDrawOverlays(false)
         MainActivity.shellFactory = { listOf(ShizukuShell(), RootShell()) }
+        MainActivity.chordWikiFactory = { ChordWikiBrowser(it) }
         MainActivity.connectionFactory = ::AndroidConnection
     }
 
@@ -4902,6 +4904,81 @@ class ListeningTest {
                 else -> null
             }
         }
+    }
+
+    /**
+     * ChordWiki's check can run out of time, or stop and ask a person to click. The words say which,
+     * and trying again looks the song up once more. The app does not click the check.
+     */
+    @Test
+    fun chordWikiCheckThatDoesntFinishSaysWhyAndTryAgain() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        File(app.cacheDir, "chords.json").delete()
+        File(app.noBackupFilesDir, "kept/chords.json").delete()
+        val timeout = string(R.string.lyrics_chords_wiki_timeout)
+        val check = string(R.string.lyrics_chords_wiki_check)
+        val generic = string(R.string.lyrics_chords_failed)
+        val line = "川の道を歩いていく"
+        val chordPro = "{title:川の道}\n[Am]$line\n[F]朝の光に歌っている"
+        var stage = 0
+        val entered = CountDownLatch(1)
+        val held = CountDownLatch(1)
+        val enteredAgain = CountDownLatch(1)
+        val heldAgain = CountDownLatch(1)
+        MainActivity.chordWikiFactory = {
+            ChordWikiPages {
+                withContext(Dispatchers.IO) {
+                    when (++stage) {
+                        1 -> {
+                            entered.countDown()
+                            held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                            throw ChordWikiStopped(ChordWikiCheck.AUTOMATIC)
+                        }
+                        2 -> {
+                            enteredAgain.countDown()
+                            heldAgain.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                            throw ChordWikiStopped(ChordWikiCheck.INTERACTIVE)
+                        }
+                        else -> chordPro
+                    }
+                }
+            }
+        }
+        wordsOf(null, "$line\\n朝の光に歌っている", title = "川の道", artist = "歩く人", sites = chordSitesWithNone())
+        // Held, so the words are up and the chords are still on their way. Nothing says they failed yet.
+        // The test thread is the main thread, so this pumps it instead of waiting on the latch.
+        waitUntil(TIMEOUT_MS) { entered.count == 0L }
+        assertTrue(composeRule.runOnIdle { controllerModel().uiState.chords.loading })
+        assertFalse(shown(timeout))
+        assertFalse(shown(check))
+        assertFalse(shown(generic))
+        assertNull(chordsOver(line))
+        held.countDown()
+        // The check ran out of time. The plain words say that, and a tap looks again.
+        waitUntil(TIMEOUT_MS) { shown(timeout) }
+        assertFalse(shown(generic))
+        assertFalse(shown(check))
+        assertTrue(shown(string(R.string.retry_button)))
+        assertNull(chordsOver(line))
+        click(string(R.string.retry_button))
+        // Held again, so the first reason goes while the next answer is still out.
+        waitUntil(TIMEOUT_MS) { enteredAgain.count == 0L }
+        waitUntil(TIMEOUT_MS) { !shown(timeout) }
+        assertFalse(shown(check))
+        heldAgain.countDown()
+        // A check a person has to do. The app does not do it. Trying again is the way on.
+        waitUntil(TIMEOUT_MS) { shown(check) }
+        assertFalse(shown(timeout))
+        assertFalse(shown(generic))
+        assertTrue(shown(string(R.string.retry_button)))
+        assertNull(chordsOver(line))
+        assertEquals(2, stage)
+        click(string(R.string.retry_button))
+        waitUntil(TIMEOUT_MS) { chordsOver(line) == listOf("Am") }
+        assertFalse(shown(check))
+        assertFalse(shown(timeout))
+        assertFalse(shown(generic))
+        assertFalse(composeRule.runOnIdle { controllerModel().uiState.chords.failed })
     }
 
     @Test

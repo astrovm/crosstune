@@ -293,8 +293,7 @@ internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLoo
     val check = chordWikiCheck(seen.title, seen.text)
     if (check != ChordWikiCheck.NONE) {
         if (!timedOut) return ChordWikiLook.Waiting
-        val why = if (check == ChordWikiCheck.INTERACTIVE) "ChordWiki asked for a check a person has to click" else "ChordWiki's check didn't finish"
-        throw IOException(why)
+        throw ChordWikiStopped(check)
     }
     // The menu's links are there before the search has answered, and its words are too. Only a song's
     // link, or the search saying nothing matched, is the answer.
@@ -359,6 +358,12 @@ private val ANCHOR_TAGS = Regex("<[^>]+>")
 
 /** What ChordWiki's search says when no song matches. */
 private const val NO_MATCH = "一致するものは見つかりませんでした"
+
+/** ChordWiki's check stopped the lookup. [check] says which kind, so the screen can say it too. */
+internal class ChordWikiStopped(val check: ChordWikiCheck) : IOException(
+    // A person's check is given up, not clicked for them. The other kind just ran out of time.
+    if (check == ChordWikiCheck.INTERACTIVE) "ChordWiki asked for a check a person has to click" else "ChordWiki's check didn't finish"
+)
 
 private val INTERACTIVE = listOf(
     "verify you are human",

@@ -75,6 +75,9 @@ class ChordWikiTest {
         assertEquals(ChordWikiLook.Waiting, chordWikiLook(seen(title = "Verify you are human", text = "I'm not a robot"), timedOut = false))
         assertThrows("click") { chordWikiLook(seen(title = "Verify you are human"), timedOut = true) }
         assertThrows("didn't finish") { chordWikiLook(seen(text = "しばらくお待ちください"), timedOut = true) }
+        // Which check it was goes with the error, so the screen can say it.
+        assertEquals(ChordWikiCheck.INTERACTIVE, stopped { chordWikiLook(seen(title = "Verify you are human"), timedOut = true) })
+        assertEquals(ChordWikiCheck.AUTOMATIC, stopped { chordWikiLook(seen(text = "しばらくお待ちください"), timedOut = true) })
         val links = "川の道 - 歩く人\thttps://ja.chordwiki.org/wiki/kawa"
         assertEquals(links, (chordWikiLook(seen(links = links), timedOut = false) as ChordWikiLook.Ready).body)
         // The search says so when nothing matches, and that is the page, however much else is on it.
@@ -528,6 +531,14 @@ class ChordWikiTest {
 
     private fun seen(href: String = "https://ja.chordwiki.org/", title: String = "川", text: String = "", source: String = "", hasEditor: Boolean = false, links: String = "") =
         ChordWikiSeen(href, title, text, source, hasEditor, links)
+
+    /** The check that stopped [block]. */
+    private fun stopped(block: () -> Unit): ChordWikiCheck? = try {
+        block()
+        null
+    } catch (e: ChordWikiStopped) {
+        e.check
+    }
 
     private fun assertThrows(part: String = "ChordWiki", block: () -> Unit) {
         try {

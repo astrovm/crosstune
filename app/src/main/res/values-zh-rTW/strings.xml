@@ -332,6 +332,8 @@
     <string name="lyrics_translation">翻譯</string>
     <string name="lyrics_translation_failed">暫時無法翻譯。</string>
     <string name="lyrics_chords_failed">無法載入和絃。</string>
+    <string name="lyrics_chords_wiki_timeout">ChordWiki 的檢查沒有完成。</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki 要求由人來完成檢查。</string>
     <string name="lyrics_chords">和絃</string>
     <string name="lyrics_capo">移調夾 %1$d</string>
     <string name="setting_translate_into">翻譯成</string>

@@ -332,6 +332,8 @@
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
     <string name="lyrics_chords_failed">कॉर्ड्स लोड नहीं हो सके।</string>
+    <string name="lyrics_chords_wiki_timeout">ChordWiki की जाँच पूरी नहीं हुई।</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki ने ऐसी जाँच माँगी जिसे एक व्यक्ति को करनी है।</string>
     <string name="lyrics_chords">कॉर्ड्स</string>
     <string name="lyrics_capo">कैपो %1$d</string>
     <string name="setting_translate_into">इसमें अनुवाद करें</string>

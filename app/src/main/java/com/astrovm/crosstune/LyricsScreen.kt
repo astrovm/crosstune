@@ -1296,13 +1296,20 @@ private fun TranslationStatus(learning: Learning, offline: Boolean, actions: Scr
 
 /**
  * That the chords couldn't be looked up, in words: plain words alone look like a song with no
- * chords, and the offline icon doesn't say what failed. Offline they're looked up again once the
- * internet is back, so there's nothing to tap. It only hands what it's given to AnimatedVisibility,
- * which does its own recomposing, so it needs no scope of its own to skip or restart.
+ * chords, and the offline icon doesn't say what failed. ChordWiki's check gets its own words,
+ * since a timeout and a check a person has to do are not the same, and the app does not do that
+ * check. Offline they're looked up again once the internet is back, so there's nothing to tap.
+ * It only hands what it's given to AnimatedVisibility, which does its own recomposing, so it
+ * needs no scope of its own to skip or restart.
  */
 @Composable
 @NonRestartableComposable
 private fun ChordsStatus(chords: ChordsState, offline: Boolean, actions: ScreenActions) {
+    val said = when (chords.failure) {
+        ChordFailure.WIKI_TIMEOUT -> R.string.lyrics_chords_wiki_timeout
+        ChordFailure.WIKI_CHECK -> R.string.lyrics_chords_wiki_check
+        null -> R.string.lyrics_chords_failed
+    }
     AnimatedVisibility(visible = chords.on && chords.failed, enter = Motion.appear, exit = Motion.disappear) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1310,7 +1317,7 @@ private fun ChordsStatus(chords: ChordsState, offline: Boolean, actions: ScreenA
         ) {
             Icon(painterResource(R.drawable.ic_error), contentDescription = null, tint = MaterialTheme.colorScheme.error)
             Text(
-                stringResource(R.string.lyrics_chords_failed),
+                stringResource(said),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f).padding(start = 12.dp).padding(vertical = 12.dp)
