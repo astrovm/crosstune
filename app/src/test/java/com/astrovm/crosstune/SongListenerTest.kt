@@ -537,6 +537,83 @@ class SongListenerTest {
         assertTrue(shared)
     }
 
+    /**
+     * Hands [samples] out in reads of [size], then silence. At 1 kHz a read of [size] is [size] ms
+     * on the clock, so each read is all new and a sample is a millisecond.
+     */
+    private class SampleTap(private val samples: ByteArray, private val size: Int) : SoundTap {
+        override val rateHz = 1_000
+        private var at = 0
+
+        override fun read(into: ByteArray): Int {
+            for (index in 0 until size) into[index] = samples.getOrElse(at + index) { 128.toByte() }
+            at += size
+            return size
+        }
+
+        override fun close() = Unit
+    }
+
+    /** How much the first read gives, and whether that listen marked the phone as sharing its sound. */
+    private fun probed(name: String, samples: ByteArray, size: Int = 100): Pair<Int, Boolean> {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences(name, Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        clock = 0
+        val played = PlayedSound({ SampleTap(samples, size) }, preferences, now = { clock }, sleep = { clock += size.toLong() })
+        val got = played.open()!!.use { it.read(ShortArray(8), 0, 8) }
+        return got to preferences.getBoolean(PlayedSound.KEY_SHARES, false)
+    }
+
+    private fun tone(count: Int) = ByteArray(count) { 200.toByte() }
+
+    private fun hush(count: Int) = ByteArray(count) { 128.toByte() }
+
+    @Test
+    fun soundThatHoldsForASecondMarksThePhoneAsSharingItsSound() {
+        // The first read played before listening started, so it does not count.
+        val (got, shared) = probed("holds", hush(100) + tone(1_000))
+        assertEquals(8, got)
+        assertTrue(shared)
+    }
+
+    @Test
+    fun soundOneSampleShortOfASecondDoesNotMarkThePhoneAsSharingItsSound() {
+        val (got, shared) = probed("short-by-one", hush(100) + tone(999))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun quietBeforeTheSoundDoesNotCountTowardsItHoldingOn() {
+        // One quiet sample, then one sample short of a second. That quiet is not part of the sound.
+        val (got, shared) = probed("quiet-before", hush(100) + hush(1) + tone(999))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun aRestOfSixtyMillisecondsKeepsTheSoundAsOne() {
+        val (got, shared) = probed("rest-60", hush(100) + tone(500) + hush(60) + tone(500))
+        assertEquals(8, got)
+        assertTrue(shared)
+    }
+
+    @Test
+    fun aRestOneSampleLongerThanSixtyMillisecondsBreaksTheSound() {
+        val (got, shared) = probed("rest-61", hush(100) + tone(500) + hush(61) + tone(500))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
+    @Test
+    fun theProbeGivesUpAsTheTwoSecondsEnd() {
+        // One read every 5 ms fills the 2 s. Sound in the next read is too late.
+        val reads = (PlayedSound.SILENT_MS / PlayedSound.POLL_MS).toInt()
+        val (got, shared) = probed("give-up", hush(reads * 100) + tone(1_000))
+        assertEquals(0, got)
+        assertFalse(shared)
+    }
+
     @Test
     fun anOldSharingDecisionDoesNotSkipTheNewProbe() {
         val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("old-sharing", Context.MODE_PRIVATE)
