@@ -196,7 +196,8 @@ class UnsungTest {
         singing.missing = true
         openLyrics()
         waitUntil { problems() == listOf("no_lyrics") }
-        assertEquals(1, singing.hears)
+        // Failed once on GitHub with nothing heard (Issue #886), so what the app noted on the way says why.
+        assertEquals(TimingLog.lastMinute(), 1, singing.hears)
     }
 
     @Test
