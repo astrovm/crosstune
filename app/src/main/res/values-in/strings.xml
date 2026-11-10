@@ -371,6 +371,7 @@
     <string name="lyrics_line_saved">Tersimpan</string>
     <string name="lyrics_word_failed">Tidak bisa menemukan artinya sekarang.</string>
     <string name="lyrics_word_unknown">Tidak ada entri kamus untuk kata ini.</string>
+    <string name="lyrics_word_modern">Ejaan lama dari %1$s</string>
     <string name="lyrics_words_to_know_failed">Tidak dapat menemukan kata yang perlu diketahui.</string>
     <string name="lyrics_save_word">Simpan %1$s</string>
     <string name="lyrics_word_saved">%1$s disimpan</string>

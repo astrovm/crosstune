@@ -371,6 +371,7 @@
     <string name="lyrics_line_saved">Salva</string>
     <string name="lyrics_word_failed">Não foi possível achar o significado agora.</string>
     <string name="lyrics_word_unknown">Nenhuma entrada de dicionário para esta palavra.</string>
+    <string name="lyrics_word_modern">Grafia antiga de %1$s</string>
     <string name="lyrics_words_to_know_failed">Não foi possível achar as palavras para saber.</string>
     <string name="lyrics_save_word">Salvar %1$s</string>
     <string name="lyrics_word_saved">%1$s salva</string>

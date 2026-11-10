@@ -371,6 +371,7 @@
     <string name="lyrics_line_saved">Kaydedildi</string>
     <string name="lyrics_word_failed">Şu an anlamı bulunamadı.</string>
     <string name="lyrics_word_unknown">Bu kelime için sözlük kaydı yok.</string>
+    <string name="lyrics_word_modern">%1$s sözcüğünün eski yazımı</string>
     <string name="lyrics_words_to_know_failed">Bilinmesi gereken kelimeler bulunamadı.</string>
     <string name="lyrics_save_word">%1$s kaydet</string>
     <string name="lyrics_word_saved">%1$s kaydedildi</string>

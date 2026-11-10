@@ -2486,6 +2486,8 @@ internal fun WordCard(meaning: WordMeaning, examples: Asking<List<Example>>?, ca
                     Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
                 }
             }
+            // The lyric keeps its old spelling; the card says how it's written today.
+            word.modern?.let { Text(stringResource(R.string.lyrics_word_modern, it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (meaning.looking) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
             } else if (meaning.failed) {

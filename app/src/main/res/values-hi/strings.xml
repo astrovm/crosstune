@@ -371,6 +371,7 @@
     <string name="lyrics_line_saved">सेव हो गई</string>
     <string name="lyrics_word_failed">अभी इसका मतलब नहीं मिला।</string>
     <string name="lyrics_word_unknown">इस शब्द के लिए कोई शब्दकोश प्रविष्टि नहीं है।</string>
+    <string name="lyrics_word_modern">%1$s की पुरानी वर्तनी</string>
     <string name="lyrics_words_to_know_failed">जानने लायक शब्द नहीं मिले।</string>
     <string name="lyrics_save_word">%1$s सेव करें</string>
     <string name="lyrics_word_saved">%1$s सेव हो गया</string>

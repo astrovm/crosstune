@@ -28,6 +28,127 @@ internal object Furigana {
         }
     }
 
+    /**
+     * [surface] spelled the modern way, if it has old kana in it: ゐ, ゑ, ひ, ふ and ほ written for い,
+     * え, い, う and お, as 思ひ出 is 思い出. Each reading in [kana] is tried in turn, as one tokenizer
+     * spells a long vowel or a kana another way than the next. Null when no kana is old, and for ヶ and
+     * the particles は and へ, which are modern writing.
+     */
+    fun modern(surface: String, vararg kana: String): String? {
+        if (surface.none { it in OLD }) return null
+        for (reading in kana) {
+            val parts = over(surface, reading)
+            if (parts.any { it.reading != null && it.text in OLD_KANA }) {
+                return parts.joinToString("") { if (it.reading != null && it.text in OLD_KANA) Readings.hiragana(it.reading) else it.text }
+            }
+        }
+        return null
+    }
+
+    /**
+     * [text] spelled today, by rule, with where each of its letters comes from in [text] ([origins], a contracted pair
+     * giving the same origin to each letter it makes), the places in [text] where a ひ, ふ or へ was changed ([plain]),
+     * where a pair like けふ starts ([contracted]), and where the first change is ([first]).
+     */
+    class Today(val text: String, val origins: List<Int>, val plain: List<Int>, val contracted: List<Int>, val first: Int)
+
+    /**
+     * [text] spelled the modern way by rule, when it can only be old kana: ゐ and ゑ, which no modern word has; け, て and the
+     * like with ふ, said きょう and ちょう; and ふ, ひ and へ right after a kanji, said う, い and え,
+     * 云ふ, 思ひ出, 耐へ. In kana alone, ふ and ひ are only taken for old kana after い, いふ and いひ: modern words have them too, ふふ.
+     * Null when nothing changes. The caller checks that the result is a word.
+     */
+    fun byRule(text: String): Today? {
+        val out = StringBuilder()
+        val origins = mutableListOf<Int>()
+        val plain = mutableListOf<Int>()
+        val pairs = mutableListOf<Int>()
+        var first = -1
+        var sure = false
+        var at = 0
+        while (at < text.length) {
+            val change = changeAt(text, at)
+            val said = change?.said ?: text[at].toString()
+            if (change != null) {
+                if (first < 0) first = at
+                sure = sure || change.sure
+                if (change.length > 1) pairs += at else if (text[at] in "ひふへ") plain += out.length
+            }
+            repeat(said.length) { origins += at }
+            out.append(said)
+            at += change?.length ?: 1
+        }
+        return if (sure && first >= 0) Today(out.toString(), origins, plain, pairs, first) else null
+    }
+
+    /** What the old kana at [at] in a text is said as, [length] letters of the text; [sure] when only old kana can be spelled so. */
+    private class Change(val said: String, val length: Int, val sure: Boolean)
+
+    private fun changeAt(text: String, at: Int): Change? {
+        val c = text[at]
+        val before = text.getOrNull(at - 1)
+        val contracted = CONTRACTED.entries.firstOrNull { text.startsWith(it.key, at) }
+        return when {
+            contracted != null -> Change(contracted.value, contracted.key.length, true)
+            c in "ゐゑ" -> Change(ENDINGS_SAID.getValue(c.toString()), 1, true)
+            before != null && c in "ひふ" -> Change(ENDINGS_SAID.getValue(c.toString()), 1, Readings.isHan(before) || before == 'い')
+            before != null && c == 'へ' && Readings.isHan(before) -> Change("え", 1, true)
+            else -> null
+        }
+    }
+
+    /** Whether [surface] is written in hiragana alone, with old kana in it: いふ, まゐる, てふてふ. */
+    fun inOldKana(surface: String) = surface.any { it in OLD } && surface.all { it in 'ぁ'..'ゖ' }
+
+    /**
+     * A word in old kana alone, [surface], spelled the modern way by the first of [forms] that
+     * spells the same word: how it's said (まゐり is said まいり) and the reading of its dictionary
+     * form (いふ is いう, てふてふ ちょうちょう). A form counts only if it differs from [surface] only
+     * where old kana is said another way, so a different word of the same sound, とこ for ところ, or
+     * a long vowel marked ー, names nothing wrong. Null if none does.
+     */
+    fun modernKana(surface: String, forms: List<String>): String? {
+        if (!inOldKana(surface)) return null
+        return forms.map(Readings::hiragana).firstOrNull { spelled(surface, it) }
+    }
+
+    /** Whether [modern] is [surface] with only its old kana changed, to how they're said. */
+    private fun spelled(surface: String, modern: String): Boolean {
+        var at = 0
+        var to = 0
+        while (at < surface.length && to < modern.length) {
+            val contracted = CONTRACTED.entries.firstOrNull { surface.startsWith(it.key, at) && modern.startsWith(it.value, to) }
+            when {
+                contracted != null -> {
+                    at += contracted.key.length
+                    to += contracted.value.length
+                }
+                surface[at] == modern[to] || "${surface[at]}${modern[to]}" in OLD_SAID_AS -> {
+                    at++
+                    to++
+                }
+                else -> return false
+            }
+        }
+        return at == surface.length && to == modern.length && modern != surface
+    }
+
+    /** How ゐ, ゑ, ひ and ふ are said, as in 恋ひ, こい, and 住まゐ, すまい. */
+    private val ENDINGS_SAID = mapOf("ゐ" to "い", "ゑ" to "え", "ひ" to "い", "ふ" to "う")
+
+    /** Old kana said another way, as in [SAID_AS] but only the pairs a word in old kana is spelled with. */
+    private val OLD_SAID_AS = setOf("ゐい", "ゑえ", "ひい", "ふう", "ほお")
+
+    /** Old kana that join the one before it in one sound: けふ is きょう, てふ ちょう. */
+    private val CONTRACTED = mapOf(
+        "えふ" to "よう", "けふ" to "きょう", "せふ" to "しょう", "てふ" to "ちょう", "ねふ" to "にょう",
+        "へふ" to "ひょう", "めふ" to "みょう", "れふ" to "りょう", "げふ" to "ぎょう", "でふ" to "じょう"
+    )
+
+    /** The kana only the old spelling writes for another sound. */
+    private const val OLD = "ゐゑひふほヰヱ"
+    private val OLD_KANA = OLD.map(Char::toString).toSet()
+
     /** A way to lay the reading along the runs from some point on: [parts] of it, and how many kana of the word it finds in the reading. */
     private class Plan(val kept: Int, val parts: List<Ruby>)
 

@@ -371,6 +371,7 @@
     <string name="lyrics_line_saved">Gespeichert</string>
     <string name="lyrics_word_failed">Konnte die Bedeutung gerade nicht finden.</string>
     <string name="lyrics_word_unknown">Kein Wörterbucheintrag für dieses Wort.</string>
+    <string name="lyrics_word_modern">Alte Schreibung von %1$s</string>
     <string name="lyrics_words_to_know_failed">Die wichtigen Wörter wurden nicht gefunden.</string>
     <string name="lyrics_save_word">%1$s speichern</string>
     <string name="lyrics_word_saved">%1$s gespeichert</string>
