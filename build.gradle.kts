@@ -22,6 +22,14 @@ subprojects {
             if (requested.group == "com.google.guava" && requested.name == "guava") useVersion("33.7.2-jre")
         }
     }
+    // A warning in a CI log is a bug (Issue #812). The compilers stop on one, so a new one fails the
+    // build where it's made instead of waiting in the log for someone to read it.
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+        compilerOptions.allWarningsAsErrors.set(true)
+    }
+    tasks.withType<JavaCompile>().configureEach {
+        options.compilerArgs.add("-Werror")
+    }
 }
 
 plugins {

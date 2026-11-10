@@ -1541,7 +1541,7 @@ class PracticeCardsTest {
         // Whether its music was muted each time it was paused, or played. Written in onPlay, after plays grows.
         val quietAt = CopyOnWriteArrayList<Pair<Boolean, Boolean>>()
         playback.onPlay = { _, play ->
-            if (!play) seeksAtFirstPause.compareAndSet(null, playback.seeks.size)
+            if (!play) seeksAtFirstPause.updateAndGet { it ?: playback.seeks.size }
             quietAt += play to playback.quiet
         }
         // The card must already say the line plays when the sound is let out. Read on that call, not after it.
