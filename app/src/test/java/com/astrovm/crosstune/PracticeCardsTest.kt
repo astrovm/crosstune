@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ApplicationProvider
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
@@ -1533,36 +1534,35 @@ class PracticeCardsTest {
         spotifyHasTheSong()
         keep(keptFromSpotify, types = hearIt)
         playback.access = true
-        // What had been asked of it when it was first paused.
-        var seeksAtFirstPause: Int? = null
-        // Whether its music was muted each time it was paused, or played.
+        // What had been asked of it when it was first paused. plays grows before onPlay writes this.
+        val seeksAtFirstPause = AtomicReference<Int?>(null)
+        // Whether its music was muted each time it was paused, or played. Written in onPlay, after plays grows.
         val quietAt = CopyOnWriteArrayList<Pair<Boolean, Boolean>>()
         playback.onPlay = { _, play ->
-            if (!play) seeksAtFirstPause = seeksAtFirstPause ?: playback.seeks.size
+            if (!play) seeksAtFirstPause.compareAndSet(null, playback.seeks.size)
             quietAt += play to playback.quiet
         }
-        // The card says the line plays before the sound comes out, so it must already say so as the sound is let out.
-        var soundAtUnmute: LineSound? = null
-        playback.onQuiet = { on -> if (!on) soundAtUnmute = practice?.sound }
+        // The card must already say the line plays when the sound is let out. Read on that call, not after it.
+        val soundAtUnmute = AtomicReference<LineSound?>(null)
+        playback.onQuiet = { on -> if (!on) soundAtUnmute.set(practice?.sound) }
         cards().start(null, before = null)
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         // Opened cold, it starts the song from its start, not yet able to move.
         playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis()), "Spotify", canSeek = false, appPackage = spotify, durationMs = 200_000)
-        // plays grows before onPlay records the pause, so wait until that record exists.
-        waitFor("it's paused") { playback.plays.isNotEmpty() && seeksAtFirstPause != null }
+        waitFor("it's paused") { quietAt.isNotEmpty() && seeksAtFirstPause.get() != null }
         assertEquals(listOf(false), playback.plays.toList())
-        assertEquals(0, seeksAtFirstPause)
+        assertEquals(0, seeksAtFirstPause.get())
         assertFalse(playback.playing.value!!.clock.playing)
         // Once it can move, it's sent to the line, and only then played, there.
         playback.playing.value = playback.playing.value!!.copy(canSeek = true)
-        waitFor("it plays the line") { playback.plays.contains(true) }
+        waitFor("it plays the line") { quietAt.any { (play, _) -> play } }
         assertEquals(listOf(10_000L), playback.seeks.toList())
         assertEquals(listOf(false, true), playback.plays.take(2))
         // Muted from before it was opened until it said it plays the line: the song's start was never heard.
         assertEquals(listOf(false to true, true to true), quietAt.take(2))
-        // Heard while it plays the line, not only once it's over. The screen state follows the sound.
-        waitFor("the line is heard") { !playback.quiet && practice?.sound == LineSound.PLAYING }
-        assertEquals(LineSound.PLAYING, soundAtUnmute)
+        // Heard while it plays the line, not only once it's over.
+        waitFor("the line is heard") { soundAtUnmute.get() != null }
+        assertEquals(LineSound.PLAYING, soundAtUnmute.get())
         assertEquals(LineSound.PLAYING, practice?.sound)
         assertEquals(listOf(true, false), playback.quiets.toList())
     }

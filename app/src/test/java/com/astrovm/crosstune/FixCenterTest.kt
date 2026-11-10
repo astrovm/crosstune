@@ -44,6 +44,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowActivity
+import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.shadows.ShadowSettings
 import java.io.File
 import java.time.Duration
@@ -114,6 +115,7 @@ class FixCenterTest {
         MainActivity.checksForUpdates = ::looksForUpdates
         GuideActivity.host = null
         ShadowSettings.setCanDrawOverlays(false)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -595,6 +597,27 @@ class FixCenterTest {
         NoPictureInPicture.throws = true
         assertTrue(startGuide().get().isFinishing)
         assertEquals(Uri.parse("package:$spotify"), nextStarted()!!.data)
+    }
+
+    @Test
+    fun aLateReminderIsListedAndOpensAlarmsAndReminders() {
+        prefs().edit().putBoolean("practice_reminder_on", true).putInt("practice_reminder_minute", 20 * 60 + 5).commit()
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val activity = launch()
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("3"))
+        openFixes()
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.practice_reminder_late))
+        click(string(R.string.practice_reminder_exact))
+        click(string(R.string.fix_open_settings))
+        val page = requireNotNull(nextStarted())
+        assertEquals(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, page.action)
+        assertEquals(Uri.parse("package:${activity.packageName}"), page.data)
+
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        comeBack()
+        waitUntil { !shown(string(R.string.practice_reminder_exact)) }
+        click(string(R.string.back_button))
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("2"))
     }
 
     @Test

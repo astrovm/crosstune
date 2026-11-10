@@ -149,9 +149,12 @@ internal class ReportSender(
     private val url: String = URL
 ) {
     /** Whether [report] got there. */
-    suspend fun send(report: Report): Boolean = withContext(ioDispatcher) {
+    suspend fun send(report: Report): Boolean = send(report.json())
+
+    /** Whether a report that was kept as its [json], what [Report.json] said, got there. */
+    suspend fun send(json: String): Boolean = withContext(ioDispatcher) {
         try {
-            client.newCall(Request.Builder().url(url).post(report.json().toRequestBody(JSON)).build()).execute().use { it.isSuccessful }
+            client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { it.isSuccessful }
         } catch (_: IOException) {
             false
         }
@@ -160,6 +163,16 @@ internal class ReportSender(
     companion object {
         const val URL = "https://report.crosstune.4st.li/reports"
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * Where reports go. A build that can be debugged may send them to a box on this phone's own address instead
+         * (adb shell setprop debug.crosstune.report_url http://127.0.0.1:PORT/reports, with adb reverse), so a try
+         * never reaches the real one. Anything else goes to [URL].
+         */
+        fun urlFor(debuggable: Boolean, asked: String?): String =
+            asked?.takeIf { debuggable && LOCAL.any(it::startsWith) } ?: URL
+
+        private val LOCAL = listOf("http://127.0.0.1:", "http://localhost:")
     }
 }
 

@@ -314,13 +314,15 @@
     <string name="report_sent">已傳送，謝謝！</string>
     <string name="report_failed">無法傳送。請檢查網路連線後再試一次。</string>
     <string name="auto_report_offer">自動回報這類問題？</string>
+    <string name="auto_report_offer_words_off">這首歌的歌詞不同步。自動回報這類問題？</string>
     <string name="auto_report_yes">好</string>
-    <string name="auto_report_no">不用了</string>
+    <string name="auto_report_not_now">暫時不用</string>
     <string name="singing_model_offer">讓歌詞對上歌聲，需要下載 32 MB。</string>
     <string name="singing_model_failed">32 MB 的下載沒有完成。</string>
     <string name="singing_model_download">下載</string>
     <string name="singing_model_close">暫不</string>
     <string name="setting_auto_report">自動回報歌曲問題</string>
+    <string name="setting_auto_report_hint">也會傳送你之前手動對時的歌詞。</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按輸入法拼寫羅馬字</string>
     <string name="lyrics_katakana_as_hiragana">片假名顯示為平假名</string>
@@ -369,6 +371,7 @@
     <string name="lyrics_line_saved">已儲存</string>
     <string name="lyrics_word_failed">暫時找不到它的意思。</string>
     <string name="lyrics_word_unknown">字典裡沒有這個詞。</string>
+    <string name="lyrics_word_modern">%1$s的舊寫法</string>
     <string name="lyrics_words_to_know_failed">找不到要學的詞。</string>
     <string name="lyrics_save_word">儲存%1$s</string>
     <string name="lyrics_word_saved">已儲存%1$s</string>

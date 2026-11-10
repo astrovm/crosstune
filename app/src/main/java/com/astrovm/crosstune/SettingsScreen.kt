@@ -337,7 +337,8 @@ private fun SettingsList(
             if (reporting) ReportDialog(Report(appVersion()), onDismiss = { reporting = false }, opener = reportRow)
             SettingSwitch(
                 label = stringResource(R.string.setting_auto_report),
-                description = null,
+                // Turned on, it also sends what was put in time by hand before, which waited on the phone.
+                description = stringResource(R.string.setting_auto_report_hint),
                 checked = state.autoReports == true,
                 onCheckedChange = actions.onAllowAutoReports
             )

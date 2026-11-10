@@ -6,10 +6,13 @@
 const MAX_BYTES = 48 * 1024;
 
 /** The longest each text may be, in characters. */
-const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, source: 100, comment: 2000, line: 300, appPackage: 150, log: 8192 };
+const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, source: 100, comment: 2000, line: 300, appPackage: 150, log: 8192, recording: 200 };
 
-/** The problems the app finds with a song by itself, and reports when the user lets it. */
-const PROBLEMS = new Set(["no_lyrics", "no_timing", "timed_by_hand", "sung_off", "no_chords"]);
+/**
+ * The problems the app finds with a song by itself, and reports when the user lets it. "kept_timing" is a song's
+ * timing an earlier version kept, sent once: by hand or by ear, the app can't tell.
+ */
+const PROBLEMS = new Set(["no_lyrics", "no_timing", "timed_by_hand", "sung_off", "no_chords", "kept_timing"]);
 
 /** What Android allows a package to be named: dotted words of letters, digits and underscores. */
 const PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
@@ -33,11 +36,11 @@ export default {
     const report = readReport(text);
     if (!report) return status(400);
     await env.DB.prepare(
-      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       report.version, report.android, report.title, report.artist, report.app,
       report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
-      report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog
+      report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording
     ).run();
     return status(204);
   },
@@ -72,7 +75,7 @@ export function readReport(text) {
     // A problem it doesn't know is one the user sent, as far as it can tell.
     problem: PROBLEMS.has(json.problem) ? json.problem : null,
     title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, source: null, timing: null,
-    appPackage: null, speed: null, leadMs: null, earlyMs: null, timingLog: null,
+    appPackage: null, speed: null, leadMs: null, earlyMs: null, timingLog: null, recording: null,
   };
   if (song) {
     report.title = textOf(song.title, LIMITS.title);
@@ -91,6 +94,8 @@ export function readReport(text) {
     report.leadMs = signedMs(song.leadMs);
     report.earlyMs = signedMs(song.earlyMs);
     report.timingLog = textOf(song.log, LIMITS.log);
+    // Which recording the timing was kept for, as the app named it: "SPOTIFY:id", or the app's own "pkg:id".
+    report.recording = textOf(song.recording, LIMITS.recording);
     const timing = timingOf(song.timing);
     if (timing === undefined) return null;
     report.timing = timing;
