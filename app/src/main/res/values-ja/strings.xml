@@ -329,6 +329,7 @@
     <string name="lyrics_katakana_as_hiragana">カタカナもひらがなで</string>
     <string name="lyrics_translation">翻訳</string>
     <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>
+    <string name="lyrics_chords_failed">コードを読み込めませんでした。</string>
     <string name="lyrics_chords">コード</string>
     <string name="lyrics_capo">カポ %1$d</string>
     <string name="setting_translate_into">翻訳先</string>

@@ -724,6 +724,7 @@ class MainActivity : ComponentActivity() {
         onTranslationChange = viewModel::setTranslation,
         onChordsChange = viewModel::setChords,
         onRetryTranslation = viewModel::retryTranslation,
+        onRetryChords = viewModel::retryChords,
         onToggleSavedLine = viewModel::toggleSavedLine,
         onLookUpWord = viewModel::lookUpWord,
         onExplainLine = viewModel::explainLine,

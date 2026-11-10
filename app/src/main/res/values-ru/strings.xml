@@ -328,6 +328,7 @@
     <string name="lyrics_katakana_as_hiragana">Катакана хираганой</string>
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
+    <string name="lyrics_chords_failed">Не удалось загрузить аккорды.</string>
     <string name="lyrics_chords">Аккорды</string>
     <string name="lyrics_capo">Каподастр %1$d</string>
     <string name="setting_translate_into">Переводить на</string>

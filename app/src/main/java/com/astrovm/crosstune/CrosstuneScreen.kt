@@ -293,6 +293,7 @@ internal data class ScreenActions(
     val onCardTypesChange: (List<CardType>, Boolean) -> Unit = { _, _ -> },
     val onTranslationChange: (Boolean) -> Unit = {},
     val onRetryTranslation: () -> Unit = {},
+    val onRetryChords: () -> Unit = {},
     val onChordsChange: (Boolean) -> Unit = {},
     val onToggleSavedLine: (Int) -> Unit = {},
     /** Looks up a word, in the line it's in, by the line's index. */

@@ -328,6 +328,7 @@
     <string name="lyrics_katakana_as_hiragana">Katakana hiragana olarak</string>
     <string name="lyrics_translation">Çeviri</string>
     <string name="lyrics_translation_failed">Şu an çevrilemedi.</string>
+    <string name="lyrics_chords_failed">Akorlar yüklenemedi.</string>
     <string name="lyrics_chords">Akorlar</string>
     <string name="lyrics_capo">Kapo %1$d</string>
     <string name="setting_translate_into">Şu dile çevir</string>

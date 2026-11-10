@@ -328,6 +328,7 @@
     <string name="lyrics_katakana_as_hiragana">片假名顯示為平假名</string>
     <string name="lyrics_translation">翻譯</string>
     <string name="lyrics_translation_failed">暫時無法翻譯。</string>
+    <string name="lyrics_chords_failed">無法載入和絃。</string>
     <string name="lyrics_chords">和絃</string>
     <string name="lyrics_capo">移調夾 %1$d</string>
     <string name="setting_translate_into">翻譯成</string>
