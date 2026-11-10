@@ -486,7 +486,13 @@ internal class LyricsFinder(
      */
     private val cache: LookupCache? = null,
     /** The song's video id on YouTube Music, whose own words come timed for it; null when it isn't there. */
-    private val youTubeMusicSong: (suspend (MusicMetadata) -> String?)? = null
+    private val youTubeMusicSong: (suspend (MusicMetadata) -> String?)? = null,
+    /**
+     * Where the answers are matched and scored: off the main thread, which drew late while a famous
+     * song's hundred namesakes were gone through, and one at a time as the main thread did them, so
+     * what's asked, and in which order, stays the same.
+     */
+    private val matching: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
 ) {
     /** A song's words, or why there are none to show. */
     internal sealed interface Lyrics {
@@ -531,13 +537,6 @@ internal class LyricsFinder(
      */
     suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics =
         firstLook(metadata, timeoutMs).let { first -> if (first.final) first.lyrics else retimed(metadata, first.lyrics, timeoutMs) }
-
-    /**
-     * Where the answers are matched and scored: off the main thread, which drew late while a famous
-     * song's hundred namesakes were gone through, and one at a time as the main thread did them, so
-     * what's asked, and in which order, stays the same.
-     */
-    private val matching = ioDispatcher.limitedParallelism(1)
 
     /** What [firstLook] found: words kept from before, which are [final], or else ones still to be [retimed]. */
     data class FirstLook(val lyrics: Lyrics, val final: Boolean)
