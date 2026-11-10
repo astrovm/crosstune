@@ -638,9 +638,18 @@ class LyricsToolsTest {
         openLyrics()
         touch()
         composeRule.runOnIdle { model().nudgeSync(500) }
-        passes(300)
+        // The clock moves only as told from here: left to run on by itself, it goes on for as long as
+        // the screen has something else to draw, and the offer would be taking taps by then.
+        composeRule.mainClock.autoAdvance = false
+        var frames = 0
+        while (offers() == 0 && frames++ < 500) {
+            composeRule.mainClock.advanceTimeByFrame()
+            Thread.sleep(2)
+        }
+        composeRule.mainClock.advanceTimeBy(300)
         yes().performClick()
         notNow().performClick()
+        composeRule.mainClock.autoAdvance = true
         passes(1)
         assertEquals(1, offers())
         assertFalse(prefs().contains("auto_reports"))

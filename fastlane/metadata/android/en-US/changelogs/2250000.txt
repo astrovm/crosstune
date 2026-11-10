@@ -1,9 +1,9 @@
 Mark a word's wrong reading and send it as a report.
+Smoother while music plays: less work on every frame.
 Japanese readings follow how the song is sung far more often.
 Search puts the artist's song ahead of karaoke.
-A song with no words is reported only when someone sings in it.
-Medleys, concerts and playlists are no longer reported.
+A song with no words is reported only if someone sings in it.
+Medleys, concerts and playlists aren't reported.
 "Artist- Song Lyrics" video titles find their words.
-Chords say when ChordWiki's check didn't finish.
+A practice card's YouTube player stops at the next line.
 Practice cards don't wait on a link they won't open.
-Silence no longer counts as the phone sharing its sound.

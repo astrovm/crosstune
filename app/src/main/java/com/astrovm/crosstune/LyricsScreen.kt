@@ -164,6 +164,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -194,7 +195,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ButtonDefaults
@@ -1650,15 +1650,19 @@ internal fun Following.ahead(ms: Long) = copy(clock = clock.copy(positionMs = cl
 
 /**
  * The line of [lines] being sung, or -1 before the first or while nothing says where the song is.
- * Checked every frame while the song plays, so a line lights as it's sung; it only changes when the
- * line does. A paused song stays where it is.
+ * Looked at again when the next line starts, so a line lights as it's sung and nothing runs in
+ * between. A paused song stays where it is.
  */
 @Composable
 internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): Int {
     fun sung() = following?.takeIf { it.timingKnown }?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
     val active by produceState(sung(), following, lines) {
         value = sung()
-        while (following?.timingKnown == true && following.clock.playing) value = withInfiniteAnimationFrameMillis { sung() }
+        val starts = lines.map { it.timeMs }
+        while (following?.timingKnown == true) {
+            delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { SyncedLyrics.nextAfter(starts, it) } ?: break)
+            value = sung()
+        }
     }
     return active
 }
@@ -2016,24 +2020,37 @@ private fun LineHelps(help: LineHelp?, instead: String?, style: TextStyle, look:
 private fun alignment(centered: Boolean) = if (centered) TextAlign.Center else TextAlign.Unspecified
 
 /**
- * What [at] makes of where the song is while [following] it, checked every frame while it plays,
- * but only told, and drawn again, when it changes; null while not following.
+ * What [at] makes of where the song is while [following] it; null while not following. Looked at
+ * again only when [changesAt] says it changes: the place in the song, after the one it's handed,
+ * where it next does, or null when it never does again. [of] is what those two go by, e.g. the
+ * lines: when it changes, they're asked afresh.
  */
 @Composable
-internal fun <T> rememberWhilePlaying(following: Following?, at: (Long) -> T): T? {
-    if (following == null) return null
+internal fun <T> rememberWhilePlaying(following: Following?, of: Any?, changesAt: (Long) -> Long?, at: (Long) -> T): T? =
+    following?.let { whilePlaying(it, of, changesAt, at).value }
+
+/**
+ * [rememberWhilePlaying] as a state, for what's only drawn from it: read where it's drawn, a change
+ * draws that again and nothing is composed again.
+ */
+@Composable
+internal fun <T> whilePlaying(following: Following, of: Any?, changesAt: (Long) -> Long?, at: (Long) -> T): State<T> {
     val latest by rememberUpdatedState(at)
+    val change by rememberUpdatedState(changesAt)
     fun now() = latest(following.clock.positionAt(SystemClock.elapsedRealtime()))
-    val value by produceState(now(), following) {
+    return produceState(now(), following, of) {
         value = now()
-        while (following.clock.playing) value = withInfiniteAnimationFrameMillis { now() }
+        while (true) {
+            delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { change(it) } ?: break)
+            value = now()
+        }
     }
-    return value
 }
 
 /** Where the song is while [following] it, to the [POSITION_STEP_MS], which is as fine as a bar or clock shows; null while not. */
 @Composable
-internal fun rememberPosition(following: Following?): Long? = rememberWhilePlaying(following) { it - it % POSITION_STEP_MS }
+internal fun rememberPosition(following: Following?): Long? =
+    rememberWhilePlaying(following, null, { it - it % POSITION_STEP_MS + POSITION_STEP_MS }) { it - it % POSITION_STEP_MS }
 
 /** How often a song's place moves on screen: more often would only draw the screen again for nothing. */
 internal const val POSITION_STEP_MS = 100L
@@ -2050,7 +2067,8 @@ private fun sungText(words: List<TimedWord>, sung: Int, rest: Float = UNSUNG_ALP
 /** The line being sung, timed word by word: each word lights as it's sung. */
 @Composable
 private fun SungWords(words: List<TimedWord>, following: Following, style: TextStyle) {
-    Text(sungText(words, rememberWhilePlaying(following) { SyncedLyrics.wordsSungBy(words, it) } ?: 0), style = style)
+    val sung = rememberWhilePlaying(following, words, { at -> SyncedLyrics.nextAfter(words.map { it.timeMs }, at) }) { SyncedLyrics.wordsSungBy(words, it) }
+    Text(sungText(words, sung ?: 0), style = style)
 }
 
 /** How bright the words of the line being sung are before they're sung. */
@@ -2080,7 +2098,9 @@ private fun ChordedLine(line: LyricLine, nextMs: Long?, chords: LineChords, foll
         return
     }
     // Only words timed one by one say when a chord's played closely enough to light it.
-    val now = rememberWhilePlaying(following.takeIf { line.words.isNotEmpty() }) {
+    // A word sung or a chord played is all that changes it.
+    val changes = remember(line, chords, nextMs) { line.words.map { it.timeMs } + chords.over.map { ChordSheets.timeOf(line, it.at, nextMs) } }
+    val now = rememberWhilePlaying(following.takeIf { line.words.isNotEmpty() }, changes, { SyncedLyrics.nextAfter(changes, it) }) {
         ChordSheets.playing(line, chords.over, nextMs, it) to SyncedLyrics.wordsSungBy(line.words, it)
     }
     // Read only where it's drawn, so a new chord played just draws it again.

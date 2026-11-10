@@ -124,6 +124,9 @@ internal object SyncedLyrics {
     /** The line being sung at [positionMs], or -1 before the first. */
     fun indexAt(lines: List<LyricLine>, positionMs: Long): Int = lines.indexOfLast { it.timeMs <= positionMs }
 
+    /** Where the next of [times] after [positionMs] is, when the line or word lit changes; null after the last. */
+    fun nextAfter(times: List<Long>, positionMs: Long): Long? = times.filter { it > positionMs }.minOrNull()
+
     /** The fraction is decimals of a second: ".5" is half of one, ".05" a twentieth. */
     private fun MatchResult.toMillis(): Long {
         val (minutes, seconds, fraction) = destructured
