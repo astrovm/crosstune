@@ -601,6 +601,20 @@ class SungWordsTest {
     }
 
     @Test
+    fun aPhoneThatGivesNoRecordingHasNoSoundToHearEither() = runBlocking {
+        // It won't share its sound at all.
+        val unshared = listener(FakeMicrophone(works = false))
+        assertNull(unshared.hear(null, null))
+        assertTrue(unshared.heardNoSound)
+        // Or its sound ends before a while is in, as silence that isn't taken for sound does.
+        val short = listener(FakeMicrophone().apply { play(1.0); end(); play(SingingListener.SECONDS.toDouble()) })
+        assertNull(short.hear(null, null))
+        assertTrue(short.heardNoSound)
+        assertNotNull(short.hear(null, null))
+        assertFalse(short.heardNoSound)
+    }
+
+    @Test
     fun theModelIsMissedOnlyWhenItWasWantedAndWasntThere() = runBlocking {
         // A phone that won't share its sound never got as far as wanting it.
         val silent = listener(FakeMicrophone(works = false), model = null)

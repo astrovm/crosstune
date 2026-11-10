@@ -119,7 +119,9 @@ internal class SingingListener(
 
     override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
         // A phone that won't share its sound has nothing to hear, so the model isn't fetched for it.
-        val recording = withContext(recordDispatcher) { sound.open() } ?: return null
+        val recording = withContext(recordDispatcher) { sound.open() }
+        heardNoSound = recording == null
+        if (recording == null) return null
         val (file, heard) = recording.use {
             // The model first, so what's heard is fresh when it's listened to.
             val file = model()
@@ -138,7 +140,8 @@ internal class SingingListener(
                     // Sound that ended before them has none to hear again.
                     again.cancel()
                     heard
-                } ?: return null
+                    // A phone turned all the way down may give no recording at all, as its silence isn't taken for sound.
+                } ?: return null.also { heardNoSound = true }
                 )
         }
         // No sound at all has no words to hear, so the speech model isn't run on it.
