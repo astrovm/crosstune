@@ -827,6 +827,8 @@ class ReadingsTest {
             assertEquals("$withUniDic", "あめ (きみのこえ)", read("雨 (君の声)"))
             // But a suffix after a word stays one: 運転手 is うんてんしゅ, 飛び方 とびかた, 4時 よじ; and so does a prefix before kanji, 前前前世.
             assertEquals("$withUniDic", "うんてんしゅ", read("運転手"))
+            assertEquals("$withUniDic", "だんすてをあげる", read("ダンス手を上げる"))
+            assertEquals("$withUniDic", "かしゅをしる", read("歌手を知る"))
             assertEquals("$withUniDic", "とびかたをしる", read("飛び方を知る"))
             assertTrue("$withUniDic", read("4時に").endsWith("じに"))
             assertTrue("$withUniDic", read("10年後に").endsWith("ねんごに"))

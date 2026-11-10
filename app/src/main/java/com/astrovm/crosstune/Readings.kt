@@ -98,7 +98,7 @@ internal object Readings {
      * worked out again: 2 for the readings a song is sung with, which were asked for in a way that found none,
      * and the dictionary's common misreadings, as 君 after a pause.
      */
-    const val VERSION = 2
+    const val VERSION = 3
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -557,7 +557,7 @@ internal object Readings {
      */
     private fun together(pieces: List<Piece>): List<Piece> {
         val out = mutableListOf<Piece>()
-        for (piece in pieces) {
+        for ((index, piece) in pieces.withIndex()) {
             val last = out.lastOrNull()
             val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
             val count = last?.let { counted(it, piece) }
@@ -586,6 +586,9 @@ internal object Readings {
                     out += piece.read("いろ")
                 // 君 is くん after a name, 太郎君; after anything else it's you, 何度君と, きみ.
                 piece.surface == "君" && piece.kana == "くん" && (last == null || !namedBy(last)) -> out += piece.read("きみ")
+                // 手 after a katakana word and before を is a hand, not a suffix naming a person.
+                piece.surface == "手" && piece.kana == "しゅ" && last != null && last.surface.all { it in 'ァ'..'ヺ' || it == 'ー' } &&
+                    pieces.getOrNull(index + 1)?.surface == "を" -> out += piece.read("て", "名詞", "一般")
                 // An adjective's stem can't go on with て or た: 愛して and 楽して are the verbs, あいして and らくして.
                 last != null && stemOfVerb(last, piece) -> {
                     out[out.lastIndex] = last.read(tokenizer.tokenize(last.surface.dropLast(1)).joinToString("") { hiragana(it.reading ?: it.surface) } + "し", "動詞", "自立")
