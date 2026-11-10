@@ -72,11 +72,13 @@ private const val RESTED_AFTER_MS = 6 * 60 * 60 * 1000L
  * itself: nothing leaves it. Nothing due, or a session done that day, it says nothing, and after
  * [IGNORED_ENOUGH] in a row with no answer it stops until the next time cards are practised.
  *
- * An exact alarm that fires in Doze, when the user has allowed alarms and reminders for the app:
- * Samsung's freezer holds an inexact one for as long as it holds the app, which no window shortens.
- * Not allowed, an inexact one still fires in Doze, up to an hour late, which [Reminder.late] says.
- * Android forgets alarms on a reboot or a force stop, so they're set again then, and when the clock
- * or time zone changes, so it stays the same hour on the wall, and when the permission changes.
+ * The alarm is exact, and it fires in Doze, when alarms and reminders are allowed. From Android 12
+ * an inexact alarm is also set for the same minute. Revoking that access deletes the exact alarm
+ * and does not start the app, so the inexact one still fires. Samsung's freezer can hold an inexact
+ * alarm for as long as it holds the app. When the exact minute is not allowed, only the inexact
+ * alarm is set. It can arrive up to an hour late, which [Reminder.late] says.
+ * Android forgets alarms on a reboot, a force stop or an update. They are set again then, when the
+ * clock or time zone changes, and when the permission changes.
  */
 internal class PracticeReminders(
     base: Context,
@@ -88,10 +90,17 @@ internal class PracticeReminders(
     private val notifications = context.getSystemService(NotificationManager::class.java)
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
-    private val alarm
-        get() = PendingIntent.getBroadcast(
-            context, 0, Intent(ACTION_REMIND).setClass(context, PracticeReminderReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+    /**
+     * One alarm Android can tell from the other: the action differs, so cancelling or replacing one
+     * leaves the other. The request code differs too, which is how the tests tell them apart.
+     * [at] is the minute it was set for, so a second delivery of that same minute says nothing.
+     */
+    private fun pending(action: String, at: Long? = null): PendingIntent {
+        val intent = Intent(action).setClass(context, PracticeReminderReceiver::class.java)
+        if (at != null) intent.putExtra(EXTRA_AT, at)
+        val code = if (action == ACTION_REMIND_KEEP) 1 else 0
+        return PendingIntent.getBroadcast(context, code, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
 
     private val on get() = preferences.getBoolean(KEY_ON, false)
     private val minute get() = preferences.getInt(KEY_MINUTE, -1).takeIf { it >= 0 }
@@ -155,22 +164,49 @@ internal class PracticeReminders(
     /** Sets the next reminder, or, off or ignored, none, so the phone isn't woken for nothing. */
     fun arm() {
         val minute = minute
-        if (on && minute != null && ignored < IGNORED_ENOUGH) {
-            val at = nextReminderAt(minute, now(), zone())
-            if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, alarm) else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, alarm)
+        if (on && minute != null && ignored < IGNORED_ENOUGH) setNext(minute) else cancelBoth()
+    }
+
+    /**
+     * The exact alarm when Android allows it, and from Android 12 an inexact one for the same minute.
+     * Revoking alarms and reminders deletes the exact one and does not start the app. The inexact one
+     * is what still fires. Before Android 12 the exact one cannot be taken away, so there is no spare.
+     */
+    private fun setNext(minute: Int) {
+        val at = nextReminderAt(minute, now(), zone())
+        val onTime = exact
+        if (onTime) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ACTION_REMIND, at))
         } else {
-            alarms.cancel(alarm)
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ACTION_REMIND, at))
+        }
+        if (onTime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ACTION_REMIND_KEEP, at))
+        } else {
+            alarms.cancel(pending(ACTION_REMIND_KEEP))
         }
     }
 
+    private fun cancelBoth() {
+        alarms.cancel(pending(ACTION_REMIND))
+        alarms.cancel(pending(ACTION_REMIND_KEEP))
+    }
+
     /** The alarm went: says what's due, unless there's no reason to, and sets tomorrow's. */
-    fun remind() {
+    fun remind(intent: Intent = Intent()) {
+        val slot = intent.getLongExtra(EXTRA_AT, 0L)
+        // The exact alarm and the spare can both be on their way. The second must not ask again.
+        val again = slot != 0L && slot == preferences.getLong(KEY_POSTED_FOR, 0L)
         val at = now()
         val types = loadCardTypes(preferences)
         val due = sessionOf(SavedLinesStore(preferences).load(), at, max = Int.MAX_VALUE, types = types)
-        if (due.isNotEmpty() && mayAsk(at)) {
+        if (!again && due.isNotEmpty() && mayAsk(at)) {
             post(due)
-            preferences.edit { putInt(KEY_IGNORED, ignored + 1) }
+            preferences.edit {
+                putInt(KEY_IGNORED, ignored + 1)
+                // No minute on the intent, as when a test asks directly: nothing to tell the next one by.
+                if (slot != 0L) putLong(KEY_POSTED_FOR, slot)
+            }
         }
         arm()
     }
@@ -212,6 +248,12 @@ internal class PracticeReminders(
     companion object {
         const val ACTION_REMIND = "com.astrovm.crosstune.action.REMIND_PRACTICE"
 
+        /** The inexact spare of [ACTION_REMIND], for when Android has deleted the exact alarm. */
+        const val ACTION_REMIND_KEEP = "com.astrovm.crosstune.action.REMIND_PRACTICE_KEEP"
+
+        /** The minute this alarm was set for, so a second delivery of the same one says nothing. */
+        const val EXTRA_AT = "practice_reminder_at"
+
         /** How many go unanswered in a row before they stop. */
         const val IGNORED_ENOUGH = 3
 
@@ -224,13 +266,15 @@ internal class PracticeReminders(
         private const val KEY_IGNORED = "practice_reminder_ignored"
         private const val KEY_TURNED_OFF = "practice_reminder_turned_off"
         private const val KEY_DONE_AT = "practice_reminder_done_at"
+        private const val KEY_POSTED_FOR = "practice_reminder_posted_for"
     }
 }
 
-/** The day's alarm, and whatever makes Android forget it, or its hour: a reboot, a new time zone or clock. */
+/** The day's alarm, and whatever makes Android forget it or its hour: a reboot, an update, a new time zone or clock. */
 class PracticeReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val reminders = PracticeReminders(context)
-        if (intent.action == PracticeReminders.ACTION_REMIND) reminders.remind() else reminders.arm()
+        val alarm = intent.action == PracticeReminders.ACTION_REMIND || intent.action == PracticeReminders.ACTION_REMIND_KEEP
+        if (alarm) reminders.remind(intent) else reminders.arm()
     }
 }

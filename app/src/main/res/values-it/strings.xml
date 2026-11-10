@@ -315,13 +315,15 @@
     <string name="report_sent">Inviato. Grazie!</string>
     <string name="report_failed">Invio non riuscito. Controlla la connessione e riprova.</string>
     <string name="auto_report_offer">Segnalare automaticamente problemi come questo?</string>
+    <string name="auto_report_offer_words_off">Il testo di questo brano era sfasato. Segnalare automaticamente casi come questo?</string>
     <string name="auto_report_yes">Sì</string>
-    <string name="auto_report_no">No, grazie</string>
+    <string name="auto_report_not_now">Non ora</string>
     <string name="singing_model_offer">Per allineare il testo al canto serve un download di 32 MB.</string>
     <string name="singing_model_failed">Il download di 32 MB non è terminato.</string>
     <string name="singing_model_download">Scarica</string>
     <string name="singing_model_close">Non ora</string>
     <string name="setting_auto_report">Segnala automaticamente i problemi dei brani</string>
+    <string name="setting_auto_report_hint">Invia anche i testi messi a tempo a mano in precedenza.</string>
     <string name="lyrics_romanized">In lettere latine</string>
     <string name="lyrics_romaji_typed">Romaji come si digita</string>
     <string name="lyrics_katakana_as_hiragana">Katakana in hiragana</string>
@@ -370,6 +372,7 @@
     <string name="lyrics_line_saved">Salvata</string>
     <string name="lyrics_word_failed">Impossibile trovare il significato ora.</string>
     <string name="lyrics_word_unknown">Nessuna voce di dizionario per questa parola.</string>
+    <string name="lyrics_word_modern">Grafia antica di %1$s</string>
     <string name="lyrics_words_to_know_failed">Impossibile trovare le parole da sapere.</string>
     <string name="lyrics_save_word">Salva %1$s</string>
     <string name="lyrics_word_saved">%1$s salvata</string>

@@ -314,13 +314,15 @@
     <string name="report_sent">Envoyé. Merci !</string>
     <string name="report_failed">Échec de l\'envoi. Vérifiez votre connexion et réessayez.</string>
     <string name="auto_report_offer">Signaler automatiquement les problèmes comme celui-ci ?</string>
+    <string name="auto_report_offer_words_off">Les paroles de ce morceau étaient décalées. Signaler automatiquement les cas comme celui-ci ?</string>
     <string name="auto_report_yes">Oui</string>
-    <string name="auto_report_no">Non merci</string>
+    <string name="auto_report_not_now">Pas maintenant</string>
     <string name="singing_model_offer">Caler les paroles sur le chant nécessite un téléchargement de 32 Mo.</string>
     <string name="singing_model_failed">Le téléchargement de 32 Mo n\'a pas abouti.</string>
     <string name="singing_model_download">Télécharger</string>
     <string name="singing_model_close">Pas maintenant</string>
     <string name="setting_auto_report">Signaler automatiquement les problèmes de morceaux</string>
+    <string name="setting_auto_report_hint">Envoie aussi les paroles calées à la main plus tôt.</string>
     <string name="lyrics_romanized">En lettres latines</string>
     <string name="lyrics_romaji_typed">Rōmaji tel qu’on le tape</string>
     <string name="lyrics_katakana_as_hiragana">Katakana en hiragana</string>
@@ -369,6 +371,7 @@
     <string name="lyrics_line_saved">Enregistrée</string>
     <string name="lyrics_word_failed">Impossible de trouver son sens pour le moment.</string>
     <string name="lyrics_word_unknown">Aucune entrée de dictionnaire pour ce mot.</string>
+    <string name="lyrics_word_modern">Ancienne graphie de %1$s</string>
     <string name="lyrics_words_to_know_failed">Impossible de trouver les mots à connaître.</string>
     <string name="lyrics_save_word">Enregistrer %1$s</string>
     <string name="lyrics_word_saved">%1$s enregistré</string>

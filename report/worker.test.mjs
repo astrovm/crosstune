@@ -45,8 +45,8 @@ test("a report is kept, with only what a report has", async () => {
   assert.deepEqual(e.saved[0].values, [
     "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937, "letras, timed by lrclib",
     JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late", null,
-    // An app from before reports about timing sends none of what they add.
-    null, null, null, null, null,
+    // An app from before reports about timing sends none of what they add, nor a recording.
+    null, null, null, null, null, null,
   ]);
   // The address only counts against the limit.
   assert.deepEqual(e.keys, ["203.0.113.7"]);
@@ -56,7 +56,7 @@ test("a report is kept, with only what a report has", async () => {
 test("a report about the app, with no song, is kept too", async () => {
   const e = env();
   assert.equal((await worker.fetch(post({ version: "2.12.0", comment: "Hi" }), e)).status, 204);
-  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", ...Array(6).fill(null)]);
+  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", ...Array(7).fill(null)]);
 });
 
 test("anything else is turned away, and nothing kept", async () => {
@@ -141,9 +141,9 @@ test("a report about timing keeps the app followed, its speed, the lead and the 
   assert.equal((await worker.fetch(post(timing), e)).status, 204);
   assert.deepEqual(e.saved[0].values.slice(12), [
     "timed_by_hand", "org.kde.kdeconnect_tp", 1, -1450, 400,
-    "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000",
+    "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000", null,
   ]);
-  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log\) VALUES \((\?, ){17}\?\)$/);
+  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, recording\) VALUES \((\?, ){18}\?\)$/);
 });
 
 test("what timing adds that isn't what it should be is left out, and the rest is kept", () => {
@@ -172,5 +172,36 @@ test("a report about timing the size the app bounds it to is kept", async () => 
   const lines = Array.from({ length: 20 }, () => ({ line: "y".repeat(300), timedMs: 1, heardMs: 2 }));
   const big = { ...timing, comment: "c".repeat(2000), song: { ...timing.song, log, timing: lines } };
   assert.equal((await worker.fetch(post(big), e)).status, 204);
-  assert.equal(e.saved[0].values.at(-1), log);
+  assert.equal(e.saved[0].values.at(-2), log);
+});
+
+/** A song's timing an earlier version kept, as the app sends it: only what the app kept, every line it had. */
+const kept = {
+  version: "2.24.0",
+  android: "15 (35)",
+  problem: "kept_timing",
+  song: {
+    title: "Demo", artist: "Band", sung: true, recording: "SPOTIFY:abc123", lengthMs: 220937,
+    timing: Array.from({ length: 300 }, (_, i) => ({ timedMs: i * 1000, heardMs: i * 1000 - 250 })),
+  },
+};
+
+test("a song's timing kept from an earlier version is kept, with its recording and every line", async () => {
+  const e = env();
+  assert.equal((await worker.fetch(post(kept), e)).status, 204);
+  const values = e.saved[0].values;
+  assert.equal(values[12], "kept_timing");
+  assert.equal(values[7], 1);
+  assert.equal(values[8], 220937);
+  assert.equal(values.at(-1), "SPOTIFY:abc123");
+  assert.equal(JSON.parse(values[10]).length, 300);
+  // Lines with no words: the key and the points were all it kept.
+  assert.deepEqual(JSON.parse(values[10])[0], { line: null, timedMs: 0, heardMs: -250 });
+});
+
+test("a recording that isn't text is left out, and a long one is cut", () => {
+  const odd = (recording) => readReport(JSON.stringify({ ...kept, song: { ...kept.song, recording } })).recording;
+  assert.equal(odd(7), null);
+  assert.equal(odd("  "), null);
+  assert.equal(odd("r".repeat(500)).length, 200);
 });

@@ -160,6 +160,13 @@ class TriageTest(unittest.TestCase):
         self.assertIn("by hand: 1", text)
         self.assertIn("says: words are wrong", text)
 
+    def test_timing_kept_from_before_says_how_many_were_heard_sung_and_names_the_recording(self):
+        kept = [dict(row(1, problem="kept_timing"), sung=1, recording="SPOTIFY:made-up"), dict(row(2, problem="kept_timing", title="Other"), sung=0)]
+        text = reports.triage(kept)
+        self.assertIn("kept_timing: 2, 0 naming the app\n  1 with the singing heard through it\n  1.0.0 on Android 16 (36) x2", text)
+        self.assertIn("1: Made Up Song | Some Band | SPOTIFY:made-up", text)
+        self.assertIn("2: Other | Some Band\n", text + "\n")
+
     def test_no_reports_is_said_plainly(self):
         self.assertEqual(reports.triage([]), "0 reports")
 

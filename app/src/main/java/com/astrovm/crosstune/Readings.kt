@@ -45,7 +45,15 @@ internal val List<Ruby>.kana: String get() = joinToString("") { it.reading ?: it
  * A word of a line: as written, how it reads when that isn't plain from it, and what to look up
  * for its meaning, e.g. 分かる for 分かった; its Latin letters as it's said, and as it's [typed].
  */
-internal data class Word(val text: String, val reading: String? = null, val romanized: String? = null, val lookup: String = text, val typed: String? = romanized)
+internal data class Word(
+    val text: String,
+    val reading: String? = null,
+    val romanized: String? = null,
+    val lookup: String = text,
+    val typed: String? = romanized,
+    /** How it's spelled today, when it's written in old kana, 思い出 for 思ひ出; the lyric keeps what it says. */
+    val modern: String? = null
+)
 
 /**
  * Romaji as it's [said] and as it's [typed], the one picked, typed when [typedFirst], first; the
@@ -143,8 +151,79 @@ internal object Readings {
                 unread = reading == null
             )
         }
-        return uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known
+        return modernPieces(uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known)
     }
+
+    /**
+     * Words in old kana the dictionary splits (云 and ふ, け and ふ) or reads as written (いふ, 云ふ read うん), read as the
+     * words their modern spelling is: the pieces of a word, [Furigana.byRule] spelled today, are tokenized as the words
+     * they are today, and those words, each as it's written in the line, replace them. A spelling counts only when
+     * the dictionary knows all its words and no ひ, ふ or へ it changed starts one, so a modern line, with は and ひ and ふ
+     * in it, comes out as it was.
+     */
+    private fun modernPieces(pieces: List<Piece>): List<Piece> {
+        val out = mutableListOf<Piece>()
+        var at = 0
+        while (at < pieces.size) {
+            val found = (minOf(OLD_WORD_PIECES, pieces.size - at) downTo 1).firstNotNullOfOrNull { count ->
+                modernPiece(pieces.subList(at, at + count))?.let { count to it }
+            }
+            if (found == null) out += pieces[at++] else {
+                out += found.second
+                at += found.first
+            }
+        }
+        return out
+    }
+
+    /** The pieces of a [word] in old kana as the words it is today, when the dictionary knows them. */
+    private fun modernPiece(word: List<Piece>): List<Piece>? {
+        val today = ruledToday(word) ?: return null
+        val tokens = tokenizer.tokenize(today.text)
+        // A word starting with a ひ, ふ or へ that was changed is a modern word: 一人ひとり is not 一人いとり.
+        if (tokens.any { !it.isKnown || it.reading == "*" || it.position in today.plain }) return null
+        // And so is a contracted pair that ends in the start of a longer word, て and ふたり in 来てふたり.
+        val starts = word.runningFold(0) { at, piece -> at + piece.surface.length }
+        if (today.contracted.any { pair -> word.indices.any { starts[it] == pair + 1 && word[it].surface.length > 1 } }) return null
+        // A contracted pair stays whole: けふ is not き and ょう, and てふてふ is not ちょうちょ and う, but ちょうちょう.
+        val words = tokens.fold(mutableListOf<MutableList<com.atilika.kuromoji.ipadic.Token>>()) { words, token ->
+            if (token.position > 0 && today.origins[token.position] == today.origins[token.position - 1]) words.last() += token else words += mutableListOf(token)
+            words
+        }
+        val text = word.joinToString("") { it.surface }
+        return words.map { group -> todayPiece(group, today, text) }
+    }
+
+    /** The spelling by rule of a [word] in old kana, when the dictionary doesn't already read it so and the change starts in its first piece. */
+    private fun ruledToday(word: List<Piece>): Furigana.Today? {
+        val text = word.joinToString("") { it.surface }
+        val first = word[0]
+        val kana = word.all { piece -> piece.surface.all { isHan(it) || isKana(it) } && piece.kind != "記号" }
+        // One piece the dictionary already reads as old kana, 思ふ as おもう, is left as it is.
+        val read = word.size == 1 && first.kana != text && spelledToday(text, first.kana, first.said) != null
+        if (!kana || read) return null
+        val today = Furigana.byRule(text) ?: return null
+        // The change is in the first piece, or just after it, as ゐ is after ま in まゐる: but not after a particle, in 待つてゐた.
+        val late = today.first > first.surface.length || (today.first == first.surface.length && first.kind in GRAMMAR)
+        return today.takeUnless { late }
+    }
+
+    private val GRAMMAR = setOf("助詞", "助動詞")
+
+    /** The piece for a [group] of tokens of the spelling [today] of [text], as it's written in the line. */
+    private fun todayPiece(group: List<com.atilika.kuromoji.ipadic.Token>, today: Furigana.Today, text: String): Piece {
+        val head = group.first()
+        val from = today.origins[head.position]
+        val to = group.last().let { it.position + it.surface.length }.let { if (it == today.text.length) text.length else today.origins[it] }
+        return Piece(
+            text.substring(from, to), group.joinToString("") { hiragana(it.reading) }, head.partOfSpeechLevel1, head.partOfSpeechLevel2,
+            head.surface, longVowels(hiragana(group.joinToString("") { it.pronunciation })),
+            today = group.joinToString("") { it.surface }
+        )
+    }
+
+    /** The most pieces a word in old kana is split into: 思 ひ 出, 植 ゑ る, て ふ て ふ. */
+    private const val OLD_WORD_PIECES = 5
 
     /** [line] as UniDic splits it. */
     private fun uniDicPieces(uniDic: com.atilika.kuromoji.unidic.Tokenizer, line: String, text: String) = uniDic.tokenize(text).map { token ->
@@ -204,10 +283,16 @@ internal object Readings {
             val a = mutableListOf(ours[i++])
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += ours[i++] else b += theirs[j++]
-            val better = a.any { it.unknown } || (b.size == 1 && a.size > 1 && b[0].surface.any(::isHan)) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
+            val better = a.any { it.unknown } || keptWhole(a, b) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
             out += if (better && b.none { it.unknown }) b else a
         }
         return out
+    }
+
+    /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
+    private fun keptWhole(a: List<Piece>, b: List<Piece>): Boolean {
+        val whole = b.singleOrNull() ?: return false
+        return a.size > 1 && (whole.surface.any(::isHan) || Furigana.modernKana(whole.surface, listOfNotNull(whole.spoken)) != null)
     }
 
     /**
@@ -351,10 +436,12 @@ internal object Readings {
         val subkind: String,
         val base: String = surface,
         val spoken: String? = null,
-        /** Where it ends in the line. */
+        /** Where it ends in the line: the dictionaries' pieces are mixed by it, and a word in old kana read as its spelling today has none, as nothing reads it after. */
         val end: Int = 0,
         /** Whether the dictionary has no reading for it. */
-        val unread: Boolean = false
+        private val unread: Boolean = false,
+        /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
+        val today: String? = null
     ) {
         /** Kanji the dictionary can't read. */
         val unknown get() = unread && surface.any(::isHan)
@@ -531,15 +618,7 @@ internal object Readings {
     // Words are only ever Chinese from Android 10 on, see scriptOf.
     @SuppressLint("NewApi")
     fun words(line: String, script: Script?): List<Word> = when (script) {
-        Script.JAPANESE -> grouped(readAsGiven(together(pieces(withoutGiven(line))), givenReadings(line))).mapNotNull { word ->
-            val text = word.joinToString("") { it.surface }.trim { !it.isLetterOrDigit() }
-            if (text.none(Char::isLetter)) return@mapNotNull null
-            val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }
-            // Kana reads as written; the reading's only worth showing for kanji.
-            val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
-            val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
-            Word(text, kana.takeIf { it != text }, romaji(said), lookup = word.first { it.kind != "記号" }.base, typed = romaji(typed, typed = true))
-        }
+        Script.JAPANESE -> japaneseWords(line, askToday = true)
         else -> segments(line).map { text ->
             when (script) {
                 Script.CHINESE -> chinese(text).let { Word(text, it.reading, null) }
@@ -549,6 +628,38 @@ internal object Readings {
             }
         }
     }
+
+    /**
+     * The words of a Japanese [line]. A word in old kana is looked up as the word its modern spelling is, the one the card
+     * names: the dictionary takes 思い出 for one word, and 思ひ出 for a stem and another word. Done once, [askToday], as
+     * the modern spelling is itself a line to read.
+     */
+    private fun japaneseWords(line: String, askToday: Boolean): List<Word> = grouped(readAsGiven(together(pieces(withoutGiven(line))), givenReadings(line))).mapNotNull { word ->
+        val text = word.joinToString("") { it.surface }.trim { !it.isLetterOrDigit() }
+        if (text.none(Char::isLetter)) return@mapNotNull null
+        val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }
+        // Kana reads as written; the reading's only worth showing for kanji.
+        val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
+        val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
+        // Letters the dictionary takes for marks, as Hangul in a Japanese line, are a word of marks: it looks itself up.
+        val base = (word.firstOrNull { it.kind != "記号" } ?: word.first()).base
+        val modern = spelledToday(text, kana, said) ?: word.joinToString("") { it.today ?: it.surface }.trim { !it.isLetterOrDigit() }.takeIf { it != text }
+        // A translator knows 云う, and takes 云ふ for a name.
+        val lookup = if (modern == null || !askToday) base else japaneseWords(modern, askToday = false).firstOrNull()?.lookup ?: base
+        Word(text, kana.takeIf { it != text }, romaji(said), lookup = lookup, typed = romaji(typed, typed = true), modern = modern)
+    }
+
+    /**
+     * [text] spelled the modern way, if it has old kana in it, from its reading [kana] and how it's [said]. In kana alone, the
+     * reading of IPADIC is not enough: it takes the くふ of くふうして for the verb 食ふ. Only UniDic's listing of the word is.
+     * (Where a rule says it, the word's pieces carry it, see [modernPieces].)
+     */
+    private fun spelledToday(text: String, kana: String, said: String): String? =
+        if (Furigana.inOldKana(text)) Furigana.modernKana(text, listedForm(text)) else Furigana.modern(text, kana, said)
+
+    /** The reading of the dictionary form UniDic has for [text], when it takes it for one word: いふ has イウ. */
+    private fun listedForm(text: String): List<String> =
+        listOfNotNull(uniDic?.tokenize(text)?.singleOrNull()?.lemmaReadingForm?.takeIf { it != "*" })
 
     /** The words between [line]'s spaces and marks, or, in Chinese, between its words. */
     private fun segments(line: String): List<String> {

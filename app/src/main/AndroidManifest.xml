@@ -303,12 +303,13 @@
             android:exported="false"
             android:targetActivity=".MainActivity" />
 
-        <!-- The day's practice reminder, set again whenever Android forgets it or its hour moves. -->
+        <!-- The day's practice reminder, set again after a reboot, an update, or a new clock or time zone. -->
         <receiver
             android:name=".PracticeReminderReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />

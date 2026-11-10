@@ -315,13 +315,15 @@
     <string name="report_sent">送信しました。ありがとうございます！</string>
     <string name="report_failed">送信できませんでした。接続を確認して、もう一度お試しください。</string>
     <string name="auto_report_offer">このような問題を自動で報告しますか？</string>
+    <string name="auto_report_offer_words_off">この曲の歌詞がずれていました。このような場合を自動で報告しますか？</string>
     <string name="auto_report_yes">はい</string>
-    <string name="auto_report_no">いいえ</string>
+    <string name="auto_report_not_now">あとで</string>
     <string name="singing_model_offer">歌詞を歌声に合わせるには、32 MBのダウンロードが必要です。</string>
     <string name="singing_model_failed">32 MBのダウンロードが完了しませんでした。</string>
     <string name="singing_model_download">ダウンロード</string>
     <string name="singing_model_close">今はしない</string>
     <string name="setting_auto_report">曲の問題を自動で報告</string>
+    <string name="setting_auto_report_hint">以前に手動でタイミングを合わせた歌詞も送ります。</string>
     <string name="lyrics_romanized">ローマ字</string>
     <string name="lyrics_romaji_typed">ローマ字を入力どおりに</string>
     <string name="lyrics_katakana_as_hiragana">カタカナもひらがなで</string>
@@ -370,6 +372,7 @@
     <string name="lyrics_line_saved">保存済み</string>
     <string name="lyrics_word_failed">今は意味が見つかりませんでした。</string>
     <string name="lyrics_word_unknown">この単語の辞書項目はありません。</string>
+    <string name="lyrics_word_modern">%1$sの旧仮名遣い</string>
     <string name="lyrics_words_to_know_failed">覚えたい言葉が見つかりませんでした。</string>
     <string name="lyrics_save_word">%1$sを保存</string>
     <string name="lyrics_word_saved">%1$sを保存済み</string>
