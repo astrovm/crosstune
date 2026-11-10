@@ -276,7 +276,8 @@ internal object ChordSheets {
         if (wideNeighbour(codeBefore(text, index))) return REFERENCE_WIDE
         val next = scriptAfter(text, index + 1)
         val prior = scriptBefore(text, index) ?: previous
-        if (latinSpaceThenKana(text, index + 1) && prior != NeighbourScript.KANA && prior != NeighbourScript.HAN) return REFERENCE_WIDE
+        // A Latin letter on the line above starts the run, the same way one on this line does.
+        if (latinSpaceThenKana(text, index + 1, prior == NeighbourScript.LATIN) && prior != NeighbourScript.KANA && prior != NeighbourScript.HAN) return REFERENCE_WIDE
         if (startsWithIdeograph(text, index) && next == null) return trailingReferenceWidth(text, index, previous)
         if (prior == null) return if (next == NeighbourScript.KANA || next == NeighbourScript.HAN) REFERENCE_WIDE else REFERENCE_NARROW
         if (prior == next && prior != NeighbourScript.LATIN) return REFERENCE_WIDE
@@ -299,20 +300,30 @@ internal object ChordSheets {
         return script == NeighbourScript.KANA || script == NeighbourScript.HAN || fullwidthNeighbour(codePoint)
     }
 
-    /** Full-width punctuation and the ideographic space. They are not a script. */
+    /**
+     * Full-width punctuation, digits and letters, and the ideographic space. They are not a script.
+     * U+FF00 is unassigned and leaves the mark narrow. U+FF66 is kana, so it is already wide.
+     */
     private fun fullwidthNeighbour(codePoint: Int): Boolean {
         if (codePoint in 0x3000..0x303F) return true
-        return codePoint in 0xFF00..0xFF0F || codePoint in 0xFF1A..0xFF20 ||
-            codePoint in 0xFF3B..0xFF40 || codePoint in 0xFF5B..0xFF60
+        return codePoint in 0xFF01..0xFF65
     }
 
     private fun neighbourScript(codePoint: Int): NeighbourScript? {
         if (codePoint in 'A'.code..'Z'.code || codePoint in 'a'.code..'z'.code) return NeighbourScript.LATIN
         if (codePoint in 0xFF21..0xFF3A || codePoint in 0xFF41..0xFF5A) return NeighbourScript.LATIN
-        if (codePoint in 0x3040..0x30FF || codePoint in 0x31F0..0x31FF || codePoint in 0xFF66..0xFF9D) return NeighbourScript.KANA
+        // The holes are unassigned and leave the mark narrow: U+3040, U+3100, U+321F, U+FFBF and the
+        // same kind of hole inside the halfwidth Hangul block. The next assigned letter draws it wide again.
+        if (codePoint in 0x3041..0x30FF || codePoint in 0x31F0..0x321E || codePoint in 0x3220..0x33FF) return NeighbourScript.KANA
+        if (kanaExtension(codePoint)) return NeighbourScript.KANA
         if (codePoint in 0x3400..0x9FFF || codePoint in 0xF900..0xFAFF) return NeighbourScript.HAN
         return null
     }
+
+    /** Halfwidth kana, then halfwidth Hangul, stopping before each unassigned hole. */
+    private fun kanaExtension(codePoint: Int): Boolean =
+        codePoint in 0xFF66..0xFFBE || codePoint in 0xFFC2..0xFFC7 || codePoint in 0xFFCA..0xFFCF ||
+            codePoint in 0xFFD2..0xFFD7 || codePoint in 0xFFDA..0xFFDC
 
     private fun scriptBefore(text: String, end: Int): NeighbourScript? {
         var script: NeighbourScript? = null
@@ -341,8 +352,8 @@ internal object ChordSheets {
      * Latin letters, then an ideographic space, then kana or kanji. An apostrophe inside the Latin
      * run stays in the run. A Latin letter after the space ends it.
      */
-    private fun latinSpaceThenKana(text: String, from: Int): Boolean {
-        var seenLatin = false
+    private fun latinSpaceThenKana(text: String, from: Int, carriedLatin: Boolean): Boolean {
+        var seenLatin = carriedLatin
         var seenSpace = false
         var index = from
         while (index < text.length) {

@@ -467,6 +467,61 @@ class ChordSheetsTest {
         assertEquals(listOf(0, 4), ChordSheets.fromJTotal(split, monospace = true).single().chords.map { it.at })
     }
 
+    @Test
+    fun jTotalMonospaceReferenceMarkKeepsEachMeasuredEdge() {
+        // Each letter was read in Chromium, from a made-up page, with scripts/jtotal-widths/compare_sheets.py.
+        // On every line, 1.650 columns and 2.000 columns land on different letters.
+        val words = "b".repeat(45)
+        // The first assigned fullwidth character widens the mark. U+FF00 is unassigned and does not.
+        assertEquals(25, monoAt("${"あ".repeat(10)}\uFF01※${jTotal("C")}<br>$words"))
+        assertEquals(24, monoAt("${"あ".repeat(10)}\uFF00※${jTotal("C")}<br>$words"))
+        // U+FF65 is the last of that block. U+FF66 is halfwidth kana, so it is wide for a different reason.
+        assertEquals(24, monoAt("${"あ".repeat(10)}\uFF65※${jTotal("C")}<br>$words"))
+        assertEquals(24, monoAt("${"あ".repeat(10)}\uFF66※${jTotal("C")}<br>$words"))
+        // U+3040 is unassigned. U+3041 is the first kana. U+3100 is not kana.
+        assertEquals(24, monoAt("${"あ".repeat(10)}\u3040※${jTotal("C")}<br>$words"))
+        assertEquals(25, monoAt("${"あ".repeat(10)}\u3041※${jTotal("C")}<br>$words"))
+        assertEquals(24, monoAt("${"あ".repeat(10)}\u3100※${jTotal("C")}<br>$words"))
+        // U+321F is an unassigned hole. The enclosed letters on either side are wide.
+        assertEquals(24, monoAt("${"あ".repeat(10)}\u321F※${jTotal("C")}<br>$words"))
+        assertEquals(25, monoAt("${"あ".repeat(10)}\u3220※${jTotal("C")}<br>$words"))
+        // Halfwidth Hangul is wide, and each unassigned hole in that block is narrow.
+        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFBF※${jTotal("C")}<br>$words"))
+        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFC2※${jTotal("C")}<br>$words"))
+        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFC8※${jTotal("C")}<br>$words"))
+        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFCA※${jTotal("C")}<br>$words"))
+        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFD0※${jTotal("C")}<br>$words"))
+        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFD2※${jTotal("C")}<br>$words"))
+        assertEquals(30, monoAt("${"あ".repeat(13)}\uFFD8※${jTotal("C")}<br>$words"))
+        assertEquals(31, monoAt("${"あ".repeat(13)}\uFFDA※${jTotal("C")}<br>$words"))
+        assertEquals(24, monoAt("${"あ".repeat(10)}\uFFDD※${jTotal("C")}<br>$words"))
+        // A kana run, then '[' or '{', still widens the mark. Calling either one Latin would narrow it.
+        assertEquals(24, monoAt("${"あ".repeat(9)}[※あ${jTotal("C")}<br>$words"))
+        assertEquals(24, monoAt("${"あ".repeat(9)}{※あ${jTotal("C")}<br>$words"))
+        // The line above is Latin, so '[' or '{' before the ideographic space stays in the Latin run.
+        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※[\u3000あbbbb"))
+        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※{\u3000あbbbb"))
+        // 'a' starts the run. The fullwidth letter beside the range does not, and the one inside it does.
+        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>※a\u3000あbbbb"))
+        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※\uFF3B\u3000あbbbb"))
+        assertEquals(3, monoAt("abcdefg${jTotal("C")}<br>※\uFF41\u3000あbbbb"))
+        assertEquals(4, monoAt("abcdefg${jTotal("C")}<br>※\uFF5B\u3000あbbbb"))
+        // Kanji after the ideographic space is wide, the same as kana there.
+        assertEquals(1, monoAt("b\u0132${jTotal("C")}<br>※A\u3000\u5B57bbbb"))
+        // The mark is not the first letter, so the second chord's place depends on the first name's length.
+        val two = "${jTotal("C")}\u0132\u0132\u0132\uFF0F※${jTotal("D")}<br>${"b".repeat(20)}"
+        assertEquals(listOf(0, 9), ChordSheets.fromJTotal(two, monospace = true).single().chords.map { it.at })
+        // U+0000 stays inside the Latin run.
+        assertEquals(4, monoAt("ab${"\u0132".repeat(4)}${jTotal("C")}<br>※A\u0000\u3000あbbbb"))
+        // This line does not open with an ideographic space. Treating it as though it did would widen the mark.
+        assertEquals(4, monoAt("abc\u0132${jTotal("C")}<br>bb※99"))
+        // Digits after a trailing mark keep the wide width. A zero width would land two letters later.
+        assertEquals(3, monoAt("abcdef${jTotal("C")}<br>\u3000あ…※99"))
+        // U+A000 and U+FB00 are just outside the two Han blocks, and the mark stays narrow.
+        assertEquals(23, monoAt("${"あ".repeat(10)}\uA000※${jTotal("C")}<br>$words"))
+        assertEquals(7, monoAt("ああ\uFB00※${jTotal("C")}<br>$words"))
+    }
+
     private fun monoAt(sheet: String) = ChordSheets.fromJTotal(sheet, monospace = true).last().chords.last().at
 
     @Test
