@@ -13,7 +13,6 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
 import java.util.Locale
-import kotlin.jvm.JvmField
 
 /**
  * Finds songs by what's typed rather than by a link. Deezer answers first, since its metadata and
@@ -179,21 +178,16 @@ internal class SongSearcher(
         const val LIMIT = 20
 
         /** The singer named in the title, with no brackets around the phrase. */
-        @JvmField
-        val originalCredit = Regex("""originally\s+(?:performed\s+)?by|原曲歌手""", RegexOption.IGNORE_CASE)
+        private val originalCredit = Regex("""originally\s+(?:performed\s+)?by|原曲歌手""", RegexOption.IGNORE_CASE)
 
         /** A karaoke key change, "+3Key" or "Key-1". */
-        @JvmField
-        val keyChange = Regex("""[+-]\d+\s*key\b|\bkey\s*[+-]\d+""", RegexOption.IGNORE_CASE)
+        private val keyChange = Regex("""[+-]\d+\s*key\b|\bkey\s*[+-]\d+""", RegexOption.IGNORE_CASE)
 
         /**
          * What a row says when it is not that singer's recording, in the scripts those
          * catalogues use. Matched on the letters left after [SongNames.normalize].
-         * Fields, not properties: a property's getter is never called from this class,
-         * and coverage would count that getter as a missed line.
          */
-        @JvmField
-        val recordingMarks = listOf(
+        private val recordingMarks = listOf(
             "オルゴール", "orgel", "musicbox", "karaoke", "караоке", "노래방", "커버"
         ).map(SongNames::normalize)
     }
