@@ -569,3 +569,21 @@ VLC for Android 3.7.1 played the Police from a tagged local file, `phone XB7AmIs
 - YouTube Music has no speed control: neither build shows one, and its session offers none (`actions=2600887`, no `ACTION_SET_PLAYBACK_SPEED`). The YouTube app has one, but it stops once Crosstune comes to the front.
 
 `phone` reads the screen with uiautomator, and only one thing may read it at a time: with a T3 device session holding it, `uiautomator dump` exits 137, and `phone` now says so instead of asking whether the phone is unlocked.
+
+## Words found with no timing, timed by ear (Issue #860)
+
+`untimed` on the 42 prepped songs, their times taken off. "Heard" is the lines sung inside a while the app heard. "Off" is a line put more than 1.0 s from where it's sung. "Unheard" is a line put where nothing was heard.
+
+| Try | Heard | Timed | Within 1.0 s | Within 0.5 s | Off | Unheard |
+|---|---:|---:|---:|---:|---:|---:|
+| Main: untimed words stay untimed | 989 | 0 | 0 | 0 | 0 | 0 |
+| One global alignment of all heard words to all lines | 989 | 451 | 357 (36%) | | | 0 |
+| Each line looked for in each while, then the heaviest chain in order | 989 | | 36% | | more | 0 |
+| The same, with short lines kept only beside a neighbor, lines between two close ones filled, words heard 550 ms late | 989 | 456 | 375 (38%) | 317 (32%) | 99 | 0 |
+| The same, played twice (`--again 12000`), as the app hears it till it's heard through twice | 1194 | 738 | 595 (50%) | 484 (41%) | 143 | 0 |
+
+- Measured: 4 songs have 80% or more of their heard lines within 1.0 s after two plays (4wOLVrGHiIU 71/71, WEuDVcXnElc 49/49, xTvyyoF_LZY 34/36, ZnrSNEah_20 21/24). After one play, 2 do.
+- Measured: of the lines put, 81% are within 1.0 s, on one play and on two.
+- Measured, as a bound: 66% of the heard lines have 2 or more words alike heard near them. The rest whisper.cpp tiny doesn't hear well enough to tell.
+- Measured on 6 songs: given the words sung near each while as its prompt (the truth, so an upper bound), whisper.cpp tiny hears enough to put 64% within 1.0 s, against 49% without. Prompting with the lines the app expects next got 53%, with more lines put off. Not adopted: it needs the native hearing changed.
+- Japanese, Korean and other songs whisper.cpp tiny hears poorly time few lines: 0 to 28% each.

@@ -10,6 +10,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
   ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE] [--uri URI]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
+  python3 scripts/syncreplay/syncreplay.py untimed [ID...] [--again MS] [-v]   # the words' times taken off, then timed by the singing heard
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
 e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), separates the voice
@@ -36,6 +37,11 @@ behind what it plays, by more or less each time. It forgets what was learnt firs
 The media volume is 1 while it plays, as at 0 the app hears only silence, and at 1 it already hears the music at full level.
 A player that isn't at 1x, as the app's log says, is followed at its rate: the words' clock is printed next to it, and what's
 heard is found near where the app says, by bits short enough to still fit a recording played faster with its pitch kept.
+`untimed` takes each song's times off its words and times them as the app does words found with none,
+by SungTiming on the JVM, in seconds: from the whiles the app would hear as the song plays from MS (--from),
+and with --again from a second play too, the first while that many ms in. It prints, per song, the lines
+sung in what was heard, those put within 1.0 s and 0.5 s of it, those put further off, those put where
+nothing was heard, and the worst; -v prints each line.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
