@@ -177,7 +177,8 @@ internal object Readings {
             val a = mutableListOf(pieces[i++])
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += pieces[i++] else b += theirs[j++]
-            out += if (a.any { it.unknown || it.unreadKatakana } && b.none { it.unknown || it.unreadKatakana }) b else a
+            // Theirs, once it can read the kana, replaces ours, which still can't.
+            out += if (a.any(Piece::missedKana) && b.none(Piece::missedKana)) b else a
         }
         return out
     }
@@ -490,6 +491,9 @@ internal object Readings {
         /** Katakana the dictionary can't read, as it can't the kana after a kanji written so, ニ or カナイ. */
         val unreadKatakana get() = unread && surface.any { it in 'ァ'..'ヺ' }
 
+        /** Kanji, or the katakana after them, that this dictionary could not read. */
+        fun missedKana() = unknown || unreadKatakana
+
         /** A prefix or suffix of kanji with no word to be one of: a suffix fixes to a noun before it, [before]. */
         fun strayAffix(before: Piece?) = surface.any(::isHan) && (kind == "接頭詞" || (subkind == "接尾" && !(before?.isNoun ?: false)))
 
@@ -515,7 +519,7 @@ internal object Readings {
      * Pieces the dictionary splits but that read as one, like 二人, ふたり rather than に and にん, also
      * written 2人. Kept to numbers of people, the ones lyrics are full of, and 一 before a counter,
      * which it runs into: 一歩 いっぽ, 一回 いっかい. And words read as lyrics sing them: 側 on its own
-     * is そば, 君の側で, but after the side it is, こっち側, がわ; 違く, said for 違って, is ちがく.
+     * is そば, 君の側で, but after the side it is, こっち側, がわ.
      */
     private fun together(pieces: List<Piece>): List<Piece> {
         val out = mutableListOf<Piece>()
@@ -544,7 +548,7 @@ internal object Readings {
                     out += piece
                 }
                 // 色 after one kanji or a word in kana is a colour, 涙色 なみだいろ; after a word of more, a character, 地方色 ちほうしょく.
-                last != null && piece.surface == "色" && piece.kana == "しょく" && piece.subkind == "接尾" && (last.surface.length == 1 || last.surface.none(::isHan)) ->
+                last != null && piece.surface == "色" && piece.kana == "しょく" && (last.surface.length == 1 || last.surface.none(::isHan)) ->
                     out += piece.read("いろ")
                 // 君 is くん after a name, 太郎君; after anything else it's you, 何度君と, きみ.
                 piece.surface == "君" && piece.kana == "くん" && (last == null || !namedBy(last)) -> out += piece.read("きみ")
@@ -556,15 +560,6 @@ internal object Readings {
                 // 何 before d, t or n is なん: 何でも, 何だ, 何と, 何て, 何の, 何なの.
                 last?.surface == "何" && last.kana == "なに" && piece.surface.first() in "でだどとての" + "な" -> {
                     out[out.lastIndex] = last.read("なん")
-                    out += piece
-                }
-                // Before a space, IPADIC takes はね after a noun for a verb, 跳ね: it's 僕らは and ね.
-                last?.kind == "名詞" && piece.kind == "動詞" && piece.surface.length == 2 && piece.surface[0] == 'は' && piece.surface[1] in ENDINGS -> {
-                    out += Piece("は", "は", "助詞", "係助詞")
-                    out += Piece(piece.surface.drop(1), piece.surface.drop(1), "助詞", "終助詞")
-                }
-                last?.surface == "違" && piece.surface.first() in "くか" -> {
-                    out[out.lastIndex] = last.read("ちが")
                     out += piece
                 }
                 else -> out += piece
@@ -579,7 +574,7 @@ internal object Readings {
      * Null when it doesn't, or the piece is no counter but one kanji of another number, 十三.
      */
     private fun counted(number: Piece, piece: Piece): String? {
-        if (number.subkind !in NUMBERS || piece.subkind in NUMBERS || piece.surface.length != 1 || !isHan(piece.surface[0])) return null
+        if (number.subkind !in NUMBERS || !piece.counts()) return null
         val first = piece.kana.firstOrNull()?.takeIf { it in RUN_INTO } ?: return null
         val stem = when {
             number.kana == "いち" || number.kana == "はち" || number.kana.endsWith("じゅう") -> number.kana.dropLast(1)
@@ -611,14 +606,23 @@ internal object Readings {
     private fun stemOfVerb(stem: Piece, next: Piece) = stem.kind == "形容詞" && stem.surface.length > 1 && stem.surface.last() == 'し' &&
         stem.surface.dropLast(1).all(::isHan) && next.surface.first() in "てた"
 
+    /**
+     * Whether this one kanji counts the number before it, 回 or 本.
+     * 色 does not: 十色 is ten colours, and the number must not run into しょく.
+     */
+    private fun Piece.counts(): Boolean {
+        if (surface == "色") return false
+        if (surface.length != 1) return false
+        if (subkind in NUMBERS) return false
+        return isHan(surface[0])
+    }
+
     /** [kana] with an h as p, ほ as ぽ, as it is after a sound run into. */
     private fun plosive(kana: String) = if (kana.first() in "はひふへほ") (kana.first() + 2) + kana.drop(1) else kana
 
     /** Whether 側 after [piece] is a side of it: after kanji or katakana, 反対側 and サーバー側, or a way, こっち側. */
     private fun sideOf(piece: Piece) = piece.surface in SIDES || piece.surface.last().let { isHan(it) || it in 'ァ'..'ヺ' || it == 'ー' }
 
-    /** Particles a line ends on, ね and よ. */
-    private const val ENDINGS = "ねさよな"
     private val NUMBERS = setOf("数", "数詞")
     private const val RUN_INTO = "かきくけこさしすせそたちつてとはひふへほ"
     private val SIDES = setOf("こっち", "そっち", "あっち", "どっち", "こちら", "そちら", "あちら", "どちら", "向こう")
@@ -645,36 +649,74 @@ internal object Readings {
     private fun sungParts(parts: List<Ruby>, fixes: List<ReadingFix>): List<Ruby> {
         val starts = parts.runningFold(0) { at, part -> at + part.text.length }
         val line = parts.joinToString("") { it.text }
+        val sung = whereSung(line, parts, starts, fixes)
+        return readSung(line, parts, starts, sung)
+    }
+
+    /** Each fix where its kanji are next in [line], then the same kanji again when ours read them alike. */
+    private fun whereSung(line: String, parts: List<Ruby>, starts: List<Int>, fixes: List<ReadingFix>): List<Sung> {
         val sung = mutableListOf<Sung>()
-        fun place(at: Int, fix: ReadingFix) = Sung(at, at + fix.kanji.length, fix, starts.indexOfLast { it <= at }, starts.indexOfFirst { it >= at + fix.kanji.length } - 1)
-        fun free(at: Int, length: Int) = sung.none { it.start < at + length && at < it.end }
-        fun readOver(fix: Sung) = parts.subList(fix.first, fix.last + 1).joinToString("") { it.reading ?: it.text }
-        fun places(kanji: String) = generateSequence(line.indexOf(kanji).takeIf { it >= 0 }) { line.indexOf(kanji, it + 1).takeIf { at -> at >= 0 } }
-        // Each fix where its kanji are next in the line, as their line has them in the same order.
-        for (fix in fixes.filter { it.kanji.isNotEmpty() }) {
-            places(fix.kanji).firstOrNull { free(it, fix.kanji.length) }?.let { sung += place(it, fix) }
+        for (fix in fixes) {
+            if (fix.kanji.isEmpty()) continue
+            val at = findKanji(line, fix.kanji).firstOrNull { free(sung, it, fix.kanji.length) } ?: continue
+            sung += sungAt(starts, at, fix)
         }
-        // The same kanji again, more times than their line has them, read as the first is when the dictionary read them alike.
-        for (first in sung.distinctBy { it.fix.kanji }) {
-            sung += places(first.fix.kanji).filter { free(it, first.fix.kanji.length) }.map { place(it, first.fix) }.filter { readOver(it) == readOver(first) }.toList()
+        // A copy: fixes added here are the same kanji, not a new word to copy again.
+        for (first in sung.toList().distinctBy { it.fix.kanji }) {
+            sung += findKanji(line, first.fix.kanji)
+                .filter { free(sung, it, first.fix.kanji.length) }
+                .map { sungAt(starts, it, first.fix) }
+                .filter { readOver(parts, it) == readOver(parts, first) }
         }
+        return sung
+    }
+
+    /** Each place [kanji] stands in [line]. */
+    private fun findKanji(line: String, kanji: String) =
+        generateSequence(line.indexOf(kanji).takeIf { it >= 0 }) { line.indexOf(kanji, it + 1).takeIf { at -> at >= 0 } }
+
+    /** Whether [at] for [length] letters is still free of a fix. */
+    private fun free(sung: List<Sung>, at: Int, length: Int) = sung.none { it.start < at + length && at < it.end }
+
+    /** A fix placed at [at] in the line, and which of our parts that stretch covers. */
+    private fun sungAt(starts: List<Int>, at: Int, fix: ReadingFix) = Sung(
+        at,
+        at + fix.kanji.length,
+        fix,
+        starts.indexOfLast { it <= at },
+        starts.indexOfFirst { it >= at + fix.kanji.length } - 1,
+    )
+
+    /** Our reading over the parts a fix covers. */
+    private fun readOver(parts: List<Ruby>, fix: Sung) = parts.subList(fix.first, fix.last + 1).joinToString("") { it.reading ?: it.text }
+
+    /** [parts] with the fixes [sung] laid on, whole parts first and then a part that fixes split. */
+    private fun readSung(line: String, parts: List<Ruby>, starts: List<Int>, sung: List<Sung>): List<Ruby> {
         val out = parts.map { listOf(it) }.toMutableList()
         val whole = sung.filter { starts[it.first] == it.start && starts[it.last + 1] == it.end }
-        // Ours a fix covers whole, or more than one: read as it says.
-        for (fix in whole) {
-            val covered = parts.subList(fix.first, fix.last + 1)
-            if (covered.none { part -> part.text.any(::isHan) }) continue
-            val reading = sungReading(readOver(fix), fix.fix.reading, line.substring(fix.end)) ?: continue
-            out[fix.first] = laidOver(fix.fix.kanji, reading)
-            for (i in fix.first + 1..fix.last) out[i] = emptyList()
-        }
-        // One of ours that fixes split: read as they say, when they read all of its kanji.
+        coverWhole(line, parts, out, whole)
         for ((index, part) in parts.withIndex()) {
             if (part.text.none(::isHan) || whole.any { index in it.first..it.last }) continue
             val inside = sung.filter { it.first == index && it.last == index }.sortedBy { it.start }
-            if (inside.isNotEmpty()) split(line, starts[index], starts[index + 1], inside)?.let { out[index] = it }
+            if (inside.isEmpty()) continue
+            split(line, starts[index], starts[index + 1], inside)?.let { out[index] = it }
         }
         return out.flatten()
+    }
+
+    /** Ours a fix covers whole, or more than one: read as it says. */
+    private fun coverWhole(line: String, parts: List<Ruby>, out: MutableList<List<Ruby>>, whole: List<Sung>) {
+        for (fix in whole) {
+            if (parts.subList(fix.first, fix.last + 1).none { part -> part.text.any(::isHan) }) continue
+            val reading = sungReading(readOver(parts, fix), fix.fix.reading, line.substring(fix.end)) ?: continue
+            out[fix.first] = laidOver(fix.fix.kanji, reading)
+            clearAfter(out, fix)
+        }
+    }
+
+    /** The parts after the first that a fix covers are now part of that first one. */
+    private fun clearAfter(out: MutableList<List<Ruby>>, fix: Sung) {
+        for (i in fix.first + 1..fix.last) out[i] = emptyList()
     }
 
     /** [kana] over the kanji of [surface], or over all of it when it has kana among them its reading hasn't, 不本意な現状 read いま. */

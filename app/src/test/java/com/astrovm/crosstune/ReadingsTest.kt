@@ -877,6 +877,12 @@ class ReadingsTest {
             assertEquals("$withUniDic", "はっせんねん", read("八千年"))
             assertEquals("$withUniDic", "なんぜんかい", read("何千回"))
             assertEquals("$withUniDic", "にひゃく", read("二百"))
+            // 万 and 億 do not. 三 stays さん, and 何 stays なん.
+            assertEquals("$withUniDic", "さんまん", read("三万"))
+            assertEquals("$withUniDic", "なんおく", read("何億"))
+            // 色 is a colour, not a counter, so 十 does not run into it.
+            assertEquals("$withUniDic", "じゅういろ", read("十色"))
+            assertEquals("$withUniDic", "はちいろ", read("八色"))
         }
     }
 
@@ -968,13 +974,9 @@ class ReadingsTest {
             assertTrue("$withUniDic", read("反対側").reading.endsWith("がわ"))
             assertTrue("$withUniDic", read("ソファ側").reading.endsWith("がわ"))
             assertTrue("$withUniDic", read("サーバー側").reading.endsWith("がわ"))
-            // は and ね, not a verb, before a space.
-            assertEquals("$withUniDic", "bokura wa ne sonna", read("僕らはね そんな").romanized)
+            // 羽 stays the noun. A space can make はね look like the verb 跳ね, and rewriting every one would also rewrite 鳥はねた.
             assertEquals("$withUniDic", "hane o hirogete", read("羽を広げて").romanized)
-            // 違く is said for 違って.
-            assertEquals("$withUniDic", "うまれたほしのもとがちがくたって", read("生まれた星のもとが違くたって").reading)
-            assertEquals("$withUniDic", "ちがくて", read("違くて").reading)
-            assertTrue("$withUniDic", read("違かった").reading.startsWith("ちが"))
+            assertTrue("$withUniDic", read("鳥はねた").romanized.startsWith("tori haneta"))
         }
     }
 
