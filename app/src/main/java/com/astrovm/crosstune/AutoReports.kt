@@ -73,7 +73,8 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
 
     private fun remember(key: String) {
         val list = (sent() - key) + key
-        preferences.edit().putString(KEY_SENT, JSONArray(list.takeLast(MAX_SENT)).toString()).apply()
+        // Written at once, so one that went isn't sent again if the app is ended right after.
+        preferences.edit().putString(KEY_SENT, JSONArray(list.takeLast(MAX_SENT)).toString()).commit()
         // Reported, it isn't owed.
         forget(key)
     }
@@ -100,9 +101,52 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         (0 until list.length()).map { list.getJSONObject(it) }.map { Owed(it.getString("key"), it.getString("json")) }
     }.getOrDefault(emptyList())
 
+    /** The latest [MAX_OWED] put in time by hand are kept, and every one kept from an earlier version, of which there are only so many. */
     private fun keep(owed: List<Owed>) {
-        val list = JSONArray(owed.takeLast(MAX_OWED).map { JSONObject().put("key", it.key).put("json", it.json) })
-        preferences.edit().putString(KEY_OWED, list.toString()).apply()
+        val byHand = owed.filterNot { it.earlier }.takeLast(MAX_OWED).toSet()
+        val list = JSONArray(owed.filter { it.earlier || it in byHand }.map { JSONObject().put("key", it.key).put("json", it.json) })
+        preferences.edit().putString(KEY_OWED, list.toString()).commit()
+    }
+
+    /**
+     * Once, at the first start of this version: each song an earlier version kept in time ([LyricsSyncStore], up to 200)
+     * is owed a report saying so. That store has the words put in time by hand and those placed by ear alike, and only
+     * the song's key and its points, so the report says no more than that: the song as the key names it, its
+     * recording and length when the key has them, the points, and whether the singing was heard through it
+     * ([SungStore]). Read from what this version found, never after, so nothing timed from now on is taken for it.
+     */
+    fun keepEarlier(version: String, android: String) {
+        if (preferences.getBoolean(KEY_EARLIER_READ, false)) return
+        val sung = preferences.getString(KEY_SUNG, null)?.split('\n')?.toSet().orEmpty()
+        val songs = runCatching { JSONObject(preferences.getString(KEY_SYNC, null) ?: "{}") }.getOrDefault(JSONObject())
+        val sent = sent()
+        val earlier = songs.keys().asSequence().mapNotNull { key ->
+            val owed = earlierReport(key, songs.optJSONObject(key) ?: return@mapNotNull null, sung, version, android) ?: return@mapNotNull null
+            // A song whose timing went already, by hand in this version, or kept, isn't sent again.
+            owed.takeIf { it.key !in sent && "${SongProblem.TIMED_BY_HAND.key}\u0000${key.split('\u0000').take(2).joinToString("\u0000")}" !in sent }
+        }.toList()
+        keep(kept() + earlier)
+        preferences.edit().putBoolean(KEY_EARLIER_READ, true).commit()
+    }
+
+    private fun earlierReport(key: String, saved: JSONObject, sung: Set<String>, version: String, android: String): Owed? {
+        val parts = key.split('\u0000')
+        val (title, artist) = parts.getOrNull(0).orEmpty() to parts.getOrNull(1).orEmpty()
+        if (title.isBlank() || artist.isBlank()) return null
+        val array = saved.optJSONArray("points") ?: return null
+        val points = (0 until array.length()).mapNotNull { array.optJSONArray(it)?.takeIf { point -> point.length() == 2 } }.take(MAX_POINTS)
+        if (points.isEmpty()) return null
+        // The key ends with the recording, then the length, each only when it was known.
+        val rest = parts.drop(2)
+        val length = rest.lastOrNull()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
+        val recording = rest.firstOrNull()?.takeIf { it != length }
+        val heard = "$key\u0000${saved.optString("words")}".replace('\n', ' ') in sung
+        val song = JSONObject().put("title", title).put("artist", artist).put("sung", heard)
+            .put("timing", JSONArray(points.map { JSONObject().put("timedMs", it.optLong(0)).put("heardMs", it.optLong(1)) }))
+        recording?.let { song.put("recording", it) }
+        length?.let { song.put("lengthMs", it.toLong()) }
+        val json = JSONObject().put("version", version).put("android", android).put("problem", EARLIER).put("song", song)
+        return Owed("$EARLIER\u0000$key", json.toString())
     }
 
     /** Nothing owed for [song]: the words were put back as they were. */
@@ -113,8 +157,14 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
     /** The report [owed] went. */
     fun paid(owed: Owed) = remember(owed.key)
 
+    /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */
+    fun owes(owed: Owed): Boolean = owed in owed()
+
     /** A report kept to be sent, under the [key] of the song and problem it's for. */
-    data class Owed(val key: String, val json: String)
+    data class Owed(val key: String, val json: String) {
+        /** Kept from an earlier version, rather than put in time by hand in this one. */
+        val earlier: Boolean get() = key.startsWith("$EARLIER\u0000")
+    }
 
     companion object {
         private const val KEY_ALLOWED = "auto_reports"
@@ -123,6 +173,17 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         private const val KEY_CLOSES = "auto_reports_closes"
         private const val KEY_OWED = "auto_reports_owed"
         private const val NEVER = -1L
+        private const val KEY_EARLIER_READ = "auto_reports_earlier_read"
+
+        /** Where [LyricsSyncStore] and [SungStore] keep theirs. */
+        private const val KEY_SYNC = "lyrics_sync"
+        private const val KEY_SUNG = "sung_heard"
+
+        /** What a report on a song's timing kept from an earlier version says it is: by hand or by ear, it can't tell. */
+        const val EARLIER = "kept_timing"
+
+        /** The most points the box for reports takes in one. */
+        private const val MAX_POINTS = 300
 
         /** The reports owed that are kept: the latest songs put in time by hand. */
         const val MAX_OWED = 20

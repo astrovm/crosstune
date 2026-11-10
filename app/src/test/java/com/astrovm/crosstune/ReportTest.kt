@@ -130,4 +130,16 @@ class ReportTest {
         fake.handler = { throw IOException("offline") }
         assertFalse(sender.send(report))
     }
+
+    @Test
+    fun onlyABuildThatCanBeDebuggedSendsReportsToABoxOnThePhonesOwnAddress() {
+        assertEquals("http://127.0.0.1:8787/reports", ReportSender.urlFor(debuggable = true, asked = "http://127.0.0.1:8787/reports"))
+        assertEquals("http://localhost:8787/reports", ReportSender.urlFor(debuggable = true, asked = "http://localhost:8787/reports"))
+        // A released one never; and nowhere but the phone itself, nor when nothing was asked.
+        assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = false, asked = "http://127.0.0.1:8787/reports"))
+        assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = true, asked = "https://example.com/reports"))
+        assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = true, asked = "http://127.0.0.1.example.com/reports"))
+        assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = true, asked = ""))
+        assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = true, asked = null))
+    }
 }

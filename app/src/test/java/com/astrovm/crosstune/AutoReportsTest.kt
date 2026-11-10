@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -121,5 +123,45 @@ class AutoReportsTest {
             preferences.edit().putString("auto_reports_owed", it).commit()
             assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
         }
+    }
+
+    @Test
+    fun aReportOwedIsStillOwedOnlyAsItWasKept() {
+        reports.owe(song("Demo"), "1")
+        val first = reports.owed().single()
+        assertTrue(reports.owes(first))
+        // Put in time again: the newer goes, not the one read before.
+        reports.owe(song("Demo"), "2")
+        assertFalse(reports.owes(first))
+        reports.paid(reports.owed().single())
+        assertFalse(reports.owes(first))
+    }
+
+    @Test
+    fun everySongKeptFromAnEarlierVersionIsOwedBesideTheLatestPutInTimeByHand() {
+        val songs = JSONObject()
+        repeat(30) { songs.put("song$it\u0000band", JSONObject().put("words", "1").put("points", JSONArray().put(JSONArray().put(0).put(100)))) }
+        preferences.edit().putString("lyrics_sync", songs.toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
+        val owed = reports.owed()
+        assertEquals(30, owed.count { it.earlier })
+        assertEquals(AutoReports.MAX_OWED, owed.count { !it.earlier })
+        // Read once: what's timed after isn't taken for it.
+        reports.paid(owed.first { it.earlier })
+        reports.keepEarlier("2.24.0", "16 (36)")
+        assertEquals(29, reports.owed().count { it.earlier })
+    }
+
+    @Test
+    fun aSongKeptBeforeWithMoreLinesThanTheBoxTakesSendsTheFirstOnes() {
+        val points = JSONArray().apply { repeat(301) { put(JSONArray().put(it * 1000L).put(it * 1000L + 5)) } }
+        preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band\u0000123", JSONObject().put("points", points)).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        val song = JSONObject(reports.owed().single().json).getJSONObject("song")
+        assertEquals(300, song.getJSONArray("timing").length())
+        // A key with a length and no recording.
+        assertEquals(123L, song.getLong("lengthMs"))
+        assertFalse(song.has("recording"))
     }
 }

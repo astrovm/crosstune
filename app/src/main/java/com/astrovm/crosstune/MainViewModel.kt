@@ -125,6 +125,8 @@ internal class MainViewModel(
     private val singing: SingingHearing? = null,
     /** Where reports on the words go, kept private; nullable so tests need none. */
     private val reports: ReportSender? = null,
+    /** How long between reports owed, sent one after another. */
+    private val reportPaceMs: Long = REPORT_PACE_MS,
     /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
     private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
     /** The kind of phone, whose settings pages the steps to fix things show. */
@@ -3173,7 +3175,15 @@ internal class MainViewModel(
         viewModelScope.launch {
             owedGoing.withLock {
                 val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
-                autoReports.owed().filter { it.key != inFront }.forEach { if (sender.send(it.json)) autoReports.paid(it) }
+                for (owed in autoReports.owed().filter { it.key != inFront }) {
+                    // Gone another way meanwhile, as the words it's for were left.
+                    if (!autoReports.owes(owed)) continue
+                    // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
+                    if (!sender.send(owed.json)) break
+                    autoReports.paid(owed)
+                    // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
+                    delay(reportPaceMs)
+                }
             }
         }
     }
@@ -4614,11 +4624,15 @@ internal class MainViewModel(
 
     init {
         // Last, once everything it reads is there: a report owed from before the app was ended goes at each start the user lets reports go.
+        reports?.let { autoReports.keepEarlier(it.version, Report(it.version).android) }
         sendOwed()
     }
 
     companion object {
         const val PREFERENCES_NAME = "crosstune_preferences"
+
+        /** The box for reports takes 5 a minute from one address; owed ones go 4 a minute. */
+        const val REPORT_PACE_MS = 15_000L
         /** A song without any picture can wait a little longer for its cover than a video with a frame. */
         private const val COVER_TIMEOUT_MS = 5_000L
         private const val VIDEO_COVER_TIMEOUT_MS = 2_000L
