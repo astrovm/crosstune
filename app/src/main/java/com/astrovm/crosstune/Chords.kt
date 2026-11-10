@@ -104,7 +104,7 @@ internal object ChordSheets {
     private val commentedStyle = Regex("""<!--\s*<style\b[^>]*>.*?</style>\s*-->""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val styleBlock = Regex("""<style\b[^>]*>(.*?)</style>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val cssComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
-    private val ttRule = Regex("""(?:^|[}\s>])tt\s*\{([^}]*)}""", RegexOption.IGNORE_CASE)
+    private val ttRule = Regex("""(?:^|[}\s>])tt\s*\{([^}]*)\}""", RegexOption.IGNORE_CASE)
     private val fontFamily = Regex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
 
     /** J-Total's last tt rule selects one of its two font stacks. */
