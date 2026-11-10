@@ -39,7 +39,7 @@ class ReadingsTest {
         val (line) = Readings.of(listOf("Привет мир"), Script.CYRILLIC)
         assertEquals(listOf(Ruby("Привет мир")), line.parts)
         assertEquals("Privet mir", line.romanized)
-        assertEquals(listOf(Word("мир", null, "mir")), Readings.words("мир", Script.CYRILLIC))
+        assertEquals(listOf(Word("мир", null, "mir", by = listOf(Reader.LATIN))), Readings.words("мир", Script.CYRILLIC))
         assertEquals(listOf(Word("love")), Readings.words("love", null))
     }
 
@@ -247,10 +247,10 @@ class ReadingsTest {
     @Test
     fun aReadingFixedByHandReachesTheKanjiNextToKana() {
         val (line) = Readings.of(listOf("飛び立つ"), Script.JAPANESE)
-        val fixed = Readings.corrected(listOf(line), listOf(ReadingFix(0, "飛", "とび")))[0]
+        val fixed = Readings.corrected(listOf(line), listOf(ReadingFix(0, "飛", "とび", Reader.SUNG)))[0]
         assertEquals(listOf(Ruby("飛", "と"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), fixed.parts)
-        val other = Readings.corrected(listOf(line), listOf(ReadingFix(0, "飛", "ひ")))[0]
-        assertEquals(listOf(Ruby("飛", "ひ"), Ruby("び"), Ruby("立", "た"), Ruby("つ")), other.parts)
+        val other = Readings.corrected(listOf(line), listOf(ReadingFix(0, "飛", "ひ", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("飛", "ひ", Reader.SUNG), Ruby("び"), Ruby("立", "た"), Ruby("つ")), other.parts)
         assertEquals("ひびたつ", other.reading)
     }
 
@@ -692,24 +692,28 @@ class ReadingsTest {
             assertEquals("逢い", Readings.words("逢ひ", Script.JAPANESE).single().modern)
             assertNull(Readings.words("いう", Script.JAPANESE).single().modern)
             assertNull(Readings.words("ふたり", Script.JAPANESE).single().modern)
-            // Its lookup and the lyric's own text keep what is written.
-            assertEquals(Word("思ひ出", "おもいで", "omoide", "思い出", "omoide", "思い出"), Readings.words("思ひ出", Script.JAPANESE).single())
+            // Its lookup and the lyric's own text keep what is written. UniDic kept the word whole, so it read the kanji.
+            assertEquals(
+                Word("思ひ出", "おもいで", "omoide", "思い出", "omoide", by = listOf(Reader.UNIDIC), modern = "思い出"),
+                Readings.words("思ひ出", Script.JAPANESE).single()
+            )
         }
     }
 
     @Test
     fun aLineSplitsIntoWordsToLookUp() {
+        val ipadic = listOf(Reader.IPADIC)
         assertEquals(
-            listOf(Word("夜空", "よぞら", "yozora", "夜空"), Word("に", null, "ni", "に"), Word("分かった", "わかった", "wakatta", "分かる")),
+            listOf(Word("夜空", "よぞら", "yozora", "夜空", by = ipadic), Word("に", null, "ni", "に", by = ipadic), Word("分かった", "わかった", "wakatta", "分かる", by = ipadic)),
             Readings.words("夜空に、分かった!", Script.JAPANESE)
         )
         // Marks alone aren't words.
-        assertEquals(listOf(Word("さよなら", null, "sayonara", "さよなら")), Readings.words("「さよなら」…", Script.JAPANESE))
+        assertEquals(listOf(Word("さよなら", null, "sayonara", "さよなら", by = ipadic)), Readings.words("「さよなら」…", Script.JAPANESE))
         // Chinese has no spaces: Android's dictionary splits it.
         val chinese = Readings.words("我们喜欢音乐。", Script.CHINESE)
         assertEquals(listOf("我们", "喜欢", "音乐"), chinese.map { it.text })
         assertEquals("wǒ men", chinese.first().reading)
-        assertEquals(listOf(Word("사랑해", null, "saranghae"), Word("한국", null, "hanguk")), Readings.words("사랑해, 한국!", Script.KOREAN))
+        assertEquals(listOf(Word("사랑해", null, "saranghae", by = listOf(Reader.ROMAJA)), Word("한국", null, "hanguk", by = listOf(Reader.ROMAJA))), Readings.words("사랑해, 한국!", Script.KOREAN))
         assertEquals(listOf(Word("Don't"), Word("stop"), Word("me")), Readings.words("Don't stop me 123 ♪", null))
         assertEquals(emptyList<Word>(), Readings.words("", null))
     }
@@ -736,7 +740,7 @@ class ReadingsTest {
         // As the dictionary really reads Asphalt Lady: 重ね着's 着 as ちゃく; 君 after "Shock!" it now reads right, きみ.
         val read = Readings.of(listOf("Shock!　君はアスファルト・レディ", "恋を一枚　重ね着したね", "ガラス越しの City Talk"), Script.JAPANESE)
         assertEquals("きみ", read[0].parts.first { it.text == "君" }.reading)
-        val fixed = Readings.corrected(read, listOf(ReadingFix(0, "君", "きみ"), ReadingFix(1, "着", "ぎ"), ReadingFix(2, "越", "ごし")))
+        val fixed = Readings.corrected(read, listOf(ReadingFix(0, "君", "きみ", Reader.SUNG), ReadingFix(1, "着", "ぎ", Reader.SUNG), ReadingFix(2, "越", "ごし", Reader.SUNG)))
         assertEquals("きみ", fixed[0].parts.first { it.text == "君" }.reading)
         assertEquals(true, fixed[0].reading.contains("きみ") && !fixed[0].reading.contains("くん"))
         assertEquals(true, fixed[0].romanized.contains("kimi wa"))
@@ -746,28 +750,28 @@ class ReadingsTest {
         assertEquals(read[2], fixed[2])
         // いま for 今 is all 今's, though ま comes after it too.
         val now = listOf(LineReading(listOf(Ruby("今", "こん"), Ruby("まで")), "こんまで", "konmade"))
-        assertEquals(LineReading(listOf(Ruby("今", "いま"), Ruby("まで")), "いままで", "ima made"), Readings.corrected(now, listOf(ReadingFix(0, "今", "いま")))[0])
+        assertEquals(LineReading(listOf(Ruby("今", "いま", Reader.SUNG), Ruby("まで")), "いままで", "ima made"), Readings.corrected(now, listOf(ReadingFix(0, "今", "いま", Reader.SUNG)))[0])
         // In katakana it's the same; a kanji the line hasn't, or a reading that isn't kana, is left out.
-        assertEquals("きみ", Readings.corrected(read, listOf(ReadingFix(0, "君", "キミ")))[0].parts.first { it.text == "君" }.reading)
-        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "愛", "あい"), ReadingFix(1, "着", "gi"), ReadingFix(9, "君", "きみ"), ReadingFix(0, "君", ""))))
+        assertEquals("きみ", Readings.corrected(read, listOf(ReadingFix(0, "君", "キミ", Reader.SUNG)))[0].parts.first { it.text == "君" }.reading)
+        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "愛", "あい", Reader.SUNG), ReadingFix(1, "着", "gi", Reader.SUNG), ReadingFix(9, "君", "きみ", Reader.SUNG), ReadingFix(0, "君", "", Reader.SUNG))))
         // Only those kanji are read otherwise: the same sounds written in kana elsewhere in the line stay.
         val kana = listOf(LineReading(listOf(Ruby("君", "くん"), Ruby("はくん")), "くんはくん", "kun wa kun"))
-        assertEquals(LineReading(listOf(Ruby("君", "きみ"), Ruby("はくん")), "きみはくん", "kimi wa kun"), Readings.corrected(kana, listOf(ReadingFix(0, "君", "きみ")))[0])
+        assertEquals(LineReading(listOf(Ruby("君", "きみ", Reader.SUNG), Ruby("はくん")), "きみはくん", "kimi wa kun"), Readings.corrected(kana, listOf(ReadingFix(0, "君", "きみ", Reader.SUNG)))[0])
         // Romaji drawn out as it's said is put right drawn out too.
         val said = listOf(LineReading(listOf(Ruby("生", "せい"), Ruby("と")), "せいと", "seeto"))
-        assertEquals("shoo to", Readings.corrected(said, listOf(ReadingFix(0, "生", "しょう")))[0].romanized)
+        assertEquals("shoo to", Readings.corrected(said, listOf(ReadingFix(0, "生", "しょう", Reader.SUNG)))[0].romanized)
         // Inside a word romaji runs together, the new reading is in it too: atama n naka, not atama nchuu.
-        val inside = Readings.corrected(Readings.of(listOf("頭ん中 埋め尽くす"), Script.JAPANESE), listOf(ReadingFix(0, "中", "なか")))[0]
+        val inside = Readings.corrected(Readings.of(listOf("頭ん中 埋め尽くす"), Script.JAPANESE), listOf(ReadingFix(0, "中", "なか", Reader.SUNG)))[0]
         assertEquals("あたまんなか うめつくす", inside.reading)
         assertTrue(inside.romanized, "naka" in inside.romanized && "chuu" !in inside.romanized)
         assertTrue(inside.typed, "naka" in inside.typed && "chuu" !in inside.typed)
         // After a reading the lyrics give in brackets, it's still where it's written.
-        val after = Readings.corrected(Readings.of(listOf("歌（うた）って頭の中"), Script.JAPANESE), listOf(ReadingFix(0, "中", "うち")))[0]
+        val after = Readings.corrected(Readings.of(listOf("歌（うた）って頭の中"), Script.JAPANESE), listOf(ReadingFix(0, "中", "うち", Reader.SUNG)))[0]
         assertEquals("うたってあたまのうち", after.reading)
         assertTrue(after.romanized, after.romanized.endsWith("uchi"))
         // Typed, it's put right as the kana spell it, only where those kanji are.
         val typed = listOf(LineReading(listOf(Ruby("生", "せい"), Ruby("と"), Ruby("せい")), "せいとせい", "seeto see", "seito sei"))
-        val fixedTyped = Readings.corrected(typed, listOf(ReadingFix(0, "生", "しょう")))[0]
+        val fixedTyped = Readings.corrected(typed, listOf(ReadingFix(0, "生", "しょう", Reader.SUNG)))[0]
         assertTrue(fixedTyped.typed, fixedTyped.typed.startsWith("shou") && fixedTyped.typed.endsWith("sei"))
         assertTrue(fixedTyped.romanized, fixedTyped.romanized.startsWith("shoo") && fixedTyped.romanized.endsWith("see"))
     }
@@ -776,33 +780,33 @@ class ReadingsTest {
     fun aSungReadingIsMadeWhereItsKanjiAreHoweverTheDictionarySplitThem() {
         fun line(vararg parts: Ruby) = LineReading(parts.toList(), parts.joinToString("") { it.reading ?: it.text }, "")
         // UtaTen reads as one what the dictionary split in two: 闇間 is やみま, not 闇 and 間 read やみかん.
-        val joined = Readings.corrected(listOf(line(Ruby("闇", "やみ"), Ruby("間", "かん"), Ruby("に"))), listOf(ReadingFix(0, "闇間", "やみま")))[0]
-        assertEquals(listOf(Ruby("闇間", "やみま"), Ruby("に")), joined.parts)
+        val joined = Readings.corrected(listOf(line(Ruby("闇", "やみ"), Ruby("間", "かん"), Ruby("に"))), listOf(ReadingFix(0, "闇間", "やみま", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("闇間", "やみま", Reader.SUNG), Ruby("に")), joined.parts)
         assertEquals("やみまに", joined.reading)
         // And splits what the dictionary read as one: 身体 からだ and 中 じゅう, not 身体中 しんたいちゅう.
         val whole = line(Ruby("身体中", "しんたいちゅう"), Ruby("が"))
-        val split = Readings.corrected(listOf(whole), listOf(ReadingFix(0, "身体", "からだ"), ReadingFix(0, "中", "じゅう")))[0]
-        assertEquals(listOf(Ruby("身体", "からだ"), Ruby("中", "じゅう"), Ruby("が")), split.parts)
+        val split = Readings.corrected(listOf(whole), listOf(ReadingFix(0, "身体", "からだ", Reader.SUNG), ReadingFix(0, "中", "じゅう", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("身体", "からだ", Reader.SUNG), Ruby("中", "じゅう", Reader.SUNG), Ruby("が")), split.parts)
         assertEquals("からだじゅうが", split.reading)
         // Only when they read all of it: a kanji left without its reading would have none.
-        assertEquals(whole, Readings.corrected(listOf(whole), listOf(ReadingFix(0, "身体", "からだ")))[0])
-        assertEquals(whole, Readings.corrected(listOf(whole), listOf(ReadingFix(0, "中", "じゅう")))[0])
-        assertEquals(whole, Readings.corrected(listOf(whole), listOf(ReadingFix(0, "身体", "からだ"), ReadingFix(0, "中", "ju")))[0])
+        assertEquals(whole, Readings.corrected(listOf(whole), listOf(ReadingFix(0, "身体", "からだ", Reader.SUNG)))[0])
+        assertEquals(whole, Readings.corrected(listOf(whole), listOf(ReadingFix(0, "中", "じゅう", Reader.SUNG)))[0])
+        assertEquals(whole, Readings.corrected(listOf(whole), listOf(ReadingFix(0, "身体", "からだ", Reader.SUNG), ReadingFix(0, "中", "ju", Reader.SUNG)))[0])
         // Kana between them stay, and so do those after.
         val between = line(Ruby("春"), Ruby("の"), Ruby("日々", "ひび"))
-        assertEquals(between, Readings.corrected(listOf(between), listOf(ReadingFix(0, "日", "ひ")))[0])
-        val around = Readings.corrected(listOf(line(Ruby("夢見草", "ゆめみそう"), Ruby("よ"))), listOf(ReadingFix(0, "夢", "ゆめ"), ReadingFix(0, "見草", "みぐさ")))[0]
-        assertEquals(listOf(Ruby("夢", "ゆめ"), Ruby("見草", "みぐさ"), Ruby("よ")), around.parts)
+        assertEquals(between, Readings.corrected(listOf(between), listOf(ReadingFix(0, "日", "ひ", Reader.SUNG)))[0])
+        val around = Readings.corrected(listOf(line(Ruby("夢見草", "ゆめみそう"), Ruby("よ"))), listOf(ReadingFix(0, "夢", "ゆめ", Reader.SUNG), ReadingFix(0, "見草", "みぐさ", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("夢", "ゆめ", Reader.SUNG), Ruby("見草", "みぐさ", Reader.SUNG), Ruby("よ")), around.parts)
         // A reading of kanji with kana among them that can't be laid over the kanji alone goes over all of it.
         val unlaid = line(Ruby("不本意", "ふほんい"), Ruby("な"), Ruby("現状", "げんじょう"))
-        assertEquals(listOf(Ruby("不本意な現状", "いま")), Readings.corrected(listOf(unlaid), listOf(ReadingFix(0, "不本意な現状", "いま")))[0].parts)
+        assertEquals(listOf(Ruby("不本意な現状", "いま", Reader.SUNG)), Readings.corrected(listOf(unlaid), listOf(ReadingFix(0, "不本意な現状", "いま", Reader.SUNG)))[0].parts)
         // As is one that reaches into a word without covering it, or has no kanji to read.
-        assertEquals(unlaid, Readings.corrected(listOf(unlaid), listOf(ReadingFix(0, "意な現", "いなげん"), ReadingFix(0, "な", "に")))[0])
+        assertEquals(unlaid, Readings.corrected(listOf(unlaid), listOf(ReadingFix(0, "意な現", "いなげん", Reader.SUNG), ReadingFix(0, "な", "に", Reader.SUNG)))[0])
         // A kanji the dictionary couldn't read takes the reading it's sung with.
-        assertEquals(listOf(Ruby("踠", "もが"), Ruby("く")), Readings.corrected(listOf(line(Ruby("踠"), Ruby("く"))), listOf(ReadingFix(0, "踠", "もが")))[0].parts)
+        assertEquals(listOf(Ruby("踠", "もが", Reader.SUNG), Ruby("く")), Readings.corrected(listOf(line(Ruby("踠"), Ruby("く"))), listOf(ReadingFix(0, "踠", "もが", Reader.SUNG)))[0].parts)
         // A reading drawn out with ー, as a word from another language is sung: 狩人 as イェーガー.
-        val drawn = Readings.corrected(listOf(line(Ruby("狩人", "かりゅうど"))), listOf(ReadingFix(0, "狩人", "イェーガー")))[0]
-        assertEquals(listOf(Ruby("狩人", "いぇーがー")), drawn.parts)
+        val drawn = Readings.corrected(listOf(line(Ruby("狩人", "かりゅうど"))), listOf(ReadingFix(0, "狩人", "イェーガー", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("狩人", "いぇーがー", Reader.SUNG)), drawn.parts)
         assertEquals("yeegaa", drawn.romanized)
         // And the rest of katakana's sounds for words from other languages.
         assertEquals(
@@ -810,8 +814,8 @@ class ReadingsTest {
             listOf("シェル", "ジェット", "チェック", "ウォーク", "ツァー", "ツィーター", "ツェー", "ツォー", "トゥー", "ドゥー", "ヴィーナス", "ヴェー", "ヴォー").map { Readings.romaji(it) }
         )
         // The first reading for a kanji is its own; another for the same kanji later is not.
-        val twice = Readings.corrected(listOf(line(Ruby("君", "くん"))), listOf(ReadingFix(0, "君", "きみ"), ReadingFix(0, "君", "くん")))[0]
-        assertEquals(listOf(Ruby("君", "きみ")), twice.parts)
+        val twice = Readings.corrected(listOf(line(Ruby("君", "くん"))), listOf(ReadingFix(0, "君", "きみ", Reader.SUNG), ReadingFix(0, "君", "くん", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("君", "きみ", Reader.SUNG)), twice.parts)
     }
 
     @Test
@@ -1005,7 +1009,7 @@ class ReadingsTest {
             assertTrue(Ruby("溢", "こぼ") in line.parts)
             assertEquals("utsumuite kimi ga koboshita", line.romanized)
             // As are its words, with the form each is listed under.
-            assertEquals(Word("溢した", "こぼした", "koboshita", lookup = "溢す"), Readings.words("君が溢した", Script.JAPANESE).last())
+            assertEquals(Word("溢した", "こぼした", "koboshita", lookup = "溢す", by = listOf(Reader.UNIDIC)), Readings.words("君が溢した", Script.JAPANESE).last())
             // Said ほー, it's spelled ほお as listed, not ほう as a long o most often is.
             assertEquals("ほおをつたう", reading("頰を伝う").reading)
         }
@@ -1147,11 +1151,11 @@ class ReadingsTest {
     fun aFixNeedsTheKanjiToBeReadAndOnlyChangesAReadingItDiffersFrom() {
         val read = listOf(LineReading(listOf(Ruby("君", "くん"), Ruby("は"), Ruby("君", "きみ")), "くんはきみ", "kun wa kimi"))
         // The kana の isn't a kanji with a reading: nothing to put right.
-        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "は", "き"))))
+        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "は", "き", Reader.SUNG))))
         // The same reading it has is no fix.
-        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "君", "くん"))))
+        assertEquals(read, Readings.corrected(read, listOf(ReadingFix(0, "君", "くん", Reader.SUNG))))
         // Only the kanji read as the first was.
-        val fixed = Readings.corrected(read, listOf(ReadingFix(0, "君", "きみ")))[0]
+        val fixed = Readings.corrected(read, listOf(ReadingFix(0, "君", "きみ", Reader.SUNG)))[0]
         assertEquals(listOf("きみ", null, "きみ"), fixed.parts.map { it.reading })
     }
 
@@ -1159,24 +1163,24 @@ class ReadingsTest {
     fun theSameKanjiLaterKeepsTheSungReadingAndAFixMayStartWhereAnotherEnds() {
         // One fix for a kanji covers the next one when the dictionary read them the same.
         val twice = LineReading(listOf(Ruby("中", "ちゅう"), Ruby("と"), Ruby("中", "ちゅう")), "ちゅうとちゅう", "")
-        val both = Readings.corrected(listOf(twice), listOf(ReadingFix(0, "中", "じゅう")))[0]
+        val both = Readings.corrected(listOf(twice), listOf(ReadingFix(0, "中", "じゅう", Reader.SUNG)))[0]
         assertEquals(listOf("じゅう", null, "じゅう"), both.parts.map { it.reading })
         // Listed second, the earlier kanji still gets its reading: the two fixes only touch.
         val whole = LineReading(listOf(Ruby("身体中", "しんたいちゅう"), Ruby("が")), "しんたいちゅうが", "")
-        val reversed = Readings.corrected(listOf(whole), listOf(ReadingFix(0, "中", "じゅう"), ReadingFix(0, "身体", "からだ")))[0]
-        assertEquals(listOf(Ruby("身体", "からだ"), Ruby("中", "じゅう"), Ruby("が")), reversed.parts)
+        val reversed = Readings.corrected(listOf(whole), listOf(ReadingFix(0, "中", "じゅう", Reader.SUNG), ReadingFix(0, "身体", "からだ", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("身体", "からだ", Reader.SUNG), Ruby("中", "じゅう", Reader.SUNG), Ruby("が")), reversed.parts)
         // The kanji are not the first part. The part after が is still split.
         val tail = LineReading(listOf(Ruby("が"), Ruby("身体中", "しんたいちゅう")), "がしんたいちゅう", "")
-        val later = Readings.corrected(listOf(tail), listOf(ReadingFix(0, "身体", "からだ"), ReadingFix(0, "中", "じゅう")))[0]
-        assertEquals(listOf(Ruby("が"), Ruby("身体", "からだ"), Ruby("中", "じゅう")), later.parts)
+        val later = Readings.corrected(listOf(tail), listOf(ReadingFix(0, "身体", "からだ", Reader.SUNG), ReadingFix(0, "中", "じゅう", Reader.SUNG)))[0]
+        assertEquals(listOf(Ruby("が"), Ruby("身体", "からだ", Reader.SUNG), Ruby("中", "じゅう", Reader.SUNG)), later.parts)
         // A sung reading may be the first hiragana, the last, or the mark that draws one out.
         fun sung(reading: String) = Readings.corrected(
             listOf(LineReading(listOf(Ruby("中", "ちゅう")), "ちゅう", "")),
-            listOf(ReadingFix(0, "中", reading)),
+            listOf(ReadingFix(0, "中", reading, Reader.SUNG)),
         )[0]
-        assertEquals(listOf(Ruby("中", "ぁ")), sung("ぁ").parts)
-        assertEquals(listOf(Ruby("中", "ゟ")), sung("ゟ").parts)
-        assertEquals(listOf(Ruby("中", "ー")), sung("ー").parts)
+        assertEquals(listOf(Ruby("中", "ぁ", Reader.SUNG)), sung("ぁ").parts)
+        assertEquals(listOf(Ruby("中", "ゟ", Reader.SUNG)), sung("ゟ").parts)
+        assertEquals(listOf(Ruby("中", "ー", Reader.SUNG)), sung("ー").parts)
         // The mark after the last hiragana is not a reading, so that fix is left unused.
         assertEquals(listOf(Ruby("中", "ちゅう")), sung("゠").parts)
     }

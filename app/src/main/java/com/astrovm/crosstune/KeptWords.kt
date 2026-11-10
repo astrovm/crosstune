@@ -90,7 +90,8 @@ internal data class KeptWords(
         }
 
         private fun readingJson(reading: LineReading) = JSONObject()
-            .put("parts", reading.parts.json { JSONArray().put(it.text).put(it.reading ?: JSONObject.NULL) })
+            // What put a reading right, when something did, so a word says it again once the words show again.
+            .put("parts", reading.parts.json { part -> JSONArray().put(part.text).put(part.reading ?: JSONObject.NULL).also { array -> part.by?.let { array.put(it.key) } } })
             .put("reading", reading.reading)
             .put("romanized", reading.romanized)
             .put("typed", reading.typed)
@@ -98,7 +99,7 @@ internal data class KeptWords(
         private fun reading(array: JSONArray, index: Int) = array.getJSONObject(index).let { reading ->
             LineReading(
                 // Kept over the kana among a word's kanji, as it once was, they're moved off them.
-                Readings.rubied(reading.getJSONArray("parts").list { parts, at -> parts.getJSONArray(at).let { Ruby(it.getString(0), if (it.isNull(1)) null else it.getString(1)) } }),
+                Readings.rubied(reading.getJSONArray("parts").list { parts, at -> parts.getJSONArray(at).let { Ruby(it.getString(0), if (it.isNull(1)) null else it.getString(1), Reader.of(it.optString(2))) } }),
                 reading.getString("reading"),
                 reading.getString("romanized"),
                 reading.getString("typed")

@@ -227,6 +227,10 @@ private fun micRecord(): AudioRecord {
  * The sound the phone itself plays, through the visuals' [tap], for a song an app on the phone
  * plays: heard through headphones too, and nothing else in the room, unlike the microphone. Each
  * read is the last moment of sound, so reads close together overlap, and only what's new is kept.
+ *
+ * The tap hears everything the phone plays, a tap's click or a notification too, and Android scales
+ * a quiet sound up. So the phone only counts as sharing its sound once sound holds on, as music does
+ * and a blip doesn't.
  */
 internal class PlayedSound(
     private val tap: () -> SoundTap?,
@@ -244,13 +248,27 @@ internal class PlayedSound(
         // Once the phone has shared its sound, silence is just a quiet moment, like a video's start.
         var heardAny = preferences?.getBoolean(KEY_SHARES, false) == true
         var waited = 0L
+        // How long sound has held on, in samples up to its last sound, and how much quiet has come since.
+        val gap = sound.rateHz * GAP_MS / 1000
+        val holdsOn = sound.rateHz * HOLDS_ON_MS / 1000
+        var run = 0
+        var quiet = 0
         // What's new and not yet made 16 kHz, and how far into it the next sample made starts.
         val fresh = ArrayList<Int>()
         var from = 0.0
         val ready = ArrayDeque<Short>()
 
         fun take(samples: IntArray, start: Int) {
-            for (index in start until samples.size) fresh += samples[index]
+            for (index in start until samples.size) {
+                fresh += samples[index]
+                if (abs(samples[index]) > QUIET) {
+                    run += quiet + 1
+                    quiet = 0
+                } else if (run > 0 && ++quiet > gap) {
+                    run = 0
+                    quiet = 0
+                }
+            }
             while (from + step <= fresh.size) {
                 ready += (fresh.subList(from.toInt(), (from + step).toInt()).average() * 256).toInt().toShort()
                 from += step
@@ -265,15 +283,12 @@ internal class PlayedSound(
                 // Silence is held back until there's sound: a phone that won't share its sound gives
                 // only silence, and the microphone hears instead.
                 while (ready.isEmpty() || !heardAny) {
-                    if (!heardAny && waited >= SILENT_MS) return 0
+                    // Sound that's started may still turn out to hold on, so it's waited for.
+                    if (!heardAny && waited >= SILENT_MS && run == 0) return 0
                     val read = sound.read(window)
                     val readAt = now()
                     if (read > 0) {
                         val samples = IntArray(read) { (window[it].toInt() and 0xFF) - 128 }
-                        if (!heardAny && samples.any { abs(it) > QUIET }) {
-                            heardAny = true
-                            preferences?.edit { putBoolean(KEY_SHARES, true) }
-                        }
                         // The first read is what played before listening started.
                         last?.let { before ->
                             val expected = ((readAt - lastAt) * sound.rateHz / 1000).toInt()
@@ -281,6 +296,10 @@ internal class PlayedSound(
                             // Reads too far apart to overlap missed some sound, kept as silence so what's heard stays in time.
                             if (new == read && expected > read) take(IntArray(expected - read), 0)
                             take(samples, read - new)
+                            if (!heardAny && run >= holdsOn) {
+                                heardAny = true
+                                preferences?.edit { putBoolean(KEY_SHARES, true) }
+                            }
                         }
                         last = samples
                         lastAt = readAt
@@ -315,7 +334,12 @@ internal class PlayedSound(
     companion object {
         /** How long only silence means the phone won't share its sound. */
         const val SILENT_MS = 2_000L
-        const val KEY_SHARES = "sound_shared"
+        // Not "sound_shared": a click could have set that one, and it was never taken back.
+        const val KEY_SHARES = "sound_shared_by_music"
+        /** Sound this long, with no more quiet than [GAP_MS] inside, isn't a click or a notification. */
+        private const val HOLDS_ON_MS = 1_000
+        /** A quiet moment this short is music breathing, like a rest, not the end of it. */
+        private const val GAP_MS = 60
         /** A little more often than a read lasts, so they overlap. */
         const val POLL_MS = 5L
         /** Off by this much from silence is still silence. */

@@ -3,6 +3,8 @@ package com.astrovm.crosstune
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineDispatcher
@@ -138,6 +141,47 @@ internal data class Report(
 }
 
 /**
+ * A reading the user says is wrong: of [word], as the word's details show it, [shown], in [line] of
+ * [song]'s words, from [source], in [script]; with the [right] one, when the user says it. Sent only
+ * when the user taps Send, with nothing but what's here.
+ */
+internal data class ReadingReport(
+    private val version: String,
+    private val song: MusicMetadata,
+    private val source: String?,
+    private val line: String,
+    private val word: Word,
+    private val shown: List<String>,
+    private val script: Script,
+    private val right: String = "",
+    private val android: String = "${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})"
+) {
+    fun json(): String = JSONObject().apply {
+        put("version", version)
+        put("android", android)
+        put("problem", WRONG_READING)
+        put("song", JSONObject().apply {
+            put("title", song.title)
+            put("artist", song.artist)
+            source?.let { put("source", it) }
+        })
+        put("reading", JSONObject().apply {
+            put("line", line)
+            put("word", word.text)
+            put("shown", shown.joinToString(" / "))
+            put("reader", word.by.joinToString("+") { it.key })
+            put("language", script.name.lowercase())
+            right.trim().takeIf { it.isNotEmpty() }?.let { put("right", it) }
+        })
+    }.toString()
+
+    companion object {
+        /** The problem the report Worker files it under. */
+        const val WRONG_READING = "wrong_reading"
+    }
+}
+
+/**
  * Sends reports to Crosstune's own box for them, a Cloudflare Worker that keeps them private, to be
  * read by hand: never posted anywhere public, as what's said may be personal.
  */
@@ -149,10 +193,15 @@ internal class ReportSender(
     private val url: String = URL
 ) {
     /** Whether [report] got there. */
-    suspend fun send(report: Report): Boolean = send(report.json())
+    suspend fun send(report: Report): Boolean = post(report.json())
+
+    /** Whether [report], on a wrong reading, got there. */
+    suspend fun send(report: ReadingReport): Boolean = post(report.json())
 
     /** Whether a report that was kept as its [json], what [Report.json] said, got there. */
-    suspend fun send(json: String): Boolean = withContext(ioDispatcher) {
+    suspend fun send(json: String): Boolean = post(json)
+
+    private suspend fun post(json: String): Boolean = withContext(ioDispatcher) {
         try {
             client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { it.isSuccessful }
         } catch (_: IOException) {
@@ -208,10 +257,71 @@ internal fun ReportDialog(report: Report, onDismiss: () -> Unit, opener: FocusRe
 @Composable
 internal fun SongReportDialog(status: ReportStatus?, onSend: (String) -> Unit, onDismiss: () -> Unit, opener: FocusRequester? = null) {
     var comment by rememberSaveable { mutableStateOf("") }
+    SendDialog(
+        status, R.drawable.ic_feedback, stringResource(R.string.report_problem), R.string.report_what_goes, onSend = { onSend(comment) }, onDismiss = onDismiss, opener = opener
+    ) { sending ->
+        OutlinedTextField(
+            value = comment,
+            onValueChange = { comment = it },
+            label = { Text(stringResource(R.string.report_comment)) },
+            enabled = !sending,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * The reading [shown] for [word] marked wrong, sent in one tap, with the right one when the user
+ * knows it: [status] is how it's going. Sent, it says so and closes.
+ */
+@Composable
+internal fun WrongReadingDialog(word: Word, shown: List<String>, status: ReportStatus?, onSend: (right: String) -> Unit, onDismiss: () -> Unit, opener: FocusRequester? = null) {
+    var right by rememberSaveable { mutableStateOf("") }
+    SendDialog(
+        status, R.drawable.ic_flag, stringResource(R.string.reading_wrong), R.string.reading_what_goes, onSend = { onSend(right) }, onDismiss = onDismiss, opener = opener
+    ) { sending ->
+        // The word and its reading as they showed, so it's plain which is being sent.
+        Text(
+            listOf(word.text, *shown.toTypedArray()).joinToString("  "),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.testTag(WRONG_READING_TAG)
+        )
+        OutlinedTextField(
+            value = right,
+            onValueChange = { right = it },
+            label = { Text(stringResource(R.string.reading_right)) },
+            singleLine = true,
+            enabled = !sending,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/** The word and its reading in [WrongReadingDialog], for tests. */
+internal const val WRONG_READING_TAG = "wrong_reading"
+
+/** The icon that says what a report sent in one tap is about, for tests. */
+internal const val REPORT_ICON_TAG = "report_icon"
+
+/**
+ * A report sent in one tap, after what the user may say in [content], [title]d, with [whatGoes]:
+ * [status] is how it's going. Sent, it says so and closes; failed, it says so and stays.
+ */
+@Composable
+private fun SendDialog(
+    status: ReportStatus?,
+    @DrawableRes icon: Int,
+    title: String,
+    @StringRes whatGoes: Int,
+    onSend: () -> Unit,
+    onDismiss: () -> Unit,
+    opener: FocusRequester?,
+    content: @Composable (sending: Boolean) -> Unit
+) {
     val sending = status == ReportStatus.SENDING
     val context = LocalContext.current
     val sent = stringResource(R.string.report_sent)
-    // With a remote, Send rather than the comment, which would open the keyboard for what's optional.
+    // With a remote, Send rather than a field, which would open the keyboard for what's optional.
     val send = remember { FocusRequester() }
     LaunchedEffect(status) {
         if (status == ReportStatus.SENT) {
@@ -222,26 +332,20 @@ internal fun SongReportDialog(status: ReportStatus?, onSend: (String) -> Unit, o
     ScreenAlert(
         onDismissRequest = onDismiss,
         opener = opener,
-        icon = { AppIcon(R.drawable.ic_feedback, contentDescription = null) },
-        title = { Text(stringResource(R.string.report_problem)) },
+        icon = { AppIcon(icon, contentDescription = null, modifier = Modifier.testTag(REPORT_ICON_TAG)) },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
-                    label = { Text(stringResource(R.string.report_comment)) },
-                    enabled = !sending,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                content(sending)
                 // What goes, said where it's sent, as it's sent without another step.
-                Text(stringResource(R.string.report_what_goes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(whatGoes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (status == ReportStatus.FAILED) Text(stringResource(R.string.report_failed), color = MaterialTheme.colorScheme.error)
             }
         },
         confirmButton = {
             // Where Send is, as the dialog's content may be put in the screen a moment after this.
             LaunchedEffect(Unit) { send.requestFocus() }
-            Button(onClick = { onSend(comment) }, enabled = !sending, modifier = Modifier.focusRequester(send)) {
+            Button(onClick = onSend, enabled = !sending, modifier = Modifier.focusRequester(send)) {
                 if (sending) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(ButtonDefaults.IconSize))
                 else AppIcon(R.drawable.ic_send, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.size(ButtonDefaults.IconSpacing))

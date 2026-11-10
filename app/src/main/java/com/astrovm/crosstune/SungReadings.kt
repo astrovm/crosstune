@@ -95,7 +95,7 @@ internal class SungReadings(
 
     private fun fromCache(kept: String): List<ReadingFix>? = try {
         val array = JSONArray(kept)
-        (0 until array.length()).map { array.getJSONArray(it).let { fix -> ReadingFix(fix.getInt(0), fix.getString(1), fix.getString(2)) } }
+        (0 until array.length()).map { array.getJSONArray(it).let { fix -> ReadingFix(fix.getInt(0), fix.getString(1), fix.getString(2), Reader.SUNG) } }
     } catch (_: JSONException) {
         null
     }
@@ -162,7 +162,7 @@ internal class SungReadings(
                 val likeness = theirs.indices.map { maxOf(alike(text, written[it]), alike(sound, said[it])) }
                 val best = likeness.indices.maxByOrNull { likeness[it] }?.takeIf { likeness[it] >= ALIKE } ?: return@flatMap emptyList()
                 theirs[best].filter { part -> part.text.any(Readings::isHan) && part.text in lines[index] }
-                    .mapNotNull { part -> part.reading?.let { ReadingFix(index, part.text, it) } }
+                    .mapNotNull { part -> part.reading?.let { ReadingFix(index, part.text, it, Reader.SUNG) } }
             }
         }
 
