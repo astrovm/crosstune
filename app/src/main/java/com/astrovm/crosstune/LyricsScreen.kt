@@ -133,6 +133,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -2433,16 +2434,22 @@ internal fun WordCard(
     val shown = word.shown(romajiTyped)
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // What doesn't fit goes on the next line, rather than squeezed a letter a line.
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(word.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
-                // Romaji as said and as typed, where they're spelled otherwise: sensee and sensei.
-                shown.forEach {
-                    Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+            Row {
+                // What doesn't fit goes on the next line, rather than squeezed a letter a line.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f).align(Alignment.CenterVertically)) {
+                    Text(word.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
+                    // Romaji as said and as typed, where they're spelled otherwise: sensee and sensei.
+                    shown.forEach {
+                        Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                    }
                 }
-                // A reading that's wrong is marked on it, by a flag at its end.
+                // A reading that's wrong is marked by a flag in the card's corner, out of the words' way.
                 if (onWrongReading != null && shown.isNotEmpty()) {
-                    IconButton(onClick = onWrongReading, modifier = Modifier.align(Alignment.CenterVertically).then(flag?.let { Modifier.focusRequester(it) } ?: Modifier)) {
+                    IconButton(
+                        onClick = onWrongReading,
+                        // Its edge where the card's words end, rather than the touch target's.
+                        modifier = Modifier.offset(x = 12.dp, y = (-8).dp).then(flag?.let { Modifier.focusRequester(it) } ?: Modifier)
+                    ) {
                         AppIcon(R.drawable.ic_flag, contentDescription = stringResource(R.string.reading_wrong), modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
