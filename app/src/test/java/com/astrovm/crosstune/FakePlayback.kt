@@ -87,6 +87,9 @@ internal class FakePlayback : PlaybackSource {
     /** Runs when an app is asked to play, for a test to have the app do as it would, e.g. pause itself. */
     var onPlay: (String?, Boolean) -> Unit = { _, _ -> }
 
+    /** Runs when the music is muted or let out, so a test can see the card at that moment. */
+    var onQuiet: (Boolean) -> Unit = {}
+
     /**
      * Whether the app goes where it's sent, and plays or pauses when asked, saying so as it does, as a real one does. Off,
      * it only ever says what a test has it say, as one that ignores what it's asked, or for a test that says it all itself.
@@ -196,6 +199,7 @@ internal class FakePlayback : PlaybackSource {
         if (on == quiet) return
         quiet = on
         quiets += on
+        onQuiet(on)
     }
 
     override fun skip(song: MusicMetadata, next: Boolean) {

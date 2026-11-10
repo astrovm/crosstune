@@ -36,5 +36,8 @@ CREATE TABLE IF NOT EXISTS reports (
   -- How far ahead of the voice each line was lit (the Lines early setting).
   early_ms INTEGER,
   -- The last minute of Crosstune's timing log, one note a line: positions, speeds and times only.
-  timing_log TEXT
+  timing_log TEXT,
+  -- Which recording a timing kept from an earlier version was for, when the app knew: "SPOTIFY:id".
+  -- Added after, before the Worker that fills it is deployed: ALTER TABLE reports ADD COLUMN recording TEXT;
+  recording TEXT
 );

@@ -2140,14 +2140,13 @@ class ListeningTest {
         assertTrue(LeadStore(prefs()).load(song)!! in 9_000..11_000)
     }
 
-    @Test
-    fun wordsPutInTimeByHandOnAVideoLinedUpByShazamTeachItsGapForEveryRelease() {
+    /** A video with words on it, lined up by Shazam, whose recording is five seconds ahead of the words: learnt as the video's lead, not yet as Shazam's gap. */
+    private fun videoLinedUpByShazam(): Pair<FakePlayback, MusicMetadata> {
         val hearing = FakeHearing()
         val phone = videoWithWords(hearing)
         waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
         val song = controllerModel().uiState.lyricsFor!!
         composeRule.runOnIdle { controllerModel().toggleSavedLine(1) }
-        val lines = SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")
         // The video is ten seconds ahead of the words, but Shazam's recording five ahead of them, which isn't known yet.
         for (index in 0..2) {
             composeRule.runOnIdle {
@@ -2159,6 +2158,13 @@ class ListeningTest {
         }
         waitUntil(TIMEOUT_MS) { LeadStore(prefs()).load(song) != null && !controllerModel().uiState.listeningAlong }
         assertTrue(LeadStore(prefs()).load(song)!! in 4_000..6_000)
+        return phone to song
+    }
+
+    @Test
+    fun wordsPutInTimeByHandOnAVideoLinedUpByShazamTeachItsGapForEveryRelease() {
+        val (phone, song) = videoLinedUpByShazam()
+        val lines = SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")
         // Ten seconds into the words, the second line is tapped as it's sung: the words were five seconds ahead.
         composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
         click(string(R.string.lyrics_sync))
@@ -2185,6 +2191,42 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") == null }
         assertTrue(LeadStore(prefs()).load(song)!! in 4_000..6_000)
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(song, lines))
+    }
+
+    @Test
+    fun aGapMovedByHandOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null }
+        // The gap moved, not the lines: a way to put the words in time by hand all the same.
+        assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(controllerModel().uiState.lyricsFor!!, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
+        assertEquals(setOf(SongProblem.TIMED_BY_HAND), controllerModel().uiState.reportOfferFor)
+        // Owed at once, so it isn't lost if the app is killed before the words are left.
+        assertTrue(prefs().getString("auto_reports_owed", "[]").orEmpty().contains("timed_by_hand"))
+        click(string(R.string.lyrics_sync_done))
+        composeRule.mainClock.advanceTimeBy(8_000)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.auto_report_offer))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun aGapMovedByTheArrowsOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        val before = ShazamGapStore(prefs()).load(52_000, "longer")
+        composeRule.onNode(hasContentDescription(string(R.string.lyrics_sync_later))).performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != before }
+        // The gap moved, not the lines: the arrows are a way to put the words in time by hand too.
+        assertEquals(setOf(SongProblem.TIMED_BY_HAND), controllerModel().uiState.reportOfferFor)
+        click(string(R.string.lyrics_sync_done))
+        composeRule.mainClock.advanceTimeBy(8_000)
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(string(R.string.auto_report_offer))).fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test

@@ -30,6 +30,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.draw.drawWithCache
 import kotlin.math.roundToInt
@@ -425,27 +426,14 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
                     }
             )
         }
-        AnimatedVisibility(
-            visible = toolsShown,
-            enter = fadeIn(tween(TOOLS_FADE_MS)),
-            exit = fadeOut(tween(TOOLS_FADE_MS)),
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp).onFocusChanged { barFocused = it.hasFocus }
-        ) {
-            // Only while the bar is there to take it.
-            LaunchedEffect(focusBar) {
-                if (focusBar) {
-                    focusBar = false
-                    bar.requestFocus()
-                }
-            }
-            LyricsActions(
-                state, actions, syncing, onOnlyVisuals = { visualsOnly = true },
-                onSync = { syncingAsked = !syncing },
-                onChooseLines = { practise -> choosing = practise },
-                menu = barMenu, onMenuChange = { barMenu = it }, focus = bar,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        }
+        LyricsActions(
+            state, actions, toolsShown, syncing, onOnlyVisuals = { visualsOnly = true },
+            onSync = { syncingAsked = !syncing },
+            onChooseLines = { practise -> choosing = practise },
+            menu = barMenu, onMenuChange = { barMenu = it }, focus = bar,
+            focusBar = focusBar, onFocusBar = { focusBar = it }, onBarFocus = { barFocused = it },
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+        )
     }
     }
     }
@@ -683,12 +671,14 @@ private fun AboutButton(shown: Boolean, label: String, onClick: () -> Unit, onFo
 
 /**
  * What can be done with the words, in a bar at the bottom, where a thumb reaches: what helps read
- * them, the visuals, floating them, and what they follow.
+ * them, the visuals, floating them, and what they follow. The bar and what opens over it go while
+ * the words glide, unless [shown]; the offer to report problems stays, in the bar's place, until it's answered.
  */
 @Composable
 private fun LyricsActions(
     state: UiState,
     actions: ScreenActions,
+    shown: Boolean,
     syncing: Boolean,
     onOnlyVisuals: () -> Unit,
     onSync: () -> Unit,
@@ -698,75 +688,147 @@ private fun LyricsActions(
     onMenuChange: (BarMenu?) -> Unit,
     /** Where a TV remote lands on the bar. */
     focus: FocusRequester,
+    /** Whether the remote is to land on the bar once it's there to take it. */
+    focusBar: Boolean,
+    onFocusBar: (Boolean) -> Unit,
+    onBarFocus: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // The readings page handles back first, while it's open, and returns to its card.
     val closing = swipedAway(enabled = menu != null, shown = menu) { onMenuChange(null) }
+    // The bar's place stays when it goes, so the offer over it doesn't move for it.
+    var barHeight by remember { mutableIntStateOf(0) }
+    var offerFocused by remember { mutableStateOf(false) }
     Box(modifier = modifier.widthIn(max = 392.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        val close = { onMenuChange(null) }
-        // Swiped back, a menu sinks into the bar it came from.
-        Column(Modifier.goingAway(closing, TransformOrigin(0.5f, 1f))) {
-            LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
-            StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
-            VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
-        }
-        if (state.reportOffer) ReportOffer(actions)
-        state.singingModel?.let { SingingModelOffer(it, actions) }
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
-            shape = CircleShape,
-            shadowElevation = 6.dp
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
-                // Offline, what needs the internet waits for it: said once, here, rather than by each part failing.
-                if (state.offline) Offline(Modifier.size(48.dp))
-                if (state.lyrics.isNotEmpty()) {
-                    BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, selected = menu == BarMenu.LEARN, onClick = { onMenuChange(if (menu == BarMenu.LEARN) null else BarMenu.LEARN) })
+            val close = { onMenuChange(null) }
+            AnimatedVisibility(visible = shown, enter = fadeIn(tween(TOOLS_FADE_MS)), exit = fadeOut(tween(TOOLS_FADE_MS))) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Swiped back, a menu sinks into the bar it came from.
+                    Column(Modifier.goingAway(closing, TransformOrigin(0.5f, 1f))) {
+                        LearnMenu(menu == BarMenu.LEARN && state.lyrics.isNotEmpty(), state.learning, state.wordsCentered, actions)
+                        StudyMenu(menu == BarMenu.STUDY && state.lyrics.isNotEmpty(), state, actions, onChooseLines, close)
+                        VisualsMenu(menu == BarMenu.VISUALS && state.visuals, state, actions, onOnlyVisuals, close)
+                    }
+                    state.singingModel?.let { SingingModelOffer(it, actions) }
                 }
-                // The song's lines are learned, and lines kept are studied.
-                if (state.lyrics.isNotEmpty()) {
-                    BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
-                }
-                VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, hears = state.visualsPlay.hears, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
-                // Floating shows the line being sung, which only timed words have.
-                if (state.lyricLines.isNotEmpty()) {
-                    IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
-                }
-                // Putting the words in time needs to know where the song is.
-                if (state.lyricLines.isNotEmpty() && state.following != null) {
-                    LitButton(syncing, R.drawable.ic_timer, stringResource(R.string.lyrics_sync), onClick = onSync)
-                }
-                SyncSource(state, actions)
             }
-        }
+            // Not while a menu is open, which it would push up under a finger.
+            if (state.reportOffer && menu == null) {
+                ReportOffer(
+                    state.reportOfferFor, actions,
+                    // Answered with the remote on it, the remote goes back to the bar rather than nowhere.
+                    onAnswered = { if (offerFocused) onFocusBar(true) },
+                    modifier = Modifier.onFocusChanged { offerFocused = it.hasFocus }
+                )
+            }
+            val place = with(LocalDensity.current) { barHeight.toDp() }
+            Column(Modifier.heightIn(min = place).onFocusChanged { onBarFocus(it.hasFocus) }) {
+                AnimatedVisibility(visible = shown, enter = fadeIn(tween(TOOLS_FADE_MS)), exit = fadeOut(tween(TOOLS_FADE_MS))) {
+                    // Only while the bar is there to take it.
+                    LaunchedEffect(focusBar) {
+                        if (focusBar) {
+                            onFocusBar(false)
+                            focus.requestFocus()
+                        }
+                    }
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+                        shape = CircleShape,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier.onSizeChanged { barHeight = maxOf(barHeight, it.height) }
+                    ) {
+                        BarTools(state, actions, syncing, menu, onMenuChange, onSync, focus)
+                    }
+                }
+            }
         }
     }
 }
 
 private enum class BarMenu { LEARN, STUDY, VISUALS }
 
-/** Over the bar, a problem the words shown have, offered to be reported by itself from now on, like it. */
+/** The bar's tools in a row: what helps read the words, the visuals, floating, putting them in time, and what they follow. */
 @Composable
-private fun ReportOffer(actions: ScreenActions) {
+private fun BarTools(
+    state: UiState,
+    actions: ScreenActions,
+    syncing: Boolean,
+    menu: BarMenu?,
+    onMenuChange: (BarMenu?) -> Unit,
+    onSync: () -> Unit,
+    focus: FocusRequester
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.focusRequester(focus).focusGroup().padding(horizontal = 6.dp, vertical = 2.dp)) {
+        // Offline, what needs the internet waits for it: said once, here, rather than by each part failing.
+        if (state.offline) Offline(Modifier.size(48.dp))
+        if (state.lyrics.isNotEmpty()) {
+            BreathingButton(state.learning.translating, R.drawable.ic_translate, R.string.lyrics_learn, selected = menu == BarMenu.LEARN, onClick = { onMenuChange(if (menu == BarMenu.LEARN) null else BarMenu.LEARN) })
+        }
+        // The song's lines are learned, and lines kept are studied.
+        if (state.lyrics.isNotEmpty()) {
+            BreathingButton(state.chords.loading, R.drawable.ic_school, R.string.lyrics_study, selected = menu == BarMenu.STUDY, onClick = { onMenuChange(if (menu == BarMenu.STUDY) null else BarMenu.STUDY) })
+        }
+        VisualsButton(state.visuals, selected = menu == BarMenu.VISUALS, hears = state.visualsPlay.hears, onClick = { if (state.visuals) onMenuChange(if (menu == BarMenu.VISUALS) null else BarMenu.VISUALS) else actions.onVisualsChange(true) })
+        // Floating shows the line being sung, which only timed words have.
+        if (state.lyricLines.isNotEmpty()) {
+            IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
+        }
+        // Putting the words in time needs to know where the song is.
+        if (state.lyricLines.isNotEmpty() && state.following != null) {
+            LitButton(syncing, R.drawable.ic_timer, stringResource(R.string.lyrics_sync), onClick = onSync)
+        }
+        SyncSource(state, actions)
+    }
+}
+
+/**
+ * Over the bar's place, the problem the words shown have, offered to be reported by itself from now on,
+ * or the words that were moved when [problems] is only that: Crosstune put them right itself, so the
+ * user has nothing wrong in front of them to be asked about. It comes in as it's seen, taking no tap for
+ * [OFFER_ARM_MS], so one aimed at the bar behind it never lands on Yes. Close is for now, not for good.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReportOffer(problems: Set<SongProblem>, actions: ScreenActions, onAnswered: () -> Unit, modifier: Modifier = Modifier) {
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(OFFER_ARM_MS)
+        armed = true
+    }
+    val shown by animateFloatAsState(if (armed) 1f else 0f, tween(OFFER_ARM_MS.toInt()), label = "report offer")
+    // Over the biggest fonts the words take the width, and the buttons the line under them.
+    val stacked = LocalDensity.current.fontScale > 1.3f
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
         shape = MaterialTheme.shapes.extraLarge,
         shadowElevation = 6.dp,
-        modifier = Modifier.padding(bottom = 8.dp)
+        modifier = modifier.padding(bottom = 8.dp).graphicsLayer { alpha = 0.4f + 0.6f * shown }
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-            Text(stringResource(R.string.auto_report_offer), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-            Spacer(Modifier.width(12.dp))
-            Button(onClick = { actions.onAllowAutoReports(true) }) {
-                AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                Text(stringResource(R.string.auto_report_yes))
+        FlowRow(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+        ) {
+            Text(
+                stringResource(if (problems == setOf(SongProblem.SUNG_OFF)) R.string.auto_report_offer_words_off else R.string.auto_report_offer),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = if (stacked) Modifier.fillMaxWidth().padding(top = 8.dp) else Modifier.weight(1f)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { if (armed) { onAnswered(); actions.onAllowAutoReports(true) } }) {
+                    AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    Text(stringResource(R.string.auto_report_yes))
+                }
+                IconButton(onClick = { if (armed) { onAnswered(); actions.onCloseAutoReportOffer() } }) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.auto_report_not_now)) }
             }
-            IconButton(onClick = { actions.onAllowAutoReports(false) }) { AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.auto_report_no)) }
         }
     }
 }
+
+/** How long the offer to report problems takes no tap, as it comes in. */
+private const val OFFER_ARM_MS = 500L
 
 /**
  * Over the bar, while the words can't be lined up to the singing for want of the speech model,
@@ -1731,6 +1793,7 @@ private const val NUDGE_MS = 500L
  * A strip over the words while they're put in time: tap the line being sung, as often as it takes.
  * Reset puts them back as they were found, once any line was moved.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Unit) {
     Surface(
@@ -1739,14 +1802,19 @@ private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Uni
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-            Text(stringResource(R.string.lyrics_sync_hint), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = { actions.onNudgeSync(-NUDGE_MS) }) {
-                AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_earlier), modifier = Modifier.rotate(180f))
+        // In big type, the hint goes above its tools: squeezed beside them, it went down a letter a line, over the words.
+        val stacked = LocalDensity.current.fontScale > 1.3f
+        FlowRow(verticalArrangement = Arrangement.Center, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.lyrics_sync_hint), style = MaterialTheme.typography.bodyMedium,
+                modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.weight(1f)).align(Alignment.CenterVertically))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { actions.onNudgeSync(-NUDGE_MS) }) {
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_earlier), modifier = Modifier.rotate(180f))
+                }
+                IconButton(onClick = { actions.onNudgeSync(NUDGE_MS) }) { AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_later)) }
+                if (synced) TextButton(onClick = actions.onResetSync) { Text(stringResource(R.string.lyrics_sync_reset)) }
+                IconButton(onClick = onDone) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.lyrics_sync_done)) }
             }
-            IconButton(onClick = { actions.onNudgeSync(NUDGE_MS) }) { AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_later)) }
-            if (synced) TextButton(onClick = actions.onResetSync) { Text(stringResource(R.string.lyrics_sync_reset)) }
-            IconButton(onClick = onDone) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.lyrics_sync_done)) }
         }
     }
 }

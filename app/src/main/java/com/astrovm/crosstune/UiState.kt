@@ -77,8 +77,8 @@ internal data class UiState(
     val report: ReportStatus? = null,
     /** Whether Crosstune reports problems it finds with songs by itself; null while the user hasn't said. */
     val autoReports: Boolean? = null,
-    /** Whether the words shown have a problem Crosstune offers to report by itself, from now on. */
-    val reportOffer: Boolean = false,
+    /** The problems with the words shown that Crosstune offers to report by itself, from now on; empty when it's not asking. */
+    val reportOfferFor: Set<SongProblem> = emptySet(),
     /** The speech model that lines the words up to the singing, while it's missing and offered to be fetched by hand. */
     val singingModel: ModelOffer? = null,
     /** Whether [lyricLines] are timed for a recording not as long as the one playing, so likely off, and not yet put right. */
@@ -313,6 +313,9 @@ internal data class UiState(
     /** A one-time choice takes precedence over the source rule and global default. */
     val resultDestination: Destination
         get() = selectedDestination ?: link?.let(::ruleFor) ?: defaultDestination
+
+    /** Whether Crosstune is asking to report problems by itself. */
+    val reportOffer: Boolean get() = reportOfferFor.isNotEmpty()
 
     /** Where links like [link] go unless changed for one result: their frontend's rule, then their service's. */
     fun ruleFor(link: MusicLink): Destination? = link.frontend?.let { frontendRules[it] } ?: rules[link.service]
