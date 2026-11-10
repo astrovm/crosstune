@@ -13,6 +13,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
 import java.util.Locale
+import kotlin.jvm.JvmField
 
 /**
  * Finds songs by what's typed rather than by a link. Deezer answers first, since its metadata and
@@ -61,13 +62,13 @@ internal class SongSearcher(
         if (creditsTheOriginal(song.title)) return true
         if (taggedAsAnotherVersion(song.title)) return true
         if (markedRecording(song.title) || markedRecording(song.artist)) return true
-        if (KEY_CHANGE.containsMatchIn(song.title)) return true
+        if (changedKey(song.title)) return true
         return remakeOfAnotherSong(song.title)
     }
 
     /** "Originally Performed by" names the singer and not the people on the row. */
     private fun creditsTheOriginal(title: String): Boolean =
-        SongNames.coverOf(title) != null || ORIGINAL_CREDIT.containsMatchIn(title)
+        SongNames.coverOf(title) != null || originalCredit.containsMatchIn(title)
 
     /** A tag the title adds, "(Piano Version)" or "[カラオケ]". The song's own name does not count. */
     private fun taggedAsAnotherVersion(title: String): Boolean =
@@ -80,9 +81,12 @@ internal class SongSearcher(
      */
     private fun markedRecording(text: String): Boolean {
         val named = SongNames.normalize(text)
-        if (RECORDING_MARKS.any { named == it }) return false
-        return RECORDING_MARKS.any { it in named }
+        if (recordingMarks.any { named == it }) return false
+        return recordingMarks.any { it in named }
     }
+
+    /** A karaoke key change, "+3Key" or "Key-1", which those catalogues add to the title. */
+    private fun changedKey(title: String): Boolean = keyChange.containsMatchIn(title)
 
     /** "Cherry REMAKE" is another recording. A song whose name is "Remake" is not. */
     private fun remakeOfAnotherSong(title: String): Boolean {
@@ -175,16 +179,21 @@ internal class SongSearcher(
         const val LIMIT = 20
 
         /** The singer named in the title, with no brackets around the phrase. */
-        val ORIGINAL_CREDIT = Regex("""originally\s+(?:performed\s+)?by|原曲歌手""", RegexOption.IGNORE_CASE)
+        @JvmField
+        val originalCredit = Regex("""originally\s+(?:performed\s+)?by|原曲歌手""", RegexOption.IGNORE_CASE)
 
-        /** A karaoke key change, "+3Key" or "Key-1", which those catalogues add to the title. */
-        val KEY_CHANGE = Regex("""[+-]\d+\s*key\b|\bkey\s*[+-]\d+""", RegexOption.IGNORE_CASE)
+        /** A karaoke key change, "+3Key" or "Key-1". */
+        @JvmField
+        val keyChange = Regex("""[+-]\d+\s*key\b|\bkey\s*[+-]\d+""", RegexOption.IGNORE_CASE)
 
         /**
          * What a row says when it is not that singer's recording, in the scripts those
          * catalogues use. Matched on the letters left after [SongNames.normalize].
+         * Fields, not properties: a property's getter is never called from this class,
+         * and coverage would count that getter as a missed line.
          */
-        val RECORDING_MARKS = listOf(
+        @JvmField
+        val recordingMarks = listOf(
             "オルゴール", "orgel", "musicbox", "karaoke", "караоке", "노래방", "커버"
         ).map(SongNames::normalize)
     }
