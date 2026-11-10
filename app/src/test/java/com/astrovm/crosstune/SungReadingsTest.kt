@@ -134,6 +134,21 @@ class SungReadingsTest {
     }
 
     @Test
+    fun aSongIsLookedUpWithoutItsExclamationMarkAsTheSiteMayWriteItOtherwise() {
+        // UtaTen writes ！ where the song's name has !, and finds nothing by the one it doesn't write.
+        fake.handler = { request ->
+            when {
+                request.url.encodedPath == "/search" && request.url.queryParameter("title") == "夜の都会" ->
+                    FakeSpotify.html(request, search(listOf("/lyric/ab0001/" to "Band")))
+                request.url.encodedPath == "/search" -> FakeSpotify.html(request, search(emptyList()))
+                else -> FakeSpotify.html(request, page)
+            }
+        }
+        assertTrue(ReadingFix(0, "都会", "まち") in ask(song = MusicMetadata("夜の都会!", "Band")).orEmpty())
+        assertTrue(ReadingFix(0, "都会", "まち") in ask(song = MusicMetadata("夜の都会？", "Band")).orEmpty())
+    }
+
+    @Test
     fun anotherSongsPageGivesNoReadings() {
         val other = """<div class="hiragana" >${ruby("雨", "あめ")}が${ruby("降", "ふ")}る<br />${ruby("風", "かぜ")}<br /></div>"""
         fake.handler = site(listOf("/lyric/a1/" to "Band", "/lyric/a2/" to "Band", "/lyric/a3/" to "Band", "/lyric/a4/" to "Band"), mapOf("/lyric/a1/" to other, "/lyric/a2/" to other, "/lyric/a3/" to other, "/lyric/a4/" to other))

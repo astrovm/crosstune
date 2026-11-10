@@ -5,6 +5,7 @@
   python3 scripts/readingsaudit/readingsaudit.py run       # the app's lyrics, timing, chords and readings on each, through gradle-box
   python3 scripts/readingsaudit/readingsaudit.py compare   # each word's reading against UtaTen's ruby; numbers, and the wrong ones by cause
   python3 scripts/readingsaudit/readingsaudit.py compare --words   # every wrong word too, with its song: for a person to read, not to publish
+  python3 scripts/readingsaudit/readingsaudit.py compare --before before   # and what changed since a run kept in that folder: cp -r audit before
 
 Songs' words are people's, so everything goes in the agent cache, never in the repo:
 $READINGSAUDIT_DIR, or /mnt/data/agent-cache/crosstune-anime-readings, or ~/.cache/agent-cache/crosstune-anime-readings.
@@ -106,9 +107,9 @@ VOWEL_ROWS = {v: set(row) for v, row in {
 
 
 def norm(kana):
-    """Kana as compared: hiragana, a long-vowel mark as the vowel it draws out, no spaces or marks."""
+    """Kana as compared: hiragana, a long-vowel mark as the vowel it draws out, づ and ぢ as ず and じ, no spaces or marks."""
     out = []
-    for c in hiragana(kana):
+    for c in hiragana(kana).replace("づ", "ず").replace("ぢ", "じ"):
         if c == "ー" and out:
             out.append(next((v for v, row in VOWEL_ROWS.items() if out[-1] in row), out[-1]))
         elif c.isalnum() or c in "ゝゞ":
@@ -243,7 +244,36 @@ def cause(word, shown, right, jmdict, line):
     return "other"
 
 
-def compare(folder, words):
+def checked(audit):
+    """Each word UtaTen reads in each song's lines, by reader: whether ours is right, and what it is."""
+    out = {}
+    for path in sorted(audit.glob("*.json")):
+        song = json.loads(path.read_text())
+        for line in song.get("lines") or []:
+            if not line.get("truth"):
+                continue
+            units = truth_units(line["text"], line["truth"])
+            for reader in ("builtIn", "uniDic", "shown"):
+                for word, shown, right, ok, at in compare_line(line["text"], line[reader], units):
+                    out[(reader, song["id"], line["text"], at)] = (ok, word, norm(shown), norm(right))
+    return out
+
+
+def changed(folder, before):
+    """Words right before and wrong now, and the other way, by reader, from the run kept in [before]."""
+    old, new = checked(folder / before / "."), checked(folder / "audit")
+    for reader in ("builtIn", "uniDic", "shown"):
+        keys = [k for k in new if k[0] == reader and k in old]
+        broke = [new[k] for k in keys if old[k][0] and not new[k][0]]
+        mended = [new[k] for k in keys if not old[k][0] and new[k][0]]
+        print(f"{reader}: {len(mended)} wrong before and right now, {len(broke)} right before and wrong now, of {len(keys)} words in both")
+        for ok, word, shown, right in broke:
+            print(f"  now wrong: {word} {shown}→{right}")
+
+
+def compare(folder, words, before=None):
+    if before:
+        changed(folder, before)
     jmdict = load_jmdict(folder)
     totals = defaultdict(Counter)
     wrong = defaultdict(list)
@@ -329,6 +359,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("step", choices=["songs", "run", "compare"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
+    parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
     args = parser.parse_args()
     folder = data_dir()
     if args.step == "songs":
@@ -336,7 +367,7 @@ def main():
     elif args.step == "run":
         run(folder)
     else:
-        compare(folder, args.words)
+        compare(folder, args.words, args.before)
 
 
 if __name__ == "__main__":

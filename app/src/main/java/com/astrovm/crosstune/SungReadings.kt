@@ -63,9 +63,13 @@ internal class SungReadings(
         return best.takeIf { linesFixed(it) * 3 >= ours }.orEmpty()
     }
 
-    /** The names to look [title] up by: whole, and each name in it, as 愛が止まらない and Turn It Into Love in "愛が止まらない ～Turn It Into Love～". */
+    /**
+     * The names to look [title] up by: whole, and each name in it, as 愛が止まらない and Turn It Into Love in "愛が止まらない ～Turn It Into Love～";
+     * and without its ! and ?, which UtaTen may write otherwise, ！ for !, and then finds nothing by.
+     */
     private fun titlesOf(title: String): List<String> =
-        (SongNames.titleNames(title) + SongNames.bareTitle(title) + title.split(titleMark)).map(String::trim).filter(String::isNotEmpty).distinct()
+        (SongNames.titleNames(title) + SongNames.bareTitle(title) + title.split(titleMark)).map(String::trim).filter(String::isNotEmpty)
+            .flatMap { listOf(it, it.replace(exclaimed, "").trim()) }.filter(String::isNotEmpty).distinct()
 
     private fun linesFixed(fixes: List<ReadingFix>) = fixes.map { it.line }.distinct().size
 
@@ -122,6 +126,7 @@ internal class SungReadings(
         )
         private val words = Regex("""<div class="hiragana"\s*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
         private val ruby = Regex("""<span class="ruby"><span class="rb">(.*?)</span><span class="rt">(.*?)</span></span>""", RegexOption.DOT_MATCHES_ALL)
+        private val exclaimed = Regex("[!?！？]")
         private val titleMark = Regex("[()（）\\[\\]～~〜「」『』]| - ")
         private val lineBreak = Regex("""<br\s*/?>""")
         private val tag = Regex("""<[^>]+>""")
