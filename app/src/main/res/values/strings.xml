@@ -249,7 +249,7 @@
     <string name="report_on_github" translatable="false">GitHub</string>
     <string name="privacy_policy">Privacy policy</string>
     <!-- Each language opens its own translation of the website's privacy policy. -->
-    <string name="privacy_policy_url">https://crosstune.4st.li/privacy/</string>
+    <string name="privacy_policy_url">https://crosstune.cc/privacy/</string>
 
     <string name="error_invalid_url">That\'s not a song, album, artist or playlist link.</string>
     <string name="error_network">Couldn\'t connect.</string>

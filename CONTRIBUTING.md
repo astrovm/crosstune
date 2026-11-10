@@ -57,7 +57,7 @@ The release APK is reproducible: building the same tag elsewhere gives the same 
 
 Store listing text lives in [`fastlane/metadata/android`](fastlane/metadata/android).
 
-The website at [crosstune.4st.li](https://crosstune.4st.li) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.
+The website at [crosstune.cc](https://crosstune.cc) is built from [`site/`](site): templates plus one strings file per language. After changing it, run `python3 scripts/build-site.py` and commit `docs/` too.
 
 ## Chord sheet widths
 
@@ -67,7 +67,9 @@ Chords from J-Total sit over the letter they sit over on J-Total's page. The pag
 
 ## Reports
 
-**Report a problem** and **Report song problems automatically** send to a Cloudflare Worker in [`report/`](report), at `report.crosstune.4st.li`. It keeps reports in the D1 database `crosstune-reports` (table in `schema.sql`), at most 5 a minute from one address, and a daily cron deletes those older than 180 days. A report about timing also carries the player's package, speed, the lead and the last minute of `TimingLog` (columns `app_package`, `speed`, `lead_ms`, `early_ms`, `timing_log`); `schema.sql` lists the `ALTER TABLE`s to run on the live database before deploying a Worker that stores them. Test it with `node --test report/*.test.mjs`, and deploy with `npx wrangler deploy` from that folder (`cf deploy` finds no dev server there and stops).
+**Report a problem** and **Report song problems automatically** send to a Cloudflare Worker in [`report/`](report), at `report.crosstune.cc`. It keeps reports in the D1 database `crosstune-reports` (table in `schema.sql`), at most 5 a minute from one address, and a daily cron deletes those older than 180 days. A report about timing also carries the player's package, speed, the lead and the last minute of `TimingLog` (columns `app_package`, `speed`, `lead_ms`, `early_ms`, `timing_log`); `schema.sql` lists the `ALTER TABLE`s to run on the live database before deploying a Worker that stores them. Test it with `node --test report/*.test.mjs`, and deploy with `npx wrangler deploy` from that folder (`cf deploy` finds no dev server there and stops).
+
+Versions of the app from before crosstune.cc send to `report.crosstune.4st.li`. That address is a second Worker, [`forward.js`](report/forward.js), in the account that holds 4st.li: it counts a report against its sender's address and passes it on, with a key (the secret `FORWARD_KEY`, set on both Workers) that tells the main Worker it was counted. Deploy it with `npx wrangler deploy -c forward.wrangler.jsonc`.
 
 [`scripts/reports/reports.py`](scripts/reports/reports.py) goes through them: it reads the table, only ever reads it, into `build/`, groups the reports by problem, version and song, and runs their songs through the app's real finders with `SongCheck`. Its top says how. They're people's songs, so they stay out of the repo, which is public. A pull request that only changes this script skips the app's CI jobs too, and its tests run either way.
 

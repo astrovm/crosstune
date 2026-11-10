@@ -28,5 +28,5 @@ jobs:
             --request POST \
             --header "Authorization: Bearer $CLOUDFLARE_CACHE_TOKEN" \
             --header "Content-Type: application/json" \
-            --data '{"hosts":["crosstune.4st.li"]}' \
-            "https://api.cloudflare.com/client/v4/zones/2da89ffd98b154334e04add0a5034e9b/invalidate_cache"
+            --data '{"hosts":["crosstune.cc"]}' \
+            "https://api.cloudflare.com/client/v4/zones/a2975e8e7b40ab8782a0f201548ee162/invalidate_cache"

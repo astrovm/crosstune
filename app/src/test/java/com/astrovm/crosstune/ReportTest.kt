@@ -129,7 +129,7 @@ class ReportTest {
         val sender = ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined)
         val report = Report("2.12.0", android = "16 (36)")
         assertTrue(sender.send(report))
-        assertEquals(listOf("https://report.crosstune.4st.li/reports"), fake.requestedUrls)
+        assertEquals(listOf("https://report.crosstune.cc/reports"), fake.requestedUrls)
         assertEquals(report.json(), fake.requestBodies.single())
         code = 503
         assertFalse(sender.send(report))

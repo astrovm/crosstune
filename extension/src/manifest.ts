@@ -39,7 +39,7 @@ export function manifestFor(target: Target, version: string): Record<string, unk
     background: { scripts: ["background.js"] },
     sidebar_action: { default_panel: "panel.html", default_title: "__MSG_actionTitle__", default_icon: ICONS, open_at_install: false },
     browser_specific_settings: {
-      gecko: { id: "extension@crosstune.4st.li", strict_min_version: "142.0", data_collection_permissions: { required: ["none"] } },
+      gecko: { id: "extension@crosstune.cc", strict_min_version: "142.0", data_collection_permissions: { required: ["none"] } },
     },
   };
 }

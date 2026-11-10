@@ -99,7 +99,7 @@ Crosstune found no confident match. Choose what happens then in **Settings** →
 - Shizuku or root is used only to change Android's link, microphone, lyrics and floating settings for Crosstune, and to let lyrics hear what music apps play without Android asking each time. That sound stays on your phone, while a notification shows it.
 - The [browser extension](extension) asks a link's service for its title and artist, and the search of the service it opens in, or ListenBrainz for Spotify, as the app does. Its lyrics panel reads the song's title and artist from the music site's page. Only while the panel is open, it asks LRCLIB, YouTube Music, NetEase Cloud Music, Letras and Genius for the words by title and artist, and a video that doesn't say it's music isn't looked up. Its settings stay in your browser, and it sends nothing to the developer.
 
-Full [privacy policy](https://crosstune.4st.li/privacy/).
+Full [privacy policy](https://crosstune.cc/privacy/).
 
 <details>
 <summary><b>Verify your download</b></summary>
