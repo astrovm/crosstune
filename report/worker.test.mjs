@@ -19,7 +19,7 @@ function env({ allowed = true } = {}) {
 }
 
 function post(body, { path = "/reports", method = "POST", headers = {} } = {}) {
-  return new Request(`https://report.crosstune.4st.li${path}`, {
+  return new Request(`https://report.crosstune.cc${path}`, {
     method,
     headers: { "CF-Connecting-IP": "203.0.113.7", ...headers },
     body: method === "GET" ? undefined : typeof body === "string" ? body : JSON.stringify(body),
@@ -96,6 +96,17 @@ test("too much is turned away before it's read", async () => {
   // Even when it says it's small.
   assert.equal((await worker.fetch(post(big, { headers: { "Content-Length": "10" } }), e)).status, 413);
   assert.equal(e.saved.length, 0);
+});
+
+test("a report passed on by the old address isn't counted again", async () => {
+  const e = { ...env({ allowed: false }), FORWARD_KEY: "made-up-key" };
+  assert.equal((await worker.fetch(post(song, { headers: { "X-Crosstune-Passed-On": "made-up-key" } }), e)).status, 204);
+  assert.deepEqual(e.keys, []);
+  // Another key, or none set here, and it's counted like any report.
+  assert.equal((await worker.fetch(post(song, { headers: { "X-Crosstune-Passed-On": "another" } }), e)).status, 429);
+  const none = env({ allowed: false });
+  assert.equal((await worker.fetch(post(song, { headers: { "X-Crosstune-Passed-On": "" } }), none)).status, 429);
+  assert.equal(e.saved.length, 1);
 });
 
 test("past the limit, nothing is kept", async () => {

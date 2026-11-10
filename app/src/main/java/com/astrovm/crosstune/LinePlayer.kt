@@ -48,7 +48,7 @@ internal object LinePlayerPage {
     const val POLL_MS = 100
 
     /** The neutral address the page is loaded as: YouTube's own refuses to play inside an app. */
-    const val BASE_URL = "https://crosstune.app"
+    const val BASE_URL = "https://crosstune.cc"
 
     /** The page's call to play the line from [startMs] to [endMs], or only get ready when not [play]; [expectedMs], the song's length, when known. */
     fun call(startMs: Long, endMs: Long, expectedMs: Long?, play: Boolean) = "line(${startMs / 1000.0}, ${endMs / 1000.0}, ${expectedMs ?: 0}, $play);"

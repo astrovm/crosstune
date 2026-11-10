@@ -45,6 +45,6 @@ class LinePlayerPageTest {
 
     @Test
     fun theBaseAddressIsNotYouTubesOwnWhichRefusesToPlayInAnApp() {
-        assertEquals("https://crosstune.app", LinePlayerPage.BASE_URL)
+        assertEquals("https://crosstune.cc", LinePlayerPage.BASE_URL)
     }
 }

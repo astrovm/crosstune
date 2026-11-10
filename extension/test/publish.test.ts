@@ -20,7 +20,7 @@ async function built(): Promise<string> {
   await mkdir(join(root, "store"));
   await writeFile(join(root, "package.json"), JSON.stringify({ version: "1.2.3" }));
   await writeFile(join(root, "store", "listing.json"), JSON.stringify({ en: { summary: "Opens links.", description: "Long." }, es: { summary: "Abre links.", description: "Largo." } }));
-  await writeFile(join(root, "dist", "firefox", "manifest.json"), JSON.stringify({ browser_specific_settings: { gecko: { id: "extension@crosstune.4st.li" } } }));
+  await writeFile(join(root, "dist", "firefox", "manifest.json"), JSON.stringify({ browser_specific_settings: { gecko: { id: "extension@crosstune.cc" } } }));
   for (const name of ["chrome", "firefox", "source"]) await writeFile(join(root, "dist", `crosstune-1.2.3-${name}.zip`), name);
   return join(root, "dist");
 }
@@ -93,7 +93,7 @@ test("a Chrome upload it turns away isn't published", async () => {
   assert.match(nth(said, 0), /^chrome: failed, Chrome upload: .*FAILED/);
 });
 
-const FIREFOX_ADDON = "https://addons.mozilla.org/api/v5/addons/addon/extension%40crosstune.4st.li";
+const FIREFOX_ADDON = "https://addons.mozilla.org/api/v5/addons/addon/extension%40crosstune.cc";
 
 test("Firefox gets its listing in its own language names, the zip, and once it's checked, the version with its source", async () => {
   const { ok, asked, said } = await run(FIREFOX, [

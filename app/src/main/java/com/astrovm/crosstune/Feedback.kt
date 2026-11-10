@@ -210,7 +210,7 @@ internal class ReportSender(
     }
 
     companion object {
-        const val URL = "https://report.crosstune.4st.li/reports"
+        const val URL = "https://report.crosstune.cc/reports"
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         /**

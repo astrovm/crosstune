@@ -86,7 +86,7 @@ class LyricsReportTest {
         File(app.cacheDir, "kept_words.json").delete()
         fake.handler = { request ->
             when (request.url.host) {
-                "report.crosstune.4st.li" -> {
+                "report.crosstune.cc" -> {
                     reportsHeld?.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     FakeSpotify.html(request, "", code = if (reportsDown) 503 else 204)
                 }
@@ -551,7 +551,7 @@ class LyricsReportTest {
         fake.handler = { request ->
             when {
                 request.url.host == "lrclib.net" -> FakeSpotify.html(request, if ("Karaoke" in request.url.toString()) "[]" else original)
-                request.url.host == "report.crosstune.4st.li" -> others(request)
+                request.url.host == "report.crosstune.cc" -> others(request)
                 else -> FakeSpotify.html(request, """{"title":"Demo (In the Style of Band) [Karaoke Version]","author_name":"Karaoke Hits"}""")
             }
         }
@@ -995,7 +995,7 @@ class LyricsReportTest {
         var taken = 0
         val others = fake.handler
         fake.handler = { request ->
-            if (request.url.host == "report.crosstune.4st.li") FakeSpotify.html(request, "", code = if (++taken <= 5) 204 else 429) else others(request)
+            if (request.url.host == "report.crosstune.cc") FakeSpotify.html(request, "", code = if (++taken <= 5) 204 else 429) else others(request)
         }
         started()
         waitUntil { owed() == 195 }

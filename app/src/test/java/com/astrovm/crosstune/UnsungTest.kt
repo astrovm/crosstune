@@ -81,7 +81,7 @@ class UnsungTest {
         File(app.cacheDir, "kept_words.json").delete()
         fake.handler = { request ->
             when (request.url.host) {
-                "report.crosstune.4st.li" -> FakeSpotify.html(request, "", code = 204)
+                "report.crosstune.cc" -> FakeSpotify.html(request, "", code = 204)
                 "lrclib.net" -> FakeSpotify.html(request, "[]")
                 "itunes.apple.com" -> FakeSpotify.html(request, genre?.let { """{"results":[{"trackId":7,"trackName":"$title","artistName":"Band","primaryGenreName":"$it","trackTimeMillis":200000}]}""" } ?: """{"results":[]}""")
                 else -> FakeSpotify.html(request, """{"title":"$title","author_name":"Band"}""")

@@ -147,7 +147,7 @@
     <string name="search_in_destination">Zoeken in %1$s</string>
     <string name="history_open">%1$s openen</string>
     <string name="privacy_policy">Privacybeleid</string>
-    <string name="privacy_policy_url">https://crosstune.4st.li/nl/privacy/</string>
+    <string name="privacy_policy_url">https://crosstune.cc/nl/privacy/</string>
     <string name="handoff_opening">Openen in %1$s…</string>
     <string name="handoff_getting_link">%1$s-link ophalen…</string>
     <string name="allow_button">Toestaan</string>
