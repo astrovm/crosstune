@@ -697,6 +697,23 @@ class LyricsToolsTest {
     }
 
     @Test
+    fun theOfferAtTheLargestFontThatFitsKeepsItsButtonsBesideItsWords() {
+        phone = Phone.OTHER
+        org.robolectric.RuntimeEnvironment.setFontScale(1.3f)
+        try {
+            openLyrics()
+            touch()
+            composeRule.runOnIdle { model().nudgeSync(500) }
+            passes(OFFER_ARMED_MS)
+            val words = composeRule.onAllNodes(hasText(offer))[0].getUnclippedBoundsInRoot()
+            val button = yes().getUnclippedBoundsInRoot()
+            assertTrue("$button is under $words, not beside it", button.top < words.bottom && button.left >= words.right)
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
     fun theOfferInGermanOverTheBiggestFontFitsAboveTheBarAndTakesLittleOfTheWords() {
         phone = Phone.OTHER
         org.robolectric.RuntimeEnvironment.setQualifiers("+de")
@@ -778,6 +795,22 @@ class LyricsToolsTest {
         composeRule.runOnIdle { model().nudgeSync(500) }
         passes(1)
         assertEquals(1, offers())
+        line("Demo two").assertIsFocused()
+    }
+
+    @Test
+    fun onATvTheOfferAnsweredWhileTheRemoteIsOnALineLeavesItThere() {
+        openLyrics()
+        waitUntil { onTheBar() }
+        line("Demo two").requestFocus()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        passes(1)
+        passes(OFFER_ARMED_MS)
+        notNow().performClick()
+        passes(1)
+        assertEquals(0, offers())
+        // The bar takes the remote only from the offer, never from the words.
+        assertFalse(onTheBar())
         line("Demo two").assertIsFocused()
     }
 

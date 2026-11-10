@@ -755,6 +755,35 @@ class SingingTest {
     }
 
     @Test
+    fun pickedUpPartwayWordsHeardJustFarEnoughOffAreKeptAndOffered() {
+        singing.answer = { sung(MainViewModel.WORDS_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { model().uiState.reportOffer }
+        assertTrue(prefs().contains("lyrics_sync"))
+    }
+
+    @Test
+    fun theTimingNotesSayHowFarOffTheSingingWasHeardAndHowSureTheClockWas() {
+        TimingLog.clear()
+        singing.answer = { sung(FAR_MS) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { prefs().contains("lyrics_sync") }
+        assertTrue(TimingLog.lastMinute(), TimingLog.lastMinute().contains("sung $FAR_MS off, clock sure false, first true"))
+    }
+
+    @Test
+    fun theTimingNotesSayWhenNothingHeardCouldBePlaced() {
+        TimingLog.clear()
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), listOf(HeardWord("la", 500))) }
+        openLyrics()
+        plays(positionMs = 3_000)
+        waitUntil { singing.hears >= 1 && TimingLog.lastMinute().contains("sung nothing to place, clock sure false") }
+        assertFalse(TimingLog.lastMinute().contains(" off, clock sure"))
+    }
+
+    @Test
     fun pickedUpPartwayWordsHeardALittleOffDontOfferToReport() {
         singing.answer = { sung(MainViewModel.SUNG_OFF_MS) }
         openLyrics()
