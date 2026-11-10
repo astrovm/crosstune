@@ -155,6 +155,8 @@ class UntimedSingingTest {
         plays()
         waitUntil { state().lyricsTimedByEar }
         assertEquals((0..3).map(::lineMs) + List(2) { LyricLine.NOT_HEARD }, lineStarts())
+        // The timing log says where each line heard went, by its number.
+        assertTrue(TimingLog.lastMinute(), "by ear 0 heard 17 words, 4 lines timed, here 0>2000 1>5000 2>8000 3>11000" in TimingLog.lastMinute())
         // Heard through twice, about, it's heard no more.
         waitUntil { singing.hears == (SONG_MS * MainViewModel.UNTIMED_HEARINGS / (SingingListener.SECONDS * 1000)).toInt() }
         composeRule.waitForIdle()

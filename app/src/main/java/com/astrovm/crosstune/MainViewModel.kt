@@ -2491,6 +2491,10 @@ internal class MainViewModel(
                 heardStretches = heardStretches + heard
                 store?.save(song, words, heardStretches)
                 timeByEar(song)
+                // Where the lines in this while were put, by their number, so the phone check and a report can tell; never the words.
+                val timed = uiState.lyricLines.withIndex().filter { it.value.heard }
+                val here = timed.filter { it.value.timeMs in heard.fromMs..heard.toMs }.joinToString(" ") { "${it.index}>${it.value.timeMs}" }
+                TimingLog.note("by ear ${heard.fromMs} heard ${heard.words.size} words, ${timed.size} lines timed, here $here")
                 timeSavedLines(song, again = true)
             }
         }

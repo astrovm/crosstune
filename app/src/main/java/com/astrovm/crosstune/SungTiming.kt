@@ -246,7 +246,7 @@ internal object SungTiming {
     const val LETTER_MS = 70L
 
     /** Faster than anyone sings, a letter at a time: lines found closer together than that can't both be right. */
-    private const val FAST_LETTER_MS = 30L
+    private const val FAST_LETTER_MS = 60L
 
     /** How far apart a line's words may say it starts and still agree. */
     private const val AGREE_MS = 1_500L
