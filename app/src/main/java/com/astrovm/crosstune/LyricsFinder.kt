@@ -545,7 +545,7 @@ internal class LyricsFinder(
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) } }
         val lookup = Answers()
-        val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
+        val (best, own) = withTimeoutOrNull(TOTAL_TIMEOUT_MS) { withContext(lookup + ioDispatcher) { best(metadata, timeoutMs).orOriginal(metadata, timeoutMs).orNamedInTitle(metadata, timeoutMs) } } ?: Best(Lyrics.Unavailable)
         val found = (best as? Lyrics.Found)?.let { cleaned(it, metadata, lookup.copies.toList()) } ?: best
         if (found == Lyrics.Unavailable) keptUnderName(metadata)?.let { return FirstLook(asKept(it, metadata), final = true) }
         // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
@@ -571,7 +571,7 @@ internal class LyricsFinder(
      * all and there's one, and kept so.
      */
     suspend fun retimed(metadata: MusicMetadata, found: Lyrics, timeoutMs: Long = TIMEOUT_MS): Lyrics {
-        val answer = (found as? Lyrics.Found)?.let { words -> withTimeoutOrNull(BORROW_TIMEOUT_MS) { timedWell(metadata, words, timeoutMs) } } ?: found
+        val answer = (found as? Lyrics.Found)?.let { words -> withTimeoutOrNull(BORROW_TIMEOUT_MS) { withContext(ioDispatcher) { timedWell(metadata, words, timeoutMs) } } } ?: found
         cache?.let { cache ->
             toCache(answer)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()

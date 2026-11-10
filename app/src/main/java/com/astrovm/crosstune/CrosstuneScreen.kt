@@ -753,7 +753,6 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
     val following = now.following
     val playing = following?.clock?.playing != false
     val duration = following?.durationMs ?: song.lengthMs
-    val position = rememberPosition(following)
     Surface(
         onClick = actions.onOpenPlayingNow,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -786,11 +785,19 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
                     AppIcon(R.drawable.ic_skip_next, contentDescription = stringResource(R.string.lyrics_next_song))
                 }
             }
-            if (position != null && duration != null) {
-                LinearProgressIndicator(progress = { (position.toFloat() / duration).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(2.dp))
-            }
+            if (following != null && duration != null) PlayedSoFar(following, duration)
         }
     }
+}
+
+/**
+ * How far into the song a music app is, as a thin line. By itself, so the song's place moving draws
+ * only this line again, and never the bar's name, cover and buttons.
+ */
+@Composable
+private fun PlayedSoFar(following: Following, duration: Long) {
+    val position = rememberPosition(following) ?: 0L
+    LinearProgressIndicator(progress = { (position.toFloat() / duration).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(2.dp))
 }
 
 /**
