@@ -445,16 +445,21 @@ internal data class LineExplanation(val index: Int, val text: String = "", val d
     val mayAskAgain get() = failed || limitReached
 }
 
+/** ChordWiki's check ran out of time, or asked a person to do it. The app does not do that check. */
+internal enum class ChordFailure { WIKI_TIMEOUT, WIKI_CHECK }
+
 /**
  * A song's chords, shown over its words while [on]; [tried] once looked up, whether or not any were
  * found. [failed] when a site wouldn't answer, so there may still be some: not the same as none.
+ * [failure] says when that was ChordWiki's check.
  */
 internal data class ChordsState(
     val on: Boolean = false,
     val loading: Boolean = false,
     val tried: Boolean = false,
     val sheet: ChordSheet? = null,
-    val failed: Boolean = false
+    val failed: Boolean = false,
+    val failure: ChordFailure? = null
 ) {
     /** For another song's words, or the same words written otherwise: switched on as it was, nothing looked up yet. */
     fun fresh() = ChordsState(on = on)

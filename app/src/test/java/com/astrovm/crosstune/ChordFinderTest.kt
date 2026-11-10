@@ -1738,16 +1738,26 @@ Singing to the morning light</div>"""
         assertEquals(ChordSite.CHORDWIKI, found.sheet.site)
         assertEquals(2, edits)
 
+        // A check a person has to click is given up. It is not answered, and it is not "no chords".
+        var checks = 0
         assertEquals(
-            ChordFinder.Chords.Unavailable,
-            chords(kawa, japanese, withWiki(ChordWikiPages { throw IOException("ChordWiki asked for a check a person has to click") }))
+            ChordFinder.Chords.WikiCheck,
+            chords(kawa, japanese, withWiki(ChordWikiPages {
+                checks++
+                throw IOException(CHORD_WIKI_NEEDS_A_PERSON)
+            }))
+        )
+        assertEquals(1, checks)
+        assertEquals(
+            ChordFinder.Chords.WikiTimedOut,
+            chords(kawa, japanese, withWiki(ChordWikiPages { throw IOException(CHORD_WIKI_CHECK_UNFINISHED) }))
         )
         // A page that comes back unreadable is a site that wouldn't answer too, not a crash.
         assertEquals(ChordFinder.Chords.Unavailable, chords(kawa, japanese, withWiki(ChordWikiPages { throw JSONException("unreadable page") })))
         // Words of a check aren't sung, and a page that never arrives isn't "no chords" when the sites did answer.
         assertEquals(ChordFinder.Chords.None, chords(kawa, japanese, withWiki(ChordWikiPages { "Just a moment. Nothing like the song." })))
         val slow = withWiki(ChordWikiPages { delay(1_000); chordPro })
-        assertEquals(ChordFinder.Chords.Unavailable, runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 40) })
+        assertEquals(ChordFinder.Chords.WikiTimedOut, runBlocking { slow.chordsOf(kawa, japanese, timeoutMs = 40) })
     }
 
     @Test

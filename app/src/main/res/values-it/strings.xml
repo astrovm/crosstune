@@ -330,6 +330,8 @@
     <string name="lyrics_translation">Traduzione</string>
     <string name="lyrics_translation_failed">Impossibile tradurre ora.</string>
     <string name="lyrics_chords_failed">Impossibile caricare gli accordi.</string>
+    <string name="lyrics_chords_wiki_timeout">Il controllo di ChordWiki non è finito.</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki ha chiesto un controllo che deve fare una persona.</string>
     <string name="lyrics_chords">Accordi</string>
     <string name="lyrics_capo">Capotasto %1$d</string>
     <string name="setting_translate_into">Traduci in</string>

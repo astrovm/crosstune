@@ -329,6 +329,8 @@
     <string name="lyrics_translation">Перевод</string>
     <string name="lyrics_translation_failed">Сейчас не удалось перевести.</string>
     <string name="lyrics_chords_failed">Не удалось загрузить аккорды.</string>
+    <string name="lyrics_chords_wiki_timeout">Проверка ChordWiki не завершилась.</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki запросил проверку, которую должен пройти человек.</string>
     <string name="lyrics_chords">Аккорды</string>
     <string name="lyrics_capo">Каподастр %1$d</string>
     <string name="setting_translate_into">Переводить на</string>

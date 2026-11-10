@@ -93,6 +93,12 @@ internal class ChordFinder(
 
         /** A site wouldn't answer, so there may still be some. */
         data object Unavailable : Chords
+
+        /** ChordWiki's check ran out of time. There may still be a sheet. */
+        data object WikiTimedOut : Chords
+
+        /** ChordWiki asked for a check a person has to do. The app does not do it. */
+        data object WikiCheck : Chords
     }
 
     /** [song]'s chords, from a sheet whose words line up with [texts], the lines shown. */
@@ -134,8 +140,11 @@ internal class ChordFinder(
         }
     }
 
-    /** One site's try: the sheet it found, and whether a site wouldn't answer. */
-    private class Tried(val sheet: ChordSheet?, val unavailable: Boolean)
+    /** Why ChordWiki itself stopped, when the other sites had no sheet. */
+    private enum class WikiMiss { TIMED_OUT, CHECK }
+
+    /** One site's try: the sheet it found, whether a site wouldn't answer, and ChordWiki's own miss. */
+    private class Tried(val sheet: ChordSheet?, val unavailable: Boolean, val wiki: WikiMiss? = null)
 
     /** A site asked in order, by the short name the lookup log uses. */
     private class Site(val name: String, val read: suspend ((ChordSheet) -> Boolean) -> ChordSheet?)
@@ -168,10 +177,18 @@ internal class ChordFinder(
     }
 
     private suspend fun answered(key: String, tried: Tried): Chords {
-        val found = tried.sheet ?: return if (tried.unavailable) Chords.Unavailable else Chords.None
-        cache?.put(key, toCache(found))
-        cache?.save()
-        return Chords.Found(found)
+        val found = tried.sheet
+        if (found != null) {
+            cache?.put(key, toCache(found))
+            cache?.save()
+            return Chords.Found(found)
+        }
+        // ChordWiki's check is said on its own. Any other miss stays "a site wouldn't answer".
+        return when (tried.wiki) {
+            WikiMiss.TIMED_OUT -> Chords.WikiTimedOut
+            WikiMiss.CHECK -> Chords.WikiCheck
+            null -> if (tried.unavailable) Chords.Unavailable else Chords.None
+        }
     }
 
     /** Japanese words, or a Japanese title or singer. Anything else never asks ChordWiki. */
@@ -189,8 +206,16 @@ internal class ChordFinder(
             }
         }
         if (looked == null || looked.isFailure) {
-            note("wiki ${if (looked == null) "timeout" else "error: ${looked.exceptionOrNull()?.message}"}")
-            return Tried(null, true)
+            val error = looked?.exceptionOrNull()
+            note("wiki ${if (looked == null) "timeout" else "error: ${error?.message}"}")
+            // The same words the browser throws. A check is given up, not answered.
+            val wiki = when {
+                looked == null -> WikiMiss.TIMED_OUT
+                error?.message == CHORD_WIKI_NEEDS_A_PERSON -> WikiMiss.CHECK
+                error?.message == CHORD_WIKI_CHECK_UNFINISHED -> WikiMiss.TIMED_OUT
+                else -> null
+            }
+            return Tried(null, true, wiki)
         }
         val found = looked.getOrNull()
         if (found == null) note("wiki none")
@@ -225,7 +250,8 @@ internal class ChordFinder(
     /** ChordWiki's sheet wins when the others had none; a failure only matters when nobody had a sheet. */
     private fun mergeWiki(earlier: Tried, wiki: Tried): Tried {
         val sheet = wiki.sheet ?: earlier.sheet
-        return if (sheet != null) Tried(sheet, false) else Tried(null, earlier.unavailable || wiki.unavailable)
+        // A sheet from either side is the answer. The check is only why there's nothing to show.
+        return if (sheet != null) Tried(sheet, false) else Tried(null, earlier.unavailable || wiki.unavailable, wiki.wiki)
     }
 
     /**

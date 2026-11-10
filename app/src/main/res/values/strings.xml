@@ -350,6 +350,8 @@
     <string name="lyrics_translation">Translation</string>
     <string name="lyrics_translation_failed">Couldn\'t translate just now.</string>
     <string name="lyrics_chords_failed">Couldn\'t load the chords.</string>
+    <string name="lyrics_chords_wiki_timeout">ChordWiki\'s check didn\'t finish.</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki asked for a check a person has to do.</string>
     <string name="lyrics_chords">Chords</string>
     <string name="lyrics_capo">Capo %1$d</string>
     <string name="setting_translate_into">Translate into</string>

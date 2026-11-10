@@ -329,6 +329,8 @@
     <string name="lyrics_translation">Tłumaczenie</string>
     <string name="lyrics_translation_failed">Nie udało się teraz przetłumaczyć.</string>
     <string name="lyrics_chords_failed">Nie udało się wczytać akordów.</string>
+    <string name="lyrics_chords_wiki_timeout">Sprawdzenie ChordWiki się nie skończyło.</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki poprosiło o sprawdzenie, które musi zrobić osoba.</string>
     <string name="lyrics_chords">Akordy</string>
     <string name="lyrics_capo">Kapodaster %1$d</string>
     <string name="setting_translate_into">Tłumacz na</string>

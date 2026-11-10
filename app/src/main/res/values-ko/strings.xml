@@ -329,6 +329,8 @@
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
     <string name="lyrics_chords_failed">코드를 불러오지 못했습니다.</string>
+    <string name="lyrics_chords_wiki_timeout">ChordWiki 확인이 끝나지 않았습니다.</string>
+    <string name="lyrics_chords_wiki_check">ChordWiki가 사람이 해야 하는 확인을 요청했습니다.</string>
     <string name="lyrics_chords">코드</string>
     <string name="lyrics_capo">카포 %1$d</string>
     <string name="setting_translate_into">번역할 언어</string>

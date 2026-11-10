@@ -330,6 +330,8 @@
     <string name="lyrics_translation">翻訳</string>
     <string name="lyrics_translation_failed">今は翻訳できませんでした。</string>
     <string name="lyrics_chords_failed">コードを読み込めませんでした。</string>
+    <string name="lyrics_chords_wiki_timeout">ChordWikiの確認が終わりませんでした。</string>
+    <string name="lyrics_chords_wiki_check">ChordWikiが、人による確認を求めました。</string>
     <string name="lyrics_chords">コード</string>
     <string name="lyrics_capo">カポ %1$d</string>
     <string name="setting_translate_into">翻訳先</string>
