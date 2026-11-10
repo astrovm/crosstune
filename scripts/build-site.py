@@ -20,6 +20,9 @@ HEART = '<svg class="heart" viewBox="0 0 960 960" width="14" height="14" role="i
 # The footer's "astro" goes to astro's own site.
 ASTRO = '<a href="https://4st.li">astro</a>'
 
+# The most a feature card says, in characters: the longest one that still reads at a glance on a phone.
+CARD_MAX = 180
+
 # Material Symbols Rounded, in the same order as the cards in each strings file, each with its viewBox:
 # the app's own drawables are drawn from the top left, the others from the bottom left. ChatGPT's is
 # OpenAI's logo, the app's own (Simple Icons, CC0).
@@ -139,6 +142,9 @@ def main():
         }
         assert "{astro}" in s["made_with"], code
         assert len(s["cards"]) == len(FEATURE_ICONS), code
+        # A card says what a feature is for, in a line or two. How it works goes in the README.
+        for h, p in s["cards"]:
+            assert len(p) <= CARD_MAX, f"{code}: the card \"{h}\" has {len(p)} characters, over {CARD_MAX}: say what it's for, not how it works"
         cards = "\n".join(
             f'        <div class="card"><svg viewBox="{box}" aria-hidden="true"><path d="{icon}"/></svg>'
             f'<div><h3>{h}</h3><p>{p}</p></div></div>'
