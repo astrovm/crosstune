@@ -313,6 +313,9 @@
     <string name="report_send">Versturen</string>
     <string name="report_sent">Verstuurd. Bedankt!</string>
     <string name="report_failed">Versturen mislukt. Controleer je verbinding en probeer het opnieuw.</string>
+    <string name="reading_wrong">Verkeerde uitspraak</string>
+    <string name="reading_right">Juiste uitspraak (optioneel)</string>
+    <string name="reading_what_goes">Stuurt het woord, de getoonde uitspraak, de regel, de naam van het nummer en de versies van de app en Android. Alleen de ontwikkelaar van Crosstune leest het.</string>
     <string name="auto_report_offer">Problemen zoals dit automatisch melden?</string>
     <string name="auto_report_offer_words_off">De tekst van dit nummer liep niet gelijk. Zulke gevallen automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>

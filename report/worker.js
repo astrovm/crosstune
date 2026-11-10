@@ -6,13 +6,25 @@
 const MAX_BYTES = 48 * 1024;
 
 /** The longest each text may be, in characters. */
-const LIMITS = { version: 40, android: 40, title: 300, artist: 300, app: 100, source: 100, comment: 2000, line: 300, appPackage: 150, log: 8192, recording: 200 };
+const LIMITS = {
+  version: 40, android: 40, title: 300, artist: 300, app: 100, source: 100, comment: 2000, line: 300, appPackage: 150, log: 8192, recording: 200,
+  word: 100, shown: 300, reader: 100, language: 20, right: 100,
+};
 
 /**
  * The problems the app finds with a song by itself, and reports when the user lets it. "kept_timing" is a song's
  * timing an earlier version kept, sent once: by hand or by ear, the app can't tell.
  */
 const PROBLEMS = new Set(["no_lyrics", "no_timing", "timed_by_hand", "sung_off", "no_chords", "kept_timing"]);
+
+/** A reading the user marked wrong, on the word itself: sent only when they tap Send. */
+const WRONG_READING = "wrong_reading";
+
+/** What read a word, as the app names it, joined by "+" when more than one did: "ipadic+unidic". */
+const READER = /^[a-z_]+(\+[a-z_]+)*$/;
+
+/** The script a word was read in, as the app names it: "japanese". */
+const LANGUAGE = /^[a-z_]+$/;
 
 /** What Android allows a package to be named: dotted words of letters, digits and underscores. */
 const PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
@@ -36,11 +48,13 @@ export default {
     const report = readReport(text);
     if (!report) return status(400);
     await env.DB.prepare(
-      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
+        "lyric_line, word, reading_shown, reader, language, right_reading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       report.version, report.android, report.title, report.artist, report.app,
       report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
-      report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording
+      report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
+      report.line, report.word, report.shown, report.reader, report.language, report.right
     ).run();
     return status(204);
   },
@@ -73,10 +87,12 @@ export function readReport(text) {
     android: textOf(json.android, LIMITS.android),
     comment: textOf(json.comment, LIMITS.comment),
     // A problem it doesn't know is one the user sent, as far as it can tell.
-    problem: PROBLEMS.has(json.problem) ? json.problem : null,
+    problem: PROBLEMS.has(json.problem) || json.problem === WRONG_READING ? json.problem : null,
     title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, source: null, timing: null,
     appPackage: null, speed: null, leadMs: null, earlyMs: null, timingLog: null, recording: null,
+    line: null, word: null, shown: null, reader: null, language: null, right: null,
   };
+  if (report.problem === WRONG_READING && !readingOf(json.reading, song, report)) return null;
   if (song) {
     report.title = textOf(song.title, LIMITS.title);
     report.artist = textOf(song.artist, LIMITS.artist);
@@ -101,6 +117,26 @@ export function readReport(text) {
     report.timing = timing;
   }
   return report;
+}
+
+/**
+ * The wrong reading in [value] put in [report]: the line, the word, the reading shown, what read it, its
+ * script and the right one when the user said it. False when it isn't one: a song, a word and a reading are a must.
+ */
+function readingOf(value, song, report) {
+  if (!song || !isObject(value)) return false;
+  report.line = textOf(value.line, LIMITS.line);
+  report.word = textOf(value.word, LIMITS.word);
+  report.shown = textOf(value.shown, LIMITS.shown);
+  report.reader = matching(textOf(value.reader, LIMITS.reader), READER);
+  report.language = matching(textOf(value.language, LIMITS.language), LANGUAGE);
+  report.right = textOf(value.right, LIMITS.right);
+  return report.word !== null && report.shown !== null;
+}
+
+/** [text] when it's [pattern], or null. */
+function matching(text, pattern) {
+  return text !== null && pattern.test(text) ? text : null;
 }
 
 function isObject(value) {

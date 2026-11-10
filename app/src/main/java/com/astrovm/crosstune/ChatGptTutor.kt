@@ -188,7 +188,7 @@ internal class ChatGptTutor(
             array
         }
         return Readings.corrected(read, JSONArray(fixes).let { list ->
-            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading")) }
+            (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map { ReadingFix(it.optInt("line") - 1, it.optString("kanji"), it.optString("reading"), Reader.CHATGPT) }
         })
     }
 
