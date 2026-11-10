@@ -246,7 +246,7 @@ internal fun LyricsScreen(state: UiState, actions: ScreenActions) {
     var visualsOnly by rememberSaveable { mutableStateOf(false) }
     // Putting the words in time: a line tapped is the one being sung. Only while something says where the song is.
     var syncingAsked by rememberSaveable(song) { mutableStateOf(false) }
-    val syncing = syncingAsked && state.lyricLines.isNotEmpty() && state.following != null
+    val syncing = syncingAsked && state.lyricLines.isNotEmpty() && state.following != null && !state.lyricsTimedByEar
     // Words timed for another take of the song are likely off, so putting them in time is offered once, as soon as there's a clock.
     var offered by rememberSaveable(song) { mutableStateOf(false) }
     LaunchedEffect(state.lyricsOffTake, state.following != null) {
@@ -775,8 +775,8 @@ private fun BarTools(
         if (state.lyricLines.isNotEmpty()) {
             IconButton(onClick = actions.onFloat) { AppIcon(R.drawable.ic_float, contentDescription = stringResource(R.string.floating_float)) }
         }
-        // Putting the words in time needs to know where the song is.
-        if (state.lyricLines.isNotEmpty() && state.following != null) {
+        // Putting the words in time needs to know where the song is, and words timed by ear time themselves.
+        if (state.lyricLines.isNotEmpty() && state.following != null && !state.lyricsTimedByEar) {
             LitButton(syncing, R.drawable.ic_timer, stringResource(R.string.lyrics_sync), onClick = onSync)
         }
         SyncSource(state, actions)
@@ -1702,7 +1702,8 @@ private fun TimedLyrics(
                     line.text,
                     words = line.words,
                     timeMs = line.timeMs,
-                    nextMs = lines.getOrNull(index + 1)?.timeMs,
+                    // Timed by ear with the next line not heard, the line goes on till it's sung through.
+                    nextMs = lines.getOrNull(index + 1)?.let { next -> if (next.heard) next.timeMs else line.endMs },
                     chords = chords.getOrNull(index),
                     following = following,
                     place = following?.let { index.compareTo(active) },
@@ -1712,7 +1713,7 @@ private fun TimedLyrics(
                     // Tapping a line puts the words in time with it while syncing; otherwise it moves the music app there, when it can.
                     onSeek = when {
                         syncing -> ({ actions.onSyncLine(index) })
-                        following?.canSeek == true && following.timingKnown -> ({ actions.onSeekLyrics(line.timeMs) })
+                        following?.canSeek == true && following.timingKnown && line.heard -> ({ actions.onSeekLyrics(line.timeMs) })
                         else -> null
                     },
                     seekLabel = if (syncing) R.string.lyrics_sync_line else R.string.lyrics_jump,
@@ -2386,7 +2387,7 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                     LineAction(R.string.lyrics_explain_line, R.drawable.ic_info) { actions.onExplainLine(index) }
                 }
                 // Only a music app the words follow, and that can be moved, can play a line again.
-                if (state.following?.let { it.canSeek && it.timingKnown } == true && index < state.lyricLines.size) {
+                if (state.following?.let { it.canSeek && it.timingKnown } == true && state.lyricLines.getOrNull(index)?.heard == true) {
                     val repeating = state.repeating == index
                     LineAction(
                         if (repeating) R.string.lyrics_stop_repeating else R.string.lyrics_repeat_line, R.drawable.ic_repeat_one, selected = repeating,

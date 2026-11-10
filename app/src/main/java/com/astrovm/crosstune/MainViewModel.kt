@@ -133,6 +133,8 @@ internal class MainViewModel(
     phone: Phone,
     /** Where the words of the songs shown lately are kept for after the app's closed; nullable so tests need none. */
     private val keptOnDisk: LookupCache? = null,
+    /** Where what was heard sung of songs whose words have no timing is kept, so they're timed from the start next time; nullable so tests need none. */
+    private val heardUntimed: LookupCache? = null,
     /** Whether a song's lyrics are looked up as its card shows, see [lookAhead]. */
     private val lookAhead: Boolean = true,
     /** Plays a playlist longer than one queue through, see [playAll]. */
@@ -1900,8 +1902,11 @@ internal class MainViewModel(
     private var unsung: Unsung? = null
     private var voiceJob: Job? = null
 
-    /** Hearing the words sung, to line them up; [singingTries] since the app's clock last started or jumped. */
+    /** Hearing the words sung, to line them up, or to time them; [singingTries] since the app's clock last started or jumped. */
     private var singingJob: Job? = null
+
+    /** What was heard sung of the song shown, its words found with no timing, to time them by: this time, and the times before. */
+    private var heardStretches: List<HeardStretch> = emptyList()
     private var singingTries = 0
 
     /**
@@ -1978,6 +1983,7 @@ internal class MainViewModel(
         stopFollowing()
         foundLines = emptyList()
         found = null
+        heardStretches = emptyList()
         unsung = null
         restored = null
         syncPoints = emptyList()
@@ -1989,7 +1995,7 @@ internal class MainViewModel(
             lyricsJob = viewModelScope.launch {
                 var first: LyricsFinder.FirstLook? = null
                 uiState = uiState.copy(
-                    lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
+                    lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
                     canFollowApps = playback?.hasAccess() == true
                 )
                 try {
@@ -2007,6 +2013,11 @@ internal class MainViewModel(
                                 lyricsOffTake = timedForAnother(song)
                             )
                             uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
+                            // Words with no timing, heard sung before, are timed as they were heard.
+                            if (answer.lines.isEmpty()) {
+                                heardStretches = heardUntimed?.let { HeardSongs(it).load(song, answer.words) }.orEmpty()
+                                timeByEar(song)
+                            }
                             followSavedLines(song)
                             timeSavedLines(song)
                             learn()
@@ -2091,7 +2102,7 @@ internal class MainViewModel(
         syncPoints = kept.syncPoints
         wordsPace = kept.pace
         uiState = uiState.copy(
-            lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
+            lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsTimedByEar = kept.foundLines.isEmpty() && kept.lines.isNotEmpty(), lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, titleMeaning = kept.learning.titleMeaning, fromRomaji = kept.learning.fromRomaji),
             chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
         )
@@ -2122,7 +2133,7 @@ internal class MainViewModel(
         if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty() || handGap != null) return
         foundLines = better.lines
         this.found = better
-        uiState = uiState.copy(lyricLines = better.lines, lyricsOffTake = timedForAnother(song))
+        uiState = uiState.copy(lyricLines = better.lines, lyricsTimedByEar = false, lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
     }
 
@@ -2445,9 +2456,10 @@ internal class MainViewModel(
         val hearing = singing ?: return
         val song = uiState.lyricsFor ?: return
         val lines = foundLines
+        if (lines.isEmpty()) return hearUntimed(hearing, song)
         if (singingJob?.isActive == true || singingTries >= SINGING_TRIES) return
         if (shazamLeads || nextPaused) return
-        if (lines.isEmpty() || !playingLinedUp() || !mayCalibrate()) return
+        if (!playingLinedUp() || !mayCalibrate()) return
         // With the app's clock sure, the words are heard once for the song; unsure, once each time it's picked up.
         if (if (clockSure) (uiState.lyricsSynced && !liningUp) || timedByHand || handGap != null || sungStore.heard(song, lines) else heardThisTime) return
         singingJob = viewModelScope.launch {
@@ -2458,6 +2470,59 @@ internal class MainViewModel(
                 doubtTiming(false)
             }
         }
+    }
+
+    /**
+     * Hears [song], its words found with no timing, a while at a time as a music app on the phone plays
+     * it, and times each line heard sung where it's sung; lines not heard stay untimed, never lit. What's
+     * heard is kept, so the words are timed from the start next time, and heard on till the song's been
+     * heard through [UNTIMED_HEARINGS] times. Only while Crosstune is in sight with the words.
+     */
+    private fun hearUntimed(hearing: SingingHearing, song: MusicMetadata) {
+        val words = found?.words ?: return
+        if (singingJob?.isActive == true || singingTries >= SINGING_TRIES || shazamLeads || nextPaused || !mayCalibrate()) return
+        if (appFollowing?.let { it.app != null && it.clock.playing } != true) return
+        val store = heardUntimed?.let(::HeardSongs)
+        singingJob = viewModelScope.launch {
+            // Shown from what was kept, what was heard before isn't loaded yet.
+            if (heardStretches.isEmpty()) heardStretches = store?.load(song, words).orEmpty()
+            // A few whiles in a row with nothing sung heard, it's let be till the app's clock starts or jumps.
+            while (!heardEnough(song) && singingTries < SINGING_TRIES) {
+                val clock = appFollowing?.clock?.takeIf { it.playing } ?: return@launch
+                singingTries++
+                val sung = hearOnce(hearing, uiState.lyrics.lines(), null) ?: return@launch
+                // Moved, paused or gone on meanwhile, what was heard can't be placed; timed words found meanwhile go by their own timing.
+                val playing = appFollowing?.clock?.takeIf { it.playing } ?: return@launch
+                if (uiState.lyricsFor != song || found?.words != words || foundLines.isNotEmpty() || abs(playing.positionAt(now()) - clock.positionAt(now())) > STEADY_CLOCK_MS) return@launch
+                if (sung.words.isNotEmpty()) singingTries = 0
+                val from = clock.positionAt(sung.startedAtMs)
+                val heard = sung.words.filter { it.atMs >= 0 }.map { it.text to clock.positionAt(sung.startedAtMs + it.atMs) }
+                heardStretches = heardStretches + HeardStretch(from, from + SingingListener.SECONDS * 1000L, heard)
+                store?.save(song, words, heardStretches)
+                timeByEar(song)
+                timeSavedLines(song, again = true)
+            }
+        }
+    }
+
+    /**
+     * Whether [song] has been heard through [UNTIMED_HEARINGS] times, about: hearing more would hardly
+     * time more lines. With no length said anywhere, once as much is heard as is kept.
+     */
+    private fun heardEnough(song: MusicMetadata): Boolean {
+        val length = untimedLengthMs(song) ?: return heardStretches.size >= HeardSongs.MAX_STRETCHES
+        return heardStretches.sumOf { it.toMs - it.fromMs } >= length * UNTIMED_HEARINGS
+    }
+
+    /** How long [song] is, where the app plays it, as the singing heard is timed by its clock: as the app says, or else the song or its words. */
+    private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs ?: song.lengthMs ?: found?.lengthMs
+
+    /** [song]'s words, found with no timing, timed by the singing heard in [heardStretches], once any line's been heard. */
+    private fun timeByEar(song: MusicMetadata) {
+        val length = untimedLengthMs(song) ?: heardStretches.maxOfOrNull { it.toMs } ?: return
+        val lines = SungTiming.timed(uiState.lyrics.lines(), heardStretches, length).ifEmpty { return }
+        uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = true)
+        uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
     }
 
     /**
@@ -2540,7 +2605,7 @@ internal class MainViewModel(
             delay(untilSung(shown, uiState.following?.clock ?: return, heardTo, straightOn) ?: return)
             val clock = uiState.following?.clock?.takeIf { playingLinedUp() } ?: return
             singingTries++
-            val sung = hearOnce(hearing, lines, heardFirst(song, lines, clock, shown, heardTo == null) { voiced = true }) ?: return
+            val sung = hearOnce(hearing, lines.map { it.text }, heardFirst(song, lines, clock, shown, heardTo == null) { voiced = true }) ?: return
             if (!stillPlays(song, lines, clock)) return
             // Nothing heard sung where the words are timed, as when they're timed into an intro, the next
             // while is heard straight on, wherever the words are timed: the singing may be well after them.
@@ -2605,8 +2670,8 @@ internal class MainViewModel(
     }
 
     /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when nothing is, as for want of the speech model, which is offered then. */
-    private suspend fun hearOnce(hearing: SingingHearing, lines: List<LyricLine>, first: (suspend (Sung) -> Boolean)?): Sung? {
-        val sung = hearing.hear(lyricsLanguage?.of(lines.map { it.text })?.substringBefore('-'), first)
+    private suspend fun hearOnce(hearing: SingingHearing, lines: List<String>, first: (suspend (Sung) -> Boolean)?): Sung? {
+        val sung = hearing.hear(lyricsLanguage?.of(lines)?.substringBefore('-'), first)
         // The model isn't fetched on mobile data by itself: it's offered by hand.
         if (sung == null && hearing.missesModel && !modelClosed) uiState = uiState.copy(singingModel = ModelOffer.MISSING)
         return sung
@@ -2774,7 +2839,9 @@ internal class MainViewModel(
      * while it's being lined up, it goes by the last hearing. With no singing heard where the words
      * are timed, and none found yet, no line's shown sung.
      */
-    private fun inSong(app: Following?): Following? = app?.let(::leadTaken)?.let { if (unheard) it.copy(timingKnown = false) else it }
+    private fun inSong(app: Following?): Following? =
+        // Timed by the singing heard where the app has the song, the words go by its clock as it is.
+        if (uiState.lyricsTimedByEar) app else app?.let(::leadTaken)?.let { if (unheard) it.copy(timingKnown = false) else it }
 
     /** [app]'s place less how far it was heard to be ahead of the words, as [inSong] has it. */
     private fun leadTaken(app: Following): Following {
@@ -3156,7 +3223,7 @@ internal class MainViewModel(
     private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null): Report {
         val byHand = handTiming()
         return Report(
-            sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = timingAtCorrection?.takeIf { timedByHand }?.first ?: playedIn, comment = comment,
+            sender.version, song, timed = uiState.lyricLines.isNotEmpty() && !uiState.lyricsTimedByEar, synced = uiState.lyricsSynced, app = timingAtCorrection?.takeIf { timedByHand }?.first ?: playedIn, comment = comment,
             sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = byHand, problem = problem, source = found?.source,
             player = if (byHand.isNotEmpty() || problem?.aboutTiming == true) playerTiming() else null
         )
@@ -3503,7 +3570,7 @@ internal class MainViewModel(
         stopFollowing()
         stopListeningAlong()
         uiState = uiState.copy(
-            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
+            lyricsFor = null, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(), chords = uiState.chords.fresh()
         )
     }
@@ -3582,7 +3649,7 @@ internal class MainViewModel(
     /** This line, timed as line [index] of the timed words shown, when they are, with the app playing them. */
     private fun SavedLine.timedAt(index: Int): SavedLine {
         val lines = uiState.lyricLines
-        val start = lines.getOrNull(index)?.timeMs ?: return copy(artworkUrl = uiState.lyricsFor?.artworkUrl)
+        val start = lines.getOrNull(index)?.takeIf { it.heard }?.timeMs ?: return copy(artworkUrl = uiState.lyricsFor?.artworkUrl)
         // Timed again, it stays with the app it was kept from, when none follows the words now.
         val app = appFollowing
         return copy(
@@ -3598,13 +3665,13 @@ internal class MainViewModel(
      */
     private fun endOf(lines: List<LyricLine>, index: Int): Long {
         val line = lines[index]
-        return line.endMs ?: lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs ?: (line.timeMs + LAST_LINE_MS)
+        return line.endMs ?: nextStart(lines, index) ?: (line.timeMs + LAST_LINE_MS)
     }
 
     /** Where the line after [index] starts, when one starts later than this one. */
     private fun nextStart(lines: List<LyricLine>, index: Int): Long? {
         val line = lines[index]
-        return lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs
+        return lines.drop(index + 1).firstOrNull { it.heard && it.timeMs > line.timeMs }?.timeMs
     }
 
     /**
@@ -3677,7 +3744,7 @@ internal class MainViewModel(
         val lines = uiState.lyricLines.takeIf { it.isNotEmpty() } ?: return
         val untimed = uiState.savedLines.filter { it.isOf(song) && (again || !it.timed) }
         untimed.forEach { saved ->
-            val index = lines.indexOfFirst { it.text == (saved.line ?: saved.text) }.takeIf { it >= 0 } ?: return@forEach
+            val index = lines.indexOfFirst { it.text == (saved.line ?: saved.text) }.takeIf { it >= 0 && lines[it].heard } ?: return@forEach
             uiState = uiState.copy(savedLines = savedLinesStore.timed(saved.timedAt(index), again))
         }
     }
@@ -3983,7 +4050,7 @@ internal class MainViewModel(
     fun repeatLine(index: Int) {
         val song = uiState.lyricsFor ?: return
         val lines = uiState.lyricLines
-        val start = lines.getOrNull(index)?.timeMs ?: return
+        val start = lines.getOrNull(index)?.takeIf { it.heard }?.timeMs ?: return
         if (uiState.following?.let { it.canSeek && it.timingKnown } != true) return
         val end = LineWindow.playedUntil(start, endOf(lines, index), nextStart(lines, index))
         repeatJob?.cancel()
@@ -4912,6 +4979,9 @@ internal class MainViewModel(
 
         /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
         const val SINGING_TRIES = 3
+
+        /** How many times through a song with untimed words is heard, all told, to time them: more would hardly time more lines. */
+        const val UNTIMED_HEARINGS = 2
 
         /** Hearings of a video it takes to say how fast it goes, and the speeds it could go at, as by [AudioTiming]. */
         const val LEAD_SPEED_HEARINGS = 3

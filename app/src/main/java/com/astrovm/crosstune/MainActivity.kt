@@ -156,6 +156,8 @@ class MainActivity : ComponentActivity() {
                     phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
                     keptOnDisk = LookupCache(File(cacheDir, "kept_words.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
+                    // What was heard of songs whose words have no timing, so they're timed from the start when played again.
+                    heardUntimed = LookupCache(File(cacheDir, "heard_untimed.json"), lookupDispatcher, maxEntries = MainViewModel.KEPT_SONGS),
                     lookAhead = lookAheadLyrics,
                     playQueue = queue,
                     queueOrder = order,

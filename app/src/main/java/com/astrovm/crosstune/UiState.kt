@@ -73,6 +73,8 @@ internal data class UiState(
     val lyricLines: List<LyricLine> = emptyList(),
     /** Whether the user put any of [lyricLines] in time by hand. */
     val lyricsSynced: Boolean = false,
+    /** Whether [lyricLines] are timed by the singing heard, the words found having no timing: lines not heard yet aren't ([LyricLine.heard]). */
+    val lyricsTimedByEar: Boolean = false,
     /** How sending a report on the words is going, while one is being written. */
     val report: ReportStatus? = null,
     /** Whether Crosstune reports problems it finds with songs by itself; null while the user hasn't said. */
