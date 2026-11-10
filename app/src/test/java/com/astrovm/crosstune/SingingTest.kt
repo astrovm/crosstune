@@ -715,6 +715,20 @@ class SingingTest {
     }
 
     @Test
+    fun wordsPutInTimeByHandWhileTheOfferForWordsHeardOffIsUpJoinIt() {
+        singing.answer = { sung(-MainViewModel.SUNG_OFF_MS) }
+        openLyrics()
+        plays(positionMs = 1_000)
+        waitUntil { model().uiState.reportOffer }
+        composeRule.onNodeWithContentDescription(app.getString(R.string.lyrics_sync)).performClick()
+        composeRule.onNodeWithText(lines[2]).performClick()
+        waitUntil { model().uiState.reportOfferFor == setOf(SongProblem.SUNG_OFF, SongProblem.TIMED_BY_HAND) }
+        // No longer only words heard off: the offer says what it says for any problem.
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(hasText(app.getString(R.string.auto_report_offer))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
     fun wordsHeardALittleOffDontOfferToReport() {
         singing.answer = { sung(-600) }
         openLyrics()

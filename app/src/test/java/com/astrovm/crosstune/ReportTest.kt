@@ -132,6 +132,26 @@ class ReportTest {
     }
 
     @Test
+    fun aReportSentLetsGoOfTheAnswerSoTheConnectionIsFreeForTheNext() = runBlocking {
+        val fake = FakeSpotify()
+        var closed = 0
+        fake.handler = { request ->
+            val body = object : okhttp3.ResponseBody() {
+                private val source = okio.Buffer()
+                override fun contentType(): okhttp3.MediaType? = null
+                override fun contentLength() = 0L
+                override fun source() = source
+                override fun close() {
+                    closed++
+                }
+            }
+            FakeSpotify.html(request, "").newBuilder().body(body).build()
+        }
+        assertTrue(ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined).send("{}"))
+        assertEquals(1, closed)
+    }
+
+    @Test
     fun onlyABuildThatCanBeDebuggedSendsReportsToABoxOnThePhonesOwnAddress() {
         assertEquals("http://127.0.0.1:8787/reports", ReportSender.urlFor(debuggable = true, asked = "http://127.0.0.1:8787/reports"))
         assertEquals("http://localhost:8787/reports", ReportSender.urlFor(debuggable = true, asked = "http://localhost:8787/reports"))

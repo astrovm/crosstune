@@ -139,7 +139,7 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         // The key ends with the recording, then the length, each only when it was known.
         val rest = parts.drop(2)
         val length = rest.lastOrNull()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
-        val recording = rest.firstOrNull()?.takeIf { it != length }
+        val recording = rest.firstOrNull()?.takeIf { it.isNotEmpty() && it != length }
         val heard = "$key\u0000${saved.optString("words")}".replace('\n', ' ') in sung
         val song = JSONObject().put("title", title).put("artist", artist).put("sung", heard)
             .put("timing", JSONArray(points.map { JSONObject().put("timedMs", it.optLong(0)).put("heardMs", it.optLong(1)) }))

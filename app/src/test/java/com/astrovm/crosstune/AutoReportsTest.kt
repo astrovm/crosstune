@@ -164,4 +164,14 @@ class AutoReportsTest {
         assertEquals(123L, song.getLong("lengthMs"))
         assertFalse(song.has("recording"))
     }
+
+    @Test
+    fun aSongKeptBeforeWithAnEmptyLastPartSendsNoLengthNorRecording() {
+        val point = JSONArray().put(JSONArray().put(0).put(100))
+        preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band\u0000", JSONObject().put("points", point)).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        val song = JSONObject(reports.owed().single().json).getJSONObject("song")
+        assertFalse(song.has("lengthMs"))
+        assertFalse(song.has("recording"))
+    }
 }

@@ -2204,6 +2204,8 @@ class ListeningTest {
         // The gap moved, not the lines: a way to put the words in time by hand all the same.
         assertEquals(emptyList<SyncPoint>(), LyricsSyncStore(prefs()).load(controllerModel().uiState.lyricsFor!!, SyncedLyrics.parse("[00:00.00] Demo one\n[00:10.00] Demo two\n[00:40.00] Demo three")))
         assertEquals(setOf(SongProblem.TIMED_BY_HAND), controllerModel().uiState.reportOfferFor)
+        // Owed at once, so it isn't lost if the app is killed before the words are left.
+        assertTrue(prefs().getString("auto_reports_owed", "[]").orEmpty().contains("timed_by_hand"))
         click(string(R.string.lyrics_sync_done))
         composeRule.mainClock.advanceTimeBy(8_000)
         composeRule.waitForIdle()
