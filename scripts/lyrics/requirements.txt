@@ -6,7 +6,7 @@ anyio==4.16.0
     # via httpx2
 av==19.0.2
     # via faster-whisper
-click==8.5.0
+click==8.5.1
     # via huggingface-hub
 ctranslate2==4.8.5
     # via faster-whisper
