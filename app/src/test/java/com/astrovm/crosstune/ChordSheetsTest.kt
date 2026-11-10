@@ -457,6 +457,8 @@ class ChordSheetsTest {
         assertEquals(2, ChordSheets.fromJTotal(latinAfter).single().chords.single().at)
         assertEquals(1, monoAt(latinAfter))
         assertEquals(3, monoAt("※あ${jTotal("C")}<br>あ\u0132bc"))
+        // The ellipsis is not a script. The kana after it still makes the mark wide.
+        assertEquals(4, monoAt("※…あ${jTotal("C")}<br>あ\u0132bc"))
         // The chord's own letters are the script of the line above the words.
         assertEquals(1, monoAt("よ<br>※${jTotal("C")}\u3000あ<br>\u0132bcdef"))
         assertEquals(2, monoAt("※${jTotal("C")}\u3000あ<br>\u0132bcdef"))
