@@ -218,6 +218,34 @@ class PracticeRemindersTest {
         assertFalse(reminders.state.late)
     }
 
+    /**
+     * Revoking alarms and reminders deletes every exact alarm and does not start the app, and the
+     * broadcast is not sent. The shadow only flips the flag, so the exact alarm is dropped here the
+     * way Android does. A due reminder must still arrive from an alarm Android keeps.
+     */
+    @Test
+    fun revokedExactAlarmsStillDeliverTheReminderWithoutTheAppBeingOpened() {
+        setUpWith(line("One"))
+        assertTrue(reminders.state.exact)
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        val kept = alarms.scheduledAlarms
+        assertEquals("Android kept no alarm once the exact one was dropped", 1, kept.size)
+        assertTrue(kept.single().windowLengthMs != 0L)
+        assertTrue(kept.single().isAllowWhileIdle)
+        // One minute on, so the stored minute is the alarm's own, not whatever the clock says now.
+        clock = at(3, 20, 6)
+        val keep = PendingIntent.getBroadcast(
+            app, 1,
+            Intent("com.astrovm.crosstune.action.REMIND_PRACTICE_KEEP").setClass(app, PracticeReminderReceiver::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
+        )
+        PracticeReminderReceiver().onReceive(app, shadowOf(requireNotNull(keep)).savedIntent)
+        assertEquals(1, shown.size)
+        assertEquals("1 card to practice", shown.single().title())
+    }
+
     @Test
     fun theSameAlarmIsReplacedWhenThePermissionChangesSoOneIsNeverLeftBehind() {
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
