@@ -47,8 +47,9 @@ internal data class HandTiming(val line: String, val timedMs: Long, val heardMs:
 /**
  * What a report about the words' timing carries beyond the lines put in time: why they may have been off.
  * [appPackage] is the app that was followed, as Android names it, and [speed] how fast it said it played;
- * [leadMs] how far ahead of the song Crosstune took that app to be, when it knew, and [earlyMs] how far
- * ahead of the voice it lit each line; and [log] the last minute of its timing log ([TimingLog]).
+ * [leadMs] how far ahead of the song Crosstune took that app to be, including zero when it used its
+ * clock as given, and [earlyMs] how far ahead of the voice it lit each line. When there is no lead,
+ * [log] says why, along with the last minute of the timing log ([TimingLog]).
  */
 internal data class PlayerTiming(
     val appPackage: String?,

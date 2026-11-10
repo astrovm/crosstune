@@ -2,14 +2,19 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import android.os.SystemClock
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -302,5 +307,54 @@ class ChordsScreenTest {
         chords = chords.copy(on = false)
         composeRule.waitUntil(5_000) { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(ChordsShown), useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_capo, 2)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun chordsThatCouldntBeLookedUpSaySoInWordsAndOfferToTryAgain() {
+        var asked = 0
+        var chords by mutableStateOf(ChordsState(on = true, loading = true))
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords), ScreenActions(onRetryChords = { asked++ })) } }
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertDoesNotExist()
+        // A site that wouldn't answer is said, which plain words alone don't: they look like a song with no chords.
+        chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        composeRule.onNodeWithText(string(R.string.retry_button)).performClick()
+        assertEquals(1, asked)
+        // Looked up again, or switched off, there's nothing left to say.
+        chords = ChordsState(on = true, loading = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_failed)).fetchSemanticsNodes().isEmpty() }
+        chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        chords = ChordsState(on = false, failed = true)
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(string(R.string.lyrics_chords_failed)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun offlineTheFailedChordsAreSaidWithNothingToTap() {
+        val chords = ChordsState(on = true, tried = true, failed = true)
+        composeRule.setContent { CrosstuneTheme { LyricsScreen(state(chords).copy(offline = true), ScreenActions()) } }
+        // The bar says it's offline; this says what that cost. They come back with the internet, so there's no button.
+        composeRule.onNodeWithText(string(R.string.lyrics_chords_failed)).assertExists()
+        composeRule.onNodeWithText(string(R.string.retry_button)).assertDoesNotExist()
+    }
+
+    @Test
+    fun theFailureIsAnnouncedAsItAppearsAndDrawnWithTheErrorIcon() {
+        var error = 0
+        val failed = ChordsState(on = true, tried = true, failed = true)
+        composeRule.setContent { CrosstuneTheme { error = MaterialTheme.colorScheme.error.toArgb(); LyricsScreen(state(failed), ScreenActions()) } }
+        // A screen reader says it when it shows up: nothing else tells that the chords didn't come.
+        val status = composeRule.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Polite) and hasAnyDescendant(hasText(string(R.string.lyrics_chords_failed)))
+        )
+        status.assertExists()
+        // The words are in the theme's text color, the button in its primary: only the icon is drawn in the error color.
+        fun errorPixels(): Int {
+            val image = status.captureToImage().asAndroidBitmap()
+            val pixels = IntArray(image.width * image.height).also { image.getPixels(it, 0, image.width, 0, 0, image.width, image.height) }
+            fun near(a: Int, b: Int, shift: Int) = kotlin.math.abs(((a shr shift) and 0xFF) - ((b shr shift) and 0xFF)) <= 8
+            return pixels.count { (it ushr 24) == 0xFF && near(it, error, 16) && near(it, error, 8) && near(it, error, 0) }
+        }
+        composeRule.waitUntil(5_000) { errorPixels() > 20 }
     }
 }

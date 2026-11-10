@@ -291,7 +291,7 @@ internal object SongNames {
     }
 
     /** How many letters to change to make [one] into [other]. */
-    private fun distance(one: String, other: String): Int {
+    internal fun distance(one: String, other: String): Int {
         var previous = IntArray(other.length + 1) { it }
         for (i in one.indices) {
             val row = IntArray(other.length + 1).also { it[0] = i + 1 }

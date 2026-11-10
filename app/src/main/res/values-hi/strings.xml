@@ -326,6 +326,7 @@
     <string name="lyrics_katakana_as_hiragana">काताकाना को हिरागाना में</string>
     <string name="lyrics_translation">अनुवाद</string>
     <string name="lyrics_translation_failed">अभी अनुवाद नहीं हो सका।</string>
+    <string name="lyrics_chords_failed">कॉर्ड्स लोड नहीं हो सके।</string>
     <string name="lyrics_chords">कॉर्ड्स</string>
     <string name="lyrics_capo">कैपो %1$d</string>
     <string name="setting_translate_into">इसमें अनुवाद करें</string>

@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -753,7 +754,7 @@ internal class MediaSessionPlayback(
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
         val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata, named)
+            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
         val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
@@ -771,15 +772,21 @@ internal class MediaSessionPlayback(
      * The cover the app shows, when it gives no link to one, e.g. YouTube Music for a song no other
      * store has: kept as a file with the covers downloaded, once a song, so it shows like those.
      */
-    private fun ownCover(metadata: MediaMetadata, song: MusicMetadata): String? {
-        val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes("${song.title}\n${song.artist}".toByteArray())}.jpg")
+    private fun ownCover(metadata: MediaMetadata): String? {
+        val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
+        val bytes = runCatching {
+            // Memory only, so there's nothing to close.
+            val output = ByteArrayOutputStream()
+            if (cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, output)) output.toByteArray() else null
+        }.getOrNull() ?: return null
+        val file = File(context.cacheDir, "$ARTWORK_DIR/playing-${UUID.nameUUIDFromBytes(bytes)}.jpg")
         if (!file.isFile) {
-            val cover = COVERS.firstNotNullOfOrNull(metadata::getBitmap) ?: return null
             // Written aside and moved in once whole, so one cut short isn't the song's cover from then on.
             val part = File(file.path + ".part")
             val saved = runCatching {
                 file.parentFile?.mkdirs()
-                part.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, COVER_QUALITY, it) } && part.renameTo(file)
+                part.writeBytes(bytes)
+                part.renameTo(file)
             }.getOrDefault(false)
             if (!saved) {
                 part.delete()
@@ -846,7 +853,10 @@ internal class MediaSessionPlayback(
     /** Music apps also play singles and local files with no album tag; YouTube Music leaves it out only for videos. */
     private fun MediaController.isVideo(): Boolean =
         metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM).isNullOrBlank() &&
-            MusicService.ofPackage(packageName).let { it == null || it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC }
+            MusicService.ofPackage(packageName).let {
+                it == MusicService.YOUTUBE || it == MusicService.YOUTUBE_MUSIC ||
+                    (it == null && !MetadataParsers.noArtist(metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()))
+            }
 
     /**
      * A session left behind, e.g. a browser tab that once played: it says it plays, but not where,

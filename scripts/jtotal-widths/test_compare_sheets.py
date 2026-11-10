@@ -1,0 +1,121 @@
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import compare_sheets as c  # noqa: E402
+
+
+def char(letter, left, right):
+    return {"c": letter, "left": left, "right": right}
+
+
+def chord(name, left, bass=None):
+    return {"name": name, "bass": bass, "left": left}
+
+
+def line(chars=(), chords=()):
+    return {"chars": list(chars), "chords": list(chords)}
+
+
+def page(*lines, font="Inconsolata, monospace"):
+    return {"url": "https://example.test/a.html", "x0": 0, "font": font, "lines": list(lines)}
+
+
+def words(text, width=20):
+    return [char(letter, i * width, (i + 1) * width) for i, letter in enumerate(text)]
+
+
+class NamesTest(unittest.TestCase):
+    def test_a_chord_is_its_text_and_the_bass_after_the_link(self):
+        self.assertEqual(c.chord_name(chord(" D\n", 0, "F#")), "D/F#")
+        self.assertEqual(c.chord_name(chord("Am", 0)), "Am")
+
+    def test_a_letter_outside_the_basic_plane_is_two_units(self):
+        self.assertEqual([c.utf16_length(x) for x in ("a", "あ", "\U0001F600")], [1, 1, 2])
+
+
+class CleanTest(unittest.TestCase):
+    def test_a_link_with_no_name_draws_no_chord_and_an_empty_line_goes(self):
+        cleaned = c.clean(page(line(chords=[chord(" \n ", 0)]), line(words("ab"), [chord("C", 0)])))
+        self.assertEqual([[x["name"] for x in l["chords"]] for l in cleaned["lines"]], [["C"]])
+
+
+class LetterAtTest(unittest.TestCase):
+    def test_the_letter_that_starts_nearest(self):
+        self.assertEqual(c.letter_at(words("abc"), 0, 41), 2)
+        self.assertEqual(c.letter_at(words("abc"), 0, 29), 1)
+
+    def test_halfway_goes_to_the_later_letter(self):
+        self.assertEqual(c.letter_at(words("abc"), 0, 30), 2)
+
+    def test_past_the_last_letter_is_the_end_of_the_line(self):
+        self.assertEqual(c.letter_at(words("abc"), 0, 500), 3)
+
+    def test_no_words_is_the_start(self):
+        self.assertEqual(c.letter_at([], 21, 300), 0)
+
+    def test_an_emoji_counts_for_two_units(self):
+        self.assertEqual(c.letter_at(words("\U0001F600b"), 0, 20), 2)
+
+
+class ExpectedTest(unittest.TestCase):
+    def test_each_chord_line_takes_the_words_under_it(self):
+        lines = c.expected(page(
+            line(chords=[chord("C", 0), chord("G", 40, "B")]), line(words("abc")),
+            line(chords=[chord("F", 20)]),
+        ))
+        self.assertEqual(lines, [
+            {"text": "abc", "chords": [[0, "C"], [2, "G/B"]]},
+            {"text": "", "chords": [[0, "F"]]},
+        ])
+
+
+class ComparePageTest(unittest.TestCase):
+    def drawn(self):
+        return page(line(chords=[chord("C", 0), chord("G", 40)]), line(words("abc")))
+
+    def test_a_chord_on_the_right_letter(self):
+        counts, wrong = c.compare_page(self.drawn(), [{"text": "abc", "chords": [[0, "C"], [2, "G"]]}])
+        self.assertEqual((counts["chords compared"], counts["chords on another letter"], wrong), (2, 0, []))
+
+    def test_a_chord_on_another_letter(self):
+        counts, wrong = c.compare_page(self.drawn(), [{"text": "abc", "chords": [[0, "C"], [1, "G"]]}])
+        self.assertEqual((counts["chords compared"], counts["chords on another letter"]), (2, 1))
+        self.assertEqual(wrong, [("abc", [2, "G"], [1, "G"])])
+
+    def test_other_words_are_counted_on_their_own(self):
+        counts, wrong = c.compare_page(self.drawn(), [{"text": "xyz", "chords": [[0, "C"], [2, "G"]]}, {"text": "q", "chords": [[0, "A"]]}])
+        self.assertEqual(counts["chord lines the app reads as other words or chords"], 1)
+        self.assertEqual(counts["chords on those lines"], 2)
+        self.assertEqual(counts["app chord lines the browser does not draw"], 2)
+        self.assertEqual(counts["chords compared"], 0)
+
+    def test_app_lines_with_no_chords_are_not_chord_lines(self):
+        counts, _ = c.compare_page(self.drawn(), [{"text": "abc", "chords": [[0, "C"], [2, "G"]]}, {"text": "more", "chords": []}])
+        self.assertEqual(counts["app chord lines the browser does not draw"], 0)
+
+
+class CompareTest(unittest.TestCase):
+    def test_the_totals_of_every_sheet(self):
+        drawn = page(line(chords=[chord("C", 0)]), line(words("ab")))
+        app = {drawn["url"]: {"url": drawn["url"], "mono": False, "lines": [{"text": "ab", "chords": [[1, "C"]]}]}}
+        total, examples = c.compare([drawn, {**drawn, "url": "https://example.test/b.html"}], app)
+        self.assertEqual(total["sheets compared"], 1)
+        self.assertEqual(total["sheets the app did not answer"], 1)
+        self.assertEqual(total["sheets whose font stack the app misreads"], 1)
+        self.assertEqual(total["sheets with a chord on another letter"], 1)
+        self.assertEqual(examples, [(drawn["url"], "ab", [0, "C"], [1, "C"])])
+
+    def test_read_app_keys_each_row_by_its_sheet(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "app.jsonl"
+            path.write_text(json.dumps({"url": "u", "lines": []}) + "\n", encoding="utf-8")
+            self.assertEqual(c.read_app(path), {"u": {"url": "u", "lines": []}})
+
+
+if __name__ == "__main__":
+    unittest.main()

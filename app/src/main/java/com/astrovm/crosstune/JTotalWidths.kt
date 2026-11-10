@@ -21,10 +21,15 @@ internal object JTotalWidths {
 
     // The file is read the first time a sheet needs a width, not when the app starts. It is looked up
     // by its whole path: the build may move the class to another package, and not the file.
-    private val runs: Runs by lazy {
-        val lines = checkNotNull(JTotalWidths::class.java.getResourceAsStream(RESOURCE)).bufferedReader().use { it.readLines() }
+    private val runs: Runs by lazy { readRuns(RESOURCE) }
+    private val monospaceRuns: Runs by lazy { readRuns("/com/astrovm/crosstune/jtotal-widths-mono.txt") }
+
+    private fun readRuns(resource: String): Runs {
+        val lines = checkNotNull(JTotalWidths::class.java.getResourceAsStream(resource)).bufferedReader().use {
+            it.readLines().filterNot { line -> line.startsWith('#') }
+        }
         val ranges = lines.map { it.substringBefore(' ') }
-        Runs(
+        return Runs(
             first = ranges.map { it.substringBefore('-').toInt(16) }.toIntArray(),
             last = ranges.map { it.substringAfter('-', it).toInt(16) }.toIntArray(),
             width = lines.map { it.substringAfter(' ').toInt() }.toIntArray(),
@@ -32,8 +37,9 @@ internal object JTotalWidths {
     }
 
     /** The width of [codePoint] in thousandths of a column. */
-    fun of(codePoint: Int): Int {
+    fun of(codePoint: Int, monospace: Boolean = false): Int {
         if (codePoint < LISTED_FROM) return COLUMN
+        val runs = if (monospace) monospaceRuns else runs
         val found = runs.first.binarySearch(codePoint)
         // Not the start of a run: the run before it, if it reaches this far.
         val run = if (found >= 0) found else -found - 2

@@ -326,6 +326,7 @@
     <string name="lyrics_katakana_as_hiragana">가타카나를 히라가나로</string>
     <string name="lyrics_translation">번역</string>
     <string name="lyrics_translation_failed">지금은 번역할 수 없습니다.</string>
+    <string name="lyrics_chords_failed">코드를 불러오지 못했습니다.</string>
     <string name="lyrics_chords">코드</string>
     <string name="lyrics_capo">카포 %1$d</string>
     <string name="setting_translate_into">번역할 언어</string>
