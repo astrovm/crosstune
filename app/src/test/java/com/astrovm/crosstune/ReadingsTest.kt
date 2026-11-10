@@ -835,6 +835,8 @@ class ReadingsTest {
             assertTrue("$withUniDic", read("ファ君と").endsWith("くんと"))
             assertTrue("$withUniDic", read("ヺ君と").endsWith("くんと"))
             assertTrue("$withUniDic", read("カー君と").endsWith("くんと"))
+            // A middle dot is not katakana. 君 after that word is きみ, not くん.
+            assertTrue("$withUniDic", read("フ・君と").endsWith("きみと"))
             // 愛して and 楽して are verbs, not an adjective's stem: あいして, not いとして.
             assertEquals("$withUniDic", "そのときは あいしてる", read("その時は 愛してる"))
             assertEquals("$withUniDic", "らくしていきる", read("楽して生きる"))
@@ -1175,5 +1177,7 @@ class ReadingsTest {
         assertEquals(listOf(Ruby("中", "ぁ")), sung("ぁ").parts)
         assertEquals(listOf(Ruby("中", "ゟ")), sung("ゟ").parts)
         assertEquals(listOf(Ruby("中", "ー")), sung("ー").parts)
+        // The mark after the last hiragana is not a reading, so that fix is left unused.
+        assertEquals(listOf(Ruby("中", "ちゅう")), sung("゠").parts)
     }
 }
