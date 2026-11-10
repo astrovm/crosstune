@@ -587,7 +587,7 @@ internal object Readings {
                 // 君 is くん after a name, 太郎君; after anything else it's you, 何度君と, きみ.
                 piece.surface == "君" && piece.kana == "くん" && (last == null || !namedBy(last)) -> out += piece.read("きみ")
                 // 手 after a katakana word and before を is a hand, not a suffix naming a person.
-                piece.surface == "手" && piece.kana == "しゅ" && last != null && last.surface.all { it in 'ァ'..'ヺ' || it == 'ー' } &&
+                piece.surface == "手" && piece.kana == "しゅ" && last != null && inKatakana(last) &&
                     pieces.getOrNull(index + 1)?.surface == "を" -> out += piece.read("て", "名詞", "一般")
                 // An adjective's stem can't go on with て or た: 愛して and 楽して are the verbs, あいして and らくして.
                 last != null && stemOfVerb(last, piece) -> {
@@ -637,7 +637,10 @@ internal object Readings {
     private fun alone(kanji: String): String? = tokenizer.tokenize(kanji).singleOrNull()?.takeIf { it.partOfSpeechLevel2 != "接尾" }?.reading?.takeIf { it != "*" }?.let(::hiragana)
 
     /** Whether 君 after [piece] follows a name: one the dictionary knows, or one in katakana. */
-    private fun namedBy(piece: Piece) = piece.subkind == "固有名詞" || piece.surface.all { it in 'ァ'..'ヺ' || it == 'ー' }
+    private fun namedBy(piece: Piece) = piece.subkind == "固有名詞" || inKatakana(piece)
+
+    /** Whether [piece] is all katakana, long marks and all, as ダンサー. */
+    private fun inKatakana(piece: Piece) = piece.surface.all { it in 'ァ'..'ヺ' || it == 'ー' }
 
     /** Whether [stem], an adjective's stem of kanji and し, goes on with て or た in [next], as only a verb can. */
     private fun stemOfVerb(stem: Piece, next: Piece) = stem.kind == "形容詞" && stem.surface.length > 1 && stem.surface.last() == 'し' &&

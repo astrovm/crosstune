@@ -829,6 +829,12 @@ class ReadingsTest {
             assertEquals("$withUniDic", "うんてんしゅ", read("運転手"))
             assertEquals("$withUniDic", "だんすてをあげる", read("ダンス手を上げる"))
             assertEquals("$withUniDic", "かしゅをしる", read("歌手を知る"))
+            // Katakana to its edges, ァ and ヺ, and its long mark, as in ファン and ダンサー.
+            assertEquals("$withUniDic", "だんさーてをあげる", read("ダンサー手を上げる"))
+            assertEquals("$withUniDic", "ふぁんてをふる", read("ファン手を振る"))
+            assertEquals("$withUniDic", "ヺてをあげる", read("ヺ手を上げる"))
+            // Only before を: with nothing after, it's left as the dictionary reads it.
+            assertEquals("$withUniDic", "だんすしゅ", read("ダンス手"))
             assertEquals("$withUniDic", "とびかたをしる", read("飛び方を知る"))
             assertTrue("$withUniDic", read("4時に").endsWith("じに"))
             assertTrue("$withUniDic", read("10年後に").endsWith("ねんごに"))
