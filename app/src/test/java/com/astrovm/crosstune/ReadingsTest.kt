@@ -588,6 +588,40 @@ class ReadingsTest {
     }
 
     @Test
+    fun aFuInAWordOfKanaAloneIsNotAnOldEndingWhateverFollowsIt() {
+        // くふうして is くふう and して, not くふ, the verb 食ふ, and うして.
+        listOf("くふうして生きる", "くふうしている", "くふうが好き").forEach { line ->
+            assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern })
+            TestUniDic.reading { assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern }) }
+        }
+    }
+
+    @Test
+    fun aWordInOldKanaKeepsTheReadingUniDicGivesItAndNamesTheWordTodayFromItsListing() {
+        TestUniDic.reading {
+            // UniDic reads 云 and 言 ゆ: the reading and how it's said stay, and the word is named by its spelling today.
+            listOf("云ふ" to "云う", "言ふ" to "言う").forEach { (text, modern) ->
+                val word = Readings.words(text, Script.JAPANESE).single()
+                assertEquals(text, listOf("ゆう", modern), listOf(word.reading, word.modern))
+                assertEquals(text, "yuu", Readings.of(listOf(text), Script.JAPANESE).single().romanized)
+            }
+            // In kana alone, with no rule to tell it, UniDic's listing of the word does: it has no reading of its own for きのふ.
+            val yesterday = Readings.words("きのふ", Script.JAPANESE).single()
+            assertEquals(listOf(null, "きのう", "きのう"), listOf(yesterday.reading, yesterday.modern, yesterday.lookup))
+        }
+        // IPADIC alone has nothing to tell it by, and names nothing.
+        assertNull(Readings.words("きのふ", Script.JAPANESE).single().modern)
+    }
+
+    @Test
+    fun aParticleAfterAWordInOldKanaIsStillSaidAsAParticle() {
+        listOf("逢ひたいは" to "aitai wa", "逢ひたいへ" to "aitai e", "云ふは" to "iu wa").forEach { (text, romaji) ->
+            assertEquals(text, romaji, Readings.of(listOf(text), Script.JAPANESE).single().romanized)
+            TestUniDic.reading { assertEquals(text, romaji, Readings.of(listOf(text), Script.JAPANESE).single().romanized) }
+        }
+    }
+
+    @Test
     fun aLineWithLettersTheDictionaryTakesForMarksStillSplitsIntoWords() {
         // Hangul in a Japanese line is a word of marks: it looks itself up.
         val words = Readings.words("사랑 愛", Script.JAPANESE)
@@ -618,6 +652,8 @@ class ReadingsTest {
         assertEquals(listOf(0, 1, 2), omoide.origins)
         assertEquals(listOf(1), omoide.plain)
         assertEquals(1, omoide.first)
+        // The first change stays the first when more follow.
+        assertEquals(0, requireNotNull(Furigana.byRule("けふけふ")).first)
         val kyou = requireNotNull(Furigana.byRule("今日けふ"))
         assertEquals(listOf(0, 1, 2, 2, 2), kyou.origins)
         assertEquals(emptyList<Int>(), kyou.plain)

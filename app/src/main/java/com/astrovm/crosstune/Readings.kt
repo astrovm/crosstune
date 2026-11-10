@@ -191,7 +191,7 @@ internal object Readings {
             words
         }
         val text = word.joinToString("") { it.surface }
-        return words.map { group -> todayPiece(group, today, text, word.last().end - text.length) }
+        return words.map { group -> todayPiece(group, today, text) }
     }
 
     /** The spelling by rule of a [word] in old kana, when the dictionary doesn't already read it so and the change starts in its first piece. */
@@ -210,15 +210,14 @@ internal object Readings {
 
     private val GRAMMAR = setOf("助詞", "助動詞")
 
-    /** The piece for a [group] of tokens of the spelling [today] of [text], as it's written in the line, which [start]s where it does. */
-    private fun todayPiece(group: List<com.atilika.kuromoji.ipadic.Token>, today: Furigana.Today, text: String, start: Int): Piece {
+    /** The piece for a [group] of tokens of the spelling [today] of [text], as it's written in the line. */
+    private fun todayPiece(group: List<com.atilika.kuromoji.ipadic.Token>, today: Furigana.Today, text: String): Piece {
         val head = group.first()
         val from = today.origins[head.position]
         val to = group.last().let { it.position + it.surface.length }.let { if (it == today.text.length) text.length else today.origins[it] }
-        val spoken = group.map { it.pronunciation?.takeIf { sound -> sound != "*" } }
         return Piece(
             text.substring(from, to), group.joinToString("") { hiragana(it.reading) }, head.partOfSpeechLevel1, head.partOfSpeechLevel2,
-            head.baseForm?.takeIf { it != "*" } ?: head.surface, spoken.takeIf { null !in it }?.joinToString("")?.let { longVowels(hiragana(it)) }, start + to,
+            head.surface, longVowels(hiragana(group.joinToString("") { it.pronunciation })),
             today = group.joinToString("") { it.surface }
         )
     }
@@ -240,8 +239,7 @@ internal object Readings {
             token.writtenBaseForm.takeIf { it != "*" } ?: surface,
             said?.let(::hiragana),
             token.position + token.surface.length,
-            unread = said == null,
-            listed = token.lemmaReadingForm.takeIf { it != "*" }
+            unread = said == null
         )
     }
 
@@ -294,7 +292,7 @@ internal object Readings {
     /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
     private fun keptWhole(a: List<Piece>, b: List<Piece>): Boolean {
         val whole = b.singleOrNull() ?: return false
-        return a.size > 1 && (whole.surface.any(::isHan) || Furigana.modernKana(whole.surface, listOfNotNull(whole.listed, whole.spoken)) != null)
+        return a.size > 1 && (whole.surface.any(::isHan) || Furigana.modernKana(whole.surface, listOfNotNull(whole.spoken)) != null)
     }
 
     /**
@@ -438,12 +436,10 @@ internal object Readings {
         val subkind: String,
         val base: String = surface,
         val spoken: String? = null,
-        /** Where it ends in the line. */
+        /** Where it ends in the line: the dictionaries' pieces are mixed by it, and a word in old kana read as its spelling today has none, as nothing reads it after. */
         val end: Int = 0,
         /** Whether the dictionary has no reading for it. */
         private val unread: Boolean = false,
-        /** The reading of its dictionary form, when the dictionary says it. */
-        val listed: String? = null,
         /** How it is spelled today, when it is in old kana and [Furigana.byRule] says it. */
         val today: String? = null
     ) {
