@@ -759,4 +759,16 @@ class SungWordsTest {
         assertEquals("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin", WhisperModel.URL)
         assertEquals("818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7", WhisperModel.SHA256)
     }
+
+    @Test
+    fun aVoiceIsHeardSingingUnlessTheModelGoesRoundOnOneWord() {
+        fun sung(vararg words: String) = Sung(0, words.mapIndexed { at, text -> HeardWord(text, at * 500L) })
+        assertTrue(sung("(upbeat music)", "Hold", "the", "light").sings)
+        // Three words is a little singing, even all the same.
+        assertTrue(sung("Oh,", "oh,").sings)
+        // Music alone, or rain heard as one word over and over, is no one singing.
+        assertFalse(sung("[Music]").sings)
+        assertFalse(sung("(rain)", "H3B", "H3B", "H3B", "H3B").sings)
+        assertFalse(sung().sings)
+    }
 }

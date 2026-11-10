@@ -226,6 +226,20 @@ class MetadataParsersTest {
     }
 
     @Test
+    fun anUploadsDashTypedRightAfterTheArtistStillSplitsItFromTheSong() {
+        // A fan's upload, its dash against the artist and "Lyrics" with nothing before it.
+        assertEquals(MusicMetadata("Night Train Home", "Fake Singer"), MetadataParsers.youtubeVideo("Fake Singer- Night Train Home Lyrics", "uploader2001"))
+        assertEquals(MusicMetadata("Night Train Home", "Fake Singer"), MetadataParsers.youtubeVideo("Fake Singer– Night Train Home", "uploader2001"))
+        // A dash inside a name has no space after it, and a spaced one comes first.
+        assertEquals(MusicMetadata("Night Train Home", "Jay-Fake"), MetadataParsers.youtubeVideo("Jay-Fake - Night Train Home", "uploader2001"))
+        assertEquals(MusicMetadata("Jay-Fake Night Train", "uploader2001"), MetadataParsers.youtubeVideo("Jay-Fake Night Train", "uploader2001"))
+        // Two such dashes say nothing of which is the artist's.
+        assertEquals(MusicMetadata("One- Two- Three", "uploader2001"), MetadataParsers.youtubeVideo("One- Two- Three", "uploader2001"))
+        // A song named "Lyrics" alone keeps its name.
+        assertEquals(MusicMetadata("Lyrics", "Fake Singer"), MetadataParsers.youtubeVideo("Lyrics", "Fake Singer"))
+    }
+
+    @Test
     fun malformedVideoMetadataNeverCrashesTheLookup() {
         val random = kotlin.random.Random(221)
         val alphabet = "abcXYZ0123 -|/[]()「」『』\"'\n\t\u0000ñé日本가사رسمي"

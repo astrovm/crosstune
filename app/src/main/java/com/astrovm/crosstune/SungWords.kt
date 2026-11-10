@@ -40,6 +40,22 @@ internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>) {
                 !sound && word.text.any { it.isLetterOrDigit() }
             }?.atMs
         }
+
+    /**
+     * Whether someone's heard singing: a voice, and not one word said over and over, as the speech
+     * model makes of rain, waves or other noise with no one in it.
+     */
+    val sings: Boolean
+        get() {
+            val voiceAt = voiceAtMs ?: return false
+            val said = words.filter { it.atMs >= voiceAt }.map { word -> word.text.filter(Char::isLetterOrDigit).lowercase() }.filter(String::isNotEmpty)
+            return said.size < LOOPED_WORDS || said.distinct().size > 1
+        }
+
+    private companion object {
+        /** A word heard this many times, and no other, is the speech model going round on noise. */
+        const val LOOPED_WORDS = 3
+    }
 }
 
 /** Hears the words of the song the phone plays now; null when it can't, or heard none. */
