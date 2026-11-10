@@ -112,6 +112,9 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(MusicMetadata("FakeBand 夜の歌", "Fan Pics")))
         fake.handler = { request -> FakeSpotify.html(request, if (request.url.queryParameter("q") != null) "{\"message\":\"busy\"}" else "[]") }
         assertEquals(Lyrics.None, found(MusicMetadata("FakeBand 夜の歌", "Fan Pics")))
+        // An answer cut short is no answer either.
+        fake.handler = { request -> FakeSpotify.html(request, if (request.url.queryParameter("q") != null) "[{\"trackName\":" else "[]") }
+        assertEquals(Lyrics.None, found(MusicMetadata("FakeBand 夜の歌", "Fan Pics")))
     }
 
     @Test

@@ -253,6 +253,8 @@ internal class PracticeCards(
             ?: return notThere(source, song, app, packageName, play || uiState.practice?.turned == true)
         val (at, playing) = reachAsAsked(source, song, app, window, play, following)
         if (at == null) return notThere(source, song, app, packageName, playing)
+        // The card says the line plays before the sound comes out, so the two agree.
+        if (playing) setSound(line, LineSound.PLAYING)
         // At the line, it's heard from there.
         source.quiet(false)
         packageName?.let { traits.seeks(it, true) }

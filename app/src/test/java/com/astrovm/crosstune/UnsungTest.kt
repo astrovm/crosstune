@@ -208,6 +208,27 @@ class UnsungTest {
     }
 
     @Test
+    fun withReportsOffOnlyASongTakenForAnInstrumentalIsHeard() {
+        prefs().edit().putBoolean("auto_reports", false).commit()
+        singing.answers = listOf(voice)
+        openLyrics()
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        // A voice heard would change nothing, so none is listened for.
+        assertEquals(0, singing.hears)
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        genre = "Jazz"
+        singing.answers = listOf(music, voice)
+        openLyrics(shown = R.string.lyrics_instrumental)
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        // Heard sung, it shows no words found, and still nothing goes.
+        waitUntil { shows(R.string.lyrics_none) }
+        assertEquals(2, singing.hears)
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
     fun aMedleyOrAWholeConcertHasNoOneSongsWordsToMiss() {
         title = "Live 2007 (Recital Completo)"
         openLyrics()

@@ -2465,6 +2465,8 @@ internal class MainViewModel(
      */
     private fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
         if (SongNames.manySongs(song)) return
+        // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
+        if (!likelyInstrumental && autoReports.allowed == false) return
         if (singing != null && shownPlayed && mayCalibrate()) {
             unsung = Unsung(song, likelyInstrumental)
             hearVoice()
@@ -2482,26 +2484,34 @@ internal class MainViewModel(
     private fun hearVoice() {
         val hearing = singing ?: return
         val waiting = unsung ?: return
-        if (voiceJob?.isActive == true || shazamLeads || nextPaused || !mayCalibrate()) return
-        if (uiState.lyricsFor != waiting.song || uiState.following?.let { it.app != null && it.clock.playing } != true) return
+        if (!mayHearVoice(waiting.song)) return
         voiceJob = viewModelScope.launch {
             var heard = waiting
             while (heard.tries < VOICE_TRIES) {
                 if (heard.tries > 0) delay(VOICE_PAUSE_MS)
                 val sung = hearing.hear(null, null)
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
-                if (sung?.sings == true || (sung == null && hearing.missesModel)) {
-                    unsung = null
-                    // Without the speech model nothing can be heard, so it's as if it couldn't be.
-                    if (sung != null && heard.likelyInstrumental) uiState = uiState.copy(lyricsInstrumental = false)
-                    if (sung != null || !heard.likelyInstrumental) problemFound(SongProblem.NO_LYRICS)
-                    return@launch
-                }
+                // Without the speech model nothing can be heard, so it's as if it couldn't be.
+                if (sung?.sings == true || (sung == null && hearing.missesModel)) return@launch voiceHeard(heard, sung != null)
                 heard = heard.copy(tries = heard.tries + 1)
                 unsung = heard
             }
             unsung = null
         }
+    }
+
+    /** Whether [song], with no words found, may be heard for a voice now: shown, played by a music app on the phone, Crosstune in sight. */
+    private fun mayHearVoice(song: MusicMetadata): Boolean {
+        if (voiceJob?.isActive == true || shazamLeads || nextPaused) return false
+        if (!mayCalibrate() || uiState.lyricsFor != song) return false
+        return uiState.following?.let { it.app != null && it.clock.playing } == true
+    }
+
+    /** [heard] was heard sung, or [sung] false, couldn't be heard at all: its missing words are a problem, as they always were. */
+    private fun voiceHeard(heard: Unsung, sung: Boolean) {
+        unsung = null
+        if (sung && heard.likelyInstrumental) uiState = uiState.copy(lyricsInstrumental = false)
+        if (sung || !heard.likelyInstrumental) problemFound(SongProblem.NO_LYRICS)
     }
 
     /** Hears the singing a while at a time, through the song, and puts the words where it's heard. */

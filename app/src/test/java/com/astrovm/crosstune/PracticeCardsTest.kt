@@ -1545,7 +1545,8 @@ class PracticeCardsTest {
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         // Opened cold, it starts the song from its start, not yet able to move.
         playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis()), "Spotify", canSeek = false, appPackage = spotify, durationMs = 200_000)
-        waitFor("it's paused") { playback.plays.isNotEmpty() }
+        // plays grows before onPlay records the pause, so wait until that record exists.
+        waitFor("it's paused") { playback.plays.isNotEmpty() && seeksAtFirstPause != null }
         assertEquals(listOf(false), playback.plays.toList())
         assertEquals(0, seeksAtFirstPause)
         assertFalse(playback.playing.value!!.clock.playing)
@@ -1556,8 +1557,8 @@ class PracticeCardsTest {
         assertEquals(listOf(false, true), playback.plays.take(2))
         // Muted from before it was opened until it said it plays the line: the song's start was never heard.
         assertEquals(listOf(false to true, true to true), quietAt.take(2))
-        // Heard while it plays the line, not only once it's over.
-        waitFor("the line is heard") { !playback.quiet }
+        // Heard while it plays the line, not only once it's over. The screen state follows the sound.
+        waitFor("the line is heard") { !playback.quiet && practice?.sound == LineSound.PLAYING }
         assertEquals(LineSound.PLAYING, practice?.sound)
         assertEquals(listOf(true, false), playback.quiets.toList())
     }
