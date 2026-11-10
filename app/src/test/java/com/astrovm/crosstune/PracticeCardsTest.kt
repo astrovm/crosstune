@@ -1795,6 +1795,26 @@ class PracticeCardsTest {
     }
 
     @Test
+    fun anAppKeptPausedTwiceInOneCardIsLetGoOfBothTimesWhenItPlaysTheLine() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        val amazon = MusicService.AMAZON_MUSIC.packageName
+        // Kept from Amazon, it's tried though its store has no link for the song.
+        keep(line().copy(app = amazon), types = hearIt)
+        // Spotify and Amazon play nothing asked of them, so YouTube Music is asked in their place; without showing over other
+        // apps it can't be opened, and asked from behind it doesn't start: it's kept paused, once for each.
+        installed(spotify, amazon, ytMusic)
+        appPlays(ytMusic, speed = 1f)
+        playback.comesBackByItself = false
+        playback.startsInBackground = false
+        playback.obeys = true
+        cards().start(null, before = null)
+        waitFor("the line is played, there or in the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
+        // Followed itself next, it's let go of both, and plays the line through: paused by the first, it would stop on the way.
+        assertEquals(listOf("trying $spotify", "$ytMusic would cover the card", "$spotify did not move to the line", "trying $amazon", "$ytMusic would cover the card", "$amazon did not move to the line", "trying $ytMusic", "$ytMusic played the line from its start"), steps())
+    }
+
+    @Test
     fun anAppKeptPausedIsLetPlayWhatPlayedBeforePractice() {
         val (tidal, flow) = tidalGoesOnToItsNextSong()
         // Done, what played before goes on in whichever app has it, here TIDAL, which is then left to play.
