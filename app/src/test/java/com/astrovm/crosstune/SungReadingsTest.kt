@@ -146,6 +146,10 @@ class SungReadingsTest {
         }
         assertTrue(ReadingFix(0, "都会", "まち") in ask(song = MusicMetadata("夜の都会!", "Band")).orEmpty())
         assertTrue(ReadingFix(0, "都会", "まち") in ask(song = MusicMetadata("夜の都会？", "Band")).orEmpty())
+        // A title that is only the mark is not looked up as a blank name.
+        fake.requestedUrls.clear()
+        assertEquals(emptyList<ReadingFix>(), ask(song = MusicMetadata("!", "Band")))
+        assertTrue(fake.requestedUrls.none { it.toHttpUrl().queryParameter("title").isNullOrEmpty() })
     }
 
     @Test

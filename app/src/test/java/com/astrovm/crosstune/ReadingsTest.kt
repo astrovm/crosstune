@@ -831,6 +831,10 @@ class ReadingsTest {
             assertEquals("$withUniDic", "なんどきみとみた", read("何度君と見た"))
             assertTrue("$withUniDic", read("太郎君と").endsWith("くんと"))
             assertTrue("$withUniDic", read("ケンジ君と").endsWith("くんと"))
+            // The katakana name range includes its first letter and its last, and a long mark.
+            assertTrue("$withUniDic", read("ファ君と").endsWith("くんと"))
+            assertTrue("$withUniDic", read("ヺ君と").endsWith("くんと"))
+            assertTrue("$withUniDic", read("カー君と").endsWith("くんと"))
             // 愛して and 楽して are verbs, not an adjective's stem: あいして, not いとして.
             assertEquals("$withUniDic", "そのときは あいしてる", read("その時は 愛してる"))
             assertEquals("$withUniDic", "らくしていきる", read("楽して生きる"))
@@ -853,6 +857,12 @@ class ReadingsTest {
             assertEquals("$withUniDic", "よるにまぎれ", read("夜ニ紛レ").reading)
             assertEquals("$withUniDic", listOf(Ruby("夜", "よる"), Ruby("ニ"), Ruby("紛", "まぎ"), Ruby("レ")), read("夜ニ紛レ").parts)
             assertEquals("$withUniDic", "こえもとどかない", read("声モ届カナイ").reading)
+            // Two such words in one line: each is read, and the second still starts where the first ended.
+            assertEquals(
+                "$withUniDic",
+                if (withUniDic) "よるにまぎれてせいもとどかない" else "よるにまぎれてごえもとどかない",
+                read("夜ニ紛レテ声モ届カナイ").reading,
+            )
             // A word in katakana after a kanji is still that word.
             assertEquals("$withUniDic", listOf(Ruby("夏", "なつ"), Ruby("アイス")), read("夏アイス").parts)
         }
@@ -883,6 +893,9 @@ class ReadingsTest {
             // 色 is a colour, not a counter, so 十 does not run into it.
             assertEquals("$withUniDic", "じゅういろ", read("十色"))
             assertEquals("$withUniDic", "はちいろ", read("八色"))
+            // A counter of more than one character, and a kana that is not a kanji, are not counters either.
+            assertEquals("$withUniDic", "じゅうかげつ", read("十ヶ月"))
+            assertEquals("$withUniDic", "じゅうこ", read("十こ"))
         }
     }
 
@@ -1138,5 +1151,29 @@ class ReadingsTest {
         // Only the kanji read as the first was.
         val fixed = Readings.corrected(read, listOf(ReadingFix(0, "君", "きみ")))[0]
         assertEquals(listOf("きみ", null, "きみ"), fixed.parts.map { it.reading })
+    }
+
+    @Test
+    fun theSameKanjiLaterKeepsTheSungReadingAndAFixMayStartWhereAnotherEnds() {
+        // One fix for a kanji covers the next one when the dictionary read them the same.
+        val twice = LineReading(listOf(Ruby("中", "ちゅう"), Ruby("と"), Ruby("中", "ちゅう")), "ちゅうとちゅう", "")
+        val both = Readings.corrected(listOf(twice), listOf(ReadingFix(0, "中", "じゅう")))[0]
+        assertEquals(listOf("じゅう", null, "じゅう"), both.parts.map { it.reading })
+        // Listed second, the earlier kanji still gets its reading: the two fixes only touch.
+        val whole = LineReading(listOf(Ruby("身体中", "しんたいちゅう"), Ruby("が")), "しんたいちゅうが", "")
+        val reversed = Readings.corrected(listOf(whole), listOf(ReadingFix(0, "中", "じゅう"), ReadingFix(0, "身体", "からだ")))[0]
+        assertEquals(listOf(Ruby("身体", "からだ"), Ruby("中", "じゅう"), Ruby("が")), reversed.parts)
+        // The kanji are not the first part. The part after が is still split.
+        val tail = LineReading(listOf(Ruby("が"), Ruby("身体中", "しんたいちゅう")), "がしんたいちゅう", "")
+        val later = Readings.corrected(listOf(tail), listOf(ReadingFix(0, "身体", "からだ"), ReadingFix(0, "中", "じゅう")))[0]
+        assertEquals(listOf(Ruby("が"), Ruby("身体", "からだ"), Ruby("中", "じゅう")), later.parts)
+        // A sung reading may be the first hiragana, the last, or the mark that draws one out.
+        fun sung(reading: String) = Readings.corrected(
+            listOf(LineReading(listOf(Ruby("中", "ちゅう")), "ちゅう", "")),
+            listOf(ReadingFix(0, "中", reading)),
+        )[0]
+        assertEquals(listOf(Ruby("中", "ぁ")), sung("ぁ").parts)
+        assertEquals(listOf(Ruby("中", "ゟ")), sung("ゟ").parts)
+        assertEquals(listOf(Ruby("中", "ー")), sung("ー").parts)
     }
 }
