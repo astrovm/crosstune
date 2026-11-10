@@ -1107,6 +1107,6 @@ internal fun MilkdropVisuals(play: VisualsPlay, modifier: Modifier = Modifier) {
 }
 
 /** A system property, set with adb shell setprop; null when it can't be read. */
-private fun systemProperty(name: String): String? = runCatching {
+internal fun systemProperty(name: String): String? = runCatching {
     Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as String
 }.getOrNull()

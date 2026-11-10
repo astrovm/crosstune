@@ -15,6 +15,7 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutManager
 import android.Manifest
@@ -145,7 +146,11 @@ class MainActivity : ComponentActivity() {
                     mayCalibrate = { checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED },
                     singing = singingFactory(applicationContext, client),
                     reminders = remindersFactory(applicationContext),
-                    reports = ReportSender(client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(), lookupDispatcher),
+                    reports = ReportSender(
+                        client, packageManager.getPackageInfo(packageName, 0).versionName.orEmpty(), lookupDispatcher,
+                        ReportSender.urlFor(applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0, systemProperty("debug.crosstune.report_url"))
+                    ),
+                    reportPaceMs = reportPaceMs,
                     microphoneAccess = { microphoneAccess(applicationContext) },
                     phone = phoneFactory(applicationContext),
                     // The words of the songs shown lately, so they show at once after the app's closed too.
@@ -472,6 +477,10 @@ class MainActivity : ComponentActivity() {
         @VisibleForTesting
         internal var lyricsBusyPauseMs: Long = LYRICS_BUSY_PAUSE_MS
 
+        /** How long reports owed wait between each other; tests don't wait. */
+        @VisibleForTesting
+        internal var reportPaceMs: Long = MainViewModel.REPORT_PACE_MS
+
         /** How long listening along waits between songs heard; tests don't wait. */
         @VisibleForTesting
         internal var listenAlongPauseMs: Long = MainViewModel.LISTEN_ALONG_PAUSE_MS
@@ -694,6 +703,7 @@ class MainActivity : ComponentActivity() {
         onSendReport = viewModel::sendReport,
         onCloseReport = viewModel::closeReport,
         onAllowAutoReports = viewModel::allowAutoReports,
+        onCloseAutoReportOffer = viewModel::closeAutoReportOffer,
         onFetchSingingModel = viewModel::fetchSingingModel,
         onCloseSingingModel = viewModel::closeSingingModel,
         onReadingsChange = viewModel::setReadings,

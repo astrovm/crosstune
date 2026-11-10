@@ -314,13 +314,15 @@
     <string name="report_sent">Verstuurd. Bedankt!</string>
     <string name="report_failed">Versturen mislukt. Controleer je verbinding en probeer het opnieuw.</string>
     <string name="auto_report_offer">Problemen zoals dit automatisch melden?</string>
+    <string name="auto_report_offer_words_off">De tekst van dit nummer liep niet gelijk. Zulke gevallen automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>
-    <string name="auto_report_no">Nee, bedankt</string>
+    <string name="auto_report_not_now">Nu niet</string>
     <string name="singing_model_offer">Om de songtekst op de zang af te stemmen is een download van 32 MB nodig.</string>
     <string name="singing_model_failed">De download van 32 MB is niet afgemaakt.</string>
     <string name="singing_model_download">Downloaden</string>
     <string name="singing_model_close">Niet nu</string>
     <string name="setting_auto_report">Problemen met nummers automatisch melden</string>
+    <string name="setting_auto_report_hint">Stuurt ook teksten die je eerder met de hand op tijd zette.</string>
     <string name="lyrics_romanized">In Latijnse letters</string>
     <string name="lyrics_romaji_typed">Romaji zoals je het typt</string>
     <string name="lyrics_katakana_as_hiragana">Katakana als hiragana</string>

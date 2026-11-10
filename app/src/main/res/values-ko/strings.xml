@@ -314,13 +314,15 @@
     <string name="report_sent">보냈어요. 감사합니다!</string>
     <string name="report_failed">보내지 못했어요. 연결을 확인하고 다시 시도하세요.</string>
     <string name="auto_report_offer">이런 문제를 자동으로 신고할까요?</string>
+    <string name="auto_report_offer_words_off">이 노래의 가사가 어긋나 있었어요. 이런 경우를 자동으로 신고할까요?</string>
     <string name="auto_report_yes">예</string>
-    <string name="auto_report_no">괜찮아요</string>
+    <string name="auto_report_not_now">나중에</string>
     <string name="singing_model_offer">가사를 노래에 맞추려면 32MB를 내려받아야 해요.</string>
     <string name="singing_model_failed">32MB 다운로드가 끝나지 않았어요.</string>
     <string name="singing_model_download">다운로드</string>
     <string name="singing_model_close">나중에</string>
     <string name="setting_auto_report">노래 문제 자동 신고</string>
+    <string name="setting_auto_report_hint">이전에 직접 타이밍을 맞춘 가사도 함께 보내요.</string>
     <string name="lyrics_romanized">라틴 문자로</string>
     <string name="lyrics_romaji_typed">입력하는 대로 로마자</string>
     <string name="lyrics_katakana_as_hiragana">가타카나를 히라가나로</string>

@@ -314,13 +314,15 @@
     <string name="report_sent">Отправлено. Спасибо!</string>
     <string name="report_failed">Не удалось отправить. Проверьте подключение и попробуйте снова.</string>
     <string name="auto_report_offer">Сообщать о таких проблемах автоматически?</string>
+    <string name="auto_report_offer_words_off">Текст этой песни не совпадал по времени. Сообщать о таких случаях автоматически?</string>
     <string name="auto_report_yes">Да</string>
-    <string name="auto_report_no">Нет, спасибо</string>
+    <string name="auto_report_not_now">Не сейчас</string>
     <string name="singing_model_offer">Чтобы подстроить текст под пение, нужно скачать 32 МБ.</string>
     <string name="singing_model_failed">Загрузка 32 МБ не завершилась.</string>
     <string name="singing_model_download">Скачать</string>
     <string name="singing_model_close">Не сейчас</string>
     <string name="setting_auto_report">Автоматически сообщать о проблемах с песнями</string>
+    <string name="setting_auto_report_hint">Также отправляет тексты, которые вы раньше вручную выставили по времени.</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_katakana_as_hiragana">Катакана хираганой</string>
