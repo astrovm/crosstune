@@ -1765,6 +1765,7 @@ private const val NUDGE_MS = 500L
  * A strip over the words while they're put in time: tap the line being sung, as often as it takes.
  * Reset puts them back as they were found, once any line was moved.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Unit) {
     Surface(
@@ -1773,14 +1774,19 @@ private fun SyncStrip(synced: Boolean, actions: ScreenActions, onDone: () -> Uni
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-            Text(stringResource(R.string.lyrics_sync_hint), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = { actions.onNudgeSync(-NUDGE_MS) }) {
-                AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_earlier), modifier = Modifier.rotate(180f))
+        // In big type, the hint goes above its tools: squeezed beside them, it went down a letter a line, over the words.
+        val stacked = LocalDensity.current.fontScale > 1.3f
+        FlowRow(verticalArrangement = Arrangement.Center, modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Text(stringResource(R.string.lyrics_sync_hint), style = MaterialTheme.typography.bodyMedium,
+                modifier = (if (stacked) Modifier.fillMaxWidth() else Modifier.weight(1f)).align(Alignment.CenterVertically))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { actions.onNudgeSync(-NUDGE_MS) }) {
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_earlier), modifier = Modifier.rotate(180f))
+                }
+                IconButton(onClick = { actions.onNudgeSync(NUDGE_MS) }) { AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_later)) }
+                if (synced) TextButton(onClick = actions.onResetSync) { Text(stringResource(R.string.lyrics_sync_reset)) }
+                IconButton(onClick = onDone) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.lyrics_sync_done)) }
             }
-            IconButton(onClick = { actions.onNudgeSync(NUDGE_MS) }) { AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.lyrics_sync_later)) }
-            if (synced) TextButton(onClick = actions.onResetSync) { Text(stringResource(R.string.lyrics_sync_reset)) }
-            IconButton(onClick = onDone) { AppIcon(R.drawable.ic_check, contentDescription = stringResource(R.string.lyrics_sync_done)) }
         }
     }
 }

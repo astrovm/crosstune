@@ -722,6 +722,35 @@ class LyricsToolsTest {
     }
 
     @Test
+    fun puttingTheWordsInTimeInGermanOverTheBiggestFontKeepsItsHintReadableAndSmall() {
+        phone = Phone.OTHER
+        org.robolectric.RuntimeEnvironment.setQualifiers("+de-w411dp-h914dp")
+        org.robolectric.RuntimeEnvironment.setFontScale(2f)
+        try {
+            openLyrics()
+            touch()
+            composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_sync)))[0].performClick()
+            // Once a line was moved, Reset joins its tools, the widest they get.
+            composeRule.runOnIdle { model().nudgeSync(500) }
+            composeRule.waitForIdle()
+            val root = composeRule.onRoot().getUnclippedBoundsInRoot()
+            val hint = composeRule.onAllNodes(hasText(string(R.string.lyrics_sync_hint)))[0].getUnclippedBoundsInRoot()
+            val reset = composeRule.onAllNodes(hasText(string(R.string.lyrics_sync_reset)))[0].getUnclippedBoundsInRoot()
+            // Squeezed beside its tools, the hint went down a letter a line and over every word on the screen.
+            assertTrue("$hint is too narrow to read", hint.right - hint.left >= (root.right - root.left) / 2)
+            assertTrue("$hint takes too much of $root", hint.bottom - hint.top <= (root.bottom - root.top) / 4)
+            assertTrue("$reset is beside $hint, not under it", reset.top >= hint.bottom)
+            // At the largest type that keeps it beside its tools, it still reads.
+            org.robolectric.RuntimeEnvironment.setFontScale(1.3f)
+            composeRule.waitForIdle()
+            val beside = composeRule.onAllNodes(hasText(string(R.string.lyrics_sync_hint)))[0].getUnclippedBoundsInRoot()
+            assertTrue("$beside is too narrow to read", beside.right - beside.left >= (root.right - root.left) / 3)
+        } finally {
+            org.robolectric.RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
     fun onATvTheOfferTakesNoFocusAndAnsweringLeavesTheRemoteOnTheBar() {
         openLyrics()
         waitUntil { onTheBar() }
