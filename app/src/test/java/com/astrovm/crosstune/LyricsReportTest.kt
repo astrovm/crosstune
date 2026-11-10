@@ -584,4 +584,55 @@ class LyricsReportTest {
     private companion object {
         const val TIMEOUT_MS = 10_000L
     }
+
+    @Test
+    fun aWrongReadingIsSentWithOnlyTheSongTheLineTheWordAndHowItRead() {
+        // Sent only when the user taps Send: whatever they said about reports sent by themselves.
+        prefs().edit().putBoolean("auto_reports", false).commit()
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空\n[00:10.00] 星の海"}]""")
+        openLyrics { model().uiState.learning.lines.isNotEmpty() }
+        val word = Readings.words("星の海", Script.JAPANESE).first()
+        composeRule.runOnIdle { model().reportReading(word, 1, " ほし ") }
+        waitUntil { model().uiState.report == ReportStatus.SENT }
+        val sent = sentReport()
+        assertEquals(listOf("android", "problem", "reading", "song", "version"), sent.keys().asSequence().sorted().toList())
+        assertEquals("wrong_reading", sent.getString("problem"))
+        assertEquals("""{"title":"Demo","artist":"Band","source":"lrclib"}""", sent.getJSONObject("song").toString())
+        val reading = sent.getJSONObject("reading")
+        assertEquals("星の海", reading.getString("line"))
+        assertEquals("星", reading.getString("word"))
+        assertEquals("ほし / hoshi", reading.getString("shown"))
+        assertEquals("ipadic", reading.getString("reader"))
+        assertEquals("japanese", reading.getString("language"))
+        assertEquals("ほし", reading.getString("right"))
+    }
+
+    @Test
+    fun aWrongReadingThatDoesntGetThereSaysSo() {
+        reportsDown = true
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
+        openLyrics { model().uiState.learning.lines.isNotEmpty() }
+        composeRule.runOnIdle { model().reportReading(Word("花", "か", "ka"), 0, "") }
+        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        assertFalse(sentReport().getJSONObject("reading").has("right"))
+    }
+
+    @Test
+    fun wordsInLatinLettersHaveNoReadingToSend() {
+        openLyrics()
+        composeRule.runOnIdle { model().reportReading(Word("Demo", "demo"), 0, "") }
+        composeRule.waitForIdle()
+        assertTrue(sentReports().isEmpty())
+        assertNull(model().uiState.report)
+    }
+
+    @Test
+    fun aLineThatIsntThereHasNoReadingToSend() {
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
+        openLyrics { model().uiState.learning.lines.isNotEmpty() }
+        composeRule.runOnIdle { model().reportReading(Word("花", "か", "ka"), 5, "") }
+        composeRule.waitForIdle()
+        assertTrue(sentReports().isEmpty())
+        assertNull(model().uiState.report)
+    }
 }

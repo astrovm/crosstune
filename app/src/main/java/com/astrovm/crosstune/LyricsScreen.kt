@@ -2268,7 +2268,12 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
     val learning = state.learning
     val reading = learning.lines.getOrNull(index)
     // Japanese loads its dictionary the first time, a moment better spent away from the screen.
-    val words by produceState(emptyList<Word>(), text, learning.script) { value = withContext(Dispatchers.Default) { Readings.words(text, learning.script) } }
+    val read by produceState(emptyList<Word>(), text, learning.script) { value = withContext(Dispatchers.Default) { Readings.words(text, learning.script) } }
+    // Each word read as it shows over the line, once UtaTen or ChatGPT put a reading right.
+    val words = remember(read, reading) { reading?.let { Readings.asShown(read, it.parts) } ?: read }
+    // A word whose reading is being marked wrong, and the flag to give the remote back to.
+    var markingWrong by remember { mutableStateOf<Word?>(null) }
+    val flag = remember { FocusRequester() }
     val saved = state.savedLines.any { it.text == text && it.title == state.lyricsFor?.title && it.artist == state.lyricsFor.artist }
     // Open all the way, so one back closes it rather than lowering it halfway first.
     ScreenSheet(onDismiss) {
@@ -2291,7 +2296,10 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
             AnimatedContent(targetState = state.word, transitionSpec = { fade() }, label = "word") { meaning ->
                 if (meaning != null) {
                     val examples = learning.examples?.takeIf { it.word == meaning.word && it.index == index }?.asking
-                    WordCard(meaning, examples, canFindExamples = signedIn, romajiTyped = learning.romajiTyped) { actions.onFindExamples(index) }
+                    WordCard(
+                        meaning, examples, canFindExamples = signedIn, romajiTyped = learning.romajiTyped,
+                        onWrongReading = { markingWrong = meaning.word }, flag = flag
+                    ) { actions.onFindExamples(index) }
                 }
             }
             val explanation = learning.explanation?.takeIf { it.index == index }
@@ -2322,6 +2330,12 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                 if (explanation.done) LineQuestions(index, learning, actions)
             }
         }
+    }
+    markingWrong?.let { word ->
+        WrongReadingDialog(word, word.shown(learning.romajiTyped), state.report, onSend = { right -> actions.onReportReading(word, index, right) }, opener = flag, onDismiss = {
+            markingWrong = null
+            actions.onCloseReport()
+        })
     }
 }
 
@@ -2406,16 +2420,31 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
  * the same way, once asked for.
  */
 @Composable
-internal fun WordCard(meaning: WordMeaning, examples: Asking<List<Example>>?, canFindExamples: Boolean, romajiTyped: Boolean = false, onFindExamples: () -> Unit) {
+internal fun WordCard(
+    meaning: WordMeaning,
+    examples: Asking<List<Example>>?,
+    canFindExamples: Boolean,
+    romajiTyped: Boolean = false,
+    onWrongReading: (() -> Unit)? = null,
+    flag: FocusRequester? = null,
+    onFindExamples: () -> Unit
+) {
     val word = meaning.word
+    val shown = word.shown(romajiTyped)
     Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // What doesn't fit goes on the next line, rather than squeezed a letter a line.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(word.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
                 // Romaji as said and as typed, where they're spelled otherwise: sensee and sensei.
-                (listOfNotNull(word.reading) + bothRomaji(word.romanized, word.typed, romajiTyped)).distinct().forEach {
+                shown.forEach {
                     Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.alignByBaseline())
+                }
+                // A reading that's wrong is marked on it, by a flag at its end.
+                if (onWrongReading != null && shown.isNotEmpty()) {
+                    IconButton(onClick = onWrongReading, modifier = Modifier.align(Alignment.CenterVertically).then(flag?.let { Modifier.focusRequester(it) } ?: Modifier)) {
+                        AppIcon(R.drawable.ic_flag, contentDescription = stringResource(R.string.reading_wrong), modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
             if (meaning.looking) {

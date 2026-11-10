@@ -78,6 +78,10 @@ class PullTest(unittest.TestCase):
         self.assertEqual(command[0][-1], f"{reports.COUNT}; {reports.READ}")
         self.assertIn("CLOUDFLARE_ACCOUNT_ID", kwargs["env"])
 
+    def test_a_pull_leaves_out_where_lines_were_moved(self):
+        self.pull(mock.Mock(returncode=0, stdout=d1_answer([{**row(1), "timing": "[]"}])))
+        self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
+
     def test_a_pull_replaces_the_last_ones_table(self):
         self.saved.write_text(json.dumps([row(1)]))
         self.pull(mock.Mock(returncode=0, stdout=d1_answer([row(1), row(2)])))
@@ -159,6 +163,13 @@ class TriageTest(unittest.TestCase):
         text = reports.triage([row(9, problem=None, comment="words are wrong")])
         self.assertIn("by hand: 1", text)
         self.assertIn("says: words are wrong", text)
+
+    def test_a_wrong_reading_shows_the_word_how_it_read_and_the_right_one(self):
+        marked = {**row(10, problem="wrong_reading"), "word": "花", "reading_shown": "か / ka", "right_reading": "はな", "reader": "ipadic+unidic", "language": "japanese", "lyric_line": "空の花"}
+        text = reports.triage([marked, {**marked, "id": 11, "right_reading": None, "reader": None, "language": None, "lyric_line": None}])
+        self.assertIn("wrong_reading: 2", text)
+        self.assertIn("    花: か / ka -> はな (ipadic+unidic, japanese)\n      in: 空の花", text)
+        self.assertTrue(text.endswith("    花: か / ka"))
 
     def test_no_reports_is_said_plainly(self):
         self.assertEqual(reports.triage([]), "0 reports")

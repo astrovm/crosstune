@@ -31,9 +31,10 @@ OUT = ROOT / "build" / "reports"
 SAVED = OUT / "reports.json"
 CHECK = OUT / "check"
 WRANGLER = ROOT / "report" / "wrangler.jsonc"
-COLUMNS = "id, at, version, android, title, artist, app, timed, synced, sung, length_ms, source, problem, comment, app_package, speed, lead_ms, early_ms, timing_log"
-# Every column but `timing`, which is long and only says where lines were moved.
-READ = f"select {COLUMNS} from reports order by id"
+# Every column, so a pull still reads the table before columns added after are in the live D1 (see report/schema.sql).
+READ = "select * from reports order by id"
+# Long, and only says where lines were moved: left out of what's saved.
+LEFT_OUT = ("timing",)
 # Asked in the same batch, so it counts the table the rows were read from.
 COUNT = "select count(*) as n from reports"
 
@@ -82,7 +83,7 @@ def pull(run=subprocess.run, sleep=time.sleep):
         token = "\nCLOUDFLARE_API_TOKEN is set here, and cf uses it instead of its login: unset it, or let it read D1." if "CLOUDFLARE_API_TOKEN" in os.environ and re.search(r"\b40[13]\b", done.stderr) else ""
         sys.exit(f"cf failed, so no reports were pulled: {done.stderr.strip()[-500:]}{token}")
     try:
-        rows = whole_table(done.stdout)
+        rows = [{key: value for key, value in row.items() if key not in LEFT_OUT} for row in whole_table(done.stdout)]
     except ValueError as error:
         sys.exit(f"cf answered, but not with the whole table, so no reports were pulled: {error}")
     OUT.mkdir(parents=True, exist_ok=True)
@@ -124,7 +125,15 @@ def triage(rows):
             apps = sorted({row["app"] for row in same if row["app"]})
             lines.append(f"  {ids}: {same[0]['title']} | {same[0]['artist']}" + (f" | {', '.join(apps)}" if apps else ""))
             lines += [f"    says: {row['comment']}" for row in same if row["comment"]]
+            lines += [wrong_reading(row) for row in same if row.get("word")]
     return "\n".join(lines)
+
+
+def wrong_reading(row):
+    """A reading marked wrong, in one line: the word, how it read, the right one when the user typed it, and what read it in which script."""
+    right = f" -> {row['right_reading']}" if row.get("right_reading") else ""
+    by = ", ".join(part for part in (row.get("reader"), row.get("language")) if part)
+    return f"    {row['word']}: {row.get('reading_shown')}{right}" + (f" ({by})" if by else "") + (f"\n      in: {row['lyric_line']}" if row.get("lyric_line") else "")
 
 
 def as_songs(rows):

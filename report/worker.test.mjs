@@ -45,8 +45,9 @@ test("a report is kept, with only what a report has", async () => {
   assert.deepEqual(e.saved[0].values, [
     "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937, "letras, timed by lrclib",
     JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late", null,
-    // An app from before reports about timing sends none of what they add.
+    // An app from before reports about timing sends none of what they add, and it's no wrong reading.
     null, null, null, null, null,
+    null, null, null, null, null, null,
   ]);
   // The address only counts against the limit.
   assert.deepEqual(e.keys, ["203.0.113.7"]);
@@ -56,7 +57,7 @@ test("a report is kept, with only what a report has", async () => {
 test("a report about the app, with no song, is kept too", async () => {
   const e = env();
   assert.equal((await worker.fetch(post({ version: "2.12.0", comment: "Hi" }), e)).status, 204);
-  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", ...Array(6).fill(null)]);
+  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", ...Array(12).fill(null)]);
 });
 
 test("anything else is turned away, and nothing kept", async () => {
@@ -142,8 +143,9 @@ test("a report about timing keeps the app followed, its speed, the lead and the 
   assert.deepEqual(e.saved[0].values.slice(12), [
     "timed_by_hand", "org.kde.kdeconnect_tp", 1, -1450, 400,
     "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000",
+    null, null, null, null, null, null,
   ]);
-  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log\) VALUES \((\?, ){17}\?\)$/);
+  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, lyric_line, word, reading_shown, reader, language, right_reading\) VALUES \((\?, ){23}\?\)$/);
 });
 
 test("what timing adds that isn't what it should be is left out, and the rest is kept", () => {
@@ -172,5 +174,56 @@ test("a report about timing the size the app bounds it to is kept", async () => 
   const lines = Array.from({ length: 20 }, () => ({ line: "y".repeat(300), timedMs: 1, heardMs: 2 }));
   const big = { ...timing, comment: "c".repeat(2000), song: { ...timing.song, log, timing: lines } };
   assert.equal((await worker.fetch(post(big), e)).status, 204);
-  assert.equal(e.saved[0].values.at(-1), log);
+  assert.equal(e.saved[0].values[17], log);
+});
+
+/** A reading marked wrong, as the app sends it: nothing but the song, the word and how it read. Made-up words. */
+const reading = {
+  version: "2.25.0",
+  android: "17 (37)",
+  problem: "wrong_reading",
+  song: { title: "Demo", artist: "Band", source: "lrclib" },
+  reading: { line: "空の花 again", word: "花", shown: "か / ka", reader: "ipadic+unidic", language: "japanese", right: " はな " },
+};
+
+test("a reading marked wrong keeps the line, the word, the reading shown, what read it, the script and the right one", async () => {
+  const e = env();
+  assert.equal((await worker.fetch(post({ ...reading, extra: "dropped" }), e)).status, 204);
+  const values = e.saved[0].values;
+  assert.deepEqual(values.slice(0, 4), ["2.25.0", "17 (37)", "Demo", "Band"]);
+  assert.equal(values[9], "lrclib");
+  assert.equal(values[12], "wrong_reading");
+  assert.deepEqual(values.slice(18), ["空の花 again", "花", "か / ka", "ipadic+unidic", "japanese", "はな"]);
+});
+
+test("a reading marked wrong needs a song, a word and the reading shown; the right one may be left out", async () => {
+  const e = env();
+  const send = (body) => worker.fetch(post(body), e).then((it) => it.status);
+  assert.equal(await send({ ...reading, song: undefined }), 400);
+  assert.equal(await send({ ...reading, reading: undefined }), 400);
+  assert.equal(await send({ ...reading, reading: ["花"] }), 400);
+  assert.equal(await send({ ...reading, reading: { ...reading.reading, word: " " } }), 400);
+  assert.equal(await send({ ...reading, reading: { ...reading.reading, shown: 3 } }), 400);
+  assert.equal(await send({ ...reading, reading: { ...reading.reading, right: undefined } }), 204);
+  assert.equal(e.saved[0].values[23], null);
+});
+
+test("what a wrong reading has that isn't what it should be is left out or cut", () => {
+  const odd = (extra) => readReport(JSON.stringify({ ...reading, reading: { ...reading.reading, ...extra } }));
+  assert.equal(odd({ reader: "ipadic; drop table" }).reader, null);
+  assert.equal(odd({ reader: "unidic" }).reader, "unidic");
+  assert.equal(odd({ reader: "ipadic+" }).reader, null);
+  assert.equal(odd({ language: "Japanese" }).language, null);
+  assert.equal(odd({ language: "x".repeat(21) }).language, "x".repeat(20));
+  assert.equal(odd({ word: "w".repeat(150) }).word.length, 100);
+  assert.equal(odd({ shown: "s".repeat(400) }).shown.length, 300);
+  assert.equal(odd({ line: "l".repeat(400) }).line.length, 300);
+  assert.equal(odd({ right: "r".repeat(150) }).right.length, 100);
+});
+
+test("a reading sent with another problem, or none, is no wrong reading", () => {
+  const other = readReport(JSON.stringify({ ...reading, problem: "no_lyrics" }));
+  assert.equal(other.problem, "no_lyrics");
+  assert.equal(other.word, null);
+  assert.equal(readReport(JSON.stringify({ ...reading, problem: undefined })).word, null);
 });

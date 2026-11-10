@@ -99,7 +99,7 @@ class SavedLinesEdgesTest {
     @Test
     fun aLineReadByHandFromFewerReadingsThanItHasKeepsTheRest() {
         val read = night.readAs(listOf("まち"))
-        assertEquals(listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), read.ruby)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.USER), Ruby("の"), Ruby("夜", "よる")), read.ruby)
         assertEquals("まちのよる", read.reading)
         assertTrue(read.readByHand)
     }
@@ -113,7 +113,7 @@ class SavedLinesEdgesTest {
     fun aLineWithoutAWholeReadingIsReadByHandFromItsPieces() {
         val bare = night.copy(reading = null, romanized = null, typed = null)
         val read = bare.readAs(listOf("まち", "よる"))
-        assertEquals(listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), read.ruby)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.USER), Ruby("の"), Ruby("夜", "よる")), read.ruby)
         assertEquals("まちのよる", read.reading)
         assertEquals("machi no yoru", read.romanized)
         assertTrue(read.readByHand)

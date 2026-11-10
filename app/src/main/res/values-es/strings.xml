@@ -313,6 +313,9 @@
     <string name="report_send">Enviar</string>
     <string name="report_sent">Enviado. ¡Gracias!</string>
     <string name="report_failed">No se pudo enviar. Revisá tu conexión y probá de nuevo.</string>
+    <string name="reading_wrong">Lectura incorrecta</string>
+    <string name="reading_right">Lectura correcta (opcional)</string>
+    <string name="reading_what_goes">Envía la palabra, la lectura que se ve, su línea, el nombre de la canción y las versiones de la app y de Android. Solo lo lee el desarrollador de Crosstune.</string>
     <string name="auto_report_offer">¿Reportar problemas como este automáticamente?</string>
     <string name="auto_report_yes">Sí</string>
     <string name="auto_report_no">No, gracias</string>

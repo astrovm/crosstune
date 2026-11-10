@@ -693,6 +693,7 @@ class MainActivity : ComponentActivity() {
         onResetSync = viewModel::resetSync,
         onSendReport = viewModel::sendReport,
         onCloseReport = viewModel::closeReport,
+        onReportReading = viewModel::reportReading,
         onAllowAutoReports = viewModel::allowAutoReports,
         onFetchSingingModel = viewModel::fetchSingingModel,
         onCloseSingingModel = viewModel::closeSingingModel,

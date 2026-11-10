@@ -130,4 +130,44 @@ class ReportTest {
         fake.handler = { throw IOException("offline") }
         assertFalse(sender.send(report))
     }
+
+    private val marked = ReadingReport(
+        "2.25.0", MusicMetadata("Made Up", "Some Band"), "lrclib", "空の花 again",
+        Word("花", "か", "ka", by = listOf(Reader.IPADIC, Reader.UNIDIC)), listOf("か", "ka"), Script.JAPANESE, right = "  はな ", android = "17 (37)"
+    )
+
+    @Test
+    fun aWrongReadingSaysOnlyTheSongTheLineTheWordHowItReadWhatReadItAndTheRightOne() {
+        val json = JSONObject(marked.json())
+        assertEquals(listOf("android", "problem", "reading", "song", "version"), json.keys().asSequence().sorted().toList())
+        assertEquals("2.25.0", json.getString("version"))
+        assertEquals("17 (37)", json.getString("android"))
+        assertEquals("wrong_reading", json.getString("problem"))
+        assertEquals("""{"title":"Made Up","artist":"Some Band","source":"lrclib"}""", json.getJSONObject("song").toString())
+        assertEquals(
+            """{"line":"空の花 again","word":"花","shown":"か \/ ka","reader":"ipadic+unidic","language":"japanese","right":"はな"}""",
+            json.getJSONObject("reading").toString()
+        )
+    }
+
+    @Test
+    fun aWrongReadingWithoutTheRightOneOrASourceLeavesThemOut() {
+        val json = JSONObject(marked.copy(source = null, right = " ", script = Script.KOREAN).json())
+        assertFalse(json.getJSONObject("song").has("source"))
+        assertFalse(json.getJSONObject("reading").has("right"))
+        assertEquals("korean", json.getJSONObject("reading").getString("language"))
+    }
+
+    @Test
+    fun aWrongReadingIsSentToTheSameBox() = runBlocking {
+        val fake = FakeSpotify()
+        var code = 204
+        fake.handler = { request -> FakeSpotify.html(request, "", code = code) }
+        val sender = ReportSender(fake.client(), "2.25.0", Dispatchers.Unconfined)
+        assertTrue(sender.send(marked))
+        assertEquals(listOf(ReportSender.URL), fake.requestedUrls)
+        assertEquals(marked.json(), fake.requestBodies.single())
+        code = 503
+        assertFalse(sender.send(marked))
+    }
 }
