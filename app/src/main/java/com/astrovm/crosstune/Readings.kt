@@ -68,6 +68,13 @@ internal data class ReadingFix(val line: Int, val kanji: String, val reading: St
 /** Readings of lyrics in Japanese, Chinese and Korean, and Latin letters for other scripts, all worked out on the phone. */
 internal object Readings {
 
+    /**
+     * Bumped when words are read otherwise than before, so the readings kept with a song's words are
+     * worked out again: 2 for the readings a song is sung with, which were asked for in a way that found none,
+     * and the dictionary's common misreadings, as 君 after a pause.
+     */
+    const val VERSION = 2
+
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
         val text = lines.joinToString("")
