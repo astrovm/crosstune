@@ -284,6 +284,8 @@ internal data class ScreenActions(
     val onReportReading: (word: Word, index: Int, right: String) -> Unit = { _, _, _ -> },
     /** Problems Crosstune finds with songs reported by itself from now on, or not. */
     val onAllowAutoReports: (Boolean) -> Unit = {},
+    /** The offer to do so closed for now, not as a no. */
+    val onCloseAutoReportOffer: () -> Unit = {},
     val onFetchSingingModel: () -> Unit = {},
     val onCloseSingingModel: () -> Unit = {},
     val onReadingsChange: (Boolean) -> Unit = {},

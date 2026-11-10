@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -15,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 class AutoReportsTest {
 
     private val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("auto-reports-test", Context.MODE_PRIVATE).also { it.edit().clear().commit() }
-    private val reports = AutoReports(preferences)
+    private val reports = AutoReports(preferences, session = 1)
 
     private fun song(title: String, artist: String = "Band") = MusicMetadata(title, artist)
 
@@ -54,5 +56,122 @@ class AutoReportsTest {
     fun whatsKeptBrokenIsForgotten() {
         preferences.edit().putString("auto_reports_sent", "not a list").commit()
         assertFalse(reports.reported(song("Demo"), SongProblem.NO_LYRICS))
+    }
+
+    @Test
+    fun theOfferIsMadeOnceAnAppSessionAndAgainOnceTheAppStartsAnew() {
+        assertTrue(reports.mayAsk())
+        reports.asked()
+        assertFalse(reports.mayAsk())
+        assertFalse(AutoReports(preferences, session = 1).mayAsk())
+        assertTrue(AutoReports(preferences, session = 2).mayAsk())
+    }
+
+    @Test
+    fun theOfferClosedIsNotANoUntilTheThirdTime() {
+        reports.closed()
+        reports.closed()
+        assertNull(reports.allowed)
+        reports.closed()
+        assertEquals(false, AutoReports(preferences).allowed)
+        // The switch in Settings still wins, and turned on, it isn't turned off by what was counted.
+        reports.allowed = true
+        assertEquals(true, AutoReports(preferences).allowed)
+    }
+
+    @Test
+    fun aReportOwedIsKeptUntilItGoesAndThenForgotten() {
+        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+        reports.owe(song("Demo"), """{"fake":1}""")
+        reports.owe(song("Demo"), """{"fake":2}""")
+        assertEquals(listOf("""{"fake":2}"""), AutoReports(preferences).owed().map { it.json })
+        reports.paid(reports.owed().single())
+        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+        assertTrue(reports.reported(song("Demo"), SongProblem.TIMED_BY_HAND))
+    }
+
+    @Test
+    fun aReportThatWentAnotherWayIsNotOwedAnyMore() {
+        reports.owe(song("Demo"), "{}")
+        reports.remember(song("Demo"), SongProblem.TIMED_BY_HAND)
+        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+        // Gone from what's kept too, not only hidden.
+        assertEquals("[]", preferences.getString("auto_reports_owed", null))
+    }
+
+    @Test
+    fun reportsOwedForSeveralSongsAreKeptAndOneIsPutBackAlone() {
+        reports.owe(song("One"), "1")
+        reports.owe(song("Two"), "2")
+        assertEquals(listOf("1", "2"), reports.owed().map { it.json })
+        reports.owedNothing(song("one"))
+        assertEquals(listOf("2"), reports.owed().map { it.json })
+        reports.owedNothing(song("two"))
+        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+    }
+
+    @Test
+    fun onlyTheLatestReportsOwedAreKept() {
+        assertEquals(20, AutoReports.MAX_OWED)
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
+        assertEquals((1..AutoReports.MAX_OWED).map { "$it" }, reports.owed().map { it.json })
+    }
+
+    @Test
+    fun reportsOwedThatWereKeptBrokenAreForgotten() {
+        listOf("not a list", "[{\"key\":1}]", "[3]").forEach {
+            preferences.edit().putString("auto_reports_owed", it).commit()
+            assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+        }
+    }
+
+    @Test
+    fun aReportOwedIsStillOwedOnlyAsItWasKept() {
+        reports.owe(song("Demo"), "1")
+        val first = reports.owed().single()
+        assertTrue(reports.owes(first))
+        // Put in time again: the newer goes, not the one read before.
+        reports.owe(song("Demo"), "2")
+        assertFalse(reports.owes(first))
+        reports.paid(reports.owed().single())
+        assertFalse(reports.owes(first))
+    }
+
+    @Test
+    fun everySongKeptFromAnEarlierVersionIsOwedBesideTheLatestPutInTimeByHand() {
+        val songs = JSONObject()
+        repeat(30) { songs.put("song$it\u0000band", JSONObject().put("words", "1").put("points", JSONArray().put(JSONArray().put(0).put(100)))) }
+        preferences.edit().putString("lyrics_sync", songs.toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
+        val owed = reports.owed()
+        assertEquals(30, owed.count { it.earlier })
+        assertEquals(AutoReports.MAX_OWED, owed.count { !it.earlier })
+        // Read once: what's timed after isn't taken for it.
+        reports.paid(owed.first { it.earlier })
+        reports.keepEarlier("2.24.0", "16 (36)")
+        assertEquals(29, reports.owed().count { it.earlier })
+    }
+
+    @Test
+    fun aSongKeptBeforeWithMoreLinesThanTheBoxTakesSendsTheFirstOnes() {
+        val points = JSONArray().apply { repeat(301) { put(JSONArray().put(it * 1000L).put(it * 1000L + 5)) } }
+        preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band\u0000123", JSONObject().put("points", points)).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        val song = JSONObject(reports.owed().single().json).getJSONObject("song")
+        assertEquals(300, song.getJSONArray("timing").length())
+        // A key with a length and no recording.
+        assertEquals(123L, song.getLong("lengthMs"))
+        assertFalse(song.has("recording"))
+    }
+
+    @Test
+    fun aSongKeptBeforeWithAnEmptyLastPartSendsNoLengthNorRecording() {
+        val point = JSONArray().put(JSONArray().put(0).put(100))
+        preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band\u0000", JSONObject().put("points", point)).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        val song = JSONObject(reports.owed().single().json).getJSONObject("song")
+        assertFalse(song.has("lengthMs"))
+        assertFalse(song.has("recording"))
     }
 }

@@ -317,13 +317,15 @@
     <string name="reading_right">Leitura certa (opcional)</string>
     <string name="reading_what_goes">Envia a palavra, a leitura mostrada, a linha dela, o nome da música e as versões do app e do Android. Só o desenvolvedor do Crosstune lê.</string>
     <string name="auto_report_offer">Relatar problemas como este automaticamente?</string>
+    <string name="auto_report_offer_words_off">A letra desta música estava fora do tempo. Relatar casos assim automaticamente?</string>
     <string name="auto_report_yes">Sim</string>
-    <string name="auto_report_no">Não, obrigado</string>
+    <string name="auto_report_not_now">Agora não</string>
     <string name="singing_model_offer">Para alinhar a letra com o canto, é preciso baixar 32 MB.</string>
     <string name="singing_model_failed">O download de 32 MB não terminou.</string>
     <string name="singing_model_download">Baixar</string>
     <string name="singing_model_close">Agora não</string>
     <string name="setting_auto_report">Relatar problemas de músicas automaticamente</string>
+    <string name="setting_auto_report_hint">Também envia letras que você ajustou à mão antes.</string>
     <string name="lyrics_romanized">Em letras latinas</string>
     <string name="lyrics_romaji_typed">Romaji como se digita</string>
     <string name="lyrics_katakana_as_hiragana">Katakana em hiragana</string>
@@ -372,6 +374,7 @@
     <string name="lyrics_line_saved">Salva</string>
     <string name="lyrics_word_failed">Não foi possível achar o significado agora.</string>
     <string name="lyrics_word_unknown">Nenhuma entrada de dicionário para esta palavra.</string>
+    <string name="lyrics_word_modern">Grafia antiga de %1$s</string>
     <string name="lyrics_words_to_know_failed">Não foi possível achar as palavras para saber.</string>
     <string name="lyrics_save_word">Salvar %1$s</string>
     <string name="lyrics_word_saved">%1$s salva</string>

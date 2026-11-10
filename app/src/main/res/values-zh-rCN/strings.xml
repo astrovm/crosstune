@@ -317,13 +317,15 @@
     <string name="reading_right">正确读音（可选）</string>
     <string name="reading_what_goes">会发送这个词、显示的读音、所在的行、歌名，以及应用和 Android 版本。只有 Crosstune 的开发者会看到。</string>
     <string name="auto_report_offer">自动报告这类问题？</string>
+    <string name="auto_report_offer_words_off">这首歌的歌词不同步。自动报告这类问题？</string>
     <string name="auto_report_yes">好</string>
-    <string name="auto_report_no">不用了</string>
+    <string name="auto_report_not_now">暂时不用</string>
     <string name="singing_model_offer">让歌词对上歌声，需要下载 32 MB。</string>
     <string name="singing_model_failed">32 MB 的下载没有完成。</string>
     <string name="singing_model_download">下载</string>
     <string name="singing_model_close">暂不</string>
     <string name="setting_auto_report">自动报告歌曲问题</string>
+    <string name="setting_auto_report_hint">也会发送你之前手动对时的歌词。</string>
     <string name="lyrics_romanized">拉丁字母</string>
     <string name="lyrics_romaji_typed">按输入法拼写罗马字</string>
     <string name="lyrics_katakana_as_hiragana">片假名显示为平假名</string>
@@ -372,6 +374,7 @@
     <string name="lyrics_line_saved">已保存</string>
     <string name="lyrics_word_failed">暂时找不到它的意思。</string>
     <string name="lyrics_word_unknown">词典中没有这个词。</string>
+    <string name="lyrics_word_modern">%1$s的旧写法</string>
     <string name="lyrics_words_to_know_failed">找不到要学的词。</string>
     <string name="lyrics_save_word">保存%1$s</string>
     <string name="lyrics_word_saved">已保存%1$s</string>

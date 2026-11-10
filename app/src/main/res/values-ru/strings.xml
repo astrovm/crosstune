@@ -317,13 +317,15 @@
     <string name="reading_right">Правильное чтение (необязательно)</string>
     <string name="reading_what_goes">Отправляет слово, показанное чтение, его строку, название песни и версии приложения и Android. Читает только разработчик Crosstune.</string>
     <string name="auto_report_offer">Сообщать о таких проблемах автоматически?</string>
+    <string name="auto_report_offer_words_off">Текст этой песни не совпадал по времени. Сообщать о таких случаях автоматически?</string>
     <string name="auto_report_yes">Да</string>
-    <string name="auto_report_no">Нет, спасибо</string>
+    <string name="auto_report_not_now">Не сейчас</string>
     <string name="singing_model_offer">Чтобы подстроить текст под пение, нужно скачать 32 МБ.</string>
     <string name="singing_model_failed">Загрузка 32 МБ не завершилась.</string>
     <string name="singing_model_download">Скачать</string>
     <string name="singing_model_close">Не сейчас</string>
     <string name="setting_auto_report">Автоматически сообщать о проблемах с песнями</string>
+    <string name="setting_auto_report_hint">Также отправляет тексты, которые вы раньше вручную выставили по времени.</string>
     <string name="lyrics_romanized">Латиницей</string>
     <string name="lyrics_romaji_typed">Ромадзи как при наборе</string>
     <string name="lyrics_katakana_as_hiragana">Катакана хираганой</string>
@@ -372,6 +374,7 @@
     <string name="lyrics_line_saved">Сохранено</string>
     <string name="lyrics_word_failed">Сейчас не удалось найти значение.</string>
     <string name="lyrics_word_unknown">Для этого слова нет словарной статьи.</string>
+    <string name="lyrics_word_modern">Старое написание слова %1$s</string>
     <string name="lyrics_words_to_know_failed">Не удалось найти слова.</string>
     <string name="lyrics_save_word">Сохранить %1$s</string>
     <string name="lyrics_word_saved">%1$s сохранено</string>

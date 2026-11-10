@@ -78,6 +78,7 @@ class LyricsReportTest {
         MainActivity.milkdropFactory = { NoMilkdrop }
         MainActivity.soundTapFactory = { null }
         MainActivity.lyricsBusyPauseMs = 0
+        MainActivity.reportPaceMs = 0
         MainActivity.lookAheadLyrics = false
         prefs().edit().clear().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false).putBoolean("play_right_away", false).putBoolean("visuals", false).commit()
         File(app.cacheDir, "lookups.json").delete()
@@ -107,6 +108,7 @@ class LyricsReportTest {
         MainActivity.milkdropFactory = ::NativeMilkdrop
         MainActivity.soundTapFactory = MainActivity.phoneSound::open
         MainActivity.lyricsBusyPauseMs = LYRICS_BUSY_PAUSE_MS
+        MainActivity.reportPaceMs = MainViewModel.REPORT_PACE_MS
         MainActivity.lookAheadLyrics = true
     }
 
@@ -162,7 +164,31 @@ class LyricsReportTest {
 
     private val offer get() = string(R.string.auto_report_offer)
 
+    /** How many timing reports are owed, kept to be sent once the words are left, or at the next start. */
+    private fun owed() = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]")).length()
+
+    /** The offer's Yes, once it takes taps, as it takes none as it comes in. */
+    private fun yes() {
+        composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+        click(string(R.string.auto_report_yes))
+    }
+
+    /** The offer's close, once it takes taps. */
+    private fun notNow() {
+        composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
+        click(string(R.string.auto_report_not_now))
+    }
+
+    /** What the box for reports was sent, as the app that is started anew finds it. */
+    private fun startedAnew() {
+        controller!!.destroyAndSettle()
+        // Another process, which isn't the one that asked.
+        prefs().edit().putLong("auto_reports_asked_in", -7L).commit()
+    }
+
     /** What the last report sent said. */
+    private val LOCAL_BOX = "http://127.0.0.1:8787/reports"
+
     private fun sentReport() = JSONObject(fake.requestBodies[fake.requestedUrls.indexOfLast { it == ReportSender.URL }])
 
     @Test
@@ -189,6 +215,29 @@ class LyricsReportTest {
         val opened = generateSequence { shadowOf(app).nextStartedActivity }.map { it.action }.toList()
         assertFalse(opened.any { it == Intent.ACTION_SENDTO || it == Intent.ACTION_VIEW })
         assertNull(model().uiState.report)
+    }
+
+    @Test
+    fun aTestBuildSendsToTheLocalAddressItsToldAndTheAppPeopleInstallNever() {
+        val flags = app.applicationInfo.flags
+        org.robolectric.shadows.ShadowSystemProperties.override("debug.crosstune.report_url", LOCAL_BOX)
+        try {
+            app.applicationInfo.flags = flags or android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+            report()
+            click(string(R.string.report_send))
+            waitUntil { !shown(string(R.string.report_what_goes)) }
+            assertEquals(listOf(LOCAL_BOX), fake.requestedUrls.filter { "/reports" in it })
+            controller?.destroyAndSettle()
+            controller = null
+            app.applicationInfo.flags = flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE.inv()
+            report()
+            click(string(R.string.report_send))
+            waitUntil { !shown(string(R.string.report_what_goes)) }
+            assertEquals(listOf(LOCAL_BOX, ReportSender.URL), fake.requestedUrls.filter { "/reports" in it })
+        } finally {
+            app.applicationInfo.flags = flags
+            org.robolectric.shadows.ShadowSystemProperties.override("debug.crosstune.report_url", "")
+        }
     }
 
     @Test
@@ -231,7 +280,7 @@ class LyricsReportTest {
         waitUntil { shown(offer) }
         // Nothing goes before the user says so.
         assertEquals(emptyList<String>(), problems())
-        click(string(R.string.auto_report_yes))
+        yes()
         waitUntil { problems() == listOf("no_lyrics") }
         assertFalse(shown(offer))
         val song = sentReports().single()
@@ -458,12 +507,11 @@ class LyricsReportTest {
     }
 
     @Test
-    fun saidNoItNeverAsksAgainNorSends() {
+    fun saidNoInSettingsItNeverAsksAgainNorSends() {
+        prefs().edit().putBoolean("auto_reports", false).commit()
         lyricsAre("[]")
         openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_none))).fetchSemanticsNodes().isNotEmpty() }
-        waitUntil { shown(offer) }
-        composeRule.onNode(hasContentDescription(string(R.string.auto_report_no))).performClick()
-        composeRule.waitForIdle()
+        settled()
         assertFalse(shown(offer))
         assertEquals(false, model().uiState.autoReports)
         // Another song with a problem, words with no timing this time.
@@ -517,7 +565,7 @@ class LyricsReportTest {
         openLyrics()
         composeRule.runOnIdle { model().nudgeSync(500) }
         waitUntil { shown(offer) }
-        click(string(R.string.auto_report_yes))
+        yes()
         // Not yet: they may be put in time some more.
         assertEquals(emptyList<String>(), problems())
         composeRule.runOnIdle { model().nudgeSync(500) }
@@ -557,6 +605,443 @@ class LyricsReportTest {
     }
 
     @Test
+    fun severalProblemsInOneSongAreOfferedOnceAndYesSendsEveryOneFound() {
+        prefs().edit().putBoolean("lyrics_chords", true).commit()
+        openLyrics()
+        waitUntil { shown(offer) }
+        settled()
+        // Chords weren't found; then the words are put in time by hand, which is another problem with the same song.
+        waitUntil { model().uiState.chords.loading.not() }
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.waitForIdle()
+        assertEquals(1, composeRule.onAllNodes(hasText(offer)).fetchSemanticsNodes().size)
+        yes()
+        // The chords' one goes now; the timing one once the words are left, so the user can go on with them.
+        waitUntil { problems() == listOf("no_chords") }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("no_chords", "timed_by_hand") }
+    }
+
+    @Test
+    fun theOfferClosedIsNotANoAndIsNotMadeAgainInTheSameSessionButIsInTheNext() {
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        waitUntil { shown(offer) }
+        notNow()
+        assertFalse(shown(offer))
+        // Not a no: nothing saved as the answer, nothing sent, the switch in Settings as it was.
+        assertFalse(prefs().contains("auto_reports"))
+        assertNull(model().uiState.autoReports)
+        assertEquals(1, prefs().getInt("auto_reports_closes", 0))
+        assertEquals(emptyList<String>(), problems())
+        // Another problem with the same song, in the same session: not asked again.
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.waitForIdle()
+        assertFalse(shown(offer))
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        // The app started anew asks again.
+        startedAnew()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        waitUntil { shown(offer) }
+    }
+
+    @Test
+    fun theThirdCloseOfTheOfferIsANoForGoodAndSettingsStillWins() {
+        repeat(3) {
+            openLyrics()
+            composeRule.runOnIdle { model().nudgeSync(500) }
+            waitUntil { shown(offer) }
+            notNow()
+            startedAnew()
+        }
+        assertEquals(false, prefs().getBoolean("auto_reports", true))
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.waitForIdle()
+        assertFalse(shown(offer))
+        assertEquals(false, model().uiState.autoReports)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        // Turned on in Settings, it's on.
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        assertEquals(true, model().uiState.autoReports)
+        assertEquals(true, prefs().getBoolean("auto_reports", false))
+    }
+
+    @Test
+    fun theThirdCloseOfTheOfferStillLeavesTheTimingReportOwedForSettings() {
+        // The third close is a no, but what was put in time stays on the phone, owed.
+        prefs().edit().putInt("auto_reports_closes", 2).commit()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        waitUntil { shown(offer) }
+        notNow()
+        assertEquals(false, model().uiState.autoReports)
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(1, owed())
+        // Turned on in Settings, it goes, though the words are no longer there.
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        waitUntil { owed() == 0 }
+    }
+
+    @Test
+    fun aTimingReportOwedSurvivesTheAppBeingKilledAndGoesAtTheNextStartOnce() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.waitForIdle()
+        // Not sent while the words are still in front of the user, who may put them in time some more; but owed.
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(1, owed())
+        // Killed before they were left.
+        controller!!.destroyAndSettle()
+        assertEquals(emptyList<String>(), problems())
+        openLyrics()
+        waitUntil { problems() == listOf("timed_by_hand") }
+        val sent = sentReports().single()
+        assertEquals("Demo", sent.getJSONObject("song").getString("title"))
+        val timing = sent.getJSONObject("song").getJSONArray("timing").getJSONObject(0)
+        assertEquals(500L, timing.getLong("heardMs") - timing.getLong("timedMs"))
+        waitUntil { owed() == 0 }
+        // Once a song: put in time again and left, it doesn't go again.
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(listOf("timed_by_hand"), problems())
+    }
+
+    @Test
+    fun aYesAfterTheWordsWerePutInTimeByHandOwesTheReportToo() {
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        waitUntil { shown(offer) }
+        // Owed from the moment they were put in time, whatever the answer.
+        assertEquals(1, owed())
+        yes()
+        assertEquals(1, owed())
+        controller!!.destroyAndSettle()
+        openLyrics()
+        waitUntil { problems() == listOf("timed_by_hand") }
+    }
+
+    @Test
+    fun aTimingReportOwedThatDidntGetThereGoesAtALaterStart() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        controller!!.destroyAndSettle()
+        reportsDown = true
+        openLyrics()
+        waitUntil { problems() == listOf("timed_by_hand") }
+        assertEquals(1, owed())
+        controller!!.destroyAndSettle()
+        reportsDown = false
+        openLyrics()
+        waitUntil { problems() == listOf("timed_by_hand", "timed_by_hand") }
+        waitUntil { owed() == 0 }
+    }
+
+    /** [songs] put in time before, whose reports wait on the phone: made up, as what they say doesn't matter. */
+    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), """{"fake":"$it"}""") }
+
+    private fun sentFakes() = fake.requestedUrls.indices.filter { fake.requestedUrls[it] == ReportSender.URL }.map { fake.requestBodies[it] }
+
+    @Test
+    fun noTimingReportIsOwedForWordsPutBackAsTheyWere() {
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        assertEquals(1, owed())
+        composeRule.runOnIdle { model().resetSync() }
+        assertEquals(0, owed())
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        assertEquals(1, owed())
+        // Said no in Settings, it still waits, on the phone, for a yes.
+        composeRule.runOnIdle { model().allowAutoReports(false) }
+        assertEquals(1, owed())
+        controller!!.destroyAndSettle()
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(1, owed())
+    }
+
+    @Test
+    fun aYesFromTheOfferSendsEveryTimingReportOwedForOtherSongsOnce() {
+        owedFor("Old one", "Old two")
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        waitUntil { shown(offer) }
+        yes()
+        waitUntil { sentFakes().size == 2 }
+        assertEquals(setOf("""{"fake":"Old one"}""", """{"fake":"Old two"}"""), sentFakes().toSet())
+        // The song in front of the user waits to be left, as it may be put in time some more; the others are dropped.
+        waitUntil { owed() == 1 }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems().count { it == "timed_by_hand" } == 1 }
+        waitUntil { owed() == 0 }
+        // Said again, nothing goes twice.
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        composeRule.waitForIdle()
+        assertEquals(3, sentFakes().size)
+    }
+
+    @Test
+    fun turningReportsOnInSettingsSendsEveryTimingReportOwed() {
+        owedFor("Old one", "Old two")
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 2 }
+        waitUntil { owed() == 0 }
+        assertEquals(setOf("""{"fake":"Old one"}""", """{"fake":"Old two"}"""), sentFakes().toSet())
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Old one", "Band"), SongProblem.TIMED_BY_HAND))
+    }
+
+    @Test
+    fun timingReportsOwedThatDidntGetThereWaitAndGoOnceTheUserIsOnline() {
+        owedFor("Old one", "Old two")
+        reportsDown = true
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        // The first didn't get there, so the second isn't tried, as it wouldn't either; both stay.
+        waitUntil { sentFakes().size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(1, sentFakes().size)
+        assertEquals(2, owed())
+        reportsDown = false
+        // The app started anew: they go at the start.
+        controller!!.destroyAndSettle()
+        openLyrics()
+        waitUntil { owed() == 0 }
+        assertEquals(3, sentFakes().size)
+    }
+
+    @Test
+    fun onlyTheLatestTwentyTimingReportsAreOwed() {
+        owedFor(*(1..21).map { "Song $it" }.toTypedArray())
+        assertEquals(20, owed())
+        openLyrics()
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { owed() == 0 }
+        assertEquals(20, sentFakes().size)
+        assertFalse(sentFakes().contains("""{"fake":"Song 1"}"""))
+    }
+
+    @Test
+    fun aTimingReportOwedGoesAtEachStartWhileReportsAreAllowedAndNeverWhenTheyAreNot() {
+        owedFor("Old one")
+        prefs().edit().putBoolean("auto_reports", false).commit()
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), sentFakes())
+        assertEquals(1, owed())
+        controller!!.destroyAndSettle()
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        openLyrics()
+        waitUntil { sentFakes().size == 1 }
+        waitUntil { owed() == 0 }
+    }
+
+    /** Two lines, as an earlier version found them for a song. */
+    private val oldLines = listOf(LyricLine(0, "Old one"), LyricLine(10_000, "Old two"))
+
+    /** A song an earlier version kept in time, [n]th of many: from a player that names its recording, and how long it is. */
+    private fun oldSong(n: Int) = MusicMetadata("Song $n", "Band", recordingId = "com.fake.player:$n", lengthMs = 200_000L)
+
+    /**
+     * What an earlier version kept for [count] songs, written by the stores it wrote them with: a line put
+     * 1.5 s later in each, and the singing heard through the first when [sungFirst].
+     */
+    private fun keptBefore(count: Int = 1, sungFirst: Boolean = false) {
+        (1..count).forEach { LyricsSyncStore(prefs()).save(oldSong(it), oldLines, listOf(SyncPoint(10_000, 11_500))) }
+        if (sungFirst) SungStore(prefs()).save(oldSong(1), oldLines)
+    }
+
+    /** The reports sent on timing kept from an earlier version. */
+    private fun keptSent() = sentReports().filter { it.optString("problem") == AutoReports.EARLIER }
+
+    /** The app started, without opening anything. */
+    private fun started() {
+        controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun timingKeptBeforeTheUpdateGoesAtTheFirstStartWhenReportsWereAllowedSayingOnlyWhatWasKept() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        keptBefore(sungFirst = true)
+        LyricsSyncStore(prefs()).save(MusicMetadata("Only named", "Band"), oldLines, listOf(SyncPoint(0, 300)))
+        started()
+        waitUntil { keptSent().size == 2 }
+        waitUntil { owed() == 0 }
+        val sent = keptSent().first()
+        assertTrue(sent.getString("version").isNotEmpty())
+        assertTrue(sent.getString("android").isNotEmpty())
+        val song = sent.getJSONObject("song")
+        // As the key kept them: names as matched, with no case or spaces.
+        assertEquals("song1", song.getString("title"))
+        assertEquals("band", song.getString("artist"))
+        assertEquals("com.fake.player:1", song.getString("recording"))
+        assertEquals(200_000L, song.getLong("lengthMs"))
+        assertTrue(song.getBoolean("sung"))
+        val point = song.getJSONArray("timing").getJSONObject(0)
+        assertEquals(10_000L, point.getLong("timedMs"))
+        assertEquals(11_500L, point.getLong("heardMs"))
+        // Nothing it didn't keep is made up.
+        assertEquals(setOf("timedMs", "heardMs"), point.keys().asSequence().toSet())
+        assertEquals(setOf("title", "artist", "recording", "lengthMs", "sung", "timing"), song.keys().asSequence().toSet())
+        assertEquals(setOf("version", "android", "problem", "song"), sent.keys().asSequence().toSet())
+        // A song kept with no recording or length says neither, and wasn't heard sung.
+        val named = keptSent()[1].getJSONObject("song")
+        assertEquals(setOf("title", "artist", "sung", "timing"), named.keys().asSequence().toSet())
+        assertFalse(named.getBoolean("sung"))
+        // Started again, nothing goes twice, and what this version times isn't taken for it.
+        controller!!.destroyAndSettle()
+        LyricsSyncStore(prefs()).save(oldSong(9), oldLines, listOf(SyncPoint(0, 300)))
+        started()
+        assertEquals(2, keptSent().size)
+        assertEquals(0, owed())
+    }
+
+    @Test
+    fun timingKeptBeforeTheUpdateWaitsForSettingsAndGoesWhenTurnedOn() {
+        keptBefore(count = 2)
+        started()
+        // Not said yet: nothing goes, and it's kept.
+        assertEquals(emptyList<JSONObject>(), keptSent())
+        assertEquals(2, owed())
+        controller!!.destroyAndSettle()
+        started()
+        assertEquals(2, owed())
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { keptSent().size == 2 }
+        waitUntil { owed() == 0 }
+        assertEquals(setOf("song1", "song2"), keptSent().map { it.getJSONObject("song").getString("title") }.toSet())
+    }
+
+    @Test
+    fun timingKeptBeforeTheUpdateGoesOnAYesFromTheOffer() {
+        keptBefore()
+        openLyrics()
+        assertEquals(1, owed())
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        waitUntil { shown(offer) }
+        yes()
+        waitUntil { keptSent().size == 1 }
+        // The song in front of the user still waits to be left.
+        assertEquals(1, owed())
+    }
+
+    @Test
+    fun timingKeptBeforeTheUpdateNeverGoesWhenReportsAreOffButIsKeptForSettings() {
+        prefs().edit().putBoolean("auto_reports", false).commit()
+        keptBefore()
+        started()
+        composeRule.waitForIdle()
+        assertEquals(emptyList<JSONObject>(), sentReports())
+        assertEquals(1, owed())
+    }
+
+    @Test
+    fun timingKeptBeforeThatWentAlreadyIsntSentAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        keptBefore(count = 2)
+        // The first went as put in time by hand in the version before; the second as kept, before a kill.
+        AutoReports(prefs()).remember(oldSong(1), SongProblem.TIMED_BY_HAND)
+        val second = org.json.JSONArray(prefs().getString("auto_reports_sent", "[]")).put("${AutoReports.EARLIER}\u0000song2\u0000band\u0000com.fake.player:2\u0000200000")
+        prefs().edit().putString("auto_reports_sent", second.toString()).commit()
+        keptBefore(count = 3)
+        started()
+        waitUntil { keptSent().size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(listOf("song3"), keptSent().map { it.getJSONObject("song").getString("title") })
+    }
+
+    @Test
+    fun brokenTimingFromBeforeIsSkippedAndTheAppStarts() {
+        prefs().edit().putBoolean("auto_reports", true).putString("lyrics_sync", "{not json").putString("sung_heard", "\u0000").commit()
+        started()
+        assertEquals(0, owed())
+        controller!!.destroyAndSettle()
+        // Songs with no points, or no name, or points that aren't two numbers each, are no timing to send.
+        val odd = JSONObject()
+            .put("\u0000band", JSONObject().put("points", org.json.JSONArray().put(org.json.JSONArray().put(1).put(2))))
+            .put("a\u0000b", JSONObject().put("points", org.json.JSONArray()))
+            .put("c\u0000d", JSONObject().put("points", org.json.JSONArray().put(org.json.JSONArray().put(1))))
+            .put("e\u0000f", JSONObject())
+            .put("g\u0000h", "not an object")
+        prefs().edit().remove("auto_reports_earlier_read").putString("lyrics_sync", odd.toString()).commit()
+        started()
+        composeRule.waitForIdle()
+        assertEquals(0, owed())
+        assertEquals(emptyList<JSONObject>(), sentReports())
+    }
+
+    @Test
+    fun twoHundredSongsKeptBeforeGoEachOnceAndWhatDidntGetThereWaitsForTheNextStart() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        keptBefore(count = 200)
+        // The box takes a few, then turns the rest away, as past its limit.
+        var taken = 0
+        val others = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "report.crosstune.4st.li") FakeSpotify.html(request, "", code = if (++taken <= 5) 204 else 429) else others(request)
+        }
+        started()
+        waitUntil { owed() == 195 }
+        composeRule.waitForIdle()
+        // One turned away stops the rest.
+        assertEquals(6, keptSent().size)
+        controller!!.destroyAndSettle()
+        fake.handler = others
+        started()
+        waitUntil { owed() == 0 }
+        val titles = keptSent().map { it.getJSONObject("song").getString("title") }
+        assertEquals(201, titles.size)
+        // The one turned away went again; every other went once.
+        assertEquals(200, titles.toSet().size)
+    }
+
+    @Test
+    fun reportsOwedArePacedUnderTheBoxsLimit() {
+        MainActivity.reportPaceMs = MainViewModel.REPORT_PACE_MS
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        keptBefore(count = 3)
+        started()
+        waitUntil { keptSent().size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(1, keptSent().size)
+        // The next waits its turn.
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.REPORT_PACE_MS))
+        waitUntil { keptSent().size == 2 }
+        assertEquals(1, owed())
+    }
+
+    @Test
+    fun aReportOwedThatWasPutBackWhileWaitingItsTurnIsntSent() {
+        MainActivity.reportPaceMs = MainViewModel.REPORT_PACE_MS
+        owedFor("Old one", "Old two")
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        started()
+        waitUntil { sentFakes().size == 1 }
+        // The words of the second were put back as they were meanwhile.
+        AutoReports(prefs()).owedNothing(MusicMetadata("Old two", "Band"))
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(MainViewModel.REPORT_PACE_MS))
+        composeRule.waitForIdle()
+        assertEquals(listOf("""{"fake":"Old one"}"""), sentFakes())
+    }
+
+    @Test
     fun wordsPutBackAsTheyWereArentSent() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         openLyrics()
@@ -589,6 +1074,8 @@ class LyricsReportTest {
 
     private companion object {
         const val TIMEOUT_MS = 10_000L
+        /** The offer takes no tap for 500 ms from the frame it first shows, so a frame more. */
+        const val OFFER_ARMED_MS = 600L
     }
 
     @Test

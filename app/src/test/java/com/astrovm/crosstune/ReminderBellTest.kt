@@ -342,6 +342,10 @@ class ReminderBellTest {
         controller?.pause()?.resume()
         waitUntil { !model().uiState.reminder.late }
         assertTrue(model().uiState.reminder.exact)
+        // Coming back is what sets it again. Saying it is on time is not enough.
+        val set = alarms.scheduledAlarms
+        assertEquals(2, set.size)
+        assertEquals(1, set.count { it.windowLengthMs == 0L })
     }
 
     @Test
@@ -352,7 +356,8 @@ class ReminderBellTest {
         click(remindMe)
         assertTrue(shown(reminderAt))
         assertNull(shadowOf(activity).nextStartedActivity)
-        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
+        // Two alarms share the minute, so either can be next. One of them is exact.
+        assertTrue(alarms.scheduledAlarms.any { it.windowLengthMs == 0L })
     }
 
     /** Notifications come first: no use setting the time exactly for one that can't show. */
@@ -595,14 +600,18 @@ class ReminderBellTest {
         val reminders = MainActivity.remindersFactory(app)
         reminders.sessionDone()
         reminders.turn(true)
-        // What a force stop does to it.
-        val alarm = android.app.PendingIntent.getBroadcast(
-            app, 0, Intent(PracticeReminders.ACTION_REMIND).setClass(app, PracticeReminderReceiver::class.java), android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        app.getSystemService(AlarmManager::class.java).cancel(alarm)
-        assertNull(alarms.peekNextScheduledAlarm())
+        // What a force stop does: it takes every alarm, the exact one and the spare.
+        val manager = app.getSystemService(AlarmManager::class.java)
+        listOf(0 to PracticeReminders.ACTION_REMIND, 1 to PracticeReminders.ACTION_REMIND_KEEP).forEach { (code, action) ->
+            val alarm = android.app.PendingIntent.getBroadcast(
+                app, code, Intent(action).setClass(app, PracticeReminderReceiver::class.java), android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            manager.cancel(alarm)
+        }
+        assertTrue(alarms.scheduledAlarms.isEmpty())
         launch()
-        assertNotNull(alarms.peekNextScheduledAlarm())
+        assertTrue(alarms.scheduledAlarms.any { it.windowLengthMs == 0L })
+        assertEquals(2, alarms.scheduledAlarms.size)
     }
 
     @Test

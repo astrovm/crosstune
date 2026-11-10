@@ -114,6 +114,9 @@ def triage(rows):
     for problem, reported in sorted(problems.items(), key=lambda item: (-len(item[1]), item[0])):
         with_app = sum(1 for row in reported if row["app"])
         lines += ["", f"{problem}: {len(reported)}, {with_app} naming the app"]
+        if problem == "kept_timing":
+            # Kept by an earlier version, by hand or by ear: the singing heard through it says it was likely by ear.
+            lines.append(f"  {sum(1 for row in reported if row.get('sung'))} with the singing heard through it")
         # One version on one Android, many in a row, is likely one person's listening.
         versions = Counter((row["version"], row["android"]) for row in reported)
         lines.append("  " + ", ".join(f"{version} on Android {android} x{count}" for (version, android), count in sorted(versions.items(), key=str)))
@@ -123,7 +126,8 @@ def triage(rows):
         for same in songs.values():
             ids = ", ".join(str(row["id"]) for row in same)
             apps = sorted({row["app"] for row in same if row["app"]})
-            lines.append(f"  {ids}: {same[0]['title']} | {same[0]['artist']}" + (f" | {', '.join(apps)}" if apps else ""))
+            recordings = sorted({row["recording"] for row in same if row.get("recording")})
+            lines.append(f"  {ids}: {same[0]['title']} | {same[0]['artist']}" + "".join(f" | {', '.join(it)}" for it in (apps, recordings) if it))
             lines += [f"    says: {row['comment']}" for row in same if row["comment"]]
             lines += [wrong_reading(row) for row in same if row.get("word")]
     return "\n".join(lines)

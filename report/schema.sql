@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS reports (
   early_ms INTEGER,
   -- The last minute of Crosstune's timing log, one note a line: positions, speeds and times only.
   timing_log TEXT,
+  -- Which recording a timing kept from an earlier version was for, when the app knew: "SPOTIFY:id".
+  -- Added after, before the Worker that fills it is deployed: ALTER TABLE reports ADD COLUMN recording TEXT;
+  recording TEXT,
   -- A reading the user marked wrong, on the word itself (problem "wrong_reading"). Added after, in this
   -- order, before the Worker that fills them is deployed (other reports send none, so they stay NULL):
   --   ALTER TABLE reports ADD COLUMN lyric_line TEXT;

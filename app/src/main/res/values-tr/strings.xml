@@ -317,13 +317,15 @@
     <string name="reading_right">Doğru okunuş (isteğe bağlı)</string>
     <string name="reading_what_goes">Kelimeyi, gösterilen okunuşu, satırını, şarkının adını, uygulama ve Android sürümlerini gönderir. Yalnızca Crosstune\'un geliştiricisi okur.</string>
     <string name="auto_report_offer">Bunun gibi sorunlar otomatik bildirilsin mi?</string>
+    <string name="auto_report_offer_words_off">Bu şarkının sözleri kaymıştı. Böyle durumlar otomatik bildirilsin mi?</string>
     <string name="auto_report_yes">Evet</string>
-    <string name="auto_report_no">Hayır, teşekkürler</string>
+    <string name="auto_report_not_now">Şimdi değil</string>
     <string name="singing_model_offer">Sözleri şarkıya göre ayarlamak için 32 MB indirmek gerekiyor.</string>
     <string name="singing_model_failed">32 MB\'lık indirme tamamlanmadı.</string>
     <string name="singing_model_download">İndir</string>
     <string name="singing_model_close">Şimdi değil</string>
     <string name="setting_auto_report">Şarkı sorunlarını otomatik bildir</string>
+    <string name="setting_auto_report_hint">Daha önce elle zamanladığınız sözleri de gönderir.</string>
     <string name="lyrics_romanized">Latin harfleriyle</string>
     <string name="lyrics_romaji_typed">Romaji yazıldığı gibi</string>
     <string name="lyrics_katakana_as_hiragana">Katakana hiragana olarak</string>
@@ -372,6 +374,7 @@
     <string name="lyrics_line_saved">Kaydedildi</string>
     <string name="lyrics_word_failed">Şu an anlamı bulunamadı.</string>
     <string name="lyrics_word_unknown">Bu kelime için sözlük kaydı yok.</string>
+    <string name="lyrics_word_modern">%1$s sözcüğünün eski yazımı</string>
     <string name="lyrics_words_to_know_failed">Bilinmesi gereken kelimeler bulunamadı.</string>
     <string name="lyrics_save_word">%1$s kaydet</string>
     <string name="lyrics_word_saved">%1$s kaydedildi</string>
