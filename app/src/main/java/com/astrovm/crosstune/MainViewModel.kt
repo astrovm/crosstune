@@ -160,9 +160,9 @@ internal class MainViewModel(
                 return source.openSong(app, link).also { if (!it) uncover() }
             }
 
-            override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
+            override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
                 qobuzNumbers?.off()
-                return source.playSong(song, app, link, mustStart)
+                return source.playSong(song, app, link, mustStart, orLastPlayed)
             }
 
             // Played on from behind where it can be; one that only plays in front is brought there for it, covered the same way.
@@ -2885,6 +2885,14 @@ internal class MainViewModel(
     /** The list of things to fix, from the bar; one tap starts afresh there. */
     fun openFixes() {
         uiState = uiState.copy(fixes = Fixes(list = true), oneTapFailed = false)
+    }
+
+    /**
+     * Lets Crosstune show over other apps, so a card comes back over the music app it opens: in one tap with Shizuku or
+     * root, which only the activity would look up again as it resumes, so it's known now; otherwise the steps show how.
+     */
+    fun allowFloat() {
+        if (!fixInOneTap(OneTapFix.FLOAT) { setCanFloatOverApps(true) }) fixSteps(listOf(Need.Float))
     }
 
     /** The steps of [needs], one at a time, from the list or wherever they're needed. */

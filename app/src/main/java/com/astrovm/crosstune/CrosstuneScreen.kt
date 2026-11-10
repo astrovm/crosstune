@@ -360,6 +360,8 @@ internal data class ScreenActions(
     val onDismissChatGptWelcome: () -> Unit = {},
     /** Lets the words follow music apps: in one tap with Shizuku or root, otherwise the steps show how. */
     val onAllowFollowing: () -> Unit = {},
+    /** Lets Crosstune show over other apps, so it comes back over a music app it opens: in one tap with Shizuku or root, otherwise the steps show how. */
+    val onAllowFloat: () -> Unit = {},
     /** Opens Android's page for Crosstune seeing what music apps play, where it's turned off too. */
     val onOpenFollowAccess: () -> Unit = {},
     /** Opens Crosstune's App info, where restricted settings are allowed. */

@@ -30,6 +30,7 @@ import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
 import androidx.annotation.MainThread
 import androidx.annotation.VisibleForTesting
 import kotlin.math.abs
@@ -236,11 +237,12 @@ internal interface PlaybackSource {
     /**
      * Has [app] find [song] by its name and play it, in the background, or YouTube Music play its
      * [link] there when it's known. Not running, [app] is woken in the background to; with no [link],
-     * the music app that last played is asked when [app] can't be. False with no app to ask, and, when
-     * [mustStart], when the app says it can't play it or hasn't started within a couple of seconds, as
-     * YouTube Music in the background without Premium: the caller then opens the song in the app.
+     * the music app that last played is asked when [app] can't be, unless not [orLastPlayed], as a practice
+     * card follows [app] alone. False with no app to ask, and, when [mustStart], when the app says it can't
+     * play it or hasn't started within a couple of seconds, as YouTube Music in the background without
+     * Premium: the caller then opens the song in the app.
      */
-    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null, mustStart: Boolean = false): Boolean
+    suspend fun playSong(song: MusicMetadata, app: String?, link: String? = null, mustStart: Boolean = false, orLastPlayed: Boolean = true): Boolean
 
     /**
      * Opens [app] on a song's [link], for when it isn't running and so has nothing to ask in the
@@ -251,6 +253,18 @@ internal interface PlaybackSource {
 
     /** Brings Crosstune back to the front, over the app [openSong] opened, unless it only plays in front. */
     fun comesBack()
+
+    /**
+     * Whether Crosstune can [comesBack] by itself over an app [openSong] opened: Android lets it only once it may show
+     * over other apps. Without that, the app stays in front, and Crosstune, behind it, can't open another either.
+     */
+    fun comesBackByItself(): Boolean
+
+    /**
+     * Mutes the phone's music, [on], while an app is on its way to a card's line, as it may play a moment of
+     * something else before it's paused, or lets it be heard again. Music the user muted is left so.
+     */
+    fun quiet(on: Boolean)
 
     /** Whether the phone is in use, its screen on and unlocked, so an app [openSong] opens comes to the front now. */
     fun unlocked(): Boolean
@@ -321,6 +335,11 @@ internal class MediaSessionPlayback(
     /** The app [openSong] last opened. */
     @Volatile
     private var opened: String? = null
+    private val preferences = context.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    init {
+        quiet(false)
+    }
 
     override fun hasAccess(): Boolean = context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 
@@ -495,13 +514,13 @@ internal class MediaSessionPlayback(
         }
     }
 
-    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean): Boolean {
+    override suspend fun playSong(song: MusicMetadata, app: String?, link: String?, mustStart: Boolean, orLastPlayed: Boolean): Boolean {
         // Without the user's say-so Android shows none, and says so by throwing; an app can still be woken.
         val apps = runCatching { sessions.getActiveSessions(listener) }.getOrDefault(emptyList()).filter { it.packageName != context.packageName }
         // Not running, the app's woken, as Android Auto wakes one; another app wouldn't have its link.
         val asked = apps.firstOrNull { sameApp(app, it.packageName, context::hasApp) }
             ?: app?.let { waker.wake(MusicService.appsFor(it)) }
-            ?: apps.takeIf { link == null }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
+            ?: apps.takeIf { link == null && (app == null || orLastPlayed) }?.maxByOrNull { it.playbackState?.lastPositionUpdateTime ?: 0L }
             ?: return false
         return watchStart(asked, mustStart) { ask(asked, song, link) }
     }
@@ -586,7 +605,16 @@ internal class MediaSessionPlayback(
         if (opened?.let(onlyInFront::contains) == true) return
         val back = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         runCatching { context.startActivity(back) }
-        if (!Settings.canDrawOverlays(context)) context.noticeToReturn(back)
+        if (!comesBackByItself()) context.noticeToReturn(back)
+    }
+
+    override fun comesBackByItself(): Boolean = Settings.canDrawOverlays(context)
+
+    override fun quiet(on: Boolean) {
+        // Kept, so music muted by Crosstune when it stopped on the way isn't left muted: the next start lets it be heard.
+        if (on == preferences.getBoolean(QUIETED_KEY, false) || on && audio.isStreamMute(AudioManager.STREAM_MUSIC)) return
+        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, if (on) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0)
+        preferences.edit { putBoolean(QUIETED_KEY, on) }
     }
 
     // Without the user's say-so Android shows none, and says so by throwing.
@@ -882,6 +910,9 @@ private val fromAFile = setOf(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE, Packag
 
 /** How long an app asked to play in the background has to say it does, before it's taken as not playing. */
 internal const val START_MS = 3_000L
+
+/** Whether the phone's music is muted by Crosstune, see [PlaybackSource.quiet]. */
+internal const val QUIETED_KEY = "quieted_music"
 
 /** How long a session that doesn't say where it is can stay quiet before it's taken as left behind. */
 internal const val LEFT_BEHIND_MS = 10 * 60_000L

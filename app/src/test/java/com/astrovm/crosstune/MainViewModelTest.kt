@@ -207,6 +207,23 @@ class MainViewModelTest {
     }
 
     @Test
+    fun showingOverOtherAppsIsAllowedInOneTapWhereItCanBeAndOtherwiseByItsSteps() {
+        // Without Shizuku or root, the steps show how.
+        val byHand = model()
+        byHand.allowFloat()
+        assertEquals(Fixes(steps = listOf(Need.Float)), byHand.uiState.fixes)
+        // With them, it's done, and known at once, for the card that asked.
+        val shell = FakeShell()
+        val model = model(oneTap = OneTapSetup(app, listOf(shell)))
+        assertFalse(model.uiState.canFloatOverApps)
+        model.allowFloat()
+        idle()
+        pass(2_000)
+        assertTrue(model.uiState.canFloatOverApps)
+        assertNull(model.uiState.fixes)
+    }
+
+    @Test
     fun aFixAskedWhileOneRunsIsTheSameFixAndRunsOnce() {
         val shell = FakeShell()
         shell.answer = kotlinx.coroutines.CompletableDeferred()
