@@ -50,6 +50,12 @@ internal object LinePlayerPage {
     /** The neutral address the page is loaded as: YouTube's own refuses to play inside an app. */
     const val BASE_URL = "https://crosstune.cc"
 
+    /**
+     * What a page loaded in the app starts with: the line asked for last, which it asks the app for. A card turned
+     * while the page was still loading asked the page that wasn't there yet, and the line it was loaded with never played.
+     */
+    const val LATEST = "eval(Line.latest());"
+
     /** The page's call to play the line from [startMs] to [endMs], or only get ready when not [play]; [expectedMs], the song's length, when known. */
     fun call(startMs: Long, endMs: Long, expectedMs: Long?, play: Boolean) = "line(${startMs / 1000.0}, ${endMs / 1000.0}, ${expectedMs ?: 0}, $play);"
 
@@ -116,12 +122,19 @@ internal class YouTubeLinePlayer(context: Context) : LinePlayer {
     private var loaded: String? = null
     private var done: (LineEnd) -> Unit = {}
 
+    /** The line asked for last, as the page's call; read by the page from its own thread as it loads. */
+    @Volatile
+    private var latest = ""
+
     init {
         web.settings.javaScriptEnabled = true
         web.settings.mediaPlaybackRequiresUserGesture = false
         web.setBackgroundColor(android.graphics.Color.BLACK)
         web.addJavascriptInterface(
             object {
+                @JavascriptInterface
+                fun latest() = latest
+
                 @JavascriptInterface
                 fun ended() {
                     main.post { done(LineEnd.ENDED) }
@@ -146,9 +159,11 @@ internal class YouTubeLinePlayer(context: Context) : LinePlayer {
     override fun show(videoId: String, startMs: Long, endMs: Long, expectedMs: Long?, play: Boolean, done: (LineEnd) -> Unit) {
         this.done = done
         val call = LinePlayerPage.call(startMs, endMs, expectedMs, play)
-        if (loaded == videoId) return web.evaluateJavascript(call, null)
+        latest = call
+        // A page still loading doesn't hear this, and starts with the line asked for last all the same.
+        if (loaded == videoId) return web.evaluateJavascript("if (typeof line == 'function') $call", null)
         loaded = videoId
-        web.loadDataWithBaseURL(LinePlayerPage.BASE_URL, LinePlayerPage.html(videoId, call), "text/html", "utf-8", null)
+        web.loadDataWithBaseURL(LinePlayerPage.BASE_URL, LinePlayerPage.html(videoId, LinePlayerPage.LATEST), "text/html", "utf-8", null)
     }
 
     override fun pause() {
