@@ -239,7 +239,9 @@ def app_run(directory, tag, old):
     if old:
         for with_stack, without in (("            val mono = ChordSheets.jTotalMonospace(page)\n", ""), ("unescape(sheet), mono)", "unescape(sheet))"), ('.put("mono", mono)', ""), ('"windows-31j"', '"Shift_JIS"')):
             source = source.replace(with_stack, without)
-    TEST.write_text(source, encoding="utf-8")
+    # The sheets sit outside Gradle's inputs. A second replay writes the same test source, and Gradle
+    # then skips the test, so the stamp makes this run a new source file.
+    TEST.write_text(source + f"\n// replay {tag} {time.time_ns()}\n", encoding="utf-8")
     try:
         subprocess.run(
             ["nice", "-n", "10", str(REPO / "scripts/gradle-box/gradle-box.sh"), "--max-workers=2", ":app:testDebugUnitTest",
