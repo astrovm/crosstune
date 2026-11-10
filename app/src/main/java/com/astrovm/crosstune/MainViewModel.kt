@@ -2688,11 +2688,11 @@ internal class MainViewModel(
      * while it's being lined up, it goes by the last hearing. With no singing heard where the words
      * are timed, and none found yet, no line's shown sung.
      */
-    private fun inSong(app: Following?): Following? = leadTaken(app)?.let { if (unheard) it.copy(timingKnown = false) else it }
+    private fun inSong(app: Following?): Following? = app?.let(::leadTaken)?.let { if (unheard) it.copy(timingKnown = false) else it }
 
     /** [app]'s place less how far it was heard to be ahead of the words, as [inSong] has it. */
-    private fun leadTaken(app: Following?): Following? {
-        if (app == null || (!app.video && appLeadMs == null)) return app
+    private fun leadTaken(app: Following): Following {
+        if (!app.video && appLeadMs == null) return app
         val lead = leadNow ?: return if (calibrationAttempted || shownPoints.isNotEmpty()) app.copy(timingKnown = shownPoints.isNotEmpty())
             else uiState.lyricsFor?.let(::heardFollowing) ?: app.copy(timingKnown = false)
         val speed = leadSpeed
@@ -3060,7 +3060,7 @@ internal class MainViewModel(
     private fun reportOn(sender: ReportSender, song: MusicMetadata?, comment: String = "", problem: SongProblem? = null): Report {
         val byHand = handTiming()
         return Report(
-            sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = playedIn, comment = comment,
+            sender.version, song, timed = uiState.lyricLines.isNotEmpty(), synced = uiState.lyricsSynced, app = timingAtCorrection?.takeIf { timedByHand }?.first ?: playedIn, comment = comment,
             sung = song != null && sungStore.heard(song, foundLines), lengthMs = found?.lengthMs, timing = byHand, problem = problem, source = found?.source,
             player = if (byHand.isNotEmpty() || problem?.aboutTiming == true) playerTiming() else null
         )
@@ -3071,13 +3071,27 @@ internal class MainViewModel(
      * played, how far ahead the words were shown, and the timing log. Put in time by hand, the log is
      * as it was at the last line moved, since the words are often left, and reported, a song later.
      */
-    private fun playerTiming() = PlayerTiming(
-        appPackage = playedPackage, speed = playedSpeed, leadMs = leadNow, earlyMs = uiState.linesEarlyMs,
-        log = timingAtCorrection.takeIf { timedByHand } ?: TimingLog.lastMinute()
-    )
+    private fun playerTiming(): PlayerTiming = timingAtCorrection?.takeIf { timedByHand }?.second ?: currentPlayerTiming()
+
+    /**
+     * The player's timing now, with the lead [leadTaken] goes by: none (zero) for an app followed on its
+     * own clock, as an audio player is until a lead is heard. With no lead to say, the log starts by
+     * saying why, so a report never leaves it to be guessed.
+     */
+    private fun currentPlayerTiming(): PlayerTiming {
+        val app = appFollowing
+        val lead = if (app != null && !app.video && appLeadMs == null) 0L else leadNow.takeIf { app != null }
+        val reason = when {
+            app == null -> "no player followed"
+            lead == null -> "video not calibrated"
+            else -> null
+        }
+        val log = TimingLog.lastMinute()
+        return PlayerTiming(playedPackage, playedSpeed, lead, uiState.linesEarlyMs, if (reason == null) log else "lead unavailable: $reason\n$log")
+    }
 
     /** The timing log as it was when the words were last put in time by hand. */
-    private var timingAtCorrection: String? = null
+    private var timingAtCorrection: Pair<String?, PlayerTiming>? = null
 
     /** Sends a report on the words shown, with what the user says is wrong. [UiState.report] says how it goes. */
     fun sendReport(comment: String) {
@@ -3219,7 +3233,7 @@ internal class MainViewModel(
         if (handGap == null) handGap = HandGap(match, before, appLeadMs.takeIf { app != null }, lineMs)
         gapStore.save(song, words, match, gap)
         TimingLog.note("gap moved by hand to $gap")
-        timingAtCorrection = TimingLog.lastMinute()
+        timingAtCorrection = playedIn to currentPlayerTiming()
         appLeadMs?.takeIf { app != null }?.let { moveLead(song, it + shiftMs) }
         placeHeard()
         uiState = uiState.copy(lyricsSynced = true, lyricsOffTake = false)
@@ -3240,7 +3254,7 @@ internal class MainViewModel(
     private fun setSync(song: MusicMetadata, points: List<SyncPoint>) {
         syncPoints = points
         TimingLog.note("lines in time ${points.takeLast(MAX_NOTED_POINTS).joinToString(" ") { "${it.lineMs}>${it.songMs}" }}")
-        if (timedByHand) timingAtCorrection = TimingLog.lastMinute()
+        if (timedByHand) timingAtCorrection = playedIn to currentPlayerTiming()
         // Put in time by hand or for good, what was heard this time only gives way.
         heardPoints = emptyList()
         // Kept for the words as found, which is how they're found next time.
