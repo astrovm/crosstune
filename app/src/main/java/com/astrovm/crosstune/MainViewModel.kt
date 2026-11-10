@@ -39,6 +39,8 @@ import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal sealed interface Effect {
     /**
@@ -123,6 +125,8 @@ internal class MainViewModel(
     private val singing: SingingHearing? = null,
     /** Where reports on the words go, kept private; nullable so tests need none. */
     private val reports: ReportSender? = null,
+    /** How long between reports owed, sent one after another. */
+    private val reportPaceMs: Long = REPORT_PACE_MS,
     /** Whether the microphone may be used, which Android says; asked again whenever Crosstune comes back. */
     private val microphoneAccess: () -> MicAccess = { MicAccess.ALLOWED },
     /** The kind of phone, whose settings pages the steps to fix things show. */
@@ -2471,10 +2475,12 @@ internal class MainViewModel(
             val first = heardTo == null
             heardTo = clock.positionAt(sung.startedAtMs) + SingingListener.SECONDS * 1000L
             if (shift == null) {
+                TimingLog.note("sung nothing to place, clock sure $clockSure")
                 if (singingTries >= SINGING_TRIES) return
                 continue
             }
             singingTries = 0
+            TimingLog.note("sung $shift off, clock sure $clockSure, first $first")
             if (!clockSure) placeThisTime(song, sung, clock, shown, shift)
             else if (placeForGood(song, lines, sung, clock, shown, shift, first)) return
         }
@@ -2563,12 +2569,17 @@ internal class MainViewModel(
      * so it's heard on through the song. Lines heard but none told where, the first is [shift] off.
      * Heard [WORDS_OFF_MS] off or more, it's the words that are off, not the clock, so what's heard
      * this time is kept, and they start where they're sung next time; still unsure, it isn't done.
+     * That's a problem found too: a song is mostly picked up playing, the words opened after it started.
      */
     private fun placeThisTime(song: MusicMetadata, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long) {
         heardThisTime = true
         val placed = SungAlignment.linesMs(sung, clock::positionAt, shown, shift).ifEmpty { mapOf(shown.indexOfFirst { it.timeMs + shift >= clock.positionAt(sung.startedAtMs) }.coerceAtLeast(0) to null) }
         val heard = placed.entries.fold(shownPoints) { kept, (line, ms) -> LyricsSync.with(kept, SyncPoint(foundLines[line].timeMs, ms ?: (shown[line].timeMs + shift))) }
-        if (abs(shift) >= WORDS_OFF_MS) return setSync(song, heard)
+        if (abs(shift) >= WORDS_OFF_MS) {
+            // The words kept so for the first time are a problem found, as those heard off with the clock sure are.
+            if (syncPoints.isEmpty()) problemFound(SongProblem.SUNG_OFF)
+            return setSync(song, heard)
+        }
         heardPoints = heard
         showPoints()
     }
@@ -3116,9 +3127,6 @@ internal class MainViewModel(
         uiState = uiState.copy(report = null)
     }
 
-    /** What the offer to report problems by itself was made for, to be sent if it's taken. */
-    private var offeredFor: SongProblem? = null
-
     /** Whether the words shown were put in time by hand, rather than moved to the singing heard. */
     private var timedByHand = false
 
@@ -3130,12 +3138,23 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         when (autoReports.allowed) {
             true -> reportProblem(song, problem)
-            null -> if (problem.offered) {
-                offeredFor = problem
-                uiState = uiState.copy(reportOffer = true)
-            }
+            null -> offerToReport(problem)
             false -> Unit
         }
+    }
+
+    /**
+     * The user is asked once an app session, so a problem found when it was asked already waits for the
+     * next. Another found while the offer is on screen goes with it, and Yes sends every one it's for.
+     */
+    private fun offerToReport(problem: SongProblem) {
+        if (uiState.reportOffer) {
+            uiState = uiState.copy(reportOfferFor = uiState.reportOfferFor + problem)
+            return
+        }
+        if (!autoReports.mayAsk()) return
+        autoReports.asked()
+        uiState = uiState.copy(reportOfferFor = setOf(problem))
     }
 
     private fun reportProblem(song: MusicMetadata, problem: SongProblem) {
@@ -3158,8 +3177,45 @@ internal class MainViewModel(
     private fun leaveWords() {
         if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
         timedByHand = false
-        offeredFor = null
-        uiState = uiState.copy(reportOffer = false)
+        uiState = uiState.copy(reportOfferFor = emptySet())
+    }
+
+    /**
+     * Words put in time by hand are reported once they're left, so a report on them is kept owed, whatever the
+     * user said about reports: it stays on the phone. Android may end the app before the words are left, and
+     * the yes may come after.
+     */
+    private fun keepOwed() {
+        val song = uiState.lyricsFor ?: return
+        val sender = reports ?: return
+        if (!timedByHand) return
+        autoReports.owe(song, reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).json())
+    }
+
+    /** Held while reports owed go, so a start and a yes close together don't send one twice. */
+    private val owedGoing = Mutex()
+
+    /**
+     * Each report owed goes, once a song, and is dropped when it got there; one that didn't waits for the next
+     * time. Words still in front of the user are left out: they may be put in time some more, and go once they're left.
+     */
+    private fun sendOwed() {
+        val sender = reports ?: return
+        if (autoReports.allowed != true) return
+        viewModelScope.launch {
+            owedGoing.withLock {
+                val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
+                for (owed in autoReports.owed().filter { it.key != inFront }) {
+                    // Gone another way meanwhile, as the words it's for were left.
+                    if (!autoReports.owes(owed)) continue
+                    // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
+                    if (!sender.send(owed.json)) break
+                    autoReports.paid(owed)
+                    // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
+                    delay(reportPaceMs)
+                }
+            }
+        }
     }
 
     /** Fetches the speech model offered, on any network, then hears the singing again with it. */
@@ -3182,14 +3238,24 @@ internal class MainViewModel(
         uiState = uiState.copy(singingModel = null)
     }
 
-    /** Problems found from now on are reported by itself, or never, and the one offered for goes too. */
+    /** Problems found from now on are reported by itself, or never, and those offered for go too. */
     fun allowAutoReports(allowed: Boolean) {
         autoReports.allowed = allowed
-        uiState = uiState.copy(autoReports = allowed, reportOffer = false)
-        val offered = offeredFor
-        offeredFor = null
-        // The words put in time by hand go once they're left.
-        if (allowed && offered != null && offered != SongProblem.TIMED_BY_HAND) problemFound(offered)
+        val offered = uiState.reportOfferFor
+        uiState = uiState.copy(autoReports = allowed, reportOfferFor = emptySet())
+        if (!allowed) return
+        // The words put in time by hand go once they're left; those of other songs, put in time before, go now.
+        (offered - SongProblem.TIMED_BY_HAND).forEach(::problemFound)
+        sendOwed()
+    }
+
+    /**
+     * The offer closed for now, not as a no: it isn't made again this app session, and the third close
+     * is a no for good. Settings still has the switch.
+     */
+    fun closeAutoReportOffer() {
+        autoReports.closed()
+        uiState = uiState.copy(autoReports = autoReports.allowed, reportOfferFor = emptySet())
     }
 
     /**
@@ -3209,6 +3275,7 @@ internal class MainViewModel(
     fun resetSync() {
         val song = uiState.lyricsFor ?: return
         timedByHand = false
+        autoReports.owedNothing(song)
         // Undone while the singing was being heard through the song, it isn't heard on.
         if (liningUp) {
             liningUp = false
@@ -3246,6 +3313,7 @@ internal class MainViewModel(
         placeHeard()
         uiState = uiState.copy(lyricsSynced = true, lyricsOffTake = false)
         keepInTime()
+        keepOwed()
         return true
     }
 
@@ -3271,6 +3339,7 @@ internal class MainViewModel(
         keepInTime()
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)
+        keepOwed()
     }
 
     /** [points] put in time from a video's guessed lead, as they are without it: where they're kept, as next time nothing's heard yet. */
@@ -3547,8 +3616,10 @@ internal class MainViewModel(
         refreshReminder()
     }
 
-    /** What may have changed in Android's settings, whether it lets them show. */
+    /** What may have changed in Android's settings: whether it lets them show, and whether the exact minute is still allowed. */
     fun refreshReminder() {
+        // Opened after a revoke, or after the exact minute was allowed again, the alarm is set the best way still allowed.
+        reminders?.arm()
         uiState = uiState.copy(reminder = reminders?.state ?: uiState.reminder)
     }
 
@@ -4592,8 +4663,17 @@ internal class MainViewModel(
         uiState = uiState.copy(isLoading = false, isMatching = false, error = error, canRetry = false, handingOff = false)
     }
 
+    init {
+        // Last, once everything it reads is there: a report owed from before the app was ended goes at each start the user lets reports go.
+        reports?.let { autoReports.keepEarlier(it.version, Report(it.version).android) }
+        sendOwed()
+    }
+
     companion object {
         const val PREFERENCES_NAME = "crosstune_preferences"
+
+        /** The box for reports takes 5 a minute from one address; owed ones go 4 a minute. */
+        const val REPORT_PACE_MS = 15_000L
         /** A song without any picture can wait a little longer for its cover than a video with a frame. */
         private const val COVER_TIMEOUT_MS = 5_000L
         private const val VIDEO_COVER_TIMEOUT_MS = 2_000L

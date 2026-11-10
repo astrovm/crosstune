@@ -626,6 +626,8 @@ def media_volume(level=None):
     """The phone's media volume, set to [level] first when given."""
     if level is not None:
         shell("cmd", "media_session", "volume", "--stream", "3", "--set", str(level))
+        # Android 17 takes that and changes nothing, so the app would hear silence: its audio service is told too.
+        shell("cmd", "audio", "set-volume", "3", str(level))
     return int(re.search(r"volume is (\d+)", shell("cmd", "media_session", "volume", "--stream", "3", "--get")).group(1))
 
 

@@ -314,13 +314,15 @@
     <string name="report_sent">Wysłano. Dziękujemy!</string>
     <string name="report_failed">Nie udało się wysłać. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="auto_report_offer">Zgłaszać takie problemy automatycznie?</string>
+    <string name="auto_report_offer_words_off">Tekst tego utworu był przesunięty. Zgłaszać takie przypadki automatycznie?</string>
     <string name="auto_report_yes">Tak</string>
-    <string name="auto_report_no">Nie, dziękuję</string>
+    <string name="auto_report_not_now">Nie teraz</string>
     <string name="singing_model_offer">Dopasowanie tekstu do śpiewu wymaga pobrania 32 MB.</string>
     <string name="singing_model_failed">Pobieranie 32 MB nie zostało ukończone.</string>
     <string name="singing_model_download">Pobierz</string>
     <string name="singing_model_close">Nie teraz</string>
     <string name="setting_auto_report">Automatycznie zgłaszaj problemy z utworami</string>
+    <string name="setting_auto_report_hint">Wysyła też teksty ustawione wcześniej ręcznie w czasie.</string>
     <string name="lyrics_romanized">Alfabetem łacińskim</string>
     <string name="lyrics_romaji_typed">Romaji tak, jak się pisze</string>
     <string name="lyrics_katakana_as_hiragana">Katakana jako hiragana</string>
@@ -369,6 +371,7 @@
     <string name="lyrics_line_saved">Zapisany</string>
     <string name="lyrics_word_failed">Nie udało się teraz znaleźć znaczenia.</string>
     <string name="lyrics_word_unknown">Brak hasła w słowniku dla tego słowa.</string>
+    <string name="lyrics_word_modern">Dawna pisownia słowa %1$s</string>
     <string name="lyrics_words_to_know_failed">Nie udało się znaleźć słów do poznania.</string>
     <string name="lyrics_save_word">Zapisz %1$s</string>
     <string name="lyrics_word_saved">Zapisano %1$s</string>

@@ -335,13 +335,15 @@
     <string name="report_sent">Sent. Thanks!</string>
     <string name="report_failed">Couldn\'t send it. Check your connection and try again.</string>
     <string name="auto_report_offer">Report problems like this one automatically?</string>
+    <string name="auto_report_offer_words_off">This song\'s words were off. Report ones like it automatically?</string>
     <string name="auto_report_yes">Yes</string>
-    <string name="auto_report_no">No thanks</string>
+    <string name="auto_report_not_now">Not now</string>
     <string name="singing_model_offer">Lining lyrics up to the singing needs a 32 MB download.</string>
     <string name="singing_model_failed">The 32 MB download didn\'t finish.</string>
     <string name="singing_model_download">Download</string>
     <string name="singing_model_close">Not now</string>
     <string name="setting_auto_report">Report song problems automatically</string>
+    <string name="setting_auto_report_hint">Sends words you put in time by hand earlier, too.</string>
     <string name="lyrics_romanized">In Latin letters</string>
     <string name="lyrics_romaji_typed">Romaji as typed</string>
     <string name="lyrics_katakana_as_hiragana">Katakana as hiragana</string>
@@ -390,6 +392,7 @@
     <string name="lyrics_line_saved">Saved</string>
     <string name="lyrics_word_failed">Couldn\'t find its meaning just now.</string>
     <string name="lyrics_word_unknown">No dictionary entry for this word.</string>
+    <string name="lyrics_word_modern">Old spelling of %1$s</string>
     <string name="lyrics_words_to_know_failed">Couldn\'t find the words to know.</string>
     <string name="lyrics_save_word">Save %1$s</string>
     <string name="lyrics_word_saved">%1$s saved</string>

@@ -138,7 +138,9 @@ jobs:
           out="Crosstune-$TAG.apk"
           # Keeps Gradle's zip layout, so F-Droid can copy this signature onto its own build of the
           # tag and ship this APK. Without it apksigner re-pads entries and the builds don't match.
-          "$apksigner" sign \
+          # JDK 25 warns, and a later JDK will block, a native call from apksigner's unnamed module.
+          # The JDK names this flag. apksigner passes each -J option through to java.
+          "$apksigner" -J-enable-native-access=ALL-UNNAMED sign \
             --alignment-preserved \
             --ks "$keystore" \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
@@ -156,7 +158,7 @@ jobs:
             bundle/release/app-release.aab \
             "$RELEASE_KEY_ALIAS"
           jarsigner -verify "Crosstune-$TAG.aab"
-          certs="$("$apksigner" verify --print-certs "$out")"
+          certs="$("$apksigner" -J-enable-native-access=ALL-UNNAMED verify --print-certs "$out")"
           echo "$certs"
           # apksigner labels the line "Signer #1" or "V3.0 Signer" depending on the signature schemes used.
           cert_sha256="$(sed -n 's/^.*certificate SHA-256 digest: //p' <<< "$certs" | head -n1)"
@@ -215,8 +217,17 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q apksigcopier
-          # apksigcopier calls apksigner to check the copied signature.
-          PATH="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1):$PATH"
+          # apksigcopier calls apksigner. The same JDK flag as the sign job, through a wrapper,
+          # because apksigcopier does not take apksigner's -J options.
+          tools="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
+          bindir="$RUNNER_TEMP/apk-bin"
+          mkdir -p "$bindir"
+          cat > "$bindir/apksigner" << EOF
+          #!/bin/bash
+          exec "$tools/apksigner" -J-enable-native-access=ALL-UNNAMED "\$@"
+          EOF
+          chmod +x "$bindir/apksigner"
+          PATH="$bindir:$tools:$PATH"
           if ! apksigcopier compare "Crosstune-$TAG.apk" --unsigned app/build/outputs/apk/release/app-release-unsigned.apk; then
             echo "::error::The signed APK doesn't match a fresh build, so F-Droid can't ship it"
             exit 1
@@ -277,6 +288,9 @@ jobs:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           # A repository variable can send releases to another track, e.g. "alpha" for closed testing.
           PLAY_TRACK: ${{ vars.PLAY_TRACK || 'production' }}
+          # The version below is pinned. Skip the update check, and send no usage metrics.
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_OPT_OUT_USAGE: "1"
         run: |
           if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
             echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so the App Bundle wasn't sent to Google Play"
@@ -291,10 +305,20 @@ jobs:
           notes="$RUNNER_TEMP/metadata"
           mkdir -p "$notes/en-US/changelogs"
           cp "fastlane/metadata/android/en-US/changelogs/$code.txt" "$notes/en-US/changelogs/"
-          sudo gem install fastlane -v 2.240.1 --no-document --silent
+          # bundle exec is what stops the "start using a Gemfile" notice. The version stays 2.240.1.
+          gemfile="$RUNNER_TEMP/Gemfile"
+          cat > "$gemfile" << 'EOF'
+          source "https://rubygems.org"
+          gem "fastlane", "2.240.1"
+          EOF
+          if ! command -v bundle >/dev/null; then
+            sudo gem install bundler --no-document --silent
+          fi
+          bundle config set --global path "$RUNNER_TEMP/bundle"
+          BUNDLE_GEMFILE="$gemfile" bundle install
           # Internal testing first: Google doesn't review it, so testers there get each release in
           # minutes, and the track never sits on an old version.
-          fastlane supply \
+          BUNDLE_GEMFILE="$gemfile" bundle exec fastlane supply \
             --package_name com.astrovm.crosstune \
             --json_key "$key" \
             --aab "Crosstune-$TAG.aab" \
@@ -309,7 +333,7 @@ jobs:
           fi
           # A run of its own, as supply skips promoting in a run that uploads. The release carries
           # its notes along.
-          fastlane supply \
+          BUNDLE_GEMFILE="$gemfile" bundle exec fastlane supply \
             --package_name com.astrovm.crosstune \
             --json_key "$key" \
             --track internal \
