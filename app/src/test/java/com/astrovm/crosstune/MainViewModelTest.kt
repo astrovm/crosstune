@@ -517,7 +517,7 @@ class MainViewModelTest {
             if (request.url.host == "lrclib.net") FakeSpotify.html(request, answer ?: throw java.io.IOException("offline")) else FakeSpotify.html(request, "")
         }
         playback.playing.value = app
-        val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0)
+        val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
         val model = playingModel(playback, lyricsFinder = finder, keptOnDisk = keptOnDisk, reports = reports, listener = listener)
         model.playerLyrics()
         if (words) until("found the words") { model.uiState.lyrics.isNotEmpty() }

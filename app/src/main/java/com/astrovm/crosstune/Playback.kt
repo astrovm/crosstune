@@ -51,6 +51,19 @@ import java.util.concurrent.ConcurrentHashMap
  */
 internal data class PlaybackClock(val positionMs: Long, val atMs: Long, val speed: Float = 1f, val playing: Boolean = true) {
     fun positionAt(nowMs: Long): Long = if (playing) positionMs + ((nowMs - atMs) * speed).toLong() else positionMs
+
+    /**
+     * How long from [nowMs] until the song is where something next changes: [changesAt] gives that
+     * place, after the one it's handed, or null when nothing changes again. Null too for a song that
+     * isn't moving on. So what follows the song sleeps to its next change, where looking every frame
+     * kept the phone busy the whole song, with nothing new to draw.
+     */
+    fun untilMs(nowMs: Long, changesAt: (Long) -> Long?): Long? {
+        if (!playing || speed <= 0f) return null
+        val position = positionAt(nowMs)
+        val next = changesAt(position) ?: return null
+        return ((next - position) / speed).toLong().coerceAtLeast(1)
+    }
 }
 
 /** The clock the timing log last had from an app, so what the app says again to the same effect isn't kept over what's new. */

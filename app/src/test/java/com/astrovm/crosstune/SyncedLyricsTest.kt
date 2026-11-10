@@ -173,4 +173,35 @@ class SyncedLyricsTest {
         assertEquals(1, SyncedLyrics.wordsSungBy(words, 1_499))
         assertEquals(2, SyncedLyrics.wordsSungBy(words, 9_000))
     }
+
+    @Test
+    fun theNextChangeIsTheNearestTimeAfterNow() {
+        // Not in order, as lines from some services come.
+        val times = listOf(20_000L, 0L, 10_000L)
+        assertEquals(0L, SyncedLyrics.nextAfter(times, -1))
+        assertEquals(10_000L, SyncedLyrics.nextAfter(times, 0))
+        assertEquals(20_000L, SyncedLyrics.nextAfter(times, 10_000))
+        assertEquals(null, SyncedLyrics.nextAfter(times, 20_000))
+        assertEquals(null, SyncedLyrics.nextAfter(emptyList(), 0))
+    }
+
+    @Test
+    fun aSongWaitsUntilItsNextChange() {
+        val clock = PlaybackClock(positionMs = 1_000, atMs = 50_000)
+        // 2 s into the song, a change at 5 s is 3 s away.
+        assertEquals(3_000L, clock.untilMs(51_000) { 5_000 })
+        // The place asked about is where the song is now, not where the clock was read.
+        assertEquals(500L, clock.untilMs(51_000) { it + 500 })
+        // At double speed it comes in half the time, and at half speed in twice.
+        assertEquals(1_500L, clock.copy(speed = 2f).untilMs(50_500) { 5_000 })
+        assertEquals(6_000L, clock.copy(speed = 0.5f).untilMs(52_000) { 5_000 })
+        // A change that's due, or just passed, is looked at on the next moment, never in a tight loop.
+        assertEquals(1L, clock.untilMs(51_000) { 2_000 })
+        assertEquals(1L, clock.untilMs(51_000) { 1_500 })
+        // Nothing changes again: no wait at all.
+        assertEquals(null, clock.untilMs(51_000) { null })
+        // A song that's paused, or isn't moving, never gets there.
+        assertEquals(null, clock.copy(playing = false).untilMs(51_000) { 5_000 })
+        assertEquals(null, clock.copy(speed = 0f).untilMs(51_000) { 5_000 })
+    }
 }

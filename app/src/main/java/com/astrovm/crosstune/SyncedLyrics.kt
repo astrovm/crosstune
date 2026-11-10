@@ -139,6 +139,9 @@ internal object SyncedLyrics {
         return if (end != null && positionMs > end) -1 else at
     }
 
+    /** Where the next of [times] after [positionMs] is, when the line or word lit changes; null after the last. */
+    fun nextAfter(times: List<Long>, positionMs: Long): Long? = times.filter { it > positionMs }.minOrNull()
+
     /** The fraction is decimals of a second: ".5" is half of one, ".05" a twentieth. */
     private fun MatchResult.toMillis(): Long {
         val (minutes, seconds, fraction) = destructured

@@ -888,7 +888,9 @@ private fun LikeButton(like: AppAction, app: String?, onLike: () -> Unit, modifi
  */
 @Composable
 private fun LyricsPeek(lines: List<LyricLine>, following: Following?, tint: Color, onLyrics: () -> Unit, modifier: Modifier) {
-    val at = rememberWhilePlaying(following?.takeIf { lines.size > 1 }) { position -> lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0) } ?: 0
+    val at = rememberWhilePlaying(following?.takeIf { lines.size > 1 }, lines, { at -> SyncedLyrics.nextAfter(lines.map { it.timeMs }, at) }) { position ->
+        lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
+    } ?: 0
     val line = (lines.getOrNull(at) ?: lines.first()).text
     val name = stringResource(R.string.lyrics_button)
     Row(
