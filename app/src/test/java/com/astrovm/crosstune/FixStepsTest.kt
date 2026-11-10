@@ -405,7 +405,57 @@ class FixStepsTest {
         assertEquals("app:${spotify.packageName}", Need.StopApp(spotify).key)
         assertEquals("float", Need.Float.key)
         assertEquals("mic", Need.Microphone.key)
+        assertEquals("exact", Need.Exact.key)
         assertEquals(false, state.done(Need.Float))
+        assertEquals(true, state.done(Need.Exact))
+    }
+
+    @Test
+    fun aLateReminderIsSaidUntilTheExactMinuteIsAllowed() {
+        val late = Reminder(minute = 20 * 60, on = true, exact = false)
+        val state = broken.copy(reminder = late)
+        assertEquals(listOf(Need.Links, Need.Follow, Need.Exact), state.checks().map { it.need })
+        assertEquals(false, state.done(Need.Exact))
+        assertEquals(3, state.toFix)
+        // Known from the app itself, before Android has been asked about the rest.
+        assertEquals(1, state.copy(systemStateKnown = false).toFix)
+        // On time, or off, there is nothing to allow.
+        assertFalse(Need.Exact in state.copy(reminder = late.copy(exact = true)).checks().map { it.need })
+        assertEquals(true, state.copy(reminder = late.copy(exact = true)).done(Need.Exact))
+        assertFalse(Need.Exact in state.copy(reminder = late.copy(on = false)).checks().map { it.need })
+        assertEquals(true, state.copy(reminder = late.copy(on = false)).done(Need.Exact))
+        // One thing already allowed still counts the rest, and a done row is not one of them.
+        assertEquals(2, state.copy(canFollowApps = true).toFix)
+    }
+
+    @Test
+    fun aLateReminderSaysSoAndOneTapCannotAllowIt() {
+        showList { copy(reminder = Reminder(minute = 20 * 60, on = true, exact = false), canSetUpInOneTap = true) }
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.practice_reminder_late), string(R.string.fix_all))
+    }
+
+    @Test
+    fun onlyALateReminderIsLeftToDoByHand() {
+        showList {
+            copy(
+                reminder = Reminder(minute = 20 * 60, on = true, exact = false),
+                canFollowApps = true,
+                unapprovedHosts = emptyMap(),
+                canSetUpInOneTap = true
+            )
+        }
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.practice_reminder_late), string(R.string.fix_one_by_one))
+        assertFalse(shown(string(R.string.fix_all)))
+        click(string(R.string.fix_one_by_one))
+        assertEquals(listOf("steps exact"), done)
+    }
+
+    @Test
+    fun theExactMinuteIsOneStepOnAndroidsPage() {
+        showSteps(Need.Exact)
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.practice_reminder_late), string(R.string.fix_open_settings))
+        click(string(R.string.fix_open_settings))
+        assertEquals(listOf("open exact"), done)
     }
 
     @Test

@@ -47,6 +47,10 @@ class PracticeRemindersTest {
     private fun alarmIntent(flag: Int): PendingIntent? =
         PendingIntent.getBroadcast(app, 0, Intent(PracticeReminders.ACTION_REMIND).setClass(app, PracticeReminderReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or flag)
 
+    /** The inexact spare, a different action, so Android keeps it when it deletes the exact alarm. */
+    private fun keepIntent(flag: Int): PendingIntent? =
+        PendingIntent.getBroadcast(app, 1, Intent(PracticeReminders.ACTION_REMIND_KEEP).setClass(app, PracticeReminderReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or flag)
+
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     private fun saved(vararg lines: JSONObject) = prefs().edit().putString("saved_lines", JSONArray(lines.toList()).toString()).commit()
@@ -188,18 +192,18 @@ class PracticeRemindersTest {
         reminders.arm()
         assertNull(alarms.peekNextScheduledAlarm())
         reminders.turn(true)
-        val alarm = alarms.peekNextScheduledAlarm()
-        assertNotNull(alarm)
-        assertEquals(at(3, 20, 5), alarm?.triggerAtMs)
-        assertEquals(AlarmManager.RTC_WAKEUP, alarm?.getType())
-        assertEquals(true, alarm?.isAllowWhileIdle)
-        // Exact: Samsung's freezer holds an inexact one for as long as the app stays frozen.
-        assertEquals(0L, requireNotNull(alarm).windowLengthMs)
+        val set = alarms.scheduledAlarms
+        // The exact one, and the inexact spare for the same minute. Two at one time, so the next in line is either.
+        assertEquals(2, set.size)
+        assertTrue(set.all { it.triggerAtMs == at(3, 20, 5) && it.getType() == AlarmManager.RTC_WAKEUP && it.isAllowWhileIdle })
+        assertEquals(1, set.count { it.windowLengthMs == 0L })
+        assertEquals(1, set.count { it.windowLengthMs != 0L })
         assertTrue(reminders.state.exact)
         assertFalse(reminders.state.late)
         assertNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))
+        assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
         reminders.turn(false)
-        assertNull(alarms.peekNextScheduledAlarm())
+        assertTrue(alarms.scheduledAlarms.isEmpty())
     }
 
     @Test
@@ -207,7 +211,7 @@ class PracticeRemindersTest {
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
         reminders.sessionDone()
         reminders.turn(true)
-        val alarm = requireNotNull(alarms.peekNextScheduledAlarm())
+        val alarm = requireNotNull(alarms.scheduledAlarms.singleOrNull())
         assertEquals(at(3, 20, 5), alarm.triggerAtMs)
         assertEquals(true, alarm.isAllowWhileIdle)
         assertTrue(alarm.windowLengthMs != 0L)
@@ -234,28 +238,40 @@ class PracticeRemindersTest {
         assertEquals("Android kept no alarm once the exact one was dropped", 1, kept.size)
         assertTrue(kept.single().windowLengthMs != 0L)
         assertTrue(kept.single().isAllowWhileIdle)
+        val keep = requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
+        val delivered = Intent(shadowOf(keep).savedIntent)
+        // Cancelling that spare leaves nothing, so the alarm Android kept is the spare.
+        manager.cancel(keep)
+        assertTrue(alarms.scheduledAlarms.isEmpty())
         // One minute on, so the stored minute is the alarm's own, not whatever the clock says now.
         clock = at(3, 20, 6)
-        val keep = PendingIntent.getBroadcast(
-            app, 1,
-            Intent("com.astrovm.crosstune.action.REMIND_PRACTICE_KEEP").setClass(app, PracticeReminderReceiver::class.java),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
-        )
-        PracticeReminderReceiver().onReceive(app, shadowOf(requireNotNull(keep)).savedIntent)
+        PracticeReminderReceiver().onReceive(app, delivered)
         assertEquals(1, shown.size)
         assertEquals("1 card to practice", shown.single().title())
+        assertEquals(delivered.getLongExtra(PracticeReminders.EXTRA_AT, 0L), prefs().getLong("practice_reminder_posted_for", 0L))
     }
 
     @Test
     fun theSameAlarmIsReplacedWhenThePermissionChangesSoOneIsNeverLeftBehind() {
-        ShadowAlarmManager.setCanScheduleExactAlarms(false)
         reminders.sessionDone()
         reminders.turn(true)
-        assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
-        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        assertEquals(2, alarms.scheduledAlarms.size)
+        val manager = app.getSystemService(AlarmManager::class.java)
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        // Android deletes the exact one as it revokes the access. The process is still here, so the app sets the inexact one.
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertEquals(1, alarms.scheduledAlarms.size)
         reminders.arm()
         assertEquals(1, alarms.scheduledAlarms.size)
-        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
+        assertTrue(alarms.scheduledAlarms.single().windowLengthMs != 0L)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.arm()
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        reminders.arm()
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+        assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
     }
 
     /** Before Android 12 there's no permission: exact is always allowed. */
@@ -265,7 +281,8 @@ class PracticeRemindersTest {
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
         reminders.sessionDone()
         reminders.turn(true)
-        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertEquals(0L, alarms.scheduledAlarms.single().windowLengthMs)
         assertTrue(reminders.state.exact)
     }
 
@@ -278,7 +295,8 @@ class PracticeRemindersTest {
             ShadowAlarmManager.setCanScheduleExactAlarms(false)
             reminders.sessionDone()
             reminders.turn(true)
-            assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
+            assertEquals(1, alarms.scheduledAlarms.size)
+            assertTrue(alarms.scheduledAlarms.single().windowLengthMs != 0L)
             assertFalse(reminders.state.exact)
         } finally {
             ReflectionHelpers.setStaticField(Build.VERSION::class.java, "SDK_INT", was)
@@ -311,8 +329,9 @@ class PracticeRemindersTest {
         assertTrue(requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs != 0L)
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
         PracticeReminderReceiver().onReceive(app, Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED))
-        assertEquals(1, alarms.scheduledAlarms.size)
-        assertEquals(0L, requireNotNull(alarms.peekNextScheduledAlarm()).windowLengthMs)
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertEquals(1, alarms.scheduledAlarms.count { it.windowLengthMs == 0L })
+        assertNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))
     }
 
     @Test
@@ -352,6 +371,8 @@ class PracticeRemindersTest {
         firesOn(3)
         assertEquals("1 card to practice", shown.single().title())
         assertEquals("Demo", shown.single().extras.getString(Notification.EXTRA_TEXT))
+        // Asked directly, with no minute on the intent: nothing is stored to tell a second delivery by.
+        assertFalse(prefs().contains("practice_reminder_posted_for"))
     }
 
     @Test
@@ -489,8 +510,10 @@ class PracticeRemindersTest {
         saved(line("One"))
         phone.sessionDone()
         phone.turn(true)
-        app.getSystemService(AlarmManager::class.java).cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_UPDATE_CURRENT)))
-        assertNull(alarms.peekNextScheduledAlarm())
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
         PracticeReminderReceiver().onReceive(app, Intent(Intent.ACTION_BOOT_COMPLETED))
         assertNotNull(alarms.peekNextScheduledAlarm())
         // A session long ago, as its clock moved on past the same day.
@@ -500,12 +523,75 @@ class PracticeRemindersTest {
     }
 
     @Test
-    fun androidBringsItThoseAfterARebootAndATimeChange() {
+    fun androidBringsItThoseAfterARebootAnUpdateOrATimeChange() {
         val receivers = { action: String -> app.packageManager.queryBroadcastReceivers(Intent(action).setPackage(app.packageName), 0).map { it.activityInfo.name } }
         val name = PracticeReminderReceiver::class.java.name
-        listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED).forEach { action ->
+        listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED).forEach { action ->
             assertTrue(action, name in receivers(action))
         }
+    }
+
+    /**
+     * A reboot, an update, or a new clock drops both alarms. Android starts the receiver with the
+     * phone's own clock, and each one sets the exact alarm and the spare for the same minute.
+     */
+    @Test
+    fun everyChangeOfTheClockOrTheAppSetsTheBestAlarmStillAllowed() {
+        setUpWith(line("One"))
+        val manager = app.getSystemService(AlarmManager::class.java)
+        val minute = requireNotNull(reminders.state.minute)
+        listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED).forEach { action ->
+            manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+            manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+            assertTrue(action, alarms.scheduledAlarms.isEmpty())
+            PracticeReminderReceiver().onReceive(app, Intent(action))
+            val set = alarms.scheduledAlarms
+            val whenDue = nextReminderAt(minute, System.currentTimeMillis(), ZoneId.systemDefault())
+            assertEquals(action, 2, set.size)
+            assertTrue(action, set.all { it.triggerAtMs == whenDue })
+            assertEquals(action, 1, set.count { it.windowLengthMs == 0L })
+            assertTrue(action, set.any { it.windowLengthMs != 0L && it.isAllowWhileIdle })
+        }
+    }
+
+    /** Both can be on their way for one minute. The second asks nothing more, and it still sets tomorrow. */
+    @Test
+    fun bothAlarmsOfOneMinuteAskOnceAndTheNextDayStillAsks() {
+        setUpWith(line("One"))
+        val exact = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val keep = Intent(shadowOf(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        val slot = exact.getLongExtra(PracticeReminders.EXTRA_AT, 0L)
+        assertEquals(at(3, 20, 5), slot)
+        assertEquals(slot, keep.getLongExtra(PracticeReminders.EXTRA_AT, 0L))
+        deliverBoth(exact, keep, slot)
+        val next = Intent(shadowOf(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE))).savedIntent)
+        assertEquals(at(4, 20, 5), next.getLongExtra(PracticeReminders.EXTRA_AT, 0L))
+        clock = at(4, 20, 6)
+        reminders.remind(next)
+        assertEquals(2, prefs().getInt("practice_reminder_ignored", 0))
+        deliverBoth(keep, exact, slot)
+    }
+
+    /** [first] asks, then the alarms are dropped, then [second] of the same minute arrives. */
+    private fun deliverBoth(first: Intent, second: Intent, slot: Long) {
+        prefs().edit().putInt("practice_reminder_ignored", 0).remove("practice_reminder_posted_for").commit()
+        reminders.clear()
+        clock = at(3, 20, 6)
+        reminders.remind(first)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        assertEquals(slot, prefs().getLong("practice_reminder_posted_for", 0L))
+        val manager = app.getSystemService(AlarmManager::class.java)
+        manager.cancel(requireNotNull(alarmIntent(PendingIntent.FLAG_NO_CREATE)))
+        manager.cancel(requireNotNull(keepIntent(PendingIntent.FLAG_NO_CREATE)))
+        assertTrue(alarms.scheduledAlarms.isEmpty())
+        reminders.remind(second)
+        assertEquals(1, shown.size)
+        assertEquals(1, prefs().getInt("practice_reminder_ignored", 0))
+        val set = alarms.scheduledAlarms
+        assertEquals(2, set.size)
+        assertTrue(set.all { it.triggerAtMs == at(4, 20, 5) })
+        assertEquals(1, set.count { it.windowLengthMs == 0L })
     }
 
     @Test

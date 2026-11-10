@@ -115,6 +115,14 @@ internal sealed interface Need {
     data object Float : Need {
         override val key get() = "float"
     }
+
+    /**
+     * Alarms and reminders, so a practice reminder can go at its minute.
+     * Without them it can still go, up to an hour late, which is said here.
+     */
+    data object Exact : Need {
+        override val key get() = "exact"
+    }
 }
 
 /** A [need] and whether it's [done]: null when Android can't tell. */
@@ -140,10 +148,20 @@ internal fun UiState.checks(apps: List<LinkApp> = appsInTheWay): List<Check> = b
         add(Check(Need.Links, linksAllowed))
     }
     add(Check(Need.Follow, canFollowApps))
+    // On, but only the inexact alarm: it can arrive late, and only the user can allow the exact minute.
+    if (reminder.late) add(Check(Need.Exact, done(Need.Exact)))
 }
 
-/** How many things are known to need fixing; none until Android has been asked. */
-internal val UiState.toFix: Int get() = if (systemStateKnown) checks().count { it.done == false } else 0
+/**
+ * How many things are known to need fixing. A late reminder is known from the app, before Android
+ * has been asked about the rest.
+ */
+internal val UiState.toFix: Int get() = checks().count { broken(it) }
+
+private fun UiState.broken(check: Check): Boolean {
+    if (check.done != false) return false
+    return systemStateKnown || check.need == Need.Exact
+}
 
 /**
  * Whether Crosstune's links are allowed. From Android 12, as Android says; before, which can't
@@ -164,6 +182,7 @@ internal fun UiState.done(need: Need): Boolean? = when (need) {
     Need.Microphone -> microphone == MicAccess.ALLOWED
     Need.Follow -> canFollowApps
     Need.Float -> canFloatOverApps
+    Need.Exact -> !reminder.late
 }
 
 /** A link of [service]'s, which opens in whatever app takes its links, Crosstune or another, [TEST_LINK] telling it apart. */
@@ -272,7 +291,8 @@ private fun FixAll(state: UiState, actions: ScreenActions, left: List<Need>) {
             .padding(top = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val oneTap = state.canSetUpInOneTap && !state.oneTapFailed
+        // One tap can allow links, following and the microphone. It cannot allow alarms and reminders.
+        val oneTap = state.canSetUpInOneTap && !state.oneTapFailed && left.any { it != Need.Exact }
         val press = rememberPress()
         Button(
             onClick = if (oneTap) actions.onSetUpInOneTap else { { actions.onFixSteps(left) } },
@@ -352,7 +372,8 @@ private fun FixRow(check: Check, asks: Boolean, onOpen: (Need) -> Unit) {
                 .padding(horizontal = 12.dp)
         ) {
             Text(needTitle(check.need), style = MaterialTheme.typography.bodyLarge)
-            check.need.gets().takeIf { asks }?.let {
+            val under = check.need.problem() ?: check.need.gets().takeIf { asks }
+            under?.let {
                 Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -392,9 +413,14 @@ private fun Need.gets(): Int? = when (this) {
     else -> null
 }
 
+/** What is wrong, said whenever the row shows. What allowing it gets you is separate, and only said the first time. */
+@StringRes
+private fun Need.problem(): Int? = if (this == Need.Exact) R.string.practice_reminder_late else null
+
 private fun Need.icon(): Int = when (this) {
     Need.Microphone -> R.drawable.ic_recognize
     Need.Float -> R.drawable.ic_float
+    Need.Exact -> R.drawable.ic_notifications_on
     else -> R.drawable.ic_lyrics
 }
 
@@ -405,6 +431,7 @@ private fun Need.title(): Int = when (this) {
     Need.Microphone -> R.string.fix_mic_title
     Need.Follow -> R.string.follow_help_title
     Need.Float -> R.string.floating_permission_title
+    Need.Exact -> R.string.practice_reminder_exact
 }
 
 @Composable
@@ -545,6 +572,8 @@ private fun bold(@StringRes template: Int, vararg words: String): AnnotatedStrin
  */
 @Composable
 internal fun fixSteps(need: Need, state: UiState, actions: ScreenActions): List<FixStep> {
+    // Only the user can allow the exact minute, on Android's alarms and reminders page.
+    if (need == Need.Exact) return listOf(FixStep(AnnotatedString(stringResource(R.string.practice_reminder_late))))
     val phone = state.phone
     val tap = R.string.fix_step_tap
     val pick = R.string.fix_step_pick
