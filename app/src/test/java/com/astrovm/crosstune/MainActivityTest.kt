@@ -4917,15 +4917,15 @@ class MainActivityTest {
         assertTextShown(string(R.string.lyrics_repeat_line))
         assertTrue(playback.seeks.isEmpty())
 
-        // Repeated, the app goes to its start, and back again each time it reaches the next line.
+        // Repeated, the app goes to its start, and back again when the next line starts, so that line is not heard.
         click(string(R.string.lyrics_repeat_line))
         assertEquals(listOf(20_000L), playback.seeks)
-        // Just past the next line's start, the last word still sounds: it plays on a moment.
-        playback.playing.value = Following(PlaybackClock(40_700, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
+        // Still in this line, a moment before the next one: it plays on.
+        playback.playing.value = Following(PlaybackClock(39_700, SystemClock.elapsedRealtime(), playing = false), "Spotify", canSeek = true)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1_200))
         composeRule.waitForIdle()
         assertEquals(listOf(20_000L), playback.seeks)
-        playback.playing.value = Following(PlaybackClock(41_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
+        playback.playing.value = Following(PlaybackClock(40_000, SystemClock.elapsedRealtime()), "Spotify", canSeek = true)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300))
         composeRule.waitForIdle()
         assertEquals(listOf(20_000L, 20_000L), playback.seeks)

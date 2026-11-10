@@ -43,8 +43,22 @@ internal data class LineWindow(val start: Long, val end: Long) {
         const val SEEK_SLACK_MS = 1_500L
 
         /** [line]'s window in a video that has [lead] ms before the song, which moves where the line is too. */
-        fun of(line: SavedLine, lead: Long): LineWindow =
-            LineWindow((line.startMs ?: 0L) + lead, (line.endMs ?: 0L) + lead + MainViewModel.LINE_TAIL_MS)
+        fun of(line: SavedLine, lead: Long): LineWindow {
+            val start = (line.startMs ?: 0L) + lead
+            // The next line sits that same lead later in the video.
+            val next = line.nextMs?.plus(lead)
+            return LineWindow(start, playedUntil(start, (line.endMs ?: 0L) + lead, next))
+        }
+
+        /**
+         * Where play stops. It is a moment past [endMs], so the last word is not cut off. When [nextMs]
+         * is inside that moment, play stops there, so the next line is not heard. A line kept before
+         * that start was stored has no [nextMs], so the moment past stays.
+         */
+        fun playedUntil(startMs: Long, endMs: Long, nextMs: Long?): Long {
+            val tailed = endMs + MainViewModel.LINE_TAIL_MS
+            return if (nextMs != null && nextMs > startMs) minOf(tailed, nextMs) else tailed
+        }
     }
 }
 

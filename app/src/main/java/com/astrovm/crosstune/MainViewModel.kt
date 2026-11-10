@@ -3481,8 +3481,8 @@ internal class MainViewModel(
     }
 
     /**
-     * Line [index] of the words shown, as it's kept: with what helps read it, where it's sung, to
-     * the next line, and the app playing it, to play it again.
+     * Line [index] of the words shown, as it's kept: with what helps read it, where it's sung,
+     * where the next line starts, and the app playing it, to play it again.
      */
     private fun savedLineAt(index: Int): SavedLine? {
         val song = uiState.lyricsFor ?: return null
@@ -3509,7 +3509,8 @@ internal class MainViewModel(
         // Timed again, it stays with the app it was kept from, when none follows the words now.
         val app = appFollowing
         return copy(
-            startMs = start, endMs = endOf(lines, index), leadMs = appLeadMs?.takeIf { app?.video == true } ?: leadMs.takeIf { app == null } ?: 0L,
+            startMs = start, endMs = endOf(lines, index), nextMs = nextStart(lines, index), lengthMs = recordingLength(),
+            leadMs = appLeadMs?.takeIf { app?.video == true } ?: leadMs.takeIf { app == null } ?: 0L,
             app = app?.appPackage ?: this.app, artworkUrl = uiState.lyricsFor?.artworkUrl ?: artworkUrl
         )
     }
@@ -3522,6 +3523,18 @@ internal class MainViewModel(
         val line = lines[index]
         return line.endMs ?: lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs ?: (line.timeMs + LAST_LINE_MS)
     }
+
+    /** Where the line after [index] starts, when one starts later than this one. */
+    private fun nextStart(lines: List<LyricLine>, index: Int): Long? {
+        val line = lines[index]
+        return lines.drop(index + 1).firstOrNull { it.timeMs > line.timeMs }?.timeMs
+    }
+
+    /**
+     * How long the recording these words were timed on lasts. The words say, when they do. Otherwise
+     * the app that was playing them, when it says a real length. 0 is not one.
+     */
+    private fun recordingLength(): Long? = found?.lengthMs?.takeIf { it > 0 } ?: appFollowing?.durationMs?.takeIf { it > 0 }
 
     /**
      * Lines of [song] kept are read as its lines are now, put right, but for the ones put right by
@@ -3895,7 +3908,7 @@ internal class MainViewModel(
         val lines = uiState.lyricLines
         val start = lines.getOrNull(index)?.timeMs ?: return
         if (uiState.following?.let { it.canSeek && it.timingKnown } != true) return
-        val end = endOf(lines, index) + LINE_TAIL_MS
+        val end = LineWindow.playedUntil(start, endOf(lines, index), nextStart(lines, index))
         repeatJob?.cancel()
         uiState = uiState.copy(repeating = index)
         playback?.seekTo(song, inApp(start))

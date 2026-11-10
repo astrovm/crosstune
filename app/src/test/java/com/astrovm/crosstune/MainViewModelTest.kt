@@ -637,6 +637,8 @@ class MainViewModelTest {
         model.toggleSavedLine(1)
         assertEquals(listOf("Two"), model.uiState.savedLines.map { it.text })
         assertEquals(10_000L, model.uiState.savedLines.single().startMs)
+        assertEquals(20_000L, model.uiState.savedLines.single().nextMs)
+        assertEquals(60_000L, model.uiState.savedLines.single().lengthMs)
         model.toggleSavedLine(1)
         assertTrue(model.uiState.savedLines.isEmpty())
         // A line that isn't there is no line to keep.
@@ -654,6 +656,37 @@ class MainViewModelTest {
         assertTrue(model.uiState.savedLines.any { it.text == "Absent" })
         model.dismissLyrics()
         assertNull(model.uiState.lyricsFor)
+    }
+
+    @Test
+    fun aSavedLineKeepsWhereTheNextLineStartsAndHowLongTheRecordingIs() {
+        val fromWords = lyricsModel(FakePlayback(), app = following().copy(durationMs = 0))
+        fromWords.toggleSavedLine(1)
+        val two = fromWords.uiState.savedLines.single { it.text == "Two" }
+        // The words are a minute long. The app saying 0 does not replace that.
+        assertEquals(20_000L, two.nextMs)
+        assertEquals(60_000L, two.lengthMs)
+        fromWords.toggleSavedLine(2)
+        val three = fromWords.uiState.savedLines.single { it.text == "Three" }
+        assertNull(three.nextMs)
+        assertEquals(20_000L + MainViewModel.LAST_LINE_MS, three.endMs)
+
+        // No length on the words: the app's length is kept, and 0 is not one.
+        // Each look starts with no line kept, so saving Two keeps it rather than letting the last one go.
+        val none = """[{"trackName":"Hush","artistName":"Band","syncedLyrics":"[00:00.00] One\n[00:10.00] Two\n[00:20.00] Three"}]"""
+        prefs().edit().remove("saved_lines").commit()
+        val fromApp = lyricsModel(FakePlayback(), answer = none, app = following().copy(durationMs = 180_000))
+        fromApp.toggleSavedLine(1)
+        assertEquals(180_000L, fromApp.uiState.savedLines.single().lengthMs)
+        prefs().edit().remove("saved_lines").commit()
+        val zero = lyricsModel(FakePlayback(), answer = none, app = following().copy(durationMs = 0))
+        zero.toggleSavedLine(1)
+        assertNull(zero.uiState.savedLines.single().lengthMs)
+        prefs().edit().remove("saved_lines").commit()
+        val missing = lyricsModel(FakePlayback(), answer = none)
+        missing.toggleSavedLine(1)
+        assertNull(missing.uiState.savedLines.single().lengthMs)
+        assertEquals(20_000L, missing.uiState.savedLines.single().nextMs)
     }
 
     @Test
