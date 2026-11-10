@@ -201,8 +201,8 @@ class FlashcardsTest {
         phone.playing.value = Following(PlaybackClock(atMs, SystemClock.elapsedRealtime(), playing = playing), "Music", canSeek = canSeek, appPackage = app, video = video)
     }
 
-    /** Demo plays in the music app, and its words are open. */
-    private fun wordsOfDemo() {
+    /** Demo plays in the music app, and its words are open, once [until] shows. */
+    private fun wordsOfDemo(until: String = "Moon") {
         appHas()
         launch()
         // The bar for the song playing opens its player, and the player has the words.
@@ -210,7 +210,36 @@ class FlashcardsTest {
         composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
         waitUntil { described(string(R.string.lyrics_button)) }
         click(string(R.string.lyrics_button))
-        waitUntil { shown("Moon") }
+        waitUntil { shown(until) }
+    }
+
+    /** YouTube Music having Demo by Band, as the video demo0000000. */
+    private fun youTubeHasDemo() {
+        val before = fake.handler
+        fake.handler = { request ->
+            if (request.url.host == "music.youtube.com") FakeSpotify.html(
+                request,
+                """{"contents":[{"musicResponsiveListItemRenderer":{
+                "flexColumns":[{"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Demo"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Band • Album • 3:34"}]}}}],
+                "playlistItemData":{"videoId":"demo0000000"}}}]}"""
+            )
+            else before(request)
+        }
+    }
+
+    /** Saves [text] from the open words, then practises the song in an app that will not move to the line. */
+    private fun saveAndPlayInThePlayer(text: String) {
+        composeRule.onAllNodes(hasText(text)).onLast().performTouchInput { longClick() }
+        composeRule.waitForIdle()
+        click(string(R.string.lyrics_save_line))
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss)).performSemanticsAction(SemanticsActions.Dismiss)
+        composeRule.waitForIdle()
+        // Already this song, and it will not move. It also does not say how long the song is.
+        phone.playing.value = phone.playing.value?.copy(canSeek = false, durationMs = null)
+        click(string(R.string.lyrics_study))
+        click(string(R.string.practice_song))
+        waitUntil { linePlayer.shown.isNotEmpty() }
     }
 
     private fun saved(vararg lines: String) = prefs().edit().putString("saved_lines", lines.joinToString(",", "[", "]")).commit()
@@ -238,6 +267,71 @@ class FlashcardsTest {
     // endregion
 
     @Test
+    fun thePlayerStopsAtTheNextLineWhenItStartsInsideTheTailAndChecksTheRecordingsLength() {
+        // The words end at 45.36 s and the next line starts at 46.10 s, on a recording 3:34 long.
+        // A one second tail would play to 46.36 s, into that next line. The length is on the words, and no app says it now.
+        runBlocking {
+            LookupCache(File(app.cacheDir, "lyrics.json"), Dispatchers.Unconfined).apply {
+                put(
+                    "${LyricsFinder.CACHE_VERSION}\u0000demo\u0000band",
+                    """{"words":"Give you up\nLet you down","length":214000,"lines":[[43560,"Give you up",[],45360],[46100,"Let you down"]]}"""
+                )
+                save()
+            }
+        }
+        youTubeHasDemo()
+        wordsOfDemo("Give you up")
+        saveAndPlayInThePlayer("Give you up")
+        val kept = savedLine("Give you up")
+        assertEquals(46_100L, kept.nextMs)
+        assertEquals(214_000L, kept.lengthMs)
+        assertEquals(Shown("demo0000000", 43_560, 46_100, 214_000, play = false), linePlayer.shown.single())
+    }
+
+    @Test
+    fun thePlayerKeepsTheTailWhenTheNextLineIsFar() {
+        // The words end at 14.5 s and the next line starts at 20 s, so the tail does not reach it.
+        runBlocking {
+            LookupCache(File(app.cacheDir, "lyrics.json"), Dispatchers.Unconfined).apply {
+                put(
+                    "${LyricsFinder.CACHE_VERSION}\u0000demo\u0000band",
+                    """{"words":"Night sky\nStars\nMoon","lines":[[0,"Night sky",[],6000],[10000,"Stars",[],14500],[20000,"Moon"]]}"""
+                )
+                save()
+            }
+        }
+        youTubeHasDemo()
+        wordsOfDemo("Stars")
+        saveAndPlayInThePlayer("Stars")
+        assertEquals(20_000L, savedLine("Stars").nextMs)
+        assertNull(savedLine("Stars").lengthMs)
+        assertEquals(Shown("demo0000000", 10_000, 14_500 + MainViewModel.LINE_TAIL_MS, null, play = false), linePlayer.shown.single())
+    }
+
+    @Test
+    fun thePlayerStopsAtTheNextLineWhenTheWordsHaveNoEndOfTheirOwn() {
+        // No word end: the line's end is where the next line starts. The tail must not play that line.
+        youTubeHasDemo()
+        wordsOfDemo()
+        saveAndPlayInThePlayer("Stars")
+        assertEquals(10_000L to 20_000L, savedLine("Stars").let { it.startMs to it.endMs })
+        assertEquals(20_000L, savedLine("Stars").nextMs)
+        assertEquals(Shown("demo0000000", 10_000, 20_000, null, play = false), linePlayer.shown.single())
+    }
+
+    @Test
+    fun thePlayerChecksTheLengthTheAppSaidWhenTheWordsHaveNone() {
+        // The words have no length. The app said 3:00 while the line was kept, then stopped saying it.
+        youTubeHasDemo()
+        wordsOfDemo()
+        phone.playing.value = phone.playing.value?.copy(durationMs = 180_000)
+        waitUntil { model().uiState.following?.durationMs == 180_000L }
+        saveAndPlayInThePlayer("Stars")
+        assertEquals(180_000L, savedLine("Stars").lengthMs)
+        assertEquals(Shown("demo0000000", 10_000, 20_000, 180_000, play = false), linePlayer.shown.single())
+    }
+
+    @Test
     fun aLineSavedFromWordsTimedWordByWordEndsWhereTheySay() {
         // Kept from before, as NetEase's words timed word by word are: each line says where it ends.
         runBlocking {
@@ -250,8 +344,9 @@ class FlashcardsTest {
         composeRule.onAllNodes(hasText("Stars")).onLast().performTouchInput { longClick() }
         composeRule.waitForIdle()
         click(string(R.string.lyrics_save_line))
-        // Where it ends, not where the next starts.
+        // Where it ends, not where the next starts. The next start is kept on its own.
         assertEquals(10_000L to 14_500L, savedLine("Stars").let { it.startMs to it.endMs })
+        assertEquals(20_000L, savedLine("Stars").nextMs)
     }
 
     @Test
@@ -263,6 +358,7 @@ class FlashcardsTest {
         click(string(R.string.lyrics_save_line))
         val kept = savedLine("Stars")
         assertEquals(10_000L to 20_000L, kept.startMs to kept.endMs)
+        assertEquals(20_000L, kept.nextMs)
         assertEquals(app.packageName, kept.app)
         composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss)).performSemanticsAction(SemanticsActions.Dismiss)
         composeRule.waitForIdle()
@@ -282,12 +378,12 @@ class FlashcardsTest {
         card().performClick()
         waitUntil { practice().sound == LineSound.PLAYING }
         assertEquals(true, phone.plays.last())
-        // Once the app is there, it pauses a moment past the next line, so the last word isn't cut short, to
+        // Once the app is there, it pauses at the next line, so that line is not heard, to
         // be played again; turned again, it isn't.
         appHas(atMs = 10_000)
-        pass(10_700)
+        pass(9_700)
         assertEquals(LineSound.PLAYING, practice().sound)
-        pass(300)
+        pass(400)
         waitUntil { practice().sound == LineSound.PLAYED }
         assertEquals(false, phone.plays.last())
         val seeks = phone.seeks.size
@@ -1411,6 +1507,7 @@ class FlashcardsTest {
         )
         wordsOfDemo()
         assertEquals(10_000L to 20_000L, savedLine("Stars").let { it.startMs to it.endMs })
+        assertEquals(20_000L, savedLine("Stars").nextMs)
         // A word, by the line it's sung in.
         assertEquals(0L, savedLine("sky").startMs)
         assertFalse(savedLine("Not sung").timed)

@@ -6,7 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LineWindowTest {
-    private fun line(start: Long? = 10_000, end: Long? = 15_000) = SavedLine("Night sky", translation = "Cielo", title = "Demo", artist = "Band", startMs = start, endMs = end)
+    private fun line(start: Long? = 10_000, end: Long? = 15_000, next: Long? = null) =
+        SavedLine("Night sky", translation = "Cielo", title = "Demo", artist = "Band", startMs = start, endMs = end, nextMs = next)
 
     @Test
     fun aLineEndsAMomentAfterTheWordsDo() {
@@ -23,6 +24,32 @@ class LineWindowTest {
     @Test
     fun aLineWithNoTimesIsTakenFromTheStart() {
         assertEquals(LineWindow(0, MainViewModel.LINE_TAIL_MS), LineWindow.of(line(start = null, end = null), lead = 0))
+    }
+
+    @Test
+    fun aLineStopsAtTheNextLineWhenItStartsInsideTheTail() {
+        // The words end at 15 s and the next line starts at 15.4 s, inside the one second tail.
+        assertEquals(LineWindow(10_000, 15_400), LineWindow.of(line(next = 15_400), lead = 0))
+        // The stored end is the next line's start, so nothing past it plays.
+        assertEquals(LineWindow(10_000, 20_000), LineWindow.of(line(end = 20_000, next = 20_000), lead = 0))
+        // The next line starts before the words end. Play still stops there.
+        assertEquals(LineWindow(10_000, 12_000), LineWindow.of(line(next = 12_000), lead = 0))
+    }
+
+    @Test
+    fun aLineKeepsItsTailWhenTheNextLineIsFartherThanThat() {
+        assertEquals(LineWindow(10_000, 15_000 + MainViewModel.LINE_TAIL_MS), LineWindow.of(line(next = 20_000), lead = 0))
+    }
+
+    @Test
+    fun aVideosLeadMovesTheNextLineToo() {
+        assertEquals(LineWindow(12_000, 17_400), LineWindow.of(line(next = 15_400), lead = 2_000))
+    }
+
+    @Test
+    fun aNextLineThatDoesNotStartAfterThisOneLeavesTheTail() {
+        assertEquals(LineWindow(10_000, 15_000 + MainViewModel.LINE_TAIL_MS), LineWindow.of(line(next = 10_000), lead = 0))
+        assertEquals(LineWindow(10_000, 15_000 + MainViewModel.LINE_TAIL_MS), LineWindow.of(line(next = 9_000), lead = 0))
     }
 
     @Test
