@@ -216,7 +216,14 @@ def load_jmdict(folder):
     for entry in json.loads(path.read_text())["words"]:
         kana = {hiragana(k["text"]) for k in entry["kana"]}
         for kanji in entry["kanji"]:
-            words[kanji["text"]] |= kana
+            text = kanji["text"]
+            words[text] |= kana
+            # The kanji of a word written with kana after them, 行く ゆく, read without those: 行 ゆ.
+            stem = re.sub("[ぁ-ゖ]+$", "", text)
+            tail = hiragana(text[len(stem):])
+            stem_only = stem and all(map(is_han, stem))
+            if tail and stem_only:
+                words[stem] |= {k[:-len(tail)] for k in kana if k.endswith(tail) and len(k) > len(tail)}
     return words
 
 
@@ -271,7 +278,8 @@ def compare(folder, words):
                 continue
             seen.add(line["text"])
             if not line.get("truth"):
-                if any(map(is_han, line["text"])):
+                # A line that gives its readings in brackets, 瞬間（とき）, is read as it says, which no analyzer knows.
+                if any(map(is_han, line["text"])) and not re.search("[（(][ぁ-ゖァ-ヺー]+[）)]", line["text"]):
                     unruled.append((kind, name, line))
                 continue
             units = truth_units(line["text"], line["truth"])
