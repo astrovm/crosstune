@@ -195,15 +195,28 @@ jobs:
 
       # The pull request keeps every locked reading, and a readings change changes the golden file.
       # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
-      # check_golden.py runs the checker main has, so a pull request can't loosen it by editing it.
+      # The step runs the checker main has, copied out of main's commit, and imports no file of the pull request:
+      # a pull request can't loosen it by editing the checker or the code it imports. Only the pull request that
+      # adds the checker, when main has none, is checked by its own. test_check_golden.py runs this step.
       - name: A pull request keeps the locked readings
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.body // ""' > "$RUNNER_TEMP/pr-body.md"
-          python3 scripts/readingsaudit/check_golden.py --body-file "$RUNNER_TEMP/pr-body.md"
+          checker=scripts/readingsaudit/check_golden.py
+          # ls-tree fails when HEAD^1 is not there, which stops the step, and prints nothing when main has no checker yet.
+          # It is a line of its own: in a test, set -e would not see it fail.
+          listed=$(git ls-tree --name-only HEAD^1 -- "$checker")
+          if [ -n "$listed" ]; then
+            mkdir -p "$RUNNER_TEMP/golden-base"
+            git archive HEAD^1 scripts/readingsaudit | tar -x -C "$RUNNER_TEMP/golden-base"
+            checker="$RUNNER_TEMP/golden-base/$checker"
+          fi
+          # -E and -s: no PYTHONPATH and no user site, so Python finds the golden code next to the checker only.
+          python3 -E -s "$checker" --repo "$GITHUB_WORKSPACE" --base HEAD^1 --head HEAD --body-file "$RUNNER_TEMP/pr-body.md"
 
       # Tangled new code is split up, never listed in detekt's baseline to pass.
       - name: Detekt's baseline only shrinks

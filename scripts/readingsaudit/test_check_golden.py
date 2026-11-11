@@ -10,11 +10,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import check_golden  # noqa: E402
-from golden import GOLDEN_REL, READING_BUILD, READING_SOURCES  # noqa: E402
+from golden import GOLDEN_REL, READING_BUILDS, READING_SOURCES  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 
 READINGS = READING_SOURCES[0]
+READING_BUILD, CATALOG = READING_BUILDS
 ROW = ("甲乙", "甲乙", "", "こうおつ", "甲乙=こうおつ", "both")
 OTHER = ("丙", "丙", "", "へい", "丙=へい", "both")
 
@@ -157,6 +158,19 @@ class FakeDiff(unittest.TestCase):
             self.write(repo, READING_BUILD, 'implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")\nimplementation("other:lib:2.0")\n')
             self.merge(repo, "build: bump other")
             self.assertEqual((0, ""), self.run_check(repo))
+        # Gradle's version catalog, when the build moves the version there, counts the same way.
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder)
+            self.write(repo, CATALOG, '[versions]\nkuromoji = "0.9.0"\nother = "1.0"\n')
+            self.merge(repo, "build: move the versions to a catalog")
+            self.assertEqual(1, self.run_check(repo)[0])
+            git(repo, "checkout", "-q", "pr")
+            self.write(repo, CATALOG, '[versions]\nkuromoji = "0.9.0"\nother = "2.0"\n')
+            self.merge(repo, "build: bump other")
+            self.assertEqual((0, ""), self.run_check(repo))
+            self.write(repo, CATALOG, '[versions]\nkuromoji = "0.9.1"\nother = "2.0"\n')
+            commit(repo, "build: bump kuromoji")
+            self.assertEqual(1, self.run_check(repo)[0])
 
     def test_the_golden_file_in_the_same_pull_request_passes(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -253,15 +267,31 @@ class FakeDiff(unittest.TestCase):
             self.assertIn("removes or changes 1 locked readings", text)
 
 
-class BaseChecker(unittest.TestCase):
-    """The checker main has runs, not the one the pull request brings."""
+STEP = "A pull request keeps the locked readings"
 
-    def repo(self, folder, rows):
-        """A repository whose main has this checker, the golden code and the golden file, and the branch pr checked out."""
-        repo = Path(folder)
-        git(repo, "init", "-b", "main")
-        for name in ("check_golden.py", "golden.py", "readingsaudit.py"):
-            (repo / check_golden.SCRIPTS).mkdir(parents=True, exist_ok=True)
+
+def ci_step(name):
+    """The run script of the lint job's step [name], as ci.yml has it, so the test runs what CI runs."""
+    lines = (HERE.parents[1] / ".github/workflows/ci.yml").read_text(encoding="utf-8").splitlines()
+    at = lines.index(f"      - name: {name}")
+    at = next(i for i in range(at, len(lines)) if lines[i] == "        run: |")
+    script = []
+    for line in lines[at + 1:]:
+        if line.strip() and not line.startswith(" " * 10):
+            break
+        script.append(line[10:])
+    return "\n".join(script) + "\n"
+
+
+class CiStep(unittest.TestCase):
+    """The lint job's step runs the checker main has, copied out of main's commit, and no file of the pull request."""
+
+    def repo(self, folder, rows, scripts=("check_golden.py", "golden.py", "readingsaudit.py")):
+        """A repository whose main has the golden file and these files of the checker, and the branch pr checked out."""
+        repo = Path(folder) / "repo"
+        git(repo.parent, "init", "-q", "-b", "main", "repo")
+        (repo / check_golden.SCRIPTS).mkdir(parents=True)
+        for name in scripts:
             shutil.copy(HERE / name, repo / check_golden.SCRIPTS / name)
         (repo / GOLDEN_REL).parent.mkdir(parents=True)
         (repo / GOLDEN_REL).write_text(golden_text(*rows), encoding="utf-8")
@@ -269,56 +299,116 @@ class BaseChecker(unittest.TestCase):
         git(repo, "checkout", "-q", "-b", "pr")
         return repo
 
-    def run_check(self, repo, body):
-        with tempfile.TemporaryDirectory() as folder:
-            (Path(folder) / "body.md").write_text(body, encoding="utf-8")
-            return subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo), "--body-file", "body.md"],
-                                  cwd=folder, capture_output=True, text=True)
-
     def merge(self, repo, message):
         commit(repo, message)
         git(repo, "checkout", "-q", "main")
         git(repo, "merge", "--no-ff", "-q", "-m", "test: merge the change", "pr")
 
-    def test_a_pull_request_that_moves_the_file_drops_a_row_and_points_the_code_at_it_fails(self):
+    def run_step(self, repo, body="", **more):
+        """The step, as GitHub runs it: bash -e in the checkout, gh answering with [body], and [more] in its environment."""
+        temp = repo.parent / "runner-temp"
+        shutil.rmtree(temp, ignore_errors=True)
+        (temp / "bin").mkdir(parents=True)
+        (temp / "body.md").write_text(body, encoding="utf-8")
+        gh = temp / "bin" / "gh"
+        gh.write_text(f"#!/bin/sh\ncat '{temp / 'body.md'}'\n", encoding="utf-8")
+        gh.chmod(0o755)
+        env = {"PATH": f"{temp / 'bin'}:/usr/bin:/bin", "HOME": str(temp), "RUNNER_TEMP": str(temp), "GITHUB_WORKSPACE": str(repo),
+               "GITHUB_REPOSITORY": "owner/repo", "PR": "1", "GH_TOKEN": "fake", **more}
+        return subprocess.run(["bash", "-e", "-c", ci_step(STEP)], cwd=repo, env=env, capture_output=True, text=True)
+
+    def drop_a_row_and(self, change):
+        """A pull request that drops a locked row, with [change] made to its own copy of the checker's files."""
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        repo = self.repo(folder.name, [ROW, OTHER])
+        (repo / GOLDEN_REL).write_text(golden_text(OTHER), encoding="utf-8")
+        change(repo / check_golden.SCRIPTS)
+        self.merge(repo, "test: drop a row and loosen the check")
+        return repo
+
+    def assert_caught(self, repo):
+        done = self.run_step(repo)
+        self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+        self.assertIn("removes or changes 1 locked readings", done.stdout)
+        self.assertIn("甲乙 こうおつ both 甲乙", done.stdout)
+
+    def test_a_checker_that_passes_everything_is_not_run(self):
+        def loosen(scripts):
+            checker = scripts / "check_golden.py"
+            text = checker.read_text(encoding="utf-8")
+            self.assertIn("return 1 if problems else 0", text)
+            checker.write_text(text.replace("return 1 if problems else 0", "return 0"), encoding="utf-8")
+        repo = self.drop_a_row_and(loosen)
+        self.assert_caught(repo)
+        # Its own checker passes it: that is what running main's prevents.
+        own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True)
+        self.assertEqual(0, own.returncode, own.stdout + own.stderr)
+
+    def test_golden_code_that_exits_on_import_is_not_run(self):
+        for name in ("golden.py", "readingsaudit.py"):
+            with self.subTest(name):
+                def exit_early(scripts):
+                    code = scripts / name
+                    code.write_text("import sys\nsys.exit(0)\n" + code.read_text(encoding="utf-8"), encoding="utf-8")
+                repo = self.drop_a_row_and(exit_early)
+                self.assert_caught(repo)
+                own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True)
+                self.assertEqual(0, own.returncode, own.stdout + own.stderr)
+
+    def test_python_code_the_pull_request_puts_on_pythonpath_is_not_run(self):
+        # An earlier step can set PYTHONPATH for the job. Python runs a sitecustomize.py it finds there before the checker.
+        repo = self.drop_a_row_and(lambda scripts: (scripts / "sitecustomize.py").write_text("import os\nos._exit(0)\n", encoding="utf-8"))
+        own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True,
+                             env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(repo / check_golden.SCRIPTS)})
+        self.assertEqual(0, own.returncode, own.stdout + own.stderr)
+        done = self.run_step(repo, PYTHONPATH=str(repo / check_golden.SCRIPTS))
+        self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+        self.assertIn("甲乙 こうおつ both 甲乙", done.stdout)
+
+    def test_a_golden_file_moved_and_pointed_at_is_read_where_main_has_it(self):
+        def point_elsewhere(scripts):
+            git(scripts, "mv", GOLDEN_REL.replace("app/", "../../app/", 1), "../../app/src/test/resources/elsewhere.tsv")
+            code = scripts / "golden.py"
+            code.write_text(code.read_text(encoding="utf-8").replace(GOLDEN_REL, "app/src/test/resources/elsewhere.tsv"), encoding="utf-8")
+        repo = self.drop_a_row_and(point_elsewhere)
+        done = self.run_step(repo, "golden: lock changed\n")
+        self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+        self.assertIn("甲乙 こうおつ both 甲乙", done.stdout)
+
+    def test_the_step_reads_the_body_and_passes_a_pull_request_that_keeps_every_row(self):
         with tempfile.TemporaryDirectory() as folder:
-            repo = self.repo(folder, [ROW, OTHER])
-            moved = "app/src/test/resources/elsewhere.tsv"
-            git(repo, "mv", GOLDEN_REL, moved)
-            (repo / moved).write_text(golden_text(OTHER), encoding="utf-8")
-            code = repo / check_golden.SCRIPTS / "golden.py"
-            code.write_text(code.read_text(encoding="utf-8").replace(GOLDEN_REL, moved), encoding="utf-8")
-            self.merge(repo, "test: move the lock and drop a row")
-            done = self.run_check(repo, "golden: lock changed\n")
+            repo = self.repo(folder, [ROW])
+            (repo / GOLDEN_REL).write_text(golden_text(ROW, OTHER), encoding="utf-8")
+            self.merge(repo, "test: add a row")
+            done = self.run_step(repo)
+            self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+            git(repo, "checkout", "-q", "pr")
+            (repo / GOLDEN_REL).write_text(golden_text(OTHER), encoding="utf-8")
+            self.merge(repo, "test: drop a lock on purpose")
+            self.assertEqual(0, self.run_step(repo, "golden: accept 甲乙 こうおつ\n").returncode)
+            self.assertEqual(1, self.run_step(repo).returncode)
+
+    def test_the_pull_request_that_adds_the_checker_is_checked_by_its_own(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, [ROW, OTHER], scripts=())
+            for name in ("check_golden.py", "golden.py", "readingsaudit.py"):
+                shutil.copy(HERE / name, repo / check_golden.SCRIPTS / name)
+            (repo / GOLDEN_REL).write_text(golden_text(OTHER), encoding="utf-8")
+            self.merge(repo, "test: add the checker and drop a row")
+            done = self.run_step(repo, "golden: lock changed\n")
             self.assertEqual(1, done.returncode, done.stdout + done.stderr)
             self.assertIn("甲乙 こうおつ both 甲乙", done.stdout)
 
-    def test_a_pull_request_that_makes_the_checker_pass_everything_fails(self):
+    def test_a_range_git_cannot_read_stops_the_step(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder, [ROW])
-            checker = repo / check_golden.CHECKER
-            checker.write_text(checker.read_text(encoding="utf-8").replace("return 1 if problems else 0", "return 0"), encoding="utf-8")
-            (repo / GOLDEN_REL).write_text(golden_text(), encoding="utf-8")
-            self.merge(repo, "test: loosen the checker")
-            done = self.run_check(repo, "")
-            self.assertEqual(1, done.returncode, done.stdout + done.stderr)
-            self.assertIn(f"  {check_golden.CHECKER}\n", done.stdout)
-            self.assertIn("removes or changes 1 locked readings", done.stdout)
-            # With its own checker it would pass: that is what running main's prevents.
-            own = subprocess.run([sys.executable, str(checker), "--own", "--repo", str(repo)], capture_output=True, text=True)
-            self.assertEqual(0, own.returncode, own.stdout + own.stderr)
-
-    def test_the_base_checker_reads_the_same_range_and_body(self):
-        with tempfile.TemporaryDirectory() as folder:
-            repo = self.repo(folder, [ROW])
-            (repo / GOLDEN_REL).write_text(golden_text(), encoding="utf-8")
-            self.merge(repo, "test: drop a lock on purpose")
-            with tempfile.TemporaryDirectory() as other:
-                body = Path(other) / "body.md"
-                body.write_text("golden: accept 甲乙 こうおつ\n", encoding="utf-8")
-                self.assertEqual(0, check_golden.main(["--repo", str(repo), "--body-file", str(body)]))
-                self.assertEqual(1, check_golden.main(["--repo", str(repo)]))
-                self.assertEqual(0, check_golden.main(["--own", "--repo", str(repo), "--body-file", str(body)]))
+            # One commit and no parent: HEAD^1 is not there, as with a checkout too shallow.
+            done = self.run_step(repo)
+            self.assertNotEqual(0, done.returncode)
+            # Git stops it, before any checker runs: not the pull request's own, as when main had none.
+            self.assertNotIn("Traceback", done.stderr)
+            self.assertIn("HEAD^1", done.stderr)
 
 
 if __name__ == "__main__":

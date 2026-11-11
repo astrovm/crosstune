@@ -24,8 +24,9 @@ READING_SOURCES = (
     "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt",
     "app/src/main/resources/com/astrovm/crosstune/old-kana.txt",
 )
-# The dictionaries are Kuromoji's jars, named with their version in the app's build file.
-READING_BUILD = "app/build.gradle.kts"
+# The dictionaries are Kuromoji's jars, named with their version in the app's build file, or in Gradle's version catalog
+# when the build moves them there.
+READING_BUILDS = ("app/build.gradle.kts", "gradle/libs.versions.toml")
 READING_BUILD_WORD = "kuromoji"
 GOLDEN_COUNT = "# rows: "
 # The letters of the line each row holds on each side of its stable stretch, where the line has them. A rule that reads a

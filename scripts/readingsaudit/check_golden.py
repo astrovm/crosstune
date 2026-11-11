@@ -5,9 +5,9 @@
   python3 scripts/readingsaudit/check_golden.py --repo . --base HEAD^1 --head HEAD --body-file BODY
 
 The lint job runs it on a pull request: on the merge commit and the main commit before it (fetch-depth: 2),
-with the pull request's body as GitHub has it when the job runs. It runs the checker the base commit has, with
-the golden code next to it, so a pull request can't loosen the check by changing it. A mark in the body is a
-line of its own:
+with the pull request's body as GitHub has it when the job runs. The job runs this file as main has it, copied
+out of main's commit with the golden code next to it, so a pull request can't loosen the check by changing it.
+A mark in the body is a line of its own:
 
   golden: none               the readings code changes, and no reading does
   golden: accept WORD KANA   the locked rows of WORD read as KANA go, on purpose
@@ -16,20 +16,17 @@ line of its own:
 This reads only Git and the body, so it can be tested on a fake repository, with no GitHub.
 """
 import argparse
-import io
 import subprocess
 import sys
-import tarfile
-import tempfile
 from pathlib import Path
 
-from golden import GOLDEN_REL, READING_BUILD, READING_BUILD_WORD, READING_SOURCES, readers_of
+from golden import GOLDEN_REL, READING_BUILD_WORD, READING_BUILDS, READING_SOURCES, readers_of
 
 ROOT = Path(__file__).resolve().parents[2]
 NONE = "golden: none"
 ACCEPT = "golden: accept "
 LOCK = "golden: lock changed"
-# Where this checker and the golden code it imports live, as the base commit has them.
+# Where this checker and the golden code it imports live. The lint job copies this folder out of main's commit.
 SCRIPTS = "scripts/readingsaudit"
 CHECKER = f"{SCRIPTS}/check_golden.py"
 # The lock's own files. A change to one could loosen the lock, so it has to be said.
@@ -115,8 +112,8 @@ def changes(repo, base, head):
 
 
 def dictionaries_changed(repo, base, head):
-    """Whether the build file's Kuromoji lines, the dictionaries and their version, change."""
-    diff = git(repo, "diff", "-U0", base, head, "--", READING_BUILD)
+    """Whether a Kuromoji line, the dictionaries and their version, changes in the build file or the version catalog."""
+    diff = git(repo, "diff", "-U0", base, head, "--", *READING_BUILDS)
     return any(line[:1] in "+-" and not line.startswith(("+++", "---")) and READING_BUILD_WORD in line for line in diff.splitlines())
 
 
@@ -141,31 +138,13 @@ def golden_path(changed):
     return next((paths[1] for status, paths in changed if status == "R" and paths[0] == GOLDEN_REL), GOLDEN_REL)
 
 
-def from_base(repo, base, argv):
-    """Runs the checker [base] has, with the golden code next to it, on the same range and body. Its exit code, or
-    None when [base] has no checker yet: the pull request that adds it is checked by its own."""
-    if not git(repo, "ls-tree", "--name-only", base, "--", CHECKER).strip():
-        return None
-    archive = subprocess.run(["git", "archive", base, SCRIPTS], cwd=repo, check=True, capture_output=True).stdout
-    with tempfile.TemporaryDirectory() as folder:
-        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-            tar.extractall(folder, filter="data")
-        return subprocess.call([sys.executable, str(Path(folder) / CHECKER), "--own", "--repo", str(Path(repo).resolve()), *argv])
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", default=str(ROOT), help="the repository to read")
     parser.add_argument("--base", default="HEAD^1", help="the commit the pull request merges into")
     parser.add_argument("--head", default="HEAD", help="the merge commit")
     parser.add_argument("--body-file", type=Path, help="the pull request's body, for its marks")
-    parser.add_argument("--own", action="store_true", help="check with this checker, not the base commit's")
     args = parser.parse_args(argv)
-    if not args.own:
-        rest = ["--base", args.base, "--head", args.head] + (["--body-file", str(args.body_file.resolve())] if args.body_file else [])
-        code = from_base(args.repo, args.base, rest)
-        if code is not None:
-            return code
     body = args.body_file.read_text(encoding="utf-8") if args.body_file else ""
     changed = changes(args.repo, args.base, args.head)
     names = {path for _status, paths in changed for path in paths}
