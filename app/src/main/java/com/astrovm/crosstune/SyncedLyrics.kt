@@ -130,9 +130,9 @@ internal object SyncedLyrics {
     private fun soundsIn(text: String): Int = syllable.findAll(text).count() + latinWord.findAll(text).count()
 
     /**
-     * The line being sung at [positionMs], or -1 before the first. A line heard sung, with the next not
-     * heard, is only lit till it ends: what's sung after it isn't known. Nor is what's sung after the
-     * last line of words timed [byEar]; the last line timed by a service stays lit, as its outro is.
+     * The line being sung at [positionMs], or -1 before the first. Of words timed [byEar], a line with
+     * an end, as one heard with the next not heard, or the last, is only lit till it ends: what's sung
+     * after it isn't known. A line timed by a service stays lit till the next, and the last through the outro.
      */
     fun indexAt(lines: List<LyricLine>, positionMs: Long, byEar: Boolean): Int {
         val at = lines.indexOfLast { it.timeMs <= positionMs }
@@ -147,11 +147,12 @@ internal object SyncedLyrics {
     fun changes(lines: List<LyricLine>, byEar: Boolean): List<Long> =
         lines.indices.flatMap { index -> listOfNotNull(lines[index].timeMs.takeIf { lines[index].heard }, litTill(lines, index, byEar)?.plus(1)) }
 
-    /** Where line [at] goes dark once it's sung through, as what's sung after it isn't known; null while it's lit till the next. */
-    private fun litTill(lines: List<LyricLine>, at: Int, byEar: Boolean): Long? {
-        val next = lines.getOrNull(at + 1)
-        return lines.getOrNull(at)?.endMs?.takeIf { if (next == null) byEar else !next.heard }
-    }
+    /**
+     * Where line [at] goes dark once it's sung through, as what's sung after it isn't known; null while
+     * it's lit till the next. Timed by ear, a line has an end only then, so it holds with the lines
+     * between left out, as blank ones are under the player.
+     */
+    private fun litTill(lines: List<LyricLine>, at: Int, byEar: Boolean): Long? = lines.getOrNull(at)?.endMs?.takeIf { byEar }
 
     /** Where the next of [times] after [positionMs] is, when the line or word lit changes; null after the last. */
     fun nextAfter(times: List<Long>, positionMs: Long): Long? = times.filter { it > positionMs }.minOrNull()

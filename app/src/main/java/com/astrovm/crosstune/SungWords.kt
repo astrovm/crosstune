@@ -24,9 +24,12 @@ import kotlin.math.abs
 /** A word heard sung, and when it starts, [atMs] into what was heard. */
 internal data class HeardWord(val text: String, val atMs: Long)
 
-/** Hears the words sung in [samples], 16 kHz mono, in [language] when it's known. */
+/**
+ * Hears the words sung in [samples], 16 kHz mono, in [language] when it's known: none when none are,
+ * as in an intro; null when the model fails on them, as out of memory, so they're not heard at all.
+ */
 internal fun interface WordHearing {
-    fun words(samples: FloatArray, language: String?): List<HeardWord>
+    fun words(samples: FloatArray, language: String?): List<HeardWord>?
 }
 
 /** What was heard sung, from [startedAtMs] on the clock that counts since the phone started. */
@@ -64,7 +67,7 @@ internal interface SingingHearing {
     /**
      * What's sung in the next while the phone plays, in [language] when it's known: no words when none
      * are, as in an intro; null only when it can't be heard at all, e.g. for want of the speech model or
-     * of sound to hear. Given [first],
+     * of sound to hear, or the model failing on it. Given [first],
      * what's sung in its first [SingingListener.FIRST_SECONDS] is told it as soon as that's heard,
      * while the rest still is. When [first] says to, as many seconds from [SingingListener.AGAIN_SECONDS]
      * in are heard and told it too, as the speech model sometimes hears singing as music alone,
@@ -161,7 +164,7 @@ internal class SingingListener(
         words(model, part.second, language)?.ifEmpty { null }?.let { first(Sung(part.first, it)) }
     }
 
-    /** The words sung in [audio], heard with [model], in [language] when it's known: none when none are sung; null when it can't be loaded. */
+    /** The words sung in [audio], heard with [model], in [language] when it's known: none when none are sung; null when it can't be loaded or fails on them. */
     private suspend fun words(model: File, audio: ShortArray, language: String?): List<HeardWord>? = withContext(computeDispatcher) {
         val hears = hearing(model) ?: return@withContext null
         try {

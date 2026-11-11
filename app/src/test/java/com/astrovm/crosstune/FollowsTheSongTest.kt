@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
@@ -14,9 +16,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -146,8 +151,15 @@ class FollowsTheSongTest {
 
     // The player.
 
-    private fun player(lines: List<LyricLine> = emptyList()) = show {
-        PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines)), ScreenActions())
+    private fun player(lines: List<LyricLine> = emptyList(), byEar: Boolean = false) = show {
+        PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions())
+    }
+
+    /** The color [text] is drawn in, as it's shown alone, once a line's faded in. */
+    private fun inkOf(text: String): Color {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNode(hasText(text), useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single().layoutInput.style.color
     }
 
     @Test
@@ -185,6 +197,44 @@ class FollowsTheSongTest {
         passesAskingRarely(2_000)
         assertTrue(exists("Two"))
         assertFalse(exists("One"))
+    }
+
+    @Test
+    fun thePlayersPeekShowsTheFirstLineDimmedTillItsSung() {
+        following = pausedAt(0)
+        player(peekLines)
+        val waiting = inkOf("One")
+        playsFrom(1_000)
+        passes(FADE_MS)
+        val sung = inkOf("One")
+        assertNotEquals(waiting, sung)
+        // Timed by a service, the last line is up through the outro, as it's lit in the words.
+        playsFrom(150_000)
+        passes(FADE_MS)
+        assertEquals(sung, inkOf("Three"))
+    }
+
+    @Test
+    fun thePlayersPeekGoesByTheLinesHeard() {
+        following = pausedAt(0)
+        // Timed by ear, with a blank line after the first, which the peek leaves out.
+        player(heardLines.take(1) + LyricLine(LyricLine.NOT_HEARD, "") + heardLines.drop(1), byEar = true)
+        playsFrom(12_000)
+        passes(FADE_MS)
+        val sung = inkOf(heardLines[0].text)
+        // Sung through, it's not up as if still sung: the line coming next in the words is, dimmed.
+        passes(1_000)
+        assertFalse(exists(heardLines[0].text))
+        assertNotEquals(sung, inkOf(heardLines[1].text))
+        // Nothing changes till the next line heard, so the song's left alone meanwhile.
+        passesAskingRarely(16_000)
+        assertTrue(exists(heardLines[1].text))
+        passes(1_000)
+        assertEquals(sung, inkOf(heardLines[3].text))
+        assertFalse(exists(heardLines[1].text))
+        // Past the last line, sung through, nothing comes: it stays, dimmed.
+        passes(3_000)
+        assertNotEquals(sung, inkOf(heardLines[3].text))
     }
 
     @Test
@@ -381,5 +431,8 @@ class FollowsTheSongTest {
 
         /** Longer than a floating line takes to rise in, and the one before to go. */
         const val ROSE_MS = 1_000L
+
+        /** Longer than the peek's line takes to fade in, and the one before to fade out. */
+        const val FADE_MS = 400L
     }
 }

@@ -171,6 +171,8 @@ class UntimedSingingTest {
 
     private fun lineStarts() = state().lyricLines.map { it.timeMs }
 
+    private fun shows(text: String) = composeRule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
+
     @Test
     fun linesHeardAreTimedWhereTheyreSungAndTheRestStayUnlit() {
         singing.answer = { sung(count = 4) }
@@ -226,6 +228,43 @@ class UntimedSingingTest {
         assertTrue(state().lyricsTimedByEar)
         assertEquals(lines.indices.map(::lineMs), lineStarts())
         assertEquals(4, singing.hears)
+    }
+
+    @Test
+    fun thePlayersPeekGoesDarkWhereTheWordsDoAfterTheyreOpenedAgain() {
+        singing.answer = { sung(count = 4) }
+        openLyrics()
+        plays()
+        waitUntil { state().lyricsTimedByEar && singing.hears == 4 }
+        controller!!.destroyAndSettle()
+        // Opened again, as after a restart, and on to the player: its peek has the lines kept, timed by ear.
+        singing.answer = { null }
+        openLyrics()
+        composeRule.runOnIdle { model().lyricsToPlayer() }
+        waitUntil { state().player?.lines?.isNotEmpty() == true }
+        // Past the last line heard, sung through, that line isn't up as if still sung: the next in the words is.
+        plays(positionMs = lineMs(4) + 1_000)
+        assertFalse(shows(lines[3]))
+        assertTrue(shows(lines[4]))
+    }
+
+    @Test
+    fun aWhileTheModelFailsToMakeOutIsntKept() {
+        val microphone = FakeMicrophone().apply {
+            play(SingingListener.SECONDS.toDouble())
+            end()
+        }
+        // whisper.cpp fails on it, as when the phone runs out of memory: that's not a while with nothing sung.
+        MainActivity.singingFactory = { _, _ ->
+            SingingListener(microphone, { File("model") }, { WordHearing { _, _ -> null } }, Dispatchers.Unconfined, Dispatchers.Unconfined, clock = { startedAt })
+        }
+        openLyrics()
+        plays()
+        composeRule.waitForIdle()
+        assertEquals(1, microphone.opened)
+        // Nothing of it is kept, so it counts for nothing towards the song heard enough.
+        assertFalse(TimingLog.lastMinute(), "by ear" in TimingLog.lastMinute())
+        assertTrue(state().lyricLines.isEmpty())
     }
 
     @Test

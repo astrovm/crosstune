@@ -694,6 +694,23 @@ class SungWordsTest {
     }
 
     @Test
+    fun aWhileTheModelFailsToMakeOutIsntHeard() = runBlocking {
+        // whisper.cpp failing on it, as out of memory, isn't music with no voice: nothing's heard, not nothing sung.
+        val failing = object : WordHearing, Closeable {
+            var closed = false
+            override fun words(samples: FloatArray, language: String?): List<HeardWord>? = null
+            override fun close() {
+                closed = true
+            }
+        }
+        val told = mutableListOf<Sung>()
+        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = failing).hear(null) { told += it; false })
+        // Its first seconds failed too, so they tell nothing either.
+        assertTrue(told.isEmpty())
+        assertTrue(failing.closed)
+    }
+
+    @Test
     fun aModelThatWontLoadHearsNothing() = runBlocking {
         assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null, null))
         // One that isn't closed needn't be.

@@ -76,7 +76,7 @@ class SyncedLyricsTest {
         assertEquals(-1, SyncedLyrics.indexAt(lines, 999, byEar = false))
         assertEquals(0, SyncedLyrics.indexAt(lines, 1_000, byEar = false))
         assertEquals(1, SyncedLyrics.indexAt(lines, 60_000, byEar = false))
-        // A line's end only counts with the next not heard: timed lines go on till the next.
+        // Timed by a service, a line's end says nothing: it goes on till the next.
         assertEquals(0, SyncedLyrics.indexAt(listOf(LyricLine(1_000, "One", endMs = 1_500), LyricLine(2_000, "Two")), 1_800, byEar = false))
     }
 
@@ -88,6 +88,8 @@ class SyncedLyricsTest {
         assertEquals(-1, SyncedLyrics.indexAt(lines, 3_001, byEar = true))
         assertEquals(2, SyncedLyrics.indexAt(lines, 9_000, byEar = true))
         assertEquals(listOf(true, false, true), lines.map { it.heard })
+        // With the line between left out, as a blank one is under the player, it still goes dark there.
+        assertEquals(-1, SyncedLyrics.indexAt(lines.filter { it.heard }, 3_001, byEar = true))
     }
 
     @Test
