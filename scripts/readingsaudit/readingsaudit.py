@@ -253,7 +253,7 @@ def with_tries(what, call):
         except (urllib.error.URLError, OSError, http.client.HTTPException, CutOff) as error:
             failed = error
         if attempt == TRIES:
-            raise SystemExit(f"{what}: failed {TRIES} tries, the last with {failed}")
+            raise SystemExit(f"{what}: failed {TRIES} tries. The last: {failed}")
         time.sleep(2 ** attempt)
 
 
@@ -267,7 +267,8 @@ def github_json(url, opener):
         with opener(urllib.request.Request(url, headers=headers), timeout=TIMEOUT) as answer:
             try:
                 return json.load(answer)
-            except json.JSONDecodeError:
+            # JSONDecodeError, or UnicodeDecodeError when the cut falls inside a character: both are ValueErrors.
+            except ValueError:
                 # A connection that ends early, with no length given, reads as a body cut short.
                 raise CutOff("its JSON is cut off or broken") from None
     return with_tries(url, ask)
@@ -331,9 +332,11 @@ def fetch(folder, tag=None, opener=urllib.request.urlopen):
         with opener(request, timeout=TIMEOUT) as answer:
             # One byte past the size is enough to know it's too long.
             data = answer.read(asset["size"] + 1)
-        # A connection that ends early reads as a shorter file, not as an error.
+        # A connection that ends early reads as a shorter file, not as an error. A release that gives a
+        # size bigger than its file reads the same way, every time.
         if len(data) < asset["size"]:
-            raise CutOff(f"cut off at {len(data)} of {asset['size']} bytes")
+            raise CutOff(f"got {len(data)} bytes, and release {tag} says {asset['name']} is {asset['size']}."
+                         " Either the download was cut off, or the release gives a wrong size.")
         return data
     data = with_tries(download, get)
     if len(data) > asset["size"]:
