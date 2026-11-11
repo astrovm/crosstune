@@ -29,6 +29,7 @@ when the folder has a venv with it: uv venv venv && VIRTUAL_ENV=venv uv pip inst
 import argparse
 import datetime
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -231,16 +232,25 @@ MAX_ZIP_BYTES = 64 * 1024 * 1024
 MAX_JSON_BYTES = 512 * 1024 * 1024
 
 
+class CutOff(Exception):
+    """An answer that ended before all of it came: tried again, like the network failing."""
+
+
 def with_tries(what, call):
-    """call(), tried again after 2 s and 4 s when the network or GitHub fails; a missing page fails at once."""
+    """call(), tried again after 2 s and 4 s when the network or GitHub fails; a missing page fails at once.
+
+    An answer cut off is tried again too: http.client's IncompleteRead, or CutOff from call() itself.
+    """
     for attempt in range(1, TRIES + 1):
         try:
             return call()
         except urllib.error.HTTPError as error:
+            # Its body is the answer's connection, left open unless closed here.
+            error.close()
             if error.code < 500 and error.code != 429:
                 raise SystemExit(f"{what}: {error.code} {error.reason}")
             failed = error
-        except (urllib.error.URLError, OSError) as error:
+        except (urllib.error.URLError, OSError, http.client.HTTPException, CutOff) as error:
             failed = error
         if attempt == TRIES:
             raise SystemExit(f"{what}: failed {TRIES} tries, the last with {failed}")
@@ -255,7 +265,11 @@ def github_json(url, opener):
 
     def ask():
         with opener(urllib.request.Request(url, headers=headers), timeout=TIMEOUT) as answer:
-            return json.load(answer)
+            try:
+                return json.load(answer)
+            except json.JSONDecodeError:
+                # A connection that ends early, with no length given, reads as a body cut short.
+                raise CutOff("its JSON is cut off or broken") from None
     return with_tries(url, ask)
 
 
@@ -316,12 +330,14 @@ def fetch(folder, tag=None, opener=urllib.request.urlopen):
         request = urllib.request.Request(download, headers={"User-Agent": "crosstune-readingsaudit"})
         with opener(request, timeout=TIMEOUT) as answer:
             # One byte past the size is enough to know it's too long.
-            return answer.read(asset["size"] + 1)
+            data = answer.read(asset["size"] + 1)
+        # A connection that ends early reads as a shorter file, not as an error.
+        if len(data) < asset["size"]:
+            raise CutOff(f"cut off at {len(data)} of {asset['size']} bytes")
+        return data
     data = with_tries(download, get)
     if len(data) > asset["size"]:
         raise SystemExit(f"{asset['name']} is {len(data)} bytes or more, release {tag} says {asset['size']}")
-    if len(data) != asset["size"]:
-        raise SystemExit(f"{asset['name']} is {len(data)} bytes, release {tag} says {asset['size']}")
     got = "sha256:" + hashlib.sha256(data).hexdigest()
     if got != expected:
         raise SystemExit(f"{asset['name']} has {got}, release {tag} says {expected}")

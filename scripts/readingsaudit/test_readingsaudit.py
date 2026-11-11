@@ -1,8 +1,10 @@
 import datetime
 import hashlib
+import http.client
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -165,12 +167,21 @@ def zipped(files):
 
 
 class Answer(io.BytesIO):
-    """An HTTP answer that remembers how much was asked of it at most."""
+    """An HTTP answer that remembers how much was asked of it at most.
+
+    An incomplete one fails to read as http.client does when the connection ends before the length it gave.
+    """
 
     asked = None
 
+    def __init__(self, body, incomplete=False):
+        super().__init__(body)
+        self.incomplete = incomplete
+
     def read(self, size=-1):
         self.asked = size
+        if self.incomplete:
+            raise http.client.IncompleteRead(b"", 10)
         return super().read(size)
 
     def __enter__(self):
@@ -195,6 +206,9 @@ class FakeGitHub:
         self.timeouts = []
         # Errors to raise, one per call, before answering: the network failing a few times.
         self.failures = []
+        # Answers to cut, one per call after the failures: "short" ends early with no error, as a
+        # connection closed before the end does; "incomplete" fails to read, as http.client says.
+        self.cuts = []
         self.answers = []
 
     def __call__(self, request, timeout=None):
@@ -202,10 +216,9 @@ class FakeGitHub:
         self.timeouts.append(timeout)
         if self.failures:
             raise self.failures.pop(0)
-        if request.full_url.startswith(readingsaudit.JMDICT_RELEASES):
-            answer = Answer(json.dumps(self.release).encode())
-        else:
-            answer = Answer(self.data)
+        body = json.dumps(self.release).encode() if request.full_url.startswith(readingsaudit.JMDICT_RELEASES) else self.data
+        cut = self.cuts.pop(0) if self.cuts else None
+        answer = Answer(body[:len(body) // 2] if cut == "short" else body, incomplete=cut == "incomplete")
         self.answers.append(answer)
         return answer
 
@@ -245,6 +258,40 @@ class Fetch(unittest.TestCase):
             readingsaudit.fetch(self.folder, "1.2.3+20000101000000", opener=github)
         self.assertEqual(1, len(github.asked))
 
+    def test_tries_again_when_github_asks_to_wait(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "{}"}))
+        busy = urllib.error.HTTPError("u", 429, "Too Many Requests", None, io.BytesIO(b"wait"))
+        github.failures = [busy]
+        readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual(3, len(github.asked))
+        self.assertEqual([2], self.waits)
+        # The connection of the answer it didn't use is closed.
+        self.assertTrue(busy.fp.closed)
+
+    def test_tries_again_when_an_answer_is_cut_off(self):
+        data = zipped({"jmdict-eng-9.9.9.json": '{"dictDate": "2000-01-01"}'})
+        # The release cut short, then its body that http.client finds incomplete, then the zip cut short.
+        github = FakeGitHub(data)
+        github.cuts = ["short", "incomplete", None, "short"]
+        readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual(5, len(github.asked))
+        self.assertEqual([2, 4, 2], self.waits)
+        self.assertEqual('{"dictDate": "2000-01-01"}', (self.folder / "jmdict.json").read_text())
+
+    def test_gives_up_on_answers_cut_off_three_times_and_says_why(self):
+        data = zipped({"jmdict-eng-9.9.9.json": "{}"})
+        for cuts, said in [
+            (["short"] * 3, "releases/latest: failed 3 tries, the last with its JSON is cut off or broken"),
+            (["incomplete"] * 3, r"releases/latest: failed 3 tries, the last with IncompleteRead\(0 bytes read, 10 more expected\)"),
+            ([None] + ["short"] * 3, f"{re.escape(ZIP_NAME)}: failed 3 tries, the last with cut off at {len(data) // 2} of {len(data)} bytes"),
+        ]:
+            github = FakeGitHub(data)
+            github.cuts = cuts
+            with self.subTest(said), self.assertRaisesRegex(SystemExit, said) as stop:
+                readingsaudit.fetch(self.folder, opener=github)
+            self.assertIsInstance(stop.exception.code, str)
+            self.assertFalse((self.folder / "jmdict.json").exists())
+
     def test_reads_no_more_of_the_download_than_one_byte_past_its_size(self):
         data = zipped({"jmdict-eng-9.9.9.json": "{}"})
         github = FakeGitHub(data + b"x" * 1000)
@@ -277,6 +324,18 @@ class Fetch(unittest.TestCase):
             readingsaudit.fetch(self.folder, opener=github)
         self.assertEqual(100, info.file_size)
         self.assertFalse((self.folder / "jmdict.json").exists())
+        self.assertEqual([], list(self.folder.iterdir()))
+
+    def test_keeps_the_jmdict_json_it_had_when_unzipping_fails(self):
+        self.folder.mkdir()
+        (self.folder / "jmdict.json").write_text('{"dictDate": "1999-01-01"}')
+        data = bytearray(zipped({"jmdict-eng-9.9.9.json": "x" * 100}))
+        central = data.rindex(b"PK\x01\x02")
+        data[central + 24:central + 28] = (10).to_bytes(4, "little")
+        with self.assertRaisesRegex(SystemExit, "doesn't unzip: Bad CRC"):
+            readingsaudit.fetch(self.folder, opener=FakeGitHub(bytes(data)))
+        self.assertEqual('{"dictDate": "1999-01-01"}', (self.folder / "jmdict.json").read_text())
+        self.assertEqual(["jmdict.json"], [p.name for p in self.folder.iterdir()])
 
     def test_takes_only_a_tag_jmdict_simplified_names_its_releases_with(self):
         for tag in ("9.9.9+20000101000000,x", "9.9.9+20000101000000`x`", "latest", "9.9.9+2000"):
@@ -322,7 +381,7 @@ class Fetch(unittest.TestCase):
             ([{**asset, "digest": None}], "gives no SHA-256"),
             ([{k: v for k, v in asset.items() if k != "digest"}], "gives no SHA-256"),
             ([{**asset, "browser_download_url": DOWNLOAD.replace("20000101000000", "19990101000000")}], "isn't under release"),
-            ([{**asset, "size": len(data) + 1}], f"is {len(data)} bytes"),
+            ([{**asset, "size": len(data) + 1}], f"3 tries, the last with cut off at {len(data)} of {len(data) + 1} bytes"),
             ([{**asset, "digest": "sha256:" + "0" * 64}], "has sha256:"),
         ]:
             with self.subTest(said), self.assertRaisesRegex(SystemExit, said):
@@ -447,6 +506,16 @@ class Main(unittest.TestCase):
                 readingsaudit.main(["age"])
             self.assertEqual(1, stop.exception.code)
             self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA], age.call_args.args[0])
+
+
+
+class Workflows(unittest.TestCase):
+
+    def test_ci_reports_required_on_a_run_by_hand_only_for_the_branch_the_jmdict_workflow_pushes(self):
+        workflows = readingsaudit.ROOT / ".github/workflows"
+        branch = re.search(r"^  BRANCH: (\S+)$", (workflows / "jmdict.yml").read_text(), re.M).group(1)
+        self.assertIn(f"(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/{branch}')",
+                      (workflows / "ci.yml").read_text())
 
 
 if __name__ == "__main__":
