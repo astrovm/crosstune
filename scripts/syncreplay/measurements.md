@@ -592,3 +592,25 @@ VLC for Android 3.7.1 played the Police from a tagged local file, `phone XB7AmIs
 - Measured, as a bound: 66% of the heard lines have 2 or more words alike heard near them. The rest whisper.cpp tiny doesn't hear well enough to tell.
 - Measured on 6 songs: given the words sung near each while as its prompt (the truth, so an upper bound), whisper.cpp tiny hears enough to put 64% within 1.0 s, against 49% without. Prompting with the lines the app expects next got 53%, with more lines put off. Not adopted: it needs the native hearing changed.
 - Japanese, Korean and other songs whisper.cpp tiny hears poorly time few lines: 0 to 28% each.
+
+### Lines put far off (Issue #892)
+
+`untimed` and `untimed --again 12000`, as above. "> 3 s" and "> 10 s" are lines put that far from where they're sung. Each row adds to the one before.
+
+| Try | Plays | Timed | Within 1.0 s | Within 0.5 s | Off | > 3 s | > 10 s | Unheard | Worst |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Before (main at `e97d7985`) | 2 | 724 | 594 | 485 | 130 | 49 | 11 | 0 | +43.2 s |
+| A line starts where its earliest word heard says (was: the median of the most that agree) | 2 | 723 | 627 | 509 | 96 | 41 | 12 | 0 | +51.3 s |
+| A line left untimed when the best chain without it, found near there, weighs at least half its own weight less | 2 | 652 | 591 | 482 | 61 | 15 | 0 | 0 | -6.8 s |
+| A line filled between two only with a voice heard where it'd be sung | 2 | 650 | 589 | 480 | 61 | 15 | 0 | 0 | -6.8 s |
+| Each letter of a word heard a letter after the one before (was: all at the word's start) | 2 | 647 | 589 | 485 | 58 | 15 | 0 | 0 | +6.7 s |
+| Before | 1 | 447 | 372 | 316 | 92 | 43 | 15 | 0 | +67.6 s |
+| All four | 1 | 412 | 364 | 308 | 57 | 24 | 9 | 0 | +69.1 s |
+
+- Before the changes, 70 of the 78 lines put 1 to 3 s off (two plays) were late, and the lines within 1.0 s were centered on 0. A line held, or with a rest in it, is sung slower than 70 ms a letter, so the words after its first say it starts too late.
+- The earliest word alone beat every window of words that agree: 1.0 s, 1.5 s, 2 s and 3 s put 585 to 588 within 1.0 s, with 16 to 18 over 3 s off. 70 ms a letter is still best with it: 60 ms put 622, 80 ms 616.
+- The rule that leaves a line untimed is a curve, not a cliff. Two plays, share of its weight and how near: 0.45 and 6 s put 597 within 1.0 s, 65 off, 19 over 3 s; 0.5 and 6 s 591, 61, 15; 0.55 and 6 s 580, 60, 14. 6 s against 5 s or 7 s moves each count by 1 to 4.
+- Its first form compared one chain per line put, and took 1.3 s on this PC for the slowest song's last while. Worked out from the best chain ending at each line found, starting at each, and the best from each on that skips a line, it gives the same lines on every while of every song (one play and two), and takes 0.27 s (0.22 s before any of this).
+- Not kept, each measured on two plays. On main: a stricter form that asks another line to be found near the one left out (569 within 1.0 s, 114 off, 37 over 3 s); dropping words heard in a clump at one time, where the model loses its timing (no better at any size). With the rows above: a line kept when two whiles found it at one place (600, 65, 17: the same curve); a line whose earliest word is past half or two thirds of it left untimed (547 or 572 within 1.0 s); one-letter pieces (Japanese, Korean) counting as half a word (Japanese goes from 17 good and 26 off to 3 and 5: turned off, not fixed); the speech model's lateness at 400, 700 or 850 ms (550 stays best).
+- Lines filled between two found, for the review of PR #889: before the voice rule, 47 on one play (27 within 1.0 s, 3 off, 0 over 3 s, 17 with no truth) and 77 on two (49, 4, 0, 24). The voice rule takes 1 off and 3 untruthed lines on one play, and 2 good and 2 untruthed on two.
+- Left: on one play, 9 lines are over 10 s off. They're whole choruses put at another time they're sung, each line in order with its neighbors, so taking one out leaves no chain as good.

@@ -40,8 +40,8 @@ heard is found near where the app says, by bits short enough to still fit a reco
 `untimed` takes each song's times off its words and times them as the app does words found with none,
 by SungTiming on the JVM, in seconds: from the whiles the app would hear as the song plays from MS (--from),
 and with --again from a second play too, the first while that many ms in. It prints, per song, the lines
-sung in what was heard, those put within 1.0 s and 0.5 s of it, those put further off, those put where
-nothing was heard, and the worst; -v prints each line.
+sung in what was heard, those put within 1.0 s and 0.5 s of it, those put further off and those over 3 s off,
+those put where nothing was heard, and the worst; -v prints each line.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -1066,6 +1066,8 @@ KOTLIN_JARS = ("kotlin-compiler-embeddable-", "kotlin-stdlib-", "kotlin-script-r
                "kotlinx-coroutines-core-jvm-", "annotations-", "fastutil-")
 JDK_IMAGE = "docker.io/library/eclipse-temurin:25-jdk"
 ON_TIME_UNTIMED_S = 1.0
+# Put this far off, a line lights where another is sung.
+FAR_UNTIMED_S = 3.0
 
 
 def kotlin_version():
@@ -1171,10 +1173,10 @@ def untimed_rounds(path):
 
 
 def untimed_score(songs, inputs, verbose=False):
-    """Per song: lines sung in what was heard, those put within ON_TIME_UNTIMED_S of it, the worst, and lines put
-    where nothing was heard. A line put far off at any time along the way counts as shown wrong."""
-    print(f"{'song':12} {'heard':>5} {'timed':>5} {'1.0 s':>5} {'0.5 s':>5} {'off':>4} {'unheard':>7} {'wrong':>5} {'worst':>6}  lang")
-    totals = dict(heard=0, timed=0, on=0, close=0, off=0, unheard=0, wrong=0)
+    """Per song: lines sung in what was heard, those put within ON_TIME_UNTIMED_S of it, those put over
+    FAR_UNTIMED_S off, the worst, and lines put where nothing was heard. A line put far off at any time along the way counts as shown wrong."""
+    print(f"{'song':12} {'heard':>5} {'timed':>5} {'1.0 s':>5} {'0.5 s':>5} {'off':>4} {'>3 s':>4} {'unheard':>7} {'wrong':>5} {'worst':>6}  lang")
+    totals = dict(heard=0, timed=0, on=0, close=0, off=0, far=0, unheard=0, wrong=0)
     rows = {}
     for song in songs:
         path, used = inputs[song]
@@ -1188,13 +1190,14 @@ def untimed_score(songs, inputs, verbose=False):
                    on=sum(n in lags and abs(lags[n]) <= ON_TIME_UNTIMED_S for n in heard_lines),
                    close=sum(n in lags and abs(lags[n]) <= ON_TIME_S for n in heard_lines),
                    off=sum(abs(lag) > ON_TIME_UNTIMED_S for lag in lags.values()),
+                   far=sum(abs(lag) > FAR_UNTIMED_S for lag in lags.values()),
                    unheard=sum(not any(a - ON_TIME_UNTIMED_S <= at <= b + ON_TIME_UNTIMED_S for a, b in spans) for at in final.values()),
                    wrong=sum(any(n in r and abs(r[n] - sung[n]) > ON_TIME_UNTIMED_S for r in rounds) for n in sung))
         for key in totals:
             totals[key] += row[key]
         rows[song] = row
         worst = f"{max(lags.values(), key=abs):+.1f}" if lags else "-"
-        print(f"{song:12} {row['heard']:5} {row['timed']:5} {row['on']:5} {row['close']:5} {row['off']:4} {row['unheard']:7} {row['wrong']:5} {worst:>6}  {(OUT / f'{song}.language').read_text().strip()}")
+        print(f"{song:12} {row['heard']:5} {row['timed']:5} {row['on']:5} {row['close']:5} {row['off']:4} {row['far']:4} {row['unheard']:7} {row['wrong']:5} {worst:>6}  {(OUT / f'{song}.language').read_text().strip()}")
         if verbose:
             lines = [line.split("\t", 1)[1] for line in path.read_text().splitlines() if line.startswith("L\t")]
             for n, text in enumerate(lines):
@@ -1202,7 +1205,7 @@ def untimed_score(songs, inputs, verbose=False):
                 put = f"put {final[n]:6.1f} {final[n] - sung[n]:+5.1f}" if n in final and n in sung else (f"put {final[n]:6.1f}      " if n in final else "not put         ")
                 print(f"  {n:3} {truth} {put} {'heard' if n in heard_lines else '     '}  {text[:40]}")
     t = totals
-    print(f"{'all':12} {t['heard']:5} {t['timed']:5} {t['on']:5} {t['close']:5} {t['off']:4} {t['unheard']:7} {t['wrong']:5}  "
+    print(f"{'all':12} {t['heard']:5} {t['timed']:5} {t['on']:5} {t['close']:5} {t['off']:4} {t['far']:4} {t['unheard']:7} {t['wrong']:5}  "
           f"{100 * t['on'] / max(t['heard'], 1):.0f}% of lines heard within {ON_TIME_UNTIMED_S} s, {100 * t['close'] / max(t['heard'], 1):.0f}% within {ON_TIME_S} s")
     return rows
 
