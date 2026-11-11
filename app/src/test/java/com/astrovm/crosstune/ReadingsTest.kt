@@ -932,6 +932,9 @@ class ReadingsTest {
             assertEquals("$withUniDic", "あとさんぷんで", read("あと三分で"))
             // Counters that don't change stay: 三回 さんかい.
             assertEquals("$withUniDic", "さんかいめ", read("三回目"))
+            // A word after a number that doesn't count it stays as it is: 八方向 はちほうこう.
+            assertEquals("$withUniDic", "はちほうこうに", read("八方向に"))
+            assertEquals("$withUniDic", "ろくほうこう", read("六方向"))
         }
     }
 
@@ -945,6 +948,8 @@ class ReadingsTest {
             // Before anything else, 十分 is enough, and 二分 a half.
             assertEquals("$withUniDic", "じゅうぶんだよ", read("十分だよ"))
             assertEquals("$withUniDic", "にぶんする", read("二分する"))
+            // A word that only ends in 分 is no number of minutes: 随分前 ずいぶんまえ.
+            assertEquals("$withUniDic", "ずいぶんまえに", read("随分前に"))
             // 分 after a number after 寸 or 割 is a tenth, ぶ.
             assertEquals("$withUniDic", "よんすんよんぶ", read("四寸四分"))
             assertEquals("$withUniDic", "ごわりごぶ", read("五割五分"))
@@ -982,6 +987,9 @@ class ReadingsTest {
 
     @Test
     fun wordsJmdictListsAreReadAsItReadsThem() {
+        // Read from the file again, and its header is no word.
+        Readings.listed = null
+        assertTrue(Readings.listed.orEmpty().keys.none { it.startsWith("#") })
         for (withUniDic in listOf(false, true)) {
             val read = { line: String -> if (withUniDic) TestUniDic.reading { reading(line) } else reading(line) }
             // Pieces that make a word JMdict reads one way only: 体中 からだじゅう, 水車小屋 すいしゃごや.
@@ -1001,6 +1009,9 @@ class ReadingsTest {
         Readings.listed = emptyMap()
         try {
             assertEquals("からだちゅうが", reading("体中が").reading)
+            // A word listed as its pieces read it stays those pieces.
+            Readings.listed = mapOf("花火大会" to reading("花火大会").reading)
+            assertTrue(Readings.words("花火大会", Script.JAPANESE).none { Reader.JMDICT in it.by })
         } finally {
             Readings.listed = null
         }

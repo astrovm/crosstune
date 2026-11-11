@@ -366,7 +366,7 @@ internal object Readings {
         val oneKanjiSuffix = ours.subkind == "接尾" && ours.surface.singleOrNull()?.let(::isHan) == true
         if (!plainNoun || !oneKanjiSuffix) return false
         if (before == null || before.subkind in NUMBERS) return false
-        return ours.kana.first() !in VOICED || (before.subkind in NOT_PLAIN_NOUNS && before.surface.all { it in 'ぁ'..'ゟ' })
+        return ours.kana.first() !in VOICED || (before.subkind in NOT_PLAIN_NOUNS && before.surface.all(::isSaid))
     }
 
     /** Kana said with a voice, as the second half of a word starts: だま, ぼし, び. */
@@ -745,14 +745,17 @@ internal object Readings {
         return Piece(surface, kana, last.kind, last.subkind, reader = Reader.JMDICT)
     }
 
-    /** How [word] reads when its last piece is a verb or an adjective JMdict has in its dictionary form: 肉付い as 肉付く, にくづく, so にくづい. */
+    /**
+     * How [word] reads when its last piece is a verb or an adjective JMdict has in its dictionary form:
+     * 肉付い as 肉付く, にくづく, so にくづい. It's looked up as written, with the dictionary form's ending.
+     */
     private fun conjugated(word: List<Piece>, table: Map<String, String>): String? {
         val last = word.last()
         if (last.kind !in INFLECTED) return null
         val ending = last.surface.takeLastWhile(::isKana)
         val listedEnding = last.base.takeLastWhile(::isKana)
-        if (last.base.dropLast(listedEnding.length) != last.surface.dropLast(ending.length)) return null
-        val kana = table[word.dropLast(1).joinToString("") { it.surface } + last.base] ?: return null
+        val written = word.dropLast(1).joinToString("") { it.surface } + last.surface.dropLast(ending.length)
+        val kana = table[written + listedEnding] ?: return null
         return if (kana.endsWith(hiragana(listedEnding))) kana.dropLast(listedEnding.length) + hiragana(ending) else null
     }
 
