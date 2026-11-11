@@ -225,8 +225,8 @@ jobs:
 
       - name: Compare with the signed APK
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q apksigcopier
+          sudo apt-get -o Acquire::Retries=5 update -q
+          sudo apt-get -o Acquire::Retries=5 install -y -q apksigcopier
           # apksigcopier calls apksigner. The same JDK flag as the sign job, through a wrapper,
           # because apksigcopier does not take apksigner's -J options.
           tools="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
