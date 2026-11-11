@@ -20,6 +20,16 @@
 # GRADLE_BOX_SLOTS can lower that, never raise it: every checkout shares the machine, so one asking for
 # more slots than fit would run builds side by side that run it out of memory.
 #
+# A machine out of memory stalls a build so long that a test times out and looks broken (Issue #852).
+# So a build waits to start while every task on the machine waited on memory for more than
+# GRADLE_BOX_STALL_LIMIT percent (10 by default) of the last 10 s, and says when the machine stalled
+# on memory during the build. Linux tells this in /proc/pressure/memory; a Mac doesn't, and builds as
+# before. GRADLE_BOX_PRESSURE reads another file, for the tests.
+#
+# GRADLE_BOX_CPUS can lower the CPUs a build gets, never raise them, and GRADLE_BOX_MEMORY_HIGH, in
+# GiB, slows a build down once it holds that much, as the kernel takes pages back. Both show how a test
+# does on a busy machine, without making the machine busy. Neither changes the slots.
+#
 # Idle slot homes are evicted oldest first above 10 GiB (GRADLE_BOX_CACHE_BYTES overrides it).
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
 # A new seed is made only when the cache and its copy fit; its contents are then read-only.
@@ -66,6 +76,10 @@ slots=${GRADLE_BOX_SLOTS:-$fit}
 ((slots >= 1)) || slots=1
 cpus=$(($(nproc) / slots))
 ((cpus >= 1)) || cpus=1
+# A fraction, like 0.5, is fine: podman takes it as a share of one CPU.
+if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpus" 'BEGIN { exit !(want > 0 && want < have) }'; then
+    cpus=$GRADLE_BOX_CPUS
+fi
 
 # A ticket's name sorts by when it asked and ends in who asked, so one left by a killed build can go.
 mkdir -p "$state/queue"
@@ -86,6 +100,18 @@ ahead_of_me() {
     echo "$count"
 }
 
+pressure=${GRADLE_BOX_PRESSURE:-/proc/pressure/memory}
+stall_limit=${GRADLE_BOX_STALL_LIMIT:-10}
+
+# One number from the line where every task waited on memory: avg10, a share of the last 10 s in
+# whole percent, or total, the microseconds since the machine started. 0 where Linux doesn't tell.
+stalled() {
+    [[ -r $pressure ]] || { echo 0; return; }
+    # The total is printed as Linux writes it, since some awks print no number past 2^31 with %d.
+    awk -v key="$1=" '$1 == "full" { for (i = 2; i <= NF; i++) if (index($i, key) == 1) { value = substr($i, length(key) + 1); print (key == "avg10=" ? int(value) : value); found = 1 } }
+        END { if (!found) print 0 }' "$pressure"
+}
+
 take_a_slot() {
     local n
     for ((n = 1; n <= slots; n++)); do
@@ -102,13 +128,20 @@ take_a_slot() {
 said=
 while :; do
     ahead=$(ahead_of_me)
-    if ((ahead < slots)) && take_a_slot; then
+    lately=$(stalled avg10)
+    if ((ahead < slots && lately <= stall_limit)) && take_a_slot; then
         break
     fi
-    if [[ $ahead != "$said" ]]; then
-        echo "gradle-box: waiting, $ahead ahead of you" >&2
-        said=$ahead
+    if ((ahead >= slots)); then
+        why="$ahead ahead of you"
+    else
+        why="the machine is out of memory, stalled $lately% of the last 10 s"
     fi
+    # Said once for each change in who's ahead, and once for running out of memory.
+    if [[ ${why%%,*} != "${said%%,*}" ]]; then
+        echo "gradle-box: waiting, $why" >&2
+    fi
+    said=$why
     sleep 1
 done
 
@@ -123,6 +156,9 @@ fi
 box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
     -v "$root:$root" -v "$sdk:$sdk:ro" -v "$home:$home"
     -w "$root" -e "ANDROID_HOME=$sdk" -e "GRADLE_USER_HOME=$home")
+if [[ -n ${GRADLE_BOX_MEMORY_HIGH:-} ]]; then
+    box+=(--cgroup-conf "memory.high=$(awk -v gib="$GRADLE_BOX_MEMORY_HIGH" 'BEGIN { printf "%d", gib * 1073741824 }')")
+fi
 # The replay's inputs can be kept apart from any checkout, for all of them (syncreplay.py).
 if [[ -n ${SYNCREPLAY_DIR:-} ]]; then
     box+=(-v "$SYNCREPLAY_DIR:$SYNCREPLAY_DIR" -e "SYNCREPLAY_DIR=$SYNCREPLAY_DIR")
@@ -158,6 +194,7 @@ keep_downloads() {
     mv -T "$new" "$seed" 2>/dev/null || rm -rf "$new"
 }
 
+stalled_before=$(stalled total)
 # A child rather than exec, so the ticket goes when it ends, and stopping this stops the build.
 nice -n 10 podman run "${box[@]}" "$image" ./gradlew --no-daemon "$@" &
 child=$!
@@ -167,5 +204,9 @@ while kill -0 "$child" 2>/dev/null; do
     wait "$child" || status=$?
 done
 ((status != 0)) || keep_downloads
+lost=$((($(stalled total) - stalled_before) / 1000000))
+if ((lost >= 5)); then
+    echo "gradle-box: the machine was out of memory for $lost s of this build. A test that timed out may have waited on that, not on the app (Issue #852)." >&2
+fi
 touch "$home"
 exit "$status"

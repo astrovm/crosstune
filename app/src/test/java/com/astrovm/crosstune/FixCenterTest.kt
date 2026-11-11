@@ -54,7 +54,11 @@ import java.time.Duration
 @Config(qualifiers = "w411dp-h2000dp")
 class FixCenterTest {
 
-    @get:Rule
+    /** Outside the Compose rule, so a wait that never ends still says what it waited on (Issue #852). */
+    @get:Rule(order = 0)
+    val hangDump = HangDump()
+
+    @get:Rule(order = 1)
     val composeRule = createEmptyComposeRule()
 
     private val app: Application = ApplicationProvider.getApplicationContext()

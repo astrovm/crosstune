@@ -50,6 +50,8 @@ class GradleBoxTest(unittest.TestCase):
         self.home = self.dir / "home"
         self.sdk = self.home / "Android" / "Sdk"
         self.sdk.mkdir(parents=True)
+        self.pressure = self.dir / "pressure"
+        self.stall(lately=0, total_s=0)
 
     def start(self, run, *args, slots="1", **env):
         return subprocess.Popen(
@@ -65,10 +67,19 @@ class GradleBoxTest(unittest.TestCase):
                 "GRADLE_BOX_SLOTS": slots,
                 # 1 GiB a build, so the slots asked for fit on any machine the tests run on.
                 "GRADLE_BOX_MEMORY": "1",
+                # The machine running the tests may be short of memory; these builds don't care.
+                "GRADLE_BOX_PRESSURE": str(self.pressure),
                 "FAKE_DIR": str(self.dir),
                 "FAKE_RUN": run,
                 **env,
             },
+        )
+
+    def stall(self, lately, total_s):
+        """Linux's memory pressure as /proc/pressure/memory says it: how much every task waited on memory."""
+        self.pressure.write_text(
+            f"some avg10={lately + 1}.00 avg60=0.00 avg300=0.00 total={total_s * 2_000_000}\n"
+            f"full avg10={lately}.25 avg60=0.00 avg300=0.00 total={total_s * 1_000_000}\n"
         )
 
     def image(self):
@@ -221,6 +232,78 @@ class GradleBoxTest(unittest.TestCase):
         output, _ = second.communicate(timeout=20)
         self.assertIn("waiting, 1 ahead of you", output)
         self.assertTrue((self.dir / "started.second").exists())
+
+    def test_waits_to_start_while_the_machine_is_out_of_memory(self):
+        self.stall(lately=40, total_s=0)
+        box = self.start("a", "help")
+        time.sleep(1.5)
+        self.assertFalse((self.dir / "started.a").exists())
+        self.stall(lately=0, total_s=0)
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertEqual(output.count("waiting, the machine is out of memory, stalled 40% of the last 10 s"), 1, output)
+        self.assertTrue((self.dir / "started.a").exists())
+
+    def test_starts_at_once_with_some_memory_pressure_under_the_limit(self):
+        self.stall(lately=10, total_s=0)
+        box = self.start("a", "help")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertNotIn("waiting", output)
+
+    def test_the_limit_on_memory_pressure_can_be_changed(self):
+        self.stall(lately=10, total_s=0)
+        box = self.start("a", "help", GRADLE_BOX_STALL_LIMIT="5")
+        time.sleep(1.5)
+        self.assertFalse((self.dir / "started.a").exists())
+        self.stall(lately=0, total_s=0)
+        output, _ = box.communicate(timeout=20)
+        self.assertIn("stalled 10% of the last 10 s", output)
+
+    def test_says_when_the_machine_ran_out_of_memory_during_the_build(self):
+        self.stall(lately=0, total_s=100)
+        self.hold("a")
+        box = self.start("a", "help", FAKE_EXIT="1")
+        self.wait_for("started.a")
+        self.stall(lately=0, total_s=112)
+        self.release("a")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 1, output)
+        self.assertIn("gradle-box: the machine was out of memory for 12 s of this build.", output)
+
+    def test_says_nothing_of_memory_when_the_build_barely_waited_on_it(self):
+        self.stall(lately=0, total_s=100)
+        self.hold("a")
+        box = self.start("a", "help")
+        self.wait_for("started.a")
+        self.stall(lately=0, total_s=104)
+        self.release("a")
+        output, _ = box.communicate(timeout=20)
+        self.assertNotIn("out of memory", output)
+
+    def test_a_machine_that_does_not_tell_its_memory_pressure_builds_as_before(self):
+        box = self.start("a", "help", GRADLE_BOX_PRESSURE=str(self.dir / "none"))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertNotIn("memory", output)
+
+    def test_fewer_cpus_can_be_asked_for_never_more(self):
+        box = self.start("fewer", "help", GRADLE_BOX_CPUS="0.5")
+        box.communicate(timeout=20)
+        more = self.start("more", "help", GRADLE_BOX_CPUS="100000")
+        more.communicate(timeout=20)
+        fewer_command, more_command = self.asked()
+        self.assertIn("--cpus 0.5 ", fewer_command)
+        self.assertNotIn("--cpus 100000 ", more_command)
+
+    def test_a_memory_level_to_slow_down_at_is_set_only_when_asked(self):
+        box = self.start("slowed", "help", GRADLE_BOX_MEMORY_HIGH="1.5")
+        box.communicate(timeout=20)
+        plain = self.start("plain", "help")
+        plain.communicate(timeout=20)
+        slowed_command, plain_command = self.asked()
+        self.assertIn(f"--cgroup-conf memory.high={3 * 2**29}", slowed_command)
+        self.assertNotIn("memory.high", plain_command)
 
     def test_a_build_that_died_holds_nobody_up(self):
         queue = self.dir / "state" / "queue"
