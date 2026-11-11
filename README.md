@@ -125,4 +125,45 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
 
-The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) and the words in kana in [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) come from [JMdict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) by the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/edrdg/licence.html), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+Crosstune includes, or downloads when it's needed, these works by others. The app lists them, with each license's full text, in **Settings** → **About** → **Licenses**, from [`notices.txt`](app/src/main/resources/com/astrovm/crosstune/notices/notices.txt). Rebuild the app from the cloned source to replace projectM with a changed copy.
+
+| Work | By | License |
+| --- | --- | --- |
+| [JMdict](https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project) | Electronic Dictionary Research and Development Group | CC BY-SA 4.0 |
+| [Kuromoji](https://github.com/atilika/kuromoji) | Atilika Inc. and contributors | Apache License 2.0 |
+| [IPADIC](https://github.com/atilika/kuromoji) | Nara Institute of Science and Technology (NAIST), with entries from ICOT Free Software | NAIST and ICOT licence |
+| [UniDic](https://repo1.maven.org/maven2/com/atilika/kuromoji/kuromoji-unidic/0.9.0/) | The UniDic Consortium | BSD 3-Clause License |
+| [projectM](https://github.com/projectM-visualizer/projectm) | The projectM Team | GNU LGPL 2.1 or later |
+| [MilkDrop's FFT](https://github.com/projectM-visualizer/projectm/blob/v4.1.8/src/libprojectM/Audio/MilkdropFFT.cpp) | Nullsoft, Inc. | BSD 3-Clause License |
+| [projectM's expression parser](https://github.com/projectM-visualizer/projectm-eval) | The projectM Team | MIT License |
+| [HLSLParser](https://github.com/projectM-visualizer/projectm/tree/v4.1.8/vendor/hlslparser) | Unknown Worlds Entertainment, Inc. | MIT License |
+| [OpenGL Mathematics (GLM)](https://github.com/g-truc/glm) | G-Truc Creation | MIT License |
+| [SOIL2](https://github.com/SpartanJ/SOIL2) | Martín Lucas Golini and Jonathan Dummer | Public domain, and MIT License |
+| [stb_image and stb_image_write](https://github.com/nothings/stb) | Sean Barrett and contributors | Public domain |
+| [Independent JPEG Group's JPEG software](https://www.ijg.org/) | Thomas G. Lane and the Independent JPEG Group | IJG License |
+| [ETC1 texture code](https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main/opengl/libs/ETC1/etc1.cpp) | Google Inc. | Apache License 2.0 |
+| [PowerVR SDK texture decompressor](https://github.com/powervr-graphics/Native_SDK) | Imagination Technologies Ltd. | MIT License |
+| [SDL](https://github.com/libsdl-org/SDL) | Sam Lantinga | zlib License |
+| [MilkDrop presets](https://github.com/projectM-visualizer/presets-cream-of-the-crop) | Their authors, named in each preset's name | None stated |
+| [MilkDrop textures](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack) | Their authors, from MilkDrop and its presets | None stated |
+| [whisper.cpp and ggml](https://github.com/ggml-org/whisper.cpp) | The ggml authors | MIT License |
+| [YaRN](https://github.com/jquesnelle/yarn) | Jeffrey Quesnelle and Bowen Peng | MIT License |
+| [Arm Optimized Routines](https://github.com/ARM-software/optimized-routines) | Arm Limited | MIT License |
+| [Whisper](https://github.com/openai/whisper) | OpenAI | MIT License |
+| [LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers](https://github.com/llvm/llvm-project) | The LLVM Project | Apache License 2.0 with LLVM Exceptions |
+| [Android's C library headers](https://android.googlesource.com/platform/bionic) | The Android Open Source Project and others | BSD and Apache License 2.0 |
+| [Material Symbols and Material Icons](https://github.com/google/material-design-icons) | Google | Apache License 2.0 |
+| [Simple Icons](https://github.com/simple-icons/simple-icons) | Simple Icons contributors | CC0 1.0 |
+| [Roboto](https://github.com/googlefonts/roboto-classic) | The Roboto Project Authors | SIL Open Font License 1.1 |
+| [Shizuku API](https://github.com/RikkaApps/Shizuku-API) | RikkaW | MIT License |
+| [OkHttp and Okio](https://github.com/square/okhttp) | Square, Inc. | Apache License 2.0 |
+| [Guava](https://github.com/google/guava) | The Guava Authors | Apache License 2.0 |
+| [Error Prone and J2ObjC annotations](https://github.com/google/error-prone) | Google | Apache License 2.0 |
+| [JSpecify](https://github.com/jspecify/jspecify) | The JSpecify Authors | Apache License 2.0 |
+| [AndroidX, Jetpack Compose and Media3](https://android.googlesource.com/platform/frameworks/support) | The Android Open Source Project | Apache License 2.0 |
+| [Protocol Buffers](https://github.com/protocolbuffers/protobuf) | Google Inc. | BSD 3-Clause License |
+| [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform) | JetBrains s.r.o. and the Android Open Source Project | Apache License 2.0 |
+| [Kotlin and kotlinx.coroutines](https://github.com/JetBrains/kotlin) | JetBrains s.r.o. and Kotlin Programming Language contributors | Apache License 2.0 |
+| [Reorderable](https://github.com/Calvin-LL/Reorderable) | Calvin Liang | Apache License 2.0 |
+
+The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) and the words in kana in [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) are made from [JMdict](https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project) by the Electronic Dictionary Research and Development Group, under the [Group's licence](https://www.edrdg.org/edrdg/licence.html), and changed. The readings: only words of two kanji or more that JMdict reads one way only, where Crosstune reads them otherwise. The words in kana: only the common ones with い or う after their first kana, each with how it's looked up, and those with ひ or ふ there, which are no old spelling. Both are under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) too.
