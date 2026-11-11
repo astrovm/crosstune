@@ -187,13 +187,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
-          fetch-depth: 2
+          # A run started by hand gets main's history too, to compare its branch with where it left main.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
 
-      # Tangled new code is split up, never listed in detekt's baseline to pass.
+      # Tangled new code is split up, never listed in detekt's baseline to pass. A run started by hand
+      # checks it too, as its CI / Required stands for a pull request's (the JMdict workflow's).
       - name: Detekt's baseline only shrinks
-        if: github.event_name == 'pull_request'
+        if: github.event_name != 'push'
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
-          added=$(git diff HEAD^1 HEAD -- config/detekt/baseline.xml | grep '^+.*<ID>' || true)
+          if [ "$EVENT" = pull_request ]; then base=HEAD^1; else base=$(git merge-base origin/main HEAD); fi
+          added=$(git diff "$base" HEAD -- config/detekt/baseline.xml | grep '^+.*<ID>' || true)
           if [ -n "$added" ]; then
             echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
             echo "$added"
@@ -207,6 +212,11 @@ jobs:
           VERSION: 1.7.12
           SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
+          # actionlint skips the scripts without a word when shellcheck is missing.
+          if ! command -v shellcheck > /dev/null; then
+            echo "::error::shellcheck isn't on this runner, so actionlint wouldn't check the workflows' scripts"
+            exit 1
+          fi
           tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
           echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
