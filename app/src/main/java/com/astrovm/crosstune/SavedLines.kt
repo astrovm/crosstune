@@ -71,6 +71,9 @@ internal data class SavedLine(
     /** Whether it was read by an older dictionary than this version's, and is to be read again. */
     val readByOlder get() = readWith != null && readWith < Readings.VERSION
 
+    /** Whether it's read again as its song's words are read now: not when read by hand, nor, when only [older] ones are, when read by this version. */
+    fun rereads(older: Boolean) = !readByHand && (!older || readByOlder)
+
     /** It read as [read] says, by this version's dictionary; with none, as nothing reads it. */
     fun readBy(read: LineReading?): SavedLine = copy(
         reading = read?.reading?.takeIf { it != text },
@@ -318,7 +321,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     fun reread(lines: List<SavedLine>, older: Boolean = false): List<SavedLine> = save(
         load().map { kept ->
             val again = lines.firstOrNull { it.isSame(kept) }
-            if (again == null || kept.readByHand || (older && !kept.readByOlder)) kept else kept.rereadAs(again)
+            if (again == null || !kept.rereads(older)) kept else kept.rereadAs(again)
         }
     )
 

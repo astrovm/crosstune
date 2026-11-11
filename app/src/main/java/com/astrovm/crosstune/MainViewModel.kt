@@ -4126,7 +4126,8 @@ internal class MainViewModel(
         val learning = uiState.learning
         val lines = wordLines()
         val script = learning.script
-        if (learning.reads && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
+        val unread = learning.lines.isEmpty() && readingsJob?.isActive != true
+        if (learning.reads && script != null && unread) {
             readingsJob = viewModelScope.launch {
                 if (script == Script.JAPANESE) readWithUniDic()
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
