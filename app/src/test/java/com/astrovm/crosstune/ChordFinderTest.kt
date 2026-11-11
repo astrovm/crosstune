@@ -247,8 +247,9 @@ Singing to the morning light</div>"""
         // entity, and each stack draws it from another font: 0.888 columns on the main stack, 1.105 on the
         // monospace one. Drawn in Chromium with scripts/jtotal-widths/compare_sheets.py, the chord after
         // ten columns lands on letter 11 with the main stack and on letter 9 with the monospace one.
-        val words = "ĳ".repeat(20)
-        val sheet = jTotalSong("${"x".repeat(10)}$jTotalChord", "&#307;".repeat(20))
+        // The kana at the end makes the words Japanese, as J-Total is asked only for those.
+        val words = "ĳ".repeat(20) + "あ"
+        val sheet = jTotalSong("${"x".repeat(10)}$jTotalChord", "&#307;".repeat(20) + "あ")
         for ((stack, letter) in listOf("'Inconsolata','MS Gothic','Hiragino Kaku Gothic','Monaco',sans-serif" to 11, "'Inconsolata', monospace" to 9)) {
             jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to "<style>tt { font-family: $stack; }</style>$sheet"))
             val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
