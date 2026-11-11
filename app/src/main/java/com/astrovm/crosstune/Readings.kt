@@ -98,7 +98,8 @@ internal object Readings {
      * worked out again: 2 for the readings a song is sung with, which were asked for in a way that found none,
      * and the dictionary's common misreadings, as 君 after a pause; 4 for counters, minutes, classical
      * verbs, the nouns IPADIC takes for suffixes, and the words JMdict reads one way only; 5 for words in old kana
-     * alone that IPADIC splits, とりあふ and おもひで, and modern words in kana that only looked old, さいふ.
+     * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ, 何分 as なんぷん,
+     * 洒落る, and numbers that start a longer word, 一重項.
      */
     const val VERSION = 5
 
@@ -742,24 +743,27 @@ internal object Readings {
 
     /**
      * 二分 and 十分, as the dictionary reads them, are a half and enough, にぶん and じゅうぶん. Before 後, 前,
-     * 間 or 半 they're minutes: 二分後 にふんご, 十分前 じゅっぷんまえ. Null when [piece] is no such word.
+     * 間 or 半 they're minutes: 二分後 にふんご, 十分前 じゅっぷんまえ. 何分, なにぶん, is how many: 何 counts as なん, 何分前
+     * なんぷんまえ, as before any counter. Null when [piece] is no such word.
      */
     private fun minutes(piece: Piece, next: Piece?): String? {
         if (next?.surface !in AFTER_MINUTES || !piece.surface.endsWith('分') || !piece.kana.endsWith("ぶん")) return null
         if (piece.surface.length < 2 || !piece.surface.dropLast(1).all { it in "一二三四五六七八九十百何" }) return null
-        val number = piece.kana.dropLast(2)
+        val number = piece.kana.dropLast(2).let { if (it == "なに") "なん" else it }
         return ranInto(number, "分", "ふん") ?: (number + "ふん")
     }
 
     /**
      * [piece] read as the classical verb the kana written after its kanji make it, 晴る and 流る: the
      * dictionary reads the kanji as the modern word, はれ and ながれ, but the line ends it with る, as
-     * 晴るる空, so the kanji are は and なが. Null when the kana after it don't make one.
+     * 晴るる空, so the kanji are は and なが. Null when the kana after it don't make one, or JMdict has the modern verb
+     * written so, 洒落る しゃれる, whose れ is in its kanji: IPADIC reads 流る and 洒落る alike.
      */
     private fun classical(piece: Piece, next: Piece?): String? {
         val kanji = piece.surface.takeWhile(::isHan)
         val ending = piece.surface.drop(kanji.length)
         if (kanji.isEmpty() || ending.any { !isKana(it) } || !piece.kana.endsWith(hiragana(ending))) return null
+        if (listed.orEmpty()[piece.base]?.endsWith("れる") == true) return null
         val over = piece.kana.dropLast(ending.length)
         val after = ending.ifEmpty { next?.surface.orEmpty() }.firstOrNull()
         return if (over.length > 1 && over.last() == 'れ' && after == 'る') over.dropLast(1) + hiragana(ending) else null
@@ -785,7 +789,8 @@ internal object Readings {
      * make one: 体 and 中 are 体中, からだじゅう, and 一番 and 星 are 一番星, いちばんぼし. A verb is
      * looked up as the dictionary writes it, 肉付く for 肉付いた. Only whole pieces, so 一人舞 is not taken
      * out of 一人舞う; never starting or ending in a particle, so 今日は stays きょうは; and never one piece
-     * alone, as the dictionary read it as a word it knows, 上野 うえの, which JMdict has only as こうずけ.
+     * alone, as the dictionary read it as a word it knows, 上野 うえの, which JMdict has only as こうずけ; nor
+     * a number that starts a longer word, 一重 of 一重項: see [numberGoesOn].
      */
     private fun listedWords(pieces: List<Piece>): List<Piece> {
         val table = listed.orEmpty()
@@ -794,7 +799,7 @@ internal object Readings {
         var at = 0
         while (at < pieces.size) {
             val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 2).firstNotNullOfOrNull { count ->
-                listedAs(pieces.subList(at, at + count), table)?.let { count to it }
+                listedAs(pieces.subList(at, at + count), table)?.takeUnless { numberGoesOn(pieces, at, count) }?.let { count to it }
             }
             if (found == null) out += pieces[at++] else {
                 out += found.second
@@ -802,6 +807,16 @@ internal object Readings {
             }
         }
         return out
+    }
+
+    /**
+     * Whether the [count] pieces at [at] start with a number and go on into a noun in kanji: then they're the start of a longer
+     * word, 一重 of 一重項 いちじゅうこう or 二五 of 二五進法, which JMdict's 一重 ひとえ and the dictionary's 二十五 don't read.
+     * Kana end a word, 一重の, and so does a verb, 三尺下がって. A word that starts with no number goes on as JMdict reads it, 保湿剤.
+     */
+    private fun numberGoesOn(pieces: List<Piece>, at: Int, count: Int): Boolean {
+        val next = pieces.getOrNull(at + count) ?: return false
+        return pieces[at].subkind in NUMBERS && isHan(pieces[at + count - 1].surface.last()) && isHan(next.surface.first()) && next.kind !in INFLECTED
     }
 
     /**

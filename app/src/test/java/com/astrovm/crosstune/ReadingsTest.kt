@@ -982,6 +982,9 @@ class ReadingsTest {
             assertEquals("$withUniDic", "にふんごにきた", read("二分後に来た"))
             assertEquals("$withUniDic", "じゅっぷんまえ", read("十分前"))
             assertEquals("$withUniDic", "ごふんまえ", read("五分前"))
+            // 何 counting minutes is なん, as it is before any counter: なんぷん, not なにふん.
+            assertEquals("$withUniDic", "なんぷんまえ", read("何分前"))
+            assertEquals("$withUniDic", "なんぷんいない", read("何分以内"))
             // Before anything else, 十分 is enough, and 二分 a half.
             assertEquals("$withUniDic", "じゅうぶんだよ", read("十分だよ"))
             assertEquals("$withUniDic", "にぶんする", read("二分する"))
@@ -990,6 +993,15 @@ class ReadingsTest {
             // 分 after a number after 寸 or 割 is a tenth, ぶ.
             assertEquals("$withUniDic", "よんすんよんぶ", read("四寸四分"))
             assertEquals("$withUniDic", "ごわりごぶ", read("五割五分"))
+        }
+    }
+
+    @Test
+    fun whatBeforeACounterIsNan() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            mapOf("何本" to "なんぼん", "何回" to "なんかい", "何匹" to "なんびき", "何杯" to "なんばい", "何階" to "なんがい", "何人" to "なんにん")
+                .forEach { (line, kana) -> assertEquals("$line $withUniDic", kana, read(line)) }
         }
     }
 
@@ -1004,6 +1016,11 @@ class ReadingsTest {
             // The modern verb, written so, stays.
             assertEquals("$withUniDic", "はれるそら", read("晴れる空").reading)
             assertEquals("$withUniDic", "ながれるかわ", read("流れる川").reading)
+            // And so does one whose れ is in its kanji, as the dictionary has it: 洒落る is しゃれる, not しゃる.
+            assertEquals("$withUniDic", "しゃれる", read("洒落る").reading)
+            assertEquals("$withUniDic", "しゃれるふく", read("洒落る服").reading)
+            // The same for each verb JMdict writes so and reads one way only: 小洒落る. (黄昏る is たそがる too.)
+            assertEquals("$withUniDic", "こじゃれる", read("小洒落る").reading)
         }
     }
 
@@ -1040,6 +1057,17 @@ class ReadingsTest {
             assertEquals("$withUniDic", "きょうははれ", read("今日は晴れ").reading)
             // Nor one piece alone the dictionary reads as a word it knows: 上野 is うえの, not JMdict's こうずけ.
             assertEquals("$withUniDic", "うえののはな", read("上野の花").reading)
+            // Nor the start of a longer word in kanji: 一重 is ひとえ, but 一重項 is いちじゅうこう.
+            assertEquals("$withUniDic", "いちじゅうこう", read("一重項").reading)
+            // A number that ends a line, or goes on in kana or into a verb, is the word JMdict reads.
+            assertEquals("$withUniDic", "ひとこきゅう", read("一呼吸").reading)
+            assertEquals("$withUniDic", "ひとこきゅうおいて", read("一呼吸おいて").reading)
+            assertEquals("$withUniDic", "ひとこきゅうおいて", read("一呼吸置いて").reading)
+            assertEquals("$withUniDic", "いちにんのりじてんしゃ", read("一人乗り自転車").reading)
+            // A word that starts with no number goes on as JMdict reads it: 保湿 of 保湿剤.
+            assertEquals("$withUniDic", "ほしつざい", read("保湿剤").reading)
+            // Kana end a word, so a verb before a noun in kanji is still the word JMdict reads: 目醒める時.
+            assertEquals("$withUniDic", "めざめるとき", read("目醒める時").reading)
         }
         assertEquals(listOf(Reader.JMDICT), Readings.words("水車小屋", Script.JAPANESE).single().by)
         // Without the table, as when it's made, the dictionaries read the word.
