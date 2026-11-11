@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -96,9 +97,9 @@ class LicensesTest {
         work("projectM").performScrollTo().performClick()
         composeRule.waitForIdle()
         // projectM's own notice, then the LGPL's whole text.
-        composeRule.onNodeWithText("projectM -- Milkdrop-esque visualisation SDK", substring = true).performScrollTo().assertExists()
-        composeRule.onNodeWithText("GNU LESSER GENERAL PUBLIC LICENSE", substring = true).performScrollTo().assertExists()
-        composeRule.onNodeWithText("END OF TERMS AND CONDITIONS", substring = true).performScrollTo().assertExists()
+        composeRule.onAllNodesWithText("projectM -- Milkdrop-esque visualisation SDK", substring = true).onFirst().performScrollTo().assertExists()
+        composeRule.onAllNodesWithText("GNU LESSER GENERAL PUBLIC LICENSE", substring = true).onFirst().performScrollTo().assertExists()
+        composeRule.onAllNodesWithText("END OF TERMS AND CONDITIONS", substring = true).onFirst().performScrollTo().assertExists()
         assertEquals(null, shadowOf(app).nextStartedActivity)
 
         composeRule.onNodeWithText("github.com/projectM-visualizer/projectm").performScrollTo().performClick()
@@ -117,8 +118,8 @@ class LicensesTest {
         openLicenses()
         work("IPADIC").performScrollTo().performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("Nara Institute of Science and Technology (NAIST)", substring = true).performScrollTo().assertExists()
-        composeRule.onNodeWithText("Each user will be deemed to have agreed", substring = true).performScrollTo().assertExists()
+        composeRule.onAllNodesWithText("Nara Institute of Science and Technology (NAIST)", substring = true).onFirst().performScrollTo().assertExists()
+        composeRule.onAllNodesWithText("Each user will be deemed to have agreed", substring = true).onFirst().performScrollTo().assertExists()
     }
 
     @Test
