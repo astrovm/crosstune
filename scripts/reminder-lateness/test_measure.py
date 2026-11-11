@@ -107,6 +107,20 @@ class NotificationTest(unittest.TestCase):
         summary = 'NotificationRecord(0x456: pkg=com.astrovm.crosstune.dev user=0 id=5 tag=null)\n'
         self.assertEqual(notification_posted_at(summary + dump), 1700000123456)
 
+    def test_reads_when_from_a_samsung_record_without_creation_time(self):
+        from measure import notification_posted_at
+
+        # One UI 8's record, cut down: its own when=, then the public version's, which comes later.
+        dump = (
+            '  NotificationRecord(0x0b3345a5: pkg=com.astrovm.crosstune.dev user=UserHandle{0} id=5 tag=null importance=3)\n'
+            '            contentIntent=PendingIntent{1}\n'
+            '            when=1794405360065/1794405360065\n'
+            '            timeout=PT72H\n'
+            '      publicNotification=\n'
+            '            when=1794405360062/1794405360062\n'
+        )
+        self.assertEqual(notification_posted_at(dump), 1794405360065)
+
     def test_rejects_incomplete_and_ambiguous_records(self):
         from measure import notification_posted_at
 
@@ -115,8 +129,10 @@ class NotificationTest(unittest.TestCase):
         self.assertIsNone(notification_posted_at(
             'NotificationRecord(0x1: pkg=com.astrovm.crosstune.dev.other user=0 id=5 tag=null)\n'
             ' mCreationTimeMs=1700000000000\n'))
-        with self.assertRaisesRegex(ValueError, 'when=1700000000000'):
-            notification_posted_at(record + '  when=1700000000000\n')
+        with self.assertRaisesRegex(ValueError, 'flags=AUTO_CANCEL'):
+            notification_posted_at(record + '  flags=AUTO_CANCEL\n')
+        with self.assertRaisesRegex(ValueError, 'publicNotification'):
+            notification_posted_at(record + '  publicNotification=\n            when=1700000000000\n')
         with self.assertRaises(ValueError):
             notification_posted_at((record + ' mCreationTimeMs=1700000000000\n') * 2)
 
@@ -374,9 +390,11 @@ class RunTest(unittest.TestCase):
                     return (f' RTC_WAKEUP #1: Alarm{{abc type 0 origWhen {target} whenElapsed 5 com.astrovm.crosstune.dev}}\n'
                             '  tag=*walarm*:com.astrovm.crosstune.action.REMIND_PRACTICE\n'
                             '  type=RTC_WAKEUP window=0\n').encode()
-                if command == 'dumpsys deviceidle': return b'mScreenOn=false\n'
+                if command == 'dumpsys deviceidle': return b'  mScreenOn=false\n  mState=IDLE mLightState=OVERRIDE\n'
                 if command == 'dumpsys power': return b'mLastWakeTime=123\n'
                 if command == 'dumpsys notification':
+                    if (clock[0] + 120) * 1000 < target + 200:
+                        return b''
                     return (f'NotificationRecord(0x1: pkg=com.astrovm.crosstune.dev user=0 id=5 tag=null)\n'
                             f' mCreationTimeMs={target + 200}\n').encode()
                 if command == 'input keyevent 223': return b''
@@ -388,7 +406,10 @@ class RunTest(unittest.TestCase):
             with patch('time.time', side_effect=lambda: clock[0]), patch('time.sleep', side_effect=sleep):
                 result = run_measurement(phone, 1, 1, True, True, Path(directory) / 'backup.xml')
             self.assertEqual(result[:2], (target, target + 200))
-            self.assertEqual(clock[0], target / 1000 + 60 - 120)
+            # It stops a few seconds after the first look that finds it, before the wait is up.
+            self.assertLess(clock[0], target / 1000 + 60 - 120)
+            self.assertGreaterEqual(clock[0], target / 1000 + 0.2 - 120 + 5)
+            self.assertIn('deep IDLE before it: yes', __import__('measure').idle_summary(result[4], target))
         self.assertGreaterEqual(phone.alarm_queries, 3)
         self.assertEqual(phone.exact, 'default')
         self.assertEqual(phone.permission, (False, frozenset({'USER_SET'})))
@@ -436,7 +457,7 @@ class RunTest(unittest.TestCase):
             def shell(self, command):
                 if command == 'dumpsys notification':
                     return (b'NotificationRecord(0x1: pkg=com.astrovm.crosstune.dev user=0 id=5 tag=null)\n'
-                            b' when=1700000220200\n')
+                            b' flags=1700000220200\n')
                 return super().shell(command)
             def command(self, *args):
                 return b'1700000220.200 1 2 I NotificationService: enqueued com.astrovm.crosstune.dev\n'
@@ -449,7 +470,7 @@ class RunTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch('time.time', side_effect=lambda: clock[0]), patch('time.sleep', side_effect=sleep):
                 with contextlib.redirect_stdout(output):
-                    with self.assertRaisesRegex(ValueError, 'when=1700000220200'):
+                    with self.assertRaisesRegex(ValueError, 'flags=1700000220200'):
                         run_measurement(phone, 1, 1, False, True, Path(directory) / 'backup.xml')
         self.assertIn('enqueued com.astrovm.crosstune.dev', output.getvalue())
         self.assertEqual(phone.prefs, b'<map />')
@@ -673,3 +694,74 @@ class InterferenceTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LogEventTest(unittest.TestCase):
+    LOG = (
+        '         1794405300.000  2413  2917 D ActivityManager: Received BROADCAST intent 0x1 Key{broadcastIntent '
+        'pkg=com.astrovm.crosstune.dev intent=act=com.astrovm.crosstune.action.REMIND_PRACTICE xflg=0x4} from uid 1000\n'
+        '         1794405360.011  2413  2917 D ActivityManager: Received BROADCAST intent 0xc29f9e6 Key{broadcastIntent '
+        'pkg=com.astrovm.crosstune.dev intent=act=com.astrovm.crosstune.action.REMIND_PRACTICE xflg=0x4} from uid 1000\n'
+        '         1794405360.067 25019 25019 I NotificationManager: com.astrovm.crosstune.dev: notify(5, null, Notification())\n'
+        '         1794405360.070 25019 25019 I NotificationManager: com.astrovm.crosstune.dev: notify(5, null, Notification())\n'
+        '         1794405361.000  2413  2413 D FreecessController: Deferring alarm due to freecess: com.astrovm.crosstune.dev\n'
+        'not a log line\n'
+    )
+
+    def test_reads_delivery_post_and_freezer_after_the_start(self):
+        from measure import log_events
+
+        self.assertEqual(log_events(self.LOG, 1794405350), {
+            'delivered': 1794405360011, 'notified': 1794405360067, 'deferred': 1794405361000})
+        self.assertEqual(log_events(self.LOG, 1794405400), {'delivered': None, 'notified': None, 'deferred': None})
+
+    def test_record_and_log_times_must_agree(self):
+        from measure import check_post_time
+
+        check_post_time(1794405360065, {'notified': 1794405360067})
+        check_post_time(None, {'notified': 1794405360067})
+        check_post_time(1794405360065, {'notified': None})
+        with self.assertRaisesRegex(ValueError, 'disagree'):
+            check_post_time(1794405370065, {'notified': 1794405360067})
+
+
+class DozeTest(unittest.TestCase):
+    def test_reads_and_summarizes_doze_states(self):
+        from measure import idle_state, idle_summary
+
+        self.assertEqual(idle_state('  mState=IDLE mLightState=OVERRIDE\n'), ('IDLE', 'OVERRIDE'))
+        with self.assertRaises(ValueError):
+            idle_state('mScreenOn=false\n')
+        self.assertEqual(idle_summary([], 100), 'no samples')
+        states = [(10, ('INACTIVE', 'IDLE')), (50, ('IDLE', 'OVERRIDE')), (99, ('IDLE_MAINTENANCE', 'OVERRIDE'))]
+        self.assertEqual(idle_summary(states, 100), 'deep IDLE_MAINTENANCE, light OVERRIDE at the minute; deep IDLE before it: yes')
+        self.assertEqual(idle_summary(states[:1], 100), 'deep INACTIVE, light IDLE at the minute; deep IDLE before it: no')
+
+
+class AnyAlarmTest(unittest.TestCase):
+    def test_finds_the_first_reminder_alarm_wherever_it_is_set(self):
+        from measure import any_reminder_alarm
+
+        dump = (' RTC_WAKEUP #1: Alarm{a type 0 origWhen 5 whenElapsed 5 other}\n'
+                '  tag=*walarm*:com.astrovm.crosstune.action.REMIND_PRACTICE\n'
+                ' RTC_WAKEUP #2: Alarm{b type 0 origWhen 9 whenElapsed 9 com.astrovm.crosstune.dev}\n'
+                '  tag=*walarm*:com.astrovm.crosstune.action.REMIND_PRACTICE_HOP\n')
+        self.assertIn('origWhen 9', any_reminder_alarm(dump))
+        with self.assertRaises(ValueError):
+            any_reminder_alarm(dump.split(' RTC_WAKEUP #2')[0])
+
+
+class ResultTest(unittest.TestCase):
+    def test_writes_lateness_in_seconds_and_none_where_unseen(self):
+        from types import SimpleNamespace
+        from measure import run_result
+
+        args = SimpleNamespace(label='exact', exact=True, force_idle=False, minutes=3, wait_minutes=2)
+        events = {'delivered': 1011, 'notified': 1067, 'deferred': None}
+        result = run_result(args, 1000, 1065, events, [(1000, ('IDLE', 'OVERRIDE'))])
+        self.assertEqual(result['posted_late_s'], 0.065)
+        self.assertEqual(result['delivered_late_s'], 0.011)
+        self.assertFalse(result['deferred_by_freezer'])
+        self.assertEqual(result['label'], 'exact')
+        self.assertIsNone(run_result(args, 1000, None, {'delivered': None, 'deferred': 5}, [])['posted_late_s'])
+        self.assertTrue(run_result(args, 1000, None, {'delivered': None, 'deferred': 5}, [])['deferred_by_freezer'])

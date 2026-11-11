@@ -67,7 +67,12 @@ def samsung_serial(listing):
 
 
 def notification_posted_at(dump):
-    """Read the reminder's system creation time in milliseconds, or None if absent."""
+    """Read when the reminder was made, in milliseconds, or None if absent.
+
+    AOSP prints the record's mCreationTimeMs. Samsung's One UI 8 prints no creation time, so the
+    notification's own when= is read: the app sets it as it posts, and logcat's notify(5) line
+    showed the two 2 ms apart on the Samsung. The public version's when= is not read.
+    """
     records = re.split(r'(?=NotificationRecord\()', dump)
     matches = []
     found = False
@@ -81,13 +86,57 @@ def notification_posted_at(dump):
         found = True
         excerpts.append('\n'.join(record.splitlines()[:60]))
         creation = re.search(r'^\s*mCreationTimeMs=(\d+)\s*$', record, re.MULTILINE)
+        own = record.split('publicNotification=')[0]
+        when = re.search(r'^\s*when=(\d+)(?:/\d+)?\s*$', own, re.MULTILINE)
         if creation:
             matches.append(int(creation.group(1)))
+        elif when:
+            matches.append(int(when.group(1)))
     if found and not matches:
         raise ValueError('Reminder record has no creation time:\n' + '\n'.join(excerpts[:3]))
     if len(matches) > 1:
         raise ValueError('More than one reminder record')
     return matches[0] if matches else None
+
+
+def log_events(log, started):
+    """Read the reminder's own moments from logcat -v epoch, in milliseconds, after started (seconds).
+
+    delivered: Android sent the alarm's broadcast to the app. notified: the app called notify(5).
+    deferred: Samsung's freezer held an alarm. Each is the first after started, or None.
+    """
+    events = {'delivered': None, 'notified': None, 'deferred': None}
+    for line in log.splitlines():
+        stamp = re.match(r'^\s*(\d+(?:\.\d+)?)\s+', line)
+        if not stamp or float(stamp.group(1)) < started:
+            continue
+        at = round(float(stamp.group(1)) * 1000)
+        if 'Received BROADCAST' in line and 'com.astrovm.crosstune.action.REMIND_PRACTICE' in line and 'crosstune.dev' in line:
+            kind = 'delivered'
+        elif re.search(r'NotificationManager: com\.astrovm\.crosstune\.dev: notify\(5,', line):
+            kind = 'notified'
+        elif 'freecess' in line.lower() and 'deferring alarm' in line.lower():
+            kind = 'deferred'
+        else:
+            continue
+        if events[kind] is None:
+            events[kind] = at
+    return events
+
+
+def check_post_time(posted, events):
+    """The record's time and logcat's notify(5) must agree, or the parser read the wrong field."""
+    notified = events['notified']
+    if posted is not None and notified is not None and abs(posted - notified) > 2000:
+        raise ValueError(f'Record time {posted} and logcat notify time {notified} disagree')
+
+
+def idle_state(dump):
+    """Read Doze's deep and light states from the device-idle service."""
+    result = re.search(r'^\s*mState=(\S+) mLightState=(\S+)\s*$', dump, re.MULTILINE)
+    if not result:
+        raise ValueError('Doze state is missing')
+    return result.group(1), result.group(2)
 
 
 def notification_permission(dump):
@@ -299,13 +348,41 @@ def reminder_alarm(dump, target, exact):
         raise ValueError('Expected one reminder alarm at the target')
     return matches[0]
 
-def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup):
-    """Run one bounded measurement; restore every setting before returning."""
+MAX_RUN_MINUTES = 110
+
+
+def any_reminder_alarm(dump):
+    """Find the dev app's next reminder alarm, wherever it is set, for builds that hop towards the minute."""
+    blocks = re.split(r'(?=^[ \t]*(?:RTC|ELAPSED)(?:_WAKEUP)? #\d+: Alarm\{)', dump, flags=re.MULTILINE)
+    for block in blocks:
+        header = block.splitlines()[0] if block.splitlines() else ''
+        if 'com.astrovm.crosstune.dev}' in header and re.search(r'com\.astrovm\.crosstune\.action\.REMIND_PRACTICE', block):
+            return block
+    raise ValueError('No reminder alarm')
+
+
+def idle_summary(states, target):
+    """Say which Doze states the phone was in before the minute and at it, from the samples taken."""
+    if not states:
+        return 'no samples'
+    before = [deep for at, (deep, _) in states if at < target]
+    at_target = min(states, key=lambda state: abs(state[0] - target))[1]
+    deep_before = 'IDLE' in before
+    return f'deep {at_target[0]}, light {at_target[1]} at the minute; deep IDLE before it: {"yes" if deep_before else "no"}'
+
+
+def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup, alarm='at-target'):
+    """Run one bounded measurement; restore every setting before returning.
+
+    alarm is 'at-target' when the build sets its alarm for the minute itself, or 'any' for a build
+    that sets earlier alarms first, such as hops, whose first alarm is not at the minute.
+    The wait ends early, a few seconds after the reminder is posted.
+    """
     import time
     from contextlib import ExitStack
 
-    if minutes < 1 or wait_minutes < 1 or minutes + wait_minutes > 38:
-        raise ValueError('Lead and wait must total at most 38 minutes')
+    if minutes < 1 or wait_minutes < 1 or minutes + wait_minutes > MAX_RUN_MINUTES:
+        raise ValueError(f'Lead and wait must total at most {MAX_RUN_MINUTES} minutes')
     if phone.battery_override() or phone.forced_idle():
         raise RuntimeError('Battery or Doze is already overridden; refusing to change it')
     clock = int(phone.shell('date +%s').decode().strip()) * 1000
@@ -326,13 +403,13 @@ def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup):
         stack.enter_context(temporary_setting(phone.battery_override, phone.set_battery_override, True))
         stack.enter_context(temporary_preferences(phone, minute, backup))
         for attempt in range(20):
-            alarm = phone.shell('dumpsys alarm').decode(errors='replace')
+            dump = phone.shell('dumpsys alarm').decode(errors='replace')
             try:
-                scheduled = reminder_alarm(alarm, target, exact)
+                scheduled = reminder_alarm(dump, target, exact) if alarm == 'at-target' else any_reminder_alarm(dump)
                 break
             except ValueError:
                 if attempt == 19:
-                    lines = [line for line in alarm.splitlines() if 'crosstune.dev' in line or 'REMIND_PRACTICE' in line]
+                    lines = [line for line in dump.splitlines() if 'crosstune.dev' in line or 'REMIND_PRACTICE' in line]
                     detail = '\n'.join(lines[:30]) or '(no dev-app alarm in the dump)'
                     logs = phone.command('logcat', '-d', '-v', 'epoch', '-s', 'AndroidRuntime', 'ActivityManager', 'ActivityTaskManager').decode(errors='replace')
                     app_lines = [line for line in logs.splitlines() if 'com.astrovm.crosstune.dev' in line]
@@ -355,14 +432,26 @@ def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup):
             stack.enter_context(temporary_setting(phone.forced_idle, phone.set_forced_idle, True))
         print(f'Target epoch ms: {target}. Waiting for the run to end.', flush=True)
         deadline = target / 1000 + wait_minutes * 60 - clock_offset
+        states = []
         while True:
             remaining = deadline - time.time()
             if remaining <= 0:
                 break
             time.sleep(min(30, remaining))
+            # Reading these over ADB doesn't wake the screen or count as motion.
+            states.append((round((time.time() + clock_offset) * 1000), idle_state(phone.shell('dumpsys deviceidle').decode())))
+            try:
+                seen = notification_posted_at(phone.shell('dumpsys notification').decode(errors='replace'))
+            except ValueError:
+                # Read again after the wait, which prints the logs that explain it.
+                break
+            if seen is not None and seen >= target:
+                time.sleep(5)
+                break
+        print('Doze: ' + idle_summary(states, target), flush=True)
         wake_after = last_wake(phone.shell('dumpsys power').decode())
         notification = phone.shell('dumpsys notification').decode(errors='replace')
-        log = phone.command('logcat', '-d', '-v', 'epoch', '-s', 'AlarmManager', 'NotificationService', 'FreecessController', 'MARsPolicyManager', 'ActivityTaskManager').decode(errors='replace')
+        log = phone.command('logcat', '-d', '-v', 'epoch', '-s', 'AlarmManager', 'NotificationService', 'NotificationManager', 'ActivityManager', 'FreecessController', 'MARsPolicyManager', 'ActivityTaskManager').decode(errors='replace')
         relevant = []
         for line in log.splitlines():
             match = re.match(r'^\s*(\d+(?:\.\d+)?)\s+', line)
@@ -377,13 +466,15 @@ def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup):
                 if 'com.astrovm.crosstune.dev' in line:
                     print(line.replace(phone.serial, '[device]'), flush=True)
             raise
+        events = log_events(log, clock / 1000)
+        check_post_time(posted, events)
         if activity_started_after(log, unattended_from):
             raise RuntimeError('An activity started during the unattended run; discard this measurement')
         if wake_before != wake_after or screen_on(phone.shell('dumpsys deviceidle').decode()):
             raise RuntimeError('The phone woke during the run; discard this measurement')
         if posted is not None and posted < target:
             raise RuntimeError('The notification predates the target; discard this measurement')
-        return target, posted, relevant
+        return target, posted, relevant, events, states
 
 
 @contextmanager
@@ -430,9 +521,11 @@ def main():
     parser.add_argument('--exact', action='store_true', help='allow exact alarms for this run')
     parser.add_argument('--recover', action='store_true', help='restore a prior interrupted run')
     parser.add_argument('--who', default='issue 773', help='owner name used to take the Samsung lock')
+    parser.add_argument('--alarm', choices=('at-target', 'any'), default='at-target', help="'any' for a build whose first alarm is before the minute")
+    parser.add_argument('--label', default='', help='candidate name written with the result')
     args = parser.parse_args()
-    if args.minutes < 1 or args.wait_minutes < 1 or args.minutes + args.wait_minutes > 38:
-        parser.error('lead and wait must total at most 38 minutes')
+    if args.minutes < 1 or args.wait_minutes < 1 or args.minutes + args.wait_minutes > MAX_RUN_MINUTES:
+        parser.error(f'lead and wait must total at most {MAX_RUN_MINUTES} minutes')
 
     lock_script = Path(__file__).resolve().parents[1] / 'devicelock.py'
     lock = subprocess.run([sys.executable, str(lock_script), 'who', 'samsung'], capture_output=True, text=True, check=True)
@@ -467,7 +560,8 @@ def main():
         write_journal(journal, original)
         try:
             with restore_screen(phone):
-                target, posted, log = run_measurement(phone, args.minutes, args.wait_minutes, args.force_idle, args.exact, backup)
+                target, posted, log, events, states = run_measurement(
+                    phone, args.minutes, args.wait_minutes, args.force_idle, args.exact, backup, args.alarm)
             if capture_state(phone) != original:
                 raise RuntimeError('Device state did not match the original after the run')
         except BaseException as error:
@@ -478,15 +572,32 @@ def main():
                 raise RuntimeError(f'Recovery is needed: {recovery_error}') from error
             raise
         journal.unlink()
+        result = run_result(args, target, posted, events, states)
+        with open(cache / 'results.jsonl', 'a', encoding='utf-8') as results:
+            results.write(json.dumps(result) + '\n')
         if posted is None:
             print(f'No notification observed by {args.wait_minutes * 60} s after the target.')
         else:
             print(f'Notification lateness: {(posted - target) / 1000:.3f} s')
+        print('Result: ' + json.dumps(result))
         for line in log:
             if 'com.astrovm.crosstune.dev' in line:
                 print(line.replace(phone.serial, '[device]'))
     finally:
         subprocess.run([sys.executable, str(lock_script), 'release', 'samsung', '--who', args.who], check=True)
+
+
+def run_result(args, target, posted, events, states):
+    """One run as a line of the results file: lateness in seconds, None where nothing was seen."""
+    def late(at):
+        return None if at is None else round((at - target) / 1000, 3)
+
+    return {
+        'label': args.label, 'exact': args.exact, 'forced_idle': args.force_idle, 'lead_minutes': args.minutes,
+        'wait_minutes': args.wait_minutes, 'target': target, 'posted_late_s': late(posted),
+        'delivered_late_s': late(events['delivered']), 'deferred_by_freezer': events['deferred'] is not None,
+        'doze': idle_summary(states, target),
+    }
 
 
 def notification_appop(dump):
