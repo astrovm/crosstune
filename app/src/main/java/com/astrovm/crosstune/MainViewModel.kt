@@ -389,7 +389,7 @@ internal class MainViewModel(
         follow: Boolean,
         microphone: Boolean = false,
         floating: Boolean = false,
-        exact: Boolean = false
+        exact: Boolean
     ): Boolean {
         val worked = setup.setUp(apps = apps, links = links, follow = follow, microphone = microphone, floating = floating, exact = exact)
         // Android lets Crosstune follow music apps a moment after it's told to.
