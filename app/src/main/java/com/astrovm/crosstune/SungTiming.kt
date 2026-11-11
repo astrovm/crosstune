@@ -71,17 +71,16 @@ internal object SungTiming {
         if (best.isEmpty()) return best
         val weight = best.sumOf { it.support }
         val sorted = candidates.sortedBy { it.ms }
-        fun follows(a: Placed, b: Placed) = b.line > a.line && b.ms - a.ms >= (firstLetters.getValue(b.line) - firstLetters.getValue(a.line)) * FAST_LETTER_MS
         // The best chain ending at each, and starting at each; one that can follow another is always later.
         val ending = DoubleArray(sorted.size) { sorted[it].support }
         val starting = DoubleArray(sorted.size) { sorted[it].support }
-        for (k in sorted.indices) for (j in 0 until k) if (follows(sorted[j], sorted[k])) ending[k] = maxOf(ending[k], ending[j] + sorted[k].support)
-        for (k in sorted.indices.reversed()) for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j])) starting[k] = maxOf(starting[k], starting[j] + sorted[k].support)
+        for (k in sorted.indices) for (j in 0 until k) if (follows(sorted[j], sorted[k], firstLetters)) ending[k] = maxOf(ending[k], ending[j] + sorted[k].support)
+        for (k in sorted.indices.reversed()) for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j], firstLetters)) starting[k] = maxOf(starting[k], starting[j] + sorted[k].support)
         // For each, the best chain that can follow it from a line on: a chain with no line between the two.
         val lines = sorted.maxOf { it.line } + 2
         val after = Array(sorted.size) { DoubleArray(lines) }
         for (k in sorted.indices) {
-            for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j])) after[k][sorted[j].line] = maxOf(after[k][sorted[j].line], starting[j])
+            for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j], firstLetters)) after[k][sorted[j].line] = maxOf(after[k][sorted[j].line], starting[j])
             for (line in lines - 2 downTo 0) after[k][line] = maxOf(after[k][line], after[k][line + 1])
         }
         return best.filter { placed ->
@@ -177,11 +176,8 @@ internal object SungTiming {
         for (k in sorted.indices) {
             best[k] = sorted[k].support
             for (j in 0 until k) {
-                val a = sorted[j]
-                val b = sorted[k]
-                val letters = firstLetters.getValue(b.line) - firstLetters.getValue(a.line)
-                if (b.line > a.line && b.ms - a.ms >= letters * FAST_LETTER_MS && best[j] + b.support > best[k]) {
-                    best[k] = best[j] + b.support
+                if (follows(sorted[j], sorted[k], firstLetters) && best[j] + sorted[k].support > best[k]) {
+                    best[k] = best[j] + sorted[k].support
                     from[k] = j + 1
                 }
             }
@@ -194,6 +190,10 @@ internal object SungTiming {
         }
         return chain.reversed()
     }
+
+    /** If [b] can be sung after [a]: a later line, and far enough after for the lines between to be sung, however fast. */
+    private fun follows(a: Placed, b: Placed, firstLetters: Map<Int, Int>) =
+        b.line > a.line && b.ms - a.ms >= (firstLetters.getValue(b.line) - firstLetters.getValue(a.line)) * FAST_LETTER_MS
 
     /** The pieces of [lines]' words, each with its line, the letters before it in its line, and before it in all. */
     private fun written(lines: List<String>): List<Written> {
@@ -214,7 +214,9 @@ internal object SungTiming {
         return words.flatMap { (text, ms) ->
             val sound = told || text.startsWith('[') || text.startsWith('(')
             told = sound && !text.endsWith(']') && !text.endsWith(')')
-            if (sound) emptyList() else SpokenWords.pieces(text).map { it to ms - HEARD_LATE_MS }
+            var before = 0L
+            // A word of unspaced writing is matched a letter at a time; each letter is a little after the one before.
+            if (sound) emptyList() else SpokenWords.pieces(text).map { piece -> (piece to ms - HEARD_LATE_MS + before * LETTER_MS).also { before += piece.length } }
         }
     }
 
