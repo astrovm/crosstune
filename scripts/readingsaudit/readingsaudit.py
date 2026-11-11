@@ -10,6 +10,12 @@
   python3 scripts/readingsaudit/readingsaudit.py golden    # lock every reading right today into readings-golden.tsv, through gradle-box; a row already there stays
   python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA   # and drop the lock on WORD read as KANA, when that change is on purpose
   python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
+  python3 scripts/readingsaudit/readingsaudit.py fetch     # put the newest jmdict-eng in the folder as jmdict.json; --tag TAG for another
+  python3 scripts/readingsaudit/readingsaudit.py age       # fail when either file's JMdict is older than MAX_AGE_DAYS; the release runs it
+
+`table --gradle "./gradlew --build-cache"` runs Gradle as given instead of through gradle-box, as the
+JMdict workflow does on a runner. EDRDG's licence asks for a way to update JMdict's data regularly from
+its newest version: the JMdict workflow runs fetch, table and oldkana each month.
 
 Songs' words are people's, so everything goes in the agent cache, never in the repo:
 $READINGSAUDIT_DIR, or /mnt/data/agent-cache/crosstune-anime-readings, or ~/.cache/agent-cache/crosstune-anime-readings.
@@ -23,11 +29,22 @@ Lines with no ruby are checked against Sudachi with its full dictionary instead,
 when the folder has a venv with it: uv venv venv && VIRTUAL_ENV=venv uv pip install sudachipy sudachidict_full
 """
 import argparse
+import datetime
+import hashlib
+import http.client
+import io
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -167,6 +184,7 @@ def old_kana_header(date, version):
 def oldkana(folder):
     """Writes the app's old-kana.txt from the JMdict in the folder: see old_kana."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
+    no_downgrade(jmdict["dictDate"], OLD_KANA)
     today, modern = old_kana(jmdict["words"])
     header = old_kana_header(jmdict["dictDate"], jmdict["version"])
     OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern) + "\n")
@@ -176,27 +194,211 @@ def oldkana(folder):
 OLD_KANA = ROOT / "app/src/main/resources/com/astrovm/crosstune/old-kana.txt"
 
 
-def table(folder):
+def table(folder, gradle=None):
     """The candidates for the app's jmdict-readings.txt, for the test that keeps those the app reads otherwise."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
+    no_downgrade(jmdict["dictDate"], TABLE)
     candidates = listed_candidates(jmdict["words"])
     header = table_header(jmdict["dictDate"], jmdict["version"])
     (folder / "listed.txt").write_text("\n".join(header + [f"{form}\t{kana}" for form, kana in candidates.items()]) + "\n")
     print(f"{len(candidates)} candidates in {folder / 'listed.txt'}")
-    run(folder, "com.astrovm.crosstune.songcheck.JmdictReadings")
+    run(folder, "com.astrovm.crosstune.songcheck.JmdictReadings", gradle)
 
 
-def songcheck(folder, test):
-    """Runs one songcheck test class through gradle-box, on the audit folder. Its exit code."""
+# How Gradle runs unless --gradle says otherwise: in the build box, which keeps a machine's builds in turn.
+GRADLE_BOX = f"{ROOT / 'scripts/gradle-box/gradle-box.sh'} --max-workers=2"
+
+
+def songcheck(folder, test, gradle=None):
+    """Runs one songcheck test class through Gradle, gradle-box unless [gradle] says otherwise, on the audit folder. Its exit code."""
     # gradle-box mounts SONGCHECK_DIR, so the words stay out of the checkout.
     env = {**os.environ, "SONGCHECK_DIR": str(folder)}
-    command = ["nice", "-n", "10", str(ROOT / "scripts/gradle-box/gradle-box.sh"), "--max-workers=2", ":app:songCheck",
+    command = ["nice", "-n", "10", *shlex.split(gradle or GRADLE_BOX), ":app:songCheck",
                f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
     return subprocess.call(command, env=env, cwd=ROOT)
 
 
-def run(folder, test="com.astrovm.crosstune.songcheck.ReadingsAudit"):
-    sys.exit(songcheck(folder, test))
+def run(folder, test="com.astrovm.crosstune.songcheck.ReadingsAudit", gradle=None):
+    sys.exit(songcheck(folder, test, gradle))
+
+
+# ---- fetch and age ----
+
+JMDICT_RELEASES = "https://api.github.com/repos/scriptin/jmdict-simplified/releases"
+# All of jmdict-eng, not jmdict-eng-common: the tables need the words that aren't common too.
+JMDICT_ASSET = re.compile(r"jmdict-eng-\d[^/]*\.json\.zip")
+
+
+# jmdict-simplified's tags: its version, then when it was made. Nothing else reaches a URL or the workflow.
+TAG_FORM = re.compile(r"\d+\.\d+\.\d+\+\d{14}")
+# Seconds to wait on GitHub for each try.
+TIMEOUT = 60
+TRIES = 3
+# The zip is about 12 MB and its JSON about 120 MB: room to grow, but no download or unzip without end.
+MAX_ZIP_BYTES = 64 * 1024 * 1024
+MAX_JSON_BYTES = 512 * 1024 * 1024
+
+
+class CutOff(Exception):
+    """An answer that ended before all of it came: tried again, like the network failing."""
+
+
+def with_tries(what, call):
+    """call(), tried again after 2 s and 4 s when the network or GitHub fails; a missing page fails at once.
+
+    An answer cut off is tried again too: http.client's IncompleteRead, or CutOff from call() itself.
+    """
+    for attempt in range(1, TRIES + 1):
+        try:
+            return call()
+        except urllib.error.HTTPError as error:
+            # Its body is the answer's connection, left open unless closed here.
+            error.close()
+            if error.code < 500 and error.code != 429:
+                raise SystemExit(f"{what}: {error.code} {error.reason}")
+            failed = error
+        except (urllib.error.URLError, OSError, http.client.HTTPException, CutOff) as error:
+            failed = error
+        if attempt == TRIES:
+            raise SystemExit(f"{what}: failed {TRIES} tries. The last: {failed}")
+        time.sleep(2 ** attempt)
+
+
+def github_json(url, opener):
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "crosstune-readingsaudit"}
+    # A runner's address shares GitHub's limit for anonymous calls with every other job on it.
+    if os.environ.get("GH_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GH_TOKEN']}"
+
+    def ask():
+        with opener(urllib.request.Request(url, headers=headers), timeout=TIMEOUT) as answer:
+            try:
+                return json.load(answer)
+            # JSONDecodeError, or UnicodeDecodeError when the cut falls inside a character: both are ValueErrors.
+            except ValueError:
+                # A connection that ends early, with no length given, reads as a body cut short.
+                raise CutOff("its JSON is cut off or broken") from None
+    return with_tries(url, ask)
+
+
+def checked_tag(tag):
+    if not TAG_FORM.fullmatch(tag):
+        raise SystemExit(f"{tag!r} isn't a jmdict-simplified release tag, like 3.6.2+20261109214828")
+    return tag
+
+
+def unzip_json(data, name, out):
+    """Writes the zip's one JSON file to [out], if the zip says it is no bigger than MAX_JSON_BYTES.
+
+    zipfile unzips no more than the size the zip gives, and fails on the CRC when the file is longer.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            members = [m for m in archive.infolist() if m.filename.endswith(".json")]
+            if len(members) != 1:
+                raise SystemExit(f"{name} holds {len(members)} JSON files, not one")
+            if members[0].file_size > MAX_JSON_BYTES:
+                raise SystemExit(f"{name} unzips to more than {MAX_JSON_BYTES} bytes")
+            part = out.with_name(out.name + ".part")
+            try:
+                with archive.open(members[0]) as source, part.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+            except BaseException:
+                part.unlink(missing_ok=True)
+                raise
+            part.replace(out)
+    except zipfile.BadZipFile as error:
+        raise SystemExit(f"{name} doesn't unzip: {error}") from None
+
+
+def fetch(folder, tag=None, opener=urllib.request.urlopen):
+    """Puts jmdict-eng of the newest jmdict-simplified release, or of [tag], in the folder as jmdict.json.
+
+    The file is taken by its release's tag, and must have the size and SHA-256 the release gives for it.
+    """
+    url = f"{JMDICT_RELEASES}/latest" if tag is None else f"{JMDICT_RELEASES}/tags/{urllib.parse.quote(checked_tag(tag), safe='')}"
+    release = github_json(url, opener)
+    tag = checked_tag(release["tag_name"])
+    assets = [a for a in release["assets"] if JMDICT_ASSET.fullmatch(a["name"])]
+    if len(assets) != 1:
+        raise SystemExit(f"release {tag} has {len(assets)} jmdict-eng zips, not one: {[a['name'] for a in release['assets']]}")
+    asset = assets[0]
+    expected = asset.get("digest") or ""
+    if not expected.startswith("sha256:"):
+        raise SystemExit(f"release {tag} gives no SHA-256 for {asset['name']}, so it can't be checked")
+    if asset["size"] > MAX_ZIP_BYTES:
+        raise SystemExit(f"release {tag} says {asset['name']} is {asset['size']} bytes, bigger than {MAX_ZIP_BYTES}")
+    download = asset["browser_download_url"]
+    # Compared decoded, as the + in a tag may come written as it is or as %2B.
+    pinned = f"https://github.com/scriptin/jmdict-simplified/releases/download/{tag}/"
+    if not urllib.parse.unquote(download).startswith(pinned):
+        raise SystemExit(f"{asset['name']} isn't under release {tag}: {download}")
+
+    def get():
+        request = urllib.request.Request(download, headers={"User-Agent": "crosstune-readingsaudit"})
+        with opener(request, timeout=TIMEOUT) as answer:
+            # One byte past the size is enough to know it's too long.
+            data = answer.read(asset["size"] + 1)
+        # A connection that ends early reads as a shorter file, not as an error. A release that gives a
+        # size bigger than its file reads the same way, every time.
+        if len(data) < asset["size"]:
+            raise CutOff(f"got {len(data)} bytes, and release {tag} says {asset['name']} is {asset['size']}."
+                         " Either the download was cut off, or the release gives a wrong size.")
+        return data
+    data = with_tries(download, get)
+    if len(data) > asset["size"]:
+        raise SystemExit(f"{asset['name']} is {len(data)} bytes or more, release {tag} says {asset['size']}")
+    got = "sha256:" + hashlib.sha256(data).hexdigest()
+    if got != expected:
+        raise SystemExit(f"{asset['name']} has {got}, release {tag} says {expected}")
+    folder.mkdir(parents=True, exist_ok=True)
+    # Written by its own name, whatever path the zip gives it.
+    unzip_json(data, asset["name"], folder / "jmdict.json")
+    print(f"jmdict-simplified {tag}, {asset['name']}, {got}, in {folder / 'jmdict.json'}")
+    # The workflow names the tag in its pull request; it has passed TAG_FORM, so it holds no newline.
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"tag={tag}\n")
+    return tag
+
+
+TABLE = ROOT / "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt"
+# The JMdict workflow remakes the tables each month. Three months is three runs missed, or their pull
+# requests left open: long enough for a month that needs a reading looked at by hand, short enough that
+# the update the EDRDG licence asks for is a regular one.
+MAX_AGE_DAYS = 90
+
+
+def header_date(path):
+    """The JMdict date in a table's first line, `# JMdict 2026-11-09, by ...`."""
+    found = re.match(r"# JMdict (\d{4}-\d{2}-\d{2}),", path.read_text().split("\n", 1)[0])
+    if not found:
+        raise SystemExit(f"{path} has no JMdict date in its first line")
+    try:
+        return datetime.date.fromisoformat(found.group(1))
+    except ValueError:
+        raise SystemExit(f"{path} has a JMdict date that is no date: {found.group(1)}") from None
+
+
+def no_downgrade(dict_date, committed):
+    """Stops a remake from an older JMdict than [committed] has: the licence asks for the newest version."""
+    if committed.exists() and datetime.date.fromisoformat(dict_date) < header_date(committed):
+        raise SystemExit(f"JMdict {dict_date} is older than the {header_date(committed)} of {committed.name}."
+                         " The EDRDG licence asks for its newest version, so a remake never goes back;"
+                         " pick a newer jmdict-simplified release")
+
+
+def age(paths, today, max_days=MAX_AGE_DAYS):
+    """1 when a table's JMdict is more than [max_days] older than [today], else 0, with each one's age."""
+    stale = False
+    for path in paths:
+        days = (today - header_date(path)).days
+        print(f"{path.name}: JMdict {header_date(path)}, {days} days old")
+        if days > max_days:
+            stale = True
+            print(f"{path.name} is older than {max_days} days. Merge the JMdict workflow's pull request,"
+                  " or run that workflow (Actions → JMdict → Run workflow)")
+    return 1 if stale else 0
 
 
 # ---- compare ----
@@ -667,24 +869,30 @@ def golden(folder, dest, accept, contexts=golden_contexts):
     return 1 if regressions or not_locked else 0
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "golden"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age", "golden"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
+    parser.add_argument("--gradle", help="run, table: the Gradle command, instead of gradle-box")
+    parser.add_argument("--tag", help="fetch: this jmdict-simplified release instead of the newest")
     parser.add_argument("--accept", action="append", nargs=2, default=[], metavar=("WORD", "KANA"),
                         help="golden: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
     parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     folder = data_dir()
     if args.step == "songs":
         songs(folder)
     elif args.step == "run":
-        run(folder)
+        run(folder, gradle=args.gradle)
     elif args.step == "table":
-        table(folder)
+        table(folder, args.gradle)
     elif args.step == "oldkana":
         oldkana(folder)
+    elif args.step == "fetch":
+        fetch(folder, args.tag)
+    elif args.step == "age":
+        sys.exit(age([TABLE, OLD_KANA], datetime.date.today()))
     elif args.step == "golden":
         sys.exit(golden(folder, args.out or GOLDEN_FILE, args.accept))
     else:
