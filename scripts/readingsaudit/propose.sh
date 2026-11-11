@@ -26,8 +26,10 @@ git ls-remote -q --exit-code origin "refs/heads/$BRANCH" > /dev/null || found=$?
 if [ "$found" = 0 ]; then
   git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
   # The branch is made again from main each time. A commit a person wrote, rebased or amended is
-  # never thrown away: each must be the workflow's as author and as committer.
-  if git log --format='%ae%n%ce' "origin/main..origin/$BRANCH" | grep -vqxF "$bot"; then
+  # never thrown away: each must be the workflow's as author and as committer. The addresses are read
+  # whole first: grep -q leaves at the first match, and SIGPIPE on git log would make it no match.
+  addresses=$(git log --format='%ae%n%ce' "origin/main..origin/$BRANCH")
+  if [ -n "$addresses" ] && grep -vqxF "$bot" <<< "$addresses"; then
     echo "::error::$BRANCH has a commit by a person. Merge or close its pull request, then run this again."
     exit 1
   fi
@@ -44,8 +46,9 @@ elif [ "$found" != 2 ]; then
   exit 1
 fi
 
-# The JMdict date in a list's first line, from stdin.
-jmdict_date() { head -n1 | sed -n 's/^# JMdict \([0-9-]*\),.*/\1/p'; }
+# The JMdict date in a list's first line, from stdin. It reads to the end: a reader that leaves early,
+# like head -n1, ends git show with SIGPIPE on a list bigger than a pipe holds, and pipefail stops the run.
+jmdict_date() { sed -n '1s/^# JMdict \([0-9-]*\),.*/\1/p'; }
 before=$(git show "$base:${lists[0]}" | jmdict_date)
 after=$(jmdict_date < "${lists[0]}")
 title="chore(readings): remake the JMdict word lists from JMdict $after"

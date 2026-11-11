@@ -36,9 +36,21 @@ mkdir "$work/no-hooks"
 export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=init.defaultBranch GIT_CONFIG_VALUE_0=main GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1="$work/no-hooks"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 person() { git -c user.name=test -c user.email=test@example.invalid "$@"; }
-list() { printf '# JMdict %s, by the Group\n%s\n' "$1" "$2"; }
+# Lists of real size. The committed jmdict-readings.txt is about 1.1 MB, far more than a pipe holds
+# (64 KiB), so a reader that leaves a pipe early ends the writer with SIGPIPE.
+awk 'BEGIN { for (i = 0; i < 60000; i++) printf "語%05d\tご%05d\n", i, i }' > "$work/filler"
+list() { printf '# JMdict %s, by the Group\n%s\n' "$1" "$2"; cat "$work/filler"; }
 remade() { list 2000-02-01 "星空	ほしぞら$1" > lists/jmdict-readings.txt; list 2000-02-01 "おもいで	思い出" > lists/old-kana.txt; }
-propose() { "$here/propose.sh" > "$work/out" 2>&1; }
+# As the workflow's propose job: a fresh checkout of main with all of origin's history and no other
+# local branch, the remade lists put in it, then propose.sh. This repository then fetches what it pushed.
+checkout() { rm -rf "$work/ci" && git clone -q "$work/origin.git" "$work/ci" && cp lists/*.txt "$work/ci/lists/"; }
+run_propose() {
+  local status=0
+  (cd "$work/ci" && "$here/propose.sh") > "$work/out" 2>&1 || status=$?
+  git fetch -q --prune origin
+  return "$status"
+}
+propose() { checkout && run_propose; }
 calls() { cat "$FAKE/calls" 2>/dev/null || true; }
 
 # Main is moved in origin by fetching into it, as a hook may refuse any push to a main.
@@ -69,12 +81,13 @@ grep -q "were from JMdict 2000-01-01" "$FAKE/body" || fail "body lacks the old d
 grep -q "jmdict-simplified \`$TAG\` (JMdict 2000-02-01)" "$FAKE/body" || fail "body lacks the release"
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff"
 
-# The same lists again, branch already on main: nothing pushed, the open pull request kept up to date,
-# and CI started again.
-git switch -q main && remade "" && rm "$FAKE/calls"
+# The same lists again, branch already on main: nothing pushed, the open pull request kept up to date
+# with origin's branch, as the checkout has no local one, and CI started again.
+remade "" && rm "$FAKE/calls"
 pushed=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
 propose || { cat "$work/out"; fail "second run failed"; }
 grep -q "already has the word lists" "$work/out" || fail "no notice for a branch already up to date"
+grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff of origin's branch"
 [ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$pushed" ] || fail "pushed a branch already up to date"
 grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not kept up to date"
 [ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started for a branch already up to date"
@@ -127,8 +140,18 @@ grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not edited"
 grep -q "^pr create" "$FAKE/calls" && fail "a second pull request opened"
 [ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started after the update"
 
+# Main moved on again, and the branch already has these lists: it is still made again from the new main.
+git checkout -q -- lists && echo again >> README && person commit -qam "docs: more again" && main_to_origin
+remade "
+月夜	つきよ"
+rm "$FAKE/calls"
+propose || { cat "$work/out"; fail "update with the same lists failed"; }
+grep -q "already has the word lists" "$work/out" && fail "branch with the same lists taken as up to date on an old main"
+git merge-base --is-ancestor origin/main "origin/$BRANCH" || fail "branch with the same lists not made from the new main"
+[ "$(git rev-list --count "origin/main..origin/$BRANCH")" = 1 ] || fail "old commit kept with the same lists"
+
 # Another push reaches the branch between reading it and pushing: the lease refuses, nothing is lost.
-git switch -q main && remade "
+remade "
 雪空	ゆきぞら" && rm "$FAKE/calls"
 touch "$FAKE/race"
 propose && fail "pushed over a push it didn't see"
@@ -136,28 +159,46 @@ propose && fail "pushed over a push it didn't see"
 [ -z "$(calls)" ] || fail "asked gh after the push was refused"
 
 # Origin can't be read: the run fails, and never takes it for a missing branch.
-git switch -q main && remade "
+remade "
 風花	かざはな" && rm -f "$FAKE/calls"
-git remote set-url origin "$work/nowhere.git"
-propose && fail "went on without origin"
+checkout && git -C "$work/ci" remote set-url origin "$work/nowhere.git"
+run_propose && fail "went on without origin"
 grep -q "Can't read $BRANCH from origin" "$work/out" || fail "no error for an origin it can't read"
 [ -z "$(calls)" ] || fail "asked gh without origin"
-git remote set-url origin "$work/origin.git"
 
 # Commits a person made on the branch: nothing is thrown away, and the run fails. One the person
 # wrote, one the workflow wrote and the person rebased or amended, one the person wrote with the
-# workflow's address as its author.
+# workflow's address as its author, one with it as its committer, and so many that their addresses
+# are more than a pipe holds.
 bot="41898282+github-actions[bot]@users.noreply.github.com"
-git fetch -q origin && git push -q --force origin "origin/main:refs/heads/$BRANCH"
+git push -q --force origin "origin/main:refs/heads/$BRANCH"
 remade ""
 propose || { cat "$work/out"; fail "proposal before a person's commits failed"; }
-proposed=$(git rev-parse "$BRANCH")
-for how in wrote rebased authored-as-bot; do
+proposed=$(git rev-parse "origin/$BRANCH")
+git checkout -q -- lists
+# 3000 empty commits by a person, about 130 KB of addresses from git log.
+many() {
+  awk -v from="$proposed" -v branch="refs/heads/$BRANCH" 'BEGIN {
+    for (i = 1; i <= 3000; i++) {
+      printf "commit %s\nauthor test <test@example.invalid> %d +0000\ncommitter test <test@example.invalid> %d +0000\ndata 7\nfix: %02d\n", branch, i, i, i % 100
+      if (i == 1) printf "from %s\n", from
+      printf "\n"
+    }
+  }' | git fast-import --quiet --force
+  git switch -q "$BRANCH"
+}
+for how in wrote rebased authored-as-bot committed-as-bot "made many commits"; do
   git switch -q -C "$BRANCH" "$proposed"
   case $how in
     wrote) echo note > NOTE && person add NOTE && person commit -q -m "fix: by hand" ;;
     rebased) person commit -q --amend --no-edit ;;
     authored-as-bot) echo note > NOTE && person add NOTE && person commit -q --author="github-actions[bot] <$bot>" -m "fix: by hand" ;;
+    committed-as-bot)
+      echo note > NOTE && person add NOTE
+      GIT_COMMITTER_NAME="github-actions[bot]" GIT_COMMITTER_EMAIL="$bot" person commit -q -m "fix: by hand"
+      [ "$(git log -1 --format='%ae %ce')" = "test@example.invalid $bot" ] || fail "commit not committed as the workflow"
+      ;;
+    "made many commits") git switch -q main && many ;;
   esac
   git push -q --force origin "$BRANCH"
   held=$(git rev-parse HEAD)
