@@ -65,7 +65,7 @@ by: The projectM Team
 license: GNU LGPL 2.1 or later
 text: projectm.txt lgpl-2.1.txt
 url: https://github.com/projectM-visualizer/projectm
-note: Built from source, v4.1.8, with changes in app/src/main/cpp/: the picture keeps its size, and two build warnings are fixed. This release's exact source, projectM and the changes with it: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, where X.Y.Z is this app's version, then build as CONTRIBUTING.md says.
+note: Built from source, v4.1.8, with changes in app/src/main/cpp/: the picture keeps its size, and two build warnings are fixed. This release's exact source, projectM and the changes with it: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, where X.Y.Z is this app's version, then build as CONTRIBUTING.md says. Rebuild the app from that source to replace projectM with a changed copy.
 covers: submodule third_party/projectm
 covers: source third_party/projectm/src/**
 covers: source BUILD/projectm/**

@@ -98,6 +98,26 @@ class ManifestTest(unittest.TestCase):
             self.assertEqual(b"licence\n", (root / "texts/mit.txt").read_bytes())
             self.assertEqual("# name sha source\nmit.txt " + hashlib.sha256(b"licence\n").hexdigest() + " LICENSE\n", manifest.read_text())
 
+    def test_a_missing_licence_text_names_the_file_and_stops(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "texts").mkdir()
+            (root / "LICENSE").write_bytes(b"licence\n")
+            manifest = root / "manifest.txt"
+            manifest.write_text("mit.txt " + hashlib.sha256(b"licence\n").hexdigest() + " LICENSE\n")
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit) as stop:
+                    notices.main(["notices.py", "check"])
+            self.assertIn("mit.txt", str(stop.exception.code))
+            self.assertNotIn("\n", str(stop.exception.code))
+            (root / "texts/mit.txt").write_bytes(b"licence\n")
+            (root / "LICENSE").unlink()
+            with mock.patch.multiple(notices, ROOT=root, MANIFEST=manifest, TEXTS=root / "texts"), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit) as stop:
+                    notices.main(["notices.py", "check"])
+            self.assertIn("LICENSE", str(stop.exception.code))
+            self.assertNotIn("Traceback", str(stop.exception.code))
+
 
 if __name__ == "__main__":
     unittest.main()

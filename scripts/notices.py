@@ -144,14 +144,20 @@ def main(argv):
     for name, sha, source in entries():
         if only and name not in only:
             continue
-        data = source_bytes(source)
+        try:
+            data = source_bytes(source)
+            bundled_path = TEXTS / name
+            bundled_bytes = bundled_path.read_bytes() if command != "fetch" else b""
+        except FileNotFoundError as missing:
+            # One line, as the other stops do, instead of a traceback.
+            sys.exit(f"No {missing.filename}")
         digest = hashlib.sha256(data).hexdigest()
         if command == "fetch":
             (TEXTS / name).write_bytes(data)
             lines = [re.sub(rf"^{re.escape(name)}\s+\S+", f"{name} {digest}", l) for l in lines]
             print(f"wrote {name} {digest[:12]}")
         else:
-            bundled = hashlib.sha256((TEXTS / name).read_bytes()).hexdigest()
+            bundled = hashlib.sha256(bundled_bytes).hexdigest()
             ok = digest == sha == bundled
             failed |= not ok
             print(f"{'ok  ' if ok else 'DIFF'} {name}  {source}")

@@ -1,7 +1,9 @@
 package com.astrovm.crosstune
 
 import androidx.annotation.DrawableRes
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
@@ -84,7 +86,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,6 +98,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -740,19 +745,34 @@ private const val LICENSES_PAGE = "licenses"
  * always shown; its licence's full text and where it is, under it once it's opened. Only what's on
  * screen is drawn, as some licences are long. The remote starts on the first work when the page opens,
  * and steps through a licence a piece at a time, each short enough to fit the screen at the largest
- * font, so none is skipped. Turned or otherwise made again, the page keeps what's open, where it was
- * scrolled to, and what the remote was on.
+ * font, so none is skipped. Back closes the open licence the remote is in, or the last one opened,
+ * and returns to that work's row; with none open, Back leaves the page. Turned or otherwise made
+ * again, the page keeps what's open, where it was scrolled to, and what the remote was on.
  */
 @Composable
 private fun LicensesPage(onBack: () -> Unit) {
     val openWebPage = rememberWebOpener()
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     var open by rememberSaveable { mutableStateOf(listOf<String>()) }
     var focusedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var entered by rememberSaveable { mutableStateOf(false) }
+    // Bumps once a licence has been split, so the page draws the pieces it kept. The split itself stays
+    // off this pass: the longest text is hundreds of thousands of characters.
+    var splitGeneration by remember { mutableIntStateOf(0) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
-    val units = remember(open) { Notices.all.filter { it.name in open }.associate { it.name to licenseUnits(Notices.text(it)) } }
+    val units = remember(open, splitGeneration) {
+        open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap()
+    }
     val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
+    // One path for a press and for a remote. The page's own Back still leaves once nothing is open.
+    BackHandler(enabled = open.isNotEmpty()) {
+        val closing = licenceToClose(focusedKey, open)
+        val next = open - closing
+        open = next
+        focusedKey = "work:$closing"
+        scope.launch { returnToLicenceRow(closing, next, listState, requesters) }
+    }
     LazyPage(
         title = stringResource(R.string.settings_licenses),
         navigationIcon = {
@@ -766,6 +786,13 @@ private fun LicensesPage(onBack: () -> Unit) {
             Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
         }) { name -> open = if (name in open) open - name else open + name }
     }
+    LaunchedEffect(open) {
+        // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
+        val openNotices = Notices.all.filter { it.name in open }
+        if (openNotices.none { LicenseSplits.of(it.name) == null }) return@LaunchedEffect
+        withContext(MainActivity.systemDispatcher) { openNotices.forEach { LicenseSplits.make(it) } }
+        splitGeneration++
+    }
     LaunchedEffect(Unit) {
         // Wait for the rows to be placed, as the list draws only those on screen.
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }.first { it.isNotEmpty() }
@@ -775,6 +802,18 @@ private fun LicensesPage(onBack: () -> Unit) {
         entered = true
         key?.let { requesters[it] }?.takeIf { listState.layoutInfo.visibleItemsInfo.any { item -> item.key == key } }?.requestFocus()
     }
+}
+
+/** Scrolls to [name]'s row, once the licence under it has gone, and puts the remote there. */
+private suspend fun returnToLicenceRow(name: String, open: List<String>, listState: LazyListState, requesters: Map<String, FocusRequester>) {
+    // The list still has the pieces until the next frame. The row's place is the one after they go.
+    withFrameNanos { }
+    val units = open.associateWith { LicenseSplits.of(it).orEmpty() }
+    listState.scrollToItem(licenseWorkIndex(name, open, units))
+    val key = "work:$name"
+    snapshotFlow { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }.first { it }
+    withFrameNanos { }
+    requesters[key]?.requestFocus()
 }
 
 /** How the licences' group looks: its color, its hairlines' and its rounded corners. */
@@ -891,6 +930,59 @@ private fun LicensePiece(unit: LicenseUnit, endsTheText: Boolean, modifier: Modi
 
 /** A piece of a licence's paragraph, and whether it [starts] or [ends] the paragraph, which is spaced from the next. */
 internal data class LicenseUnit(val text: String, val starts: Boolean, val ends: Boolean)
+
+/**
+ * Each work's licence, split once and kept. Opening another work must not split this one again, and
+ * the split stays off the pass that draws the page: one text is about half a million characters.
+ * [times] counts the splits, for that test.
+ */
+internal object LicenseSplits {
+    private val pieces = HashMap<String, List<LicenseUnit>>()
+    val times = mutableMapOf<String, Int>()
+
+    fun of(name: String): List<LicenseUnit>? = synchronized(pieces) { pieces[name] }
+
+    fun make(notice: Notice): List<LicenseUnit> {
+        synchronized(pieces) { pieces[notice.name] }?.let { return it }
+        val made = licenseUnits(Notices.text(notice))
+        return synchronized(pieces) {
+            pieces[notice.name]?.let { return it }
+            times[notice.name] = (times[notice.name] ?: 0) + 1
+            pieces[notice.name] = made
+            made
+        }
+    }
+
+    fun clear() {
+        synchronized(pieces) {
+            pieces.clear()
+            times.clear()
+        }
+    }
+}
+
+/** The open licence Back closes: the one the remote is in, or the last one opened when it is in none. */
+internal fun licenceToClose(focusedKey: String?, open: List<String>): String {
+    val holding = focusedKey?.let(::licenseFocusWork)?.takeIf { it in open }
+    return holding ?: open.last()
+}
+
+/** The work a list key belongs to: "work:Name", "url:Name" or "text:Name:3". */
+internal fun licenseFocusWork(key: String): String =
+    if (key.startsWith("text:")) key.removePrefix("text:").substringBeforeLast(':') else key.substringAfter(':')
+
+/** Where [name]'s row sits in the list, once each open licence's link and pieces are counted. */
+internal fun licenseWorkIndex(name: String, open: Collection<String>, units: Map<String, List<LicenseUnit>>): Int {
+    var at = 0
+    for (notice in Notices.all) {
+        if (notice.name == name) break
+        at++
+        if (notice.name !in open) continue
+        if (notice.url != null) at++
+        at += units[notice.name].orEmpty().size
+    }
+    return at
+}
 
 /** About how many characters a line of a licence holds on a phone; a shorter line, like a list's, takes a whole one. */
 internal const val LICENSE_ROW = 64

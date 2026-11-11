@@ -1,4 +1,4 @@
-# JMdict 2026-11-09, by the Electronic Dictionary Research and Development Group, https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project
+# JMdict 2026-11-09, by the Electronic Dictionary Research and Development Group, https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project
 # through jmdict-simplified 3.6.2. Licensed under CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
 # as the Group's licence asks, https://www.edrdg.org/edrdg/licence.html
 # Changed: only words of two kanji or more it reads one way only, kept where Crosstune reads them otherwise.

@@ -96,6 +96,26 @@ class NoticesTest {
     }
 
     @Test
+    fun backClosesTheLicenceTheRemoteIsInOrTheLastOpenedAndAnOpenOneIsNotSplitAgain() {
+        assertEquals("projectM", licenceToClose("text:projectM:12", listOf("JMdict", "projectM")))
+        assertEquals("JMdict", licenceToClose("work:JMdict", listOf("JMdict", "projectM")))
+        assertEquals("projectM", licenceToClose("url:Kuromoji", listOf("JMdict", "projectM")))
+        assertEquals("projectM", licenseFocusWork("text:projectM:3"))
+        assertEquals("Kuromoji", licenseFocusWork("url:Kuromoji"))
+        val open = listOf("JMdict", "projectM")
+        val units = open.associateWith { name -> licenseUnits(Notices.text(Notices.all.first { it.name == name })) }
+        val before = Notices.all.takeWhile { it.name != "projectM" }
+        val jmdict = units.getValue("JMdict")
+        assertEquals(before.size + 1 + jmdict.size, licenseWorkIndex("projectM", open, units))
+        LicenseSplits.clear()
+        val notice = Notices.all.first { it.name == "JMdict" }
+        assertEquals(licenseUnits(Notices.text(notice)), LicenseSplits.make(notice))
+        assertEquals(1, LicenseSplits.times["JMdict"])
+        LicenseSplits.make(notice)
+        assertEquals(1, LicenseSplits.times["JMdict"])
+    }
+
+    @Test
     fun aListsItemsShareAPieceWhileItFitsAndEachPieceSaysWhereItsParagraphStartsAndEnds() {
         val list = (1..7).joinToString("\n") { "* item $it" }
         val units = licenseUnits("Before.\n\n$list")

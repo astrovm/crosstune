@@ -460,6 +460,11 @@ class TvTest {
         // Scrolled with it, far from the top: the list no longer draws the first work.
         assertTrue(composeRule.onAllNodes(hasText("JMdict") and hasClickAction()).fetchSemanticsNodes().isEmpty())
 
+        // Back closes the open licence and returns to its row. The next Back leaves the page.
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        jmdict.assertIsFocused()
+        assertTrue(composeRule.onAllNodesWithText("ELECTRONIC DICTIONARY RESEARCH AND DEVELOPMENT GROUP").fetchSemanticsNodes().isEmpty())
         checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         licenses.assertIsFocused()
@@ -529,6 +534,60 @@ class TvTest {
         val piece = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(reading)))
         composeRule.onNode(piece).assertIsDisplayed().assertIsFocused()
         assertTrue(composeRule.onAllNodes(hasText("JMdict") and hasClickAction() and isFocused()).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun onATvBackFromInsideALongLicenceClosesItAndLandsOnItsRowThenLeavesThePage() {
+        licensesByRemote()
+        val row = hasText("projectM") and hasClickAction()
+        scrollTo(row)
+        composeRule.onNode(row).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        repeat(20) { pressOnFocused(Key.DirectionDown) }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithText(string(R.string.settings_about_title)).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText("GNU LESSER GENERAL PUBLIC LICENSE").fetchSemanticsNodes().isEmpty())
+        composeRule.onNode(row).assertIsFocused()
+
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(shown(string(R.string.settings_about_title)))
+        composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackClosesTheLicenceTheRemoteIsInOrTheLastOneOpened() {
+        licensesByRemote()
+        val jmdict = hasText("JMdict") and hasClickAction()
+        composeRule.onNode(jmdict).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        pressOnFocused(Key.DirectionDown)
+        pressOnFocused(Key.DirectionDown)
+        val piece = focused().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+        val kuromoji = hasText("Kuromoji") and hasClickAction()
+        scrollTo(kuromoji)
+        composeRule.onNode(kuromoji).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        val pieceNode = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(piece)))
+        scrollTo(pieceNode)
+        composeRule.onNode(pieceNode).requestFocus()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(pieceNode).fetchSemanticsNodes().isEmpty())
+        composeRule.onNode(jmdict).assertIsFocused()
+        // The heading sits inside a longer piece, so the match is a part of that piece, not the whole of it.
+        val heading = hasText("Kuromoji Japanese Morphological Analyzer", substring = true)
+        scrollTo(heading)
+        assertTrue(composeRule.onAllNodes(heading).fetchSemanticsNodes().isNotEmpty())
+
+        val ipadic = hasText("IPADIC") and hasClickAction()
+        scrollTo(ipadic)
+        composeRule.onNode(ipadic).requestFocus()
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodes(heading).fetchSemanticsNodes().isEmpty())
+        composeRule.onNode(kuromoji).assertIsFocused()
     }
 
     @Test

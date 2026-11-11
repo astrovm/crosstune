@@ -125,7 +125,7 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
 
-Crosstune includes, or downloads when it's needed, these works by others. The app lists them, with each license's full text, in **Settings** → **About** → **Licenses**, from [`notices.txt`](app/src/main/resources/com/astrovm/crosstune/notices/notices.txt).
+Crosstune includes, or downloads when it's needed, these works by others. The app lists them, with each license's full text, in **Settings** → **About** → **Licenses**, from [`notices.txt`](app/src/main/resources/com/astrovm/crosstune/notices/notices.txt). Rebuild the app from the cloned source to replace projectM with a changed copy.
 
 | Work | By | License |
 | --- | --- | --- |

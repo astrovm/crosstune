@@ -3,7 +3,11 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasContentDescription
@@ -12,9 +16,13 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
@@ -149,5 +157,45 @@ class LicensesTest {
         composeRule.waitForIdle()
         assertTrue(shown(string(R.string.settings_about_title)))
         assertTrue(!shown("Electronic Dictionary Research and Development Group"))
+    }
+
+    @Test
+    fun openingAnotherWorkDoesNotSplitAnOpenOneAgain() {
+        LicenseSplits.clear()
+        openLicenses()
+        work("projectM").performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, LicenseSplits.times["projectM"])
+        work("JMdict").performClick()
+        composeRule.waitForIdle()
+        assertEquals(1, LicenseSplits.times["projectM"])
+        assertEquals(1, LicenseSplits.times["JMdict"])
+    }
+
+    /** A phone, as a TV: Back from inside a long licence closes it and returns to its row, and the next Back leaves. */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun backFromInsideALongLicenceClosesItAndASecondBackLeavesThePage() {
+        openLicenses()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+        val row = hasText("projectM") and hasClickAction()
+        scrollTo(row)
+        composeRule.onNode(row).requestFocus()
+        composeRule.onNode(row).performKeyInput { pressKey(Key.DirectionCenter) }
+        composeRule.waitForIdle()
+        repeat(6) {
+            composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).performKeyInput { pressKey(Key.DirectionDown) }
+            composeRule.waitForIdle()
+        }
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithText(string(R.string.settings_about_title)).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodesWithText("GNU LESSER GENERAL PUBLIC LICENSE").fetchSemanticsNodes().isEmpty())
+        composeRule.onNode(row).assertIsFocused()
+
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithText(string(R.string.settings_about_title)).fetchSemanticsNodes().isNotEmpty())
+        composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction()).assertIsFocused()
     }
 }

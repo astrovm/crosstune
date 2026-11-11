@@ -108,7 +108,7 @@ def listed_candidates(words):
             and all(is_han(c) or "ぁ" <= c <= "ゖ" or "ァ" <= c <= "ヶ" or c == "ー" for c in form)}
 
 
-JMDICT_URL = "https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project"
+JMDICT_URL = "https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project"
 EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 CC_BY_SA_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
 
