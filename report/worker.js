@@ -39,14 +39,26 @@ const MAX_POINTS = 300;
 const KEEP_DAYS = 180;
 
 /**
- * The most reports one network may send in a day (UTC), for each kind: those the app finds by itself, and those the
- * user sends. Checked before the caps below, so one sender can't fill them for everyone. People send about 7 a day in
- * all. One phone's first start of a new version can owe up to 200 found ones, each song an earlier version kept in
- * time: the app sends them 4 a minute, keeps those turned away for its next start, and so sends them in 7 days of
- * use, while the user's own reports have their own 10. A /24 at most can then fill the table in no fewer than 225
- * days, past the 180 a report is kept.
+ * What a report is, for the limits: one a person sends ("user", a problem in the lyrics or a reading marked wrong),
+ * one the app finds live ("found"), or a song's timing an earlier version kept ("kept"). Each kind has its own room,
+ * so one can't use up another's.
  */
-const NETWORK_A_DAY = { found: 30, user: 10 };
+function kindOf(problem) {
+  if (problem === KEPT_TIMING) return "kept";
+  return PROBLEMS.has(problem) ? "found" : "user";
+}
+
+/** The timing an earlier version kept, as v2.24.0 on sends it (AutoReports.EARLIER). */
+const KEPT_TIMING = "kept_timing";
+
+/**
+ * The most reports one network may send in a day (UTC), for each kind. People send about 7 a day in all, and the app
+ * reports a song's problem once. One phone's first start of a new version can owe up to 200 kept timings: it sends
+ * them at each start, 4 a minute, until one is turned away, and keeps the rest for the next start, so 30 a day sends
+ * them in 7 days of use. A problem found live goes once and isn't kept when it's turned away, so the kept ones have
+ * their own 30, and can't use the 20 found live or the person's own 10.
+ */
+const NETWORK_A_DAY = { user: 10, found: 20, kept: 30 };
 
 /**
  * The most reports kept from one day (UTC), whoever sent them: the last wall when many networks send at once. A
@@ -121,7 +133,7 @@ export default {
       return refused(503, "no_key");
     }
     const day = new Date().toISOString().slice(0, 10);
-    const kind = PROBLEMS.has(report.problem) ? "found" : "user";
+    const kind = kindOf(report.problem);
     const network = await networkDayKey(env.NETWORK_KEY, day, kind, networkOf(address));
     const counted = await env.DB.prepare(COUNT_NETWORK).bind(network, day, NETWORK_A_DAY[kind]).run();
     if (counted.meta.changes === 0) {

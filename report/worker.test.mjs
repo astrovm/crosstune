@@ -449,7 +449,10 @@ test("limits.sql takes the counts from the table, and running it again changes n
   assert.equal(rows(e), 5);
 });
 
-test("one network sends 10 reports a day and 30 the app found by itself, then its own are turned away", async () => {
+const found = { version: "2.25.0", problem: "no_lyrics", song: { title: "Demo", artist: "Band" } };
+const keptTiming = { version: "2.25.0", problem: "kept_timing", song: { title: "Demo", artist: "Band" } };
+
+test("one network sends 10 reports a person sends a day, 20 the app finds and 30 timings kept from before", async () => {
   const e = realEnv();
   const send = (address, body = song) => worker.fetch(from(address, body), e);
   // Anywhere in one /24, or one /48: one network.
@@ -457,17 +460,30 @@ test("one network sends 10 reports a day and 30 the app found by itself, then it
   const refused = await send("203.0.113.200");
   assert.equal(refused.status, 429);
   assert.equal(refused.headers.get("X-Crosstune-Refused"), "network");
-  // What the app found by itself is counted apart, so a phone sending what it owes leaves its user's own room.
-  const found = { version: "2.24.0", problem: "kept_timing", song: { title: "Demo", artist: "Band" } };
-  for (let i = 0; i < 30; i++) assert.equal((await send(`203.0.113.${i}`, found)).status, 204, `found ${i}`);
+  // Each kind is counted apart, so one can't use another's room.
+  for (let i = 0; i < 20; i++) assert.equal((await send(`203.0.113.${i}`, found)).status, 204, `found ${i}`);
   assert.equal((await send("203.0.113.9", found)).status, 429);
+  for (let i = 0; i < 30; i++) assert.equal((await send(`203.0.113.${i}`, keptTiming)).status, 204, `kept ${i}`);
+  assert.equal((await send("203.0.113.9", keptTiming)).status, 429);
   for (let i = 0; i < 10; i++) assert.equal((await send(`2001:db8:a:${i}::1`)).status, 204);
   assert.equal((await send("2001:db8:a:ffff::1")).status, 429);
   // Other networks aren't touched.
   assert.equal((await send("203.0.114.1")).status, 204);
   assert.equal((await send("2001:db8:b::1")).status, 204);
-  assert.equal(rows(e), 52);
-  assert.deepEqual(refusals(e), { network: 3 });
+  assert.equal(rows(e), 72);
+  assert.deepEqual(refusals(e), { network: 4 });
+});
+
+test("a phone sending the timings it kept from before leaves room for a problem it finds live", async () => {
+  // v2.25.0 sends what it owes at each start, 4 a minute, until one is turned away; a problem found meanwhile
+  // goes once, and isn't kept when it's turned away.
+  const e = realEnv();
+  const send = (body) => worker.fetch(from("203.0.113.7", body), e);
+  let sent = 0;
+  while ((await send(keptTiming)).status === 204) sent++;
+  assert.equal(sent, 30);
+  assert.equal((await send(found)).status, 204);
+  assert.equal((await send(song)).status, 204);
 });
 
 test("a network is counted under a key that keeps no address and is another one each day", async () => {
