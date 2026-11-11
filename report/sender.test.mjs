@@ -1,7 +1,7 @@
 // Run with: node --test "report/*.test.mjs"
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { senderKey } from "./sender.js";
+import { networkOf, senderKey } from "./sender.js";
 
 test("an IPv4 address counts whole", () => {
   assert.equal(senderKey("203.0.113.7"), "203.0.113.7");
@@ -40,4 +40,24 @@ test("what isn't an address counts as itself, so it's still limited", () => {
   }
   assert.equal(senderKey(null), "");
   assert.equal(senderKey(undefined), "");
+});
+
+test("a day's reports count by network: an IPv4 address by its /24, an IPv6 one by its /48", () => {
+  for (const address of ["203.0.113.7", "203.0.113.200", "::ffff:203.0.113.9", " 203.0.113.1 "]) assert.equal(networkOf(address), "203.0.113.0/24", address);
+  assert.equal(networkOf("203.0.114.7"), "203.0.114.0/24");
+  for (const address of ["2001:db8:a::1", "2001:db8:a:ffff::1", "2001:DB8:A:1:2:3:4:5", "[2001:db8:a::1]", "2001:db8:a::1%eth0"]) {
+    assert.equal(networkOf(address), "2001:db8:a::/48", address);
+  }
+  assert.equal(networkOf("2001:db8:b::1"), "2001:db8:b::/48");
+});
+
+test("a 6to4 address counts as the IPv4 network inside it", () => {
+  // 2002:cb00:7107:: carries 203.0.113.7.
+  assert.equal(networkOf("2002:cb00:7107::1"), "203.0.113.0/24");
+  assert.equal(networkOf("2002:cb00:71ff:1::1"), "203.0.113.0/24");
+});
+
+test("what isn't an address is its own network", () => {
+  for (const odd of ["", "not an address", "1::2::3", "300.1.2.3", "1.2.3"]) assert.equal(networkOf(odd), odd.trim().toLowerCase(), odd);
+  assert.equal(networkOf(undefined), "");
 });

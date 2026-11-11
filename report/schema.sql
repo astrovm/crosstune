@@ -63,7 +63,5 @@ CREATE TABLE IF NOT EXISTS reports (
   right_reading TEXT
 );
 
--- When each report came in, in order: the Worker finds the first of the last 24 hours here, to count the day's
--- reports against its cap, and the daily clear-out finds the old ones. Added after, before the Worker that uses it
--- is deployed: CREATE INDEX IF NOT EXISTS reports_at ON reports (at);
-CREATE INDEX IF NOT EXISTS reports_at ON reports (at);
+
+-- The counts that keep this table from being filled, and their index, are in limits.sql: run it after this file.

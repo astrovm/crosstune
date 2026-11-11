@@ -18,7 +18,7 @@ function post(body, headers = {}) {
   return new Request("https://report.crosstune.4st.li/reports", { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.7", ...headers }, body });
 }
 
-test("a report is counted against its sender and passed on with the key", async () => {
+test("a report is counted against its sender and passed on with the key and the sender, for its network's day", async () => {
   const s = setUp();
   const response = await forward.fetch(post('{"version":"2.23.0"}', { "Content-Type": "application/json" }), s.env);
   assert.equal(response.status, 204);
@@ -27,9 +27,9 @@ test("a report is counted against its sender and passed on with the key", async 
   assert.equal(s.passed[0].url, "https://report.crosstune.cc/reports");
   assert.equal(s.passed[0].method, "POST");
   assert.equal(s.passed[0].body, '{"version":"2.23.0"}');
-  assert.deepEqual(s.passed[0].headers, { "Content-Type": "application/json", "X-Crosstune-Passed-On": "made-up-key" });
-  // The sender's address goes no further.
-  assert.ok(!JSON.stringify(s.passed).includes("203.0.113.7"));
+  assert.deepEqual(s.passed[0].headers, { "Content-Type": "application/json", "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7" });
+  // The sender's address goes in that header only, never in the report.
+  assert.ok(!s.passed[0].body.includes("203.0.113.7"));
 });
 
 test("what the new address answers is what the app is told", async () => {
@@ -69,7 +69,7 @@ test("a report's type is passed on as it was sent, and none is made up, so the n
   await forward.fetch(post("{}", { "Content-Type": "text/plain" }), s.env);
   await forward.fetch(new Request("https://report.crosstune.4st.li/reports", { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.7" }, body: new TextEncoder().encode("{}") }), s.env);
   assert.deepEqual(s.passed.map((it) => it.headers), [
-    { "Content-Type": "text/plain", "X-Crosstune-Passed-On": "made-up-key" },
-    { "X-Crosstune-Passed-On": "made-up-key" },
+    { "Content-Type": "text/plain", "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7" },
+    { "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7" },
   ]);
 });

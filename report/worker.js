@@ -1,8 +1,9 @@
 // Takes the problems people report from Crosstune and keeps them private, in D1, to be read by
 // hand. Nothing here posts anywhere public: a comment, or a song, may say something personal by
-// mistake. The IP address only counts reports against the limit; it isn't kept.
+// mistake. The IP address only counts reports against the limits: it isn't kept, and its network is
+// counted for the day under a key that can't be turned back into it (limits.sql).
 
-import { senderKey } from "./sender.js";
+import { networkOf, senderKey } from "./sender.js";
 
 /** More than a report with a long comment, every line put in time by hand and a minute of timing log needs. */
 const MAX_BYTES = 48 * 1024;
@@ -38,9 +39,18 @@ const MAX_POINTS = 300;
 const KEEP_DAYS = 180;
 
 /**
- * The most reports kept from the last 24 hours, whoever sent them: the last defence when many senders fill it
- * at once, past the limit for each one. People send about 7 a day. One phone's first start of a new version can
- * owe up to 200, each song an earlier version kept in time. An app turned away keeps what it owes for later.
+ * The most reports one network may send in a day (UTC), for each kind: those the app finds by itself, and those the
+ * user sends. Checked before the caps below, so one sender can't fill them for everyone. People send about 7 a day in
+ * all. One phone's first start of a new version can owe up to 200 found ones, each song an earlier version kept in
+ * time: the app sends them 4 a minute, keeps those turned away for its next start, and so sends them in 7 days of
+ * use, while the user's own reports have their own 10. A /24 at most can then fill the table in no fewer than 225
+ * days, past the 180 a report is kept.
+ */
+const NETWORK_A_DAY = { found: 30, user: 10 };
+
+/**
+ * The most reports kept from one day (UTC), whoever sent them: the last wall when many networks send at once. A
+ * network's day is 40, so it takes 13 networks to fill one.
  */
 const MAX_A_DAY = 500;
 
@@ -50,6 +60,9 @@ const MAX_A_DAY = 500;
  */
 const MAX_KEPT = 9000;
 
+/** How many refusals of each kind a day are counted: past it, a refusal costs no write. */
+const MAX_REFUSALS = 10000;
+
 /** What every version of the app sends a report as, OkHttp's "application/json; charset=utf-8", with or without the charset. */
 const JSON_TYPE = /^application\/json\s*(;\s*charset=utf-8\s*)?$/i;
 
@@ -58,17 +71,25 @@ const COLUMNS =
   "version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
   "lyric_line, word, reading_shown, reader, language, right_reading";
 
+/** How many reports the table holds, and how many came in today, as limits.sql's triggers keep them. */
+const KEPT = "coalesce((SELECT n FROM report_counts WHERE key = 'all'), 0)";
+const TODAY = "coalesce((SELECT n FROM report_counts WHERE key = date('now')), 0)";
+
 /**
- * A report put in the table, unless that would take it past [MAX_KEPT], or the last 24 hours past [MAX_A_DAY]: one
- * statement, so two reports at once can't both take the last place. Ids only grow, as only the oldest are deleted, so
- * the newest id less the oldest counts the rows, and less the first of the last day counts the day's. Each is one
- * row looked up at an end of the table or of the reports_at index, never a count of every row, so a full table
- * costs a flood of reports nothing. A gap left by deleting by hand only counts as more.
+ * A report put in the table, unless that would take it past [MAX_KEPT], or today past [MAX_A_DAY]: one statement,
+ * so two reports at once can't both take the last place. It reads two counts, one row each, never the reports.
  */
 const INSERT =
-  `INSERT INTO reports (${COLUMNS}) SELECT ${COLUMNS.split(",").map(() => "?").join(", ")} WHERE ` +
-  `coalesce((SELECT max(id) FROM reports) - (SELECT min(id) FROM reports) + 1, 0) < ${MAX_KEPT} AND ` +
-  `coalesce((SELECT max(id) FROM reports) - (SELECT id FROM reports WHERE at > datetime('now', '-1 day') ORDER BY at LIMIT 1) + 1, 0) < ${MAX_A_DAY}`;
+  `INSERT INTO reports (${COLUMNS}) SELECT ${COLUMNS.split(",").map(() => "?").join(", ")} ` +
+  `WHERE ${KEPT} < ${MAX_KEPT} AND ${TODAY} < ${MAX_A_DAY}`;
+
+/** One more report from a network today, unless it sent its day's: then nothing changes. */
+const COUNT_NETWORK = "INSERT INTO network_days (key, day, n) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET n = n + 1 WHERE n < ?";
+
+/** One more report turned away today, for the reason given, or, with none, for whichever cap is reached. */
+const REFUSE =
+  `INSERT INTO refusals (day, why, n) SELECT date('now'), coalesce(?, CASE WHEN ${KEPT} >= ${MAX_KEPT} THEN 'kept_full' ELSE 'day_full' END), 1 ` +
+  `WHERE true ON CONFLICT (day, why) DO UPDATE SET n = n + 1 WHERE n < ${MAX_REFUSALS}`;
 
 export default {
   async fetch(request, env) {
@@ -79,35 +100,80 @@ export default {
     // anywhere, without asking first; JSON needs the receiver's leave, which this never gives.
     if (!JSON_TYPE.test(request.headers.get("Content-Type") ?? "")) return status(415);
     if (Number(request.headers.get("Content-Length") ?? 0) > MAX_BYTES) return status(413);
-    // A report the old address passes on (forward.js) was counted there, against its sender's own
-    // address. From here they all come from Cloudflare's, and would count as one sender.
+    // A report the old address passes on (forward.js) was counted there for the minute, against its sender's own
+    // address, which it passes on too. From here they all come from Cloudflare's, and would count as one sender.
     const passedOn = !!env.FORWARD_KEY && request.headers.get("X-Crosstune-Passed-On") === env.FORWARD_KEY;
+    const address = (passedOn ? request.headers.get("X-Crosstune-Sender") : null) ?? request.headers.get("CF-Connecting-IP");
     if (!passedOn) {
-      const { success } = await env.LIMIT.limit({ key: senderKey(request.headers.get("CF-Connecting-IP")) });
-      if (!success) return status(429);
+      const { success } = await env.LIMIT.limit({ key: senderKey(address) });
+      if (!success) return refused(429, "minute");
     }
     const text = await request.text();
     if (new TextEncoder().encode(text).length > MAX_BYTES) return status(413);
     const report = readReport(text);
     if (!report) return status(400);
+    // Without the secret, a network can't be counted without keeping its address, so nothing is kept: the
+    // limits are what keep one sender from turning everyone else's reports away. The app keeps the reports it
+    // found for later. Deploying asks for it (secrets.required in wrangler.jsonc), so only a mistake gets here.
+    if (!env.NETWORK_KEY) {
+      console.error("NETWORK_KEY isn't set: no report is kept until it is (wrangler secret put NETWORK_KEY)");
+      await refuse(env, "no_key");
+      return refused(503, "no_key");
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    const kind = PROBLEMS.has(report.problem) ? "found" : "user";
+    const network = await networkDayKey(env.NETWORK_KEY, day, kind, networkOf(address));
+    const counted = await env.DB.prepare(COUNT_NETWORK).bind(network, day, NETWORK_A_DAY[kind]).run();
+    if (counted.meta.changes === 0) {
+      await refuse(env, "network");
+      return refused(429, "network");
+    }
     const { meta } = await env.DB.prepare(INSERT).bind(
       report.version, report.android, report.title, report.artist, report.app,
       report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
       report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
       report.line, report.word, report.shown, report.reader, report.language, report.right
     ).run();
-    // Full: the app keeps what it owes and tries again later.
-    return status(meta.changes === 0 ? 429 : 204);
+    if (meta.changes !== 0) return status(204);
+    // Full: the app keeps what it found for later.
+    await refuse(env, null);
+    return refused(429, "full");
   },
 
-  // Once a day, the reports older than the policy allows go.
+  // Once a day, the reports older than the policy allows go, and the counts no one asks anymore.
   async scheduled(controller, env) {
     await env.DB.prepare("DELETE FROM reports WHERE at < datetime('now', ?)").bind(`-${KEEP_DAYS} days`).run();
+    await env.DB.prepare("DELETE FROM network_days WHERE day < date('now')").bind().run();
+    await env.DB.prepare("DELETE FROM report_counts WHERE key <> 'all' AND key < date('now', '-1 day')").bind().run();
+    await env.DB.prepare("DELETE FROM refusals WHERE day < date('now', ?)").bind(`-${KEEP_DAYS} days`).run();
   },
 };
 
 function status(code) {
   return new Response(null, { status: code });
+}
+
+/**
+ * A report turned away, saying [why]: "minute", "network", "full" or "no_key". The app reads only the status and
+ * keeps what it found for later either way; the reason is for whoever looks at the answer.
+ */
+function refused(code, why) {
+  return new Response(null, { status: code, headers: { "X-Crosstune-Refused": why } });
+}
+
+/** Counts a report turned away today for [why], or for the cap reached when it's null, up to [MAX_REFUSALS]. */
+async function refuse(env, why) {
+  await env.DB.prepare(REFUSE).bind(why).run();
+}
+
+/**
+ * The key a [network]'s reports of [kind] are counted under on [day]: an HMAC-SHA256 of all three with [secret]. It
+ * can't be turned back into the network without the secret, and it is another one each day.
+ */
+export async function networkDayKey(secret, day, kind, network) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${day}\n${kind}\n${network}`));
+  return Array.from(new Uint8Array(mac), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** The report in [text], with only what a report has, or null when it isn't one. */

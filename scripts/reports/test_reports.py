@@ -23,9 +23,17 @@ def d1_answer(rows, counted=None, success=True):
     ])
 
 
+def refusals_answer(refused, success=True):
+    """What `cf d1 query` prints for REFUSED."""
+    return json.dumps([{"results": refused, "success": success}])
+
+
+REFUSED = [{"day": "2026-11-11", "why": "network", "n": 120}, {"day": "2026-11-10", "why": "day_full", "n": 3}]
+
+
 class ReadTest(unittest.TestCase):
     def test_it_only_ever_asks_d1_to_read(self):
-        for statement in (reports.READ, reports.COUNT):
+        for statement in (reports.READ, reports.COUNT, reports.REFUSED):
             self.assertRegex(statement, r"^select\b[^;]*$")
 
     def test_the_config_is_read_past_its_comments(self):
@@ -49,6 +57,12 @@ class ReadTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=answer):
                 reports.whole_table(answer)
 
+    def test_the_refusals_are_the_rows_d1_gave(self):
+        self.assertEqual(reports.refusals_of(refusals_answer(REFUSED)), REFUSED)
+        for answer in (refusals_answer(REFUSED, success=False), d1_answer([row(1)]), '[{"success": true}]', "nothing"):
+            with self.assertRaises(ValueError, msg=answer):
+                reports.refusals_of(answer)
+
     def test_the_saved_reports_are_ignored_by_git(self):
         self.assertEqual(reports.OUT.relative_to(reports.ROOT).parts[0], "build")
         self.assertIn("build/", (reports.ROOT / ".gitignore").read_text().splitlines())
@@ -59,7 +73,8 @@ class PullTest(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.saved = Path(folder.name) / "reports.json"
-        for name, value in {"OUT": Path(folder.name), "SAVED": self.saved}.items():
+        self.refused = Path(folder.name) / "refusals.json"
+        for name, value in {"OUT": Path(folder.name), "SAVED": self.saved, "REFUSALS": self.refused}.items():
             patch = mock.patch.object(reports, name, value)
             patch.start()
             self.addCleanup(patch.stop)
@@ -68,16 +83,34 @@ class PullTest(unittest.TestCase):
         with mock.patch.dict(reports.os.environ, env or {}), mock.patch("builtins.print"):
             reports.pull(mock.Mock(return_value=answer), sleep=mock.Mock())
 
-    def test_pull_saves_the_rows_and_tells_cf_the_account(self):
-        run = mock.Mock(return_value=mock.Mock(returncode=0, stdout=d1_answer([row(1)])))
+    def test_pull_saves_the_rows_and_the_refusals_and_tells_cf_the_account(self):
+        run = mock.Mock(side_effect=[mock.Mock(returncode=0, stdout=d1_answer([row(1)])), mock.Mock(returncode=0, stdout=refusals_answer(REFUSED))])
         with mock.patch("builtins.print"):
             reports.pull(run, sleep=mock.Mock())
         self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
-        self.assertEqual([path.name for path in self.saved.parent.iterdir()], ["reports.json"])
-        command, kwargs = run.call_args
+        self.assertEqual(json.loads(self.refused.read_text()), REFUSED)
+        self.assertEqual(sorted(path.name for path in self.saved.parent.iterdir()), ["refusals.json", "reports.json"])
+        (command, kwargs), (refusals, _) = run.call_args_list
         self.assertEqual(command[0][3:5], ["d1", "query"])
         self.assertEqual(command[0][-1], f"{reports.COUNT}; {reports.READ}")
+        self.assertEqual(refusals[0][-1], reports.REFUSED)
         self.assertIn("CLOUDFLARE_ACCOUNT_ID", kwargs["env"])
+
+    def test_refusals_not_read_still_leave_the_reports_and_say_so(self):
+        # As before limits.sql is run on the live D1, which has no refusals table yet.
+        self.refused.write_text(json.dumps(REFUSED))
+        no_table = mock.Mock(returncode=1, stderr="no such table: refusals")
+        run, sleep = mock.Mock(side_effect=[mock.Mock(returncode=0, stdout=d1_answer([row(1)])), no_table, no_table, no_table]), mock.Mock()
+        with mock.patch("builtins.print") as said:
+            reports.pull(run, sleep)
+        self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
+        self.assertFalse(self.refused.exists())
+        self.assertIn("no such table: refusals", str(said.call_args_list))
+        # An answer of another shape is the same.
+        run = mock.Mock(side_effect=[mock.Mock(returncode=0, stdout=d1_answer([row(1)])), mock.Mock(returncode=0, stdout="nothing")])
+        with mock.patch("builtins.print"):
+            reports.pull(run, sleep)
+        self.assertFalse(self.refused.exists())
 
     def test_a_pull_leaves_out_where_lines_were_moved(self):
         self.pull(mock.Mock(returncode=0, stdout=d1_answer([{**row(1), "timing": "[]"}])))
@@ -90,6 +123,7 @@ class PullTest(unittest.TestCase):
 
     def test_a_failed_pull_stops_says_why_and_leaves_no_table(self):
         self.saved.write_text(json.dumps([row(1)]))
+        self.refused.write_text(json.dumps(REFUSED))
         with self.assertRaisesRegex(SystemExit, "login expired") as stopped:
             self.pull(mock.Mock(returncode=1, stderr="login expired"))
         self.assertIn("no reports were pulled", str(stopped.exception))
@@ -97,11 +131,11 @@ class PullTest(unittest.TestCase):
 
     def test_a_refusal_that_passes_is_asked_again_and_the_table_saved(self):
         refused = mock.Mock(returncode=1, stderr="Account is invalid or unauthorized [code: 7403]")
-        run, sleep = mock.Mock(side_effect=[refused, refused, mock.Mock(returncode=0, stdout=d1_answer([row(1)]))]), mock.Mock()
+        run, sleep = mock.Mock(side_effect=[refused, refused, mock.Mock(returncode=0, stdout=d1_answer([row(1)])), mock.Mock(returncode=0, stdout=refusals_answer([]))]), mock.Mock()
         with mock.patch("builtins.print"):
             reports.pull(run, sleep)
         self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
-        self.assertEqual(run.call_count, 3)
+        self.assertEqual(run.call_count, 4)
         self.assertEqual([wait.args[0] for wait in sleep.call_args_list], list(reports.WAITS))
 
     def test_a_refusal_that_stays_is_asked_three_times_then_stops(self):
@@ -180,7 +214,7 @@ class TriageTest(unittest.TestCase):
         self.assertIn("2: Other | Some Band\n", text + "\n")
 
     def test_no_reports_is_said_plainly(self):
-        self.assertEqual(reports.triage([]), "0 reports")
+        self.assertEqual(reports.triage([], []), "0 reports\n0 turned away")
 
 
 class CheckTest(unittest.TestCase):
@@ -221,12 +255,34 @@ class CheckTest(unittest.TestCase):
         self.assertIn("2 no_lyrics 1.0.0 | Made Up Song | Some Band -> not run", text)
 
 
+class RefusedTest(unittest.TestCase):
+    def test_triage_shows_the_reports_turned_away_by_day_and_why_newest_first(self):
+        days = [{"day": f"2026-10-{day:02}", "why": "network", "n": 1} for day in range(1, 21)]
+        text = reports.triage([row(1)], REFUSED + days)
+        lines = text.splitlines()
+        self.assertEqual(lines[1], "143 turned away")
+        self.assertEqual(lines[2], "  2026-11-11: network 120")
+        self.assertEqual(lines[3], "  2026-11-10: day_full 3")
+        self.assertEqual(lines[4], "  2026-10-20: network 1")
+        # Two weeks of days, and the rest in the count.
+        self.assertIn("2026-10-09", text)
+        self.assertNotIn("2026-10-08", text)
+
+    def test_two_reasons_on_one_day_share_its_line(self):
+        refused = [{"day": "2026-11-11", "why": "day_full", "n": 2}, {"day": "2026-11-11", "why": "network", "n": 5}]
+        self.assertIn("  2026-11-11: network 5, day_full 2", reports.triage([], refused))
+
+    def test_triage_says_when_none_were_turned_away_or_they_were_not_read(self):
+        self.assertEqual(reports.triage([], []).splitlines()[1], "0 turned away")
+        self.assertEqual(reports.triage([], None).splitlines()[1], "turned away: not read, pull again")
+
+
 class MainTest(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         out = Path(folder.name)
-        for name, value in {"OUT": out, "SAVED": out / "reports.json", "CHECK": out / "check"}.items():
+        for name, value in {"OUT": out, "SAVED": out / "reports.json", "REFUSALS": out / "refusals.json", "CHECK": out / "check"}.items():
             patch = mock.patch.object(reports, name, value)
             patch.start()
             self.addCleanup(patch.stop)
@@ -234,6 +290,13 @@ class MainTest(unittest.TestCase):
     def test_steps_other_than_pull_want_the_reports_pulled(self):
         with self.assertRaisesRegex(SystemExit, "run `pull` first"):
             reports.main(["triage"])
+
+    def test_triage_shows_the_refusals_pulled(self):
+        reports.SAVED.write_text(json.dumps([row(39)]))
+        reports.REFUSALS.write_text(json.dumps(REFUSED))
+        with mock.patch("builtins.print") as said:
+            reports.main(["triage"])
+        self.assertIn("123 turned away", said.call_args.args[0])
 
     def test_pull_is_a_step(self):
         with mock.patch.object(reports, "pull") as pull:
@@ -296,12 +359,13 @@ class ShownTest(unittest.TestCase):
                 "recording": NASTY, "word": NASTY, "reading_shown": NASTY, "right_reading": NASTY, "reader": NASTY, "language": NASTY, "lyric_line": NASTY,
             }
             (out / "reports.json").write_text(json.dumps([nasty, {**nasty, "id": 40, "problem": NASTY}]))
+            (out / "refusals.json").write_text(json.dumps([{"day": NASTY, "why": NASTY, "n": 1}]))
             (out / "check" / "reports").mkdir(parents=True)
             # What the finders found comes from other sites, so it's a stranger's text too.
             found = {"lyrics": {"kind": "found", "source": NASTY, "lines": []}, "chords": {"kind": "found", "site": NASTY, "url": NASTY}}
             (out / "check" / "reports" / "39.json").write_text(json.dumps(found))
             (out / "check" / "reports" / "40.json").write_text(json.dumps({"lyrics": {"kind": NASTY}}))
-            with mock.patch.object(reports, "OUT", out), mock.patch.object(reports, "SAVED", out / "reports.json"), mock.patch.object(reports, "CHECK", out / "check"):
+            with mock.patch.object(reports, "OUT", out), mock.patch.object(reports, "SAVED", out / "reports.json"), mock.patch.object(reports, "REFUSALS", out / "refusals.json"), mock.patch.object(reports, "CHECK", out / "check"):
                 with mock.patch("builtins.print") as said:
                     reports.main(["triage"])
                     reports.main(["check"])

@@ -2,7 +2,7 @@
 """Triage of the reports in D1: what came in, grouped, and what the app's real finders say of them now.
 
   python3 scripts/reports/reports.py pull                  # reads the whole table into build/reports/reports.json
-  python3 scripts/reports/reports.py triage --since 39     # grouped by problem, version and song
+  python3 scripts/reports/reports.py triage --since 39     # the reports turned away, then these grouped by problem, version and song
   python3 scripts/reports/reports.py songs --since 39      # them as songs for SongCheck, the real finders on real services
   scripts/gradle-box/gradle-box.sh :app:songCheck -PsongcheckDir=$PWD/build/reports/check
   python3 scripts/reports/reports.py check --since 39      # what each report's song gets now
@@ -18,7 +18,8 @@ the colors or pass for a line of its own. `songs` leaves those characters out of
 SongCheck, which prints them as it goes.
 
 A pull that can't read the whole table saves nothing, says why and exits non-zero, and the last pull's table is
-removed first, so an old table never passes for a new one.
+removed first, so an old table never passes for a new one. The count of reports turned away each day, and why, is
+read after it (report/limits.sql): if that read fails the reports are still saved, and triage says it wasn't read.
 """
 import argparse
 import json
@@ -35,6 +36,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "reports"
 SAVED = OUT / "reports.json"
+REFUSALS = OUT / "refusals.json"
 CHECK = OUT / "check"
 WRANGLER = ROOT / "report" / "wrangler.jsonc"
 # Every column, so a pull still reads the table before columns added after are in the live D1 (see report/schema.sql).
@@ -43,6 +45,8 @@ READ = "select * from reports order by id"
 LEFT_OUT = ("timing",)
 # Asked in the same batch, so it counts the table the rows were read from.
 COUNT = "select count(*) as n from reports"
+# Asked on its own, after: a database limits.sql hasn't been run on has no such table, and the reports are still read.
+REFUSED = "select day, why, n from refusals order by day desc, n desc, why"
 
 
 def wrangler_config(text):
@@ -65,25 +69,42 @@ def whole_table(answer):
     return rows
 
 
+def refusals_of(answer):
+    """The rows in what `cf d1 query` prints for REFUSED. Raises ValueError saying why not."""
+    try:
+        [read] = json.loads(answer)
+        if not read["success"]:
+            raise ValueError("D1 says the statement failed")
+        return read["results"]
+    except (TypeError, KeyError) as error:
+        raise ValueError(f"D1's answer isn't the refusals asked for ({type(error).__name__})") from error
+
+
 # Cloudflare sometimes refuses a read once and takes the same one a moment later: 1 of 32 pulls in a row
 # got error 7403, "account invalid or unauthorized", and the other 31 read the table. Only reads are asked,
 # so asking again is safe.
 WAITS = (2, 5)
 
 
-def pull(run=subprocess.run, sleep=time.sleep):
-    """Saves every report in the table, or saves nothing and exits with why: the last pull's table goes first, as it would pass for this one's."""
-    SAVED.unlink(missing_ok=True)
+def ask(sql, run, sleep):
+    """What `cf d1 query` did with [sql], asked again after each of WAITS while it fails."""
     database, account = wrangler_config(WRANGLER.read_text())
     for wait in (*WAITS, None):
         done = run(
-            ["npx", "--yes", "cf@latest", "d1", "query", database, "--sql", f"{COUNT}; {READ}"],
+            ["npx", "--yes", "cf@latest", "d1", "query", database, "--sql", sql],
             cwd=WRANGLER.parent, env={**os.environ, "CLOUDFLARE_ACCOUNT_ID": account}, capture_output=True, text=True,
         )
         if done.returncode == 0 or wait is None:
-            break
+            return done
         print(f"cf failed, asking again in {wait} s: {done.stderr.strip()[-200:]}", file=sys.stderr)
         sleep(wait)
+
+
+def pull(run=subprocess.run, sleep=time.sleep):
+    """Saves every report in the table, or saves nothing and exits with why: the last pull's table goes first, as it would pass for this one's."""
+    SAVED.unlink(missing_ok=True)
+    REFUSALS.unlink(missing_ok=True)
+    done = ask(f"{COUNT}; {READ}", run, sleep)
     if done.returncode != 0:
         # cf uses a token in its environment over its login, and a helper's may be for other things.
         token = "\nCLOUDFLARE_API_TOKEN is set here, and cf uses it instead of its login: unset it, or let it read D1." if "CLOUDFLARE_API_TOKEN" in os.environ and re.search(r"\b40[13]\b", done.stderr) else ""
@@ -97,6 +118,16 @@ def pull(run=subprocess.run, sleep=time.sleep):
     kept.write_text(json.dumps(rows, ensure_ascii=False, indent=1))
     kept.replace(SAVED)
     print(f"{len(rows)} reports in {SAVED}")
+    done = ask(REFUSED, run, sleep)
+    try:
+        if done.returncode != 0:
+            raise ValueError(f"cf failed: {done.stderr.strip()[-300:]}")
+        refused = refusals_of(done.stdout)
+    except ValueError as error:
+        print(f"the reports turned away weren't read, so triage can't show them: {error}", file=sys.stderr)
+        return
+    REFUSALS.write_text(json.dumps(refused, ensure_ascii=False, indent=1))
+    print(f"{sum(it['n'] for it in refused)} turned away in {REFUSALS}")
 
 
 # What a terminal acts on, hides or can't print: control characters (Cc), format characters such as zero-width ones,
@@ -138,10 +169,28 @@ def song_key(row):
     return re.sub(r"\s*[(\[]\s*(feat|ft|with)\b.*?[)\]]", "", plain(row["title"])), plain(row["artist"])
 
 
-def triage(rows):
-    """The reports as text: how many of each problem, by version, and the songs in each, with the reports on it."""
+# The days of refusals triage shows one by one; the rest are in the count.
+REFUSED_DAYS = 14
+
+
+def turned_away(refused):
+    """The reports turned away, newest day first, from REFUSED's rows, or that they weren't read when [refused] is None."""
+    if refused is None:
+        return ["turned away: not read, pull again"]
+    refused = [printable(it) for it in refused]
+    days = defaultdict(list)
+    for it in refused:
+        days[it["day"]].append(it)
+    lines = [f"{sum(it['n'] for it in refused)} turned away"]
+    for day in sorted(days, reverse=True)[:REFUSED_DAYS]:
+        lines.append(f"  {day}: " + ", ".join(f"{it['why']} {it['n']}" for it in sorted(days[day], key=lambda it: (-it["n"], it["why"]))))
+    return lines
+
+
+def triage(rows, refused=None):
+    """The reports as text: how many were turned away, then how many of each problem, by version, and the songs in each, with the reports on it."""
     rows = [printable(row) for row in rows]
-    lines = [f"{len(rows)} reports" + (f", {rows[0]['id']} to {rows[-1]['id']}" if rows else "")]
+    lines = [f"{len(rows)} reports" + (f", {rows[0]['id']} to {rows[-1]['id']}" if rows else ""), *turned_away(refused)]
     problems = defaultdict(list)
     for row in rows:
         problems[row["problem"] or "by hand"].append(row)
@@ -219,6 +268,11 @@ def saved():
     return json.loads(SAVED.read_text())
 
 
+def refusals():
+    """The refusals the last pull read, or None when it read none."""
+    return json.loads(REFUSALS.read_text()) if REFUSALS.exists() else None
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("step", choices=["pull", "triage", "songs", "check"])
@@ -228,7 +282,7 @@ def main(argv=None):
         return pull()
     rows = since(saved(), args.since)
     if args.step == "triage":
-        print(triage(rows))
+        print(triage(rows, refusals()))
     elif args.step == "songs":
         CHECK.mkdir(parents=True, exist_ok=True)
         # SongCheck goes on from the answers it finds, so the last run's would pass for what the finders say now.
