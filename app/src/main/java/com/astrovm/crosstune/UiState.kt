@@ -391,7 +391,7 @@ internal data class NowPlaying(val song: MusicMetadata, val following: Following
 /**
  * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube
  * Music; [following] it once the app plays it, and [played] since. Its [lines], once found, show
- * the one being sung.
+ * the one being sung, [linesByEar] when they're timed by the singing heard, not by a service.
  */
 internal data class PlayerState(
     val song: MusicMetadata,
@@ -400,6 +400,7 @@ internal data class PlayerState(
     val following: Following? = null,
     val played: Boolean = false,
     val lines: List<LyricLine> = emptyList(),
+    val linesByEar: Boolean = false,
     /** What the app was playing when asked, so only a song it goes on to after is taken for the one asked. */
     val over: MusicMetadata? = null
 )

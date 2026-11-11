@@ -1563,22 +1563,22 @@ internal class MainViewModel(
         val song = uiState.player?.song ?: return
         val asked = asPlayed(song)
         val key = RecordingKey.of(asked)
-        kept[key]?.let { return showPeek(song, it.lines, it.lyrics) }
+        kept[key]?.let { return showPeek(song, it.lines, it.lyrics, it.timedByEar) }
         val finder = lyricsFinder?.takeIf { lookAhead && asked.type == ItemType.TRACK && asked.artist.isNotBlank() } ?: return
         val look = lookingAhead[key] ?: viewModelScope.async { finder.firstLook(asked) }.also {
             lookingAhead[key] = it
             it.invokeOnCompletion { lookingAhead.remove(key) }
         }
         peekJob = viewModelScope.launch {
-            (look.await().lyrics as? LyricsFinder.Lyrics.Found)?.let { showPeek(song, it.lines, it.words) }
+            (look.await().lyrics as? LyricsFinder.Lyrics.Found)?.let { showPeek(song, it.lines, it.words, byEar = false) }
         }
     }
 
-    /** [lines] under [song]'s player, while it shows it; words that aren't timed show their first line. */
-    private fun showPeek(song: MusicMetadata, lines: List<LyricLine>, words: String) {
+    /** [lines] under [song]'s player, while it shows it, timed [byEar] or not; words that aren't timed show their first line. */
+    private fun showPeek(song: MusicMetadata, lines: List<LyricLine>, words: String, byEar: Boolean) {
         val player = uiState.player?.takeIf { it.song == song } ?: return
         val shown = lines.ifEmpty { words.lines().filter { it.isNotBlank() }.take(1).map { LyricLine(0, it) } }
-        uiState = uiState.copy(player = player.copy(lines = shown))
+        uiState = uiState.copy(player = player.copy(lines = shown, linesByEar = byEar))
     }
 
     /**
@@ -2102,7 +2102,7 @@ internal class MainViewModel(
         syncPoints = kept.syncPoints
         wordsPace = kept.pace
         uiState = uiState.copy(
-            lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsTimedByEar = kept.foundLines.isEmpty() && kept.lines.isNotEmpty(), lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
+            lyricsFor = song, lyrics = kept.lyrics, lyricLines = kept.lines, lyricsSynced = kept.synced, lyricsTimedByEar = kept.timedByEar, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = false,
             learning = uiState.learning.fresh(kept.learning.script).copy(lines = kept.learning.lines, names = kept.learning.names, translations = kept.learning.translations, titleMeaning = kept.learning.titleMeaning, fromRomaji = kept.learning.fromRomaji),
             chords = kept.chords.copy(on = uiState.chords.on), canFollowApps = playback?.hasAccess() == true
         )
@@ -2524,11 +2524,13 @@ internal class MainViewModel(
 
     /**
      * Whether [song] has been heard through [UNTIMED_HEARINGS] times, about: hearing more would hardly
-     * time more lines. With no length said anywhere, once as much is heard as is kept.
+     * time more lines. A song too long for that to be kept, or with no length said anywhere, once as
+     * much is heard as is kept: what's heard past it would be gone next time, and heard again.
      */
     private fun heardEnough(song: MusicMetadata): Boolean {
-        val length = untimedLengthMs(song) ?: return heardStretches.size >= HeardSongs.MAX_STRETCHES
-        return heardStretches.sumOf { it.toMs - it.fromMs } >= length * UNTIMED_HEARINGS
+        val kept = HeardSongs.MAX_STRETCHES * SingingListener.SECONDS * 1000L
+        val wanted = untimedLengthMs(song)?.let { it * UNTIMED_HEARINGS } ?: kept
+        return heardStretches.sumOf { it.toMs - it.fromMs } >= minOf(wanted, kept)
     }
 
     /** How long [song] is, where the app plays it, as the singing heard is timed by its clock: as the app says, or else the song or its words. */
@@ -2686,7 +2688,7 @@ internal class MainViewModel(
         else placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L))
     }
 
-    /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when nothing is, as for want of the speech model, which is offered then. */
+    /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when it can't be heard, as for want of the speech model, which is offered then. */
     private suspend fun hearOnce(hearing: SingingHearing, lines: List<String>, first: (suspend (Sung) -> Boolean)?): Sung? {
         val sung = hearing.hear(lyricsLanguage?.of(lines)?.substringBefore('-'), first)
         // The model isn't fetched on mobile data by itself: it's offered by hand.
@@ -2705,11 +2707,12 @@ internal class MainViewModel(
      * no voice heard where they're timed doubts them, so no line's shown sung; a voice heard there, even
      * with too few of its words made out to place them, says they're not timed into an intro after all,
      * as the speech model sometimes hears a while of singing as music alone. So does one [voiced] in
-     * the while's first seconds, though the whole while is heard as music alone.
+     * the while's first seconds, though the whole while is heard as music alone. A while it made out
+     * nothing in at all, not even music, says nothing either way, so it leaves them as they are.
      */
     private fun foundSinging(found: Boolean, sung: Sung, clock: PlaybackClock, shown: List<LyricLine>, shift: Long?, voiced: Boolean): Boolean {
         if (found) return true
-        doubtTiming(shift == null && !voiced && noVoice(sung, clock, shown))
+        if (sung.words.isNotEmpty()) doubtTiming(shift == null && !voiced && noVoice(sung, clock, shown))
         return shift != null
     }
 

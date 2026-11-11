@@ -130,14 +130,29 @@ internal object SyncedLyrics {
     private fun soundsIn(text: String): Int = syllable.findAll(text).count() + latinWord.findAll(text).count()
 
     /**
-     * The line being sung at [positionMs], or -1 before the first. A line heard sung, with the next not
-     * heard, is only lit till it ends: what's sung after it isn't known.
+     * The line being sung at [positionMs], or -1 before the first. Of words timed [byEar], a line with
+     * an end, as one heard with the next not heard, or the last, is only lit till it ends: what's sung
+     * after it isn't known. A line timed by a service stays lit till the next, and the last through the outro.
      */
-    fun indexAt(lines: List<LyricLine>, positionMs: Long): Int {
+    fun indexAt(lines: List<LyricLine>, positionMs: Long, byEar: Boolean): Int {
         val at = lines.indexOfLast { it.timeMs <= positionMs }
-        val end = lines.getOrNull(at)?.endMs?.takeIf { lines.getOrNull(at + 1)?.heard == false }
+        val end = litTill(lines, at, byEar)
         return if (end != null && positionMs > end) -1 else at
     }
+
+    /**
+     * Where in the song the line lit by [indexAt] changes: as each line heard starts, and just past the
+     * end of one lit only till it ends. Lines not heard start never, so they're left out.
+     */
+    fun changes(lines: List<LyricLine>, byEar: Boolean): List<Long> =
+        lines.indices.flatMap { index -> listOfNotNull(lines[index].timeMs.takeIf { lines[index].heard }, litTill(lines, index, byEar)?.plus(1)) }
+
+    /**
+     * Where line [at] goes dark once it's sung through, as what's sung after it isn't known; null while
+     * it's lit till the next. Timed by ear, a line has an end only then, so it holds with the lines
+     * between left out, as blank ones are under the player.
+     */
+    private fun litTill(lines: List<LyricLine>, at: Int, byEar: Boolean): Long? = lines.getOrNull(at)?.endMs?.takeIf { byEar }
 
     /** Where the next of [times] after [positionMs] is, when the line or word lit changes; null after the last. */
     fun nextAfter(times: List<Long>, positionMs: Long): Long? = times.filter { it > positionMs }.minOrNull()

@@ -1650,17 +1650,17 @@ internal fun Following.ahead(ms: Long) = copy(clock = clock.copy(positionMs = cl
 
 /**
  * The line of [lines] being sung, or -1 before the first or while nothing says where the song is.
- * Looked at again when the next line starts, so a line lights as it's sung and nothing runs in
- * between. A paused song stays where it is.
+ * Looked at again when the next line starts, or a line timed [byEar] goes dark, so a line lights as
+ * it's sung and nothing runs in between. A paused song stays where it is.
  */
 @Composable
-internal fun rememberSungLine(lines: List<LyricLine>, following: Following?): Int {
-    fun sung() = following?.takeIf { it.timingKnown }?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime())) } ?: -1
-    val active by produceState(sung(), following, lines) {
+internal fun rememberSungLine(lines: List<LyricLine>, following: Following?, byEar: Boolean): Int {
+    fun sung() = following?.takeIf { it.timingKnown }?.let { SyncedLyrics.indexAt(lines, it.clock.positionAt(SystemClock.elapsedRealtime()), byEar) } ?: -1
+    val active by produceState(sung(), following, lines, byEar) {
         value = sung()
-        val starts = lines.map { it.timeMs }
+        val changes = SyncedLyrics.changes(lines, byEar)
         while (following?.timingKnown == true) {
-            delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { SyncedLyrics.nextAfter(starts, it) } ?: break)
+            delay(following.clock.untilMs(SystemClock.elapsedRealtime()) { SyncedLyrics.nextAfter(changes, it) } ?: break)
             value = sung()
         }
     }
@@ -1682,10 +1682,10 @@ private fun TimedLyrics(
 ) {
     val lines = state.lyricLines
     val following = state.following?.ahead(state.linesEarlyMs)
-    val active = rememberSungLine(lines, following)
+    val active = rememberSungLine(lines, following, state.lyricsTimedByEar)
     // Set to, the line coming next brightens a moment before it's lit, so the eye is there first. Set
     // off, a moment of 0, that's the line lit, so none brightens ahead.
-    val coming = rememberSungLine(lines, following?.ahead(state.nextLineAheadMs))
+    val coming = rememberSungLine(lines, following?.ahead(state.nextLineAheadMs), state.lyricsTimedByEar)
     val chords = rememberChords(state.chords, lines.map { it.text })
     val third = with(LocalDensity.current) { 160.dp.roundToPx() }
     val look = WordsLook.on(state.phone)
