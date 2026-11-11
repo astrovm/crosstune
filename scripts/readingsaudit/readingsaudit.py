@@ -6,6 +6,7 @@
   python3 scripts/readingsaudit/readingsaudit.py compare   # each word's reading against UtaTen's ruby; numbers, and the wrong ones by cause
   python3 scripts/readingsaudit/readingsaudit.py compare --words   # every wrong word too, with its song: for a person to read, not to publish
   python3 scripts/readingsaudit/readingsaudit.py compare --before before   # and what changed since a run kept in that folder: cp -r audit before
+  python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
 
 Songs' words are people's, so everything goes in the agent cache, never in the repo:
 $READINGSAUDIT_DIR, or /mnt/data/agent-cache/crosstune-anime-readings, or ~/.cache/agent-cache/crosstune-anime-readings.
@@ -87,11 +88,43 @@ def songs(folder):
     print(f"{len(out)} songs in {folder / 'songs.json'}: " + ", ".join(f"{k} {len(v)}" for k, v in SONGS.items()))
 
 
-def run(folder):
+# Kanji forms and kana JMdict marks as rarely used, irregular, outdated or for search only: not how lyrics write or sing a word.
+ODD_FORMS = {"iK", "oK", "sK"}
+ODD_KANA = {"ik", "ok", "rk", "sk"}
+
+
+def listed_candidates(words):
+    """{form: kana} for each JMdict form of two kanji or more, starting with one, that it reads one way only."""
+    readings = defaultdict(set)
+    for entry in words:
+        for kanji in entry["kanji"]:
+            form = kanji["text"]
+            if set(kanji["tags"]) & ODD_FORMS:
+                continue
+            readings[form] |= {hiragana(k["text"]) for k in entry["kana"]
+                               if ("*" in k["appliesToKanji"] or form in k["appliesToKanji"]) and not set(k["tags"]) & ODD_KANA}
+    return {form: next(iter(kana)) for form, kana in sorted(readings.items())
+            if len(kana) == 1 and is_han(form[0]) and sum(map(is_han, form)) >= 2
+            and all(is_han(c) or "ぁ" <= c <= "ゖ" or "ァ" <= c <= "ヶ" or c == "ー" for c in form)}
+
+
+def table(folder):
+    """The candidates for the app's jmdict-readings.txt, for the test that keeps those the app reads otherwise."""
+    jmdict = json.loads((folder / "jmdict.json").read_text())
+    candidates = listed_candidates(jmdict["words"])
+    header = [f"# JMdict {jmdict['dictDate']}, by the Electronic Dictionary Research and Development Group, CC BY-SA 4.0",
+              f"# through jmdict-simplified {jmdict['version']}: words of two kanji or more it reads one way only,",
+              "# kept where Crosstune reads them otherwise. Made by scripts/readingsaudit/readingsaudit.py table."]
+    (folder / "listed.txt").write_text("\n".join(header + [f"{form}\t{kana}" for form, kana in candidates.items()]) + "\n")
+    print(f"{len(candidates)} candidates in {folder / 'listed.txt'}")
+    run(folder, "com.astrovm.crosstune.songcheck.JmdictReadings")
+
+
+def run(folder, test="com.astrovm.crosstune.songcheck.ReadingsAudit"):
     # gradle-box mounts SONGCHECK_DIR, so the words stay out of the checkout.
     env = {**os.environ, "SONGCHECK_DIR": str(folder)}
     command = ["nice", "-n", "10", str(ROOT / "scripts/gradle-box/gradle-box.sh"), "--max-workers=2", ":app:songCheck",
-               f"-PsongcheckDir={folder}", "-PsongcheckTest=com.astrovm.crosstune.songcheck.ReadingsAudit"]
+               f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
     sys.exit(subprocess.call(command, env=env, cwd=ROOT))
 
 
@@ -357,7 +390,7 @@ def compare(folder, words, before=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
     args = parser.parse_args()
@@ -366,6 +399,8 @@ def main():
         songs(folder)
     elif args.step == "run":
         run(folder)
+    elif args.step == "table":
+        table(folder)
     else:
         compare(folder, args.words, args.before)
 

@@ -17,13 +17,13 @@ internal enum class Script(val glyph: String) {
 
 /**
  * What gave a word its reading, as a report on a wrong one names it by [key]: for Japanese, the
- * dictionaries on the phone, IPADIC and UniDic, Crosstune's own rules (二人 as ふたり, 側 as そば),
+ * dictionaries on the phone, IPADIC and UniDic, JMdict's words of more than one kanji, Crosstune's own rules (二人 as ふたり, 側 as そば),
  * the lyrics' own reading in brackets, UtaTen's sung readings, ChatGPT's, or the user's own on a
  * kept line; for Chinese, Android's pinyin; for Korean, Crosstune's romaja; for the rest, Android's
  * Latin letters.
  */
 internal enum class Reader(val key: String) {
-    IPADIC("ipadic"), UNIDIC("unidic"), RULES("crosstune_rules"), LYRICS("lyrics_ruby"), SUNG("utaten"), CHATGPT("chatgpt"), USER("user"),
+    IPADIC("ipadic"), UNIDIC("unidic"), JMDICT("jmdict"), RULES("crosstune_rules"), LYRICS("lyrics_ruby"), SUNG("utaten"), CHATGPT("chatgpt"), USER("user"),
     PINYIN("android_pinyin"), ROMAJA("crosstune_romaja"), LATIN("android_latin");
 
     companion object {
@@ -96,9 +96,10 @@ internal object Readings {
     /**
      * Bumped when words are read otherwise than before, so the readings kept with a song's words are
      * worked out again: 2 for the readings a song is sung with, which were asked for in a way that found none,
-     * and the dictionary's common misreadings, as 君 after a pause.
+     * and the dictionary's common misreadings, as 君 after a pause; 4 for counters, minutes, classical
+     * verbs, the nouns IPADIC takes for suffixes, and the words JMdict reads one way only.
      */
-    const val VERSION = 3
+    const val VERSION = 4
 
     /** The script [lines] are in: any kana is Japanese, as Japanese mixes kana with kanji, which Chinese never does. */
     fun scriptOf(lines: List<String>): Script? {
@@ -348,11 +349,31 @@ internal object Readings {
             val a = mutableListOf(ours[i++])
             val b = mutableListOf(theirs[j++])
             while (a.last().end != b.last().end) if (a.last().end < b.last().end) a += ours[i++] else b += theirs[j++]
-            val better = a.any { it.unknown } || keptWhole(a, b) || (a.size == 1 && b.size == 1 && a[0].strayAffix(before))
+            val better = a.any { it.unknown } || keptWhole(a, b) || (a.size == 1 && b.size == 1 && (a[0].strayAffix(before) || nounNotAffix(a[0], b[0], before)))
             out += if (better && b.none { it.unknown }) b else a
         }
         return out
     }
+
+    /**
+     * Whether a kanji IPADIC takes for a suffix to the noun before it, [ours], is the plain noun UniDic
+     * reads, [theirs]: 心 after ざわめき is こころ, not しん. Not after a number, where it counts, 三人; and
+     * not when it's said with a voice, as the second half of a word, ガラス玉 がらすだま or 一番星 いちばんぼし,
+     * unless the word before is one it can't be part of, as いつか in いつか日.
+     */
+    private fun nounNotAffix(ours: Piece, theirs: Piece, before: Piece?): Boolean {
+        val plainNoun = theirs.kind == "名詞" && theirs.subkind == "普通名詞"
+        val oneKanjiSuffix = ours.subkind == "接尾" && ours.surface.singleOrNull()?.let(::isHan) == true
+        if (!plainNoun || !oneKanjiSuffix) return false
+        if (before == null || before.subkind in NUMBERS) return false
+        return ours.kana.first() !in VOICED || (before.subkind in NOT_PLAIN_NOUNS && before.surface.all(::isSaid))
+    }
+
+    /** Kana said with a voice, as the second half of a word starts: だま, ぼし, び. */
+    private const val VOICED = "がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ"
+
+    /** Words in kana a noun after can't be the second half of: いつか, a pronoun, and the names IPADIC makes up, いつの. */
+    private val NOT_PLAIN_NOUNS = setOf("副詞可能", "代名詞", "固有名詞")
 
     /** Whether UniDic keeps whole, as the word [b], what IPADIC breaks up, [a]: kanji, 逢ひ in 逢 and ひ, or old kana, けふ in け and ふ. */
     private fun keptWhole(a: List<Piece>, b: List<Piece>): Boolean {
@@ -560,15 +581,21 @@ internal object Readings {
         for ((index, piece) in pieces.withIndex()) {
             val last = out.lastOrNull()
             val word = last?.let { TOGETHER[(it.surface + piece.surface).map { c -> KANJI_DIGITS[c] ?: c }.joinToString("")] }
-            val count = last?.let { counted(it, piece) }
+            // 分 after a number after 寸 or 割 is a tenth of it, ぶ: 四寸四分, 五割五分. Elsewhere, minutes.
+            val tenth = piece.surface == "分" && last?.subkind in NUMBERS && out.getOrNull(out.lastIndex - 1)?.surface?.lastOrNull()?.let { it in TENTHS } == true
+            val count = last?.takeUnless { tenth }?.let { counted(it, piece) }
             val hundred = last?.takeIf { it.subkind in NUMBERS && piece.subkind in NUMBERS }?.let { hundreds(it.kana, piece.kana) }
             // A suffix after a mark or a space, or starting the line, is a suffix to nothing.
             val stray = piece.takeIf { it.subkind == "接尾" && it.surface.all(::isHan) && (last == null || last.surface.none(Char::isLetterOrDigit)) }?.let { alone(it.surface) }
             // A prefix of kanji goes before a word with kanji, 今世紀 or 前前前世; before one in kana, 今となり, it's a word.
             val strayBefore = last?.takeIf { it.kind == "接頭詞" && it.surface.all(::isHan) && piece.surface.none(::isHan) }?.let { alone(it.surface) }
+            val next = pieces.getOrNull(index + 1)
+            val classical = classical(piece, next)
+            val minutes = minutes(piece, next)
             when {
                 word != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, word, "名詞", "一般", reader = Reader.RULES)
                 last != null && count != null -> out[out.lastIndex] = Piece(last.surface + piece.surface, count, "名詞", "一般", reader = Reader.RULES)
+                tenth -> out += piece.read("ぶ")
                 last != null && hundred != null -> {
                     out[out.lastIndex] = last.read(hundred.first)
                     out += piece.read(hundred.second)
@@ -599,10 +626,12 @@ internal object Readings {
                     out[out.lastIndex] = last.read("なん")
                     out += piece
                 }
+                classical != null -> out += piece.read(classical)
+                minutes != null -> out += piece.read(minutes)
                 else -> out += piece
             }
         }
-        return out
+        return listedWords(out)
     }
 
     /**
@@ -612,14 +641,128 @@ internal object Readings {
      */
     private fun counted(number: Piece, piece: Piece): String? {
         if (number.subkind !in NUMBERS || !piece.counts()) return null
-        val first = piece.kana.firstOrNull()?.takeIf { it in RUN_INTO } ?: return null
-        val stem = when {
-            number.kana == "いち" || number.kana == "はち" || number.kana.endsWith("じゅう") -> number.kana.dropLast(1)
-            number.kana.endsWith("く") && first in "かきくけこはひふへほ" -> number.kana.dropLast(1)
-            else -> return null
-        }
-        return stem + "っ" + plosive(piece.kana)
+        return ranInto(number.kana, piece.surface, piece.kana)
     }
+
+    /**
+     * How a number read [number] sounds with the counter [counter], read [kana], when they run together:
+     * いっかい and ろっぽん, as [counted] says; and after ん, 三本 さんぼん, 何階 なんがい, 四分 よんぷん.
+     */
+    private fun ranInto(number: String, counter: String, kana: String): String? {
+        val first = kana.firstOrNull()?.takeIf { it in RUN_INTO } ?: return null
+        val stem = when {
+            number == "いち" || number == "はち" || number.endsWith("じゅう") -> number.dropLast(1)
+            number.endsWith("く") && first in "かきくけこはひふへほ" -> number.dropLast(1)
+            else -> return afterN(number, counter, kana)
+        }
+        return stem + "っ" + plosive(kana)
+    }
+
+    /** [ranInto] after ん: 分 is ぷん after any, the other counters in [AFTER_N] change only after さん and なん. */
+    private fun afterN(number: String, counter: String, kana: String): String? {
+        val start = AFTER_N[counter.first()] ?: return null
+        val changes = if (counter.first() == '分') number.endsWith("ん") else number.endsWith("さん") || number.endsWith("なん")
+        return if (changes) number + start + kana.drop(1) else null
+    }
+
+    /**
+     * 二分 and 十分, as the dictionary reads them, are a half and enough, にぶん and じゅうぶん. Before 後, 前,
+     * 間 or 半 they're minutes: 二分後 にふんご, 十分前 じゅっぷんまえ. Null when [piece] is no such word.
+     */
+    private fun minutes(piece: Piece, next: Piece?): String? {
+        if (next?.surface !in AFTER_MINUTES || !piece.surface.endsWith('分') || !piece.kana.endsWith("ぶん")) return null
+        if (piece.surface.length < 2 || !piece.surface.dropLast(1).all { it in "一二三四五六七八九十百何" }) return null
+        val number = piece.kana.dropLast(2)
+        return ranInto(number, "分", "ふん") ?: (number + "ふん")
+    }
+
+    /**
+     * [piece] read as the classical verb the kana written after its kanji make it, 晴る and 流る: the
+     * dictionary reads the kanji as the modern word, はれ and ながれ, but the line ends it with る, as
+     * 晴るる空, so the kanji are は and なが. Null when the kana after it don't make one.
+     */
+    private fun classical(piece: Piece, next: Piece?): String? {
+        val kanji = piece.surface.takeWhile(::isHan)
+        val ending = piece.surface.drop(kanji.length)
+        if (kanji.isEmpty() || ending.any { !isKana(it) } || !piece.kana.endsWith(hiragana(ending))) return null
+        val over = piece.kana.dropLast(ending.length)
+        val after = ending.ifEmpty { next?.surface.orEmpty() }.firstOrNull()
+        return if (over.length > 1 && over.last() == 'れ' && after == 'る') over.dropLast(1) + hiragana(ending) else null
+    }
+
+    /**
+     * Words of two kanji or more that JMdict reads one way only, and the dictionaries on the phone read
+     * another, 体中 からだじゅう for からだちゅう, kept in [LISTED]: made by `scripts/readingsaudit`, see
+     * CONTRIBUTING.md. Read when a line first needs them; empty to read without them.
+     */
+    @Volatile
+    internal var listed: Map<String, String>? = null
+        get() = field ?: readListed().also { field = it }
+
+    private const val LISTED = "/com/astrovm/crosstune/jmdict-readings.txt"
+
+    private fun readListed(): Map<String, String> = checkNotNull(Readings::class.java.getResourceAsStream(LISTED)).bufferedReader().useLines { lines ->
+        lines.filterNot { it.startsWith('#') }.associate { it.substringBefore('\t') to it.substringAfter('\t') }
+    }
+
+    /**
+     * [pieces] with the words JMdict [listed] read as it does, where the pieces next to each other
+     * make one: 体 and 中 are 体中, からだじゅう, and 一番 and 星 are 一番星, いちばんぼし. A verb is
+     * looked up as the dictionary writes it, 肉付く for 肉付いた. Only whole pieces, so 一人舞 is not taken
+     * out of 一人舞う; never starting or ending in a particle, so 今日は stays きょうは; and never one piece
+     * alone, as the dictionary read it as a word it knows, 上野 うえの, which JMdict has only as こうずけ.
+     */
+    private fun listedWords(pieces: List<Piece>): List<Piece> {
+        val table = listed.orEmpty()
+        if (table.isEmpty()) return pieces
+        val out = mutableListOf<Piece>()
+        var at = 0
+        while (at < pieces.size) {
+            val found = (minOf(LISTED_PIECES, pieces.size - at) downTo 2).firstNotNullOfOrNull { count ->
+                listedAs(pieces.subList(at, at + count), table)?.let { count to it }
+            }
+            if (found == null) out += pieces[at++] else {
+                out += found.second
+                at += found.first
+            }
+        }
+        return out
+    }
+
+    /**
+     * The one piece [word] makes as a word in [table], when it's there and read otherwise than its pieces.
+     * Only the last piece may be a verb or an adjective: one before goes on into the next word, 溺れ in
+     * 溺れ死にそう, not into a noun JMdict lists, 溺れ死に おぼれじに.
+     */
+    private fun listedAs(word: List<Piece>, table: Map<String, String>): Piece? {
+        val last = word.last()
+        val runsOn = word.dropLast(1).none { it.kind in GRAMMAR || it.kind in INFLECTED }
+        if (!isHan(word[0].surface[0]) || last.kind in GRAMMAR || !runsOn) return null
+        val surface = word.joinToString("") { it.surface }
+        if (surface.count(::isHan) < 2) return null
+        val kana = table[surface] ?: conjugated(word, table) ?: return null
+        if (kana == word.joinToString("") { it.kana }) return null
+        return Piece(surface, kana, last.kind, last.subkind, reader = Reader.JMDICT)
+    }
+
+    /**
+     * How [word] reads when its last piece is a verb or an adjective JMdict has in its dictionary form:
+     * 肉付い as 肉付く, にくづく, so にくづい. It's looked up as written, with the dictionary form's ending.
+     */
+    private fun conjugated(word: List<Piece>, table: Map<String, String>): String? {
+        val last = word.last()
+        if (last.kind !in INFLECTED) return null
+        val ending = last.surface.takeLastWhile(::isKana)
+        val listedEnding = last.base.takeLastWhile(::isKana)
+        val written = word.dropLast(1).joinToString("") { it.surface } + last.surface.dropLast(ending.length)
+        val kana = table[written + listedEnding] ?: return null
+        return if (kana.endsWith(hiragana(listedEnding))) kana.dropLast(listedEnding.length) + hiragana(ending) else null
+    }
+
+    private val INFLECTED = setOf("動詞", "形容詞")
+
+    /** The most pieces a word JMdict lists is looked for in: 水車 小屋, 一言 一句. */
+    private const val LISTED_PIECES = 5
 
     /** How a number read [number] and 百 or 千 after it, read [hundred], sound together: さんびゃく, ろっぴゃく, はっせん, なんぜん. */
     private fun hundreds(number: String, hundred: String): Pair<String, String>? = when {
@@ -647,14 +790,14 @@ internal object Readings {
         stem.surface.dropLast(1).all(::isHan) && next.surface.first() in "てた"
 
     /**
-     * Whether this one kanji counts the number before it, 回 or 本.
-     * 色 does not: 十色 is ten colours, and the number must not run into しょく.
+     * Whether this counts the number before it: one kanji, 回 or 本, or a suffix the dictionary has
+     * as one word, 週間 or ヶ月. 色 does not: 十色 is ten colours, and the number must not run into しょく.
      */
     private fun Piece.counts(): Boolean {
         if (surface == "色") return false
-        if (surface.length != 1) return false
         if (subkind in NUMBERS) return false
-        return isHan(surface[0])
+        if (surface.length == 1) return isHan(surface[0])
+        return subkind == "接尾" && (isHan(surface[0]) || surface[0] in "ヶヵケ") && surface.drop(1).all(::isHan)
     }
 
     /** [kana] with an h as p, ほ as ぽ, as it is after a sound run into. */
@@ -665,6 +808,17 @@ internal object Readings {
 
     private val NUMBERS = setOf("数", "数詞")
     private const val RUN_INTO = "かきくけこさしすせそたちつてとはひふへほ"
+
+    /** Counters said with a voice, or a p, after ん, by the kana they start with then: 三本 さんぼん, 三匹 さんびき, 三分 さんぷん. */
+    private val AFTER_N = mapOf(
+        '本' to "ぼ", '杯' to "ば", '匹' to "び", '階' to "が", '軒' to "げ", '足' to "ぞ", '歩' to "ぽ", '泊' to "ぱ", '発' to "ぱ", '分' to "ぷ"
+    )
+
+    /** What 分 is a tenth of, after a number after it: 寸 in 四寸四分, 割 in 五割五分. */
+    private const val TENTHS = "寸割"
+
+    /** What minutes come before: 二分後, 十分前, 三分間, 五分半. */
+    private val AFTER_MINUTES = setOf("後", "前", "間", "半", "以内")
     private val SIDES = setOf("こっち", "そっち", "あっち", "どっち", "こちら", "そちら", "あちら", "どちら", "向こう")
 
     private val TOGETHER = mapOf("一人" to "ひとり", "二人" to "ふたり")

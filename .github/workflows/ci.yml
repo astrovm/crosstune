@@ -97,6 +97,7 @@ jobs:
           python3 -m unittest discover -s scripts/milkdrop-render -p "test_*.py"
           python3 -m unittest discover -s scripts/shots -p "test_*.py"
           python3 -m unittest discover -s scripts/songcheck -p "test_*.py"
+          python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
           python3 -m unittest discover -s scripts/syncreplay -p "test_*.py"
           python3 -m unittest discover -s scripts/contrast -p "test_*.py"
           python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
