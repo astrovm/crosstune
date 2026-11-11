@@ -932,7 +932,7 @@ private const val SKIP_WAIT_MS = 1_500L
 private val BAR_ROOM = 88.dp
 
 /** Whether anything that helps read the words is switched on, and so shown under them. */
-private val Learning.shows get() = translation || (script != null && (readings || romanized || wordsAs != WordsAs.WRITTEN))
+private val Learning.shows get() = translation || (script != null && reads)
 
 /**
  * How the words show, set here: how big they are, whether a script that reads otherwise shows as

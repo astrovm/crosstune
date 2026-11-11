@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -333,7 +335,7 @@ class SavedLinesPracticeTest {
         val store = SavedLinesStore(prefs)
         val morning = SavedLine("都会の朝", reading = "とかいのあさ", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("朝", "あさ")))
         store.addAll(listOf(night, morning))
-        store.readAs(morning.readAs(listOf("とかい", "あした")))
+        runBlocking { store.change(Dispatchers.Unconfined) { kept -> kept.map { it.editedAs(morning, morning.readAs(listOf("とかい", "あした"))) ?: it } } }
         val sung = night.readAs(listOf("まち", "よる")).copy(readByHand = false)
         val again = store.reread(listOf(sung, morning.copy(reading = "まちのあさ", ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("朝", "あさ")))))
         assertEquals("まちのよる", again.first { it.text == night.text }.reading)

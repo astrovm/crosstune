@@ -427,7 +427,29 @@ internal data class Practice(
     val cantComeBack: Boolean = false
 ) {
     val line: SavedLine? get() = queue.firstOrNull()
+
+    /**
+     * This session's lines as [saved] keeps them now: only how they read. A refresh while the session
+     * runs then shows the new reading. The order and each card's schedule stay as the session has them.
+     */
+    fun withReadings(saved: List<SavedLine>): Practice {
+        val fresh = { line: SavedLine ->
+            val stored = saved.find { it.isSame(line) }
+            if (stored == null) line else line.withReadingFrom(stored)
+        }
+        return copy(queue = queue.map(fresh), lastSong = lastSong?.let(fresh))
+    }
 }
+
+/** [stored]'s reading on this card, which keeps its place in the session and its schedule. */
+private fun SavedLine.withReadingFrom(stored: SavedLine) = copy(
+    reading = stored.reading,
+    romanized = stored.romanized,
+    ruby = stored.ruby,
+    typed = stored.typed,
+    readWith = stored.readWith,
+    readByHand = stored.readByHand,
+)
 
 /** How a card's line sounds: not at all, on its way in the music app or the small player, playing, or ready to play (again). */
 internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }
@@ -550,6 +572,12 @@ internal fun Learning.insteadOf(index: Int): String? {
     if (showsAs == WordsAs.LATIN) return reading.latin(romajiTyped).takeIf { it.isNotBlank() }
     return null
 }
+
+/**
+ * Whether the words are read, for what's switched on: their readings, their romaji, or the words shown in kana
+ * or Latin letters, which are all made from how they're read.
+ */
+internal val Learning.reads: Boolean get() = readings || romanized || wordsAs != WordsAs.WRITTEN
 
 /** How the words show for the script they're in: only Japanese has kana, so the others show as written. */
 internal val Learning.showsAs: WordsAs get() = if (wordsAs == WordsAs.KANA && script != Script.JAPANESE) WordsAs.WRITTEN else wordsAs
