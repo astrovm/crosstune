@@ -243,12 +243,18 @@ Singing to the morning light</div>"""
 
     @Test
     fun jTotalUsesTheFontStackFromThePage() {
-        val words = "あ".repeat(22)
-        val page = "<style>tt { font-family: 'Inconsolata', monospace; }</style>" +
-            jTotalSong("${"x".repeat(41)}$jTotalChord", words)
-        jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to page))
-        val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
-        assertEquals(20, found.sheet.lines.single().chords.single().at)
+        // Both stacks draw a Windows-31J letter at one width. U+0133 is not one, so a page writes it as an
+        // entity, and each stack draws it from another font: 0.888 columns on the main stack, 1.105 on the
+        // monospace one. Drawn in Chromium with scripts/jtotal-widths/compare_sheets.py, the chord after
+        // ten columns lands on letter 11 with the main stack and on letter 9 with the monospace one.
+        val words = "ĳ".repeat(20)
+        val sheet = jTotalSong("${"x".repeat(10)}$jTotalChord", "&#307;".repeat(20))
+        for ((stack, letter) in listOf("'Inconsolata','MS Gothic','Hiragino Kaku Gothic','Monaco',sans-serif" to 11, "'Inconsolata', monospace" to 9)) {
+            jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to "<style>tt { font-family: $stack; }</style>$sheet"))
+            val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
+            assertEquals(words, found.sheet.lines.single().text)
+            assertEquals(letter, found.sheet.lines.single().chords.single().at)
+        }
     }
 
     @Test
