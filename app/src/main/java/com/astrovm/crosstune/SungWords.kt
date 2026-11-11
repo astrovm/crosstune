@@ -13,11 +13,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.Closeable
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.text.Normalizer
 import kotlin.math.abs
 
 /** A word heard sung, and when it starts, [atMs] into what was heard. */
@@ -402,16 +403,7 @@ internal object SungAlignment {
         }
     }
 
-    /** Match unspaced writing by letters, as the model can split the same phrase anywhere. */
-    private fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.findAll(plain(word)).map { it.value }.toList() }
-
-    private val writing = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+")
-
-    /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
-    private fun plain(word: String): String =
-        Normalizer.normalize(word.lowercase(), Normalizer.Form.NFKC).flatMap { letter ->
-            if (letter < '\u0250') Normalizer.normalize(letter.toString(), Normalizer.Form.NFKD).toList() else listOf(letter)
-        }.filter { it.isLetterOrDigit() }.joinToString("")
+    private fun pieces(text: String) = SpokenWords.pieces(text)
 
     /** Which of [heard] match which of [timed], in order, as many as can: index pairs. */
     private fun matched(heard: List<String>, timed: List<String>): List<Pair<Int, Int>> {
@@ -471,6 +463,36 @@ internal object SungAlignment {
 
     /** How close together the places tried for far-off lines are: as close as words heard can tell apart. */
     private const val FAR_STEP_MS = 1_000L
+}
+
+/** What was heard sung of songs whose words have no timing, per recording and words, so they're timed from the start when played again. */
+internal class HeardSongs(private val cache: LookupCache) {
+    suspend fun load(song: MusicMetadata, words: String): List<HeardStretch> {
+        val json = cache.get(keyOf(song, words)) ?: return emptyList()
+        // Kept by an older Crosstune some other way, it's heard again.
+        return runCatching { JSONArray(json).let { all -> (0 until all.length()).map { stretch(all.getJSONObject(it)) } } }.getOrDefault(emptyList())
+    }
+
+    suspend fun save(song: MusicMetadata, words: String, heard: List<HeardStretch>) {
+        val kept = heard.takeLast(MAX_STRETCHES).map { stretch ->
+            JSONObject().put("from", stretch.fromMs).put("to", stretch.toMs).put("words", JSONArray(stretch.words.map { (text, ms) -> JSONArray().put(text).put(ms) }))
+        }
+        cache.put(keyOf(song, words), JSONArray(kept).toString())
+        cache.save()
+    }
+
+    private fun stretch(json: JSONObject): HeardStretch {
+        val words = json.getJSONArray("words")
+        return HeardStretch(json.getLong("from"), json.getLong("to"), (0 until words.length()).map { words.getJSONArray(it).let { word -> word.getString(0) to word.getLong(1) } })
+    }
+
+    /** Other words for the song are other lines, so they're heard again. */
+    private fun keyOf(song: MusicMetadata, words: String) = RecordingKey.of(song) + "\u0000" + words.hashCode().toString(16)
+
+    companion object {
+        /** About three times through a long song: the oldest go first. */
+        const val MAX_STRETCHES = 60
+    }
 }
 
 /** The songs whose words were heard sung and lined up, per recording and words, so each is heard once. */

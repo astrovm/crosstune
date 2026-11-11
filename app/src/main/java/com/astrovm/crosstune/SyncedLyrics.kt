@@ -5,7 +5,15 @@ package com.astrovm.crosstune
  * when the words are timed that closely, and when it ends, when that's known. The words, put
  * together, are the line.
  */
-internal data class LyricLine(val timeMs: Long, val text: String, val words: List<TimedWord> = emptyList(), val endMs: Long? = null)
+internal data class LyricLine(val timeMs: Long, val text: String, val words: List<TimedWord> = emptyList(), val endMs: Long? = null) {
+    /** Whether it's known when it's sung: words found with no timing are timed by the singing heard, a line at a time, and not all are heard. */
+    val heard: Boolean get() = timeMs != NOT_HEARD
+
+    companion object {
+        /** When a line not heard yet is sung: never, so it's never lit, though it's shown in its place. */
+        const val NOT_HEARD = Long.MAX_VALUE
+    }
+}
 
 /** A word of a line, or a syllable, as it's timed, and when in the song it's sung. */
 internal data class TimedWord(val timeMs: Long, val text: String)
@@ -121,8 +129,15 @@ internal object SyncedLyrics {
      */
     private fun soundsIn(text: String): Int = syllable.findAll(text).count() + latinWord.findAll(text).count()
 
-    /** The line being sung at [positionMs], or -1 before the first. */
-    fun indexAt(lines: List<LyricLine>, positionMs: Long): Int = lines.indexOfLast { it.timeMs <= positionMs }
+    /**
+     * The line being sung at [positionMs], or -1 before the first. A line heard sung, with the next not
+     * heard, is only lit till it ends: what's sung after it isn't known.
+     */
+    fun indexAt(lines: List<LyricLine>, positionMs: Long): Int {
+        val at = lines.indexOfLast { it.timeMs <= positionMs }
+        val end = lines.getOrNull(at)?.endMs?.takeIf { lines.getOrNull(at + 1)?.heard == false }
+        return if (end != null && positionMs > end) -1 else at
+    }
 
     /** Where the next of [times] after [positionMs] is, when the line or word lit changes; null after the last. */
     fun nextAfter(times: List<Long>, positionMs: Long): Long? = times.filter { it > positionMs }.minOrNull()

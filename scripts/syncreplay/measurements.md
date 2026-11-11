@@ -569,3 +569,26 @@ VLC for Android 3.7.1 played the Police from a tagged local file, `phone XB7AmIs
 - YouTube Music has no speed control: neither build shows one, and its session offers none (`actions=2600887`, no `ACTION_SET_PLAYBACK_SPEED`). The YouTube app has one, but it stops once Crosstune comes to the front.
 
 `phone` reads the screen with uiautomator, and only one thing may read it at a time: with a T3 device session holding it, `uiautomator dump` exits 137, and `phone` now says so instead of asking whether the phone is unlocked.
+
+## Words found with no timing, timed by ear (Issue #860)
+
+`untimed` on the 42 prepped songs, their times taken off. "Heard" is the lines sung inside a while the app heard. "Off" is a line put more than 1.0 s from where it's sung. "Unheard" is a line put where nothing was heard.
+
+| Try | Heard | Timed | Within 1.0 s | Within 0.5 s | Off | Unheard |
+|---|---:|---:|---:|---:|---:|---:|
+| Main: untimed words stay untimed | 989 | 0 | 0 | 0 | 0 | 0 |
+| One global alignment of all heard words to all lines | 989 | 451 | 357 (36%) | | | 0 |
+| Each line looked for in each while, then the heaviest chain in order | 989 | | 36% | | more | 0 |
+| The same, with short lines kept only beside a neighbor, lines between two close ones filled, words heard 550 ms late | 989 | 456 | 375 (38%) | 317 (32%) | 99 | 0 |
+| The same, played twice (`--again 12000`), as the app hears it till it's heard through twice | 1194 | 738 | 595 (50%) | 484 (41%) | 143 | 0 |
+| The same, two plays, no two lines closer than 60 ms a letter (was 30) | 1194 | 724 | 594 (50%) | 485 (41%) | 130 | 0 |
+| The same, one play | 989 | 447 | 372 (38%) | 316 (32%) | 92 | 0 |
+| Two plays, and a line dropped when it's over 3 s from where the song's pace from the lines within 4 puts it | 1194 | 641 | 541 (45%) | 442 (37%) | 100 | 0 |
+
+- Measured: 4 songs have 80% or more of their heard lines within 1.0 s after two plays (4wOLVrGHiIU 71/71, WEuDVcXnElc 49/49, xTvyyoF_LZY 34/36, ZnrSNEah_20 21/24). After one play, 2 do.
+- Measured: of the lines put, 83% are within 1.0 s on one play, 82% on two.
+- Issue #892, lines put far off. With 60 ms a letter, lines put over 3 s off go from 58 to 49 on two plays (48 to 43 on one), and over 10 s from 18 to 15 on one play, for 1 to 3 good lines. Kept.
+- The pace rule above drops 52 good lines to take away 44 off ones, and lines over 10 s off barely fall (12 to 9): most far-off lines come in groups that agree with each other, like a chorus put at its other repeat. Not kept. Tried with windows of 3 to 6 lines and 3 s to 8 s: each takes away about one good line for each off one (27 good for 30 off at 4 lines and 5 s, 32 for 27 at 6 lines and 8 s).
+- Measured, as a bound: 66% of the heard lines have 2 or more words alike heard near them. The rest whisper.cpp tiny doesn't hear well enough to tell.
+- Measured on 6 songs: given the words sung near each while as its prompt (the truth, so an upper bound), whisper.cpp tiny hears enough to put 64% within 1.0 s, against 49% without. Prompting with the lines the app expects next got 53%, with more lines put off. Not adopted: it needs the native hearing changed.
+- Japanese, Korean and other songs whisper.cpp tiny hears poorly time few lines: 0 to 28% each.
