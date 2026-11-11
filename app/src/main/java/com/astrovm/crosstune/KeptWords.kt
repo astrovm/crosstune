@@ -23,6 +23,9 @@ internal data class KeptWords(
     /** How much of the song plays per ms of the words past [syncPoints], see [LyricsSync.adjust]. */
     val pace: Double = 1.0
 ) {
+    /** Whether [lines] are timed by the singing heard: words found with no timing, with lines timed since. */
+    val timedByEar: Boolean get() = foundLines.isEmpty() && lines.isNotEmpty()
+
     /** Only what shows them again: what's being asked of ChatGPT about the song is asked again. */
     fun json(): String = JSONObject()
         .put("lyrics", lyrics)

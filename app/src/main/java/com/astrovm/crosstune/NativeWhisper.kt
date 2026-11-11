@@ -5,15 +5,15 @@ import java.io.File
 
 /** whisper.cpp on the phone, through `libsungwords`: hears the words sung, with [model]. */
 internal class NativeWhisper private constructor(private var handle: Long) : WordHearing, Closeable {
-    override fun words(samples: FloatArray, language: String?): List<HeardWord> =
-        HeardWords.parse(nativeWords(handle, samples, language, THREADS))
+    override fun words(samples: FloatArray, language: String?): List<HeardWord>? =
+        nativeWords(handle, samples, language, THREADS)?.let(HeardWords::parse)
 
     override fun close() {
         if (handle != 0L) nativeClose(handle)
         handle = 0L
     }
 
-    private external fun nativeWords(instance: Long, samples: FloatArray, language: String?, threads: Int): ByteArray
+    private external fun nativeWords(instance: Long, samples: FloatArray, language: String?, threads: Int): ByteArray?
     private external fun nativeClose(instance: Long)
 
     companion object {

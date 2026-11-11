@@ -1,3 +1,3 @@
 Lyrics found with no timing get timed from the singing Crosstune hears, and follow the song from the next play.
 Japanese readings: counters (三本, 一週間), classical verbs and thousands of dictionary words read as they're said.
-The privacy text says that readings ask UtaTen by title and artist.
+The privacy text says when UtaTen is asked by title and artist: readings, Latin letters, or words in only kana or Latin letters.
