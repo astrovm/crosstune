@@ -117,5 +117,57 @@ class CompareTest(unittest.TestCase):
             self.assertEqual(c.read_app(path), {"u": {"url": "u", "lines": []}})
 
 
+class MovesTest(unittest.TestCase):
+    def drawn(self, widths, left=60, url="https://example.test/a.html", font="Inconsolata, monospace"):
+        chars, x = [], 0
+        for letter, width in zip("abcd", widths):
+            chars.append(char(letter, x, x + width))
+            x += width
+        return {**page(line(chords=[chord("C", left)]), line(chars), font=font), "url": url}
+
+    def test_the_same_drawing_moves_nothing(self):
+        counts, shifts, culprits = c.moves([self.drawn([20, 20, 20, 20])], [self.drawn([20, 20, 20, 20])])
+        self.assertEqual(counts["chords (mono stack)"], 1)
+        self.assertEqual(counts["chords on another letter (mono stack)"], 0)
+        self.assertEqual(counts["chords on a letter start in A (mono stack)"], 1)
+        self.assertEqual((shifts, culprits), ({}, {}))
+
+    def test_a_wider_letter_before_the_chord_moves_it_back_a_letter(self):
+        counts, shifts, culprits = c.moves([self.drawn([20, 20, 20, 20])], [self.drawn([20, 44, 20, 20], left=60)])
+        self.assertEqual(counts["chords on another letter (mono stack)"], 1)
+        self.assertEqual(counts["sheets with a chord on another letter (mono stack)"], 1)
+        self.assertEqual(counts["chords on a letter start in B (mono stack)"], 0)
+        self.assertEqual(shifts, {("mono", -1.0): 1})
+        self.assertEqual(culprits, {("mono", ord("b")): 1})
+
+    def test_other_words_are_not_compared(self):
+        b = self.drawn([20, 44, 20, 20])
+        b["lines"][1]["chars"][3]["c"] = "x"
+        counts, _, _ = c.moves([self.drawn([20] * 4)], [b])
+        self.assertEqual(counts["chords (mono stack)"], 0)
+
+    def test_a_leading_space_one_drawing_leaves_out_blames_no_letter(self):
+        a = self.drawn([20, 44, 20, 20], left=20)
+        a["lines"][1]["chars"].insert(0, char(" ", -20, 0))
+        counts, _, culprits = c.moves([a], [self.drawn([20] * 4, left=20)])
+        self.assertEqual(counts["chords on another letter (mono stack)"], 1)
+        self.assertEqual(culprits, {})
+
+    def test_a_sheet_only_one_drawing_has_is_counted_on_its_own(self):
+        counts, _, _ = c.moves([self.drawn([20] * 4, url="https://example.test/b.html", font="x")], [self.drawn([20] * 4)])
+        self.assertEqual(counts["sheets only A drew"], 1)
+
+    def test_starts_are_by_utf16_unit_and_the_end_counts(self):
+        self.assertEqual(c.starts(words("a\U0001F600")), {0: 0, 1: 20, 3: 40})
+        self.assertEqual(c.starts([]), {})
+
+    def test_moves_main_prints_the_counts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            a, b = Path(folder) / "a.json", Path(folder) / "b.json"
+            a.write_text(json.dumps([self.drawn([20] * 4)]), encoding="utf-8")
+            b.write_text(json.dumps([self.drawn([20, 44, 20, 20])]), encoding="utf-8")
+            c.moves_main(a, b, 5)
+
+
 if __name__ == "__main__":
     unittest.main()

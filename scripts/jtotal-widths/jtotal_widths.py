@@ -24,10 +24,14 @@ script beside the mark, including the line above. The table keeps the Japanese-c
 import argparse
 import hashlib
 import json
+import platform
+import shutil
 import subprocess
 import sys
+import tempfile
 import unicodedata
 import urllib.request
+from importlib import metadata
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -35,6 +39,7 @@ REPO = HERE.parents[1] if len(HERE.parents) > 1 else HERE  # in the container th
 TABLE = REPO / "app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt"
 MONO_TABLE = TABLE.with_name("jtotal-widths-mono.txt")
 IMAGE = "localhost/crosstune-jtotal-widths"
+ALIASES = Path("/etc/fonts/local.conf")  # where the Containerfile names the fonts the page asks for
 
 # Google Fonts' Inconsolata v37, in the three files J-Total's stylesheet asks for, with their ranges.
 FONT_BASE = "https://fonts.gstatic.com/s/inconsolata/v37/QldgNThLqRwH-OJ1UHjlKENVzkWGVkL3GZQmAwLYxYWI2qfdm7Lpp4U8WR"
@@ -102,39 +107,79 @@ def installed_fonts(packages):
     return [line.removesuffix(" installed") for line in packages.splitlines() if line.endswith(" installed")]
 
 
-def measure(out, stack=STACK):
+def font_faces(fonts):
+    """J-Total's three Inconsolata files, from the folder `fonts`, each over its range."""
+    return "".join(
+        f'@font-face {{ font-family:"Inconsolata"; src:url("{(Path(fonts) / f"inconsolata-{name}.woff2").resolve().as_uri()}") format("woff2"); unicode-range:{span}; }}\n'
+        for name, (_, span) in FONTS.items()
+    )
+
+
+def page_head(stack, fonts, lang=None):
+    """The top of a page that draws `tt` as J-Total does: its font stack at 40px, one line a row."""
+    tag = f' lang="{lang}"' if lang else ""
+    return (f'<!DOCTYPE html><html{tag}><head><meta charset="utf-8"><style>\n{font_faces(fonts)}'
+            'tt { font-family:' + stack + '; font-size:40px; line-height:1; white-space:pre; }\ndiv { margin:0; }\n</style></head><body>')
+
+
+def font_packages():
+    """The font packages of a Debian or Ubuntu machine. Elsewhere, what the machine is, as its fonts come with it."""
+    if shutil.which("dpkg-query"):
+        packages = subprocess.check_output(['dpkg-query', '-W', '-f=${Package} ${Version} ${db:Status-Status}\\n', 'fonts-*'], text=True)
+        return installed_fonts(packages)
+    if shutil.which("sw_vers"):
+        build = subprocess.check_output(["sw_vers", "-buildVersion"], text=True).strip()
+        return [f"macOS {platform.mac_ver()[0]} ({build}) {platform.machine()}, its own fonts"]
+    return [f"{platform.system()} {platform.release()}: no dpkg-query, so the font packages are not recorded"]
+
+
+def launch(p, browser, lang=None):
+    """Starts `browser`: chromium or webkit as Playwright ships them, or a Chromium-based browser at that path.
+
+    `lang` also sets the browser's own language, which picks the fonts Chromium draws a generic family in.
+    """
+    args = [f"--lang={lang}"] if lang and browser != "webkit" else []
+    if browser in ("chromium", "webkit"):
+        return getattr(p, browser).launch(headless=True, args=args)
+    if not Path(browser).exists():
+        raise SystemExit(f"{browser}: no such browser on this machine")
+    return p.chromium.launch(headless=True, executable_path=browser, args=args)
+
+
+def inconsolata_hashes(fonts):
+    return 'Inconsolata v37 (Google Fonts), SHA-256: ' + ', '.join(
+        f'{name}={hashlib.sha256((Path(fonts) / f"inconsolata-{name}.woff2").read_bytes()).hexdigest()}' for name in FONTS
+    )
+
+
+def environment(browser, name, stack, fonts):
+    """What made a measurement: the stack, the browser, Playwright, Unicode, and the fonts."""
+    return [
+        f"Font stack {stack}",
+        f"{name.capitalize()} {browser.version}",
+        f"Playwright {metadata.version('playwright')}",
+        f"Unicode {unicodedata.unidata_version}",
+        *font_packages(),
+        inconsolata_hashes(fonts),
+        *(['MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans'] if ALIASES.exists() else []),
+    ]
+
+
+def measure(out, stack=STACK, fonts=Path("/fonts")):
     """Inside the container: the width of every letter, in thousandths of a digit. Writes JSON to `out`."""
     from playwright.sync_api import sync_playwright
 
-    faces = "".join(
-        f'@font-face {{ font-family:"Inconsolata"; src:url("file:///fonts/inconsolata-{name}.woff2") format("woff2"); unicode-range:{span}; }}\n'
-        for name, (_, span) in FONTS.items()
-    )
-    head = f'<!DOCTYPE html><html><head><meta charset="utf-8"><style>\n{faces}tt {{ font-family:{stack}; font-size:40px; line-height:1; white-space:pre; }}\ndiv {{ margin:0; }}\n</style></head><body>'
+    head = page_head(stack, fonts)
     codes = spans_codes()
     widths = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        environment = [
-            f"Font stack {stack}",
-            f"Chromium {browser.version}",
-            f"Playwright {subprocess.check_output(['pip', 'show', 'playwright'], text=True).split('Version: ', 1)[1].splitlines()[0]}",
-            f"Unicode {unicodedata.unidata_version}",
-        ]
-        packages = subprocess.check_output(
-            ['dpkg-query', '-W', '-f=${Package} ${Version} ${db:Status-Status}\\n', 'fonts-*'],
-            text=True,
-        )
-        environment.extend(installed_fonts(packages))
-        environment.append('Inconsolata v37 (Google Fonts), SHA-256: ' + ', '.join(
-            f'{name}={hashlib.sha256(Path(f"/fonts/inconsolata-{name}.woff2").read_bytes()).hexdigest()}' for name in FONTS
-        ))
-        environment.append('MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans')
+    with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
+        browser = launch(p, "chromium")
         page = browser.new_page(viewport={"width": 1200, "height": 800})
+        html = Path(tmp) / "widths.html"
         for start in range(0, len(codes), BATCH):
             rows = "".join(f'<div><tt data-c="{c}">あ<s>{chr(c)}</s>あ</tt></div>' for c in codes[start:start + BATCH])
-            Path("/tmp/widths.html").write_text(head + rows + "</body></html>", encoding="utf-8")
-            page.goto("file:///tmp/widths.html")
+            html.write_text(head + rows + "</body></html>", encoding="utf-8")
+            page.goto(html.as_uri())
             page.evaluate("document.fonts.ready")
             page.wait_for_timeout(300)
             widths.update(page.evaluate("""() => {
@@ -146,9 +191,10 @@ def measure(out, stack=STACK):
               }
               return out;
             }"""))
+        found = environment(browser, "chromium", stack, fonts)
         browser.close()
     nothing = [c for c in codes if unassigned(c)]
-    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing, "environment": environment}), encoding="utf-8")
+    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing, "environment": found}), encoding="utf-8")
 
 
 def cache():
@@ -156,26 +202,38 @@ def cache():
     return (mnt if mnt.is_dir() else Path.home() / ".cache/agent-cache") / "crosstune-jtotal-widths"
 
 
-def container():
-    """Downloads Inconsolata once, builds the image, and gives back the folder that holds the fonts' work files."""
-    work = cache()
-    (work / "fonts").mkdir(parents=True, exist_ok=True)
+def container_fonts():
+    """Downloads J-Total's three Inconsolata files once, and gives back their folder."""
+    fonts = cache() / "fonts"
+    fonts.mkdir(parents=True, exist_ok=True)
     for name, (url, _) in FONTS.items():
-        font = work / "fonts" / f"inconsolata-{name}.woff2"
+        font = fonts / f"inconsolata-{name}.woff2"
         if not font.exists():
             font.write_bytes(urllib.request.urlopen(url, timeout=60).read())
+    return fonts
+
+
+def container():
+    """Downloads Inconsolata once, builds the image, and gives back the folder that holds the fonts' work files."""
+    fonts = container_fonts()
     subprocess.run(["podman", "build", "-t", IMAGE, "-f", str(HERE / "Containerfile"), str(HERE)], check=True)
-    return work
+    return fonts.parent
+
+
+def run_in_container(work, script):
+    """Runs `python3 SCRIPT...` in the container, with `work` at /work, the fonts at /fonts and this folder at /script."""
+    fonts = container() / "fonts"
+    subprocess.run(
+        ["podman", "run", "--rm", "-v", f"{work}:/work", "-v", f"{fonts}:/fonts:ro", "-v", f"{HERE}:/script:ro",
+         "-e", "PYTHONPATH=/script", IMAGE, "python3", *script],
+        check=True,
+    )
 
 
 def in_container(mono=False):
     """Measures in the container and gives back the table text it makes."""
-    work = container()
-    subprocess.run(
-        ["podman", "run", "--rm", "-v", f"{work}:/work", "-v", f"{work / 'fonts'}:/fonts:ro", "-v", f"{HERE}:/script:ro",
-         IMAGE, "python3", "/script/jtotal_widths.py", "measure", "/work/raw.json", *(["--mono"] if mono else [])],
-        check=True,
-    )
+    work = cache()
+    run_in_container(work, ["/script/jtotal_widths.py", "measure", "/work/raw.json", *(["--mono"] if mono else [])])
     raw = json.loads((work / "raw.json").read_text(encoding="utf-8"))
     widths = {int(c): w for c, w in raw["widths"].items()}
     return "\n".join(header(raw["environment"]) + lines(runs(widths, set(raw["nothing"])))) + "\n"

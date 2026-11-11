@@ -3,6 +3,8 @@
 
   python3 scripts/jtotal-widths/compare_sheets.py crawl DIR URLS.txt [--limit N]
   python3 scripts/jtotal-widths/compare_sheets.py browser DIR            # DIR/browser.json
+  python3 scripts/jtotal-widths/compare_sheets.py draw DIR --fonts FONTS [--browser B] [--lang ja] [--out NAME.json]
+  python3 scripts/jtotal-widths/compare_sheets.py moves A.json B.json    # chords that sit over another letter in B
   python3 scripts/jtotal-widths/compare_sheets.py app DIR TAG [--old]    # DIR/app-TAG.jsonl
   python3 scripts/jtotal-widths/compare_sheets.py compare DIR TAG [--show N]
 
@@ -13,6 +15,12 @@ It reads where each chord link starts and where each letter of the line under it
 `app` runs `ChordSheets.fromJTotal`, the code of this checkout, on the same pages with a throwaway
 test that it puts in the app's test folder and takes out again. `--old` leaves out the font stack
 the page names and reads the page as Java's Shift_JIS, for a checkout from before the app did either.
+`draw` is what `browser` runs in the container. Run on another machine, it draws the pages with that
+machine's browser and fonts, such as a Mac's, and writes NAME.environment.txt beside the drawing.
+`moves` puts two drawings side by side: how many chords sit over another letter, by how many columns,
+which code points before them are drawn at another width, and how many chords start where a letter
+starts in each. An author lines a chord up with a letter on their own screen, so the drawing that puts
+more chords on a letter start is nearer to the one the sheets were written on.
 `compare` puts the two side by side: a chord is right when the app's letter is the one the browser's
 chord starts nearest to. Lines that the app and the browser read as other words or other chords
 are counted on their own, as nothing says which letter would be right there.
@@ -24,6 +32,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from collections import Counter
@@ -219,13 +228,8 @@ def crawl(directory, urls, limit):
 
 
 def browser_in_container(directory):
-    from jtotal_widths import container
-    work = container()
-    subprocess.run(
-        ["podman", "run", "--rm", "-v", f"{directory}:/crawl", "-v", f"{work / 'fonts'}:/fonts:ro", "-v", f"{HERE}:/script:ro",
-         "-e", "PYTHONPATH=/script", "localhost/crosstune-jtotal-widths", "python3", "/script/compare_sheets.py", "draw", "/crawl"],
-        check=True,
-    )
+    from jtotal_widths import run_in_container
+    run_in_container(directory, ["/script/compare_sheets.py", "draw", "/work", "--fonts", "/fonts"])
 
 
 def app_run(directory, tag, old):
@@ -256,20 +260,22 @@ def app_run(directory, tag, old):
 
 # The step that runs in the container.
 
-def draw(directory):
+def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, out="browser.json"):
+    """Draws every page in `browser_name` on this machine, with its fonts, and writes where the letters are to `out`."""
     from playwright.sync_api import sync_playwright
-    from jtotal_widths import FONTS
+    from jtotal_widths import FONTS, environment, launch
 
     css = (directory / "dat_st.css").read_bytes().decode(CHARSET, "replace")
     faces = "".join(
-        f'@font-face{{font-family:Inconsolata;src:url(file:///fonts/inconsolata-{n}.woff2);unicode-range:{s}}}'
+        f'@font-face{{font-family:Inconsolata;src:url({(fonts / f"inconsolata-{n}.woff2").resolve().as_uri()});unicode-range:{s}}}'
         for n, (_, s) in FONTS.items()
     )
     pages = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900}, device_scale_factor=4)
+    with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
+        browser = launch(p, browser_name, lang)
+        page = browser.new_page(viewport={"width": 1280, "height": 900}, device_scale_factor=4, locale=lang)
         page.route("**/*", lambda r: r.continue_() if r.request.url.startswith("file:") else r.abort())
+        html = Path(tmp) / "sheet.html"
         for item in json.loads((directory / "urls.json").read_text(encoding="utf-8")):
             raw = (directory / "sheets" / item["file"]).read_bytes().decode(CHARSET, "replace")
             if "<!--HPSTART-->" not in raw:
@@ -278,23 +284,118 @@ def draw(directory):
             text = re.sub(r"(?is)<script\b.*?</script[^>]*>", "", text)
             text = re.sub(r"(?i)charset=.?[A-Za-z_0-9-]+.?", 'charset="utf-8"', text)
             text = text.replace("</head>", "<style>" + faces + " *{font-size:40px !important}</style></head>", 1)
-            Path("/tmp/sheet.html").write_text(text, encoding="utf-8")
-            page.goto("file:///tmp/sheet.html")
+            html.write_text(text, encoding="utf-8")
+            page.goto(html.as_uri())
             page.evaluate("document.fonts.ready")
             pages.append({**page.evaluate(JS), "url": item["url"]})
+        found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, "the page's own", fonts)
         browser.close()
-    (directory / "browser.json").write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
+    (directory / out).write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
+    (directory / out).with_suffix(".environment.txt").write_text("\n".join(found + [f"Browser language {lang or 'as Playwright starts it'}"]) + "\n", encoding="utf-8")
     print(f"{len(pages)} sheets drawn")
+
+
+def drawn_lines(page):
+    """The chord lines of a drawn page, keyed by their words and chords, each with where its chords and letters are."""
+    lines, result, i = clean(page)["lines"], [], 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if not line["chords"]:
+            continue
+        words = lines[i] if i < len(lines) and not lines[i]["chords"] else None
+        if words is not None:
+            i += 1
+        chars = words["chars"] if words else []
+        text = "".join(c["c"] for c in chars).strip(" ")
+        result.append({"key": (text, tuple(chord_name(c) for c in line["chords"])), "chars": chars, "chords": line["chords"], "x0": page["x0"]})
+    return result
+
+
+def starts(chars):
+    """Where each letter starts, by its index in UTF-16 units, and where the line ends."""
+    found, index = {}, 0
+    for char in chars:
+        found[index] = char["left"]
+        index += utf16_length(char["c"])
+    if chars:
+        found[index] = chars[-1]["right"]
+    return found
+
+
+def on_a_start(chars, left):
+    """True when a chord starts where a letter of the words under it starts: the author lined it up there."""
+    return any(abs(start - left) <= EPSILON for start in starts(chars).values())
+
+
+def moves(a_pages, b_pages, digit=20.0):
+    """Chords that sit over another letter in drawing B than in drawing A, on sheets both drew.
+
+    Gives the counts, a Counter of how many columns of A each move is, and a Counter of the code points
+    before a moved chord that B draws at another width than A.
+    """
+    by_url = {page["url"]: page for page in b_pages}
+    counts, shifts, culprits = Counter(), Counter(), Counter()
+    for a_page in a_pages:
+        b_page = by_url.get(a_page["url"])
+        if b_page is None:
+            counts["sheets only A drew"] += 1
+            continue
+        stack = "mono" if a_page["font"] == MONO else "main"
+        counts[f"sheets ({stack} stack)"] += 1
+        a_lines, b_lines = drawn_lines(a_page), drawn_lines(b_page)
+        matcher = difflib.SequenceMatcher(None, [x["key"] for x in a_lines], [x["key"] for x in b_lines], autojunk=False)
+        moved_here = False
+        for i, j, size in matcher.get_matching_blocks():
+            for k in range(size):
+                a_line, b_line = a_lines[i + k], b_lines[j + k]
+                a_starts = starts(a_line["chars"])
+                for a_chord, b_chord in zip(a_line["chords"], b_line["chords"]):
+                    counts[f"chords ({stack} stack)"] += 1
+                    counts[f"chords on a letter start in A ({stack} stack)"] += on_a_start(a_line["chars"], a_chord["left"])
+                    counts[f"chords on a letter start in B ({stack} stack)"] += on_a_start(b_line["chars"], b_chord["left"])
+                    a_at = letter_at(a_line["chars"], a_line["x0"], a_chord["left"])
+                    b_at = letter_at(b_line["chars"], b_line["x0"], b_chord["left"])
+                    if a_at == b_at:
+                        continue
+                    moved_here = True
+                    counts[f"chords on another letter ({stack} stack)"] += 1
+                    shifts[(stack, round((a_starts[b_at] - a_starts[a_at]) / digit, 1))] += 1
+                    # A space drawn at no width is left out of a drawing, so the letters pair up only when both kept the same ones.
+                    paired = [x["c"] for x in a_line["chars"]] == [x["c"] for x in b_line["chars"]]
+                    for a_char, b_char in zip(a_line["chars"], b_line["chars"]) if paired else ():
+                        if a_char["left"] >= a_chord["left"] - EPSILON:
+                            break
+                        if abs((a_char["right"] - a_char["left"]) - (b_char["right"] - b_char["left"])) > EPSILON:
+                            culprits[(stack, ord(a_char["c"][0]))] += 1
+        counts[f"sheets with a chord on another letter ({stack} stack)"] += moved_here
+    return counts, shifts, culprits
+
+
+def moves_main(a_path, b_path, show):
+    counts, shifts, culprits = moves(*(json.loads(Path(path).read_text(encoding="utf-8")) for path in (a_path, b_path)))
+    for name, value in sorted(counts.items()):
+        print(f"{value:7d}  {name}")
+    print("\nHow far a moved chord goes, in columns of A (stack, columns, chords):")
+    for (stack, columns), value in sorted(shifts.items()):
+        print(f"  {stack:4} {columns:+5.1f} {value}")
+    print("\nCode points before a moved chord that B draws at another width (stack, code point, chords):")
+    for (stack, code), value in culprits.most_common(show or None):
+        print(f"  {stack:4} U+{code:04X} {value}")
 
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=("crawl", "browser", "draw", "app", "compare"))
+    parser.add_argument("command", choices=("crawl", "browser", "draw", "app", "compare", "moves"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("extra", nargs="?")
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--old", action="store_true")
     parser.add_argument("--show", type=int, default=0)
+    parser.add_argument("--fonts", type=Path, default=Path("/fonts"))
+    parser.add_argument("--browser", default="chromium")
+    parser.add_argument("--lang")
+    parser.add_argument("--out", default="browser.json")
     args = parser.parse_args(argv)
     directory = args.directory.resolve()
     if args.command == "crawl":
@@ -302,9 +403,11 @@ def main(argv):
     elif args.command == "browser":
         browser_in_container(directory)
     elif args.command == "draw":
-        draw(directory)
+        draw(directory, args.fonts, args.browser, args.lang, args.out)
     elif args.command == "app":
         app_run(directory, args.extra, args.old)
+    elif args.command == "moves":
+        moves_main(directory, Path(args.extra), args.show)
     else:
         total, examples = compare(json.loads((directory / "browser.json").read_text(encoding="utf-8")), read_app(directory / f"app-{args.extra}.jsonl"))
         for name, value in total.items():
