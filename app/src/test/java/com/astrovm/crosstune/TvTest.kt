@@ -15,12 +15,12 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -39,6 +39,11 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.assertIsDisplayed
+import org.robolectric.RuntimeEnvironment
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.core.app.ApplicationProvider
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import kotlinx.coroutines.Dispatchers
@@ -444,20 +449,86 @@ class TvTest {
         val jmdict = composeRule.onNode(hasText("JMdict") and hasClickAction())
         jmdict.assertIsFocused()
 
-        // Opened, the remote steps down to where it is, then through the licence a paragraph at a time.
+        // Opened, the remote steps down to where it is, then through the licence a piece at a time.
         pressOnFocused(Key.DirectionCenter)
         pressOnFocused(Key.DirectionDown)
-        composeRule.onNode(hasText("www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project") and hasClickAction()).assertIsFocused()
-        val licence = licenseParagraphs(Notices.text(Notices.all.first()))
+        composeRule.onNode(hasText("www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project") and hasClickAction()).assertIsFocused()
+        val licence = licenseUnits(Notices.text(Notices.all.first())).map { it.text }
         repeat(30) { pressOnFocused(Key.DirectionDown) }
         val at = focused().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
         assertEquals(licence[29], at)
-        // Scrolled with it, far from the top.
-        jmdict.assertIsNotDisplayed()
+        // Scrolled with it, far from the top: the list no longer draws the first work.
+        assertTrue(composeRule.onAllNodes(hasText("JMdict") and hasClickAction()).fetchSemanticsNodes().isEmpty())
 
         checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
         composeRule.waitForIdle()
         licenses.assertIsFocused()
+    }
+
+    private fun licensesByRemote() {
+        settingsByRemote()
+        composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction()).performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+    }
+
+    private fun list() = composeRule.onNode(hasScrollToNodeAction())
+
+    private fun scrollTo(matcher: SemanticsMatcher) {
+        list().performScrollToNode(matcher)
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun onATvAtTheLargestFontEveryWorkAndEachPieceOfTheLongestLicencesFitsTheScreen() {
+        RuntimeEnvironment.setFontScale(2f)
+        try {
+            licensesByRemote()
+            val screen = list().fetchSemanticsNode().boundsInRoot.height
+            Notices.all.forEach { notice ->
+                val row = hasText(notice.name) and hasClickAction()
+                scrollTo(row)
+                assertTrue(notice.name, composeRule.onNode(row).fetchSemanticsNode().boundsInRoot.height <= screen)
+            }
+            // The pieces that take the most lines, each in its work, opened.
+            val tallest = Notices.all.flatMap { notice -> licenseUnits(Notices.text(notice)).map { notice to it.text } }
+                .sortedByDescending { (_, text) -> text.lines().sumOf { it.length / 40 + 1 } }.take(3)
+            tallest.forEach { (notice, text) ->
+                val row = hasText(notice.name) and hasClickAction()
+                scrollTo(row)
+                composeRule.onNode(row).performClick()
+                composeRule.waitForIdle()
+                val piece = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(text)))
+                scrollTo(piece)
+                assertTrue(text.take(60), composeRule.onNode(piece).fetchSemanticsNode().boundsInRoot.height <= screen)
+                scrollTo(row)
+                composeRule.onNode(row).performClick()
+                composeRule.waitForIdle()
+            }
+        } finally {
+            RuntimeEnvironment.setFontScale(1f)
+        }
+    }
+
+    @Test
+    fun onATvTheLicensesMadeAgainKeepTheWorkOpenWhereItWasAndWhatTheRemoteWasOn() {
+        licensesByRemote()
+        // A later work, opened and read a way in.
+        val work = Notices.all.first { it.name == "projectM" }
+        val row = hasText(work.name) and hasClickAction()
+        scrollTo(row)
+        composeRule.onNode(row).requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        repeat(12) { pressOnFocused(Key.DirectionDown) }
+        val reading = focused().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+        assertTrue(reading in licenseUnits(Notices.text(work)).map { it.text })
+
+        controller = checkNotNull(controller).recreate()
+        composeRule.waitForIdle()
+
+        // Still open, still there, the remote still on what it was on, not thrown back to the first work.
+        val piece = SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(AnnotatedString(reading)))
+        composeRule.onNode(piece).assertIsDisplayed().assertIsFocused()
+        assertTrue(composeRule.onAllNodes(hasText("JMdict") and hasClickAction() and isFocused()).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

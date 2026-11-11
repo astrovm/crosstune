@@ -23,8 +23,8 @@ internal object Notices {
     /** Every notice, in the file's order. Read when the page first opens. */
     val all: List<Notice> by lazy { parse(read("notices.txt")) }
 
-    /** [notice]'s licence texts and notices, one after the other. */
-    fun text(notice: Notice): String = notice.texts.joinToString("\n\n") { read(it).trimEnd() }
+    /** [notice]'s licence texts and notices, one after the other; some are copied with Windows' line ends. */
+    fun text(notice: Notice): String = notice.texts.joinToString("\n\n") { read(it).replace("\r\n", "\n").trimEnd() }
 
     /** The blocks of [text]: a name, then `key: value` lines; `#` lines are comments. */
     internal fun parse(text: String): List<Notice> =

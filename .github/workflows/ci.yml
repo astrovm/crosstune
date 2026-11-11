@@ -103,6 +103,7 @@ jobs:
           python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
           python3 -m unittest discover -s scripts/emulator -p "test_*.py"
           python3 -m unittest scripts/test_devicelock.py
+          python3 -m unittest scripts/test_notices.py
           python3 -m unittest discover -s scripts/record -p "test_*.py"
           python3 -m unittest discover -s scripts/reports -p "test_*.py"
           python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
@@ -246,7 +247,7 @@ jobs:
           update-package-index: true
 
       - name: Build
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --build-cache --configuration-cache
+        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:notices --build-cache --configuration-cache
         env:
           # CMake reads these to put ccache in front of the NDK's compilers.
           CMAKE_C_COMPILER_LAUNCHER: ccache

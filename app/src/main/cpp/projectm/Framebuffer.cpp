@@ -1,8 +1,11 @@
-// projectM's Renderer/Framebuffer.cpp, with one change: SetSize keeps the picture, stretched into the
-// new size, rather than starting over from black. The visuals change size while they play, drawn
-// smaller when the phone can't keep up and sharper when it can, and a preset's picture builds on its
-// last frame, so starting over would flash black and lose its trails each time. CMakeLists.txt
-// builds this in place of projectM's own, and stops if that one changes, to bring the change over.
+// projectM's Renderer/Framebuffer.cpp (v4.1.8), changed by Crosstune (https://github.com/astrovm/crosstune):
+//   2026-11-03: SetSize keeps the picture.
+//   2026-11-08: MaskDrawBuffer has its own body for OpenGL ES, which doesn't use the buffer index.
+// SetSize keeps the picture, stretched into the new size, rather than starting over from black. The
+// visuals change size while they play, drawn smaller when the phone can't keep up and sharper when it
+// can, and a preset's picture builds on its last frame, so starting over would flash black and lose its
+// trails each time. CMakeLists.txt builds this in place of projectM's own, and stops if that one
+// changes, to bring the change over.
 #include "Framebuffer.hpp"
 
 namespace libprojectM {

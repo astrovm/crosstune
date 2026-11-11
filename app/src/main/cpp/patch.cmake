@@ -4,10 +4,14 @@
 # text it replaces: if an update moves that text, or says it twice, the configure stops here, so the
 # fix is looked at again, and dropped once upstream has it.
 
-# crosstune_patch(<source file> <copy> <old text> <new text>): writes <copy> from <source file>, with
-# <old text> replaced by <new text>. It rewrites the copy only when it changed, so a configure that
-# changes nothing doesn't compile everything again.
-function(crosstune_patch source copy old new)
+# crosstune_patch(<source file> <copy> <old text> <new text> <change>): writes <copy> from <source file>,
+# with <old text> replaced by <new text>, and a first line that says the file was changed, when and how
+# (<change>, "YYYY-MM-DD: what"), as the LGPL asks of a changed file. It rewrites the copy only when it
+# changed, so a configure that changes nothing doesn't compile everything again.
+function(crosstune_patch source copy old new change)
+    if(NOT change MATCHES "^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]: ")
+        message(FATAL_ERROR "The change to ${source} needs its date first: \"YYYY-MM-DD: what\"")
+    endif()
     file(READ "${source}" content)
     string(FIND "${content}" "${old}" first)
     string(FIND "${content}" "${old}" last REVERSE)
@@ -15,6 +19,7 @@ function(crosstune_patch source copy old new)
         message(FATAL_ERROR "${source} no longer has \"${old}\" exactly once: look at what the update did, and drop or redo the fix in app/src/main/cpp/")
     endif()
     string(REPLACE "${old}" "${new}" patched "${content}")
+    set(patched "// Changed by Crosstune (https://github.com/astrovm/crosstune) on ${change}\n${patched}")
     set(existing "")
     if(EXISTS "${copy}")
         file(READ "${copy}" existing)

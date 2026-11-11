@@ -1,5 +1,7 @@
 import java.lang.management.ManagementFactory
+import java.util.zip.ZipFile
 import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
+import org.gradle.api.artifacts.FileCollectionDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
@@ -225,9 +227,10 @@ dependencies {
 // Everything CI verifies, so `./gradlew :app:ci` locally runs exactly what the CI job does.
 tasks.register("ci") {
     group = "verification"
-    description = "Unit tests with the 100% line and 88% branch coverage gates, lint, detekt, and the debug and minified release APKs."
+    description = "Unit tests with the 100% line and 88% branch coverage gates, the notices check, lint, detekt, and the debug and minified release APKs."
     dependsOn(
         "testDebugUnitTest",
+        "notices",
         ":pitest-changed-lines:test",
         "koverLogDebug",
         "koverXmlReportDebug",
@@ -324,21 +327,67 @@ val robolectricDeps = tasks.register("robolectricDeps") {
     }
 }
 
-// The libraries in the release APK, a group:module a line, for NoticesTest: it fails when one has no
-// notice in Settings → About → Licenses, so a new library, or one a new version brings in, gets one.
+// What the release APK is built from, for the notices task: a line per library, "maven group:module",
+// with "maven group:module!path" for each licence or notice file it carries, and "file path" for each
+// file the app depends on outside Maven. The notices task fails when one has no notice in Settings →
+// About → Licenses, so a new library, or one a new version brings in, gets one.
 val releaseLibraries = tasks.register("releaseLibraries") {
-    val libraries = configurations.named("releaseRuntimeClasspath").flatMap { it.incoming.resolutionResult.rootComponent }.map { root ->
+    val runtime = configurations.named("releaseRuntimeClasspath")
+    val libraries = runtime.flatMap { it.incoming.resolutionResult.rootComponent }.map { root ->
         val seen = mutableSetOf<ResolvedComponentResult>()
         fun walk(component: ResolvedComponentResult) {
             if (seen.add(component)) component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { walk(it.selected) }
         }
         walk(root)
-        seen.mapNotNull { it.id as? ModuleComponentIdentifier }.map { "${it.group}:${it.module}" }.distinct().sorted()
+        seen.mapNotNull { it.id as? ModuleComponentIdentifier }.map { "${it.group}:${it.module}" }.distinct()
+    }
+    // Each library's Java resources, which the APK packs as they are, licence and notice files too.
+    val resources = runtime.flatMap { configuration ->
+        configuration.incoming.artifactView {
+            attributes { attribute(Attribute.of("artifactType", String::class.java), "android-java-res") }
+        }.artifacts.resolvedArtifacts
+    }.map { artifacts ->
+        artifacts.mapNotNull { artifact -> (artifact.id.componentIdentifier as? ModuleComponentIdentifier)?.let { "${it.group}:${it.module}" to artifact.file } }
+    }
+    val root = rootDir
+    val files = runtime.map { configuration ->
+        configuration.allDependencies.withType<FileCollectionDependency>().flatMap { it.files.files }.map { "file " + it.relativeTo(root).invariantSeparatorsPath }
     }
     val out = layout.buildDirectory.file("notices/release-libraries.txt")
     inputs.property("libraries", libraries)
+    inputs.property("files", files)
+    inputs.files(resources.map { list -> list.map { it.second } })
     outputs.file(out)
-    doLast { out.get().asFile.writeText(libraries.get().joinToString("") { "$it\n" }) }
+    doLast {
+        val notice = Regex("(?i)(^|/)(notice|license|licence|copying|authors|contributors|third[-_]?party)[^/]*$")
+        val carried = resources.get().flatMap<Pair<String, File>, String> { (library, file) ->
+            val names = when {
+                file.isDirectory -> file.walkTopDown().filter { it.isFile }.map { it.relativeTo(file).invariantSeparatorsPath }.toList()
+                file.isFile -> ZipFile(file).use { zip -> zip.entries().toList().filterNot { it.isDirectory }.map { it.name } }
+                else -> emptyList<String>()
+            }
+            names.filter { notice.containsMatchIn(it) }.map { "maven $library!$it" }
+        }
+        val lines = libraries.get().map { "maven $it" } + carried + files.get()
+        out.get().asFile.writeText(lines.distinct().sorted().joinToString("") { "$it\n" })
+    }
+}
+
+// The notices check: every library, submodule, compiled source, bundled file and download in the
+// release APK has a notice in Settings → About → Licenses, and each licence text is the one copied
+// from its source. It reads the release build's native compile logs, so it builds those first.
+val notices = tasks.register<Test>("notices") {
+    group = "verification"
+    description = "Fails on anything in the release APK with no notice in Settings → About → Licenses."
+    val unitTests = tasks.named<Test>("testDebugUnitTest").get()
+    testClassesDirs = unitTests.testClassesDirs
+    classpath = unitTests.classpath
+    filter.includeTestsMatching("com.astrovm.crosstune.notices.*")
+    dependsOn("mergeReleaseNativeLibs", releaseLibraries)
+    systemProperty("notices.libraries", layout.buildDirectory.file("notices/release-libraries.txt").get().asFile.path)
+    systemProperty("notices.cxx", layout.projectDirectory.dir(".cxx/RelWithDebInfo").asFile.path)
+    inputs.dir(rootProject.layout.projectDirectory.dir("app/src/main"))
+    outputs.upToDateWhen { false }
 }
 
 // Robolectric's Android 16 runtime reaches into JDK internals, its native graphics load a library,
@@ -353,9 +402,10 @@ val robolectricJvmArgs = listOf(
 tasks.withType<Test>().configureEach {
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
     if (name != "songCheck") filter.excludeTestsMatching("com.astrovm.crosstune.songcheck.*")
-    dependsOn(robolectricDeps, releaseLibraries)
+    if (name != "notices") filter.excludeTestsMatching("com.astrovm.crosstune.notices.*")
+    // The notices check runs no app code, so it needs no Android runtime.
+    if (name != "notices") dependsOn(robolectricDeps)
     systemProperty("robolectric-deps.properties", layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path)
-    systemProperty("notices.libraries", layout.buildDirectory.file("notices/release-libraries.txt").get().asFile.path)
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
     // Two test processes, each with that heap, where there's room for them, like CI's runner:
@@ -387,8 +437,9 @@ pitest {
     targetClasses.set(providers.gradleProperty("mutateClasses").map { it.split(",") }.orElse(listOf("com.astrovm.crosstune.*")))
     providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
     providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }
-    // The store's screenshots aren't tests of what the app does, and take long to draw; the song check asks real services.
-    excludedTestClasses.set(listOf("com.astrovm.crosstune.shots.*", "com.astrovm.crosstune.songcheck.*"))
+    // The store's screenshots aren't tests of what the app does, and take long to draw; the song check asks real services;
+    // the notices check reads the build, not the app.
+    excludedTestClasses.set(listOf("com.astrovm.crosstune.shots.*", "com.astrovm.crosstune.songcheck.*", "com.astrovm.crosstune.notices.*"))
     threads.set(2)
     // A fresh test process takes some seconds to start Robolectric, more than PIT allows a test by default.
     timeoutConstInMillis.set(30_000)
@@ -399,7 +450,7 @@ pitest {
     // Each mutant's classes are loaded again, and their adapters and stubs fill the JIT's small code
     // heap for them long before the Java heap fills, which PIT reports as a MEMORY_ERROR. One code
     // cache, unsplit, gives them the room.
-    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path, "-Dnotices.libraries=" + layout.buildDirectory.file("notices/release-libraries.txt").get().asFile.path))
+    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
 }
 
 // After the plugin's own setup, which gives the tests only what they compile against.
@@ -408,7 +459,7 @@ afterEvaluate {
         providers.gradleProperty("mutateLines").orNull?.let {
             inputs.file(it).withPathSensitivity(PathSensitivity.NONE)
         }
-        dependsOn(robolectricDeps, releaseLibraries)
+        dependsOn(robolectricDeps)
         // What the unit tests run with, like the app's resources, which Robolectric reads. The app's own
         // classes come from the folders PIT mutates, not the jar the tests get, or PIT finds nothing to mutate.
         additionalClasspath.setFrom(

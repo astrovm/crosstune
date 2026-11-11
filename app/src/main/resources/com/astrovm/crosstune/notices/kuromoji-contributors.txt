@@ -1,7 +1,3 @@
-# Kuromoji Japanese Morphological Analyzer
-
-Copyright 2010-2015 Atilika Inc. and contributors (see `CONTRIBUTORS.md`)
-
 # Authors
 
 * Gaute Lambertsen

@@ -76,6 +76,11 @@ jobs:
       - name: Test, lint and build
         run: ./gradlew :app:ci :app:bundleRelease --build-cache
 
+      # Each licence text in Settings → About → Licenses is still the one its work publishes, fetched
+      # again; the NDK's own notice is read from the NDK the build above installed.
+      - name: Check licence texts against their sources
+        run: python3 scripts/notices.py check
+
       - name: Verify version metadata
         run: |
           expected="${TAG#v}"

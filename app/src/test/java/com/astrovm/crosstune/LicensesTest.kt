@@ -3,7 +3,9 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
@@ -71,44 +74,61 @@ class LicensesTest {
         composeRule.waitForIdle()
     }
 
-    private fun work(name: String) = composeRule.onNode(hasText(name) and hasClickAction())
+    /** The list draws only what's on screen: scrolled to [matcher] first, so it's there to find. */
+    private fun scrollTo(matcher: SemanticsMatcher) {
+        composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(matcher)
+        composeRule.waitForIdle()
+    }
+
+    private fun work(name: String) = (hasText(name) and hasClickAction()).let { scrollTo(it); composeRule.onNode(it) }
+
+    private fun text(words: String) = scrollTo(hasText(words, substring = true)).let { composeRule.onAllNodesWithText(words, substring = true).onFirst() }
 
     @Test
     fun aboutOpensTheLicensesWithJmdictsAcknowledgementAndEveryWork() {
         openLicenses()
         // JMdict's acknowledgement, as its licence asks of an app: who made it, its licence, and that it was changed.
-        work("JMdict").performScrollTo()
+        work("JMdict")
         assertTrue(shown("Electronic Dictionary Research and Development Group · CC BY-SA 4.0"))
         assertTrue(shown("word lists made from JMdict are changed"))
         assertTrue(shown("https://www.edrdg.org/edrdg/licence.html"))
+        // Opened, its licence, CC BY-SA's and JMdict's documentation, as the licence asks.
+        work("JMdict").performClick()
+        composeRule.waitForIdle()
+        text("ELECTRONIC DICTIONARY RESEARCH AND DEVELOPMENT GROUP").assertExists()
+        text("Attribution-ShareAlike 4.0 International").assertExists()
+        text("JMdict-EDICT Dictionary Project").assertExists()
+        work("JMdict").performClick()
+        composeRule.waitForIdle()
         // The works the app is built from, by name, each with a row of its own.
         val names = listOf(
-            "Kuromoji", "IPADIC", "UniDic", "projectM", "whisper.cpp and ggml", "Whisper tiny speech model", "MilkDrop presets",
+            "Kuromoji", "IPADIC", "UniDic", "projectM", "whisper.cpp and ggml", "Whisper", "MilkDrop presets",
             "MilkDrop textures", "Shizuku API", "OkHttp and Okio", "Guava", "AndroidX, Jetpack Compose and Media3",
             "Kotlin and kotlinx.coroutines", "Reorderable"
         )
-        (names + Notices.all.map { it.name }).distinct().forEach { work(it).performScrollTo().assertExists() }
+        (names + Notices.all.map { it.name }).distinct().forEach { work(it).assertExists() }
     }
 
     @Test
     fun aWorkOpensToItsFullLicenceAndWhereItIsWhichOpensOnlyOnATap() {
         openLicenses()
         assertTrue(!shown("GNU LESSER GENERAL PUBLIC LICENSE"))
-        work("projectM").performScrollTo().performClick()
+        work("projectM").performClick()
         composeRule.waitForIdle()
         // projectM's own notice, then the LGPL's whole text.
-        composeRule.onAllNodesWithText("projectM -- Milkdrop-esque visualisation SDK", substring = true).onFirst().performScrollTo().assertExists()
-        composeRule.onAllNodesWithText("GNU LESSER GENERAL PUBLIC LICENSE", substring = true).onFirst().performScrollTo().assertExists()
-        composeRule.onAllNodesWithText("END OF TERMS AND CONDITIONS", substring = true).onFirst().performScrollTo().assertExists()
+        text("projectM -- Milkdrop-esque visualisation SDK").assertExists()
+        text("GNU LESSER GENERAL PUBLIC LICENSE").assertExists()
+        text("END OF TERMS AND CONDITIONS").assertExists()
         assertEquals(null, shadowOf(app).nextStartedActivity)
 
-        composeRule.onNodeWithText("github.com/projectM-visualizer/projectm").performScrollTo().performClick()
+        scrollTo(hasText("github.com/projectM-visualizer/projectm"))
+        composeRule.onNodeWithText("github.com/projectM-visualizer/projectm").performClick()
         val started = shadowOf(app).nextStartedActivity
         assertEquals(Intent.ACTION_VIEW, started.action)
         assertEquals("https://github.com/projectM-visualizer/projectm", started.dataString)
 
         // Tapped again, it closes.
-        work("projectM").performScrollTo().performClick()
+        work("projectM").performClick()
         composeRule.waitForIdle()
         assertTrue(!shown("GNU LESSER GENERAL PUBLIC LICENSE"))
     }
@@ -116,10 +136,10 @@ class LicensesTest {
     @Test
     fun theIpadicNoticeIsReproducedInFull() {
         openLicenses()
-        work("IPADIC").performScrollTo().performClick()
+        work("IPADIC").performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("Nara Institute of Science and Technology (NAIST)", substring = true).onFirst().performScrollTo().assertExists()
-        composeRule.onAllNodesWithText("Each user will be deemed to have agreed", substring = true).onFirst().performScrollTo().assertExists()
+        text("Nara Institute of Science and Technology (NAIST)").assertExists()
+        text("Each user will be deemed to have agreed").assertExists()
     }
 
     @Test
