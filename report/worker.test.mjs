@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import * as all from "./worker.js";
-import worker, { networkDayKey, readReport } from "./worker.js";
+import worker, { networkDayKey, readReport, sameKey } from "./worker.js";
 
 /**
  * D1 and the rate limit, as a test needs them: the reports saved, every other statement asked, and whether the
@@ -118,6 +118,21 @@ test("a report passed on by the old address isn't counted again", async () => {
   const none = env({ allowed: false });
   assert.equal((await worker.fetch(post(song, { headers: { "X-Crosstune-Passed-On": "" } }), none)).status, 429);
   assert.equal(e.saved.length, 1);
+});
+
+test("the old address's key is compared in constant time, by digests of the same length", async (t) => {
+  assert.equal(await sameKey("made-up-key", "made-up-key"), true);
+  for (const given of ["made-up-kez", "made-up-key ", "made", "", null, undefined]) assert.equal(await sameKey(given, "made-up-key"), false, String(given));
+  assert.equal(await sameKey("made-up-key", undefined), false);
+  assert.equal(await sameKey("", ""), false);
+  // Both go through SHA-256 first, so how long the compare takes says nothing of how much of the key was right.
+  const digest = t.mock.method(crypto.subtle, "digest");
+  await sameKey("made-up-kez", "made-up-key");
+  assert.equal(digest.mock.callCount(), 2);
+  // And the Worker uses it.
+  const e = { ...env({ allowed: false }), FORWARD_KEY: "made-up-key" };
+  await worker.fetch(post(song, { headers: { "X-Crosstune-Passed-On": "made-up-key" } }), e);
+  assert.ok(digest.mock.callCount() >= 4);
 });
 
 test("past the limit, nothing is kept", async () => {

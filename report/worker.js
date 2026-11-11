@@ -102,7 +102,7 @@ export default {
     if (Number(request.headers.get("Content-Length") ?? 0) > MAX_BYTES) return status(413);
     // A report the old address passes on (forward.js) was counted there for the minute, against its sender's own
     // address, which it passes on too. From here they all come from Cloudflare's, and would count as one sender.
-    const passedOn = !!env.FORWARD_KEY && request.headers.get("X-Crosstune-Passed-On") === env.FORWARD_KEY;
+    const passedOn = await sameKey(request.headers.get("X-Crosstune-Passed-On"), env.FORWARD_KEY);
     const address = (passedOn ? request.headers.get("X-Crosstune-Sender") : null) ?? request.headers.get("CF-Connecting-IP");
     if (!passedOn) {
       const { success } = await env.LIMIT.limit({ key: senderKey(address) });
@@ -164,6 +164,18 @@ function refused(code, why) {
 /** Counts a report turned away today for [why], or for the cap reached when it's null, up to [MAX_REFUSALS]. */
 async function refuse(env, why) {
   await env.DB.prepare(REFUSE).bind(why).run();
+}
+
+/**
+ * Whether [given] is [key], compared in constant time: both are hashed with SHA-256 first, so the compare is always
+ * of 32 bytes, and how long it takes says nothing of how much of the key was right. No key, or an empty one, is none.
+ */
+export async function sameKey(given, key) {
+  if (!given || !key) return false;
+  const [a, b] = await Promise.all([given, key].map(async (it) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(it)))));
+  let differ = 0;
+  for (let i = 0; i < a.length; i++) differ |= a[i] ^ b[i];
+  return differ === 0;
 }
 
 /**
