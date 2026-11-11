@@ -5,10 +5,12 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir "$work/bin" "$work/gh"
-# A file fail-pr-create (or fail-workflow-run, ...) makes that call fail once, saying what the file holds.
+# A file fail-pr-create (or fail-pr-list, ...) makes that call fail once, saying what the file holds.
+# Every call also goes to all-calls, which no case clears.
 cat > "$work/bin/gh" <<'FAKE'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE/calls"
+echo "$*" >> "$FAKE/all-calls"
 if [ -f "$FAKE/fail-$1-$2" ]; then cat "$FAKE/fail-$1-$2" >&2; rm "$FAKE/fail-$1-$2"; exit 1; fi
 case "$1 $2" in
   "pr list") [ -f "$FAKE/open" ] && cat "$FAKE/open"; exit 0 ;;
@@ -70,19 +72,20 @@ grep -q "already what JMdict" "$work/out" || fail "no notice for the same lists"
 [ -z "$(calls)" ] || fail "asked gh with nothing to propose"
 git ls-remote --exit-code origin "$BRANCH" > /dev/null && fail "pushed with nothing to propose"
 
-# New lists and no branch yet: one commit by the workflow, a new pull request, and CI started on it.
+# New lists and no branch yet: one commit by the workflow and a new pull request, whose body asks a
+# person to approve its runs.
 remade ""
 propose || { cat "$work/out"; fail "first proposal failed"; }
 [ "$(git log --format=%ae%n%s -1 "origin/$BRANCH")" = "$(printf '%s\n%s' '41898282+github-actions[bot]@users.noreply.github.com' 'chore(readings): remake the JMdict word lists from JMdict 2000-02-01')" ] || fail "commit not the workflow's"
 [ "$(git rev-list --count "origin/main..origin/$BRANCH")" = 1 ] || fail "not one commit on main"
 grep -q "pr create --head $BRANCH --base main --title chore(readings): remake the JMdict word lists from JMdict 2000-02-01" "$FAKE/calls" || fail "no pull request opened"
-[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started last"
+grep -qxF "To run CI, select **Approve workflows to run** at the bottom of this pull request." "$FAKE/body" || fail "body doesn't ask a person to approve the runs"
 grep -q "were from JMdict 2000-01-01" "$FAKE/body" || fail "body lacks the old date"
 grep -q "jmdict-simplified \`$TAG\` (JMdict 2000-02-01)" "$FAKE/body" || fail "body lacks the release"
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff"
 
 # The same lists again, branch already on main: nothing pushed, the open pull request kept up to date
-# with origin's branch, as the checkout has no local one, and CI started again.
+# with origin's branch, as the checkout has no local one.
 remade "" && rm "$FAKE/calls"
 pushed=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
 propose || { cat "$work/out"; fail "second run failed"; }
@@ -90,28 +93,17 @@ grep -q "already has the word lists" "$work/out" || fail "no notice for a branch
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff of origin's branch"
 [ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$pushed" ] || fail "pushed a branch already up to date"
 grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not kept up to date"
-[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started for a branch already up to date"
 
-# A run pushed the branch, then gh failed: the next run with the same lists opens the pull request
-# and starts CI, without a push.
+# A run pushed the branch, then gh failed: the next run with the same lists opens the pull request,
+# without a push.
 rm "$FAKE/open" "$FAKE/calls"
 echo "HTTP 502" > "$FAKE/fail-pr-create"
 propose && fail "went on after gh failed"
 grep -q "HTTP 502" "$work/out" || fail "gh's error not shown"
-grep -q "workflow run" "$FAKE/calls" && fail "CI started without a pull request"
 rm "$FAKE/calls"
 propose || { cat "$work/out"; fail "run after a failed pull request failed"; }
 [ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$pushed" ] || fail "pushed again after a failed pull request"
 grep -q "^pr create --head $BRANCH " "$FAKE/calls" || fail "pull request not opened after it failed"
-[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started after a failed pull request"
-# The same when starting CI failed.
-rm "$FAKE/calls"
-echo "HTTP 500" > "$FAKE/fail-workflow-run"
-propose && fail "went on after starting CI failed"
-rm "$FAKE/calls"
-propose || { cat "$work/out"; fail "run after CI failed to start failed"; }
-grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not found after CI failed to start"
-[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started again"
 
 # The repository doesn't let workflows open pull requests: the run says which setting to turn on.
 rm "$FAKE/open" "$FAKE/calls"
@@ -128,7 +120,7 @@ echo "HTTP 401" > "$FAKE/fail-pr-list"
 propose && fail "went on after gh pr list failed"
 [ "$(calls)" = "pr list --head $BRANCH --base main --state open --json number --jq .[0].number // empty" ] || fail "asked gh more after it failed"
 
-# Main moved on: the branch is made again from it, the open pull request edited, CI started again.
+# Main moved on: the branch is made again from it, and the open pull request edited.
 git checkout -q -- lists && echo readme > README && person add README && person commit -q -m "docs: more" && main_to_origin
 remade "
 月夜	つきよ"
@@ -138,7 +130,6 @@ git merge-base --is-ancestor origin/main "origin/$BRANCH" || fail "branch not ma
 [ "$(git rev-list --count "origin/main..origin/$BRANCH")" = 1 ] || fail "old commit kept"
 grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not edited"
 grep -q "^pr create" "$FAKE/calls" && fail "a second pull request opened"
-[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started after the update"
 
 # Main moved on again, and the branch already has these lists: it is still made again from the new main.
 git checkout -q -- lists && echo again >> README && person commit -qam "docs: more again" && main_to_origin
@@ -210,4 +201,7 @@ for how in wrote rebased authored-as-bot committed-as-bot "made many commits"; d
   [ -z "$(calls)" ] || fail "asked gh over a commit a person $how"
   git checkout -q -- lists
 done
+# A CI run started with gh workflow run never counts as a pull request's checks (GitHub's docs,
+# "Troubleshooting required status checks"). A person approves the pull request's own runs instead.
+grep -q "^workflow run" "$FAKE/all-calls" && fail "propose.sh started a workflow by gh workflow run"
 echo "propose.sh: all cases pass"

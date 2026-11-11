@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Opens the JMdict workflow's one pull request with the word lists it remade, or brings the open one up
-# to date, then starts CI on it. Run from a checkout of main whose $TABLES hold the remade lists.
+# to date. Run from a checkout of main whose $TABLES hold the remade lists.
 #
 #   BRANCH=jmdict/remake TABLES=app/src/main/resources/com/astrovm/crosstune TAG=3.6.2+20261109214828 RUN=URL \
 #     scripts/readingsaudit/propose.sh
 #
-# It needs git, with origin able to push, and gh with a token that can write pull requests and start
-# workflows. propose.test.sh runs it on a local repository and a fake gh.
+# It needs git, with origin able to push, and gh with a token that can write pull requests.
+# propose.test.sh runs it on a local repository and a fake gh.
 set -euo pipefail
 : "${BRANCH:?}" "${TABLES:?}" "${TAG:?}" "${RUN:?}"
 lists=("$TABLES/jmdict-readings.txt" "$TABLES/old-kana.txt")
@@ -35,7 +35,7 @@ if [ "$found" = 0 ]; then
   fi
   lease=$(git rev-parse "origin/$BRANCH")
   # Already on main and made from this JMdict: nothing to push. A run that pushed it may have failed
-  # before its pull request or CI, so those are still seen to.
+  # before it opened its pull request, so that is still seen to.
   if git merge-base --is-ancestor origin/main "origin/$BRANCH" && git diff --quiet "origin/$BRANCH" -- "${lists[@]}"; then
     echo "::notice::$BRANCH already has the word lists JMdict $TAG makes"
     push=false
@@ -76,6 +76,10 @@ trap 'rm -f "$body"' EXIT
   git diff --stat "$base" "$head"
   echo '```'
   echo
+  # GitHub holds the runs of a pull request opened or pushed with the workflow's token until a person
+  # with write access approves them. Started any other way, CI never counts as the pull request's checks.
+  echo "To run CI, select **Approve workflows to run** at the bottom of this pull request."
+  echo
   echo "## Done when"
   echo
   echo "- [ ] CI passes. A readings test that fails means JMdict now reads a word another way: find out which is right, and fix the reading or the word list, never the test to pass."
@@ -95,5 +99,3 @@ else
   fi
   echo "$said"
 fi
-# A pull request opened or pushed with the workflow's token starts no workflow.
-gh workflow run ci.yml --ref "$BRANCH"

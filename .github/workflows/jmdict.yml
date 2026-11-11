@@ -30,7 +30,7 @@ env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
-  # CI reports CI / Required on a run started by hand only on this branch: ci.yml names it too.
+  # The one pull request's branch.
   BRANCH: jmdict/remake
   TABLES: app/src/main/resources/com/astrovm/crosstune
 
@@ -54,6 +54,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
           bash scripts/readingsaudit/propose.test.sh
+          shellcheck scripts/readingsaudit/*.sh
 
       # Taken by its release's tag, and kept only with the size and SHA-256 the release gives.
       - name: Fetch JMdict
@@ -107,8 +108,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      # A pull request opened with this job's token starts no workflow, so CI is started by hand.
-      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

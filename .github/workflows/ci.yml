@@ -187,21 +187,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
-          # A run started by hand gets main's history too, to compare its branch with where it left main.
-          # Written this way round, as `&& 0 ||` would give 2: 0 counts as false in an expression.
-          fetch-depth: ${{ github.event_name != 'workflow_dispatch' && 2 || 0 }}
+          fetch-depth: 2
 
-      # Tangled new code is split up, never listed in detekt's baseline to pass. A run started by hand
-      # checks it too, as its CI / Required stands for a pull request's (the JMdict workflow's).
+      # Tangled new code is split up, never listed in detekt's baseline to pass.
       - name: Detekt's baseline only shrinks
-        if: github.event_name != 'push'
-        env:
-          EVENT: ${{ github.event_name }}
+        if: github.event_name == 'pull_request'
         run: |
-          if [ "$EVENT" = pull_request ]; then base=HEAD^1; else base=$(git merge-base origin/main HEAD); fi
           # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
-          diff=$(git diff "$base" HEAD -- config/detekt/baseline.xml)
-          added=$(grep '^+.*<ID>' <<< "$diff" || true)
+          diff=$(git diff HEAD^1 HEAD -- config/detekt/baseline.xml)
+          # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
+          added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
           if [ -n "$added" ]; then
             echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
             echo "$added"
@@ -297,11 +292,8 @@ jobs:
 
   required-ci:
     name: CI / Required
-    # Always report a result, including when a prerequisite failed or was skipped. Also on a run started
-    # by hand on jmdict/remake: the JMdict workflow's pull request gets its checks that way, as its token
-    # starts no workflow. A run by hand elsewhere tests a branch's head, not its merge with main, so it
-    # reports nothing that could pass for a pull request's check. jmdict/remake is BRANCH in jmdict.yml.
-    if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/jmdict/remake')) }}
+    # Always report a result, including when a prerequisite failed or was skipped.
+    if: ${{ always() && github.event_name == 'pull_request' }}
     needs:
       - changes
       - site
