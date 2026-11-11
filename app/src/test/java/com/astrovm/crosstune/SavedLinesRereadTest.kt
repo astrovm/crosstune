@@ -171,6 +171,13 @@ class SavedLinesRereadTest {
         assertEquals(unread, again.first { it.text == "你好" })
         assertEquals(pinyin, again.first { it.text == "爱" })
         assertEquals(marked, again.first { it.text == "谢谢" })
+        // Nothing Japanese in the list: leave it, rather than replace the kept lines with none.
+        assertNull(readAgain(listOf(unread, pinyin, marked)))
+        // The only kana is the reading over the kanji. The line's own reading field is empty.
+        val rubyOnly = SavedLine("三本", title = "Demo", artist = "Band", ruby = listOf(Ruby("三本", "さんほん")), readWith = 3)
+        val fromRuby = readAgain(listOf(rubyOnly))
+        assertNotNull(fromRuby)
+        assertEquals("さんぼん", fromRuby!!.single().reading)
     }
 
     @Test

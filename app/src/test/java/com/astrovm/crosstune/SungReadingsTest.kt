@@ -250,6 +250,16 @@ class SungReadingsTest {
     }
 
     @Test
+    fun oneMatchedLineInThreeIsEnoughToKeep() = runBlocking {
+        // Exactly a third of the kanji lines. One fewer, and the page is not this song.
+        val few = listOf("都会の夜", "別の言葉", "違う文です")
+        val one = """<div class="hiragana" >${ruby("都会", "まち")}のよる<br /></div>"""
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to one))
+        val fixes = SungReadings(fake.client(), null, Dispatchers.Unconfined).of(song, few, read(few))
+        assertEquals(listOf(ReadingFix(0, "都会", "まち", Reader.SUNG)), fixes)
+    }
+
+    @Test
     fun nothingIsAskedWhenReadingsAreAlreadyUnwanted() = runBlocking {
         val cache = LookupCache(File(folder.root, "sung-off.json"), Dispatchers.Unconfined)
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
