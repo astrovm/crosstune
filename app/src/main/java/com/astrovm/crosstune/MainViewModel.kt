@@ -2524,11 +2524,13 @@ internal class MainViewModel(
 
     /**
      * Whether [song] has been heard through [UNTIMED_HEARINGS] times, about: hearing more would hardly
-     * time more lines. With no length said anywhere, once as much is heard as is kept.
+     * time more lines. A song too long for that to be kept, or with no length said anywhere, once as
+     * much is heard as is kept: what's heard past it would be gone next time, and heard again.
      */
     private fun heardEnough(song: MusicMetadata): Boolean {
-        val length = untimedLengthMs(song) ?: return heardStretches.size >= HeardSongs.MAX_STRETCHES
-        return heardStretches.sumOf { it.toMs - it.fromMs } >= length * UNTIMED_HEARINGS
+        val kept = HeardSongs.MAX_STRETCHES * SingingListener.SECONDS * 1000L
+        val wanted = untimedLengthMs(song)?.let { it * UNTIMED_HEARINGS } ?: kept
+        return heardStretches.sumOf { it.toMs - it.fromMs } >= minOf(wanted, kept)
     }
 
     /** How long [song] is, where the app plays it, as the singing heard is timed by its clock: as the app says, or else the song or its words. */
@@ -2686,7 +2688,7 @@ internal class MainViewModel(
         else placeSung(song, SungAlignment.linesMs(sung, clock::positionAt, shown, shift.takeIf { abs(it) >= SINGING_NUDGE_MS } ?: 0L))
     }
 
-    /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when nothing is, as for want of the speech model, which is offered then. */
+    /** What's heard sung, in the words' language, its [first] seconds told as they're heard; null when it can't be heard, as for want of the speech model, which is offered then. */
     private suspend fun hearOnce(hearing: SingingHearing, lines: List<String>, first: (suspend (Sung) -> Boolean)?): Sung? {
         val sung = hearing.hear(lyricsLanguage?.of(lines)?.substringBefore('-'), first)
         // The model isn't fetched on mobile data by itself: it's offered by hand.

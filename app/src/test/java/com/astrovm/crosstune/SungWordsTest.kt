@@ -683,11 +683,19 @@ class SungWordsTest {
     }
 
     @Test
-    fun aModelThatWontLoadOrHearsNoWordsHearsNothing() = runBlocking {
-        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null, null))
+    fun aWhileWithNoWordsInItIsHeardAsNoneSung() = runBlocking {
+        // whisper.cpp gives nothing for music with no voice, as an intro: heard, with nothing sung, which isn't a while that couldn't be heard.
         val words = FakeWords(emptyList())
-        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = words).hear(null, null))
+        val listener = listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = words)
+        assertEquals(Sung(1_234, emptyList()), listener.hear(null, null))
+        assertFalse(listener.missesModel)
+        assertFalse(listener.heardNoSound)
         assertTrue(words.closed)
+    }
+
+    @Test
+    fun aModelThatWontLoadHearsNothing() = runBlocking {
+        assertNull(listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = null).hear(null, null))
         // One that isn't closed needn't be.
         val open = WordHearing { _, _ -> listOf(HeardWord("Oh", 320)) }
         assertEquals(1, listener(FakeMicrophone().apply { play(SingingListener.SECONDS.toDouble()) }, hearing = open).hear(null, null)!!.words.size)

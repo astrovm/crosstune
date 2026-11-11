@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
@@ -210,12 +211,16 @@ class FollowsTheSongTest {
 
     private var lyricLines by mutableStateOf(lines)
 
+    /** Whether [lyricLines] are timed by the singing heard, the words found having no timing. */
+    private var byEar by mutableStateOf(false)
+
     private fun words(chords: ChordsState = ChordsState()) = show {
         LyricsScreen(
             UiState(
                 lyricsFor = MusicMetadata("River Road", "The Walkers"),
                 lyrics = lyricLines.joinToString("\n") { it.text },
                 lyricLines = lyricLines,
+                lyricsTimedByEar = byEar,
                 following = following,
                 canFollowApps = true,
                 chords = chords,
@@ -285,11 +290,96 @@ class FollowsTheSongTest {
         assertEquals("Walking ".length, litLetters(lines[0].text))
     }
 
+    // Words timed by the singing heard.
+
+    /** Timed by ear: the first and last lines heard, each lit till it's sung through, and the two between not heard. */
+    private val heardLines = listOf(
+        LyricLine(10_000, "Walking down the river road", endMs = 13_000),
+        LyricLine(LyricLine.NOT_HEARD, "Under the yellow moon"),
+        LyricLine(LyricLine.NOT_HEARD, "Every river finds the sea"),
+        LyricLine(30_000, "Singing to the morning light", endMs = 33_000)
+    )
+
+    /** The lines lit, by their words. */
+    private fun litLines(): List<String> = compose.onAllNodes(hasTestTag(LYRIC_LINE_TAG) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        .fetchSemanticsNodes().map { node -> node.config[SemanticsProperties.Text].joinToString("") }
+
+    @Test
+    fun aLineHeardGoesDarkOnceSungThroughThoughTheNextLineHeardIsFarOn() {
+        lyricLines = heardLines
+        byEar = true
+        following = pausedAt(0)
+        words()
+        playsFrom(12_000)
+        assertEquals(listOf(heardLines[0].text), litLines())
+        // Sung through, it goes dark on time: what's sung till the next line heard isn't known.
+        passes(1_200)
+        assertEquals(emptyList<String>(), litLines())
+        // Nothing changes till then, so the song's left alone meanwhile.
+        passesAskingRarely(16_000)
+        assertEquals(emptyList<String>(), litLines())
+        passes(1_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+    }
+
+    @Test
+    fun theLastLineHeardGoesDarkOnceSungThrough() {
+        lyricLines = heardLines
+        byEar = true
+        following = pausedAt(0)
+        words()
+        playsFrom(32_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+        // What's sung after it, as an outro, isn't known.
+        passes(1_200)
+        assertEquals(emptyList<String>(), litLines())
+    }
+
+    @Test
+    fun aSongHeardWholeGoesDarkAfterItsLastLineToo() {
+        // Every line heard, the words are still timed by ear, and nothing says what's sung past the last.
+        lyricLines = listOf(heardLines[0].copy(endMs = null), heardLines[3])
+        byEar = true
+        following = pausedAt(0)
+        words()
+        playsFrom(32_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+        passes(1_200)
+        assertEquals(emptyList<String>(), litLines())
+    }
+
+    @Test
+    fun aLastLineTimedByItsWordsStaysLitThroughTheOutro() {
+        // Timed by a service word by word, so where it ends is known, the last line stays lit as it always did.
+        lyricLines = listOf(heardLines[0].copy(endMs = null), heardLines[3])
+        following = pausedAt(0)
+        words()
+        playsFrom(32_000)
+        passes(5_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+    }
+
+    @Test
+    fun theFloatingWordsShowTheSongOnceALineHeardIsSungThrough() {
+        following = pausedAt(0)
+        show {
+            FloatingLyrics(UiState(lyricsFor = MusicMetadata("River Road", "The Walkers"), lyricLines = heardLines, lyricsTimedByEar = true, following = following, linesEarlyMs = 0, nextLineAheadMs = 0), Modifier)
+        }
+        playsFrom(12_000)
+        assertTrue(exists(heardLines[0].text))
+        passes(1_200 + ROSE_MS)
+        assertFalse(exists(heardLines[0].text))
+        assertTrue(exists("River Road"))
+    }
+
     private companion object {
         /** About a frame on a 60 Hz screen. */
         const val FRAME_MS = 16L
 
         /** Ten frames, which a change takes at most to show here. */
         const val SETTLE_MS = 10 * FRAME_MS
+
+        /** Longer than a floating line takes to rise in, and the one before to go. */
+        const val ROSE_MS = 1_000L
     }
 }

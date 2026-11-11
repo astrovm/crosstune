@@ -189,9 +189,9 @@ class UntimedSingingTest {
         assertEquals(4, singing.hears)
         // The words go by the app's clock as it is, with no lead taken off.
         assertEquals(playback.playing.value?.clock, state().following?.clock)
-        assertEquals(3, SyncedLyrics.indexAt(state().lyricLines, lineMs(3) + 100))
+        assertEquals(3, SyncedLyrics.indexAt(state().lyricLines, lineMs(3) + 100, byEar = true))
         // Past the last line heard, sung through, nothing is lit.
-        assertEquals(-1, SyncedLyrics.indexAt(state().lyricLines, lineMs(4) + 1_000))
+        assertEquals(-1, SyncedLyrics.indexAt(state().lyricLines, lineMs(4) + 1_000, byEar = true))
         // Timed by ear, they time themselves: there's nothing to put in time by hand.
         assertTrue(composeRule.onAllNodesWithContentDescription(app.getString(R.string.lyrics_sync)).fetchSemanticsNodes().isEmpty())
         // A line not heard can't be played again.
@@ -226,6 +226,39 @@ class UntimedSingingTest {
         assertTrue(state().lyricsTimedByEar)
         assertEquals(lines.indices.map(::lineMs), lineStarts())
         assertEquals(4, singing.hears)
+    }
+
+    @Test
+    fun aLongSongHeardEnoughIsLeftAloneAfterARestart() {
+        singing.answer = { sung() }
+        openLyrics()
+        // Fifteen minutes long: heard through twice is half an hour of whiles.
+        plays(durationMs = FIFTEEN_MINUTES_MS)
+        waitUntil { singing.hears >= 90 }
+        composeRule.waitForIdle()
+        assertEquals(90, singing.hears)
+        // Opened again, as after a restart, it's heard enough already.
+        controller!!.destroyAndSettle()
+        openLyrics()
+        plays(durationMs = FIFTEEN_MINUTES_MS)
+        composeRule.waitForIdle()
+        assertEquals(90, singing.hears)
+    }
+
+    @Test
+    fun aSongLongerThanWhatsKeptIsHeardAsLongAsWhatsKept() {
+        singing.answer = { sung() }
+        openLyrics()
+        // An hour long, it's heard as long as what's kept, and no longer, now or after a restart.
+        plays(durationMs = 4 * FIFTEEN_MINUTES_MS)
+        waitUntil { singing.hears >= HeardSongs.MAX_STRETCHES }
+        composeRule.waitForIdle()
+        assertEquals(HeardSongs.MAX_STRETCHES, singing.hears)
+        controller!!.destroyAndSettle()
+        openLyrics()
+        plays(durationMs = 4 * FIFTEEN_MINUTES_MS)
+        composeRule.waitForIdle()
+        assertEquals(HeardSongs.MAX_STRETCHES, singing.hears)
     }
 
     @Test
@@ -267,6 +300,30 @@ class UntimedSingingTest {
         composeRule.waitForIdle()
         assertEquals(MainViewModel.SINGING_TRIES, singing.hears)
         assertTrue(state().lyricLines.isEmpty())
+    }
+
+    @Test
+    fun anIntroWithNoWordsHeardIsOneTryNotTheEnd() {
+        // The phone's own listener, as on a phone: the first while is the intro, with no words for whisper.cpp to hear.
+        // Two whiles of sound, and then none: a phone that stops sharing it.
+        val microphone = FakeMicrophone().apply {
+            repeat(2) { play(SingingListener.SECONDS.toDouble()) }
+            end()
+        }
+        val answers = ArrayDeque(listOf(emptyList(), sung(count = 1).words))
+        // Each while heard from where the song starts, so the words heard are where they're sung.
+        MainActivity.singingFactory = { _, _ ->
+            SingingListener(microphone, { File("model") }, { WordHearing { _, _ -> answers.removeFirst() } }, Dispatchers.Unconfined, Dispatchers.Unconfined, clock = { startedAt })
+        }
+        openLyrics()
+        plays()
+        // Heard on after it, the first line sung is timed.
+        waitUntil { state().lyricsTimedByEar }
+        assertEquals(listOf(lineMs(0)) + List(5) { LyricLine.NOT_HEARD }, lineStarts())
+        // With no sound left to hear, it's let be.
+        composeRule.waitForIdle()
+        assertEquals(3, microphone.opened)
+        assertTrue(answers.isEmpty())
     }
 
     @Test
@@ -461,6 +518,7 @@ class UntimedSingingTest {
         const val TIMEOUT_MS = 10_000L
         const val SONG_MS = 40_000L
         const val COVER = "https://example.com/demo.jpg"
+        const val FIFTEEN_MINUTES_MS = 15 * 60_000L
 
         /** More whiles than any test hears, past which a hearing that never ends would stop. */
         const val MOST_HEARS = 100

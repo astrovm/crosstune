@@ -131,12 +131,26 @@ internal object SyncedLyrics {
 
     /**
      * The line being sung at [positionMs], or -1 before the first. A line heard sung, with the next not
-     * heard, is only lit till it ends: what's sung after it isn't known.
+     * heard, is only lit till it ends: what's sung after it isn't known. Nor is what's sung after the
+     * last line of words timed [byEar]; the last line timed by a service stays lit, as its outro is.
      */
-    fun indexAt(lines: List<LyricLine>, positionMs: Long): Int {
+    fun indexAt(lines: List<LyricLine>, positionMs: Long, byEar: Boolean): Int {
         val at = lines.indexOfLast { it.timeMs <= positionMs }
-        val end = lines.getOrNull(at)?.endMs?.takeIf { lines.getOrNull(at + 1)?.heard == false }
+        val end = litTill(lines, at, byEar)
         return if (end != null && positionMs > end) -1 else at
+    }
+
+    /**
+     * Where in the song the line lit by [indexAt] changes: as each line heard starts, and just past the
+     * end of one lit only till it ends. Lines not heard start never, so they're left out.
+     */
+    fun changes(lines: List<LyricLine>, byEar: Boolean): List<Long> =
+        lines.indices.flatMap { index -> listOfNotNull(lines[index].timeMs.takeIf { lines[index].heard }, litTill(lines, index, byEar)?.plus(1)) }
+
+    /** Where line [at] goes dark once it's sung through, as what's sung after it isn't known; null while it's lit till the next. */
+    private fun litTill(lines: List<LyricLine>, at: Int, byEar: Boolean): Long? {
+        val next = lines.getOrNull(at + 1)
+        return lines.getOrNull(at)?.endMs?.takeIf { if (next == null) byEar else !next.heard }
     }
 
     /** Where the next of [times] after [positionMs] is, when the line or word lit changes; null after the last. */
