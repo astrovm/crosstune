@@ -907,9 +907,102 @@ class ReadingsTest {
             // 色 is a colour, not a counter, so 十 does not run into it.
             assertEquals("$withUniDic", "じゅういろ", read("十色"))
             assertEquals("$withUniDic", "はちいろ", read("八色"))
-            // A counter of more than one character, and a kana that is not a kanji, are not counters either.
-            assertEquals("$withUniDic", "じゅうかげつ", read("十ヶ月"))
+            // A counter of more than one character, as the dictionary has it, runs in too; a kana that is not a kanji is no counter.
+            assertEquals("$withUniDic", "じゅっかげつ", read("十ヶ月"))
+            assertEquals("$withUniDic", "いっしゅうかん", read("一週間"))
+            assertEquals("$withUniDic", "いっぷんかん", read("一分間"))
             assertEquals("$withUniDic", "じゅうこ", read("十こ"))
+            assertEquals("$withUniDic", "にぶんのいち", read("二分の一"))
+        }
+    }
+
+    @Test
+    fun countersSoundOtherwiseAfterN() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            // After さん and なん, 本, 杯, 匹, 階 and 歩 are said with a voice or a p.
+            assertEquals("$withUniDic", "さんぼんのはな", read("三本の花"))
+            assertEquals("$withUniDic", "なんがいまで", read("何階まで"))
+            assertEquals("$withUniDic", "さんばいめ", read("三杯目"))
+            assertEquals("$withUniDic", "さんびきのねこ", read("三匹の猫"))
+            assertEquals("$withUniDic", "さんぽすすんで", read("三歩進んで"))
+            // After よん they're as written, but for 分, which is ぷん after any ん.
+            assertEquals("$withUniDic", "よんほん", read("四本"))
+            assertEquals("$withUniDic", "よんぷん", read("四分"))
+            assertEquals("$withUniDic", "あとさんぷんで", read("あと三分で"))
+            // Counters that don't change stay: 三回 さんかい.
+            assertEquals("$withUniDic", "さんかいめ", read("三回目"))
+        }
+    }
+
+    @Test
+    fun aHalfAndEnoughBeforeATimeAreMinutes() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            assertEquals("$withUniDic", "にふんごにきた", read("二分後に来た"))
+            assertEquals("$withUniDic", "じゅっぷんまえ", read("十分前"))
+            assertEquals("$withUniDic", "ごふんまえ", read("五分前"))
+            // Before anything else, 十分 is enough, and 二分 a half.
+            assertEquals("$withUniDic", "じゅうぶんだよ", read("十分だよ"))
+            assertEquals("$withUniDic", "にぶんする", read("二分する"))
+            // 分 after a number after 寸 or 割 is a tenth, ぶ.
+            assertEquals("$withUniDic", "よんすんよんぶ", read("四寸四分"))
+            assertEquals("$withUniDic", "ごわりごぶ", read("五割五分"))
+        }
+    }
+
+    @Test
+    fun aKanjiWithAClassicalEndingIsReadAsTheClassicalVerb() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> if (withUniDic) TestUniDic.reading { reading(line) } else reading(line) }
+            // 晴るる and 流る, not はれるる and ながれる.
+            assertEquals("$withUniDic", "はるるそら", read("晴るる空").reading)
+            assertTrue("$withUniDic", Ruby("晴", "は") in read("晴るる空").parts)
+            assertEquals("$withUniDic", "ながるかわ", read("流る川").reading)
+            // The modern verb, written so, stays.
+            assertEquals("$withUniDic", "はれるそら", read("晴れる空").reading)
+            assertEquals("$withUniDic", "ながれるかわ", read("流れる川").reading)
+        }
+    }
+
+    @Test
+    fun aNounUniDicKnowsIsNotASuffixToTheWordBefore() {
+        TestUniDic.reading {
+            // IPADIC takes these for suffixes after the noun before them; UniDic reads them as the nouns they are.
+            assertEquals("すてきなざわめきこころに", reading("素敵なざわめき心に").reading)
+            assertEquals("ぼくらてをたたいて", reading("僕ら手を叩いて").reading)
+            assertEquals("いつかひがのぼる", reading("いつか日が昇る").reading)
+            // A suffix said with a voice after a noun it's part of stays: ガラス玉, and 一番星.
+            assertEquals("がらすだま", reading("ガラス玉").reading)
+            assertEquals("いちばんぼしを", reading("一番星を").reading)
+            // After a number it counts.
+            assertEquals("さんにんで", reading("三人で").reading)
+        }
+    }
+
+    @Test
+    fun wordsJmdictListsAreReadAsItReadsThem() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> if (withUniDic) TestUniDic.reading { reading(line) } else reading(line) }
+            // Pieces that make a word JMdict reads one way only: 体中 からだじゅう, 水車小屋 すいしゃごや.
+            assertEquals("$withUniDic", "からだじゅうがあつい", read("体中が熱い").reading)
+            assertEquals("$withUniDic", "すいしゃごや", read("水車小屋").reading)
+            assertTrue("$withUniDic", Ruby("体中", "からだじゅう") in read("体中が").parts)
+            // A verb is looked up as the dictionary writes it, and keeps the ending the line gives it.
+            assertEquals("$withUniDic", "にくづいた", read("肉付いた").reading)
+            // Not out of part of a piece, 一人舞 out of 一人舞う, nor a word ending in a particle, 今日は.
+            assertEquals("$withUniDic", "ひとりまう", read("一人舞う").reading)
+            assertEquals("$withUniDic", "きょうははれ", read("今日は晴れ").reading)
+            // Nor one piece alone the dictionary reads as a word it knows: 上野 is うえの, not JMdict's こうずけ.
+            assertEquals("$withUniDic", "うえののはな", read("上野の花").reading)
+        }
+        assertEquals(listOf(Reader.JMDICT), Readings.words("水車小屋", Script.JAPANESE).single().by)
+        // Without the table, as when it's made, the dictionaries read the word.
+        Readings.listed = emptyMap()
+        try {
+            assertEquals("からだちゅうが", reading("体中が").reading)
+        } finally {
+            Readings.listed = null
         }
     }
 

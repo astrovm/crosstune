@@ -65,6 +65,12 @@ Chords from J-Total sit over the letter they sit over on J-Total's page. The pag
 
 [`compare_sheets.py`](scripts/jtotal-widths/compare_sheets.py) measures how well that works on crawled sheets: Chromium draws each page, and the script says which chords the app puts over another letter than the page does. `crawl` saves the pages (one request a second, into the agent cache, never into Git), `browser` draws them in the container, `app` runs this checkout's `ChordSheets` on them in the test box, and `compare` prints the counts. Its top has the commands. `app --old` does the same for a checkout from before the app read a page's font stack and Windows-31J.
 
+## Japanese readings
+
+[`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) lists the words of two kanji or more that [JMdict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) reads one way only, where IPADIC or UniDic read them another way: 体中 is からだじゅう, not からだちゅう. `Readings` reads a run of whole words as the file says. JMdict is by the Electronic Dictionary Research and Development Group, under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the file's header says so, with the JMdict date and the [jmdict-simplified](https://github.com/scriptin/jmdict-simplified) version.
+
+Remake it with `python3 scripts/readingsaudit/readingsaudit.py table`, with `jmdict.json` (jmdict-eng) in the audit folder. It runs `JmdictReadings` in the build box, which keeps a word only where the app reads it otherwise. Then measure the change with the same script's `run` and `compare --before`, on a copy of the audit from before; its top has the commands.
+
 ## Reports
 
 **Report a problem** and **Report song problems automatically** send to a Cloudflare Worker in [`report/`](report), at `report.crosstune.cc`. It keeps reports in the D1 database `crosstune-reports` (table in `schema.sql`), at most 5 a minute from one address, and a daily cron deletes those older than 180 days. A report about timing also carries the player's package, speed, the lead and the last minute of `TimingLog` (columns `app_package`, `speed`, `lead_ms`, `early_ms`, `timing_log`); `schema.sql` lists the `ALTER TABLE`s to run on the live database before deploying a Worker that stores them. Test it with `node --test report/*.test.mjs`, and deploy with `npx wrangler deploy` from that folder (`cf deploy` finds no dev server there and stops).
