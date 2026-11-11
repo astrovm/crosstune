@@ -256,7 +256,9 @@ class MainTest(unittest.TestCase):
 
 # Made up: what a stranger could write in a report to move the cursor, recolor or retitle the terminal, or turn text around.
 NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg"
-UNSEEN = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+def unseen(text):
+    """The characters a terminal acts on or hides, apart from the line break the output is made of."""
+    return [c for c in text if c != "\n" and (ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F or 0x2028 <= ord(c) <= 0x202E or 0x2066 <= ord(c) <= 0x2069)]
 
 
 class ShownTest(unittest.TestCase):
@@ -291,7 +293,7 @@ class ShownTest(unittest.TestCase):
         printed = [str(arg) for call in said.call_args_list for arg in call.args]
         self.assertEqual(len(printed), 3)
         for text in printed:
-            self.assertIsNone(UNSEEN.search(text), repr(text))
+            self.assertEqual([], unseen(text), repr(text))
         # A comment's lines stay in its own line, so it can't pass for a report of its own.
         self.assertIn("    says: one\\n  40: Fake | Song", printed[0])
         self.assertIn("\\x1b[2J", printed[0])
