@@ -2048,10 +2048,16 @@ internal fun <T> whilePlaying(following: Following, of: Any?, changesAt: (Long) 
     }
 }
 
-/** Where the song is while [following] it, to the [POSITION_STEP_MS], which is as fine as a bar or clock shows; null while not. */
+/**
+ * Where the song is while [following] it, to the second, as the player's clock shows it; null while
+ * not. Finer, the player's clock and slider were composed again 10 times a second for one new second.
+ */
 @Composable
-internal fun rememberPosition(following: Following?): Long? =
-    rememberWhilePlaying(following, null, { it - it % POSITION_STEP_MS + POSITION_STEP_MS }) { it - it % POSITION_STEP_MS }
+internal fun rememberSecond(following: Following?): Long? =
+    rememberWhilePlaying(following, null, { it - it % SECOND_MS + SECOND_MS }) { it - it % SECOND_MS }
+
+/** A second, the step the player's clock and slider move in. */
+private const val SECOND_MS = 1_000L
 
 /** How often a song's place moves on screen: more often would only draw the screen again for nothing. */
 internal const val POSITION_STEP_MS = 100L
