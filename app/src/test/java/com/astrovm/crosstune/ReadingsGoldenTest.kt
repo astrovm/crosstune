@@ -1,8 +1,10 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -10,7 +12,8 @@ import org.robolectric.RobolectricTestRunner
 /**
  * Every reading in readings-golden.tsv still reads the way it did when it was locked, kana and where they go.
  * The file is what `readingsaudit.py golden` wrote: each reading the audit found right, on the shortest
- * stretch of its line that the app reads the same way. A row that fails is printed with what the app gave.
+ * stretch of its line that the app reads the same way, alone and with any more of the line around it.
+ * A row that fails is printed with what the app gave.
  */
 @RunWith(RobolectricTestRunner::class)
 class ReadingsGoldenTest {
@@ -89,32 +92,71 @@ class ReadingsGoldenTest {
         assertNull(GoldenReadings.rubyAt(parts, "思い出の想い", "思い出", null))
     }
 
-    @Test
-    fun theShortestStretchThatStillReadsSoIsKept() {
-        // A made-up reader: 日 is び after 曜, ひ alone.
-        val read = { stretch: String ->
-            stretch.mapIndexed { at, c ->
-                when {
-                    c == '日' -> Ruby("日", if (at > 0 && stretch[at - 1] == '曜') "び" else "ひ")
-                    else -> Ruby(c.toString())
-                }
+    /** A made-up reader: 日 is び after 曜, ひ alone; and ひ on each stretch of [wrong] too. */
+    private fun reader(vararg wrong: String) = { stretch: String ->
+        stretch.mapIndexed { at, c ->
+            when {
+                c != '日' -> Ruby(c.toString())
+                stretch in wrong -> Ruby("日", "ひ")
+                else -> Ruby("日", if (at > 0 && stretch[at - 1] == '曜') "び" else "ひ")
             }
         }
-        assertEquals("曜日" to null, GoldenReadings.shortest("月曜日に", "日", 2, "日=び", read))
-        assertEquals("日" to null, GoldenReadings.shortest("その日に", "日", 2, "日=ひ", read))
-        assertNull(GoldenReadings.shortest("その日に", "日", 2, "日=び", read))
-        // Another made-up reader: 日 after 曜 is び only in a stretch that starts with 日. The stretch then has 日 twice, so it names which.
+    }
+
+    @Test
+    fun aRowIsOnTheShortestStretchThatReadsSoWithAnyMoreOfTheLine() {
+        assertEquals(1 to 3, GoldenReadings.Around("月曜日に", "日", 2, "日=び", reader()).shortestStable())
+        assertEquals(2 to 3, GoldenReadings.Around("その日に", "日", 2, "日=ひ", reader()).shortestStable())
+        assertNull(GoldenReadings.Around("その日に", "日", 2, "日=び", reader()).shortestStable())
+        // 今曜日 reads ひ: a row on 曜日 would miss a change that breaks only that. 曜日だ holds, with the line around it too.
+        val around = GoldenReadings.Around("今曜日だ", "日", 2, "日=び", reader("今曜日"))
+        assertTrue(around.good(1, 3))
+        assertFalse(around.good(0, 3))
+        assertFalse(around.stable(1, 3))
+        assertTrue(around.stable(1, 4))
+        assertEquals(1 to 4, around.shortestStable())
+        assertEquals("曜日だ" to null, around.stretch(1, 4))
+    }
+
+    @Test
+    fun aReadingOnlyItsWholeLineHoldsCanFallBackToTheLongestStretchShortOfIt() {
+        val line = GoldenReadings.Around("月曜日に", "日", 2, "日=び", reader("月曜日", "曜日に"))
+        assertEquals(0 to 4, line.shortestStable())
+        assertEquals(1 to 3, line.longestShortOfLine(emptySet()))
+        // Never a stretch that is itself a lyric line.
+        assertNull(line.longestShortOfLine(setOf("曜日")))
+        // A word that is its whole line has nothing shorter.
+        assertNull(GoldenReadings.Around("日", "日", 0, "日=ひ", reader()).longestShortOfLine(emptySet()))
+    }
+
+    @Test
+    fun aStretchNamesWhichOccurrenceAndOfTwoAsShortTheFirst() {
+        // 日 after 曜 is び only in a stretch that starts with 日. The stretch then has 日 twice, so it names which.
         val fromTheStart = { stretch: String ->
-            read(stretch).map { part -> if (part.reading == "び" && stretch[0] != '日') Ruby("日", "ひ") else part }
+            reader()(stretch).map { part -> if (part.reading == "び" && stretch[0] != '日') Ruby("日", "ひ") else part }
         }
-        assertEquals("日曜日" to 1, GoldenReadings.shortest("日曜日", "日", 2, "日=び", fromTheStart))
-        // Of two as short, the one that starts first: here 日 is び next to any 曜, before or after it.
+        val twice = GoldenReadings.Around("日曜日", "日", 2, "日=び", fromTheStart)
+        assertEquals(0 to 3, twice.shortestStable())
+        assertEquals("日曜日" to 1, twice.stretch(0, 3))
+        // 日 is び next to any 曜, before or after it.
         val nextTo = { stretch: String ->
             stretch.mapIndexed { at, c ->
                 if (c != '日') Ruby(c.toString()) else Ruby("日", if ("曜" in stretch.substring(maxOf(0, at - 1), minOf(stretch.length, at + 2))) "び" else "ひ")
             }
         }
-        assertEquals("曜日" to null, GoldenReadings.shortest("曜日曜", "日", 1, "日=び", nextTo))
+        assertEquals(0 to 2, GoldenReadings.Around("曜日曜", "日", 1, "日=び", nextTo).shortestStable())
+    }
+
+    @Test
+    fun aStretchThatSplitsALetterIsNeverReadNorARow() {
+        val read = { stretch: String ->
+            check(!stretch[0].isLowSurrogate()) { "half a letter read: $stretch" }
+            reader()(stretch)
+        }
+        val around = GoldenReadings.Around("𠮷日", "日", 2, "日=ひ", read)
+        assertTrue(around.good(1, 3))
+        assertEquals(2 to 3, around.shortestStable())
+        assertTrue(around.stable(0, 3))
     }
 
     @Test

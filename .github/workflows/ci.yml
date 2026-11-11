@@ -195,6 +195,7 @@ jobs:
 
       # The pull request keeps every locked reading, and a readings change changes the golden file.
       # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
+      # check_golden.py runs the checker main has, so a pull request can't loosen it by editing it.
       - name: A pull request keeps the locked readings
         if: github.event_name == 'pull_request'
         env:

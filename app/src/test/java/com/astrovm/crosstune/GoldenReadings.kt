@@ -79,22 +79,58 @@ internal object GoldenReadings {
     }
 
     /**
-     * The shortest stretch of [line] around the occurrence of [word] at [start] that [read] still reads as [ruby],
-     * and the index of that occurrence in it; null when not even the whole line does. Of two as short, the one that starts first.
+     * The stretches of [line] around the occurrence of [word] at [start], line[from, to), and how [read] reads the word in each.
+     * A stretch is good when it reads the word as [ruby], and stable when it and every wider stretch of the line around it,
+     * up to the whole line, is good. A row on a stable stretch holds, whatever the rest of the line around it is.
      */
-    fun shortest(line: String, word: String, start: Int, ruby: String, read: (String) -> List<Ruby>): Pair<String, Int?>? {
-        for (length in word.length..line.length) {
-            for (from in maxOf(0, start + word.length - length)..start) {
-                val to = from + length
-                if (to > line.length) break
-                if (!fits(line, from, to)) continue
-                val stretch = line.substring(from, to)
-                val found = starts(stretch, word)
-                val index = found.indexOf(start - from).takeIf { found.size > 1 }
-                if (rubyAt(read(stretch), stretch, word, index) == ruby) return stretch to index
-            }
+    class Around(
+        private val line: String,
+        private val word: String,
+        private val start: Int,
+        private val ruby: String,
+        private val read: (String) -> List<Ruby>
+    ) {
+        private val end = start + word.length
+        private val good = HashMap<Long, Boolean>()
+        private val stable = HashMap<Long, Boolean>()
+
+        /** Whether line[from, to) can be read at all: it splits no letter in two. */
+        private fun whole(from: Int, to: Int) =
+            !(from > 0 && line[from].isLowSurrogate()) && !(to < line.length && line[to].isLowSurrogate())
+
+        /** Whether line[from, to) reads the word as [ruby]. A stretch that splits a letter can't be read, and asks nothing. */
+        fun good(from: Int, to: Int): Boolean = !whole(from, to) || good.getOrPut(key(from, to)) {
+            val (stretch, index) = stretch(from, to)
+            rubyAt(read(stretch), stretch, word, index) == ruby
         }
-        return null
+
+        /** Whether line[from, to) and every wider stretch of the line around it reads the word as [ruby]. */
+        fun stable(from: Int, to: Int): Boolean = stable.getOrPut(key(from, to)) {
+            // The wider ones first: a stretch one letter wider on either side covers them all, and is read first.
+            (from == 0 || stable(from - 1, to)) && (to == line.length || stable(from, to + 1)) && good(from, to)
+        }
+
+        /** The shortest stable stretch a row can hold, as from and to; null when not even the whole line is. Of two as short, the one that starts first. */
+        fun shortestStable(): Pair<Int, Int>? = spans((word.length..line.length)).firstOrNull { (from, to) -> stable(from, to) }
+
+        /** The longest good stretch a row can hold that is shorter than the line and is none of [lines]; null when there is none. */
+        fun longestShortOfLine(lines: Set<String>): Pair<Int, Int>? =
+            spans((line.length - 1 downTo word.length)).firstOrNull { (from, to) -> line.substring(from, to) !in lines && good(from, to) }
+
+        /** The stretches around the word a row can hold, by [lengths], then from the first start. */
+        private fun spans(lengths: IntProgression) = lengths.asSequence().flatMap { length ->
+            (maxOf(0, end - length)..start).asSequence().map { it to it + length }
+                .filter { (from, to) -> to <= line.length && fits(line, from, to) }
+        }
+
+        /** line[from, to), and the index of the word's occurrence in it, null when it holds the word once. */
+        fun stretch(from: Int, to: Int): Pair<String, Int?> {
+            val stretch = line.substring(from, to)
+            val found = starts(stretch, word)
+            return stretch to found.indexOf(start - from).takeIf { found.size > 1 }
+        }
+
+        private fun key(from: Int, to: Int) = from.toLong() shl Int.SIZE_BITS or to.toLong()
     }
 
     /** Whether line[from, to) can be a row's line: whole characters, not a comment, nothing that ends a line in Kotlin or Python. */

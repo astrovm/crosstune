@@ -9,6 +9,7 @@
   python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
   python3 scripts/readingsaudit/readingsaudit.py golden    # lock every reading right today into readings-golden.tsv, through gradle-box; a row already there stays
   python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA   # and drop the lock on WORD read as KANA, when that change is on purpose
+  python3 scripts/readingsaudit/readingsaudit.py hole      # how many right readings the golden file guards on every wider stretch of their line, and how many a break on the whole line slips past; --golden FILE, again for more
   python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
   python3 scripts/readingsaudit/readingsaudit.py fetch     # put the newest jmdict-eng in the folder as jmdict.json; --tag TAG for another
   python3 scripts/readingsaudit/readingsaudit.py age       # fail when either file's JMdict is older than MAX_AGE_DAYS; the release runs it
@@ -661,217 +662,9 @@ def compare(folder, words, before=None):
             print(f"{w['cause']} | {w['word']} {norm(w['shown'])}→{norm(w['right'])} | {w['song']} | {w['line']}")
 
 
-# ---- golden ----
-
-# What ReadingsGoldenTest reads back: every reading the audit found right, on the shortest stretch of its line that reads so.
-GOLDEN_REL = "app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv"
-GOLDEN_FILE = ROOT / GOLDEN_REL
-# What the readings are made of. A pull request that changes one has to change the golden file too, or say so.
-READING_SOURCES = (
-    "app/src/main/java/com/astrovm/crosstune/Readings.kt",
-    "app/src/main/java/com/astrovm/crosstune/Furigana.kt",
-    "app/src/main/java/com/astrovm/crosstune/UniDic.kt",
-    "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt",
-    "app/src/main/resources/com/astrovm/crosstune/old-kana.txt",
-)
-# The dictionaries are Kuromoji's jars, named with their version in the app's build file.
-READING_BUILD = "app/build.gradle.kts"
-READING_BUILD_WORD = "kuromoji"
-GOLDEN_COUNT = "# rows: "
-GOLDEN_HEADER = [
-    "# Locked readings. Each row is a reading the app gives the way the song is sung: its kana, and where they go.",
-    "# Every reading the audit found right is here, on the shortest stretch of its line that the app reads the same way.",
-    "# Rows are sorted by the stretch, so songs are not in order. There is no song title and no artist name.",
-    "# Columns, separated by a tab: line, word, index, kana, ruby, dictionary.",
-    "# line is the stretch. index is empty when the word is in it once. Otherwise it is the occurrence, from 0.",
-    "# ruby is the word's parts as the app splits it, text=reading or text alone, joined by |.",
-    "# dictionary is ipadic, unidic or both.",
-    "# Regenerate: python3 scripts/readingsaudit/readingsaudit.py golden",
-    "# The command adds rows. It does not remove or change a row.",
-    "# A row the app now reads otherwise is a regression, and the command exits 1.",
-    "# A change you mean drops that lock: python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA",
-]
-# What ends a line for Python's splitlines or Kotlin's lineSequence, and the field separator. GoldenReadings.LINE_ENDS is the same.
-LINE_ENDS = set("\t\n\r\x0b\x0c\x1c\x1d\x1e\x85  ")
-DICTIONARIES = ("ipadic", "unidic", "both")
-
-
-def find_starts(line, word):
-    """Where [word] starts in [line], including a word that overlaps itself. GoldenReadings.starts does the same."""
-    starts, at = [], 0
-    while True:
-        found = line.find(word, at)
-        if found < 0:
-            return starts
-        starts.append(found)
-        at = found + 1
-
-
-def iter_audit_lines(folder):
-    """Each lyric line the audit compared, once per song: its text and the two dictionaries' parts."""
-    audit = folder / "audit"
-    if not audit.is_dir():
-        raise SystemExit(f"no audit in {audit}")
-    for path in sorted(audit.glob("*.json")):
-        song = json.loads(path.read_text())
-        seen = set()
-        for line in song.get("lines") or []:
-            text = line.get("text")
-            # A chorus sung again is the same line. A line with no ruby has nothing to lock.
-            if not text or text in seen or not line.get("truth") or "builtIn" not in line or "uniDic" not in line:
-                continue
-            seen.add(text)
-            yield line
-
-
-def ruby_over(parts, start, end):
-    """The parts over line[start:end], text=reading or text alone, joined by |. GoldenReadings.rubyAt writes them the same way."""
-    out, at = [], 0
-    for text, reading in parts:
-        stop = at + len(text)
-        if stop > start and at < end:
-            out.append(text if reading is None else f"{text}={reading}")
-        at = stop
-    return "|".join(out)
-
-
-def right_cases(folder):
-    """Every reading the audit found right, once: {(line, word, occurrence from 0, ipadic or unidic): (kana, ruby)}."""
-    cases = {}
-    for line in iter_audit_lines(folder):
-        text = line["text"]
-        units = truth_units(text, line["truth"])
-        for name, key in (("ipadic", "builtIn"), ("unidic", "uniDic")):
-            for word, shown, _right, ok, (start, end) in compare_line(text, line[key], units):
-                if ok and word:
-                    cases[(text, word, find_starts(text, word).index(start), name)] = (shown, ruby_over(line[key], start, end))
-    return cases
-
-
-def writable(word, ruby):
-    """Whether a row can hold this word and ruby: a | or = in the word would make the ruby mean something else."""
-    return not set(word) & (LINE_ENDS | {"|", "="}) and not set(ruby) & LINE_ENDS
-
-
-def dictionary_tag(readers):
-    """ipadic, unidic, or both when this one occurrence is right in each."""
-    if {"ipadic", "unidic"} <= readers:
-        return "both"
-    return "ipadic" if "ipadic" in readers else "unidic"
-
-
-def readers_of(tag):
-    return {"ipadic", "unidic"} if tag == "both" else {tag}
-
-
-def check_fields(row):
-    """A row ReadingsGoldenTest reads back as written: six fields, none with a tab or a line end, and a line that is no comment."""
-    if any(set(part) & LINE_ENDS for part in row) or not row[0] or row[0].startswith("#"):
-        raise SystemExit(f"a golden row can't be written: {row!r}")
-    line, word, field, kana, ruby, tag = row
-    parts = [part.split("=", 1) for part in ruby.split("|")]
-    if (tag not in DICTIONARIES or (field and not field.isdigit()) or "".join(p[0] for p in parts) != word
-            or "".join(p[-1] for p in parts) != kana or word not in line):
-        raise SystemExit(f"a golden row needs a dictionary, an index, and ruby that spells its word as its kana: {row!r}")
-
-
-def row_sort_key(row):
-    return (row[0], row[1], -1 if row[2] == "" else int(row[2]), row[3], row[4], row[5])
-
-
-def read_golden(path):
-    """The rows already locked. Missing file means none yet. A broken row stops the command."""
-    if not path.exists():
-        return []
-    rows = []
-    for raw in path.read_text(encoding="utf-8").split("\n"):
-        raw = raw.rstrip("\r")
-        if not raw or raw.startswith("#"):
-            continue
-        fields = tuple(raw.split("\t"))
-        if len(fields) != 6:
-            raise SystemExit(f"a golden row needs 6 fields: {raw}")
-        check_fields(fields)
-        rows.append(fields)
-    return rows
-
-
-def write_golden(path, rows):
-    for row in rows:
-        check_fields(row)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = GOLDEN_HEADER + [f"{GOLDEN_COUNT}{len(rows)}"] + ["\t".join(row) for row in sorted(rows, key=row_sort_key)]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def golden_contexts(folder, job):
-    """GoldenContexts' answer to [job], run in the build box: which rows still hold, and each case's shortest stretch."""
-    # The job holds the songs' lines, so it stays in the audit folder.
-    (folder / "golden-job.json").write_text(json.dumps(job, ensure_ascii=False))
-    answer = folder / "golden-answer.json"
-    answer.unlink(missing_ok=True)
-    if songcheck(folder, "com.astrovm.crosstune.songcheck.GoldenContexts") != 0 or not answer.exists():
-        raise SystemExit("GoldenContexts did not answer; its output is above")
-    return json.loads(answer.read_text())
-
-
-def covers(row, line, word, start):
-    """Whether [row]'s stretch is the part of [line] around the occurrence of [word] at [start]."""
-    starts = find_starts(row[0], word)
-    occurrence = int(row[2]) if row[2] else 0
-    if occurrence >= len(starts):
-        return False
-    begin = start - starts[occurrence]
-    return begin >= 0 and line[begin:begin + len(row[0])] == row[0]
-
-
-def golden(folder, dest, accept, contexts=golden_contexts):
-    """Write [dest] from the audit, every right reading locked. Add rows. Never drop or edit one, unless [accept] names its word and kana."""
-    accept = {tuple(pair) for pair in accept}
-    old = read_golden(dest)
-    cases = right_cases(folder)
-    keys = sorted(key for key, (_kana, ruby) in cases.items() if writable(key[1], ruby))
-    job = {"rows": [[row[0], row[1], int(row[2]) if row[2] else None, row[4], row[5]] for row in old],
-           "cases": [[*key[:3], cases[key][1], key[3]] for key in keys]}
-    answer = contexts(folder, job)
-    merged, held, regressions = defaultdict(set), defaultdict(list), []
-    for row, verdict in zip(old, answer["rows"]):
-        if all(v for v in verdict if v is not None):
-            merged[row[:5]] |= readers_of(row[5])
-            held[(row[1], row[4])].append(row)
-            continue
-        if (row[1], row[3]) in accept:
-            continue
-        regressions.append(row)
-        merged[row[:5]] |= readers_of(row[5])
-    locked, not_locked = 0, [key for key, (_kana, ruby) in cases.items() if not writable(key[1], ruby)]
-    for key, stretch in zip(keys, answer["cases"]):
-        line, word, occurrence, tag = key
-        kana, ruby = cases[key]
-        start = find_starts(line, word)[occurrence]
-        # A row already there locks it, so a second run writes the same file.
-        if any(tag in readers_of(row[5]) and covers(row, line, word, start) for row in held[(word, ruby)]):
-            locked += 1
-        elif stretch is None:
-            not_locked.append(key)
-        else:
-            locked += 1
-            merged[(stretch[0], word, "" if stretch[1] is None else str(stretch[1]), kana, ruby)].add(tag)
-    rows = [key + (dictionary_tag(readers),) for key, readers in merged.items()]
-    write_golden(dest, rows)
-    for row in sorted(regressions, key=row_sort_key):
-        print(f"regression: {row[1]}\t{row[3]}\t{row[5]}\t{row[0]}\t{row[4]}")
-    for key in sorted(not_locked):
-        print(f"not locked: {key[1]}\t{cases[key][0]}\t{key[3]}")
-    share = f"{100 * locked / len(cases):.1f}%" if cases else "none"
-    print(f"golden: {len(rows)} rows, {len(set(rows) - set(old))} new, {len(regressions)} regressions, "
-          f"{locked} of {len(cases)} right readings locked ({share}), {dest}")
-    return 1 if regressions or not_locked else 0
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age", "golden"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age", "golden", "hole"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
     parser.add_argument("--gradle", help="run, table: the Gradle command, instead of gradle-box")
@@ -879,6 +672,8 @@ def main(argv=None):
     parser.add_argument("--accept", action="append", nargs=2, default=[], metavar=("WORD", "KANA"),
                         help="golden: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
     parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
+    parser.add_argument("--golden", action="append", type=Path, default=[], metavar="FILE",
+                        help="hole: a golden file to measure, instead of the one in the repo; again for more")
     args = parser.parse_args(argv)
     folder = data_dir()
     if args.step == "songs":
@@ -893,8 +688,11 @@ def main(argv=None):
         fetch(folder, args.tag)
     elif args.step == "age":
         sys.exit(age([TABLE, OLD_KANA], datetime.date.today()))
-    elif args.step == "golden":
-        sys.exit(golden(folder, args.out or GOLDEN_FILE, args.accept))
+    elif args.step in ("golden", "hole"):
+        # golden.py reads this module's audit, so it is loaded only here.
+        import golden
+        sys.exit(golden.golden(folder, args.out or golden.GOLDEN_FILE, args.accept) if args.step == "golden"
+                 else golden.hole(folder, args.golden or [golden.GOLDEN_FILE]))
     else:
         compare(folder, args.words, args.before)
 

@@ -83,6 +83,9 @@ grep -qxF "To run CI, select **Approve workflows to run** at the bottom of this 
 grep -q "were from JMdict 2000-01-01" "$FAKE/body" || fail "body lacks the old date"
 grep -q "jmdict-simplified \`$TAG\` (JMdict 2000-02-01)" "$FAKE/body" || fail "body lacks the release"
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff"
+grep -qF 'add a line `golden: none` here when no reading changes' "$FAKE/body" || fail "body doesn't say how to pass the locked readings check"
+# A mark is a whole line of the body: the hint must never be one, or the check would pass by itself.
+! grep -qxE ' *golden: (none|lock changed|accept .*) *' "$FAKE/body" || fail "body has a golden mark of its own"
 
 # The same lists again, branch already on main: nothing pushed, the open pull request kept up to date
 # with origin's branch, as the checkout has no local one.
