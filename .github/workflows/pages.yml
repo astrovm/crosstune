@@ -1,0 +1,78 @@
+name: Pages
+
+# Publishes docs/ to crosstune.cc through GitHub Pages, then has Cloudflare check its copies
+# against the new files. It replaces GitHub's own "pages-build-deployment", which runs actions we
+# can't update (upload-artifact v4 on Node 20) and prints their warnings in every log (Issue #812).
+# Pages has to publish from Actions for this: Settings → Pages → Source → GitHub Actions.
+#
+# A pull request that changes the site or this workflow packs the site, so a broken setup shows
+# before it reaches main. Only main publishes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - docs/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every checkout prints Git's hint to name the initial branch. This is what it asks for.
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+# One publish at a time, and a newer push to main waits for the one before it instead of cutting it off.
+concurrency:
+  group: pages-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/ is the built site already (scripts/build-site.py), so it goes out as it is, with no Jekyll.
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  invalidate:
+    needs: deploy
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Invalidate Cloudflare cache
+        env:
+          CLOUDFLARE_CACHE_TOKEN: ${{ secrets.CLOUDFLARE_CACHE_TOKEN }}
+        # Marks cached copies stale so the edge revalidates them against the new deploy.
+        run: |
+          curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors \
+            --request POST \
+            --header "Authorization: Bearer $CLOUDFLARE_CACHE_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data '{"hosts":["crosstune.cc"]}' \
+            "https://api.cloudflare.com/client/v4/zones/a2975e8e7b40ab8782a0f201548ee162/invalidate_cache"

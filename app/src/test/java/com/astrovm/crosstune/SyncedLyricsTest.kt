@@ -75,6 +75,18 @@ class SyncedLyricsTest {
         assertEquals(-1, SyncedLyrics.indexAt(lines, 999))
         assertEquals(0, SyncedLyrics.indexAt(lines, 1_000))
         assertEquals(1, SyncedLyrics.indexAt(lines, 60_000))
+        // A line's end only counts with the next not heard: timed lines go on till the next.
+        assertEquals(0, SyncedLyrics.indexAt(listOf(LyricLine(1_000, "One", endMs = 1_500), LyricLine(2_000, "Two")), 1_800))
+    }
+
+    @Test
+    fun aLineHeardWithTheNextNotIsLitTillItEnds() {
+        val lines = listOf(LyricLine(1_000, "One", endMs = 3_000), LyricLine(LyricLine.NOT_HEARD, "Two"), LyricLine(9_000, "Three"))
+        assertEquals(0, SyncedLyrics.indexAt(lines, 3_000))
+        // Past its end, nothing's known to be sung till the next line heard.
+        assertEquals(-1, SyncedLyrics.indexAt(lines, 3_001))
+        assertEquals(2, SyncedLyrics.indexAt(lines, 9_000))
+        assertEquals(listOf(true, false, true), lines.map { it.heard })
     }
 
     @Test

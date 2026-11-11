@@ -10,6 +10,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
   ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE] [--uri URI]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
+  python3 scripts/syncreplay/syncreplay.py untimed [ID...] [--again MS] [-v]   # the words' times taken off, then timed by the singing heard
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
 e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), separates the voice
@@ -36,6 +37,11 @@ behind what it plays, by more or less each time. It forgets what was learnt firs
 The media volume is 1 while it plays, as at 0 the app hears only silence, and at 1 it already hears the music at full level.
 A player that isn't at 1x, as the app's log says, is followed at its rate: the words' clock is printed next to it, and what's
 heard is found near where the app says, by bits short enough to still fit a recording played faster with its pitch kept.
+`untimed` takes each song's times off its words and times them as the app does words found with none,
+by SungTiming on the JVM, in seconds: from the whiles the app would hear as the song plays from MS (--from),
+and with --again from a second play too, the first while that many ms in. It prints, per song, the lines
+sung in what was heard, those put within 1.0 s and 0.5 s of it, those put further off, those put where
+nothing was heard, and the worst; -v prints each line.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -1053,6 +1059,154 @@ def hear(args):
         windows(args.id, OUT / f"{args.id}.wav", length, args.model, args.clean)
 
 
+# Words found with no timing, put in time by the singing heard (SungTiming.kt), held against when each line is sung.
+UNTIMED_SOURCES = ("app/src/main/java/com/astrovm/crosstune/SungTiming.kt", "app/src/main/java/com/astrovm/crosstune/SyncedLyrics.kt", "scripts/syncreplay/UntimedReplay.kt")
+# The jars the Kotlin compiler needs, by the start of their names, from Gradle's caches.
+KOTLIN_JARS = ("kotlin-compiler-embeddable-", "kotlin-stdlib-", "kotlin-script-runtime-", "kotlin-reflect-", "kotlin-daemon-embeddable-",
+               "kotlinx-coroutines-core-jvm-", "annotations-", "fastutil-")
+JDK_IMAGE = "docker.io/library/eclipse-temurin:25-jdk"
+ON_TIME_UNTIMED_S = 1.0
+
+
+def kotlin_version():
+    return re.search(r'kotlin\.plugin\.compose"\) version "([^"]+)"', (ROOT / "build.gradle.kts").read_text()).group(1)
+
+
+def kotlin_jars():
+    """The Kotlin compiler and what it runs on, copied once from Gradle's caches into the agent cache: the
+    app's own version, so the timing is compiled as the app's build compiles it. The compiler is the one
+    the build downloads; the rest come from a Gradle that runs the same Kotlin, as they work together there."""
+    version = kotlin_version()
+    folder = OUT / "kotlinc" / version
+    if (folder / "done").exists():
+        return sorted(folder.glob("*.jar"))
+    caches = [cache for cache in (Path.home() / ".cache" / "crosstune-gradle-box", Path.home() / ".gradle") if cache.exists()]
+    compiler = next((jar for cache in caches for jar in cache.rglob(f"kotlin-compiler-embeddable-{version}.jar") if "files-2.1" in jar.parts), None)
+    lib = next((jar.parent for cache in caches for jar in cache.rglob(f"kotlin-stdlib-{version}.jar") if "dists" in jar.parts), None)
+    if compiler is None or lib is None:
+        sys.exit(f"No Kotlin {version} compiler in Gradle's caches: build the app once with scripts/gradle-box/gradle-box.sh first.")
+    rest = [jar for start in KOTLIN_JARS[1:] for jar in sorted(lib.glob(f"{start}*.jar"))[:1]]
+    if len(rest) < len(KOTLIN_JARS) - 1:
+        sys.exit(f"Gradle's {lib} lacks some of {KOTLIN_JARS[1:]}")
+    folder.mkdir(parents=True, exist_ok=True)
+    for jar in [compiler, *rest]:
+        shutil.copy(jar, folder / jar.name)
+    (folder / "done").write_text("")
+    return sorted(folder.glob("*.jar"))
+
+
+def untimed_classes():
+    """SungTiming.kt and the replay compiled, in a container, once for each change to them."""
+    import hashlib
+    sources = [ROOT / name for name in UNTIMED_SOURCES]
+    key = hashlib.sha256(b"".join(path.read_bytes() for path in sources) + kotlin_version().encode()).hexdigest()[:16]
+    classes = OUT / "untimed-classes" / key
+    if not (classes / "done").exists():
+        jars = kotlin_jars()
+        compiler = ":".join(str(jar) for jar in jars)
+        stdlib = next(str(jar) for jar in jars if jar.name.startswith("kotlin-stdlib-"))
+        subprocess.run(["podman", "run", "--rm", "-v", f"{ROOT}:{ROOT}:ro", "-v", f"{OUT}:{OUT}", JDK_IMAGE,
+                        "java", "-cp", compiler, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect", "-nowarn",
+                        "-cp", stdlib, "-d", str(classes), *map(str, sources)], check=True)
+        (classes / "done").write_text("")
+    return classes
+
+
+def untimed_whiles(length_ms, start, work):
+    """Where in the song each 20 s heard starts, one after another as the app hears them, each once the last is worked out."""
+    return list(range(start, length_ms - LENGTHS[0] // 2, LENGTHS[0] + work))
+
+
+def untimed_input(song, starts, length_ms, other=""):
+    """The song's lines with no times, and what was heard in each while from [starts], as UntimedReplay reads them;
+    [other] names another hearing of it, as `all --heard` does."""
+    lines = [text for _, text in json.loads((OUT / f"{song}.lyrics.json").read_text()) if text.strip()]
+    heard = json.loads((OUT / f"{song}.heard{LENGTHS[0] // 1000}{other}.json").read_text())
+    rows = [f"N\t{length_ms}"] + [f"L\t{text}" for text in lines]
+    used = []
+    for want in starts:
+        start = min(map(int, heard), key=lambda s: abs(s - want))
+        used.append(start)
+        rows.append(f"S\t{start}\t{start + LENGTHS[0]}")
+        rows += [f"W\t{start + ms}\t{word.strip()}" for ms, word in heard[str(start)] if ms >= 0 and word.strip()]
+    folder = own() / "untimed"
+    folder.mkdir(exist_ok=True)
+    path = folder / f"{song}.tsv"
+    path.write_text("\n".join(rows) + "\n")
+    return path, used
+
+
+def untimed(args):
+    """Each song's lines put in time by the singing heard, with their own times taken off, against when they're sung."""
+    songs = args.ids or prepped()
+    lengths = {song: max(map(int, json.loads(heard_file(song, LENGTHS[0], APP_MODEL).read_text()))) + LENGTHS[0] for song in songs}
+    wanted = {song: untimed_whiles(lengths[song], args.start, args.work) + (untimed_whiles(lengths[song], args.again, args.work) if args.again is not None else [])
+              for song in songs}
+    if not args.nearest and not args.heard:
+        def heard_all(song):
+            done = set(map(int, json.loads(heard_file(song, LENGTHS[0], APP_MODEL).read_text())))
+            missing = sorted({s // STEP_MS * STEP_MS for s in wanted[song]} - done)
+            if missing:
+                windows(song, OUT / f"{song}.wav", LENGTHS[0], wanted=lambda starts, missing=missing: [s for s in missing if s in starts])
+        with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
+            list(pool.map(heard_all, songs))
+    inputs = {song: untimed_input(song, [s // STEP_MS * STEP_MS for s in wanted[song]] if not args.nearest else wanted[song], lengths[song], args.heard) for song in songs}
+    classes = untimed_classes()
+    stdlib = next(str(jar) for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
+    subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", "-v", f"{own()}:{own()}", JDK_IMAGE,
+                    "java", "-cp", f"{classes}:{stdlib}", "com.astrovm.crosstune.UntimedReplayKt", *(str(path) for path, _ in inputs.values())], check=True)
+    return untimed_score(songs, inputs, args.verbose)
+
+
+def untimed_rounds(path):
+    """Where the lines were put after each while heard: a list of {line: seconds}."""
+    rounds = []
+    for row in Path(f"{path}.placed").read_text().splitlines():
+        cells = row.split("\t")
+        if cells[0] == "R":
+            rounds.append({})
+        else:
+            rounds[-1][int(cells[0])] = int(cells[1]) / 1000
+    return rounds
+
+
+def untimed_score(songs, inputs, verbose=False):
+    """Per song: lines sung in what was heard, those put within ON_TIME_UNTIMED_S of it, the worst, and lines put
+    where nothing was heard. A line put far off at any time along the way counts as shown wrong."""
+    print(f"{'song':12} {'heard':>5} {'timed':>5} {'1.0 s':>5} {'0.5 s':>5} {'off':>4} {'unheard':>7} {'wrong':>5} {'worst':>6}  lang")
+    totals = dict(heard=0, timed=0, on=0, close=0, off=0, unheard=0, wrong=0)
+    rows = {}
+    for song in songs:
+        path, used = inputs[song]
+        rounds = untimed_rounds(path)
+        final = rounds[-1] if rounds else {}
+        sung = {row["line"]: row["start"] for row in map(json.loads, (OUT / f"{song}.truth.jsonl").read_text().splitlines())}
+        spans = [(start / 1000, (start + LENGTHS[0]) / 1000) for start in used]
+        heard_lines = {n for n, at in sung.items() if any(a <= at <= b for a, b in spans)}
+        lags = {n: final[n] - sung[n] for n in sung if n in final}
+        row = dict(heard=len(heard_lines), timed=sum(n in final for n in heard_lines),
+                   on=sum(n in lags and abs(lags[n]) <= ON_TIME_UNTIMED_S for n in heard_lines),
+                   close=sum(n in lags and abs(lags[n]) <= ON_TIME_S for n in heard_lines),
+                   off=sum(abs(lag) > ON_TIME_UNTIMED_S for lag in lags.values()),
+                   unheard=sum(not any(a - ON_TIME_UNTIMED_S <= at <= b + ON_TIME_UNTIMED_S for a, b in spans) for at in final.values()),
+                   wrong=sum(any(n in r and abs(r[n] - sung[n]) > ON_TIME_UNTIMED_S for r in rounds) for n in sung))
+        for key in totals:
+            totals[key] += row[key]
+        rows[song] = row
+        worst = f"{max(lags.values(), key=abs):+.1f}" if lags else "-"
+        print(f"{song:12} {row['heard']:5} {row['timed']:5} {row['on']:5} {row['close']:5} {row['off']:4} {row['unheard']:7} {row['wrong']:5} {worst:>6}  {(OUT / f'{song}.language').read_text().strip()}")
+        if verbose:
+            lines = [line.split("\t", 1)[1] for line in path.read_text().splitlines() if line.startswith("L\t")]
+            for n, text in enumerate(lines):
+                truth = f"sung {sung[n]:6.1f}" if n in sung else "sung    ?  "
+                put = f"put {final[n]:6.1f} {final[n] - sung[n]:+5.1f}" if n in final and n in sung else (f"put {final[n]:6.1f}      " if n in final else "not put         ")
+                print(f"  {n:3} {truth} {put} {'heard' if n in heard_lines else '     '}  {text[:40]}")
+    t = totals
+    print(f"{'all':12} {t['heard']:5} {t['timed']:5} {t['on']:5} {t['close']:5} {t['off']:4} {t['unheard']:7} {t['wrong']:5}  "
+          f"{100 * t['on'] / max(t['heard'], 1):.0f}% of lines heard within {ON_TIME_UNTIMED_S} s, {100 * t['close'] / max(t['heard'], 1):.0f}% within {ON_TIME_S} s")
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     steps = parser.add_subparsers(dest="step", required=True)
@@ -1106,6 +1260,15 @@ def main():
     p.add_argument("--model", default=APP_MODEL, help="a whisper.cpp model, e.g. base-q5_1, to hear the recording with as the app would")
     p.add_argument("--clean", action="store_true", help="hear the recording itself, not through the visualizer; then run --model MODEL.clean")
     p.set_defaults(go=hear)
+    p = steps.add_parser("untimed")
+    p.add_argument("ids", nargs="*", help="songs to replay; every prepped one when none")
+    p.add_argument("--from", dest="start", type=int, default=0, help="ms into the song the first while is heard from")
+    p.add_argument("--work", type=int, default=4500, help="ms the phone takes to work out what it heard")
+    p.add_argument("--nearest", action="store_true", help="use the nearest while already heard, rather than hearing what's missing")
+    p.add_argument("-v", "--verbose", action="store_true", help="each line: when it's sung and where it was put")
+    p.add_argument("--heard", default="", help="another hearing of each song, as `all --heard`; the nearest while in it")
+    p.add_argument("--again", type=int, help="play it a second time, keeping what was heard, with the first while heard this many ms in")
+    p.set_defaults(go=untimed)
     p = steps.add_parser("phone")
     p.add_argument("id")
     p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
