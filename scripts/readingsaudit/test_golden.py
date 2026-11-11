@@ -54,7 +54,7 @@ class FakeContexts:
     def __call__(self, folder, job):
         self.jobs.append(job)
         rows = [[self.ruby_at(r[0], r[1], r[2], d) == r[3] if r[4] in (d, "both") else None for d in ("ipadic", "unidic")] for r in job["rows"]]
-        return {"rows": rows, "cases": [self.case(*case, set(job["lines"])) for case in job["cases"]]}
+        return {"rows": rows, "cases": [self.case(*case, set(job["lines"]), job["width"]) for case in job["cases"]]}
 
     def ruby_at(self, stretch, word, index, dictionary):
         parts = self.read(stretch, dictionary)
@@ -73,7 +73,9 @@ class FakeContexts:
             return None
         return golden.ruby_over(parts, start, start + len(word))
 
-    def case(self, line, word, occurrence, ruby, dictionary, spans, lines):
+    def case(self, line, word, occurrence, ruby, dictionary, spans, lines, width):
+        """Spans in and out in UTF-16, as Kotlin counts them."""
+        spans = [(golden.letters(line, a), golden.letters(line, b)) for a, b in spans]
         start = golden.find_starts(line, word)[occurrence]
         end, memo = start + len(word), {}
 
@@ -87,18 +89,28 @@ class FakeContexts:
                 memo[(a, b)] = (a == 0 or stable(a - 1, b)) and (b == len(line) or stable(a, b + 1)) and good(a, b)
             return memo[(a, b)]
 
+        def fits(a, b):
+            return line[a] != "#" and not set(line[a:b]) & golden.LINE_ENDS
+
         def around(lengths):
             for length in lengths:
                 for a in range(max(0, end - length), start + 1):
                     b = a + length
-                    if b <= len(line) and line[a] != "#" and not set(line[a:b]) & golden.LINE_ENDS:
+                    if b <= len(line) and fits(a, b):
                         yield a, b
+
+        def utf16(span):
+            return span and [golden.units(line, span[0]), golden.units(line, span[1])]
         stretch = next((span for span in around(range(len(word), len(line) + 1)) if stable(*span)), None)
+        for _ in range(width if stretch else 0):
+            a, b = stretch
+            a = a - 1 if a > 0 and fits(a - 1, b) else a
+            stretch = (a, b + 1 if b < len(line) and fits(a, b + 1) else b)
         fallback = None
         if stretch == (0, len(line)):
-            shorter = range(len(line) - 1, len(word) - 1, -1)
-            fallback = next((span for span in around(shorter) if line[span[0]:span[1]] not in lines and good(*span)), None)
-        return {"stretch": stretch and list(stretch), "whole": good(0, len(line)), "fallback": fallback and list(fallback),
+            shorter = [span for span in around(range(len(line) - 1, len(word) - 1, -1)) if line[span[0]:span[1]] not in lines]
+            fallback = next((span for span in shorter if stable(*span)), None) or next((span for span in shorter if good(*span)), None)
+        return {"stretch": utf16(stretch), "whole": good(0, len(line)), "fallback": utf16(fallback),
                 "spans": [[good(a, b), stable(a, b)] for a, b in spans]}
 
 
@@ -121,10 +133,11 @@ def golden_rows(dest):
 
 class Golden(unittest.TestCase):
 
-    def run_golden(self, folder, dest, accept=(), app=APP):
+    def run_golden(self, folder, dest, accept=(), app=APP, width=0):
+        """golden with [width] letters of context: 0 shows the stable stretch itself."""
         fake = FakeContexts(app)
         with mock.patch("builtins.print") as said:
-            code = golden.golden(folder, dest, accept, fake)
+            code = golden.golden(folder, dest, accept, fake, width)
         return code, "\n".join(call.args[0] for call in said.call_args_list), fake
 
     def test_locks_every_right_reading_on_the_shortest_stretch_that_reads_so(self):
@@ -249,6 +262,89 @@ class Golden(unittest.TestCase):
             self.assertEqual(0, code, said)
             self.assertEqual(first, dest.read_bytes())
             self.assertIn("0 new", said)
+
+    def test_a_row_holds_letters_of_its_line_each_side_of_its_stable_stretch_as_far_as_a_row_can(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [
+                audit_line("あい曜日うえお", [["あい", None], ["曜", "よう"], ["日", "び"], ["うえお", None]]),
+                # A row never starts with # nor holds a tab: there the stretch stops short.
+                audit_line("#曜日だ\tよ", [["#", None], ["曜", "よう"], ["日", "び"], ["だ\tよ", None]]),
+            ])
+            dest = folder / "golden.tsv"
+            code, said, fake = self.run_golden(folder, dest, width=2)
+            self.assertEqual(0, code, said)
+            self.assertEqual([
+                ["あい曜日う", "曜", "", "よう", "曜=よう", "both"],
+                ["あい曜日うえ", "日", "", "び", "日=び", "both"],
+                ["曜日だ", "日", "", "び", "日=び", "both"],
+                ["曜日だ", "曜", "", "よう", "曜=よう", "both"],
+            ], golden_rows(dest))
+            self.assertEqual(2, fake.jobs[0]["width"])
+            first = dest.read_bytes()
+            code, said, _fake = self.run_golden(folder, dest, width=2)
+            self.assertEqual(0, code, said)
+            self.assertEqual(first, dest.read_bytes())
+            self.assertIn("golden: 4 rows, 0 new", said)
+
+    def test_a_row_already_there_locks_a_reading_only_when_it_holds_all_of_its_stretch(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("あい曜日うえお", [["あい", None], ["曜", "よう"], ["日", "び"], ["うえお", None]])])
+            dest = folder / "golden.tsv"
+            # 曜日 is the stable stretch, but too short for two letters each side: a row that holds them joins it.
+            # あい曜日うえ holds all of 曜's: it locks 曜, and no new row joins it.
+            golden.write_golden(dest, [("曜日", "日", "", "び", "日=び", "both"), ("あい曜日うえ", "曜", "", "よう", "曜=よう", "both")])
+            code, said, _fake = self.run_golden(folder, dest, width=2)
+            self.assertEqual(0, code, said)
+            self.assertEqual([
+                ["あい曜日うえ", "日", "", "び", "日=び", "both"],
+                ["あい曜日うえ", "曜", "", "よう", "曜=よう", "both"],
+                ["曜日", "日", "", "び", "日=び", "both"],
+            ], golden_rows(dest))
+
+    def test_a_row_the_quarter_limit_keeps_off_its_whole_line_is_short_of_it_and_not_fully_guarded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("月曜日", [["月", "げつ"], ["曜", "よう"], ["日", "び"]])])
+            dest = folder / "golden.tsv"
+            # Two letters each side make each row the whole line, the song's only one. Each goes on a stable stretch short of it.
+            code, said, _fake = self.run_golden(folder, dest, width=2)
+            self.assertEqual(0, code, said)
+            self.assertEqual([
+                ["曜日", "日", "", "び", "日=び", "both"],
+                ["月曜", "曜", "", "よう", "曜=よう", "both"],
+                ["月曜", "月", "", "げつ", "月=げつ", "both"],
+            ], golden_rows(dest))
+            self.assertIn("not fully guarded: 日\tび\tunidic", said)
+            self.assertIn("6 not fully guarded", said)
+            first = dest.read_bytes()
+            code, said, _fake = self.run_golden(folder, dest, width=2)
+            self.assertEqual(first, dest.read_bytes())
+            self.assertIn("golden: 3 rows, 0 new", said)
+
+    def test_a_letter_past_u_ffff_counts_as_two_where_kotlin_counts(self):
+        self.assertEqual(3, golden.units("𠮷曜日", 2))
+        self.assertEqual(2, golden.letters("𠮷曜日", 3))
+        self.assertEqual(0, golden.letters("𠮷曜日", 0))
+        self.assertEqual(None, golden.span_in("𠮷曜日", None))
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("𠮷曜日", [["𠮷", None], ["曜", "よう"], ["日", "び"]])])
+            dest = folder / "golden.tsv"
+            golden.write_golden(dest, [("𠮷曜日", "日", "", "び", "日=び", "both")])
+            code, said, fake = self.run_golden(folder, dest)
+            self.assertEqual(0, code, said)
+            # The row already there is tried on the stretch Kotlin counts, and the new row is the stretch the app read.
+            self.assertIn(["𠮷曜日", "日", 0, "日=び", "ipadic", [[0, 4]]], fake.jobs[0]["cases"])
+            self.assertIn(["曜", "曜", "", "よう", "曜=よう", "both"], golden_rows(dest))
+
+    def test_the_golden_command_takes_a_width_or_the_one_the_file_is_made_with(self):
+        for argv, width in ((["golden"], golden.CONTEXT), (["golden", "--width", "0"], 0)):
+            with mock.patch.object(readingsaudit, "data_dir", return_value=Path("/fake")), \
+                    mock.patch.object(golden, "golden", return_value=0) as made, self.assertRaises(SystemExit):
+                readingsaudit.main(argv)
+            made.assert_called_once_with(Path("/fake"), golden.GOLDEN_FILE, [], width=width)
 
     def test_a_song_with_room_keeps_the_whole_lines_that_guard_the_most(self):
         placed = {

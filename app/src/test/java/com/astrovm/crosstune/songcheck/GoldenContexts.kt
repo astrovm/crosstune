@@ -18,10 +18,11 @@ import java.io.File
  * writes `golden-job.json` and runs it through Gradle's `songCheck` task, then reads `golden-answer.json`.
  * Both go in the audit folder, as they hold the songs' lines.
  *
- * A case is the line, the word, its occurrence from 0, its ruby, the dictionary, and stretches to try as [from, to].
- * Its answer: `stretch`, the shortest stable stretch a row can hold (see [GoldenReadings.Around]); `whole`, whether
- * the whole line reads it so; `fallback`, when the stretch is the whole line, the longest good stretch short of it
- * that is no line of `lines`; and `spans`, for each stretch tried, whether it is good and whether it is stable.
+ * A case is the line, the word, its occurrence from 0, its ruby, the dictionary, and stretches to try as [from, to],
+ * in UTF-16 units. Its answer: `stretch`, the shortest stable stretch a row can hold (see [GoldenReadings.Around]),
+ * with up to the job's `width` more letters of the line on each side; `whole`, whether the whole line reads it so;
+ * `fallback`, when the stretch is the whole line, the longest stretch short of it that is no line of `lines`, stable
+ * when one is; and `spans`, for each stretch tried, whether it is good and whether it is stable.
  */
 @RunWith(RobolectricTestRunner::class)
 class GoldenContexts {
@@ -33,12 +34,13 @@ class GoldenContexts {
         val rows = job.getJSONArray("rows").let { array -> (0 until array.length()).map(array::getJSONArray) }
         val cases = job.getJSONArray("cases").let { array -> (0 until array.length()).map(array::getJSONArray) }
         val lines = job.optJSONArray("lines")?.let { array -> (0 until array.length()).map(array::getString).toSet() }.orEmpty()
+        val width = job.optInt("width", 0)
         val holds = Array(rows.size) { arrayOfNulls<Boolean>(2) }
         val answers = arrayOfNulls<JSONObject>(cases.size)
         val started = System.nanoTime()
         Readings.uniDic = null
-        answer(Job(rows, cases, lines), "ipadic", 0, holds, answers)
-        TestUniDic.reading { answer(Job(rows, cases, lines), "unidic", 1, holds, answers) }
+        answer(Job(rows, cases, lines, width), "ipadic", 0, holds, answers)
+        TestUniDic.reading { answer(Job(rows, cases, lines, width), "unidic", 1, holds, answers) }
         val answer = JSONObject()
             .put("rows", JSONArray(holds.map { JSONArray().put(it[0] ?: JSONObject.NULL).put(it[1] ?: JSONObject.NULL) }))
             .put("cases", JSONArray(answers.map { it ?: JSONObject.NULL }))
@@ -48,7 +50,7 @@ class GoldenContexts {
         println("golden contexts: ${rows.size} rows, ${cases.size} cases, $unlocked not locked, $ms ms")
     }
 
-    private class Job(val rows: List<JSONArray>, val cases: List<JSONArray>, val lines: Set<String>)
+    private class Job(val rows: List<JSONArray>, val cases: List<JSONArray>, val lines: Set<String>, val width: Int)
 
     private fun answer(job: Job, dictionary: String, column: Int, holds: Array<Array<Boolean?>>, answers: Array<JSONObject?>) {
         // Each stretch is read once for each dictionary, as many cases try the same ones.
@@ -66,7 +68,7 @@ class GoldenContexts {
             val word = case.getString(1)
             val start = GoldenReadings.starts(line, word)[case.getInt(CASE_OCCURRENCE)]
             val around = GoldenReadings.Around(line, word, start, case.getString(CASE_RUBY), reader)
-            val stretch = around.shortestStable()
+            val stretch = around.shortestStable()?.let { around.widened(it, job.width) }
             val fallback = if (stretch == 0 to line.length) around.longestShortOfLine(job.lines) else null
             val tried = case.optJSONArray(CASE_SPANS) ?: JSONArray()
             val spans = (0 until tried.length()).map { at ->

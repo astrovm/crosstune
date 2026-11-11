@@ -130,6 +130,29 @@ class ReadingsGoldenTest {
     }
 
     @Test
+    fun aRowHoldsLettersOfItsLineEachSideAsFarAsARowCan() {
+        val around = GoldenReadings.Around("あい曜日うえお", "日", 3, "日=び", reader())
+        assertEquals(2 to 4, around.shortestStable())
+        assertEquals(2 to 4, around.widened(2 to 4, 0))
+        assertEquals(0 to 6, around.widened(2 to 4, 2))
+        assertEquals(0 to 7, around.widened(2 to 4, 3))
+        // Never a # to start it, a tab in it, or half a letter.
+        assertEquals(1 to 4, GoldenReadings.Around("#曜日だ\tよ", "日", 2, "日=び", reader()).widened(1 to 3, 2))
+        assertEquals(0 to 3, GoldenReadings.Around("𠮷日", "日", 2, "日=ひ", reader()).widened(2 to 3, 1))
+        assertEquals(0 to 3, GoldenReadings.Around("日𠮷", "日", 0, "日=ひ", reader()).widened(0 to 1, 2))
+    }
+
+    @Test
+    fun aRowKeptShortOfItsLineIsOnAStableStretchWhenOneIs() {
+        // XA日B reads 日 otherwise, so XA日 reads so but not with more of the line; 日BX holds with any more. Both lines of four are lyric lines.
+        val read = { stretch: String -> stretch.map { if (it == '日') Ruby("日", if (stretch == "XA日B") "ひ" else "び") else Ruby(it.toString()) } }
+        val around = GoldenReadings.Around("XA日BX", "日", 2, "日=び", read)
+        assertTrue(around.good(0, 3))
+        assertFalse(around.stable(0, 3))
+        assertEquals(2 to 5, around.longestShortOfLine(setOf("XA日B", "A日BX")))
+    }
+
+    @Test
     fun aStretchNamesWhichOccurrenceAndOfTwoAsShortTheFirst() {
         // 日 after 曜 is び only in a stretch that starts with 日. The stretch then has 日 twice, so it names which.
         val fromTheStart = { stretch: String ->

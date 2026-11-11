@@ -113,9 +113,29 @@ internal object GoldenReadings {
         /** The shortest stable stretch a row can hold, as from and to; null when not even the whole line is. Of two as short, the one that starts first. */
         fun shortestStable(): Pair<Int, Int>? = spans((word.length..line.length)).firstOrNull { (from, to) -> stable(from, to) }
 
-        /** The longest good stretch a row can hold that is shorter than the line and is none of [lines]; null when there is none. */
-        fun longestShortOfLine(lines: Set<String>): Pair<Int, Int>? =
-            spans((line.length - 1 downTo word.length)).firstOrNull { (from, to) -> line.substring(from, to) !in lines && good(from, to) }
+        /**
+         * [span] with up to [width] more letters of the line on each side, as far as a row can hold them: a change that
+         * breaks the reading only with a little more of the line fails the row too. A stretch wider than a stable one is stable.
+         */
+        fun widened(span: Pair<Int, Int>, width: Int): Pair<Int, Int> {
+            var (from, to) = span
+            repeat(width) {
+                val left = if (from >= 2 && line[from - 1].isLowSurrogate()) from - 2 else from - 1
+                if (left >= 0 && fits(line, left, to)) from = left
+                val right = if (to + 1 < line.length && line[to].isHighSurrogate()) to + 2 else to + 1
+                if (right <= line.length && fits(line, from, right)) to = right
+            }
+            return from to to
+        }
+
+        /**
+         * The longest stretch a row can hold that is shorter than the line and is none of [lines]: a stable one when there
+         * is one, else a good one; null when there is none.
+         */
+        fun longestShortOfLine(lines: Set<String>): Pair<Int, Int>? {
+            val shorter = spans((line.length - 1 downTo word.length)).filter { (from, to) -> line.substring(from, to) !in lines }
+            return shorter.firstOrNull { (from, to) -> stable(from, to) } ?: shorter.firstOrNull { (from, to) -> good(from, to) }
+        }
 
         /** The stretches around the word a row can hold, by [lengths], then from the first start. */
         private fun spans(lengths: IntProgression) = lengths.asSequence().flatMap { length ->

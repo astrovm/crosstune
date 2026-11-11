@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 import readingsaudit as audit
 
 # What ReadingsGoldenTest reads back: every reading the audit found right, on the shortest stretch of its line that reads so
-# with any more of the line around it too.
+# with any more of the line around it too, and CONTEXT more letters of the line on each side.
 GOLDEN_REL = "app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv"
 GOLDEN_FILE = audit.ROOT / GOLDEN_REL
 # What the readings are made of. A pull request that changes one has to change the golden file too, or say so.
@@ -28,11 +28,15 @@ READING_SOURCES = (
 READING_BUILD = "app/build.gradle.kts"
 READING_BUILD_WORD = "kuromoji"
 GOLDEN_COUNT = "# rows: "
+# The letters of the line each row holds on each side of its stable stretch, where the line has them. A rule that reads a
+# word by the text next to its stretch fails a row too: the most of the measured breaks this catches, with the fewest rows.
+CONTEXT = 2
 GOLDEN_HEADER = [
     "# Locked readings. Each row is a reading the app gives the way the song is sung: its kana, and where they go.",
     "# Every reading the audit found right is here, on the shortest stretch of its line that the app reads the same way",
-    "# alone and with any more of the line around it. A song never has more than a quarter of its lines here whole:",
-    "# past that, a reading is locked on the longest stretch short of its line that reads so.",
+    f"# alone and with any more of the line around it, and up to {CONTEXT} more letters of the line on each side of that.",
+    "# A song never has more than a quarter of its lines here whole: past that, a reading is locked on the longest",
+    "# stretch short of its line that reads so.",
     "# Rows are sorted by the stretch, so songs are not in order. There is no song title and no artist name.",
     "# Columns, separated by a tab: line, word, index, kana, ruby, dictionary.",
     "# line is the stretch. index is empty when the word is in it once. Otherwise it is the occurrence, from 0.",
@@ -156,6 +160,20 @@ def write_golden(path, rows):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def units(line, at):
+    """Where letter [at] of [line] is in UTF-16, as Kotlin counts: a letter past U+FFFF is two."""
+    return at + sum(1 for c in line[:at] if ord(c) > 0xFFFF)
+
+
+def letters(line, at):
+    """Which letter of [line] starts at UTF-16 unit [at]: the other way round from [units]."""
+    found = count = 0
+    while count < at:
+        count += 2 if ord(line[found]) > 0xFFFF else 1
+        found += 1
+    return found
+
+
 def golden_contexts(folder, job):
     """GoldenContexts' answer to [job], run in the build box: which rows still hold, and each case's shortest stretch."""
     # The job holds the songs' lines, so it stays in the audit folder.
@@ -208,11 +226,18 @@ def cases_tried(cases, keys, rows):
     return tried
 
 
-def job_of(cases, keys, rows, tried, lines):
-    """What GoldenContexts reads: the rows to check, each case with the spans to try, and every lyric line."""
+def job_of(cases, keys, rows, tried, lines, width=0):
+    """What GoldenContexts reads: the rows to check, each case with the spans to try in UTF-16, every lyric line, and the
+    letters of context a row holds on each side of its stable stretch."""
     return {"rows": [[row[0], row[1], int(row[2]) if row[2] else None, row[4], row[5]] for row in rows],
-            "cases": [[*key[:3], cases[key][1], key[3], [list(span) for _at, span in tried[key]]] for key in keys],
-            "lines": sorted(lines)}
+            "cases": [[*key[:3], cases[key][1], key[3], [[units(key[0], a), units(key[0], b)] for _at, (a, b) in tried[key]]]
+                      for key in keys],
+            "lines": sorted(lines), "width": width}
+
+
+def span_in(line, answered):
+    """A span GoldenContexts answered, in UTF-16, as letters of [line]; None stays None."""
+    return answered and (letters(line, answered[0]), letters(line, answered[1]))
 
 
 def cap_whole_lines(songs, kept, placed):
@@ -246,16 +271,16 @@ def summary(rows, songs):
             f"stretches median {median} and longest {lengths[-1] if lengths else 0} characters")
 
 
-def golden(folder, dest, accept, contexts=golden_contexts):
-    """Write [dest] from the audit, every right reading locked on a stable stretch. Add rows. Never drop or edit one,
-    unless [accept] names its word and kana."""
+def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT):
+    """Write [dest] from the audit, every right reading locked on a stable stretch with [width] letters of its line on each
+    side. Add rows. Never drop or edit one, unless [accept] names its word and kana."""
     accept = {tuple(pair) for pair in accept}
     old = read_golden(dest)
     cases = right_cases(folder)
     songs = song_lines(folder)
     keys = sorted(key for key, (_kana, ruby) in cases.items() if writable(key[1], ruby))
     tried = cases_tried(cases, keys, old)
-    answer = contexts(folder, job_of(cases, keys, old, tried, set().union(*songs.values()) if songs else set()))
+    answer = contexts(folder, job_of(cases, keys, old, tried, set().union(*songs.values()) if songs else set(), width))
     merged, regressions = defaultdict(set), []
     for row, verdict in zip(old, answer["rows"]):
         if not all(v for v in verdict if v is not None):
@@ -268,15 +293,15 @@ def golden(folder, dest, accept, contexts=golden_contexts):
     for key, got in zip(keys, answer["cases"]):
         line, word, occurrence, _tag = key
         kana, ruby = cases[key]
-        # A row already there that holds on every wider stretch locks it, so a second run writes the same file.
-        if any(stable and old[at][:5] in kept for (at, _span), (_good, stable) in zip(tried[key], got["spans"])):
-            continue
-        if got["stretch"] is None:
+        stretch, fallback = span_in(line, got["stretch"]), span_in(line, got["fallback"])
+        if stretch is None:
             not_locked.append(key)
             continue
+        # A row already there that holds all of the stretch locks it as well, so a second run writes the same file.
+        if any(a <= stretch[0] and stretch[1] <= b and old[at][:5] in kept for at, (a, b) in tried[key]):
+            continue
         start = find_starts(line, word)[occurrence]
-        fallback = got["fallback"] and row_on(line, word, start, got["fallback"], kana, ruby)
-        placed[key] = [row_on(line, word, start, got["stretch"], kana, ruby), fallback]
+        placed[key] = [row_on(line, word, start, stretch, kana, ruby), fallback and row_on(line, word, start, fallback, kana, ruby)]
     moved = cap_whole_lines(songs, kept, placed)
     for key, (row, _fallback) in placed.items():
         merged[row].add(key[3])

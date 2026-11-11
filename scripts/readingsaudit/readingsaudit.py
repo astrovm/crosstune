@@ -672,6 +672,7 @@ def main(argv=None):
     parser.add_argument("--accept", action="append", nargs=2, default=[], metavar=("WORD", "KANA"),
                         help="golden: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
     parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
+    parser.add_argument("--width", type=int, help="golden: the letters of context each row holds on each side of its stable stretch")
     parser.add_argument("--golden", action="append", type=Path, default=[], metavar="FILE",
                         help="hole: a golden file to measure, instead of the one in the repo; again for more")
     args = parser.parse_args(argv)
@@ -691,7 +692,8 @@ def main(argv=None):
     elif args.step in ("golden", "hole"):
         # golden.py reads this module's audit, so it is loaded only here.
         import golden
-        sys.exit(golden.golden(folder, args.out or golden.GOLDEN_FILE, args.accept) if args.step == "golden"
+        sys.exit(golden.golden(folder, args.out or golden.GOLDEN_FILE, args.accept,
+                                width=golden.CONTEXT if args.width is None else args.width) if args.step == "golden"
                  else golden.hole(folder, args.golden or [golden.GOLDEN_FILE]))
     else:
         compare(folder, args.words, args.before)
