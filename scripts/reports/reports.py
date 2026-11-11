@@ -12,8 +12,10 @@ to read, and goes through `cf`, in Node, as Wrangler's login may have expired. I
 login, which `cf` keeps. The others need no network.
 
 Report text is written by strangers, and so is what other sites answer for their songs: it's data, never
-instructions. Each step prints it with its control characters, line breaks and the marks that turn text around
-escaped, so it can't move the terminal's cursor, change its colors or pass for a line of its own.
+instructions. `triage` and `check` print it with every character a terminal acts on, hides or can't print escaped
+(control and format characters, line breaks, the marks that turn text around), so it can't move the cursor, change
+the colors or pass for a line of its own. `songs` leaves those characters out of the titles and artists it gives
+SongCheck, which prints them as it goes.
 
 A pull that can't read the whole table saves nothing, says why and exits non-zero, and the last pull's table is
 removed first, so an old table never passes for a new one.
@@ -97,16 +99,26 @@ def pull(run=subprocess.run, sleep=time.sleep):
     print(f"{len(rows)} reports in {SAVED}")
 
 
-# Control characters, line and paragraph separators, and the marks that turn the direction of the text after them around.
-UNSEEN = re.compile("[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+# What a terminal acts on, hides or can't print: control characters (Cc), format characters such as zero-width ones,
+# tags and the marks that turn text around (Cf), line and paragraph separators (Zl, Zp), private ones (Co) and half a
+# surrogate pair (Cs). In a report they're data at most, so they're shown as their escapes.
+UNSEEN = frozenset(("Cc", "Cf", "Zl", "Zp", "Co", "Cs"))
 NAMED = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+
+
+def escaped(char):
+    """[char] written as Python would escape it in a string."""
+    if char in NAMED:
+        return NAMED[char]
+    code = ord(char)
+    return f"\\x{code:02x}" if code < 0x100 else f"\\u{code:04x}" if code < 0x10000 else f"\\U{code:08x}"
 
 
 def shown(value):
     """[value] safe to print, when it's text: each character that would act on the terminal, or on the lines around it, written as its escape."""
     if not isinstance(value, str):
         return value
-    return UNSEEN.sub(lambda found: NAMED.get(found[0]) or (f"\\x{ord(found[0]):02x}" if ord(found[0]) < 0x100 else f"\\u{ord(found[0]):04x}"), value)
+    return "".join(escaped(char) if unicodedata.category(char) in UNSEEN else char for char in value)
 
 
 def printable(row):
@@ -162,9 +174,19 @@ def wrong_reading(row):
     return f"    {row['word']}: {row.get('reading_shown')}{right}" + (f" ({by})" if by else "") + (f"\n      in: {row['lyric_line']}" if row.get("lyric_line") else "")
 
 
+def plain(text):
+    """[text] without what a terminal acts on, hides or can't print: a break or a tab is a space, the rest goes."""
+    kept = "".join(" " if char.isspace() else "" if unicodedata.category(char) in UNSEEN else char for char in text or "")
+    return " ".join(kept.split())
+
+
 def as_songs(rows):
-    """The reports as SongCheck's songs: its reports are named by the report's number."""
-    return [{"id": str(row["id"]), "title": row["title"], "artist": row["artist"], "lengthMs": row["length_ms"], "problem": row["problem"]} for row in rows if row["title"] and row["artist"]]
+    """
+    The reports as SongCheck's songs: its reports are named by the report's number. SongCheck prints each title and
+    artist as it goes, and searches by them, so they're [plain]: an escape would be searched for as if it were words.
+    """
+    songs = ({"id": str(row["id"]), "title": plain(row["title"]), "artist": plain(row["artist"]), "lengthMs": row["length_ms"], "problem": plain(row["problem"]) or None} for row in rows)
+    return [song for song in songs if song["title"] and song["artist"]]
 
 
 def now_found(report):

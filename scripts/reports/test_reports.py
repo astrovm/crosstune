@@ -1,6 +1,7 @@
 import json
 import sys
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -189,6 +190,16 @@ class CheckTest(unittest.TestCase):
             [{"id": "7", "title": "Made Up Song", "artist": "Some Band", "lengthMs": 1000, "problem": "no_lyrics"}],
         )
 
+    def test_songs_for_songcheck_carry_no_character_a_terminal_acts_on(self):
+        # SongCheck prints each song's title and artist as it goes, and rows already in D1 weren't cleaned.
+        songs = reports.as_songs([row(7, title=f"Made\tUp{NASTY}", artist="Some\nBand\u200d\U0001f3b8")])
+        self.assertEqual(songs[0]["title"], "Made Upa[2J]0;titleb cde f ghijklm nop")
+        self.assertEqual(songs[0]["artist"], "Some Band\U0001f3b8")
+        for song in songs:
+            self.assertEqual([], unseen(song["title"] + song["artist"]))
+        # Nothing left is no song to look for.
+        self.assertEqual(reports.as_songs([row(8, title="\x1b\u200b")]), [])
+
     def test_what_the_finders_returned_in_few_words(self):
         self.assertEqual(reports.now_found({"lyrics": {"kind": "none"}}), "none")
         self.assertEqual(reports.now_found({"lyrics": {"kind": "instrumental"}}), "instrumental")
@@ -254,20 +265,26 @@ class MainTest(unittest.TestCase):
 
 
 # Made up: what a stranger could write in a report to move the cursor, recolor or retitle the terminal, or turn text around.
-NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg"
+# Past the control characters: zero-width ones, a tag, a mark that turns text around, a private one and half a pair.
+NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg\u200bh\u200di\U000e0041j\u200ek\ue000l\ud800m\u2029n\u061co\ufeffp"
+
+
 def unseen(text):
-    """The characters a terminal acts on or hides, apart from the line break the output is made of."""
-    return [c for c in text if c != "\n" and (ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F or 0x2028 <= ord(c) <= 0x202E or 0x2066 <= ord(c) <= 0x2069)]
+    """The characters a terminal acts on, hides or can't print, apart from the line break the output is made of."""
+    return [c for c in text if c != "\n" and unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs")]
 
 
 class ShownTest(unittest.TestCase):
     def test_control_characters_and_turning_marks_are_shown_escaped(self):
         self.assertEqual(
             reports.shown(NASTY),
-            "a\\x1b[2J\\x1b]0;title\\x07b\\x00\\x7f\\x85\\x9bc\\u202ed\\u2066e\\u2069\\u2028f\\tg",
+            "a\\x1b[2J\\x1b]0;title\\x07b\\x00\\x7f\\x85\\x9bc\\u202ed\\u2066e\\u2069\\u2028f\\tg"
+            "\\u200bh\\u200di\\U000e0041j\\u200ek\\ue000l\\ud800m\\u2029n\\u061co\\ufeffp",
         )
         self.assertEqual(reports.shown("line\nbreak\r"), "line\\nbreak\\r")
         self.assertEqual(reports.shown("Demo 花 أغنية"), "Demo 花 أغنية")
+        # Every character of what was printed can be printed: half a pair would stop Python's print.
+        reports.shown(NASTY).encode("utf-8")
         self.assertEqual(reports.shown(None), None)
         self.assertEqual(reports.shown(7), 7)
 
