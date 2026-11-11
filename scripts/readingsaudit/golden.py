@@ -29,8 +29,8 @@ READING_BUILD = "app/build.gradle.kts"
 READING_BUILD_WORD = "kuromoji"
 GOLDEN_COUNT = "# rows: "
 # The letters of the line each row holds on each side of its stable stretch, where the line has them. A rule that reads a
-# word by the text next to its stretch fails a row too: the most of the measured breaks this catches, with the fewest rows.
-CONTEXT = 2
+# word by the text next to its stretch fails a row too: the fewest that catch every break measured in PR #931.
+CONTEXT = 3
 GOLDEN_HEADER = [
     "# Locked readings. Each row is a reading the app gives the way the song is sung: its kana, and where they go.",
     "# Every reading the audit found right is here, on the shortest stretch of its line that the app reads the same way",
@@ -176,13 +176,18 @@ def letters(line, at):
 
 def golden_contexts(folder, job):
     """GoldenContexts' answer to [job], run in the build box: which rows still hold, and each case's shortest stretch."""
-    # The job holds the songs' lines, so it stays in the audit folder.
-    (folder / "golden-job.json").write_text(json.dumps(job, ensure_ascii=False))
+    # The job holds the songs' lines, so it is in the audit folder, and goes once it is answered.
+    asked = folder / "golden-job.json"
+    asked.write_text(json.dumps(job, ensure_ascii=False))
     answer = folder / "golden-answer.json"
     answer.unlink(missing_ok=True)
-    if audit.songcheck(folder, "com.astrovm.crosstune.songcheck.GoldenContexts") != 0 or not answer.exists():
-        raise SystemExit("GoldenContexts did not answer; its output is above")
-    return json.loads(answer.read_text())
+    try:
+        if audit.songcheck(folder, "com.astrovm.crosstune.songcheck.GoldenContexts") != 0 or not answer.exists():
+            raise SystemExit("GoldenContexts did not answer; its output is above")
+        return json.loads(answer.read_text())
+    finally:
+        asked.unlink(missing_ok=True)
+        answer.unlink(missing_ok=True)
 
 
 def span_of(row, line, word, start):

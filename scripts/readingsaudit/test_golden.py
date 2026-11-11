@@ -528,9 +528,12 @@ class Golden(unittest.TestCase):
             (folder / "golden-answer.json").write_text("{}")
             with mock.patch.object(readingsaudit, "songcheck", side_effect=songcheck):
                 self.assertEqual(answer, golden.golden_contexts(folder, {"rows": [], "cases": [["日", "日", 0, "日=ひ", "ipadic"]]}))
+            # The songs' lines go once they are answered.
+            self.assertEqual([], list(folder.iterdir()))
             # A failed run, or one that wrote nothing, stops the command: an old answer is never read.
             with mock.patch.object(readingsaudit, "songcheck", return_value=1), self.assertRaises(SystemExit):
                 golden.golden_contexts(folder, {"rows": [], "cases": []})
+            self.assertEqual([], list(folder.iterdir()))
             with mock.patch.object(readingsaudit, "songcheck", return_value=0), self.assertRaises(SystemExit):
                 golden.golden_contexts(folder, {"rows": [], "cases": []})
 
