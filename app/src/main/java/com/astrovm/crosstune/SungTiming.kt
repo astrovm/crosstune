@@ -54,12 +54,47 @@ internal object SungTiming {
             }
         }.filter { it.support >= MIN_SUPPORT }
         val firstLetters = written.groupBy { it.line }.mapValues { (_, its) -> its.first().letters }
-        val chain = backed(chained(candidates, firstLetters), firstLetters)
+        val chain = backed(sure(candidates, firstLetters), firstLetters)
         val placed = chain + filled(chain, firstLetters, stretches)
         return placed.filter { placed -> stretches.any { placed.ms in it.fromMs - EDGE_MS..it.toMs } }.associate { it.line to it.ms }
     }
 
     private class Placed(val line: Int, val ms: Long, val support: Double, val words: Int)
+
+    /**
+     * The lines of the best chain of [candidates] that it can't do about as well without: with one gone,
+     * another line found at its time often takes its place, as a chorus sung again has the same words.
+     * Of two such chains, nothing heard says which is right, so the line isn't put at all.
+     */
+    private fun sure(candidates: List<Placed>, firstLetters: Map<Int, Int>): List<Placed> {
+        val best = chained(candidates, firstLetters)
+        if (best.isEmpty()) return best
+        val weight = best.sumOf { it.support }
+        val sorted = candidates.sortedBy { it.ms }
+        fun follows(a: Placed, b: Placed) = b.line > a.line && b.ms - a.ms >= (firstLetters.getValue(b.line) - firstLetters.getValue(a.line)) * FAST_LETTER_MS
+        // The best chain ending at each, and starting at each; one that can follow another is always later.
+        val ending = DoubleArray(sorted.size) { sorted[it].support }
+        val starting = DoubleArray(sorted.size) { sorted[it].support }
+        for (k in sorted.indices) for (j in 0 until k) if (follows(sorted[j], sorted[k])) ending[k] = maxOf(ending[k], ending[j] + sorted[k].support)
+        for (k in sorted.indices.reversed()) for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j])) starting[k] = maxOf(starting[k], starting[j] + sorted[k].support)
+        // For each, the best chain that can follow it from a line on: a chain with no line between the two.
+        val lines = sorted.maxOf { it.line } + 2
+        val after = Array(sorted.size) { DoubleArray(lines) }
+        for (k in sorted.indices) {
+            for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j])) after[k][sorted[j].line] = maxOf(after[k][sorted[j].line], starting[j])
+            for (line in lines - 2 downTo 0) after[k][line] = maxOf(after[k][line], after[k][line + 1])
+        }
+        return best.filter { placed ->
+            val elsewhere = sorted.indices.filter { sorted[it].line == placed.line && abs(sorted[it].ms - placed.ms) > SAME_PLACE_MS }
+                .maxOfOrNull { ending[it] + starting[it] - sorted[it].support } ?: 0.0
+            val before = sorted.indices.filter { sorted[it].line < placed.line }
+            val skipped = maxOf(
+                before.maxOfOrNull { ending[it] + after[it][placed.line + 1] } ?: 0.0,
+                sorted.indices.filter { sorted[it].line > placed.line }.maxOfOrNull { starting[it] } ?: 0.0,
+            )
+            maxOf(elsewhere, skipped) < weight - placed.support * SURE_SHARE
+        }
+    }
 
     /**
      * Lines found by few words, kept only beside a line placed where they'd follow: two words alike
@@ -218,6 +253,13 @@ internal object SungTiming {
 
     /** Lines between two found this close together, in one while heard, are put between them. */
     private const val FILL_MS = 8_000L
+
+    /**
+     * A line in the best chain is sure only if the best without it, found this near where it is, weighs
+     * less by more than this share of its own weight.
+     */
+    private const val SAME_PLACE_MS = 6_000L
+    private const val SURE_SHARE = 0.5
 
     /** How sure a line found has to be, by its words alike, as [matchScore] has them. */
     private const val MIN_SUPPORT = 1.0
