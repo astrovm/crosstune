@@ -30,6 +30,9 @@ class SungTimingTest {
 
     private fun heard(fromMs: Long, vararg sung: List<Pair<String, Long>>) = HeardStretch(fromMs, fromMs + 20_000, sung.toList().flatten())
 
+    /** [text] sung from [startMs], heard as [heardAs], a word for each word. */
+    private fun heardAs(startMs: Long, text: String, heardAs: String) = sungAt(startMs, text).zip(heardAs.split(' ')) { (_, ms), word -> word to ms }
+
     @Test
     fun aLineHeardStartsWhereItsSung() {
         val placed = SungTiming.linesMs(lines, listOf(heard(20_000, sungAt(21_000, lines[1]), sungAt(25_000, lines[2]))), 120_000)
@@ -50,6 +53,10 @@ class SungTimingTest {
         val sounds = listOf("[Music]" to 20_500L, "(upbeat" to 20_700L, "music)" to 20_800L, "♪" to 20_900L)
         val placed = SungTiming.linesMs(lines, listOf(heard(20_000, sounds, sungAt(22_000, lines[1]))), 120_000)
         assertEquals(mapOf(1 to 22_000L), placed)
+        // Right before a line, they take none of its words.
+        val two = listOf("Amber lanterns glow", "Silver rivers bend")
+        val soundsBefore = listOf(listOf("[Music]" to 10_400L), sungAt(10_000, two[0]), listOf("(Music)" to 20_200L), sungAt(20_000, two[1]))
+        assertEquals(mapOf(0 to 10_000L, 1 to 20_000L), SungTiming.linesMs(two, listOf(heard(9_000, *soundsBefore.toTypedArray())), 60_000))
     }
 
     @Test
@@ -58,6 +65,76 @@ class SungTimingTest {
         val at = SungTiming.HEARD_LATE_MS + 10_000
         val misheard = listOf("Mornin" to at, "comes" to at + 7 * SungTiming.LETTER_MS, "uh" to at + 10 * SungTiming.LETTER_MS, "over" to at + 12 * SungTiming.LETTER_MS, "hill" to at + 19 * SungTiming.LETTER_MS)
         assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(lines, listOf(heard(9_000, misheard)), 120_000))
+        // Most words a letter or so off.
+        val offByALetter = heardAs(30_000, lines[1], "Coffe steamin by da windo")
+        assertEquals(mapOf(1 to 30_000L), SungTiming.linesMs(lines, listOf(heard(29_000, offByALetter)), 120_000))
+        // Words as long but with no letter where the line's has it aren't the line's.
+        val unlike = heardAs(30_000, lines[4], "bloom sugar pitched mist")
+        assertEquals(emptyMap<Int, Long>(), SungTiming.linesMs(lines, listOf(heard(29_000, unlike)), 120_000))
+    }
+
+    @Test
+    fun wordsHalfHeardAreJustEnoughNearWhereTheLineIsLikelySung() {
+        // The letters before put the second line halfway through the song; within a quarter of the song of there is near.
+        val words = listOf("Bicycles rattle along bakery", "Oh my we go on", "Lanterns glowing")
+        fun timedAt(startMs: Long, heard: String) =
+            SungTiming.linesMs(words, listOf(HeardStretch(startMs - 1_000, startMs + 19_000, heardAs(startMs, words[1], heard))), 100_000)
+        // Each of five words heard half right is just enough.
+        assertEquals(mapOf(1 to 30_000L), timedAt(30_000, "ah me wo ga an"))
+        // Four aren't.
+        assertEquals(emptyMap<Int, Long>(), timedAt(30_000, "ah me wo ga"))
+        // Nor are five further off.
+        assertEquals(emptyMap<Int, Long>(), timedAt(20_000, "ah me wo ga an"))
+    }
+
+    @Test
+    fun wordsInManyLinesOrOfOneLetterSayLess() {
+        // Each line is first in its words, so it's likely sung near the start; halfway through the song is far off.
+        fun timedAt(startMs: Long, words: List<String>, heard: String) =
+            SungTiming.linesMs(words, listOf(HeardStretch(startMs - 1_000, startMs + 19_000, heardAs(startMs, words[0], heard))), 100_000)
+        // Heard clearly, a line is sure enough even far off.
+        assertEquals(mapOf(0 to 70_000L), timedAt(70_000, listOf("Amber lanterns glow", "Silver rivers bend"), "Amber lanterns glow"))
+        // Three words half heard and one of two letters heard clearly are enough far off.
+        assertEquals(mapOf(0 to 60_000L), timedAt(60_000, listOf("Oh my we go", "Lanterns glowing"), "ah me wo go"))
+        // With a word of one letter instead, they aren't, though near the start they are.
+        val oneLetter = listOf("Oh my we a", "Lanterns glowing")
+        assertEquals(emptyMap<Int, Long>(), timedAt(60_000, oneLetter, "ah me wo a"))
+        assertEquals(mapOf(0 to 30_000L), timedAt(30_000, oneLetter, "ah me wo a"))
+        // Nor with a word in four lines.
+        val common = listOf("Oh my we the", "The lanterns", "The rivers", "The window")
+        assertEquals(emptyMap<Int, Long>(), timedAt(60_000, common, "ah me wo the"))
+        assertEquals(mapOf(0 to 30_000L), timedAt(30_000, common, "ah me wo the"))
+    }
+
+    @Test
+    fun wordsHeardBeforeOnesUnlikeTheLineDontMoveIt() {
+        // Half heard and then a word unlike the line's, the first words say where it starts apart from the last.
+        val one = listOf("Oh my we go on silver carry every lantern")
+        val first = heardAs(10_000, one[0], "ah me wo ga an plum")
+        val last = sungAt(13_000, one[0]).drop(6)
+        assertEquals(mapOf(0 to 13_000L), SungTiming.linesMs(one, listOf(heard(9_000, first, last)), 60_000))
+    }
+
+    @Test
+    fun theWordsThatAgreeSayWhereALineStarts() {
+        // Each word heard says where its line starts by the letters before it: here 10 s, 11.5 s and 15 s.
+        val one = listOf("Carry every lantern down")
+        val late = SungTiming.HEARD_LATE_MS
+        val heardSo = listOf("Carry" to 10_000L + late, "every" to 11_500L + late + 5 * SungTiming.LETTER_MS, "lantern" to 15_000L + late + 10 * SungTiming.LETTER_MS)
+        // The first two agree, just, so they say it over the third; of two, the earlier.
+        assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(one, listOf(heard(9_000, heardSo)), 60_000))
+    }
+
+    @Test
+    fun aWordHeardOnceCountsForOneLine() {
+        // Sung twice with a rest between, the "home" before the rest heard once: the end of the first time or the start of the second, not both.
+        val twice = listOf("Home is where we go home", "Home is where we go home")
+        val again = 10_000 + 15 * SungTiming.LETTER_MS + 2_000
+        val heardBoth = sungAt(10_000, twice[0]) + sungAt(again, twice[1]).drop(1)
+        assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(twice, listOf(heard(9_000, heardBoth)), 60_000))
+        // With only "go" heard of the first time, the second has it.
+        val onlyGo = heardBoth.drop(4)
+        assertEquals(mapOf(0 to again), SungTiming.linesMs(twice, listOf(heard(9_000, onlyGo)), 60_000))
     }
 
     @Test
@@ -67,28 +144,66 @@ class SungTimingTest {
         assertEquals(emptyMap<Int, Long>(), SungTiming.linesMs(short, listOf(heard(10_000, sungAt(13_000, short[1]))), 60_000))
         // Right after a line found, they're that line's next.
         assertEquals(mapOf(0 to 10_000L, 1 to 13_000L), SungTiming.linesMs(short, listOf(heard(9_000, sungAt(10_000, short[0]), sungAt(13_000, short[1]))), 60_000))
+        // Right before a line found, as long before as its 6 letters can be sung at the slowest, and 2 s more.
+        assertEquals(mapOf(1 to 13_000L, 2 to 16_200L), SungTiming.linesMs(short, listOf(heard(12_000, sungAt(13_000, short[1]), sungAt(16_200, short[2]))), 60_000))
+        // Longer after the line before than that, it's alone again.
+        val late = listOf("Paper boats along the gutter", "Morning comes over the hill", "Oh yeah")
+        assertEquals(mapOf(1 to 10_000L), SungTiming.linesMs(late, listOf(heard(9_000, sungAt(10_000, late[1]), sungAt(20_000, late[2]))), 60_000))
+        // Three words alike are enough alone.
+        val three = sungAt(13_000, short[2]).filter { it.first in setOf("comes", "over", "hill") }
+        assertEquals(mapOf(2 to 13_000L), SungTiming.linesMs(short, listOf(heard(12_000, three)), 60_000))
     }
 
     @Test
     fun aLineNotMadeOutBetweenTwoHeardIsPutBetweenThem() {
-        val three = listOf("Paper boats along the gutter", "Shimmer shimmer", "Morning comes over the hill")
-        val placed = SungTiming.linesMs(three, listOf(heard(9_000, sungAt(10_000, three[0]), listOf("la" to 13_600L, "la" to 13_900L), sungAt(16_000, three[2]))), 60_000)
-        val first = SpokenWords.pieces(three[0]).sumOf { it.length }
-        val second = SpokenWords.pieces(three[1]).sumOf { it.length }
-        assertEquals(mapOf(0 to 10_000L, 1 to 10_000L + 6_000L * first / (first + second), 2 to 16_000L), placed)
+        val four = listOf("Hey", "Paper boats along the gutter", "Shimmer shimmer", "Morning comes over the hill")
+        val la = listOf("la" to 13_600L, "la" to 13_900L)
+        // Where its letters put it between, 8 s apart at most.
+        val between = 10_000L + 8_000L * 24 / (24 + 14)
+        assertEquals(mapOf(1 to 10_000L, 2 to between, 3 to 18_000L), SungTiming.linesMs(four, listOf(heard(10_000, sungAt(10_000, four[1]), la, sungAt(18_000, four[3]))), 60_000))
+        assertEquals(mapOf(1 to 10_000L, 3 to 18_001L), SungTiming.linesMs(four, listOf(heard(10_000, sungAt(10_000, four[1]), la, sungAt(18_001, four[3]))), 60_000))
+        // The two found in two plays, it's put between them as long as one heard all from one to the other.
+        val firstPlay = heard(17_500, sungAt(18_000, four[3]))
+        val secondPlay = HeardStretch(10_000, 18_000, sungAt(10_000, four[1]) + la)
+        assertEquals(mapOf(1 to 10_000L, 2 to between, 3 to 18_000L), SungTiming.linesMs(four, listOf(firstPlay, secondPlay), 60_000))
     }
 
     @Test
     fun aLineSungBeforeTheWhileHeardIsntTimedByItsLastWords() {
+        fun timedSungAt(startMs: Long, vararg before: HeardStretch) =
+            SungTiming.linesMs(lines, listOf(*before, heard(30_000, sungAt(startMs, lines[1]).filter { it.second >= 30_000 })), 120_000)
         // Only "by the window" falls in what was heard; the line started well before.
-        val late = sungAt(28_000, lines[1]).filter { it.second >= 30_000 }
-        assertEquals(emptyMap<Int, Long>(), SungTiming.linesMs(lines, listOf(heard(30_000, late)), 120_000))
+        assertEquals(emptyMap<Int, Long>(), timedSungAt(28_500))
+        // A second before, as its first words may be, it's taken.
+        assertEquals(mapOf(1 to 29_000L), timedSungAt(29_000))
+        // As it is with the while before heard up to where it starts.
+        assertEquals(mapOf(1 to 28_500L), timedSungAt(28_500, HeardStretch(8_500, 28_500, emptyList())))
     }
 
     @Test
     fun aLineHeardInTwoPlaysIsTimedOnce() {
         val placed = SungTiming.linesMs(lines, listOf(heard(20_000, sungAt(21_000, lines[1])), heard(12_000, sungAt(21_000, lines[1]))), 120_000)
         assertEquals(mapOf(1 to 21_000L), placed)
+        // Heard at two times, it's where it's heard surest.
+        val misheardLater = heardAs(40_000, lines[1], "Coffee steaming my the window")
+        assertEquals(mapOf(1 to 21_000L), SungTiming.linesMs(lines, listOf(heard(20_000, sungAt(21_000, lines[1])), heard(39_000, misheardLater)), 120_000))
+    }
+
+    @Test
+    fun twoLinesAreNeverCloserThanAnyoneSings() {
+        // The first line's 23 letters take at least 1.38 s.
+        fun timedSecondAt(startMs: Long) = SungTiming.linesMs(lines, listOf(heard(9_000, sungAt(10_000, lines[0]), sungAt(startMs, lines[1]))), 120_000)
+        assertEquals(mapOf(0 to 10_000L, 1 to 11_380L), timedSecondAt(11_380))
+        // Any closer, only one of them is right.
+        assertEquals(1, timedSecondAt(11_379).size)
+    }
+
+    @Test
+    fun ofTwoLinesHeardOutOfOrderTheFirstHeardGoes() {
+        // Either could come before the third, and each is as sure.
+        val three = listOf("Amber lanterns glow", "Silver rivers bend", "Morning comes over the hill")
+        val heardSo = heard(9_000, sungAt(10_000, three[1]), sungAt(12_000, three[0]), sungAt(20_000, three[2]))
+        assertEquals(mapOf(1 to 10_000L, 2 to 20_000L), SungTiming.linesMs(three, listOf(heardSo), 100_000))
     }
 
     @Test

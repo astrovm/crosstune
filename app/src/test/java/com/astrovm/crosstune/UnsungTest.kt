@@ -79,6 +79,8 @@ class UnsungTest {
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
+        // The log is one for all the tests run together: what another test noted isn't this one's.
+        TimingLog.clear()
         fake.handler = { request ->
             when (request.url.host) {
                 "report.crosstune.cc" -> FakeSpotify.html(request, "", code = 204)

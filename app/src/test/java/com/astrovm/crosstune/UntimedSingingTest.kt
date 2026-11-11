@@ -16,6 +16,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -28,9 +29,11 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowSystemClock
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.io.File
+import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** Words found with no timing, timed by the singing heard in what the phone plays. */
@@ -75,6 +78,8 @@ class UntimedSingingTest {
         listOf("lookups.json", "lyrics.json", "kept_words.json", "heard_untimed.json").forEach { File(app.cacheDir, it).delete() }
         untimedWords()
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        // The log is one for all the tests run together: what another test noted isn't this one's.
+        TimingLog.clear()
     }
 
     @After
@@ -102,14 +107,15 @@ class UntimedSingingTest {
     private fun waitUntil(condition: () -> Boolean) =
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
 
-    /** LRCLIB has the six lines with no timing, for a recording [seconds] long when it says. */
-    private fun untimedWords(seconds: Int? = null) {
+    /** LRCLIB has the six lines with no timing, for a recording [seconds] long when it says; the song's cover is [artworkUrl]. */
+    private fun untimedWords(seconds: Int? = null, artworkUrl: String? = null) {
         val duration = seconds?.let { "\"duration\":$it," }.orEmpty()
+        val cover = artworkUrl?.let { ",\"thumbnail_url\":\"$it\"" }.orEmpty()
         fake.handler = { request ->
             FakeSpotify.html(
                 request,
                 if (request.url.host == "lrclib.net") """[{"trackName":"Demo","artistName":"Band",$duration"plainLyrics":"${lines.joinToString("\\n")}"}]"""
-                else """{"title":"Demo","author_name":"Band"}"""
+                else """{"title":"Demo","author_name":"Band"$cover}"""
             )
         }
     }
@@ -134,14 +140,34 @@ class UntimedSingingTest {
     }
 
     /** The first [count] lines heard sung, each at [lineMs], word by word as whisper.cpp hears them: a little late. */
-    private fun sung(count: Int = lines.size) = Sung(startedAt, lines.take(count).flatMapIndexed { index, line ->
-        var before = 0
-        line.split(' ').map { word ->
-            HeardWord(word, lineMs(index) + SungTiming.HEARD_LATE_MS + before * SungTiming.LETTER_MS - startedFromMs).also { before += word.length }
-        }
-    }.filter { it.atMs >= 0 })
+    private fun sung(count: Int = lines.size) =
+        Sung(startedAt, (0 until count).flatMap { wordsSung(it, lineMs(it)) }.map { (word, ms) -> HeardWord(word, ms - startedFromMs) }.filter { it.atMs >= 0 })
 
     private fun lineMs(index: Int) = 2_000L + index * 3_000L
+
+    /** The words of line [index], sung from [startMs], each with where in the song whisper.cpp hears it: a little late. */
+    private fun wordsSung(index: Int, startMs: Long): List<Pair<String, Long>> {
+        var before = 0
+        return lines[index].split(' ').map { word -> (word to startMs + SungTiming.HEARD_LATE_MS + before * SungTiming.LETTER_MS).also { before += word.length } }
+    }
+
+    /**
+     * The song plays on as it's heard, from where [plays] put it: each while is heard from where the
+     * last ended, or from when the app started playing, and the phone's clock moves on to its end.
+     * What's heard is the first [words] words of each line sung in it, the lines sung where [singsAt] says.
+     */
+    private fun playsOn(singsAt: Map<Int, Long>, words: Int = Int.MAX_VALUE) {
+        var heardTo = 0L
+        singing.answer = {
+            val whileMs = SingingListener.SECONDS * 1000L
+            val heardAt = maxOf(startedAt, heardTo)
+            heardTo = heardAt + whileMs
+            val fromMs = startedFromMs + heardAt - startedAt
+            ShadowSystemClock.advanceBy(Duration.ofMillis(maxOf(0L, heardTo - SystemClock.elapsedRealtime())))
+            val heard = singsAt.flatMap { (index, ms) -> wordsSung(index, ms).take(words) }.filter { it.second in fromMs until fromMs + whileMs }
+            Sung(heardAt, heard.map { (word, ms) -> HeardWord(word, ms - fromMs) })
+        }
+    }
 
     private fun lineStarts() = state().lyricLines.map { it.timeMs }
 
@@ -193,6 +219,13 @@ class UntimedSingingTest {
         plays()
         composeRule.waitForIdle()
         assertEquals(4, singing.hears)
+        // Worked out again, as after an update, they're timed from what was heard, before anything's heard.
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics()
+        assertTrue(state().lyricsTimedByEar)
+        assertEquals(lines.indices.map(::lineMs), lineStarts())
+        assertEquals(4, singing.hears)
     }
 
     @Test
@@ -211,6 +244,8 @@ class UntimedSingingTest {
         moved.complete(Unit)
         composeRule.waitForIdle()
         assertTrue(state().lyricLines.isEmpty())
+        // Moved while a while is heard, it's not heard twice at once.
+        assertEquals(1, singing.hears)
         assertFalse(state().lyricsTimedByEar)
     }
 
@@ -255,6 +290,145 @@ class UntimedSingingTest {
         assertEquals(0, singing.hears)
     }
 
+    @Test
+    fun eachWhileHeardSaysWhereItsLinesWent() {
+        // The second line is sung where the first while heard ends, and heard first.
+        playsOn(mapOf(0 to 20_000L, 1 to 40_000L))
+        openLyrics()
+        plays(positionMs = 40_000, durationMs = 200_000)
+        waitUntil { singing.hears == 1 + MainViewModel.SINGING_TRIES }
+        assertEquals(listOf(LyricLine.NOT_HEARD, 40_000L) + List(4) { LyricLine.NOT_HEARD }, lineStarts())
+        // Moved back to the first line, both are where the while heard starts and ends, and the note says so.
+        singing.most = singing.hears + 1
+        plays(positionMs = 20_000, durationMs = 200_000)
+        waitUntil { singing.hears == singing.most + 1 }
+        assertEquals(listOf(20_000L, 40_000L) + List(4) { LyricLine.NOT_HEARD }, lineStarts())
+        val note = TimingLog.lastMinute().lines().last { "by ear" in it }
+        assertTrue(note, note.endsWith("by ear 20000 heard 4 words, 2 lines timed, here 0>20000 1>40000"))
+    }
+
+    @Test
+    fun aWordHeardAsTheWhileStartsIsHeard() {
+        singing.answer = { sung(count = 1) }
+        openLyrics()
+        // The first word is sung just as the while heard starts.
+        plays(positionMs = lineMs(0) + SungTiming.HEARD_LATE_MS)
+        waitUntil { state().lyricsTimedByEar }
+        assertTrue(TimingLog.lastMinute(), "by ear 2550 heard 4 words, 1 lines timed" in TimingLog.lastMinute())
+    }
+
+    @Test
+    fun aClockOffByLessThanAJumpIsStillPlaced() {
+        val moved = CompletableDeferred<Unit>()
+        singing.answer = {
+            val heard = sung()
+            moved.await()
+            heard
+        }
+        openLyrics()
+        plays(positionMs = 10_000)
+        waitUntil { singing.hears == 1 }
+        // The app says it's a little further than its clock said, not far enough to have moved.
+        plays(positionMs = 10_000 + SystemClock.elapsedRealtime() - startedAt + MainViewModel.STEADY_CLOCK_MS)
+        moved.complete(Unit)
+        waitUntil { state().lyricsTimedByEar }
+        assertEquals(List(3) { LyricLine.NOT_HEARD } + (3..5).map(::lineMs), lineStarts())
+    }
+
+    @Test
+    fun aSongHeardThroughTwiceIsHeardNoMore() {
+        playsOn(mapOf(0 to 2_000L, 3 to 25_000L))
+        openLyrics()
+        plays()
+        waitUntil { singing.hears >= 4 }
+        composeRule.waitForIdle()
+        // Forty seconds long, it's heard through twice in four whiles, though the last two hear nothing.
+        assertEquals(4, singing.hears)
+        assertEquals(listOf(2_000L, LyricLine.NOT_HEARD, LyricLine.NOT_HEARD, 25_000L, LyricLine.NOT_HEARD, LyricLine.NOT_HEARD), lineStarts())
+    }
+
+    @Test
+    fun theLengthTheAppSaysGoesFirst() {
+        // The words say the song is half a minute long, and the app forty seconds.
+        untimedWords(seconds = 30)
+        singing.answer = { sung() }
+        openLyrics()
+        plays()
+        waitUntil { singing.hears >= 4 }
+        composeRule.waitForIdle()
+        assertEquals(4, singing.hears)
+    }
+
+    @Test
+    fun withNoLengthFromTheAppTheWordsSayIt() {
+        untimedWords(seconds = 30)
+        singing.answer = { sung() }
+        openLyrics()
+        plays(durationMs = null)
+        waitUntil { singing.hears >= 3 }
+        composeRule.waitForIdle()
+        assertEquals(3, singing.hears)
+    }
+
+    @Test
+    fun withNoLengthSaidTheWhileHeardLastSaysHowLongItIs() {
+        // Three words of the second line, sung late in the second while: placed only in a song at least that long.
+        playsOn(mapOf(1 to 34_000L), words = 3)
+        singing.most = 2
+        openLyrics()
+        plays(durationMs = null)
+        waitUntil { singing.hears == 3 }
+        assertEquals(listOf(LyricLine.NOT_HEARD, 34_000L) + List(4) { LyricLine.NOT_HEARD }, lineStarts())
+    }
+
+    @Test
+    fun aLineKeptIsTimedOnceItsHeard() {
+        untimedWords(artworkUrl = COVER)
+        singing.answer = { sung(count = 4) }
+        openLyrics()
+        composeRule.runOnIdle { model().toggleSavedLine(1) }
+        assertEquals(null, state().savedLines.single().startMs)
+        plays()
+        waitUntil { state().lyricsTimedByEar }
+        assertEquals(lineMs(1), state().savedLines.single().startMs)
+        // Kept once timed, a line heard is timed, and one not heard isn't.
+        composeRule.runOnIdle { model().toggleSavedLine(2) }
+        composeRule.runOnIdle { model().toggleSavedLine(4) }
+        assertEquals(mapOf(lines[1] to lineMs(1), lines[2] to lineMs(2), lines[4] to null), state().savedLines.associate { it.text to it.startMs })
+        // Timed or not, each has the song's cover.
+        assertEquals(listOf(COVER, COVER, COVER), state().savedLines.map { it.artworkUrl })
+    }
+
+    @Test
+    fun aVideoTimedByEarGoesByItsClock() {
+        singing.answer = { sung(count = 4) }
+        openLyrics()
+        plays(video = true)
+        waitUntil { state().lyricsTimedByEar }
+        // Heard where the app has the song, nothing's taken off its clock, and the lines heard are sure.
+        assertEquals(playback.playing.value, state().following)
+    }
+
+    @Test
+    fun outOfSightItsNotHeard() {
+        singing.answer = { sung() }
+        openLyrics()
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        plays()
+        assertEquals(0, singing.hears)
+        composeRule.runOnIdle { model().resumeFollowingNext() }
+        waitUntil { state().lyricsTimedByEar }
+    }
+
+    @Test
+    fun withNoMicItsNotHeard() {
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        singing.answer = { sung() }
+        openLyrics()
+        plays()
+        assertEquals(0, singing.hears)
+    }
+
     /** whisper.cpp, answering what a test says. */
     private class FakeSinging : SingingHearing {
         val languages: MutableList<String?> = CopyOnWriteArrayList()
@@ -265,6 +439,10 @@ class UntimedSingingTest {
         @Volatile
         var missing = false
 
+        /** The most whiles heard: past them, it hears on till it's stopped, so a test can look at what the first gave. */
+        @Volatile
+        var most = MOST_HEARS
+
         val hears get() = languages.size
 
         override val missesModel get() = missing
@@ -274,6 +452,7 @@ class UntimedSingingTest {
 
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
             languages += language
+            if (hears > most) awaitCancellation()
             return if (missing) null else answer()
         }
     }
@@ -281,5 +460,9 @@ class UntimedSingingTest {
     private companion object {
         const val TIMEOUT_MS = 10_000L
         const val SONG_MS = 40_000L
+        const val COVER = "https://example.com/demo.jpg"
+
+        /** More whiles than any test hears, past which a hearing that never ends would stop. */
+        const val MOST_HEARS = 100
     }
 }
