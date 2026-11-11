@@ -4877,7 +4877,8 @@ internal class MainViewModel(
         val script = Readings.scriptOf(lines)
         // Asked as when the words show: romaji and kana are made from the readings too. Not had, they're tried again on the next network.
         val sung = if (uiState.learning.reads && script == Script.JAPANESE) sungReadingsOf(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) }) else emptyList()
-        return sung != null || sungReadings == null
+        // Readings turned off while UtaTen was asked: none are wanted any more, so the song's kept all the same.
+        return sung != null || sungReadings == null || !uiState.learning.reads
     }
 
     /**
