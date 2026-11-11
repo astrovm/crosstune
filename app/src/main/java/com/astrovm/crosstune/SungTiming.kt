@@ -68,12 +68,11 @@ internal object SungTiming {
      */
     private fun sure(candidates: List<Placed>, firstLetters: Map<Int, Int>): List<Placed> {
         val best = chained(candidates, firstLetters)
-        if (best.isEmpty()) return best
         val weight = best.sumOf { it.support }
         val sorted = candidates.sortedBy { it.ms }
         val ending = ending(sorted, firstLetters)
         val starting = starting(sorted, firstLetters)
-        val after = after(sorted, starting, firstLetters)
+        val after = after(sorted, starting, firstLetters.keys.max() + 2, firstLetters)
         return best.filter { placed ->
             val elsewhere = sorted.indices.filter { sorted[it].line == placed.line && abs(sorted[it].ms - placed.ms) > SAME_PLACE_MS }
                 .maxOfOrNull { ending[it] + starting[it] - sorted[it].support } ?: 0.0
@@ -100,9 +99,11 @@ internal object SungTiming {
         return starting
     }
 
-    /** For each of [sorted], the best chain that can follow it from each line on: a chain with no line between the two. */
-    private fun after(sorted: List<Placed>, starting: DoubleArray, firstLetters: Map<Int, Int>): Array<DoubleArray> {
-        val lines = sorted.maxOf { it.line } + 2
+    /**
+     * For each of [sorted], the best chain that can follow it from each line on: a chain with no line between
+     * the two. [lines] is past the last line by one more, so the line after any has a place too.
+     */
+    private fun after(sorted: List<Placed>, starting: DoubleArray, lines: Int, firstLetters: Map<Int, Int>): Array<DoubleArray> {
         val after = Array(sorted.size) { DoubleArray(lines) }
         for (k in sorted.indices) {
             for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j], firstLetters)) after[k][sorted[j].line] = maxOf(after[k][sorted[j].line], starting[j])
@@ -129,7 +130,8 @@ internal object SungTiming {
     private fun filled(chain: List<Placed>, firstLetters: Map<Int, Int>, stretches: List<HeardStretch>): List<Placed> =
         chain.zipWithNext().flatMap { (a, b) ->
             val heard = stretches.filter { a.ms >= it.fromMs && b.ms <= it.toMs }
-            if (b.line - a.line < 2 || b.ms - a.ms > FILL_MS || heard.isEmpty()) return@flatMap emptyList()
+            // Lines next to each other have none between, so nothing is put.
+            if (b.ms - a.ms > FILL_MS || heard.isEmpty()) return@flatMap emptyList()
             val from = firstLetters.getValue(a.line)
             val to = firstLetters.getValue(b.line)
             val put = (a.line + 1 until b.line).filter { it in firstLetters }.map { line ->
