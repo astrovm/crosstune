@@ -11,6 +11,15 @@ internal object SpokenWords {
     /** Match unspaced writing by letters, as the model can split the same phrase anywhere. */
     fun pieces(text: String): List<String> = text.split(' ').flatMap { word -> writing.findAll(plain(word)).map { it.value }.toList() }
 
+    /**
+     * [text]'s pieces heard from [ms], each with where it starts: a word of unspaced writing is matched a letter
+     * at a time, and each letter is sung a little after the one before, not all at the word's start.
+     */
+    fun heardFrom(text: String, ms: Long): List<Pair<String, Long>> {
+        var before = 0L
+        return pieces(text).map { piece -> (piece to ms + before * SungTiming.LETTER_MS).also { before += piece.length } }
+    }
+
     private val writing = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+")
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
@@ -129,14 +138,14 @@ internal object SungTiming {
      */
     private fun filled(chain: List<Placed>, firstLetters: Map<Int, Int>, stretches: List<HeardStretch>): List<Placed> =
         chain.zipWithNext().flatMap { (a, b) ->
+            val between = (a.line + 1 until b.line).filter { it in firstLetters }
+            // Lines next to each other, or with only lines with no words between, have nothing to put.
+            if (between.isEmpty() || b.ms - a.ms > FILL_MS) return@flatMap emptyList()
             val heard = stretches.filter { a.ms >= it.fromMs && b.ms <= it.toMs }
-            // Lines next to each other have none between, so nothing is put.
-            if (b.ms - a.ms > FILL_MS || heard.isEmpty()) return@flatMap emptyList()
             val from = firstLetters.getValue(a.line)
             val to = firstLetters.getValue(b.line)
-            val put = (a.line + 1 until b.line).filter { it in firstLetters }.map { line ->
-                Placed(line, a.ms + (b.ms - a.ms) * (firstLetters.getValue(line) - from) / (to - from), 0.0, 0)
-            }
+            val put = between.map { line -> Placed(line, a.ms + (b.ms - a.ms) * (firstLetters.getValue(line) - from) / (to - from), 0.0, 0) }
+            // Heard in no one while from one to the other, no voice says anything is sung between.
             val voice = heard.flatMap { sung(it.words) }.map { it.second }
             put.filterIndexed { k, placed -> voice.any { it in placed.ms until (put.getOrNull(k + 1)?.ms ?: b.ms) } }
         }
@@ -232,9 +241,7 @@ internal object SungTiming {
         return words.flatMap { (text, ms) ->
             val sound = told || text.startsWith('[') || text.startsWith('(')
             told = sound && !text.endsWith(']') && !text.endsWith(')')
-            var before = 0L
-            // A word of unspaced writing is matched a letter at a time; each letter is a little after the one before.
-            if (sound) emptyList() else SpokenWords.pieces(text).map { piece -> (piece to ms - HEARD_LATE_MS + before * LETTER_MS).also { before += piece.length } }
+            if (sound) emptyList() else SpokenWords.heardFrom(text, ms - HEARD_LATE_MS)
         }
     }
 

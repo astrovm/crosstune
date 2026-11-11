@@ -614,4 +614,44 @@ VLC for Android 3.7.1 played the Police from a tagged local file, `phone XB7AmIs
 - Not kept, each measured on two plays. On main: a stricter form that asks another line to be found near the one left out (569 within 1.0 s, 114 off, 37 over 3 s); dropping words heard in a clump at one time, where the model loses its timing (no better at any size). With the rows above: a line kept when two whiles found it at one place (600, 65, 17: the same curve); a line whose earliest word is past half or two thirds of it left untimed (547 or 572 within 1.0 s); one-letter pieces (Japanese, Korean) counting as half a word (Japanese goes from 17 good and 26 off to 3 and 5: turned off, not fixed); the speech model's lateness at 400, 700 or 850 ms (550 stays best).
 - Lines filled between two found, for the review of PR #889: before the voice rule, 47 on one play (27 within 1.0 s, 3 off, 0 over 3 s, 17 with no truth) and 77 on two (49, 4, 0, 24). The voice rule takes 1 off and 3 untruthed lines on one play, and 2 good and 2 untruthed on two.
 - Left: on one play, 9 lines are over 10 s off. They're whole choruses put at another time they're sung, each line in order with its neighbors, so taking one out leaves no chain as good.
-- Held out, two plays, by `untimed --again 12000 --part K/3` on main's timing and on this one (within 1.0 s / off / over 3 s, main → now): part 1 185 / 42 / 23 → 173 / 24 / 8, part 2 178 / 31 / 11 → 181 / 13 / 2, part 3 231 / 57 / 15 → 235 / 21 / 5, none put where nothing was heard. Each part has far fewer lines off. But part 1 loses 12 lines within 1.0 s: 17 of the 42 songs lose 1 to 4, and two gain 6 each, so the whole set loses only 5. Issue #928 has it.
+- `untimed` now has a "Wrong" column: lines shown more than 1.0 s from where they're sung at any time in the replay, not only at the end. Main 173, now 97, on two plays.
+- A word heard in unspaced writing (Japanese, Chinese, Korean) is cut into one piece a letter. Each piece was heard at the word's start. Now each is a letter (70 ms) after the one before, in the app (`SungTiming`, and `SungWords` for timed words) and in the replay's hearings. The truth is unchanged: the old way and the new one give the same start for 112 of the 113 cached lines in unspaced writing, and the last moves by 10 ms.
+
+### Held out (Issue #892 review)
+
+The parts are fixed by song ID (SHA-256 of the ID, mod 3), so a song stays in its part as songs are added. `--part tune` is parts 2 and 3 (29 songs), `--part held` is part 1 (13 songs). The constants are picked on `tune` and scored once on `held`. Two plays (`untimed --again 12000`).
+
+The pick rule, set before the sweep: within 1.0 s at least as many as now (398), over 3 s no more than now (6), then the fewest off.
+
+| Share of weight | Near 4 s | 5 s | 6 s (now) | 7 s | 8 s |
+|---|---|---|---|---|---|
+| 0.4 | 405 / 33 / 9 | 407 / 34 / 9 | 407 / 36 / 10 | 408 / 37 / 11 | 410 / 38 / 12 |
+| 0.45 | 402 / 32 / 8 | 405 / 33 / 8 | 405 / 35 / 9 | 406 / 36 / 10 | 406 / 37 / 11 |
+| 0.5 (now) | 395 / 30 / 6 | 398 / 31 / 6 | 398 / 32 / 6 | 399 / 34 / 8 | 399 / 37 / 11 |
+| 0.55 | 389 / 30 / 6 | 392 / 31 / 6 | 392 / 32 / 6 | 393 / 34 / 8 | 393 / 37 / 11 |
+| 0.6 | 387 / 30 / 6 | 390 / 31 / 6 | 390 / 32 / 6 | 390 / 34 / 8 | 390 / 37 / 11 |
+
+Within 1.0 s / off / over 3 s, on `tune`. Then with share 0.5 and 5 s, a letter's time and the speech model's lateness:
+
+| Letter | Late 400 ms | 550 ms (now) | 700 ms |
+|---|---|---|---|
+| 60 ms | 393 / 37 / 9 | 394 / 36 / 7 | 395 / 35 / 6 |
+| 70 ms (now) | 393 / 36 / 7 | 398 / 31 / 6 | 394 / 35 / 5 |
+| 80 ms | 393 / 37 / 7 | 396 / 38 / 7 | 397 / 37 / 6 |
+
+The rule picks share 0.5, 5 s, 70 ms, 550 ms: one line off fewer than 6 s on `tune`. Scored:
+
+| Timing | Part | Heard | Timed | Within 1.0 s | Within 0.5 s | Off | > 3 s | Unheard | Wrong |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Main | tune | 839 | 479 | 393 | 321 | 86 | 26 | 0 | 115 |
+| Now (6 s) | tune | 839 | 430 | 398 | 330 | 32 | 6 | 0 | 58 |
+| Main | held | 355 | 245 | 201 | 164 | 44 | 23 | 0 | 58 |
+| Now (6 s) | held | 355 | 217 | 191 | 155 | 26 | 9 | 0 | 39 |
+| Picked (5 s) | held | 355 | 216 | 190 | 154 | 26 | 9 | 0 | 38 |
+| Main | all | 1194 | 724 | 594 | 485 | 130 | 49 | 0 | 173 |
+| Now (6 s) | all | 1194 | 647 | 589 | 485 | 58 | 15 | 0 | 97 |
+| Picked (5 s) | all | 1194 | 645 | 588 | 484 | 57 | 15 | 0 | 95 |
+
+- 5 s moves every count by 1 or 2, on `held` and on all songs, and puts one fewer within 1.0 s. That's noise, so 6 s stays.
+- On the held songs, lines off fall from 44 to 26 and over 3 s from 23 to 9, but 10 fewer are within 1.0 s (201 to 191). On `tune` 5 more are. So the rule that leaves a line untimed costs good lines on songs it wasn't picked on. Issue #928 has it.
+- Per part, main → now, within 1.0 s / off / over 3 s: part 1 201 / 44 / 23 → 191 / 26 / 9, part 2 240 / 26 / 6 → 236 / 13 / 2, part 3 153 / 60 / 20 → 162 / 18 / 4.

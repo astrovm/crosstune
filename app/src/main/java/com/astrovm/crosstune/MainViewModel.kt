@@ -2548,10 +2548,18 @@ internal class MainViewModel(
     private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs ?: song.lengthMs ?: found?.lengthMs
 
     /** [song]'s words, found with no timing, timed by the singing heard in [heardStretches], once any line's been heard. */
-    private fun timeByEar(song: MusicMetadata) {
-        val length = untimedLengthMs(song) ?: heardStretches.maxOfOrNull { it.toMs } ?: return
-        val lines = SungTiming.timed(uiState.lyrics.lines(), heardStretches, length).ifEmpty { return }
-        uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = true)
+    private suspend fun timeByEar(song: MusicMetadata) {
+        val heard = heardStretches
+        val words = uiState.lyrics
+        val length = untimedLengthMs(song) ?: heard.maxOfOrNull { it.toMs } ?: return
+        // A long song heard through twice takes a while to line up, so it's done away from the screen.
+        val lines = withContext(systemDispatcher) { SungTiming.timed(words.lines(), heard, length) }
+        // Timed words found meanwhile, or these written otherwise, as in their own script: this is out of date.
+        // Left, or heard again, the job doing this is stopped, so it never gets here.
+        if (foundLines.isNotEmpty() || uiState.lyrics != words) return
+        // Nothing heard is sure of any line now, so the lines lit before go dark too.
+        if (lines.isEmpty() && !uiState.lyricsTimedByEar) return
+        uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = lines.isNotEmpty())
         uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
     }
 

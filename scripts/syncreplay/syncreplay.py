@@ -10,7 +10,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
   ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE] [--uri URI]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
-  python3 scripts/syncreplay/syncreplay.py untimed [ID...] [--again MS] [--part K/N] [-v]   # the words' times taken off, then timed by the singing heard
+  python3 scripts/syncreplay/syncreplay.py untimed [ID...] [--again MS] [--part tune|held|K/N] [-v]   # the words' times taken off, then timed by the singing heard
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
 e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), separates the voice
@@ -41,8 +41,9 @@ heard is found near where the app says, by bits short enough to still fit a reco
 by SungTiming on the JVM, in seconds: from the whiles the app would hear as the song plays from MS (--from),
 and with --again from a second play too, the first while that many ms in. It prints, per song, the lines
 sung in what was heard, those put within 1.0 s and 0.5 s of it, those put further off and those over 3 s off,
-those put where nothing was heard, and the worst; -v prints each line. --part K/N takes every Nth song
-of those prepped, from the Kth, so a change tuned on all of them can be checked on each part alone.
+those put where nothing was heard, those shown more than 1.0 s off at any time along the way (wrong), and the
+worst; -v prints each line. --part tune takes the two thirds of the songs a change is tuned on, and --part held
+the third it's then checked on, which it never saw; each song's part is fixed by its ID. --part K/N takes part K of N.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -70,6 +71,7 @@ Wants ffmpeg, yt-dlp, cmake, curl, and demucs, faster-whisper and numpy in the P
 import argparse
 from array import array
 import fcntl
+import hashlib
 import html
 import json
 from datetime import datetime
@@ -274,7 +276,22 @@ def words_heard(vocals, language):
     else:
         segments, _ = truth_model().transcribe(audio(vocals), language=language, word_timestamps=True, condition_on_previous_text=False, beam_size=5)
         hearings = [[(w.word, w.start) for s in segments for w in s.words]]
-    return [[(piece, start) for word, start in words for piece in pieces(word)] for words in hearings]
+    return [[heard for word, start in words for heard in heard_pieces(word, start)] for words in hearings]
+
+
+# About how long a letter takes to sing, as SungTiming.LETTER_MS has it.
+SUNG_LETTER_S = 0.07
+
+
+def heard_pieces(word, start):
+    """[word]'s pieces heard from [start] s, each with when it starts: a letter of unspaced writing a little after
+    the one before, as the app has them (SpokenWords.heardFrom). Whisper can hear a line's first letters inside
+    the word before, and all at its start, the line would start early."""
+    heard, before = [], 0
+    for piece in pieces(word):
+        heard.append((piece, round(start + before * SUNG_LETTER_S, 3)))
+        before += len(piece)
+    return heard
 
 
 def line_starts(heard, lines):
@@ -1139,14 +1156,36 @@ def untimed_input(song, starts, length_ms, other=""):
     return path, used
 
 
+# A change to SungTiming is tuned on the songs in TUNE_PARTS and then checked on those in HELD_OUT, which it
+# never saw. Each song's part comes from its ID alone, so it stays in it as songs are added.
+PARTS = 3
+HELD_OUT = frozenset({1})
+TUNE_PARTS = frozenset({2, 3})
+
+
+def song_part(song, n):
+    """Which of [n] parts [song] is in, counted from 1, by its ID alone."""
+    return int.from_bytes(hashlib.sha256(song.encode()).digest(), "big") % n + 1
+
+
+def part_arg(text):
+    """--part as given: "held" (HELD_OUT), "tune" (TUNE_PARTS) or "K/N" (part K of N), as the parts taken and N."""
+    if text == "held":
+        return HELD_OUT, PARTS
+    if text == "tune":
+        return TUNE_PARTS, PARTS
+    k, slash, n = text.partition("/")
+    if not (slash and k.isdigit() and n.isdigit() and 1 <= int(k) <= int(n)):
+        raise argparse.ArgumentTypeError(f"{text!r} is not held, tune or K/N with K from 1 to N, as 1/3")
+    return frozenset({int(k)}), int(n)
+
+
 def part(songs, which):
-    """Every Nth of [songs] from the Kth, for [which] as "K/N" counted from 1; all of them with none."""
+    """Those of [songs] in the parts [which] takes, as part_arg gives it; all of them with none."""
     if not which:
         return songs
-    k, n = map(int, which.split("/"))
-    if not 1 <= k <= n:
-        sys.exit(f"--part {which}: K has to be from 1 to N")
-    return songs[k - 1::n]
+    parts, n = which
+    return [song for song in songs if song_part(song, n) in parts]
 
 
 def untimed(args):
@@ -1282,7 +1321,7 @@ def main():
     p.add_argument("-v", "--verbose", action="store_true", help="each line: when it's sung and where it was put")
     p.add_argument("--heard", default="", help="another hearing of each song, as `all --heard`; the nearest while in it")
     p.add_argument("--again", type=int, help="play it a second time, keeping what was heard, with the first while heard this many ms in")
-    p.add_argument("--part", help="K/N: every Nth song from the Kth, to check a part held out")
+    p.add_argument("--part", type=part_arg, help="tune: the songs a change is tuned on; held: those it's then checked on; K/N: part K of N, by song ID")
     p.set_defaults(go=untimed)
     p = steps.add_parser("phone")
     p.add_argument("id")

@@ -274,6 +274,16 @@ class SungTimingTest {
     }
 
     @Test
+    fun onlyLinesWithWordsArePutBetweenTwoHeard() {
+        // Next to each other, or with only a break or a sound between, there's no line to put, whatever's heard between.
+        val mm = listOf("mm" to 13_000L + SungTiming.HEARD_LATE_MS)
+        for (between in listOf(emptyList(), listOf(""), listOf("♪", ""))) {
+            val lines = listOf("Amber lanterns glow") + between + "Silver rivers bend"
+            assertEquals(mapOf(0 to 10_000L, lines.lastIndex to 16_000L), SungTiming.linesMs(lines, listOf(heard(9_000, sungAt(10_000, lines[0]), mm, sungAt(16_000, lines.last()))), 60_000))
+        }
+    }
+
+    @Test
     fun aLineSungBeforeTheWhileHeardIsntTimedByItsLastWords() {
         fun timedSungAt(startMs: Long, vararg before: HeardStretch) =
             SungTiming.linesMs(lines, listOf(*before, heard(30_000, sungAt(startMs, lines[1]).filter { it.second >= 30_000 })), 120_000)
@@ -326,9 +336,8 @@ class SungTimingTest {
         val japanese = listOf("君の名前を呼んだ", "夜明けの空に")
         val heardSo = listOf("君の" to 10_550L, "名前を" to 10_690L, "呼んだ" to 10_900L)
         val placed = SungTiming.linesMs(japanese, listOf(heard(9_000, heardSo)), 60_000)
-        // Each letter of a word heard is sung a little after the one before, so where the line starts is told within a letter.
-        assertEquals(setOf(0), placed.keys)
-        assertTrue(kotlin.math.abs(placed.getValue(0) - 10_000L) <= SungTiming.LETTER_MS)
+        // Each letter of a word heard is sung a little after the one before, so each says the line starts where it's sung.
+        assertEquals(mapOf(0 to 10_000L), placed)
     }
 
     @Test
