@@ -318,6 +318,7 @@ class BaseChecker(unittest.TestCase):
                 body.write_text("golden: accept 甲乙 こうおつ\n", encoding="utf-8")
                 self.assertEqual(0, check_golden.main(["--repo", str(repo), "--body-file", str(body)]))
                 self.assertEqual(1, check_golden.main(["--repo", str(repo)]))
+                self.assertEqual(0, check_golden.main(["--own", "--repo", str(repo), "--body-file", str(body)]))
 
 
 if __name__ == "__main__":
