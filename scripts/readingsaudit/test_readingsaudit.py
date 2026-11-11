@@ -73,5 +73,75 @@ class Table(unittest.TestCase):
         self.assertEqual(readingsaudit.table_header(date, version), header)
 
 
+def word(kanji, kana, senses):
+    """A JMdict entry for old_kana: kanji [(text, tags, common)], kana [(text, tags, common, applies to)], senses [(part of speech, misc)]."""
+    return {"kanji": [{"text": text, "tags": tags, "common": common} for text, tags, common in kanji],
+            "kana": [{"text": text, "tags": tags, "common": common, "appliesToKanji": applies} for text, tags, common, applies in kana],
+            "sense": [{"partOfSpeech": pos, "misc": misc} for pos, misc in senses]}
+
+
+class OldKana(unittest.TestCase):
+
+    def test_names_each_common_word_with_i_or_u_by_its_usual_form(self):
+        words = [
+            word([("思い出", [], True), ("想い出", [], False)], [("おもいで", [], True, ["*"])], [(["n"], [])]),
+            # Usually written in kana, or with no kanji: looked up as it is.
+            word([("有難う", [], True)], [("ありがとう", [], True, ["*"])], [(["int"], ["uk"])]),
+            word([], [("ちょうど", [], True, [])], [(["adv"], [])]),
+            # No common form: the first one there is, but no form for search only.
+            word([("迚", ["sK"], False), ("会う", [], False)], [("あう", [], True, ["*"])], [(["v5u"], [])]),
+            # Two common words written so: no telling which, so the kana.
+            word([("言う", [], True)], [("いう", [], True, ["*"])], [(["v5u"], [])]),
+            word([("結う", [], True)], [("いう", [], True, ["*"])], [(["v5u"], [])]),
+        ]
+        today, _ = readingsaudit.old_kana(words)
+        self.assertEqual({"おもいで": "思い出", "ありがとう": "ありがとう", "ちょうど": "ちょうど", "あう": "会う", "いう": "いう"}, today)
+
+    def test_leaves_out_adjectives_rare_words_odd_kana_and_other_letters(self):
+        words = [
+            # 古い was ふるし, never ふるひ.
+            word([("古い", [], True)], [("ふるい", [], True, ["*"])], [(["adj-i"], [])]),
+            word([("会う", [], True)], [("あう", [], False, ["*"])], [(["v5u"], [])]),
+            word([("言う", [], True)], [("ゆう", ["ik"], True, ["*"])], [(["v5u"], [])]),
+            word([], [("ウイスキー", [], True, [])], [(["n"], [])]),
+            # い or う first is no old ひ or ふ.
+            word([("家", [], True)], [("いえ", [], True, ["*"])], [(["n"], [])]),
+        ]
+        self.assertEqual(({}, []), readingsaudit.old_kana(words))
+
+    def test_lists_the_words_written_with_hi_or_fu_today_but_archaic_ones(self):
+        words = [
+            word([("工夫", [], True)], [("くふう", [], True, ["*"])], [(["n"], [])]),
+            word([("お昼", [], True)], [("おひる", [], False, ["*"])], [(["n"], []), (["n"], ["arch"])]),
+            word([("言ふ", [], False)], [("いふ", [], False, ["*"])], [(["v4h"], ["arch"])]),
+            word([], [("ひと", ["ok"], False, [])], [(["n"], [])]),
+        ]
+        self.assertEqual(["おひる", "くふう"], readingsaudit.old_kana(words)[1])
+
+    def test_writes_the_table_with_where_it_comes_from(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            words = [word([("思い出", [], True)], [("おもいで", [], True, ["*"])], [(["n"], [])]),
+                     word([("工夫", [], True)], [("くふう", [], True, ["*"])], [(["n"], [])])]
+            (folder / "jmdict.json").write_text(json.dumps({"version": "9.9.9", "dictDate": "2000-01-01", "words": words}, ensure_ascii=False))
+            out = folder / "old-kana.txt"
+            with mock.patch.object(readingsaudit, "OLD_KANA", out), mock.patch("builtins.print") as said:
+                readingsaudit.oldkana(folder)
+            lines = out.read_text().splitlines()
+            header = "\n".join(line for line in lines if line.startswith("#"))
+            self.assertTrue(lines[0].startswith("# JMdict 2000-01-01"))
+            # Where it's from, its license and that it's changed, as the Group's licence asks.
+            for part in ("jmdict-simplified 9.9.9", "CC BY-SA 4.0", "Changed:", readingsaudit.JMDICT_URL,
+                         "https://creativecommons.org/licenses/by-sa/4.0/", "https://www.edrdg.org/edrdg/licence.html"):
+                self.assertIn(part, header)
+            self.assertEqual(["おもいで\t思い出", "くふう\t工夫", "くふう"], [line for line in lines if not line.startswith("#")])
+            self.assertIn("2 words today and 1 modern words", said.call_args.args[0])
+
+    def test_the_committed_table_has_the_header_a_remake_writes(self):
+        header = [line for line in readingsaudit.OLD_KANA.read_text().splitlines() if line.startswith("#")]
+        date, version = header[0].split()[2].rstrip(","), header[1].split()[3].rstrip(".")
+        self.assertEqual(readingsaudit.old_kana_header(date, version), header)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,11 +5,15 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -103,7 +107,9 @@ internal class PracticeCards(
     private val reminders: PracticeReminders? = null,
     private val songLoadMs: Long = MainViewModel.LOAD_SONG_MS,
     /** Makes the small YouTube player a line plays in when its music app can't move to it, once it's wanted; nullable so tests need none. */
-    private val newPlayer: (() -> LinePlayer)? = null
+    private val newPlayer: (() -> LinePlayer)? = null,
+    /** Where a card's line is read again: the dictionary loads the first time, and the screen would freeze meanwhile. */
+    private val readDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
     private var uiState by screen
     private var soundJob: Job? = null
@@ -610,15 +616,31 @@ internal class PracticeCards(
         if (practice.sound == LineSound.PLAYED && practice.line?.let { typeOf(it).options.back.sound } == true) replay()
     }
 
-    /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */
+    /** Card edits, one at a time, so one doesn't undo another. */
+    private val editing = Mutex()
+
+    /**
+     * The card's line read as [readings] say, one for each of its kanji, put right by hand: only what they change in it as
+     * shown, laid over it as it's kept by then, so what was put right meanwhile, by another edit or by UtaTen, stays.
+     */
     fun readAs(readings: List<String>) {
-        val practice = uiState.practice ?: return
-        val line = practice.line ?: return
-        val read = line.readAs(readings).takeIf { it != line } ?: return
-        uiState = uiState.copy(
-            savedLines = store.readAs(read),
-            practice = practice.copy(queue = practice.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true, typed = read.typed) else it })
-        )
+        val seen = uiState.practice?.line ?: return
+        scope.launch {
+            editing.withLock {
+                val saved = store.change(readDispatcher) { kept ->
+                    val edited = seen.readAs(readings).takeIf { it != seen } ?: return@change null
+                    val read = kept.firstOrNull { it.isSame(seen) }?.editedAs(seen, edited) ?: return@change null
+                    kept.map { if (it.isSame(read)) read else it }
+                } ?: return@withLock
+                val read = saved.first { it.isSame(seen) }
+                // Practice may have gone on meanwhile: the line's put right wherever it is in it now.
+                val practice = uiState.practice
+                uiState = uiState.copy(
+                    savedLines = saved,
+                    practice = practice?.let { now -> now.copy(queue = now.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true, typed = read.typed) else it }) }
+                )
+            }
+        }
     }
 
     /** Says how well the card turned was known, and goes on to the next; one missed comes back after its song's others. */
