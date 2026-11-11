@@ -340,7 +340,8 @@ internal class PracticeCards(
                         step("${app ?: "the app"} stopped at ${ready.clock.positionMs} ms, short of the line")
                         return@withTimeoutOrNull Reached(null, short = true)
                     }
-                    latest?.clock?.let(was::add)
+                    // Said again every look while nothing changes: kept once.
+                    latest?.clock?.takeIf { it != was.lastOrNull() }?.let(was::add)
                     at = latest?.clock?.takeIf { it.playing == play && window.near(it.positionMs) && window.holds(it.positionAt(now())) }?.positionMs
                 }
                 wasReady = ready != null
