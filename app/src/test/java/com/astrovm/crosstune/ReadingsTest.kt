@@ -2,11 +2,15 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 
 @RunWith(RobolectricTestRunner::class)
 class ReadingsTest {
@@ -474,6 +478,12 @@ class ReadingsTest {
         assertNull(modernKana("いふ"))
         assertNull(modernKana("いふ", "イウエ"))
         assertNull(modernKana("いふう", "イウ"))
+        // How IPADIC says it, with ー for an old kana said long: きのふ is said きのー.
+        assertEquals("きのう", modernKana("きのふ", Furigana.saidAsSpelled("きのふ", "キノー")))
+        assertEquals("いい", modernKana("いひ", Furigana.saidAsSpelled("いひ", "イー")))
+        assertEquals("とおい", modernKana("とほい", Furigana.saidAsSpelled("とほい", "トーイ")))
+        assertEquals("キノ", Furigana.saidAsSpelled("きのふ", "キノ"))
+        assertEquals("アーフ", Furigana.saidAsSpelled("ああふ", "アーフ"))
         // Hiragana is ぁ to ゖ, both ends in.
         assertEquals(true, Furigana.inOldKana("ぁひゖ"))
         assertEquals(false, Furigana.inOldKana("ひ\u3097"))
@@ -609,8 +619,116 @@ class ReadingsTest {
             val yesterday = Readings.words("きのふ", Script.JAPANESE).single()
             assertEquals(listOf(null, "きのう", "きのう"), listOf(yesterday.reading, yesterday.modern, yesterday.lookup))
         }
-        // IPADIC alone has nothing to tell it by, and names nothing.
-        assertNull(Readings.words("きのふ", Script.JAPANESE).single().modern)
+        // IPADIC alone says it きのー, the way it's said today.
+        assertEquals("きのう", Readings.words("きのふ", Script.JAPANESE).single().modern)
+    }
+
+    @Test
+    fun aWordInOldKanaAloneIsTheWordItIsTodayWithOrWithoutUniDic() {
+        // Text, spelling today and lookup of each word with a spelling today, in a line in kana alone IPADIC splits or misreads.
+        val lines = listOf(
+            "おもひで" to listOf("おもひで", "おもいで", "思い出"),
+            "手をとりあふ" to listOf("とりあふ", "とりあう", "とりあう"),
+            "あひたい" to listOf("あひたい", "あいたい", "あう"),
+            "きのふ" to listOf("きのふ", "きのう", "きのう"),
+            "待つてゐたんだよ" to listOf("ゐたんだ", "いたんだ", "いる"),
+            // Its first kana is never an old ending: ひろふ is ひろう, not いろう.
+            "ひろふ" to listOf("ひろふ", "ひろう", "ひろう"),
+            "ひきあふ" to listOf("ひきあふ", "ひきあう", "ひきあう"),
+            // Wherever it is in the line, and whatever marks are around it.
+            "ずっとふるふ" to listOf("ふるふ", "ふるう", "ふるう"),
+            "あっといふま" to listOf("といふ", "という", "という"),
+            "「あやふく」" to listOf("あやふく", "あやうく", "あやうい"),
+            "いふ（「ずっと」）" to listOf("いふ", "いう", "いう")
+        )
+        fun check() = lines.forEach { (line, expected) ->
+            val modern = Readings.words(line, Script.JAPANESE).filter { it.modern != null }.map { listOf(it.text, it.modern, it.lookup) }
+            assertEquals(line, listOf(expected), modern)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun aWordInKanaAloneIsOldOnlyWhereItCanBe() {
+        // A particle starts no word, an adjective's い was never ひ, and a verb in ひ may be a verb and 日: 降る日 is ふるひ.
+        val lines = listOf("あとへはひく", "あめのふるひ", "ひふ", "あいうえお", "ふふふ", "あの日へ", "おひるのひ", "あひるのこ", "やまはふじ").map { it to emptyList<String>() } +
+            // A word written so today that holds the old kana and more is that word: 財布, 回避, 手札, 威風, 都会風.
+            listOf("さいふ", "ぼくのさいふ", "かいひ", "てふだ", "いふう", "かいらいせいふ", "とかいふう", "せいふ", "せいひ", "いひん").map { it to emptyList() } +
+            // Where it's the word itself, the old one stays: いふ is いう more than 畏怖.
+            listOf("いふ" to listOf("いう"), "ちょうちょうといふ" to listOf("という"))
+        fun check() = lines.forEach { (line, modern) ->
+            val words = Readings.words(line, Script.JAPANESE)
+            assertEquals(line, modern, words.mapNotNull { it.modern })
+            // And no word goes missing: the words are the whole line.
+            assertEquals(line, line, words.joinToString("") { it.text })
+        }
+        check()
+        TestUniDic.reading { check() }
+        // Nor one the dictionary can't name today, あふぎ (Issue #904).
+        assertEquals("あふぎ", Readings.words("あふぎ", Script.JAPANESE).joinToString("") { it.text })
+    }
+
+    @Test
+    fun aModernWordTheDictionarySplitsIsSaidAsItIsWritten() {
+        // IPADIC says the verb いふ as いう and いひ as いい. Inside a longer word written so today, that sound is the word's own.
+        // たいふう, こうふく and まほう are modern too, and their long vowels stay. おおはば's は is the particle wa, not old kana.
+        val lines = listOf(
+            "さいふ" to "saifu",
+            "かいひ" to "kaihi",
+            "ないふ" to "naifu",
+            "いふう" to "ifuu",
+            "けいひ" to "keihi",
+            "がいふう" to "gaifuu",
+            "ぼくのさいふ" to "bokunosaifu",
+            "たいふう" to "taifuu",
+            "こうふく" to "koofuku",
+            "まほう" to "mahoo",
+            "おおはば" to "oowaba",
+            "とかいふう" to "tokaifuu"
+        )
+        fun check() = lines.forEach { (line, romaji) ->
+            val read = Readings.of(listOf(line), Script.JAPANESE).single()
+            assertEquals("$line said [${read.romanized}]", romaji, read.romanized.replace(" ", ""))
+            assertEquals("$line kana", line, read.reading)
+            assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern })
+            assertEquals(line, romaji, Readings.words(line, Script.JAPANESE).joinToString("") { it.romanized.orEmpty() })
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun threadsThatAskForATableAtOnceGetTheOneTableReadOnce() {
+        // Issue #911: each thread that asked before the first had read the file read it again, into a table of its own.
+        fun <T> atOnce(forget: () -> Unit, ask: () -> T): List<T> {
+            forget()
+            val go = CountDownLatch(1)
+            val got = Collections.synchronizedList(mutableListOf<T>())
+            val threads = List(8) { thread { go.await(); got += ask() } }
+            go.countDown()
+            threads.forEach { it.join() }
+            return got.toList()
+        }
+        val listed = atOnce({ Readings.listed = null }) { Readings.listed }
+        assertTrue(listed.size == 8 && listed.all { it === listed.first() })
+        val oldKana = atOnce({ Readings.oldKanaRead = null }) { Readings.oldKana }
+        assertTrue(oldKana.size == 8 && oldKana.all { it === oldKana.first() })
+    }
+
+    @Test
+    fun theWordsInKanaFromJmdictAreReadFromTheirFile() {
+        // Read from the file again, and its header is no word.
+        Readings.oldKanaRead = null
+        val table = Readings.oldKana
+        assertTrue(table.modern.isNotEmpty() && table.modern.none { it.startsWith("#") })
+        assertEquals("思い出", table.today["おもいで"])
+        assertTrue("くふう" in table.modern && "おもいで" !in table.modern)
+        assertEquals(table.modern.maxOf { it.length }, table.longest)
+        assertTrue(table.modern.first().length < table.longest)
+        // Read once: the same table after, and kept.
+        assertSame(table, Readings.oldKana)
+        assertSame(table, Readings.oldKanaRead)
     }
 
     @Test
@@ -945,6 +1063,9 @@ class ReadingsTest {
             assertEquals("$withUniDic", "にふんごにきた", read("二分後に来た"))
             assertEquals("$withUniDic", "じゅっぷんまえ", read("十分前"))
             assertEquals("$withUniDic", "ごふんまえ", read("五分前"))
+            // 何 counting minutes is なん, as it is before any counter: なんぷん, not なにふん.
+            assertEquals("$withUniDic", "なんぷんまえ", read("何分前"))
+            assertEquals("$withUniDic", "なんぷんいない", read("何分以内"))
             // Before anything else, 十分 is enough, and 二分 a half.
             assertEquals("$withUniDic", "じゅうぶんだよ", read("十分だよ"))
             assertEquals("$withUniDic", "にぶんする", read("二分する"))
@@ -953,6 +1074,15 @@ class ReadingsTest {
             // 分 after a number after 寸 or 割 is a tenth, ぶ.
             assertEquals("$withUniDic", "よんすんよんぶ", read("四寸四分"))
             assertEquals("$withUniDic", "ごわりごぶ", read("五割五分"))
+        }
+    }
+
+    @Test
+    fun whatBeforeACounterIsNan() {
+        for (withUniDic in listOf(false, true)) {
+            val read = { line: String -> (if (withUniDic) TestUniDic.reading { reading(line) } else reading(line)).reading }
+            mapOf("何本" to "なんぼん", "何回" to "なんかい", "何匹" to "なんびき", "何杯" to "なんばい", "何階" to "なんがい", "何人" to "なんにん")
+                .forEach { (line, kana) -> assertEquals("$line $withUniDic", kana, read(line)) }
         }
     }
 
@@ -967,6 +1097,11 @@ class ReadingsTest {
             // The modern verb, written so, stays.
             assertEquals("$withUniDic", "はれるそら", read("晴れる空").reading)
             assertEquals("$withUniDic", "ながれるかわ", read("流れる川").reading)
+            // And so does one whose れ is in its kanji, as the dictionary has it: 洒落る is しゃれる, not しゃる.
+            assertEquals("$withUniDic", "しゃれる", read("洒落る").reading)
+            assertEquals("$withUniDic", "しゃれるふく", read("洒落る服").reading)
+            // The same for each verb JMdict writes so and reads one way only: 小洒落る. (黄昏る is たそがる too.)
+            assertEquals("$withUniDic", "こじゃれる", read("小洒落る").reading)
         }
     }
 
@@ -1003,6 +1138,17 @@ class ReadingsTest {
             assertEquals("$withUniDic", "きょうははれ", read("今日は晴れ").reading)
             // Nor one piece alone the dictionary reads as a word it knows: 上野 is うえの, not JMdict's こうずけ.
             assertEquals("$withUniDic", "うえののはな", read("上野の花").reading)
+            // Nor the start of a longer word in kanji: 一重 is ひとえ, but 一重項 is いちじゅうこう.
+            assertEquals("$withUniDic", "いちじゅうこう", read("一重項").reading)
+            // A number that ends a line, or goes on in kana or into a verb, is the word JMdict reads.
+            assertEquals("$withUniDic", "ひとこきゅう", read("一呼吸").reading)
+            assertEquals("$withUniDic", "ひとこきゅうおいて", read("一呼吸おいて").reading)
+            assertEquals("$withUniDic", "ひとこきゅうおいて", read("一呼吸置いて").reading)
+            assertEquals("$withUniDic", "いちにんのりじてんしゃ", read("一人乗り自転車").reading)
+            // A word that starts with no number goes on as JMdict reads it: 保湿 of 保湿剤.
+            assertEquals("$withUniDic", "ほしつざい", read("保湿剤").reading)
+            // Kana end a word, so a verb before a noun in kanji is still the word JMdict reads: 目醒める時.
+            assertEquals("$withUniDic", "めざめるとき", read("目醒める時").reading)
         }
         assertEquals(listOf(Reader.JMDICT), Readings.words("水車小屋", Script.JAPANESE).single().by)
         // Without the table, as when it's made, the dictionaries read the word.

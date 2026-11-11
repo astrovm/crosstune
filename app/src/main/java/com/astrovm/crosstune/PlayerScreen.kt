@@ -277,7 +277,7 @@ internal fun PlayerScreen(state: UiState, actions: ScreenActions) {
                 AppIcon(R.drawable.ic_queue_music, contentDescription = stringResource(R.string.player_up_next))
             }
         }
-        if (hasWords && words.isNotEmpty()) LyricsPeek(words, following?.ahead(state.linesEarlyMs), tint, actions.onPlayerLyrics, Modifier.padding(top = 8.dp))
+        if (hasWords && words.isNotEmpty()) LyricsPeek(words, player.linesByEar, following?.ahead(state.linesEarlyMs), tint, actions.onPlayerLyrics, Modifier.padding(top = 8.dp))
     }
     val queue: @Composable (Modifier, Morph) -> Unit = { modifier, moving ->
         // Only while it's open, which its list being there says.
@@ -883,15 +883,20 @@ private fun LikeButton(like: AppAction, app: String?, onLike: () -> Unit, modifi
 
 /**
  * The line being sung, in a card at the bottom tinted as the cover is, which opens all the words, as
- * does a swipe up. Before the singing, the first. Two lines tall whatever the line, so the cover above
- * doesn't move as it's sung.
+ * does a swipe up. Lit as the words are, timed [byEar] or not: with none sung, as before the singing
+ * or past a line heard, the one coming next, dimmed; past the last, it. Two lines tall whatever the
+ * line, so the cover above doesn't move as it's sung.
  */
 @Composable
-private fun LyricsPeek(lines: List<LyricLine>, following: Following?, tint: Color, onLyrics: () -> Unit, modifier: Modifier) {
-    val at = rememberWhilePlaying(following?.takeIf { lines.size > 1 }, lines, { at -> SyncedLyrics.nextAfter(lines.map { it.timeMs }, at) }) { position ->
-        lines.indexOfLast { it.timeMs <= position }.coerceAtLeast(0)
-    } ?: 0
-    val line = (lines.getOrNull(at) ?: lines.first()).text
+private fun LyricsPeek(lines: List<LyricLine>, byEar: Boolean, following: Following?, tint: Color, onLyrics: () -> Unit, modifier: Modifier) {
+    val changes = remember(lines, byEar) { SyncedLyrics.changes(lines, byEar) }
+    val (at, sung) = rememberWhilePlaying(following, lines to byEar, { at -> SyncedLyrics.nextAfter(changes, at) }) { position ->
+        val sung = SyncedLyrics.indexAt(lines, position, byEar)
+        if (sung >= 0) sung to true
+        else (lines.indexOfLast { it.timeMs <= position } + 1).coerceAtMost(lines.lastIndex) to false
+    } ?: (0 to true)
+    val line = lines[at].text
+    val ink = if (sung) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
     val name = stringResource(R.string.lyrics_button)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -904,8 +909,8 @@ private fun LyricsPeek(lines: List<LyricLine>, following: Following?, tint: Colo
     ) {
         // Named as the button it stands in for: the line changes as it's sung, which a screen reader would read out each time.
         AppIcon(R.drawable.ic_lyrics, contentDescription = name, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Crossfade(line, label = "sung line", modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(it, style = MaterialTheme.typography.titleMedium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Crossfade(line to ink, label = "sung line", modifier = Modifier.weight(1f).padding(start = 12.dp)) { (text, color) ->
+            Text(text, style = MaterialTheme.typography.titleMedium, color = color, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }

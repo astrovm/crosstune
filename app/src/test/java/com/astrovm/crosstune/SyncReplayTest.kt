@@ -251,7 +251,7 @@ class SyncReplayTest(private val name: String, private val index: Int) {
             if (times != lastPlaced) placed.put(JSONObject().put("at", atMs + behindMs).put("times", JSONArray(times)))
             lastPlaced = times
             // Lit as the screen lights it: a moment early, so the eye is there first.
-            val index = SyncedLyrics.indexAt(state.lyricLines, following.ahead(state.linesEarlyMs).clock.positionAt(now))
+            val index = SyncedLyrics.indexAt(state.lyricLines, following.ahead(state.linesEarlyMs).clock.positionAt(now), state.lyricsTimedByEar)
             if (index != last && index >= 0) shown.put(JSONObject().put("line", index).put("text", state.lyricLines[index].text).put("at", atMs + behindMs))
             last = index
         }

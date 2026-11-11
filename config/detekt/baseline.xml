@@ -81,7 +81,6 @@
     <ID>NestedBlockDepth:Milkdrop.kt$GlThread$private fun draw()</ID>
     <ID>NestedBlockDepth:Readings.kt$Readings$private fun readAs(parts: List&lt;Ruby&gt;): LineReading</ID>
     <ID>NestedBlockDepth:SongListener.kt$PlayedSound$override fun open(): Recording?</ID>
-    <ID>NestedBlockDepth:SungReadings.kt$SungReadings$private suspend fun found(song: MusicMetadata, lines: List&lt;String&gt;, read: List&lt;LineReading&gt;): List&lt;ReadingFix&gt;</ID>
     <ID>NestedBlockDepth:UniDic.kt$UniDic$private fun fetched(): Boolean</ID>
   </CurrentIssues>
 </SmellBaseline>

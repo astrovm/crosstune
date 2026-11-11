@@ -24,9 +24,12 @@ import kotlin.math.abs
 /** A word heard sung, and when it starts, [atMs] into what was heard. */
 internal data class HeardWord(val text: String, val atMs: Long)
 
-/** Hears the words sung in [samples], 16 kHz mono, in [language] when it's known. */
+/**
+ * Hears the words sung in [samples], 16 kHz mono, in [language] when it's known: none when none are,
+ * as in an intro; null when the model fails on them, as out of memory, so they're not heard at all.
+ */
 internal fun interface WordHearing {
-    fun words(samples: FloatArray, language: String?): List<HeardWord>
+    fun words(samples: FloatArray, language: String?): List<HeardWord>?
 }
 
 /** What was heard sung, from [startedAtMs] on the clock that counts since the phone started. */
@@ -59,10 +62,12 @@ internal data class Sung(val startedAtMs: Long, val words: List<HeardWord>) {
     }
 }
 
-/** Hears the words of the song the phone plays now; null when it can't, or heard none. */
+/** Hears the words of the song the phone plays now; null when it can't. */
 internal interface SingingHearing {
     /**
-     * What's sung in the next while the phone plays, in [language] when it's known. Given [first],
+     * What's sung in the next while the phone plays, in [language] when it's known: no words when none
+     * are, as in an intro; null only when it can't be heard at all, e.g. for want of the speech model or
+     * of sound to hear, or the model failing on it. Given [first],
      * what's sung in its first [SingingListener.FIRST_SECONDS] is told it as soon as that's heard,
      * while the rest still is. When [first] says to, as many seconds from [SingingListener.AGAIN_SECONDS]
      * in are heard and told it too, as the speech model sometimes hears singing as music alone,
@@ -135,7 +140,8 @@ internal class SingingListener(
                     val heard = withContext(recordDispatcher) {
                         record(recording, again) { startedAt, part ->
                             // Told back where it was asked, while the rest is still heard.
-                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.let { if (first(Sung(startedAt, it))) hearAgain(file, again.await(), language, first) } }
+                            // Nothing heard in them tells nothing.
+                            if (first != null) this@coroutineScope.launch { words(file, part, language)?.ifEmpty { null }?.let { if (first(Sung(startedAt, it))) hearAgain(file, again.await(), language, first) } }
                         }
                     }
                     // Sound that ended before them has none to hear again.
@@ -155,14 +161,14 @@ internal class SingingListener(
 
     /** The sound in [part], from when it started, heard with [model] and told [first]. */
     private suspend fun hearAgain(model: File, part: Pair<Long, ShortArray>, language: String?, first: suspend (Sung) -> Boolean) {
-        words(model, part.second, language)?.let { first(Sung(part.first, it)) }
+        words(model, part.second, language)?.ifEmpty { null }?.let { first(Sung(part.first, it)) }
     }
 
-    /** The words sung in [audio], heard with [model], in [language] when it's known; null when it can't be loaded, or hears none. */
+    /** The words sung in [audio], heard with [model], in [language] when it's known: none when none are sung; null when it can't be loaded or fails on them. */
     private suspend fun words(model: File, audio: ShortArray, language: String?): List<HeardWord>? = withContext(computeDispatcher) {
         val hears = hearing(model) ?: return@withContext null
         try {
-            Busy.during { hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language) }.ifEmpty { null }
+            Busy.during { hears.words(FloatArray(audio.size) { audio[it] / 32768f }, language) }
         } finally {
             (hears as? Closeable)?.close()
         }
@@ -490,8 +496,11 @@ internal class HeardSongs(private val cache: LookupCache) {
     private fun keyOf(song: MusicMetadata, words: String) = RecordingKey.of(song) + "\u0000" + words.hashCode().toString(16)
 
     companion object {
-        /** About three times through a long song: the oldest go first. */
-        const val MAX_STRETCHES = 60
+        /**
+         * Half an hour heard: a song up to 15 minutes long heard through twice, as hearing stops there, so
+         * none of it is lost. Hearing a longer one stops here too. The oldest go first.
+         */
+        const val MAX_STRETCHES = 90
     }
 }
 

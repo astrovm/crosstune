@@ -7,6 +7,7 @@
   python3 scripts/readingsaudit/readingsaudit.py compare --words   # every wrong word too, with its song: for a person to read, not to publish
   python3 scripts/readingsaudit/readingsaudit.py compare --before before   # and what changed since a run kept in that folder: cp -r audit before
   python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
+  python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
 
 Songs' words are people's, so everything goes in the agent cache, never in the repo:
 $READINGSAUDIT_DIR, or /mnt/data/agent-cache/crosstune-anime-readings, or ~/.cache/agent-cache/crosstune-anime-readings.
@@ -106,6 +107,60 @@ def listed_candidates(words):
     return {form: next(iter(kana)) for form, kana in sorted(readings.items())
             if len(kana) == 1 and is_han(form[0]) and sum(map(is_han, form)) >= 2
             and all(is_han(c) or "ぁ" <= c <= "ゖ" or "ァ" <= c <= "ヶ" or c == "ー" for c in form)}
+
+
+def old_kana(words):
+    """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with a ひ or ふ after their first kana.
+
+    The first are JMdict's common words with an い or う after their first kana, おもいで, but adjectives, each looked up as its usual form,
+    思い出, or as its kana when it's usually written so or JMdict has more than one common word for it. The second are
+    every word JMdict has that's written so today, おひる or くふう, not archaic: written there, it's no old spelling.
+    """
+    looked_up = defaultdict(set)
+    modern = set()
+    for entry in words:
+        senses = entry.get("sense", [])
+        kana_usually = any("uk" in sense.get("misc", []) for sense in senses)
+        archaic = bool(senses) and all(set(sense.get("misc", [])) & {"arch", "obs"} for sense in senses)
+        for kana in entry["kana"]:
+            text = kana["text"]
+            if set(kana["tags"]) & ODD_KANA or not text or not all("ぁ" <= c <= "ゖ" for c in text):
+                continue
+            if any(c in "ひふ" for c in text[1:]) and not archaic:
+                modern.add(text)
+            # An adjective's い was never ひ, 古い is ふるし: ふるひ is 降る日.
+            adjective = any("adj-i" in sense.get("partOfSpeech", []) for sense in senses)
+            if kana.get("common") and any(c in "いう" for c in text[1:]) and not adjective:
+                forms = [k["text"] for k in entry["kanji"] if not set(k["tags"]) & ODD_FORMS
+                         and ("*" in kana["appliesToKanji"] or k["text"] in kana["appliesToKanji"])]
+                common = [k["text"] for k in entry["kanji"] if k.get("common") and k["text"] in forms]
+                looked_up[text].add(text if kana_usually or not forms else (common or forms)[0])
+    return {kana: next(iter(lookups)) if len(lookups) == 1 else kana for kana, lookups in sorted(looked_up.items())}, sorted(modern)
+
+
+def old_kana_header(date, version):
+    """old-kana.txt's header: where its words come from, their licence and how they were changed, as CC BY-SA 4.0 asks."""
+    return [f"# JMdict {date}, by the Electronic Dictionary Research and Development Group, {JMDICT_URL}",
+            f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
+            f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
+            "# Changed: only the common words in kana with い or う after their first kana, each with how it's looked up,",
+            "# then the words in kana with ひ or ふ after their first kana, which are no old spelling.",
+            "# Made by scripts/readingsaudit/readingsaudit.py oldkana."]
+
+
+def oldkana(folder):
+    """Writes the app's old-kana.txt from the JMdict in the folder: see old_kana."""
+    jmdict = json.loads((folder / "jmdict.json").read_text())
+    today, modern = old_kana(jmdict["words"])
+    header = old_kana_header(jmdict["dictDate"], jmdict["version"])
+    OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern) + "\n")
+    print(f"{len(today)} words today and {len(modern)} modern words in {OLD_KANA}")
+
+
+OLD_KANA = ROOT / "app/src/main/resources/com/astrovm/crosstune/old-kana.txt"
+JMDICT_URL = "https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project"
+CC_BY_SA_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
+EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 
 
 def table(folder):
@@ -390,7 +445,7 @@ def compare(folder, words, before=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare", "table"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
     args = parser.parse_args()
@@ -401,6 +456,8 @@ def main():
         run(folder)
     elif args.step == "table":
         table(folder)
+    elif args.step == "oldkana":
+        oldkana(folder)
     else:
         compare(folder, args.words, args.before)
 
