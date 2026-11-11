@@ -77,7 +77,7 @@ class LineWindowTest {
     fun anAppStoppedShortIsPausedAtANewPlaceBeforeTheLine() {
         val window = LineWindow(43_270, 48_270)
         val slack = LineWindow.SEEK_SLACK_MS
-        fun paused(at: Long) = PlaybackClock(at, atMs = 1_000)
+        fun paused(at: Long) = PlaybackClock(at, atMs = 1_000, playing = false)
         // TIDAL, sent from its start past its 30 s preview, paused at the preview's end.
         val playingItsStart = PlaybackClock(65, atMs = 800)
         assertTrue(window.stoppedShort(paused(29_952), from = playingItsStart))
