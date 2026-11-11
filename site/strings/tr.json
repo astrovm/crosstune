@@ -57,13 +57,6 @@
     ]
   ],
   "play_button": "Google Play",
-  "play_h2": "Google Play'den indir",
-  "play_steps": [
-    "Google Play hesabınızla <a href=\"{group}\">Crosstune testers</a> grubuna katılın.",
-    "<a href=\"{testing}\">Test sayfasını</a> açın ve <b>Become a tester</b> düğmesine dokunun.",
-    "Crosstune'u <a href=\"{store}\">Google Play</a>'den yükleyin."
-  ],
-  "play_note": "Crosstune, Google Play'de test aşamasında. Görünmesi birkaç dakika sürebilir.",
   "works_with": "Uyumlu servisler",
   "made_with": "{astro} tarafından {heart} ile yapıldı",
   "privacy_link": "Gizlilik politikası",

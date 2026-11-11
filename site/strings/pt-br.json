@@ -57,13 +57,6 @@
     ]
   ],
   "play_button": "Google Play",
-  "play_h2": "Baixe no Google Play",
-  "play_steps": [
-    "Entre no grupo <a href=\"{group}\">Crosstune testers</a> com sua conta do Google Play.",
-    "Abra a <a href=\"{testing}\">página de teste</a> e toque em <b>Become a tester</b>.",
-    "Instale o Crosstune pelo <a href=\"{store}\">Google Play</a>."
-  ],
-  "play_note": "O Crosstune está em teste no Google Play. Pode levar alguns minutos para aparecer.",
   "works_with": "Funciona com",
   "made_with": "Feito com {heart} por {astro}",
   "privacy_link": "Política de privacidade",
