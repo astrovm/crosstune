@@ -8,6 +8,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.math.abs
@@ -1633,6 +1634,133 @@ class PracticeCardsTest {
         assertFalse(playback.plays.contains(true))
         assertEquals(listOf("trying $tidal", "$tidal did not play the line", "the YouTube player"), steps())
         assertEquals(AppTraits(keeps = false), traits.of(tidal))
+    }
+
+    @Test
+    fun aPreviewThatStopsShortMovesToTheNextPlayerPromptly() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        keep(line(start = 43_560))
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        appPlays(tidal, speed = 1f, positionMs = 24)
+        playback.obeys = false
+        val flow = playback.appPlaying.getValue(tidal)
+        flow.value = flow.value?.copy(clock = PlaybackClock(24, System.currentTimeMillis(), 1f, playing = false))
+        val stoppedAt = AtomicLong()
+        playback.onPlay = { app, play ->
+            if (app == tidal && !play && playback.seeks.isNotEmpty() && stoppedAt.get() == 0L) {
+                stoppedAt.set(System.nanoTime())
+                flow.value = flow.value?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+            }
+        }
+        cards().start(null, before = null)
+        waitFor("TIDAL stops short") { stoppedAt.get() != 0L }
+        waitFor("TIDAL is passed over") { "$tidal did not get to the line" in steps() }
+        val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - stoppedAt.get())
+        assertTrue("TIDAL took $elapsedMs ms to give up", elapsedMs < 300)
+    }
+
+    @Test
+    fun anUnchangedPreviewPositionWaitsForTheSeek() {
+        youTubeHasTheSong()
+        keep(line(start = 43_560))
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        appPlays(tidal, speed = 1f, positionMs = 29_952)
+        playback.obeys = false
+        val flow = playback.appPlaying.getValue(tidal)
+        flow.value = flow.value?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+        cards().start(null, before = null)
+        waitFor("the preview is sent to the line") { playback.seeks.isNotEmpty() }
+        Thread.sleep(500)
+        assertTrue(player.shown.isEmpty())
+        assertNull(traits.of(tidal).seeks)
+        waitFor("the player takes over after the wait") { player.shown.isNotEmpty() }
+        assertEquals(false, traits.of(tidal).seeks)
+    }
+
+    @Test
+    fun aSeekThatReportsAnOldPositionAndReturnsStillReachesTheLine() {
+        youTubeHasTheSong()
+        keep(line(start = 43_270))
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        appPlays(ytMusic, speed = 1f, positionMs = 43_000)
+        playback.obeys = false
+        val flow = playback.appPlaying.getValue(ytMusic)
+        val song = flow.value
+        flow.value = song?.copy(clock = PlaybackClock(43_000, System.currentTimeMillis(), 1f, playing = false))
+        val replayed = AtomicBoolean(false)
+        playback.onPlay = { app, play ->
+            if (app == ytMusic && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
+                thread {
+                    flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = true))
+                    Thread.sleep(250)
+                    flow.value = song?.copy(clock = PlaybackClock(43_208, System.currentTimeMillis(), 1f, playing = true))
+                    Thread.sleep(100)
+                    flow.value = null
+                    Thread.sleep(500)
+                    flow.value = song?.copy(clock = PlaybackClock(43_577, System.currentTimeMillis(), 1f, playing = false))
+                }
+            }
+        }
+        cards().start(null, before = null)
+        waitFor("YouTube Music reaches the line") { practice?.sound == LineSound.PLAYED }
+        assertEquals(true, traits.of(ytMusic).seeks)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun aPausedOldPositionCanBeFollowedByTheLine() {
+        youTubeHasTheSong()
+        keep(line(start = 43_270))
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        appPlays(ytMusic, speed = 1f, positionMs = 29_952)
+        playback.obeys = false
+        val flow = playback.appPlaying.getValue(ytMusic)
+        val song = flow.value
+        flow.value = song?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+        val replayed = AtomicBoolean(false)
+        playback.onPlay = { app, play ->
+            if (app == ytMusic && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
+                thread {
+                    flow.value = song?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+                    Thread.sleep(500)
+                    flow.value = song?.copy(clock = PlaybackClock(43_270, System.currentTimeMillis(), 1f, playing = false))
+                }
+            }
+        }
+        cards().start(null, before = null)
+        waitFor("the line arrives after the old position") { practice?.sound == LineSound.PLAYED }
+        assertEquals(true, traits.of(ytMusic).seeks)
+        assertTrue(player.shown.isEmpty())
+    }
+
+    @Test
+    fun aSeekThatPlaysBeforePausingAtTheLineStillReachesIt() {
+        youTubeHasTheSong()
+        keep(line(start = 43_270))
+        installed(morphe, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC, build = morphe))
+        appPlays(morphe, speed = 1f, positionMs = 43_000)
+        playback.obeys = false
+        val flow = playback.appPlaying.getValue(morphe)
+        val song = flow.value
+        val replayed = AtomicBoolean(false)
+        playback.onPlay = { app, play ->
+            if (app == morphe && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
+                thread {
+                    flow.value = song?.copy(clock = PlaybackClock(43_096, System.currentTimeMillis(), 1f, playing = true))
+                    Thread.sleep(190)
+                    flow.value = song?.copy(clock = PlaybackClock(43_306, System.currentTimeMillis(), 1f, playing = true))
+                    Thread.sleep(730)
+                    flow.value = song?.copy(clock = PlaybackClock(43_490, System.currentTimeMillis(), 1f, playing = false))
+                }
+            }
+        }
+        cards().start(null, before = null)
+        waitFor("Morphe reaches the line") { practice?.sound == LineSound.PLAYED }
+        assertEquals(true, traits.of(morphe).seeks)
+        assertTrue(player.shown.isEmpty())
     }
 
     @Test
