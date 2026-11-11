@@ -7,6 +7,8 @@
   python3 scripts/readingsaudit/readingsaudit.py compare --words   # every wrong word too, with its song: for a person to read, not to publish
   python3 scripts/readingsaudit/readingsaudit.py compare --before before   # and what changed since a run kept in that folder: cp -r audit before
   python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
+  python3 scripts/readingsaudit/readingsaudit.py golden    # lock every word read right today into readings-golden.tsv; a row already there stays
+  python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD   # and let WORD's row change, when that change is on purpose
   python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
 
 Songs' words are people's, so everything goes in the agent cache, never in the repo:
@@ -452,11 +454,193 @@ def compare(folder, words, before=None):
             print(f"{w['cause']} | {w['word']} {norm(w['shown'])}→{norm(w['right'])} | {w['song']} | {w['line']}")
 
 
+# ---- golden ----
+
+# What ReadingsGoldenTest reads back. One row per word the audit read the same way the song is sung.
+GOLDEN_REL = "app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv"
+GOLDEN_FILE = ROOT / GOLDEN_REL
+# A pull request that changes either of these has to change the golden file too, or say so.
+READING_SOURCES = (
+    "app/src/main/java/com/astrovm/crosstune/Readings.kt",
+    "app/src/main/java/com/astrovm/crosstune/Furigana.kt",
+)
+GOLDEN_HEADER = [
+    "# Locked readings. Each row is a word the app read the same way the song is sung.",
+    "# One row for each word, kana and dictionary. The line is the shortest line that has it.",
+    "# Rows are sorted by the line, so songs are not in order. There is no song title and no artist name.",
+    "# Columns, separated by a tab: line, word, index, kana, romaji, dictionary.",
+    "# index is empty when the word is in the line once. Otherwise it is the occurrence, from 0.",
+    "# romaji is empty when the audit did not record one. dictionary is ipadic, unidic or both.",
+    "# Regenerate: python3 scripts/readingsaudit/readingsaudit.py golden",
+    "# The command adds rows. It does not remove or change a row.",
+    "# A row the audit now reads otherwise is a regression, and the command exits 1.",
+    "# A change you mean: python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD",
+]
+
+
+def find_starts(line, word):
+    """Where [word] starts in [line], including a word that overlaps itself. ReadingsGoldenTest.starts does the same."""
+    starts, at = [], 0
+    while True:
+        found = line.find(word, at)
+        if found < 0:
+            return starts
+        starts.append(found)
+        at = found + 1
+
+
+def occurrence_field(line, word, start):
+    """Empty when [word] is in [line] once, else which occurrence starts at [start], from 0."""
+    starts = find_starts(line, word)
+    if start not in starts:
+        raise SystemExit(f"the word {word!r} is not at {start} in the line")
+    if len(starts) == 1:
+        return ""
+    return str(starts.index(start))
+
+
+def iter_audit_lines(folder):
+    """Each lyric line the audit compared, once per song: its text and the two dictionaries' parts."""
+    audit = folder / "audit"
+    if not audit.is_dir():
+        raise SystemExit(f"no audit in {audit}")
+    for path in sorted(audit.glob("*.json")):
+        song = json.loads(path.read_text())
+        seen = set()
+        for line in song.get("lines") or []:
+            text = line.get("text")
+            # A chorus sung again is the same line. A line with no ruby has nothing to lock.
+            if not text or text in seen or not line.get("truth") or "builtIn" not in line or "uniDic" not in line:
+                continue
+            seen.add(text)
+            yield line
+
+
+def grouped_hits(line):
+    """(word, index, kana) -> the dictionaries that read it right on this line."""
+    text = line["text"]
+    units = truth_units(text, line["truth"])
+    grouped = defaultdict(set)
+    for name, key in (("ipadic", "builtIn"), ("unidic", "uniDic")):
+        for word, shown, _right, ok, (start, _end) in compare_line(text, line[key], units):
+            if not ok or not word:
+                continue
+            grouped[(word, occurrence_field(text, word, start), shown)].add(name)
+    return grouped
+
+
+def dictionary_tag(readers):
+    """ipadic, unidic, or both when this one occurrence is right in each."""
+    if {"ipadic", "unidic"} <= readers:
+        return "both"
+    if "ipadic" in readers:
+        return "ipadic"
+    return "unidic"
+
+
+def check_fields(row):
+    for part in row:
+        if "\t" in part or "\n" in part or "\r" in part:
+            raise SystemExit("a golden field has a tab or a new line")
+
+
+def fresh_rows(folder):
+    """One row per word, kana and dictionary, on the shortest line that has that case."""
+    # Shorter line first; the same length keeps the earlier line text, then the earlier occurrence.
+    best = {}
+    for line in iter_audit_lines(folder):
+        text = line["text"]
+        for (word, field, kana), readers in grouped_hits(line).items():
+            tag = dictionary_tag(readers)
+            cand = (len(text), text, -1 if field == "" else int(field), field)
+            key = (word, kana, tag)
+            old = best.get(key)
+            if old is None or cand < old:
+                best[key] = cand
+    # One both row already locks each dictionary. A single-dictionary row for the same kana would repeat it.
+    covered = {(word, kana) for word, kana, tag in best if tag == "both"}
+    rows = []
+    for (word, kana, tag), (_length, text, _number, field) in best.items():
+        if tag != "both" and (word, kana) in covered:
+            continue
+        row = (text, word, field, kana, "", tag)
+        check_fields(row)
+        rows.append(row)
+    return rows
+
+
+def row_sort_key(row):
+    return (row[0], row[1], -1 if row[2] == "" else int(row[2]), row[3], row[4], row[5])
+
+
+def read_golden(path):
+    """The rows already locked. Missing file means none yet. A broken row stops the command."""
+    if not path.exists():
+        return []
+    rows = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith("#"):
+            continue
+        fields = tuple(raw.split("\t"))
+        if len(fields) != 6 or fields[5] not in ("ipadic", "unidic", "both") or (fields[2] != "" and not fields[2].isdigit()):
+            raise SystemExit(f"a golden row needs 6 fields: {raw}")
+        rows.append(fields)
+    return rows
+
+
+def write_golden(path, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = GOLDEN_HEADER + ["\t".join(row) for row in sorted(rows, key=row_sort_key)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def row_holds(line, row):
+    """Whether this audit line still reads [row]'s word as its kana, with the dictionary the row names."""
+    needed = {"ipadic", "unidic"} if row[5] == "both" else {row[5]}
+    return needed <= grouped_hits(line).get((row[1], row[2], row[3]), set())
+
+
+def golden(folder, dest, accept):
+    """Write [dest] from the audit. Add rows. Never drop or edit one, unless [accept] names its word."""
+    accept = set(accept)
+    by_line = defaultdict(list)
+    for line in iter_audit_lines(folder):
+        by_line[line["text"]].append(line)
+    kept, kept_keys, regressions = [], set(), []
+    for row in read_golden(dest):
+        copies = by_line.get(row[0])
+        # A line this audit does not have was not seen read otherwise, so the row stays.
+        holds = copies is None or any(row_holds(copy, row) for copy in copies)
+        if holds:
+            kept.append(row)
+            kept_keys.add((row[1], row[3], row[5]))
+            continue
+        if row[1] in accept:
+            continue
+        regressions.append(row)
+        kept.append(row)
+        kept_keys.add((row[1], row[3], row[5]))
+    new = []
+    for row in fresh_rows(folder):
+        key = (row[1], row[3], row[5])
+        if key in kept_keys:
+            continue
+        new.append(row)
+        kept_keys.add(key)
+    write_golden(dest, kept + new)
+    for row in sorted(regressions, key=row_sort_key):
+        print(f"regression: {row[1]}\t{row[3]}\t{row[5]}\t{row[0]}")
+    print(f"golden: {len(kept) + len(new)} rows, {len(new)} new, {len(regressions)} regressions, {dest}")
+    return 1 if regressions else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "golden"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
+    parser.add_argument("--accept", action="append", default=[], metavar="WORD", help="golden: let this word's row change; the change is on purpose")
+    parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
     args = parser.parse_args()
     folder = data_dir()
     if args.step == "songs":
@@ -467,6 +651,8 @@ def main():
         table(folder)
     elif args.step == "oldkana":
         oldkana(folder)
+    elif args.step == "golden":
+        sys.exit(golden(folder, args.out or GOLDEN_FILE, args.accept))
     else:
         compare(folder, args.words, args.before)
 

@@ -189,6 +189,11 @@ jobs:
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           fetch-depth: 2
 
+      # The pull request merged into main, and main before it. A readings change has to
+      # change the golden file, or say golden: none in a commit message.
+      - name: A readings change keeps the golden file
+        run: python3 scripts/readingsaudit/check_golden.py
+
       # Tangled new code is split up, never listed in detekt's baseline to pass.
       - name: Detekt's baseline only shrinks
         if: github.event_name == 'pull_request'

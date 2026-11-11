@@ -143,5 +143,111 @@ class OldKana(unittest.TestCase):
         self.assertEqual(readingsaudit.old_kana_header(date, version), header)
 
 
+def audit_line(text, built, uni=None, truth=None):
+    """One invented line, as the audit writes it. Not a lyric."""
+    return {"text": text, "builtIn": built, "uniDic": uni if uni is not None else built, "truth": truth if truth is not None else built}
+
+
+def write_audit(folder, lines):
+    audit = folder / "audit"
+    audit.mkdir()
+    # A title and an artist are in the song, and must not land in the golden file.
+    (audit / "t-01.json").write_text(json.dumps({"id": "t-01", "title": "Not A Real Title", "artist": "Not An Artist", "lines": lines}, ensure_ascii=False))
+
+
+class Golden(unittest.TestCase):
+
+    def test_locks_each_right_case_once_on_the_shortest_line_and_sorts_by_the_line(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            # 丙 sorts before 甲. The song lists the long line first, so song order is not the file order.
+            write_audit(folder, [
+                audit_line("甲乙は丙", [["甲乙", "こうおつ"], ["は", None], ["丙", "へい"]]),
+                audit_line("甲乙", [["甲乙", "こうおつ"]]),
+                # Only the built-in dictionary has this one.
+                audit_line("丁戊", [["丁戊", "ていぼ"]], [["丁戊", "ちょうぼ"]], [["丁戊", "ていぼ"]]),
+                # Neither dictionary has this one.
+                audit_line("己庚", [["己庚", "きこう"]], [["己庚", "きこう"]], [["己庚", "おのこう"]]),
+                # The same word twice, read two ways. Each occurrence stays.
+                audit_line("丙丙", [["丙", "へい"], ["丙", "てい"]], truth=[["丙", "へい"], ["丙", "てい"]]),
+            ])
+            dest = folder / "golden.tsv"
+            self.assertEqual(0, readingsaudit.golden(folder, dest, []))
+            text = dest.read_text(encoding="utf-8")
+            self.assertNotIn("Not A Real Title", text)
+            self.assertNotIn("Not An Artist", text)
+            rows = [line.split("\t") for line in text.splitlines() if line and not line.startswith("#")]
+            self.assertEqual([
+                ["丁戊", "丁戊", "", "ていぼ", "", "ipadic"],
+                ["丙丙", "丙", "0", "へい", "", "both"],
+                ["丙丙", "丙", "1", "てい", "", "both"],
+                ["甲乙", "甲乙", "", "こうおつ", "", "both"],
+            ], rows)
+            self.assertIn("readingsaudit.py golden", text)
+            self.assertIn("--accept WORD", text)
+            first = dest.read_bytes()
+            self.assertEqual(0, readingsaudit.golden(folder, dest, []))
+            self.assertEqual(first, dest.read_bytes())
+            again = folder / "again.tsv"
+            readingsaudit.golden(folder, again, [])
+            self.assertEqual(first, again.read_bytes())
+
+    def test_a_second_run_keeps_a_row_and_adds_a_new_one(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("甲乙は丙", [["甲乙", "こうおつ"], ["は", None], ["丙", "へい"]])])
+            dest = folder / "golden.tsv"
+            readingsaudit.golden(folder, dest, [])
+            first = dest.read_bytes()
+            # A shorter line appears for 甲乙. The row already there keeps the long line.
+            (folder / "audit" / "t-02.json").write_text(json.dumps({"id": "t-02", "lines": [
+                audit_line("甲乙", [["甲乙", "こうおつ"]]),
+                audit_line("辛壬", [["辛壬", "しんじん"]]),
+            ]}, ensure_ascii=False))
+            self.assertEqual(0, readingsaudit.golden(folder, dest, []))
+            rows = [line.split("\t") for line in dest.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]
+            self.assertIn(["甲乙は丙", "甲乙", "", "こうおつ", "", "both"], rows)
+            self.assertNotIn(["甲乙", "甲乙", "", "こうおつ", "", "both"], rows)
+            self.assertIn(["辛壬", "辛壬", "", "しんじん", "", "both"], rows)
+            self.assertNotEqual(first, dest.read_bytes())
+
+    def test_a_word_read_otherwise_stays_and_the_command_fails_until_it_is_accepted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("甲乙", [["甲乙", "こうおつ"]])])
+            dest = folder / "golden.tsv"
+            readingsaudit.golden(folder, dest, [])
+            # The word is now sung, and read, another way. The old row is a regression.
+            (folder / "audit" / "t-01.json").write_text(json.dumps({"id": "t-01", "lines": [
+                audit_line("甲乙", [["甲乙", "こういつ"]]),
+            ]}, ensure_ascii=False))
+            with mock.patch("builtins.print") as said:
+                code = readingsaudit.golden(folder, dest, [])
+            self.assertEqual(1, code)
+            said_text = "\n".join(call.args[0] for call in said.call_args_list)
+            self.assertIn("regression: 甲乙\tこうおつ\tboth\t甲乙", said_text)
+            rows = [line.split("\t") for line in dest.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]
+            self.assertIn(["甲乙", "甲乙", "", "こうおつ", "", "both"], rows)
+            self.assertIn(["甲乙", "甲乙", "", "こういつ", "", "both"], rows)
+            with mock.patch("builtins.print"):
+                self.assertEqual(0, readingsaudit.golden(folder, dest, ["甲乙"]))
+            rows = [line.split("\t") for line in dest.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]
+            self.assertEqual([["甲乙", "甲乙", "", "こういつ", "", "both"]], rows)
+
+    def test_a_row_whose_line_is_not_in_the_audit_stays(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("甲乙", [["甲乙", "こうおつ"]])])
+            dest = folder / "golden.tsv"
+            readingsaudit.golden(folder, dest, [])
+            (folder / "audit" / "t-01.json").write_text(json.dumps({"id": "t-01", "lines": [
+                audit_line("辛壬", [["辛壬", "しんじん"]]),
+            ]}, ensure_ascii=False))
+            self.assertEqual(0, readingsaudit.golden(folder, dest, []))
+            text = dest.read_text(encoding="utf-8")
+            self.assertIn("甲乙\t甲乙\t\tこうおつ\t\tboth", text)
+            self.assertIn("辛壬\t辛壬\t\tしんじん\t\tboth", text)
+
+
 if __name__ == "__main__":
     unittest.main()

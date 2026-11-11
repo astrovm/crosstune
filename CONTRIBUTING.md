@@ -73,6 +73,22 @@ Chords from J-Total sit over the letter they sit over on J-Total's page. The pag
 
 Remake it with `python3 scripts/readingsaudit/readingsaudit.py table`, with `jmdict.json` (jmdict-eng) in the audit folder. It runs `JmdictReadings` in the build box, which keeps a word only where the app reads it otherwise. Then measure the change with the same script's `run` and `compare --before`, on a copy of the audit from before; its top has the commands.
 
+A word that already reads as it is sung stays that way. [`readings-golden.tsv`](app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv) locks each such word: the shortest line it is in, the kana, and whether IPADIC, UniDic or both read it so. `ReadingsGoldenTest` reads every row back with the app.
+
+A fix that makes a word read right adds its row. From the audit folder:
+
+```bash
+python3 scripts/readingsaudit/readingsaudit.py golden
+```
+
+The command adds rows. It does not remove or change one. When a locked word now reads otherwise, it names the word and exits with an error. To keep a change you mean, name the word:
+
+```bash
+python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD
+```
+
+A change to `Readings.kt` or `Furigana.kt` has to change that file too. When no reading changes, put `golden: none` in a commit message.
+
 [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) helps `Readings` read old kana in kana alone, which IPADIC splits: おもひで is おもいで. It lists JMdict's common words in kana with い or う after their first kana, each with the form it's looked up by, and the words in kana written with ひ or ふ today, おひる or くふう, where a ひ or ふ is no old kana. It's from JMdict as well, under the same license, and its header says so. Remake it with `python3 scripts/readingsaudit/readingsaudit.py oldkana`, with `jmdict.json` in the audit folder. Measure a change to old kana with `OldKanaNotes`, which lists every line that gets an old spelling note, with and without UniDic: `./gradlew :app:songCheck -PsongcheckTest=com.astrovm.crosstune.songcheck.OldKanaNotes -PsongcheckDir=FOLDER`, with the audit folder as `FOLDER` so its songs in `found/` count too. Then `diff` its `oldkana/` against a run from before. A note on a modern line is a false note.
 
 ## Reports
