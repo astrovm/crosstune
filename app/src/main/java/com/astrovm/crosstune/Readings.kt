@@ -362,7 +362,9 @@ internal object Readings {
      * unless the word before is one it can't be part of, as いつか in いつか日.
      */
     private fun nounNotAffix(ours: Piece, theirs: Piece, before: Piece?): Boolean {
-        if (theirs.kind != "名詞" || theirs.subkind != "普通名詞" || ours.subkind != "接尾" || ours.surface.length != 1 || !isHan(ours.surface[0])) return false
+        val plainNoun = theirs.kind == "名詞" && theirs.subkind == "普通名詞"
+        val oneKanjiSuffix = ours.subkind == "接尾" && ours.surface.singleOrNull()?.let(::isHan) == true
+        if (!plainNoun || !oneKanjiSuffix) return false
         if (before == null || before.subkind in NUMBERS) return false
         return ours.kana.first() !in VOICED || (before.subkind in NOT_PLAIN_NOUNS && before.surface.all { it in 'ぁ'..'ゟ' })
     }
@@ -734,7 +736,8 @@ internal object Readings {
      */
     private fun listedAs(word: List<Piece>, table: Map<String, String>): Piece? {
         val last = word.last()
-        if (!isHan(word[0].surface[0]) || last.kind in GRAMMAR || word.dropLast(1).any { it.kind in GRAMMAR || it.kind in INFLECTED }) return null
+        val runsOn = word.dropLast(1).none { it.kind in GRAMMAR || it.kind in INFLECTED }
+        if (!isHan(word[0].surface[0]) || last.kind in GRAMMAR || !runsOn) return null
         val surface = word.joinToString("") { it.surface }
         if (surface.count(::isHan) < 2) return null
         val kana = table[surface] ?: conjugated(word, table) ?: return null
