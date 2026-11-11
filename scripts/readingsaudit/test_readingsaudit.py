@@ -1,7 +1,12 @@
+import datetime
+import hashlib
+import io
 import json
+import os
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -54,8 +59,8 @@ class Table(unittest.TestCase):
             jmdict = {"version": "9.9.9", "dictDate": "2000-01-01", "words": [entry([("星空", [])], [("ほしぞら", [], ["*"])])]}
             (folder / "jmdict.json").write_text(json.dumps(jmdict, ensure_ascii=False))
             with mock.patch.object(readingsaudit, "run") as run, mock.patch("builtins.print"):
-                readingsaudit.table(folder)
-            run.assert_called_once_with(folder, "com.astrovm.crosstune.songcheck.JmdictReadings")
+                readingsaudit.table(folder, "./gradlew")
+            run.assert_called_once_with(folder, "com.astrovm.crosstune.songcheck.JmdictReadings", "./gradlew")
             lines = (folder / "listed.txt").read_text().splitlines()
             self.assertEqual("星空\tほしぞら", lines[-1])
             header = "\n".join(line for line in lines if line.startswith("#"))
@@ -141,6 +146,165 @@ class OldKana(unittest.TestCase):
         header = [line for line in readingsaudit.OLD_KANA.read_text().splitlines() if line.startswith("#")]
         date, version = header[0].split()[2].rstrip(","), header[1].split()[3].rstrip(".")
         self.assertEqual(readingsaudit.old_kana_header(date, version), header)
+
+
+TAG = "9.9.9+20000101000000"
+ZIP_NAME = f"jmdict-eng-{TAG}.json.zip"
+DOWNLOAD = f"https://github.com/scriptin/jmdict-simplified/releases/download/9.9.9%2B20000101000000/{ZIP_NAME}"
+
+
+def zipped(files):
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, text in files.items():
+            archive.writestr(name, text)
+    return out.getvalue()
+
+
+class Answer(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+class FakeGitHub:
+    """Answers the release API and the download the way GitHub does, from what each test gives it."""
+
+    def __init__(self, data, assets=None, tag=TAG):
+        self.data = data
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        self.release = {"tag_name": tag, "assets": assets if assets is not None else [
+            {"name": f"jmdict-eng-common-{tag}.json.zip", "size": 1, "digest": "sha256:00",
+             "browser_download_url": DOWNLOAD.replace("jmdict-eng-", "jmdict-eng-common-")},
+            {"name": ZIP_NAME, "size": len(data), "digest": digest, "browser_download_url": DOWNLOAD},
+        ]}
+        self.asked = []
+
+    def __call__(self, request):
+        self.asked.append(request)
+        if request.full_url.startswith(readingsaudit.JMDICT_RELEASES):
+            return Answer(json.dumps(self.release).encode())
+        return Answer(self.data)
+
+
+class Fetch(unittest.TestCase):
+
+    def setUp(self):
+        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory())) / "data"
+        self.enterContext(mock.patch("builtins.print"))
+        self.enterContext(mock.patch.dict(os.environ, {"GH_TOKEN": ""}))
+
+    def test_puts_the_newest_jmdict_eng_in_the_folder_when_it_is_what_the_release_says(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": '{"dictDate": "2000-01-01"}'}))
+        self.assertEqual(TAG, readingsaudit.fetch(self.folder, opener=github))
+        self.assertEqual('{"dictDate": "2000-01-01"}', (self.folder / "jmdict.json").read_text())
+        self.assertEqual([f"{readingsaudit.JMDICT_RELEASES}/latest", DOWNLOAD], [r.full_url for r in github.asked])
+        self.assertIsNone(github.asked[0].get_header("Authorization"))
+
+    def test_asks_for_the_release_of_a_tag_with_the_runners_token(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "{}"}))
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "fake-token"}):
+            readingsaudit.fetch(self.folder, TAG, opener=github)
+        self.assertEqual(f"{readingsaudit.JMDICT_RELEASES}/tags/9.9.9%2B20000101000000", github.asked[0].full_url)
+        self.assertEqual("Bearer fake-token", github.asked[0].get_header("Authorization"))
+        # The token is GitHub's API's, never sent with the download.
+        self.assertIsNone(github.asked[1].get_header("Authorization"))
+
+    def test_keeps_nothing_that_is_not_what_the_release_says(self):
+        data = zipped({"jmdict-eng-9.9.9.json": "{}"})
+        asset = {"name": ZIP_NAME, "size": len(data), "digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+                 "browser_download_url": DOWNLOAD}
+        for assets, said in [
+            ([], "has 0 jmdict-eng zips"),
+            ([asset, {**asset, "name": f"jmdict-eng-{TAG}-again.json.zip"}], "has 2 jmdict-eng zips"),
+            ([{**asset, "digest": None}], "gives no SHA-256"),
+            ([{k: v for k, v in asset.items() if k != "digest"}], "gives no SHA-256"),
+            ([{**asset, "browser_download_url": DOWNLOAD.replace("20000101000000", "19990101000000")}], "isn't under release"),
+            ([{**asset, "size": len(data) + 1}], f"is {len(data)} bytes"),
+            ([{**asset, "digest": "sha256:" + "0" * 64}], "has sha256:"),
+        ]:
+            with self.subTest(said), self.assertRaisesRegex(SystemExit, said):
+                readingsaudit.fetch(self.folder, opener=FakeGitHub(data, assets))
+            self.assertFalse((self.folder / "jmdict.json").exists())
+
+    def test_wants_one_json_file_in_the_zip(self):
+        for files, count in [({"a.json": "{}", "b.json": "{}"}, 2), ({"README.md": ""}, 0)]:
+            with self.subTest(count), self.assertRaisesRegex(SystemExit, f"holds {count} JSON files"):
+                readingsaudit.fetch(self.folder, opener=FakeGitHub(zipped(files)))
+
+    def test_writes_jmdict_json_whatever_path_the_zip_gives(self):
+        readingsaudit.fetch(self.folder, opener=FakeGitHub(zipped({"../../escape.json": "{}"})))
+        self.assertEqual(["jmdict.json"], [p.name for p in self.folder.parent.rglob("*.json")])
+
+
+def dated(folder, name, date):
+    path = folder / name
+    path.write_text("\n".join(readingsaudit.table_header(date, "9.9.9") + ["星空\tほしぞら"]) + "\n")
+    return path
+
+
+class Age(unittest.TestCase):
+
+    def setUp(self):
+        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.said = self.enterContext(mock.patch("builtins.print"))
+
+    def test_passes_up_to_the_age_and_fails_past_it_naming_the_old_file(self):
+        fresh = dated(self.folder, "fresh.txt", "2000-03-01")
+        old = dated(self.folder, "old.txt", "2000-01-01")
+        self.assertEqual(0, readingsaudit.age([fresh, old], datetime.date(2000, 3, 31), max_days=90))
+        self.assertEqual(1, readingsaudit.age([fresh, old], datetime.date(2000, 4, 1), max_days=90))
+        said = [call.args[0] for call in self.said.call_args_list]
+        self.assertIn("old.txt: JMdict 2000-01-01, 91 days old", said)
+        self.assertTrue(any(line.startswith("old.txt is older than 90 days") for line in said))
+        self.assertFalse(any(line.startswith("fresh.txt is older") for line in said))
+
+    def test_a_table_with_no_date_stops_the_check(self):
+        path = self.folder / "undated.txt"
+        path.write_text("星空\tほしぞら\n")
+        with self.assertRaisesRegex(SystemExit, "no JMdict date"):
+            readingsaudit.age([path], datetime.date(2000, 1, 1))
+
+    def test_the_committed_tables_have_a_date_the_check_reads(self):
+        for path in (readingsaudit.TABLE, readingsaudit.OLD_KANA):
+            self.assertGreaterEqual(readingsaudit.header_date(path), datetime.date(2026, 11, 9))
+
+
+class Run(unittest.TestCase):
+
+    def gradle_command(self, *args, **kwargs):
+        with mock.patch.object(readingsaudit.subprocess, "call", return_value=3) as call, self.assertRaises(SystemExit) as stop:
+            readingsaudit.run(Path("/fake/folder"), "Some.Test", *args, **kwargs)
+        self.assertEqual(3, stop.exception.code)
+        self.assertEqual("/fake/folder", call.call_args.kwargs["env"]["SONGCHECK_DIR"])
+        return call.call_args.args[0]
+
+    def test_runs_gradle_in_the_box_unless_told_another_way(self):
+        tail = [":app:songCheck", "-PsongcheckDir=/fake/folder", "-PsongcheckTest=Some.Test"]
+        box = str(readingsaudit.ROOT / "scripts/gradle-box/gradle-box.sh")
+        self.assertEqual(["nice", "-n", "10", box, "--max-workers=2", *tail], self.gradle_command())
+        self.assertEqual(["nice", "-n", "10", "./gradlew", "--build-cache", *tail], self.gradle_command("./gradlew --build-cache"))
+
+
+class Main(unittest.TestCase):
+
+    def test_passes_each_step_its_options(self):
+        with mock.patch.object(readingsaudit, "data_dir", return_value=Path("/fake")):
+            with mock.patch.object(readingsaudit, "table") as table:
+                readingsaudit.main(["table", "--gradle", "./gradlew"])
+            table.assert_called_once_with(Path("/fake"), "./gradlew")
+            with mock.patch.object(readingsaudit, "run") as run:
+                readingsaudit.main(["run"])
+            run.assert_called_once_with(Path("/fake"), gradle=None)
+            with mock.patch.object(readingsaudit, "fetch") as fetch:
+                readingsaudit.main(["fetch", "--tag", TAG])
+            fetch.assert_called_once_with(Path("/fake"), TAG)
+            with mock.patch.object(readingsaudit, "age", return_value=1) as age, self.assertRaises(SystemExit) as stop:
+                readingsaudit.main(["age"])
+            self.assertEqual(1, stop.exception.code)
+            self.assertEqual([readingsaudit.TABLE, readingsaudit.OLD_KANA], age.call_args.args[0])
 
 
 if __name__ == "__main__":

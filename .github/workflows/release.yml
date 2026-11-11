@@ -40,6 +40,11 @@ jobs:
       - name: Check Play Store changelog
         run: python3 scripts/release/check_changelog.py
 
+      # The EDRDG licence asks for JMdict's data to be kept up to date. The JMdict workflow remakes the
+      # word lists each month; a release with older ones than readingsaudit.py's MAX_AGE_DAYS stops here.
+      - name: Check the JMdict word lists are recent
+        run: python3 scripts/readingsaudit/readingsaudit.py age
+
       - name: Validate tag
         env:
           GH_TOKEN: ${{ github.token }}

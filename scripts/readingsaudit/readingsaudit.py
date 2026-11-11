@@ -8,6 +8,12 @@
   python3 scripts/readingsaudit/readingsaudit.py compare --before before   # and what changed since a run kept in that folder: cp -r audit before
   python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
   python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
+  python3 scripts/readingsaudit/readingsaudit.py fetch     # put the newest jmdict-eng in the folder as jmdict.json; --tag TAG for another
+  python3 scripts/readingsaudit/readingsaudit.py age       # fail when either file's JMdict is older than MAX_AGE_DAYS; the release runs it
+
+`table --gradle "./gradlew --build-cache"` runs Gradle as given instead of through gradle-box, as the
+JMdict workflow does on a runner. EDRDG's licence asks for a way to update JMdict's data regularly from
+its newest version: the JMdict workflow runs fetch, table and oldkana each month.
 
 Songs' words are people's, so everything goes in the agent cache, never in the repo:
 $READINGSAUDIT_DIR, or /mnt/data/agent-cache/crosstune-anime-readings, or ~/.cache/agent-cache/crosstune-anime-readings.
@@ -21,11 +27,18 @@ Lines with no ruby are checked against Sudachi with its full dictionary instead,
 when the folder has a venv with it: uv venv venv && VIRTUAL_ENV=venv uv pip install sudachipy sudachidict_full
 """
 import argparse
+import datetime
+import hashlib
+import io
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import urllib.parse
+import urllib.request
+import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -174,22 +187,107 @@ def oldkana(folder):
 OLD_KANA = ROOT / "app/src/main/resources/com/astrovm/crosstune/old-kana.txt"
 
 
-def table(folder):
+def table(folder, gradle=None):
     """The candidates for the app's jmdict-readings.txt, for the test that keeps those the app reads otherwise."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
     candidates = listed_candidates(jmdict["words"])
     header = table_header(jmdict["dictDate"], jmdict["version"])
     (folder / "listed.txt").write_text("\n".join(header + [f"{form}\t{kana}" for form, kana in candidates.items()]) + "\n")
     print(f"{len(candidates)} candidates in {folder / 'listed.txt'}")
-    run(folder, "com.astrovm.crosstune.songcheck.JmdictReadings")
+    run(folder, "com.astrovm.crosstune.songcheck.JmdictReadings", gradle)
 
 
-def run(folder, test="com.astrovm.crosstune.songcheck.ReadingsAudit"):
+# How Gradle runs unless --gradle says otherwise: in the build box, which keeps a machine's builds in turn.
+GRADLE_BOX = f"{ROOT / 'scripts/gradle-box/gradle-box.sh'} --max-workers=2"
+
+
+def run(folder, test="com.astrovm.crosstune.songcheck.ReadingsAudit", gradle=None):
     # gradle-box mounts SONGCHECK_DIR, so the words stay out of the checkout.
     env = {**os.environ, "SONGCHECK_DIR": str(folder)}
-    command = ["nice", "-n", "10", str(ROOT / "scripts/gradle-box/gradle-box.sh"), "--max-workers=2", ":app:songCheck",
+    command = ["nice", "-n", "10", *shlex.split(gradle or GRADLE_BOX), ":app:songCheck",
                f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
     sys.exit(subprocess.call(command, env=env, cwd=ROOT))
+
+
+# ---- fetch and age ----
+
+JMDICT_RELEASES = "https://api.github.com/repos/scriptin/jmdict-simplified/releases"
+# All of jmdict-eng, not jmdict-eng-common: the tables need the words that aren't common too.
+JMDICT_ASSET = re.compile(r"jmdict-eng-\d[^/]*\.json\.zip")
+
+
+def github_json(url, opener):
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "crosstune-readingsaudit"}
+    # A runner's address shares GitHub's limit for anonymous calls with every other job on it.
+    if os.environ.get("GH_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GH_TOKEN']}"
+    with opener(urllib.request.Request(url, headers=headers)) as answer:
+        return json.load(answer)
+
+
+def fetch(folder, tag=None, opener=urllib.request.urlopen):
+    """Puts jmdict-eng of the newest jmdict-simplified release, or of [tag], in the folder as jmdict.json.
+
+    The file is taken by its release's tag, and must have the size and SHA-256 the release gives for it.
+    """
+    url = f"{JMDICT_RELEASES}/latest" if tag is None else f"{JMDICT_RELEASES}/tags/{urllib.parse.quote(tag, safe='')}"
+    release = github_json(url, opener)
+    tag = release["tag_name"]
+    assets = [a for a in release["assets"] if JMDICT_ASSET.fullmatch(a["name"])]
+    if len(assets) != 1:
+        raise SystemExit(f"release {tag} has {len(assets)} jmdict-eng zips, not one: {[a['name'] for a in release['assets']]}")
+    asset = assets[0]
+    expected = asset.get("digest") or ""
+    if not expected.startswith("sha256:"):
+        raise SystemExit(f"release {tag} gives no SHA-256 for {asset['name']}, so it can't be checked")
+    download = asset["browser_download_url"]
+    pinned = f"https://github.com/scriptin/jmdict-simplified/releases/download/{urllib.parse.quote(tag, safe='')}/"
+    if not download.startswith(pinned):
+        raise SystemExit(f"{asset['name']} isn't under release {tag}: {download}")
+    with opener(urllib.request.Request(download, headers={"User-Agent": "crosstune-readingsaudit"})) as answer:
+        data = answer.read()
+    if len(data) != asset["size"]:
+        raise SystemExit(f"{asset['name']} is {len(data)} bytes, release {tag} says {asset['size']}")
+    got = "sha256:" + hashlib.sha256(data).hexdigest()
+    if got != expected:
+        raise SystemExit(f"{asset['name']} has {got}, release {tag} says {expected}")
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        members = [m for m in archive.namelist() if m.endswith(".json")]
+        if len(members) != 1:
+            raise SystemExit(f"{asset['name']} holds {len(members)} JSON files, not one")
+        folder.mkdir(parents=True, exist_ok=True)
+        # Written by its own name, whatever path the zip gives it.
+        (folder / "jmdict.json").write_bytes(archive.read(members[0]))
+    print(f"jmdict-simplified {tag}, {asset['name']}, {got}, in {folder / 'jmdict.json'}")
+    return tag
+
+
+TABLE = ROOT / "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt"
+# The JMdict workflow remakes the tables each month. Three months is three runs missed, or their pull
+# requests left open: long enough for a month that needs a reading looked at by hand, short enough that
+# the update the EDRDG licence asks for is a regular one.
+MAX_AGE_DAYS = 90
+
+
+def header_date(path):
+    """The JMdict date in a table's first line, `# JMdict 2026-11-09, by ...`."""
+    found = re.match(r"# JMdict (\d{4}-\d{2}-\d{2}),", path.read_text().split("\n", 1)[0])
+    if not found:
+        raise SystemExit(f"{path} has no JMdict date in its first line")
+    return datetime.date.fromisoformat(found.group(1))
+
+
+def age(paths, today, max_days=MAX_AGE_DAYS):
+    """1 when a table's JMdict is more than [max_days] older than [today], else 0, with each one's age."""
+    stale = False
+    for path in paths:
+        days = (today - header_date(path)).days
+        print(f"{path.name}: JMdict {header_date(path)}, {days} days old")
+        if days > max_days:
+            stale = True
+            print(f"{path.name} is older than {max_days} days. Merge the JMdict workflow's pull request,"
+                  " or run that workflow (Actions → JMdict → Run workflow)")
+    return 1 if stale else 0
 
 
 # ---- compare ----
@@ -452,21 +550,27 @@ def compare(folder, words, before=None):
             print(f"{w['cause']} | {w['word']} {norm(w['shown'])}→{norm(w['right'])} | {w['song']} | {w['line']}")
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
-    args = parser.parse_args()
+    parser.add_argument("--gradle", help="run, table: the Gradle command, instead of gradle-box")
+    parser.add_argument("--tag", help="fetch: this jmdict-simplified release instead of the newest")
+    args = parser.parse_args(argv)
     folder = data_dir()
     if args.step == "songs":
         songs(folder)
     elif args.step == "run":
-        run(folder)
+        run(folder, gradle=args.gradle)
     elif args.step == "table":
-        table(folder)
+        table(folder, args.gradle)
     elif args.step == "oldkana":
         oldkana(folder)
+    elif args.step == "fetch":
+        fetch(folder, args.tag)
+    elif args.step == "age":
+        sys.exit(age([TABLE, OLD_KANA], datetime.date.today()))
     else:
         compare(folder, args.words, args.before)
 

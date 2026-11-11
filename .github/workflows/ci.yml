@@ -200,6 +200,19 @@ jobs:
             exit 1
           fi
 
+      # The workflows, with shellcheck on their scripts. actionlint's own release, checked against the
+      # SHA-256 its checksums file gives for that version.
+      - name: Lint workflows
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
+          echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
@@ -271,8 +284,9 @@ jobs:
 
   required-ci:
     name: CI / Required
-    # Always report a result, including when a prerequisite failed or was skipped.
-    if: ${{ always() && github.event_name == 'pull_request' }}
+    # Always report a result, including when a prerequisite failed or was skipped. Also on a run started
+    # by hand: the JMdict workflow's pull request gets its checks that way, as its token starts no workflow.
+    if: ${{ always() && github.event_name != 'push' }}
     needs:
       - changes
       - site
