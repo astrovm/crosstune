@@ -1,4 +1,4 @@
-Ouvrez n'importe quel lien. Reconnaissez n'importe quelle chanson. Suivez chaque mot.
+Ouvrez n'importe quel lien. Suivez chaque mot.
 
 Recevez un lien d'un service de musique et ouvrez le même morceau dans votre app préférée. De Spotify à YouTube Music ou d'Apple Music à Deezer : choisissez librement. Titres, albums, artistes et playlists.
 
