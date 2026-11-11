@@ -24,6 +24,9 @@
     <string name="settings_default_label">Müzik uygulaması</string>
     <string name="setting_show_in_crosstune_first">Önce Crosstune\'da göster</string>
     <string name="settings_about_title">Hakkında</string>
+    <string name="settings_licenses">Lisanslar</string>
+    <string name="license_show">Lisansı göster</string>
+    <string name="license_hide">Lisansı gizle</string>
     <string name="settings_links_title">Şuradan gelen bağlantıları aç</string>
     <string name="rule_opens_in">%1$s ile açılır</string>
     <string name="rule_default">Varsayılan (%1$s)</string>

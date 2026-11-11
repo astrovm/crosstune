@@ -25,6 +25,9 @@
     <string name="settings_default_label">音楽アプリ</string>
     <string name="setting_show_in_crosstune_first">先に Crosstune で表示</string>
     <string name="settings_about_title">アプリ情報</string>
+    <string name="settings_licenses">ライセンス</string>
+    <string name="license_show">ライセンスを表示</string>
+    <string name="license_hide">ライセンスを隠す</string>
     <string name="settings_links_title">開くリンクの提供元</string>
     <string name="rule_opens_in">%1$s で開く</string>
     <string name="rule_default">デフォルト（%1$s）</string>

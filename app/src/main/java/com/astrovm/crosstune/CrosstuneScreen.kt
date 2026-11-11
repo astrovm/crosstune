@@ -1,5 +1,8 @@
 package com.astrovm.crosstune
 
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.ui.draw.rotate
@@ -581,7 +584,6 @@ private fun appLabel(packageName: String): String? {
 }
 
 /** Page scaffold shared by every screen: a flat top bar (none when [title] is null) and a centered, scrollable column. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun Page(
     title: String?,
@@ -594,6 +596,49 @@ internal fun Page(
     /** Pass the step's scroll state so each setup step starts at the top. */
     scrollState: ScrollState = rememberScrollState(),
     content: @Composable () -> Unit
+) {
+    PageFrame(title, titleLeading, navigationIcon, actions, bottomBar, snackbarHost, floatingActionButton) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = ContentMaxWidth)
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+/** [Page] for a long list, of which only what's on screen is drawn. */
+@Composable
+internal fun LazyPage(
+    title: String,
+    navigationIcon: @Composable () -> Unit,
+    listState: LazyListState,
+    content: LazyListScope.() -> Unit
+) {
+    PageFrame(title, null, navigationIcon, {}, {}, {}, {}) {
+        LazyColumn(
+            modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(),
+            state = listState,
+            contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 32.dp),
+            content = content
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PageFrame(
+    title: String?,
+    titleLeading: (@Composable () -> Unit)?,
+    navigationIcon: @Composable () -> Unit,
+    actions: @Composable () -> Unit,
+    bottomBar: @Composable () -> Unit,
+    snackbarHost: @Composable () -> Unit,
+    floatingActionButton: @Composable () -> Unit,
+    body: @Composable () -> Unit
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -629,15 +674,7 @@ internal fun Page(
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
-            Column(
-                modifier = Modifier
-                    .widthIn(max = ContentMaxWidth)
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(start = 16.dp, end = 16.dp, bottom = 32.dp)
-            ) {
-                content()
-            }
+            body()
         }
     }
 }
