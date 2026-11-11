@@ -46,7 +46,16 @@ crosstune_patch("${PROJECT_ROOT}/third_party/projectm/vendor/hlslparser/src/GLSL
 crosstune_patch("${PROJECT_ROOT}/third_party/projectm/src/libprojectM/MilkdropPreset/Waveform.hpp"
     "${PROJECTM_COPY}/src/libprojectM/MilkdropPreset/Waveform.hpp"
     "    int m_samples{};         //!< Number of samples in the current waveform. Depends on the mode.\n" "")
+# Optimized in the dev build too, as in the release: unoptimized, the visuals took the dev app 620 to
+# 750 ms of CPU a second, against about 270 in the release build (Issue #884), so how heavy they
+# looked there wasn't what anyone's phone does. Only projectM's directory gets it.
+set(CROSSTUNE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+set(CROSSTUNE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+string(APPEND CMAKE_C_FLAGS_DEBUG " -O2")
+string(APPEND CMAKE_CXX_FLAGS_DEBUG " -O2")
 add_subdirectory("${PROJECTM_COPY}" projectm EXCLUDE_FROM_ALL)
+set(CMAKE_C_FLAGS_DEBUG "${CROSSTUNE_C_FLAGS_DEBUG}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CROSSTUNE_CXX_FLAGS_DEBUG}")
 # Our copy of projectM's Framebuffer.cpp, which keeps the picture when the visuals change size. Built
 # from the one this copy was made from only: a new projectM's needs the change brought over again.
 set(PROJECTM_FRAMEBUFFER "${PROJECT_ROOT}/third_party/projectm/src/libprojectM/Renderer/Framebuffer.cpp")
