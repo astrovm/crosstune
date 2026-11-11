@@ -640,8 +640,12 @@ class ReadingsTest {
     @Test
     fun aWordInKanaAloneIsOldOnlyWhereItCanBe() {
         // A particle starts no word, an adjective's い was never ひ, and a verb in ひ may be a verb and 日: 降る日 is ふるひ.
-        val lines = listOf("あとへはひく", "あめのふるひ", "ひふ", "あいうえお", "ふふふ", "あの日へ", "おひるのひ", "あひるのこ", "やまはふじ")
-        fun check() = lines.forEach { line -> assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern }) }
+        val lines = listOf("あとへはひく", "あめのふるひ", "ひふ", "あいうえお", "ふふふ", "あの日へ", "おひるのひ", "あひるのこ", "やまはふじ").map { it to emptyList<String>() } +
+            // A word written so today that holds the old kana and more is that word: 財布, 回避, 手札, 威風, 都会風.
+            listOf("さいふ", "かいひ", "てふだ", "いふう", "かいらいせいふ", "とかいふう", "せいふ").map { it to emptyList() } +
+            // Where it's the word itself, the old one stays: いふ is いう more than 畏怖.
+            listOf("いふ" to listOf("いう"), "ちょうちょうといふ" to listOf("という"))
+        fun check() = lines.forEach { (line, modern) -> assertEquals(line, modern, Readings.words(line, Script.JAPANESE).mapNotNull { it.modern }) }
         check()
         TestUniDic.reading { check() }
     }
