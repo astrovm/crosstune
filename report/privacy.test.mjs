@@ -41,7 +41,7 @@ const SAID = {
 async function columns() {
   let sql = "";
   const env = {
-    DB: { prepare: (text) => (text.startsWith("INSERT INTO reports (") && (sql = text), { bind: () => ({ run: async () => ({ meta: { changes: 1 } }) }) }) },
+    DB: { prepare: (text) => (text.startsWith("INSERT INTO reports (") && (sql = text), { bind: () => ({ run: async () => ({ meta: { changes: 1 } }), first: async () => ({ full: null }) }) }) },
     LIMIT: { limit: async () => ({ success: true }) },
     NETWORK_KEY: "made-up-key",
   };

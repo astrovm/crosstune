@@ -21,7 +21,10 @@ function env({ allowed = true } = {}) {
     NETWORK_KEY: "made-up-key",
     DB: {
       prepare: (sql) => ({
-        bind: (...values) => ({ run: async () => ((sql.startsWith("INSERT INTO reports ") ? saved : asked).push({ sql, values }), { meta: { changes: 1 } }) }),
+        bind: (...values) => ({
+          run: async () => ((sql.startsWith("INSERT INTO reports ") ? saved : asked).push({ sql, values }), { meta: { changes: 1 } }),
+          first: async () => (asked.push({ sql, values }), { full: null }),
+        }),
       }),
     },
     LIMIT: { limit: async ({ key }) => (keys.push(key), { success: allowed }) },
@@ -363,6 +366,10 @@ function realEnv() {
             statements.push({ sql, values });
             return { meta: { changes: Number(db.prepare(sql).run(...values).changes) } };
           },
+          first: async () => {
+            statements.push({ sql, values });
+            return db.prepare(sql).get(...values) ?? null;
+          },
         }),
       }),
     },
@@ -530,11 +537,42 @@ test("without NETWORK_KEY nothing is kept, the log says why, and the refusal is 
   assert.deepEqual(refusals(e), { no_key: 1 });
 });
 
-test("refusals are counted up to 10000 a day for each reason, then cost no write", async () => {
+test("refusals are counted up to 1000 a day for each reason, then cost no write", async () => {
   const e = realEnv();
-  e.db.exec("INSERT INTO refusals (day, why, n) VALUES (date('now'), 'network', 9999)");
-  for (let i = 0; i < 11; i++) await worker.fetch(from("203.0.113.7"), e);
-  assert.deepEqual(refusals(e), { network: 10000 });
+  fill(e, 500);
+  e.db.exec("INSERT INTO refusals (day, why, n) VALUES (date('now'), 'day_full', 998)");
+  // Each one is turned away: the first two are counted, and the rest change nothing.
+  for (let i = 0; i < 5; i++) assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 429);
+  assert.deepEqual(refusals(e), { day_full: 1000 });
+});
+
+/** Rows SQLite changed since the database was made, by the Worker's statements and the triggers they set off. */
+const changed = (e) => Number(e.db.prepare("SELECT total_changes() AS n").get().n);
+
+test("once the day or the table is full, a report writes only its refusal, and no network's count", async () => {
+  const e = realEnv();
+  fill(e, 500);
+  const before = changed(e);
+  for (let i = 0; i < 50; i++) assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 429);
+  assert.equal(e.db.prepare("SELECT count(*) AS n FROM network_days").get().n, 0);
+  assert.deepEqual(refusals(e), { day_full: 50 });
+  assert.equal(changed(e) - before, 50);
+  const full = realEnv();
+  fill(full, 9000, "-30 days");
+  for (let i = 0; i < 50; i++) assert.equal((await worker.fetch(from(anotherNetwork()), full)).status, 429);
+  assert.equal(full.db.prepare("SELECT count(*) AS n FROM network_days").get().n, 0);
+  assert.deepEqual(refusals(full), { kept_full: 50 });
+});
+
+test("a flood from many networks writes the networks of the reports kept, and at most 1000 refusals", async () => {
+  const e = realEnv();
+  const before = changed(e);
+  for (let i = 0; i < 2000; i++) await worker.fetch(from(anotherNetwork()), e);
+  assert.equal(rows(e), 500);
+  assert.equal(e.db.prepare("SELECT count(*) AS n FROM network_days").get().n, 500);
+  assert.deepEqual(refusals(e), { day_full: 1000 });
+  // Each report kept: its network, itself and two counts. Each refusal past 1000 changes nothing.
+  assert.equal(changed(e) - before, 500 * 4 + 1000);
 });
 
 test("the daily clear-out forgets past days' networks, old day counts and old refusals", async () => {
@@ -562,9 +600,9 @@ test("every statement a report costs looks rows up, never reads the table throug
   fill(e, 499);
   // Kept, then turned away for the day, then for the network.
   for (let i = 0; i < 12; i++) await worker.fetch(from("203.0.113.7"), e);
-  // Counting the network, keeping the report, counting a refusal.
+  // Reading the caps, counting the network, keeping the report, counting a refusal.
   const asked = new Set(e.statements.map((it) => it.sql));
-  assert.equal(asked.size, 3);
+  assert.equal(asked.size, 4);
   for (const { sql, values } of e.statements) {
     const plan = e.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...values).map((it) => it.detail);
     // SCAN reads every row; SEARCH goes straight to the rows it wants.

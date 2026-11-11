@@ -32,6 +32,6 @@ CREATE TABLE IF NOT EXISTS network_days (key TEXT PRIMARY KEY, day TEXT NOT NULL
 
 -- How many reports were turned away each day ('2026-11-11', UTC), and why: 'network' (its network sent its day's
 -- reports), 'day_full' (the day's reports are all in), 'kept_full' (the table holds all it may), 'no_key' (the
--- Worker has no NETWORK_KEY). reports.py's triage shows them. Counted up to 10000 a day for each, so a flood
+-- Worker has no NETWORK_KEY). reports.py's triage shows them. Counted up to 1000 a day for each, so a flood
 -- costs a write a refusal only until then.
 CREATE TABLE IF NOT EXISTS refusals (day TEXT NOT NULL, why TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, why)) WITHOUT ROWID;

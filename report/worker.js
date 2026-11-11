@@ -72,8 +72,8 @@ const MAX_A_DAY = 500;
  */
 const MAX_KEPT = 9000;
 
-/** How many refusals of each kind a day are counted: past it, a refusal costs no write. */
-const MAX_REFUSALS = 10000;
+/** How many refusals for each reason a day are counted: past it, a refusal costs no write. */
+const MAX_REFUSALS = 1000;
 
 /** What every version of the app sends a report as, OkHttp's "application/json; charset=utf-8", with or without the charset. */
 const JSON_TYPE = /^application\/json\s*(;\s*charset=utf-8\s*)?$/i;
@@ -95,10 +95,19 @@ const INSERT =
   `INSERT INTO reports (${COLUMNS}) SELECT ${COLUMNS.split(",").map(() => "?").join(", ")} ` +
   `WHERE ${KEPT} < ${MAX_KEPT} AND ${TODAY} < ${MAX_A_DAY}`;
 
+/**
+ * Which cap is reached, if one is: 'kept_full' or 'day_full', else null. Read before anything is written, so once
+ * the day or the table is full a report costs a refusal's write at most, and no network's count.
+ */
+const FULL = `SELECT CASE WHEN ${KEPT} >= ${MAX_KEPT} THEN 'kept_full' WHEN ${TODAY} >= ${MAX_A_DAY} THEN 'day_full' END AS full`;
+
 /** One more report from a network today, unless it sent its day's: then nothing changes. */
 const COUNT_NETWORK = "INSERT INTO network_days (key, day, n) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET n = n + 1 WHERE n < ?";
 
-/** One more report turned away today, for the reason given, or, with none, for whichever cap is reached. */
+/**
+ * One more report turned away today, for the reason given, or, with none, for whichever cap is reached: the last
+ * place can go to another report between FULL and the insert.
+ */
 const REFUSE =
   `INSERT INTO refusals (day, why, n) SELECT date('now'), coalesce(?, CASE WHEN ${KEPT} >= ${MAX_KEPT} THEN 'kept_full' ELSE 'day_full' END), 1 ` +
   `WHERE true ON CONFLICT (day, why) DO UPDATE SET n = n + 1 WHERE n < ${MAX_REFUSALS}`;
@@ -131,6 +140,11 @@ export default {
       console.error("NETWORK_KEY isn't set: no report is kept until it is (wrangler secret put NETWORK_KEY)");
       await refuse(env, "no_key");
       return refused(503, "no_key");
+    }
+    const full = (await env.DB.prepare(FULL).bind().first())?.full;
+    if (full) {
+      await refuse(env, full);
+      return refused(429, "full");
     }
     const day = new Date().toISOString().slice(0, 10);
     const kind = kindOf(report.problem);
