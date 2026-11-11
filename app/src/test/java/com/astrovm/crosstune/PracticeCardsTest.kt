@@ -1697,131 +1697,158 @@ class PracticeCardsTest {
         assertEquals(AppTraits(keeps = false), traits.of(tidal))
     }
 
-    @Test
-    fun aPreviewThatStopsShortMovesToTheNextPlayerPromptly() {
-        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+    /**
+     * What a music app said after it was sent to a line: [afterMs] after it was asked to pause there, at [positionMs], playing
+     * or not, or nothing, as one that falls out. [onTheWay]: paused where playing on from where it was took it by then.
+     */
+    private data class Said(val afterMs: Long, val positionMs: Long?, val playing: Boolean = false, val onTheWay: Boolean = false)
+
+    /**
+     * [app], at [from] and playing or not, says [said] once it's sent to [start], as it did on the Samsung (Issue #846), each with
+     * a time of its own. When it was first told where it stopped is kept, from the phone's clock, or 0 while it hasn't been.
+     */
+    private fun replays(app: String, start: Long, from: Long, fromPlaying: Boolean, vararg said: Said): AtomicLong {
         youTubeHasTheSong()
-        keep(line(start = 43_560))
-        val tidal = MusicService.TIDAL.packageName
-        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
-        appPlays(tidal, speed = 1f, positionMs = 24)
+        keep(line(start = start))
+        appPlays(app, speed = 1f, positionMs = from)
         playback.obeys = false
-        val flow = playback.appPlaying.getValue(tidal)
-        flow.value = flow.value?.copy(clock = PlaybackClock(24, System.currentTimeMillis(), 1f, playing = false))
-        val stoppedAt = AtomicLong()
-        playback.onPlay = { app, play ->
-            if (app == tidal && !play && playback.seeks.isNotEmpty() && stoppedAt.get() == 0L) {
-                stoppedAt.set(System.nanoTime())
-                flow.value = flow.value?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+        val flow = playback.appPlaying.getValue(app)
+        val song = flow.value
+        val was = PlaybackClock(from, System.currentTimeMillis(), 1f, fromPlaying)
+        flow.value = song?.copy(clock = was)
+        val firstSaid = AtomicLong()
+        val replayed = AtomicBoolean(false)
+        playback.onPlay = { asked, play ->
+            if (asked == app && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
+                val sent = System.nanoTime()
+                thread {
+                    said.forEach { (afterMs, positionMs, playing, onTheWay) ->
+                        Thread.sleep(maxOf(0, afterMs - TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - sent)))
+                        val at = System.currentTimeMillis()
+                        flow.value = (if (onTheWay) was.positionAt(at) else positionMs)?.let { song?.copy(clock = PlaybackClock(it, at, 1f, playing)) }
+                        firstSaid.compareAndSet(0, System.nanoTime())
+                    }
+                }
             }
         }
-        cards().start(null, before = null)
-        waitFor("TIDAL stops short") { stoppedAt.get() != 0L }
-        waitFor("TIDAL is passed over") { "$tidal did not get to the line" in steps() }
-        val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - stoppedAt.get())
-        assertTrue("TIDAL took $elapsedMs ms to give up", elapsedMs < 300)
+        return firstSaid
     }
 
+    /** How long after [since], on the phone's clock, [app] was given up on, waited for as long as the card may wait. */
+    private fun givenUpAfterMs(app: String, since: AtomicLong): Long {
+        waitFor("$app is given up on") { "$app did not get to the line" in steps() }
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - since.get())
+    }
+
+    // TIDAL without an account, cold, sent past its 30 s preview: playing its start, it says it's paused at the preview's end.
     @Test
-    fun anUnchangedPreviewPositionWaitsForTheSeek() {
-        youTubeHasTheSong()
-        keep(line(start = 43_560))
+    fun tidalStoppedAtItsPreviewsEndIsGivenUpOnAtOnce() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
         val tidal = MusicService.TIDAL.packageName
         installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
-        appPlays(tidal, speed = 1f, positionMs = 29_952)
-        playback.obeys = false
-        val flow = playback.appPlaying.getValue(tidal)
-        flow.value = flow.value?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
+        val said = replays(tidal, start = 43_270, from = 65, fromPlaying = true, Said(117, 29_952), Said(168, 29_952))
         cards().start(null, before = null)
-        waitFor("the preview is sent to the line") { playback.seeks.isNotEmpty() }
-        Thread.sleep(500)
-        assertTrue(player.shown.isEmpty())
-        assertNull(traits.of(tidal).seeks)
-        waitFor("the player takes over after the wait") { player.shown.isNotEmpty() }
+        val waitedMs = givenUpAfterMs(tidal, said)
+        // The wait for an app to get there is 3 s. Given up on as soon as it said it stopped, even on a busy machine.
+        assertTrue("TIDAL was given up on $waitedMs ms after it said it stopped", waitedMs < 1_000)
+        assertTrue("$tidal stopped at 29952 ms, short of the line" in steps())
+        assertEquals(false, traits.of(tidal).seeks)
+        waitFor("the player takes over") { player.shown.isNotEmpty() }
+    }
+
+    // Warm, TIDAL already stopped at its preview's end says that same place again: that isn't told from not having moved yet.
+    @Test
+    fun tidalSayingAgainWhereItWasIsWaitedFor() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        val said = replays(tidal, start = 43_270, from = 29_952, fromPlaying = false, Said(131, 29_952))
+        cards().start(null, before = null)
+        assertTrue(givenUpAfterMs(tidal, said) >= LineWindow.SEEK_WAIT_MS - 500)
         assertEquals(false, traits.of(tidal).seeks)
     }
 
-    @Test
-    fun aSeekThatReportsAnOldPositionAndReturnsStillReachesTheLine() {
-        youTubeHasTheSong()
-        keep(line(start = 43_270))
-        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
-        appPlays(ytMusic, speed = 1f, positionMs = 43_000)
-        playback.obeys = false
-        val flow = playback.appPlaying.getValue(ytMusic)
-        val song = flow.value
-        flow.value = song?.copy(clock = PlaybackClock(43_000, System.currentTimeMillis(), 1f, playing = false))
-        val replayed = AtomicBoolean(false)
-        playback.onPlay = { app, play ->
-            if (app == ytMusic && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
-                thread {
-                    flow.value = song?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f, playing = true))
-                    Thread.sleep(250)
-                    flow.value = song?.copy(clock = PlaybackClock(43_208, System.currentTimeMillis(), 1f, playing = true))
-                    Thread.sleep(100)
-                    flow.value = null
-                    Thread.sleep(500)
-                    flow.value = song?.copy(clock = PlaybackClock(43_577, System.currentTimeMillis(), 1f, playing = false))
-                }
-            }
-        }
-        cards().start(null, before = null)
-        waitFor("YouTube Music reaches the line") { practice?.sound == LineSound.PLAYED }
-        assertEquals(true, traits.of(ytMusic).seeks)
+    /** That [app] got to the line, after it said all it did, and no other app or player was needed. */
+    private fun reached(app: String) {
+        waitFor("$app gets to the line") { practice?.sound == LineSound.PLAYED }
+        assertEquals(true, traits.of(app).seeks)
         assertTrue(player.shown.isEmpty())
     }
 
+    // YouTube Music, warm, sent from further on in the song: paused, it says a place a little before the line, as it rounds.
     @Test
-    fun aPausedOldPositionCanBeFollowedByTheLine() {
-        youTubeHasTheSong()
-        keep(line(start = 43_270))
+    fun youTubeMusicPausedALittleBeforeTheLineIsThere() {
         installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
-        appPlays(ytMusic, speed = 1f, positionMs = 29_952)
-        playback.obeys = false
-        val flow = playback.appPlaying.getValue(ytMusic)
-        val song = flow.value
-        flow.value = song?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
-        val replayed = AtomicBoolean(false)
-        playback.onPlay = { app, play ->
-            if (app == ytMusic && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
-                thread {
-                    flow.value = song?.copy(clock = PlaybackClock(29_952, System.currentTimeMillis(), 1f, playing = false))
-                    Thread.sleep(500)
-                    flow.value = song?.copy(clock = PlaybackClock(43_270, System.currentTimeMillis(), 1f, playing = false))
-                }
-            }
-        }
+        replays(ytMusic, start = 43_270, from = 56_725, fromPlaying = false, Said(204, 43_000))
         cards().start(null, before = null)
-        waitFor("the line arrives after the old position") { practice?.sound == LineSound.PLAYED }
-        assertEquals(true, traits.of(ytMusic).seeks)
-        assertTrue(player.shown.isEmpty())
+        reached(ytMusic)
     }
 
+    // YouTube Music, warm, falls out a moment and comes back a little before the line: it's sent there once more.
     @Test
-    fun aSeekThatPlaysBeforePausingAtTheLineStillReachesIt() {
-        youTubeHasTheSong()
-        keep(line(start = 43_270))
+    fun youTubeMusicThatFallsOutAndComesBackIsThere() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 43_341, fromPlaying = false, Said(141, null), Said(219, 43_000), Said(399, 43_000))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // YouTube Music, cold: it says the song's start, playing, then plays near the line, falls out, and comes back paused there.
+    @Test
+    fun youTubeMusicColdBackAtTheStartFirstStillGetsThere() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 43_000, fromPlaying = false, Said(316, 0, playing = true), Said(366, 43_208, playing = true), Said(466, null), Said(1_011, 43_577))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // YouTube Music, cold, the same with where it was first: playing a little before the line, falling out, back paused past its start.
+    @Test
+    fun youTubeMusicColdPlayingOnFromWhereItWasStillGetsThere() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 43_000, fromPlaying = false, Said(287, 43_052, playing = true), Said(386, 43_056, playing = true), Said(437, null), Said(963, 43_643))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // YouTube Music, cold, paused at the song's start, as it was while loading, before it says the line: the start proves nothing.
+    @Test
+    fun anAppPausedAtTheSongsStartIsWaitedFor() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 43_000, fromPlaying = false, Said(292, 0), Said(408, 0), Said(558, null), Said(1_037, 0), Said(1_400, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // Morphe's YouTube Music, cold: it plays on from where it was to the line, then pauses there.
+    @Test
+    fun morphePlayingOnToTheLineIsThere() {
         installed(morphe, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC, build = morphe))
-        appPlays(morphe, speed = 1f, positionMs = 43_000)
-        playback.obeys = false
-        val flow = playback.appPlaying.getValue(morphe)
-        val song = flow.value
-        val replayed = AtomicBoolean(false)
-        playback.onPlay = { app, play ->
-            if (app == morphe && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
-                thread {
-                    flow.value = song?.copy(clock = PlaybackClock(43_096, System.currentTimeMillis(), 1f, playing = true))
-                    Thread.sleep(190)
-                    flow.value = song?.copy(clock = PlaybackClock(43_306, System.currentTimeMillis(), 1f, playing = true))
-                    Thread.sleep(730)
-                    flow.value = song?.copy(clock = PlaybackClock(43_490, System.currentTimeMillis(), 1f, playing = false))
-                }
-            }
-        }
+        replays(
+            morphe, start = 43_270, from = 43_001, fromPlaying = true,
+            Said(183, 43_096, playing = true), Said(290, 43_102, playing = true), Said(375, 43_118, playing = true),
+            Said(425, 43_306, playing = true), Said(476, 43_492, playing = true), Said(1_144, 43_490),
+        )
         cards().start(null, before = null)
-        waitFor("Morphe reaches the line") { practice?.sound == LineSound.PLAYED }
-        assertEquals(true, traits.of(morphe).seeks)
-        assertTrue(player.shown.isEmpty())
+        reached(morphe)
+    }
+
+    // Morphe's YouTube Music, warm: already paused at the line, it says so again.
+    @Test
+    fun morpheAlreadyAtTheLineIsThere() {
+        installed(morphe, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC, build = morphe))
+        replays(morphe, start = 43_270, from = 43_270, fromPlaying = false, Said(270, 43_270))
+        cards().start(null, before = null)
+        reached(morphe)
+    }
+
+    // An app paused before it seeks says where it was by then, playing on: that's where it was, not where it stopped.
+    @Test
+    fun anAppPausedOnTheWayBeforeItSeeksIsWaitedFor() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 10_000, fromPlaying = true, Said(100, null, onTheWay = true), Said(600, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
     }
 
     @Test

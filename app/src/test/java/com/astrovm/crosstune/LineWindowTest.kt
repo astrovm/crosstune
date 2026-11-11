@@ -74,6 +74,31 @@ class LineWindowTest {
     }
 
     @Test
+    fun anAppStoppedShortIsPausedAtANewPlaceBeforeTheLine() {
+        val window = LineWindow(43_270, 48_270)
+        val slack = LineWindow.SEEK_SLACK_MS
+        fun paused(at: Long) = PlaybackClock(at, atMs = 1_000)
+        // TIDAL, sent from its start past its 30 s preview, paused at the preview's end.
+        val playingItsStart = PlaybackClock(65, atMs = 800)
+        assertTrue(window.stoppedShort(paused(29_952), from = playingItsStart))
+        // Just short of where the line counts as reached, and no nearer.
+        assertTrue(window.stoppedShort(paused(43_270 - slack - 1), from = playingItsStart))
+        assertFalse(window.stoppedShort(paused(43_270 - slack), from = playingItsStart))
+        // Still playing on, it hasn't stopped.
+        assertFalse(window.stoppedShort(PlaybackClock(29_952, atMs = 1_000, playing = true), from = playingItsStart))
+        // Back at the song's start, where an app sits while it loads, up to the slack.
+        assertFalse(window.stoppedShort(paused(0), from = paused(20_000)))
+        assertFalse(window.stoppedShort(paused(slack - 1), from = paused(20_000)))
+        assertTrue(window.stoppedShort(paused(slack), from = paused(20_000)))
+        // Where it was, said again, or where playing on from there took it by then: it may not have moved yet.
+        assertFalse(window.stoppedShort(paused(29_952), from = paused(29_952)))
+        assertFalse(window.stoppedShort(paused(29_952 + slack), from = paused(29_952)))
+        assertTrue(window.stoppedShort(paused(29_952 + slack + 1), from = paused(29_952)))
+        assertTrue(window.stoppedShort(paused(29_952 - slack - 1), from = paused(29_952)))
+        assertFalse(window.stoppedShort(paused(10_200), from = PlaybackClock(10_000, atMs = 800)))
+    }
+
+    @Test
     fun aLineIsOverAtItsEndNotBefore() {
         val window = LineWindow(10_000, 16_000)
         assertFalse(window.over(15_999))

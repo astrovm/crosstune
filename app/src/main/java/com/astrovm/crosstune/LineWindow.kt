@@ -16,6 +16,15 @@ internal data class LineWindow(val start: Long, val end: Long) {
      */
     fun near(position: Long) = abs(position - start) <= SEEK_SLACK_MS
 
+    /**
+     * The app, sent here from [from], says it stopped short: paused before the line, as TIDAL at its 30 s preview's end, at a
+     * place it says is new. Where it was may be said again before it moves (paused, where playing on from there took it by
+     * then, as one paused before it seeks says), and so may the song's start, where YouTube Music sits while it loads: neither
+     * says it went anywhere. A real place short of the line does, so the app needn't be waited for.
+     */
+    fun stoppedShort(clock: PlaybackClock, from: PlaybackClock): Boolean =
+        !clock.playing && clock.positionMs in SEEK_SLACK_MS..<start - SEEK_SLACK_MS && abs(clock.positionMs - from.positionAt(clock.atMs)) > SEEK_SLACK_MS
+
     /** The app has played the line out. */
     fun over(position: Long) = position >= end
 

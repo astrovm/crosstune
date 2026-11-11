@@ -307,32 +307,33 @@ internal class PracticeCards(
     /**
      * Sends [app] to [window] and has it [play] there, or pause, once it's ready: following the song, able to move, and not in
      * an ad. Then waits for it to say it's at the line, as asked; where it said it was, or null when it doesn't in
-     * [LineWindow.SEEK_WAIT_MS]. A new paused position short of the line says it stopped there. An unchanged position
-     * may be the old one, so it must wait. One that falls out on the way, as YouTube Music errs, and comes back is asked once more.
+     * [LineWindow.SEEK_WAIT_MS], or says it stopped short of it, see [LineWindow.stoppedShort]: TIDAL at its preview's
+     * end has nowhere else to go. One that falls out on the way, as YouTube Music errs, and comes back is asked once more.
      */
     private suspend fun reach(source: PlaybackSource, song: MusicMetadata, app: String?, window: LineWindow, play: Boolean, following: () -> Following?): Long? =
         withTimeoutOrNull(LineWindow.SEEK_WAIT_MS) {
             var asks = 0
             var wasReady = false
             var at: Long? = null
-            var before: Long? = null
+            // Where it was when last sent, to tell where it stopped from where it was.
+            var sentFrom: PlaybackClock? = null
             while (at == null) {
                 val latest = following()
-                val ready = latest != null && latest.canSeek && !latest.ad
-                if (ready && !wasReady && asks < ASKS) {
+                val ready = latest?.takeIf { it.canSeek && !it.ad }
+                if (ready != null && !wasReady && asks < ASKS) {
                     hushed = false
-                    before = latest?.clock?.positionMs
+                    sentFrom = ready.clock
                     source.seekTo(song, window.start, app)
                     source.playPause(song, play, app)
                     asks++
                 } else if (asks > 0) {
-                    val clock = latest?.clock
-                    if (ready && clock != null && !clock.playing && clock.positionMs != before && clock.positionMs < window.start - LineWindow.SEEK_SLACK_MS) {
+                    if (ready != null && sentFrom?.let { window.stoppedShort(ready.clock, it) } == true) {
+                        step("${app ?: "the app"} stopped at ${ready.clock.positionMs} ms, short of the line")
                         return@withTimeoutOrNull null
                     }
                     at = latest?.clock?.takeIf { it.playing == play && window.near(it.positionMs) && window.holds(it.positionAt(now())) }?.positionMs
                 }
-                wasReady = ready
+                wasReady = ready != null
                 delay(SOUND_CHECK_MS)
             }
             at
