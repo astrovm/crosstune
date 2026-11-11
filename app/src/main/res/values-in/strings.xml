@@ -318,7 +318,7 @@
     <string name="report_failed">Gagal mengirim. Periksa koneksimu dan coba lagi.</string>
     <string name="reading_wrong">Bacaan salah</string>
     <string name="reading_right">Bacaan yang benar (opsional)</string>
-    <string name="reading_what_goes">Mengirim kata, bacaan yang ditampilkan, barisnya, nama lagu, serta versi aplikasi dan Android. Hanya developer Crosstune yang membacanya.</string>
+    <string name="reading_what_goes">Mengirim kata, bacaan yang ditampilkan dan asalnya, baris dan aksaranya, bacaan yang kamu ketik, judul dan artis lagu, asal liriknya, serta versi aplikasi dan Android. Hanya developer Crosstune yang membacanya.</string>
     <string name="auto_report_offer">Laporkan masalah seperti ini secara otomatis?</string>
     <string name="auto_report_offer_words_off">Lirik lagu ini tidak selaras. Laporkan yang seperti ini secara otomatis?</string>
     <string name="auto_report_yes">Ya</string>
