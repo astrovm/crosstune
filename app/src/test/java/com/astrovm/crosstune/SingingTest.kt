@@ -1034,6 +1034,8 @@ class SingingTest {
         repeat(5) { plays(positionMs = it.toLong()) }
         // Heard straight on, a while at a time.
         waitUntil { singing.hears == 1 }
+        // Music alone where the words are timed says they may be timed into an intro.
+        assertFalse(model().uiState.following!!.timingKnown)
         passes(20_000)
         waitUntil { singing.hears == 2 }
         passes(20_000)
@@ -1042,6 +1044,26 @@ class SingingTest {
         assertEquals(3, singing.hears)
         assertFalse(model().uiState.lyricsSynced)
         // Given up on, the lines are shown sung as they're timed again, as nothing says they're wrong.
+        assertTrue(model().uiState.following!!.timingKnown)
+    }
+
+    @Test
+    fun nothingMadeOutAtAllLeavesTheTimingBe() {
+        // whisper.cpp makes out nothing in a while, not even music: that says nothing of where the words are timed.
+        singing.answer = { Sung(SystemClock.elapsedRealtime(), emptyList()) }
+        openLyrics()
+        repeat(5) { plays(positionMs = it.toLong()) }
+        // Heard on a few times, the lines are shown sung as they're timed all the while.
+        waitUntil { singing.hears == 1 }
+        assertTrue(model().uiState.following!!.timingKnown)
+        passes(20_000)
+        waitUntil { singing.hears == 2 }
+        assertTrue(model().uiState.following!!.timingKnown)
+        passes(20_000)
+        waitUntil { singing.hears == 3 }
+        assertTrue(model().uiState.following!!.timingKnown)
+        passes(60_000)
+        assertEquals(3, singing.hears)
         assertTrue(model().uiState.following!!.timingKnown)
     }
 
