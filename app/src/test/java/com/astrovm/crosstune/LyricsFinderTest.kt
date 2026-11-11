@@ -61,6 +61,74 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(song))
     }
 
+    /** LRCLIB's copy of [title] by Band marked instrumental, as it keeps one, with no words. */
+    private fun instrumentalCopy(title: String = "Song") = """{"trackName":${quote(title)},"artistName":"Band","instrumental":true,"plainLyrics":null,"syncedLyrics":null}"""
+
+    @Test
+    fun aRecordingMostOfLrclibsCopiesMarkInstrumentalHasNoWords() {
+        // Issue #861: some copies of an instrumental recording hold the song's words, sent for its name.
+        respond("[${instrumentalCopy()},${instrumentalCopy()},${answer("Song", "Band", "Sung after all")}]")
+        assertEquals(Lyrics.Instrumental, found(song))
+        // Half of them is no more than a copy with words, as above.
+        respond("[${instrumentalCopy()},${instrumentalCopy()},${answer("Song", "Band", "Sung after all")},${answer("Song", "Band", "Sung after all")}]")
+        assertEquals("Sung after all", words(song))
+    }
+
+    @Test
+    fun aRecordingLrclibMarksInstrumentalHasNoneOfTheSongsWordsFromElsewhere() {
+        // Report 88: YouTube Music gives an instrumental recording the words of the song it plays, untimed.
+        everywhere("[${instrumentalCopy()}]", youTubeMusicPage("Words someone else sings" to null))
+        assertEquals(Lyrics.Instrumental, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Nor NetEase's, timed word by word or not, as Letras's are for 2CELLOS' Viva la Vida.
+        onNetEase("""{"lrc":{"lyric":"[00:10.00]Words someone else sings"},"yrc":{"lyric":"[10000,2000](10000,2000,0)Words"}}""") { request ->
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[${instrumentalCopy()}]" else """{"results":[]}""")
+        }
+        assertEquals(Lyrics.Instrumental, found(song))
+        // The recording's own words, timed for it, are still the words sung in it.
+        everywhere("[${instrumentalCopy()}]", youTubeMusicPage("Own first" to 12_000, "Own second" to 15_500))
+        val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        assertEquals("Own first\nOwn second", (runBlocking { withYouTubeMusic().lyricsOf(known) } as Lyrics.Found).words)
+    }
+
+    @Test
+    fun aRecordingLrclibMarksInstrumentalHasNoWordsUnderItsBareTitle() {
+        // "Song" is the song sung; "Song (Piano Version)", the recording playing, has no one singing.
+        fake.handler = { request ->
+            FakeSpotify.html(request, when (request.url.queryParameter("track_name")) {
+                "Song (Piano Version)" -> "[${instrumentalCopy("Song (Piano Version)")}]"
+                "Song" -> "[${answer("Song", "Band", "Words of the song sung")}]"
+                else -> "[]"
+            })
+        }
+        assertEquals(Lyrics.Instrumental, found(MusicMetadata("Song (Piano Version)", "Band")))
+        // With no copy of its own at all, the bare title's words are still taken.
+        fake.handler = { request ->
+            FakeSpotify.html(request, if (request.url.queryParameter("track_name") == "Song") "[${answer("Song", "Band", "Words of the song sung")}]" else "[]")
+        }
+        assertEquals("Words of the song sung", words(MusicMetadata("Song (Piano Version)", "Band")))
+    }
+
+    @Test
+    fun aTitleSayingNoOneSingsInItHasNoWords() {
+        respond("[${answer("Song (Instrumental)", "Band", "Words of the song sung")}]")
+        for (title in listOf("Song (Instrumental)", "Song - Instrumental", "Song [Inst.]", "曲 (伴奏)", "曲 off vocal ver.", "曲 -OFF VOCAL ver.-")) {
+            fake.requestedUrls.clear()
+            assertEquals(title, Lyrics.Instrumental, found(MusicMetadata(title, "Band")))
+            // It's known without asking anyone.
+            assertEquals(title, emptyList<String>(), fake.requestedUrls)
+        }
+        // Words kept for it before are no longer shown.
+        val file = File.createTempFile("lyrics-instrumental", ".json").apply { delete(); deleteOnExit() }
+        val cache = LookupCache(file, Dispatchers.Unconfined)
+        val tagged = MusicMetadata("Song (Instrumental)", "Band")
+        runBlocking { cache.put("${LyricsFinder.CACHE_VERSION}\u0000${RecordingKey.of(tagged)}", """{"words":"Words of the song sung","lines":[]}""") }
+        assertEquals(Lyrics.Instrumental, runBlocking { LyricsFinder(fake.client(), "test", cache = cache, busyPauseMs = 0).lyricsOf(tagged) })
+        file.delete()
+        // A song of that name is sung.
+        respond("[${answer("Instrumental", "Band", "Words of the song sung")}]")
+        assertEquals("Words of the song sung", words(MusicMetadata("Instrumental", "Band")))
+    }
+
     /** LRCLIB, which has [songs], by song and artist, each with its own words, and finds them by any of their words. */
     private fun lrclibHas(vararg songs: Pair<String, String>, searches: MutableList<String> = mutableListOf()) {
         fun json(found: List<Pair<String, String>>) = found.joinToString(",", "[", "]") { (title, artist) -> answer(title, artist, "Words of $title") }
@@ -267,6 +335,19 @@ class LyricsFinderTest {
         // Nor with the store down.
         fake.handler = { request -> if (request.url.host == "itunes.apple.com") FakeSpotify.html(request, "", code = 503) else store(request) }
         assertEquals(Lyrics.None, found(cover))
+    }
+
+    @Test
+    fun aCoverLrclibMarksInstrumentalHasNoneOfTheOriginalsWords() {
+        // 2CELLOS' "With or Without You": all 15 of LRCLIB's copies are marked instrumental.
+        onlyBy("Evanescence", "Bring Me to Life", answer("Bring Me to Life", "Evanescence", "Wake me up inside"))
+        val elsewhere = fake.handler
+        val cover = MusicMetadata("Bring Me to Life (Cyberpunk Shamisen Cover)", "TOKYO SAMURAI SYNDICATE")
+        fake.handler = { request ->
+            if (request.url.queryParameter("artist_name") != cover.artist) elsewhere(request)
+            else FakeSpotify.html(request, """[{"trackName":${quote(cover.title)},"artistName":${quote(cover.artist)},"instrumental":true}]""")
+        }
+        assertEquals(Lyrics.Instrumental, found(cover))
     }
 
     @Test
@@ -858,13 +939,16 @@ class LyricsFinderTest {
 
     @Test
     fun savedSentenceCaseIsStillReadableOfflineDuringTheRefresh() {
-        val file = File.createTempFile("lyrics-old-offline", ".json").apply { delete(); deleteOnExit() }
-        val cache = LookupCache(file, Dispatchers.Unconfined)
-        runBlocking { cache.put("15\u0000${RecordingKey.of(song)}", """{"words":"We walk with mira through the night","lines":[],"provisional":false}""") }
-        fake.handler = { throw IOException("offline") }
-        val result = runBlocking { LyricsFinder(fake.client(), "test", cache = cache, busyPauseMs = 0).lyricsOf(song) } as Lyrics.Found
-        assertEquals("We walk with mira through the night", result.words)
-        file.delete()
+        // Kept by the versions before, as each still holds words to show offline.
+        for (version in listOf(15, 16)) {
+            val file = File.createTempFile("lyrics-old-offline", ".json").apply { delete(); deleteOnExit() }
+            val cache = LookupCache(file, Dispatchers.Unconfined)
+            runBlocking { cache.put("$version\u0000${RecordingKey.of(song)}", """{"words":"We walk with mira through the night","lines":[],"provisional":false}""") }
+            fake.handler = { throw IOException("offline") }
+            val result = runBlocking { LyricsFinder(fake.client(), "test", cache = cache, busyPauseMs = 0).lyricsOf(song) } as Lyrics.Found
+            assertEquals("$version", "We walk with mira through the night", result.words)
+            file.delete()
+        }
     }
 
     @Test

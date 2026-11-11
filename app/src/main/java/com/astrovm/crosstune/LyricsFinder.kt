@@ -548,6 +548,8 @@ internal class LyricsFinder(
     suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
+        // Its title says no one sings in it, so whatever words are kept for its name are another recording's.
+        if (SongNames.saysInstrumental(metadata.title)) return FirstLook(Lyrics.Instrumental, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) } }
         val lookup = Answers()
@@ -568,7 +570,7 @@ internal class LyricsFinder(
      * song kept offline, played from an app that names its recording otherwise, still has its words.
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
-        val names = listOf(CACHE_VERSION, 15).map { version -> "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}" }
+        val names = listOf(CACHE_VERSION, 16, 15).map { version -> "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}" }
         return cache?.entries()?.lastOrNull { (key) -> names.any { name -> key == name || key.startsWith("$name\u0000") } }?.let { (_, kept) -> fromCache(kept)?.first }
     }
 
@@ -710,6 +712,12 @@ internal class LyricsFinder(
             return@coroutineScope Best(own, own = true)
         }
         val rest = elsewhere.await()
+        // Found under the recording's own names, that no one sings in it isn't bettered by the song's words
+        // found for its name, as YouTube Music gives an instrumental recording (Issue #861).
+        if (rest is Lyrics.Instrumental) {
+            byWord.cancel()
+            return@coroutineScope Best(rest)
+        }
         // YouTube Music's words for another edit of the song, found by its name, give way to words
         // timed as well for this one.
         val otherTake = own != null && !fits(own, metadata) && rest is Lyrics.Found && rest.lengthMs != null && fits(rest, metadata) && timing(rest) >= timing(own)
@@ -749,9 +757,12 @@ internal class LyricsFinder(
     /** These words, kept for a song in capitals to take its names from, as they've been fetched anyway. */
     private suspend fun <T : Lyrics> T.seen(): T = also { if (it is Lyrics.Found) currentCoroutineContext()[Answers]?.copies?.add(it) }
 
-    /** With no words of its own for a cover, the words of the song it covers. */
+    /**
+     * With no words of its own for a cover, the words of the song it covers. Not for one a service marks
+     * instrumental: no one sings in it, as in 2CELLOS' "With or Without You" (Issue #861).
+     */
     private suspend fun Best.orOriginal(metadata: MusicMetadata, timeoutMs: Long): Best =
-        if (lyrics is Lyrics.None || lyrics is Lyrics.Instrumental || lyrics is Lyrics.LikelyInstrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
+        if (lyrics is Lyrics.None || lyrics is Lyrics.LikelyInstrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
 
     /**
      * With no words under the names given, the words of the song a video's title names by itself, when
@@ -923,6 +934,8 @@ internal class LyricsFinder(
             // A bare title may name another edit; timedWell checks whether its times can be lent.
             if (title !in names && kept != null && romanizedScript(kept.words) == null) return kept
             underName(metadata.copy(title = title), timeoutMs).also { answer ->
+                // No one sings in the recording as named, so words under its bare title are another recording's.
+                if (answer is Lyrics.Instrumental) return answer
                 if (answer is Lyrics.Found) {
                     val native = romanizedScript(answer.words) == null
                     fallback = if (kept == null) answer else betterNamed(kept, answer)
@@ -948,6 +961,8 @@ internal class LyricsFinder(
      */
     private suspend fun underName(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         val first = fromLrclib(metadata, timeoutMs).seen()
+        // LRCLIB's copies of the recording say no one sings in it: words others keep under its name are the song's, sung elsewhere.
+        if (first is Lyrics.Instrumental) return first
         val romanized = (first as? Lyrics.Found)?.let { romanizedScript(it.words) }
         // Words timed badly are no better than untimed ones: both give way to words timed well.
         val untimed = first is Lyrics.Found && timing(first) < WELL_TIMED
@@ -1123,6 +1138,9 @@ internal class LyricsFinder(
         // The service's own answers first, then a close one, as [ExactMatcher] does. Among those, one
         // with timed words wins, so they can follow the song.
         val named = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
+        // Most copies marked instrumental: no one sings in the recording. Some copies of an instrumental
+        // hold the song's words, sent for its name; a sung song's copies are seldom marked (Issue #861).
+        if (named.count(Answer::instrumental) * 2 > named.size) return Lyrics.Instrumental
         // Timed copies of different lengths are different takes, e.g. a live one named the same, so
         // the one as long as the song comes first: as the app playing it or its service says, or
         // else the iTunes Store, asked only then.
@@ -1742,9 +1760,10 @@ internal class LyricsFinder(
          * Bumped when words kept from before should be looked up again, the words kept as shown too: 8 for Japanese songs NetEase writes
          * with China's kanji, and words in romaji found under a song's name in Latin letters; 11 for
          * Korean songs found in Latin letters; 12 for Korean words NetEase keeps garbled; 13 for commas it keeps as apostrophes, and the notes it opens with for a moment;
-         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed; 16 for spaces and name capitals in saved words.
+         * 14 for untimed words kept before the other title names were checked for timings; 15 for lines timed late and rushed; 16 for spaces and name capitals in saved words;
+         * 17 for a song's words kept for an instrumental recording of it.
          */
-        const val CACHE_VERSION = 16
+        const val CACHE_VERSION = 17
 
         /**
          * [found] without what's since learned to be left out: a site's ad, and a note on how the song is played, "（repeat and fade）", from any site, and what

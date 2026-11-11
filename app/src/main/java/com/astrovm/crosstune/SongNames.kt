@@ -262,15 +262,36 @@ internal object SongNames {
         return Covered(song, coverBy.find(tag.value)?.groupValues?.get(1)?.trim()?.ifEmpty { null })
     }
 
+    /**
+     * Whether [title] says no one sings in the recording: "Song (Instrumental)", "Song - Inst.", "曲 (伴奏)",
+     * "曲 off vocal ver.". Not a karaoke track's or a cover's, which is sung along to, nor a song of that name.
+     * Of 2,551 song names the iTunes Store gave, the 202 that say so are all instrumentals (Issue #861).
+     */
+    fun saysInstrumental(title: String): Boolean =
+        instrumentalTag.containsMatchIn(title) && !karaoke.containsMatchIn(title) && coverOf(title) == null
+
     /** A cover's song: its [title], and its [artist] when the cover's title names them. */
     data class Covered(val title: String, val artist: String?)
 
-    private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
+    private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade (?:famous|popular) by\b|カバー|歌ってみた|翻唱|커버"""
     private val coverTags = listOf(
         Regex("""[(\[【][^)\]】]*(?:$COVER_WORDS)[^)\]】]*[)\]】]""", RegexOption.IGNORE_CASE),
         Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
     )
-    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made (?:famous|popular) by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+
+    private const val INSTRUMENTAL_WORDS = """instrumental|instrumentale|inst\.?|off[ -]?vocal|backing track|minus one|伴奏|オフボーカル|纯音乐|純音樂|인스트루멘탈"""
+    private const val NOT_A_LETTER_BEFORE = """(?<![\p{L}\p{N}])"""
+    private const val NOT_A_LETTER_AFTER = """(?![\p{L}\p{N}])"""
+
+    /** A tag saying no one sings: in brackets, after a dash or a tilde, or "off vocal" ending the title. */
+    private val instrumentalTag = Regex(
+        """[(\[（【][^()\[\]（）【】]*?$NOT_A_LETTER_BEFORE(?:$INSTRUMENTAL_WORDS)$NOT_A_LETTER_AFTER[^()\[\]（）【】]*[)\]）】]""" +
+            """|\s[-–~〜]\s?[^-–~〜]*?$NOT_A_LETTER_BEFORE(?:$INSTRUMENTAL_WORDS)$NOT_A_LETTER_AFTER""" +
+            """|\soff[ -]?vocal(?: ver(?:sion|\.)?)?\s*$""",
+        RegexOption.IGNORE_CASE
+    )
+    private val karaoke = Regex("""karaoke|カラオケ""", RegexOption.IGNORE_CASE)
 
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {

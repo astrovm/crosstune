@@ -15,8 +15,24 @@ class SongNamesVersionTest {
         assertEquals(SongNames.Covered("アイドル", null), SongNames.coverOf("アイドル【歌ってみた】"))
         assertEquals(SongNames.Covered("Zombie", "The Cranberries"), SongNames.coverOf("Zombie (Originally Performed by The Cranberries) [Karaoke]"))
         assertEquals(SongNames.Covered("Halo", "Beyoncé"), SongNames.coverOf("Halo (Made Famous by Beyoncé)"))
+        assertEquals(SongNames.Covered("Supera", "Marília Mendonça"), SongNames.coverOf("Supera (Made Popular By Marília Mendonça) [Instrumental Version]"))
         // A song named with the word is the artist's own, as is a tag that's all there is.
         for (own in listOf("Cover Me", "Undercover (Remix)", "Cover Girl - Live", "(Cover)")) assertNull(own, SongNames.coverOf(own))
+    }
+
+    @Test
+    fun aTitleThatSaysNoOneSingsInItSaysItsInstrumental() {
+        for (title in listOf(
+            "Without Me (Instrumental)", "Song - Instrumental", "Song (Instrumental Version)", "Song [Inst.]", "Song (Inst)", "Song (feat. Guest) [Instrumental]",
+            "Song（Instrumental）", "Song (Versión Instrumental)", "Song (Instrumentale)", "Song (Backing Track)", "Song (Minus One)",
+            "最美的期待 (伴奏)", "曲 (纯音乐)", "曲 (純音樂)", "曲 (オフボーカル)", "노래 (인스트루멘탈)",
+            "サイレントマジョリティー off vocal ver.", "BAN -OFF VOCAL Ver.-", "サヨナラの意味 〜off vocal ver.〜", "Kyun (Off Vocal Version)", "Darling Off Vocal"
+        )) assertTrue(title, SongNames.saysInstrumental(title))
+        // A song of that name, a word that only starts so, and a karaoke track or cover, which is sung along to, aren't.
+        for (title in listOf(
+            "Instrumental", "Instrumental (Live)", "Song (Instrumentalist Mix)", "Song (Vocal Version)", "Song (Instant Remix)", "Off Vocal Ver. (Remix)",
+            "Song (Karaoke Instrumental)", "Song (カラオケ) [Instrumental]", "Papaoutai (Originally Performed By Stromae) [Instrumental]", "Song (Piano Cover) [Instrumental]"
+        )) assertFalse(title, SongNames.saysInstrumental(title))
     }
 
     @Test
