@@ -85,7 +85,7 @@ internal class Inventory(private val root: File, libraries: File, cxx: File) {
     companion object {
         /** A line that says where code came from or what licence it's under. */
         val MARK = Regex(
-            "copyright|\\blicen[cs]e|public domain|borrowed|adapted from|ported from|taken from|based on|derived from|\\(c\\) ?[0-9]{4}|original author|\\bauthor:",
+            "copyright|\\blicen[cs]e|public domain|borrowed|adapted from|ported from|taken from|derived from|based on( *$|:? *https?://| (the |an? )?(\\S+ )?(code|work|implementation|original)\\b)|\\(c\\) ?[0-9]{4}|original author|\\bauthor:",
             RegexOption.IGNORE_CASE
         )
 

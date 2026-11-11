@@ -395,6 +395,8 @@ text: apache-2.0.txt
 url: https://github.com/google/guava
 covers: maven com.google.guava:failureaccess
 covers: maven com.google.guava:guava
+covers: maven com.google.guava:failureaccess!META-INF/LICENSE
+covers: maven com.google.guava:guava!META-INF/LICENSE
 covers: maven com.google.guava:listenablefuture
 
 Error Prone and J2ObjC annotations
@@ -529,6 +531,13 @@ covers: maven androidx.window:window-core
 covers: maven androidx.window:window-core-android
 covers: maven androidx.work:work-runtime
 covers: maven androidx.work:work-runtime-ktx
+covers: maven androidx.annotation:annotation-jvm!META-INF/androidx/annotation/annotation/LICENSE.txt
+covers: maven androidx.collection:collection-jvm!META-INF/androidx/collection/collection/LICENSE.txt
+covers: maven androidx.collection:collection-ktx!META-INF/androidx/collection/collection-ktx/LICENSE.txt
+covers: maven androidx.glance:glance-appwidget-external-protobuf!META-INF/androidx/glance/glance-appwidget-external-protobuf/LICENSE.txt
+covers: maven androidx.glance:glance-appwidget-proto!META-INF/androidx/glance/glance-appwidget-proto/LICENSE.txt
+covers: maven androidx.lifecycle:lifecycle-common-java8!META-INF/androidx/lifecycle/lifecycle-common-java8/LICENSE.txt
+covers: maven androidx.lifecycle:lifecycle-common-jvm!META-INF/androidx/lifecycle/lifecycle-common/LICENSE.txt
 
 Protocol Buffers
 by: Google Inc.
@@ -578,6 +587,7 @@ covers: maven org.jetbrains.kotlinx:atomicfu-jvm
 covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-android
 covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-bom
 covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-core
+covers: maven androidx.concurrent:concurrent-futures-ktx!META-INF/NOTICE.txt
 covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm
 covers: maven org.jetbrains.kotlinx:kotlinx-serialization-bom
 covers: maven org.jetbrains.kotlinx:kotlinx-serialization-core
