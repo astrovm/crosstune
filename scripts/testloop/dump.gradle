@@ -1,0 +1,11 @@
+allprojects {
+    tasks.withType(Test).configureEach { t ->
+        t.doFirst {
+            def out = new File(rootProject.projectDir, "build/loop/${t.name}")
+            out.mkdirs()
+            new File(out, "classpath.txt").text = t.classpath.files.join(":")
+            new File(out, "classesdirs.txt").text = t.testClassesDirs.files.join(":")
+            new File(out, "jvmargs.txt").text = t.allJvmArgs.join("\n")
+        }
+    }
+}
