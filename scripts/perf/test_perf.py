@@ -153,6 +153,20 @@ class PerfTest(unittest.TestCase):
         self.run_perf("start", "--runs", "1", "--settle", "1")
         self.assertEqual([10, 1], self.slept)
 
+    def test_it_runs_at_a_status_it_is_allowed(self):
+        (self.home_path / "thermal").write_text("Thermal Status: 1\n")
+        self.run_perf("start", "--runs", "1", "--settle", "1", "--status", "1")
+        self.assertEqual([1], self.slept)
+
+    def test_it_waits_while_the_phone_says_no_status(self):
+        thermal = self.home_path / "thermal"
+        thermal.write_text("nothing\n")
+        self.sleep.stop()
+        self.sleep = mock.patch.object(perf.time, "sleep", lambda seconds: (self.slept.append(seconds), thermal.write_text("Thermal Status: 0\n")))
+        self.sleep.start()
+        self.run_perf("start", "--runs", "1", "--settle", "1")
+        self.assertEqual([10, 1], self.slept)
+
     def test_adb_comes_from_the_path_without_an_sdk(self):
         with mock.patch.dict(os.environ, {"ANDROID_HOME": ""}), mock.patch.object(perf.Path, "home", return_value=Path("/nowhere")):
             with mock.patch.object(perf.shutil, "which", return_value="/usr/bin/adb"):

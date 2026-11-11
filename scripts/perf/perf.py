@@ -108,10 +108,10 @@ def battery_c() -> float:
     return int(found.group(1)) / 10 if found else 0.0
 
 
-def cool(below_c: float) -> None:
-    """Waits until the phone isn't throttled and its battery is under [below_c]: a throttled phone
-    drew the same build's frames a third slower."""
-    while thermal() != "0" or battery_c() >= below_c:
+def cool(below_c: float, status: int) -> None:
+    """Waits until the phone's thermal status is at most [status] and its battery is under [below_c]:
+    a throttled phone drew the same build's frames a third slower."""
+    while not thermal().isdigit() or int(thermal()) > status or battery_c() >= below_c:
         time.sleep(10)
 
 
@@ -140,7 +140,7 @@ def screen() -> tuple[int, int]:
 def jank(args: argparse.Namespace) -> dict:
     width, height = screen()
     x, low, high = str(width // 2), str(height * 3 // 4), str(height // 3)
-    cool(args.below)
+    cool(args.below, args.status)
     cold_start()
     time.sleep(args.settle)
     shell("dumpsys", "gfxinfo", PACKAGE, "reset")
@@ -165,7 +165,7 @@ def cpu(args: argparse.Namespace) -> dict:
 
 
 def start(args: argparse.Namespace) -> dict:
-    cool(args.below)
+    cool(args.below, args.status)
     total = cold_start()
     time.sleep(args.settle)
     return {"total_ms": total}
@@ -187,6 +187,7 @@ def main(argv: list[str] | None = None) -> None:
         one.add_argument("--runs", type=int, default=10)
         one.add_argument("--settle", type=float, default=4.0, help="seconds after a cold start")
         one.add_argument("--below", type=float, default=40.0, help="battery degrees C to cool to before each run")
+        one.add_argument("--status", type=int, default=0, help="the most thermal status to run at; 1 for a phone that charges")
         if name != "cpu":
             one.add_argument("--build", action="append", default=[], metavar="LABEL=APK", help="install each in turn, every run")
         if name == "jank":
