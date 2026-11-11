@@ -115,10 +115,10 @@ internal object SungTiming {
             val span = pairs.last().first..pairs.first().first
             if (alike.size < MIN_WORDS || taken.any { it.first <= span.last && span.first <= it.last }) continue
             taken += span
-            // Each word says where the line starts, by the letters before it; the most that agree say it, as the model may time the first word after a rest early.
-            val starts = alike.map { (h, w) -> heard[h].second - pieces[w].before * LETTER_MS }
-            val agree = starts.map { ms -> starts.filter { it in ms..ms + AGREE_MS } }.maxBy { it.size }.sorted()
-            out += Triple(agree[(agree.size - 1) / 2], best[endI][endJ], alike.size)
+            // Each word says where the line starts, by the letters before it. The earliest says it: a line is
+            // often sung slower than a letter each LETTER_MS, held or with a rest in it, so later words say too late.
+            val start = alike.minOf { (h, w) -> heard[h].second - pieces[w].before * LETTER_MS }
+            out += Triple(start, best[endI][endJ], alike.size)
         }
         return out
     }
@@ -250,9 +250,6 @@ internal object SungTiming {
 
     /** Faster than anyone sings, a letter at a time: lines found closer together than that can't both be right. */
     private const val FAST_LETTER_MS = 60L
-
-    /** How far apart a line's words may say it starts and still agree. */
-    private const val AGREE_MS = 1_500L
 
     /** How far before what was heard a line found in it may start: its first words may be just before. */
     private const val EDGE_MS = 1_000L
