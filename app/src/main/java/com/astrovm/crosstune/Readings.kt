@@ -254,9 +254,9 @@ internal object Readings {
     private fun kanaToday(word: List<Piece>, line: String, at: Int): List<Piece>? {
         val text = word.joinToString("") { it.surface }
         val changed = text.indices.filter { it > 0 && text[it] in KANA_SAID }
+        if (word.size < 2 || changed.isEmpty() || !text.all { it in 'ぁ'..'ゖ' }) return null
         // A word starts with no particle: は and ひく in あとへはひく are no はいく.
-        if (word.size < 2 || changed.isEmpty() || !text.all { it in 'ぁ'..'ゖ' } || word[0].kind in GRAMMAR || grouped(word).size < 2) return null
-        if (changed.any { writtenToday(line, at + it) }) return null
+        if (word[0].kind in GRAMMAR || grouped(word).size < 2 || changed.any { writtenToday(line, at + it) }) return null
         val today = text.mapIndexed { i, c -> if (i in changed) KANA_SAID.getValue(c) else c }.joinToString("")
         return knownToday(text, today, changed)
             ?: oldKana.today[today]?.let { lookup -> listOf(Piece(text, today, "名詞", "一般", lookup, today, reader = Reader.JMDICT, today = today)) }
@@ -283,7 +283,8 @@ internal object Readings {
      */
     private fun knownToday(text: String, today: String, changed: List<Int>): List<Piece>? {
         val tokens = tokenizer.tokenize(today)
-        if (tokens.any { !it.isKnown || it.reading == "*" || it.position in changed || it.partOfSpeechLevel2 == "固有名詞" }) return null
+        if (tokens.any { !it.isKnown || it.reading == "*" }) return null
+        if (tokens.any { it.position in changed || it.partOfSpeechLevel2 == "固有名詞" }) return null
         val endings = changed.all { at ->
             val token = tokens.first { at < it.position + it.surface.length }
             val ends = at + 1 == token.position + token.surface.length
@@ -1128,23 +1129,7 @@ internal object Readings {
         val words = groups.map { word ->
             val start = at
             at += word.sumOf { it.surface.length }
-            val text = word.joinToString("") { it.surface }.trim { !it.isLetterOrDigit() }
-            val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }
-            // Kana reads as written; the reading's only worth showing for kanji.
-            val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
-            val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
-            // What read its kanji, or, for kana, what split it, which says how its particles read.
-            val by = (word.filter { piece -> piece.surface.any(::isHan) }.ifEmpty { word }).map { it.reader }.distinct()
-            // Letters the dictionary takes for marks, as Hangul in a Japanese line, are a word of marks: it looks itself up.
-            val base = (word.firstOrNull { it.kind != "記号" } ?: word.first()).base
-            // IPADIC says a few words in old kana alone as they're said today, きのふ as きのー: it names them so. Not an old
-            // verb that ends in ひ, as that's a verb and 日 as well: ふるひ is 降る日 more than 振るひ.
-            val ipadicSaid = word.singleOrNull()?.takeIf { it.reader == Reader.IPADIC && !(it.kind == "動詞" && it.surface.endsWith('ひ')) }?.said
-            // Kana inside a longer word written so today are that word: いふ in さいふ is 財布, whatever the dictionaries split.
-            val surface = word.joinToString("") { it.surface }
-            val inLonger = Furigana.inOldKana(text) && surface.indices.any { it > 0 && surface[it] in "ひふほ" && writtenToday(written, start + it, start until at) }
-            val modern = (if (inLonger) null else spelledToday(text, kana, said, ipadicSaid)) ?: word.joinToString("") { it.today ?: it.surface }.trim { !it.isLetterOrDigit() }.takeIf { it != text }
-            Word(text, kana.takeIf { it != text }, romaji(said), lookup = base, typed = romaji(typed, typed = true), by = by, modern = modern)
+            japaneseWord(word, written, start until at)
         }
         if (!askToday || words.none { it.modern != null }) return words.filter { word -> word.text.any(Char::isLetter) }
         // A translator knows 云う, and takes 云ふ for a name: each word in old kana is looked up as the word at its place in the line spelled today.
@@ -1163,6 +1148,29 @@ internal object Readings {
             word.copy(lookup = lookup).takeIf { word.text.any(Char::isLetter) }
         }
     }
+
+    /** The [Word] a [word] of pieces is, at [place] in the [line] it's in. */
+    private fun japaneseWord(word: List<Piece>, line: String, place: IntRange): Word {
+        val text = word.joinToString("") { it.surface }.trim { !it.isLetterOrDigit() }
+        val kana = word.joinToString("") { it.kana }.trim { !it.isLetterOrDigit() }
+        // Kana reads as written; the reading's only worth showing for kanji.
+        val said = word.joinToString("") { it.said }.trim { !it.isLetterOrDigit() }
+        val typed = word.joinToString("") { it.typed }.trim { !it.isLetterOrDigit() }
+        // What read its kanji, or, for kana, what split it, which says how its particles read.
+        val by = (word.filter { piece -> piece.surface.any(::isHan) }.ifEmpty { word }).map { it.reader }.distinct()
+        // Letters the dictionary takes for marks, as Hangul in a Japanese line, are a word of marks: it looks itself up.
+        val base = (word.firstOrNull { it.kind != "記号" } ?: word.first()).base
+        // IPADIC says a few words in old kana alone as they're said today, きのふ as きのー: it names them so. Not an old
+        // verb that ends in ひ, as that's a verb and 日 as well: ふるひ is 降る日 more than 振るひ.
+        val ipadicSaid = word.singleOrNull()?.takeIf { it.reader == Reader.IPADIC && !(it.kind == "動詞" && it.surface.endsWith('ひ')) }?.said
+        val ruled = word.joinToString("") { it.today ?: it.surface }.trim { !it.isLetterOrDigit() }.takeIf { it != text }
+        val modern = (if (inLongerWord(text, line, place)) null else spelledToday(text, kana, said, ipadicSaid)) ?: ruled
+        return Word(text, kana.takeIf { it != text }, romaji(said), lookup = base, typed = romaji(typed, typed = true), by = by, modern = modern)
+    }
+
+    /** Whether a word in old kana alone, [text] at [place] in [line], is inside a longer word written so today: いふ in さいふ is 財布, whatever the dictionaries split. */
+    private fun inLongerWord(text: String, line: String, place: IntRange): Boolean =
+        Furigana.inOldKana(text) && place.any { it > place.first && line[it] in "ひふほ" && writtenToday(line, it, place) }
 
     /** The lookup of each word of [line] spelled today, by where it starts in the line. */
     private fun wordsAt(line: String): List<Pair<Int, String>> {
