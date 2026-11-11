@@ -8,6 +8,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 
 @RunWith(RobolectricTestRunner::class)
 class ReadingsTest {
@@ -667,6 +670,24 @@ class ReadingsTest {
     }
 
     @Test
+    fun threadsThatAskForATableAtOnceGetTheOneTableReadOnce() {
+        // Issue #911: each thread that asked before the first had read the file read it again, into a table of its own.
+        fun <T> atOnce(forget: () -> Unit, ask: () -> T): List<T> {
+            forget()
+            val go = CountDownLatch(1)
+            val got = Collections.synchronizedList(mutableListOf<T>())
+            val threads = List(8) { thread { go.await(); got += ask() } }
+            go.countDown()
+            threads.forEach { it.join() }
+            return got.toList()
+        }
+        val listed = atOnce({ Readings.listed = null }) { Readings.listed }
+        assertTrue(listed.size == 8 && listed.all { it === listed.first() })
+        val oldKana = atOnce({ Readings.oldKanaRead = null }) { Readings.oldKana }
+        assertTrue(oldKana.size == 8 && oldKana.all { it === oldKana.first() })
+    }
+
+    @Test
     fun theWordsInKanaFromJmdictAreReadFromTheirFile() {
         // Read from the file again, and its header is no word.
         Readings.oldKanaRead = null
@@ -676,8 +697,9 @@ class ReadingsTest {
         assertTrue("くふう" in table.modern && "おもいで" !in table.modern)
         assertEquals(table.modern.maxOf { it.length }, table.longest)
         assertTrue(table.modern.first().length < table.longest)
-        // Read once: the same table after.
+        // Read once: the same table after, and kept.
         assertSame(table, Readings.oldKana)
+        assertSame(table, Readings.oldKanaRead)
     }
 
     @Test

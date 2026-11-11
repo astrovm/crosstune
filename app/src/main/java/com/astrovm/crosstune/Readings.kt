@@ -298,20 +298,23 @@ internal object Readings {
     /** What a noun made of an old verb is, as IPADIC names it: うたがひ is a noun, わりあひ an adverb. */
     private val NOUNS = setOf("名詞", "副詞")
 
+    /** Held while [listed] or [oldKana] is read from its file, so two threads that ask at once read it once. */
+    private val tables = Any()
+
     /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with a ひ or ふ today, [modern]. */
     internal class OldKana(val today: Map<String, String>, val modern: Set<String>) {
         val longest = modern.maxOf { it.length }
     }
 
     /**
-     * [OldKana], from [OLD_KANA_WORDS]: made by `scripts/readingsaudit`, see CONTRIBUTING.md. Read when a line first
-     * needs it, as [oldKana]; null to read it again.
+     * [OldKana], from [OLD_KANA_WORDS]: made by `scripts/readingsaudit`, see CONTRIBUTING.md. Read once, as [oldKana],
+     * when a line first needs it, whatever threads ask at once; null to read it again.
      */
     @Volatile
     internal var oldKanaRead: OldKana? = null
 
     internal val oldKana: OldKana
-        get() = oldKanaRead ?: readOldKana().also { oldKanaRead = it }
+        get() = oldKanaRead ?: synchronized(tables) { oldKanaRead ?: readOldKana().also { oldKanaRead = it } }
 
     private fun readOldKana(): OldKana = checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
         val (today, modern) = lines.filterNot { it.startsWith('#') }.partition { '\t' in it }
@@ -779,11 +782,12 @@ internal object Readings {
     /**
      * Words of two kanji or more that JMdict reads one way only, and the dictionaries on the phone read
      * another, 体中 からだじゅう for からだちゅう, kept in [LISTED]: made by `scripts/readingsaudit`, see
-     * CONTRIBUTING.md. Read when a line first needs them; empty to read without them.
+     * CONTRIBUTING.md. Read once, when a line first needs them, whatever threads ask at once; null to read them
+     * again, empty to read without them.
      */
     @Volatile
     internal var listed: Map<String, String>? = null
-        get() = field ?: readListed().also { field = it }
+        get() = field ?: synchronized(tables) { field ?: readListed().also { field = it } }
 
     private const val LISTED = "/com/astrovm/crosstune/jmdict-readings.txt"
 
