@@ -149,7 +149,11 @@ Crosstune includes, or downloads when it's needed, these works by others. The ap
 | [Shizuku API](https://github.com/RikkaApps/Shizuku-API) | RikkaW | MIT License |
 | [OkHttp and Okio](https://github.com/square/okhttp) | Square, Inc. | Apache License 2.0 |
 | [Guava](https://github.com/google/guava) | The Guava Authors | Apache License 2.0 |
+| [Error Prone and J2ObjC annotations](https://github.com/google/error-prone) | Google | Apache License 2.0 |
+| [JSpecify](https://github.com/jspecify/jspecify) | The JSpecify Authors | Apache License 2.0 |
 | [AndroidX, Jetpack Compose and Media3](https://android.googlesource.com/platform/frameworks/support) | The Android Open Source Project | Apache License 2.0 |
+| [Protocol Buffers](https://github.com/protocolbuffers/protobuf) | Google Inc. | BSD 3-Clause License |
+| [Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform) | JetBrains s.r.o. and the Android Open Source Project | Apache License 2.0 |
 | [Kotlin and kotlinx.coroutines](https://github.com/JetBrains/kotlin) | JetBrains s.r.o. and Kotlin Programming Language contributors | Apache License 2.0 |
 | [Reorderable](https://github.com/Calvin-LL/Reorderable) | Calvin Liang | Apache License 2.0 |
 

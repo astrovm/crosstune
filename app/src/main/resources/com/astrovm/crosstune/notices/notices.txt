@@ -158,6 +158,21 @@ text: apache-2.0.txt
 url: https://github.com/google/guava
 covers: maven com.google.guava:*
 
+Error Prone and J2ObjC annotations
+by: Google
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/google/error-prone
+covers: maven com.google.errorprone:*
+covers: maven com.google.j2objc:*
+
+JSpecify
+by: The JSpecify Authors
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/jspecify/jspecify
+covers: maven org.jspecify:*
+
 AndroidX, Jetpack Compose and Media3
 by: The Android Open Source Project
 license: Apache License 2.0
@@ -165,10 +180,26 @@ text: apache-2.0.txt
 url: https://android.googlesource.com/platform/frameworks/support
 covers: maven androidx.*:*
 
+Protocol Buffers
+by: Google Inc.
+license: BSD 3-Clause License
+text: protobuf.txt
+url: https://github.com/protocolbuffers/protobuf
+note: Inside the home screen widget's library, Glance.
+covers: maven androidx.glance:glance-appwidget-external-protobuf
+
+Compose Multiplatform
+by: JetBrains s.r.o. and the Android Open Source Project
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/JetBrains/compose-multiplatform
+covers: maven org.jetbrains.compose.*:*
+covers: maven org.jetbrains.androidx.*:*
+
 Kotlin and kotlinx.coroutines
 by: JetBrains s.r.o. and Kotlin Programming Language contributors
 license: Apache License 2.0
-text: apache-2.0.txt
+text: kotlinx-coroutines.txt apache-2.0.txt
 url: https://github.com/JetBrains/kotlin
 covers: maven org.jetbrains.kotlin:*
 covers: maven org.jetbrains.kotlinx:*
