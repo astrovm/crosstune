@@ -878,8 +878,7 @@ internal class LyricsFinder(
     /** Words found over none, the better timed of two, and [first] among equals; with no words, the one that [says] more. */
     private fun better(first: Lyrics, second: Lyrics): Lyrics = when {
         first is Lyrics.Found && second is Lyrics.Found -> if (timing(second) > timing(first)) second else first
-        says(second) > says(first) -> second
-        else -> first
+        else -> maxOf(first, second, compareBy(::says))
     }
 
     /**

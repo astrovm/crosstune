@@ -76,6 +76,14 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun copiesAsLongAsTheRecordingPlayingAreItsOwn() {
+        // Two marked copies as long as the song playing, the one three seconds off too, outnumber the one with words.
+        val sung = lasting(answer("Song Title", "Band Name", "Words sung by the band"), 200.0)
+        respond("[$sung,${lasting(instrumentalCopy("Song Title", "Band Name"), 200.0)},${lasting(instrumentalCopy("Song Title", "Band Name"), 203.0)}]")
+        assertEquals(Lyrics.MarkedInstrumental, found(MusicMetadata("Song Title", "Band Name", lengthMs = 200_000)))
+    }
+
+    @Test
     fun anotherRecordingsMarksSayNothingOfThisOne() {
         val sung = answer("Song Title", "Band Name", "Words sung by the band")
         // Copies tagged as instrumentals of the song are other recordings of it, here the only ones marked.
@@ -97,6 +105,24 @@ class LyricsFinderTest {
         // A copy sent with no words may be marked so, as one of a sung song's ten is.
         everywhere("[${instrumentalCopy()}]", youTubeMusicPage("Words the video sings" to null))
         assertEquals("Words the video sings", (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).words)
+    }
+
+    @Test
+    fun aRecordingLrclibMarksInstrumentalIsShownWithoutWaitingForNetEase() {
+        everywhere("[${instrumentalCopy()},${instrumentalCopy()}]", youTubeMusicPage("Words someone else sings" to null))
+        val answers = fake.handler
+        val held = CountDownLatch(1)
+        // NetEase answers late, as it can: its words timed word by word are no better for a song no one sings in.
+        fake.handler = { request ->
+            if (request.url.host == "music.163.com") held.await()
+            answers(request)
+        }
+        try {
+            val first = runBlocking { withTimeout(10_000) { withYouTubeMusic().firstLook(song, timeoutMs = 30_000) } }
+            assertEquals(Lyrics.MarkedInstrumental, first.lyrics)
+        } finally {
+            held.countDown()
+        }
     }
 
     @Test
