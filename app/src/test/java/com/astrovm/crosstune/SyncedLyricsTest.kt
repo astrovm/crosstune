@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class SyncedLyricsTest {
@@ -72,21 +73,53 @@ class SyncedLyricsTest {
     @Test
     fun theLineSungIsTheLastOneStarted() {
         val lines = listOf(LyricLine(1_000, "One"), LyricLine(2_000, "Two"))
-        assertEquals(-1, SyncedLyrics.indexAt(lines, 999))
-        assertEquals(0, SyncedLyrics.indexAt(lines, 1_000))
-        assertEquals(1, SyncedLyrics.indexAt(lines, 60_000))
-        // A line's end only counts with the next not heard: timed lines go on till the next.
-        assertEquals(0, SyncedLyrics.indexAt(listOf(LyricLine(1_000, "One", endMs = 1_500), LyricLine(2_000, "Two")), 1_800))
+        assertEquals(-1, SyncedLyrics.indexAt(lines, 999, byEar = false))
+        assertEquals(0, SyncedLyrics.indexAt(lines, 1_000, byEar = false))
+        assertEquals(1, SyncedLyrics.indexAt(lines, 60_000, byEar = false))
+        // Timed by a service, a line's end says nothing: it goes on till the next.
+        assertEquals(0, SyncedLyrics.indexAt(listOf(LyricLine(1_000, "One", endMs = 1_500), LyricLine(2_000, "Two")), 1_800, byEar = false))
     }
 
     @Test
     fun aLineHeardWithTheNextNotIsLitTillItEnds() {
         val lines = listOf(LyricLine(1_000, "One", endMs = 3_000), LyricLine(LyricLine.NOT_HEARD, "Two"), LyricLine(9_000, "Three"))
-        assertEquals(0, SyncedLyrics.indexAt(lines, 3_000))
+        assertEquals(0, SyncedLyrics.indexAt(lines, 3_000, byEar = true))
         // Past its end, nothing's known to be sung till the next line heard.
-        assertEquals(-1, SyncedLyrics.indexAt(lines, 3_001))
-        assertEquals(2, SyncedLyrics.indexAt(lines, 9_000))
+        assertEquals(-1, SyncedLyrics.indexAt(lines, 3_001, byEar = true))
+        assertEquals(2, SyncedLyrics.indexAt(lines, 9_000, byEar = true))
         assertEquals(listOf(true, false, true), lines.map { it.heard })
+        // With the line between left out, as a blank one is under the player, it still goes dark there.
+        assertEquals(-1, SyncedLyrics.indexAt(lines.filter { it.heard }, 3_001, byEar = true))
+    }
+
+    @Test
+    fun theLastLineIsLitTillItEndsOnlyWhenTimedByEar() {
+        val lines = listOf(LyricLine(1_000, "One"), LyricLine(4_000, "Two", endMs = 6_000))
+        assertEquals(1, SyncedLyrics.indexAt(lines, 6_000, byEar = true))
+        // What's sung after it isn't known.
+        assertEquals(-1, SyncedLyrics.indexAt(lines, 6_001, byEar = true))
+        // Timed by a service, its outro is still it.
+        assertEquals(1, SyncedLyrics.indexAt(lines, 6_001, byEar = false))
+        // With no end said, it stays lit either way.
+        assertEquals(0, SyncedLyrics.indexAt(listOf(LyricLine(1_000, "One")), 60_000, byEar = true))
+    }
+
+    @Test
+    fun theLineLitChangesAsLinesHeardStartAndJustPastWhereOnesGoingDarkEnd() {
+        val lines = listOf(
+            LyricLine(1_000, "One", endMs = 3_000),
+            LyricLine(LyricLine.NOT_HEARD, "Two"),
+            LyricLine(9_000, "Three"),
+            LyricLine(12_000, "Four", endMs = 14_000)
+        )
+        // A line not heard is never lit, so it changes nothing, and nothing waits for it.
+        assertEquals(listOf(1_000L, 3_001L, 9_000L, 12_000L, 14_001L), SyncedLyrics.changes(lines, byEar = true))
+        // Timed by a service, the last line goes on, and the lines with ends say nothing more.
+        assertEquals(listOf(1_000L, 9_000L, 12_000L), SyncedLyrics.changes(lines.filter { it.heard }, byEar = false))
+        // Each change is where indexAt gives another line.
+        SyncedLyrics.changes(lines, byEar = true).forEach { at -> assertNotEquals(SyncedLyrics.indexAt(lines, at - 1, byEar = true), SyncedLyrics.indexAt(lines, at, byEar = true)) }
+        // Past the last line's end, nothing changes again, however near the end of time.
+        assertEquals(null, SyncedLyrics.nextAfter(SyncedLyrics.changes(lines, byEar = true), 14_001))
     }
 
     @Test
