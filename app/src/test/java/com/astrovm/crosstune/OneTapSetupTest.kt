@@ -20,14 +20,14 @@ class OneTapSetupTest {
     @Test
     fun withNoShellReadyNothingIsRun() = runBlocking {
         val shell = FakeShell(ready = false)
-        assertFalse(OneTapSetup(app, listOf(shell)).setUp(listOf("a.b"), links = true, follow = true, microphone = true, floating = true))
+        assertFalse(OneTapSetup(app, listOf(shell)).setUp(listOf("a.b"), links = true, follow = true, microphone = true, floating = true, exact = false))
         assertEquals(emptyList<List<String>>(), shell.ran)
     }
 
     @Test
     fun floatingLyricsAskAboutNotificationsOnlyWhereAndroidDoes() = runBlocking {
         val shell = FakeShell()
-        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = true))
+        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = true, exact = false))
         assertEquals(listOf("appops", "appops", "pm"), shell.ran.map { it.first() })
         assertTrue(shell.ran.last().contains(android.Manifest.permission.POST_NOTIFICATIONS))
     }
@@ -36,15 +36,24 @@ class OneTapSetupTest {
     @Config(sdk = [32])
     fun beforeAndroid13FloatingLyricsNeedNoNotificationPermission() = runBlocking {
         val shell = FakeShell()
-        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = true))
+        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = true, exact = false))
         assertEquals(listOf("appops", "appops"), shell.ran.map { it.first() })
     }
 
     @Test
     fun anySetupLetsLyricsHearMusicAppsCleanlyWithoutAndroidAsking() = runBlocking {
         val shell = FakeShell()
-        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = false))
+        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = false, exact = false))
         val user = (android.os.Process.myUid() / 100_000).toString()
         assertEquals(listOf(listOf("appops", "set", "--user", user, app.packageName, "android:project_media", "allow")), shell.ran)
+    }
+
+    @Test
+    fun aLateReminderGetsAlarmsAndRemindersAllowedLikeAndroidsSwitch() = runBlocking {
+        val shell = FakeShell()
+        assertTrue(OneTapSetup(app, listOf(shell)).setUp(emptyList(), links = false, follow = false, microphone = false, floating = false, exact = true))
+        val user = (android.os.Process.myUid() / 100_000).toString()
+        assertEquals(listOf("appops", "set", "--user", user, app.packageName, "SCHEDULE_EXACT_ALARM", "allow"), shell.ran.last())
+        assertEquals(2, shell.ran.size)
     }
 }

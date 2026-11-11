@@ -795,7 +795,7 @@ class MainActivity : ComponentActivity() {
         onPureBlackChange = viewModel::setPureBlack,
         onReminderChange = { on -> if (on) remind() else viewModel.setReminder(false) },
         onReminderTimeChange = viewModel::setReminderTime,
-        onReminderExact = ::openExactAlarmPage,
+        onReminderExact = ::allowExactReminders,
         onPlayingBarChange = viewModel::setPlayingBar,
         onLinesEarlyChange = viewModel::setLinesEarly,
         onNextLineAheadChange = viewModel::setNextLineAhead,
@@ -988,11 +988,19 @@ class MainActivity : ComponentActivity() {
      */
     private fun remindersOn() {
         viewModel.setReminder(true)
+        if (viewModel.uiState.reminder.exact) return
+        // With Shizuku or root it's allowed in one tap, the tap that turned them on, so it's never asked.
+        if (viewModel.fixInOneTap(OneTapFix.EXACT)) return
         val prefs = getSharedPreferences(MainViewModel.PREFERENCES_NAME, MODE_PRIVATE)
-        if (!viewModel.uiState.reminder.exact && !prefs.getBoolean(KEY_ASKED_EXACT_ALARMS, false)) {
+        if (!prefs.getBoolean(KEY_ASKED_EXACT_ALARMS, false)) {
             prefs.edit().putBoolean(KEY_ASKED_EXACT_ALARMS, true).apply()
             openExactAlarmPage()
         }
+    }
+
+    /** Alarms and reminders allowed, from settings: in one tap with Shizuku or root, otherwise on Android's page. */
+    private fun allowExactReminders() {
+        if (!viewModel.fixInOneTap(OneTapFix.EXACT)) openExactAlarmPage()
     }
 
     private fun openExactAlarmPage() {

@@ -61,6 +61,7 @@ class ReminderBellTest {
     private var clock = LocalDateTime.of(2026, 3, 2, 20, 5).atZone(zone).toInstant().toEpochMilli()
     private val realPhone = MainActivity.phoneFactory
     private val realReminders = MainActivity.remindersFactory
+    private val realShells = MainActivity.shellFactory
     private val manager get() = app.getSystemService(NotificationManager::class.java)
     private val alarms get() = shadowOf(app.getSystemService(AlarmManager::class.java))
     private val activity get() = requireNotNull(controller).get()
@@ -94,6 +95,7 @@ class ReminderBellTest {
         MainActivity.playbackFactory = ::MediaSessionPlayback
         MainActivity.remindersFactory = realReminders
         MainActivity.phoneFactory = realPhone
+        MainActivity.shellFactory = realShells
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -346,6 +348,66 @@ class ReminderBellTest {
         val set = alarms.scheduledAlarms
         assertEquals(2, set.size)
         assertEquals(1, set.count { it.windowLengthMs == 0L })
+    }
+
+    /** Shizuku allowing alarms and reminders as Android's switch would, or failing to. */
+    private fun shizuku(works: Boolean = true) = FakeShell { command ->
+        if (OneTapSetup.EXACT_ALARM_OP in command && works) exactAllowed(true)
+        works
+    }.also { shell -> MainActivity.shellFactory = { listOf(shell) } }
+
+    private val exactCommand get() = listOf("appops", "set", "--user", (android.os.Process.myUid() / 100_000).toString(), app.packageName, OneTapSetup.EXACT_ALARM_OP, "allow")
+
+    @Test
+    fun withShizukuTheTapThatTurnsItOnAllowsTheExactMinuteToo() {
+        exactAllowed(false)
+        val shell = shizuku()
+        launch()
+        finishASession()
+        drainStartedActivities()
+        click(remindMe)
+        waitUntil { model().uiState.reminder.exact }
+        assertEquals(exactCommand, shell.ran.last())
+        // Nothing asked, no page of Android's opened, and the alarm set again for the exact minute.
+        assertNull(shadowOf(activity).nextStartedActivity)
+        assertFalse(model().uiState.reminder.late)
+        assertTrue(alarms.scheduledAlarms.any { it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun withShizukuFailingItIsLeftToDoByHand() {
+        exactAllowed(false)
+        val shell = shizuku(works = false)
+        launch()
+        finishASession()
+        drainStartedActivities()
+        click(remindMe)
+        waitUntil { shell.ran.isNotEmpty() }
+        assertTrue(model().uiState.reminder.late)
+        // What one tap couldn't do is left to do by hand, saying so.
+        waitUntil { model().uiState.fixes?.need == Need.Exact }
+        assertTrue(requireNotNull(model().uiState.fixes).failed)
+    }
+
+    @Test
+    fun withShizukuSettingsAllowsTheExactMinuteInOneTap() {
+        exactAllowed(false)
+        // Shizuku not running yet when the bell was tapped, so the reminder is late.
+        val shell = shizuku().apply { ready = false }
+        launch()
+        finishASession()
+        click(remindMe)
+        drainStartedActivities()
+        backToTheList()
+        click(app.getString(R.string.back_button))
+        shell.ready = true
+        shell.changed!!()
+        openSettings()
+        composeRule.onNodeWithTextScrolled(app.getString(R.string.practice_reminders))
+        click(exactTime)
+        waitUntil { !shown(exactTime) }
+        assertEquals(exactCommand, shell.ran.last())
+        assertNull(shadowOf(activity).nextStartedActivity)
     }
 
     @Test

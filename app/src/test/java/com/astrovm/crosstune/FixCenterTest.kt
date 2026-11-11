@@ -191,6 +191,7 @@ class FixCenterTest {
             "all" in command -> allowed = true
             "allow_listener" in command -> playback.access = true
             Manifest.permission.RECORD_AUDIO in command -> allowMicrophone()
+            OneTapSetup.EXACT_ALARM_OP in command -> ShadowAlarmManager.setCanScheduleExactAlarms(true)
         }
         true
     }
@@ -622,6 +623,42 @@ class FixCenterTest {
         waitUntil { !shown(string(R.string.practice_reminder_exact)) }
         click(string(R.string.back_button))
         composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("2"))
+    }
+
+    @Test
+    fun withShizukuALateReminderIsFixedInTheSameOneTap() {
+        prefs().edit().putBoolean("practice_reminder_on", true).putInt("practice_reminder_minute", 20 * 60 + 5).commit()
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        val shell = doingShell()
+        MainActivity.shellFactory = { listOf(shell) }
+        launch()
+        openFixes()
+        assertShown(string(R.string.practice_reminder_exact), string(R.string.fix_with_shizuku))
+        click(string(R.string.fix_all))
+        // Android's alarms and reminders switch, as the user would turn it on, and no page opened for it.
+        waitUntil { !shown(string(R.string.practice_reminder_exact)) }
+        assertTrue(listOf("appops", "set", "--user", user, app.packageName, "SCHEDULE_EXACT_ALARM", "allow") in shell.ran)
+        assertNull(nextStarted())
+        click(string(R.string.back_button))
+        assertFalse(barShown())
+        // And the alarm is set again at once for the exact minute.
+        val alarms = shadowOf(app.getSystemService(android.app.AlarmManager::class.java)).scheduledAlarms
+        assertTrue(alarms.any { it.isAllowWhileIdle && it.windowLengthMs == 0L })
+    }
+
+    @Test
+    fun withShizukuOnlyALateReminderLeftIsStillOneTap() {
+        prefs().edit().putBoolean("practice_reminder_on", true).putInt("practice_reminder_minute", 20 * 60 + 5).commit()
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        playback.access = true
+        val shell = doingShell()
+        MainActivity.shellFactory = { listOf(shell) }
+        launch()
+        composeRule.onNodeWithTag(FIX_BAR_TAG).assert(hasText("2"))
+        openFixes()
+        click(string(R.string.fix_all))
+        waitUntil { !shown(string(R.string.practice_reminder_exact)) }
+        assertTrue(shell.ran.any { OneTapSetup.EXACT_ALARM_OP in it })
     }
 
     @Test
