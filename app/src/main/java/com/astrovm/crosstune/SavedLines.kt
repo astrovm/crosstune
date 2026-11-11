@@ -108,13 +108,25 @@ internal data class SavedLine(
     }
 
     /**
+     * The readings put right in it, each with what put it right. A line read by hand before the user's readings were
+     * marked can't tell them from the dictionary's: the user saw them all, so each counts as the user's.
+     */
+    val fixes: List<ReadingFix> get() {
+        val unmarked = readByHand && ruby.orEmpty().none { it.by != null }
+        return ruby.orEmpty().mapNotNull { part ->
+            val by = part.by ?: Reader.USER.takeIf { unmarked }
+            if (by == null || part.reading == null) null else ReadingFix(0, part.text, part.reading, by)
+        }
+    }
+
+    /**
      * It, line [was] of its song's words before they changed, read as the words read now, with what UtaTen, ChatGPT or the
      * user put right in [was] laid over it where the same kanji are: the user's over all, the rest where nothing's put
      * right in it already. Read by the dictionary first, when the words weren't read yet as it moved. Still read by
      * hand while something the user put right is in it.
      */
     fun carrying(was: SavedLine): SavedLine {
-        val fixes = was.ruby.orEmpty().mapNotNull { part -> part.by?.let { by -> part.reading?.let { ReadingFix(0, part.text, it, by) } } }
+        val fixes = was.fixes
         if (fixes.isEmpty()) return this
         val now = if (readWith != null) this else readBy(Readings.of(listOf(text), Script.JAPANESE).single())
         val parts = now.ruby ?: listOf(Ruby(text))

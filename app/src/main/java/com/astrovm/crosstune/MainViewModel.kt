@@ -3747,7 +3747,7 @@ internal class MainViewModel(
         if (changes.isEmpty()) return
         uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
         // What was put right in them goes with them, read away from the screen, as the dictionary may have to read them first.
-        val putRight = changes.filter { (saved, _) -> saved.ruby.orEmpty().any { it.by != null } }
+        val putRight = changes.filter { (saved, _) -> saved.fixes.isNotEmpty() }
         if (putRight.isNotEmpty()) viewModelScope.launch { savedLinesStore.change(systemDispatcher) { kept -> carried(kept, putRight) }?.let { uiState = uiState.copy(savedLines = it) } }
     }
 

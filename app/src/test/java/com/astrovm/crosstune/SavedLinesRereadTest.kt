@@ -123,6 +123,15 @@ class SavedLinesRereadTest {
     }
 
     @Test
+    fun aLineReadByHandBeforeTheUsersReadingsWereMarkedCarriesAllItsReadingsAsTheUsers() {
+        val was = SavedLine("都会の夜", reading = "まちのよ", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よ")), readByHand = true)
+        val carried = SavedLine("都会の夜に", reading = null, title = "Demo", artist = "Band").carrying(was)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.USER), Ruby("夜", "よ", Reader.USER)), carried.read())
+        assertEquals("まちのよに", carried.reading)
+        assertTrue(carried.readByHand)
+    }
+
+    @Test
     fun whatTheWordsNowPutRightWinsOverWhatALineCarriesButTheUsers() {
         val was = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よ", Reader.USER))
         val moved = SavedLine(
