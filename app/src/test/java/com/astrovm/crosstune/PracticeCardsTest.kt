@@ -50,8 +50,8 @@ class PracticeCardsTest {
     /** What the phone has seen each music app do. */
     private val traits = AppTraitsStore(ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("practice-traits", Context.MODE_PRIVATE).also { it.edit().clear().commit() }) { wall }
 
-    private fun cards(source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player) =
-        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, { System.currentTimeMillis() }, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
+    private fun cards(source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player, now: () -> Long = { System.currentTimeMillis() }) =
+        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
 
     /** YouTube Music having the demo song, 3:20 long, as its video "demo0000000". */
     private fun youTubeHasTheSong() {
@@ -1700,9 +1700,10 @@ class PracticeCardsTest {
     /**
      * What a music app said after it was sent to a line: [afterMs] after it was asked to pause there, at [positionMs], playing
      * or not, or nothing, as one that falls out. [onTheWay]: paused where playing on from where it was took it by then. Its
-     * clock is from when it says it, or from [updatedMs] after it was sent, which may be before, as a report already on its way.
+     * clock is from when it says it, or from [updatedMs] after it was sent, which may be before, as a report already on its way,
+     * or from [atMs] on the card's clock.
      */
-    private data class Said(val afterMs: Long, val positionMs: Long?, val playing: Boolean = false, val onTheWay: Boolean = false, val updatedMs: Long? = null)
+    private data class Said(val afterMs: Long, val positionMs: Long?, val playing: Boolean = false, val onTheWay: Boolean = false, val updatedMs: Long? = null, val atMs: Long? = null)
 
     /**
      * [app], at [from] and playing or not, says [said] once it's sent to [start], as it did on the Samsung (Issue #846), each with
@@ -1730,9 +1731,9 @@ class PracticeCardsTest {
                 val sent = System.nanoTime()
                 val sentAt = System.currentTimeMillis()
                 thread {
-                    said.forEach { (afterMs, positionMs, playing, onTheWay, updatedMs) ->
+                    said.forEach { (afterMs, positionMs, playing, onTheWay, updatedMs, atMs) ->
                         Thread.sleep(maxOf(0, afterMs - TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - sent)))
-                        val at = updatedMs?.let { sentAt + it } ?: System.currentTimeMillis()
+                        val at = atMs ?: updatedMs?.let { sentAt + it } ?: System.currentTimeMillis()
                         flow.value = (if (onTheWay) was.positionAt(at) else positionMs)?.let { song?.copy(clock = PlaybackClock(it, at, 1f, playing)) }
                         firstSaid.compareAndSet(0, System.nanoTime())
                     }
@@ -1785,6 +1786,21 @@ class PracticeCardsTest {
         // Next time Crosstune starts, it is.
         cards().start(null, before = null)
         waitFor("$tidal is tried again") { steps().count { it == "trying $tidal" } > tried }
+    }
+
+    // TIDAL's answer may say it was made the very moment it was sent, as both clocks count in milliseconds: that's an answer too.
+    @Test
+    fun anAnswerFromTheMomentTheAppWasSentIsJudged() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        // The card's clock stands still, so it sends at this moment, and TIDAL's answer is from the same one.
+        val sentAt = System.currentTimeMillis()
+        val said = replays(tidal, start = 43_270, from = 65, fromPlaying = true, Said(117, 29_952, atMs = sentAt))
+        cards(now = { sentAt }).start(null, before = null)
+        val waitedMs = givenUpAfterMs(tidal, said)
+        assertTrue("TIDAL was given up on $waitedMs ms after it said it stopped", waitedMs < 1_000)
+        assertTrue("$tidal stopped at 29952 ms, short of the line" in steps())
     }
 
     // Warm, TIDAL already stopped at its preview's end says that same place again: that isn't told from not having moved yet.
