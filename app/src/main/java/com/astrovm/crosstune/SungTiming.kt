@@ -107,16 +107,21 @@ internal object SungTiming {
         }
     }
 
-    /** Lines between two placed close together, all heard, where their letters put them between. */
+    /**
+     * Lines between two placed close together, all heard, where their letters put them between: each
+     * only with a voice heard while it'd be sung, as a line is never put where nothing was heard.
+     */
     private fun filled(chain: List<Placed>, firstLetters: Map<Int, Int>, stretches: List<HeardStretch>): List<Placed> =
-        chain.zipWithNext().filter { (a, b) ->
-            b.line - a.line > 1 && b.ms - a.ms <= FILL_MS && stretches.any { a.ms >= it.fromMs && b.ms <= it.toMs }
-        }.flatMap { (a, b) ->
+        chain.zipWithNext().flatMap { (a, b) ->
+            val heard = stretches.filter { a.ms >= it.fromMs && b.ms <= it.toMs }
+            if (b.line - a.line < 2 || b.ms - a.ms > FILL_MS || heard.isEmpty()) return@flatMap emptyList()
             val from = firstLetters.getValue(a.line)
             val to = firstLetters.getValue(b.line)
-            (a.line + 1 until b.line).filter { it in firstLetters }.map { line ->
+            val put = (a.line + 1 until b.line).filter { it in firstLetters }.map { line ->
                 Placed(line, a.ms + (b.ms - a.ms) * (firstLetters.getValue(line) - from) / (to - from), 0.0, 0)
             }
+            val voice = heard.flatMap { sung(it.words) }.map { it.second }
+            put.filterIndexed { k, placed -> voice.any { it in placed.ms until (put.getOrNull(k + 1)?.ms ?: b.ms) } }
         }
 
     /**
