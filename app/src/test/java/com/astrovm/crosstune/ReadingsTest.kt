@@ -474,6 +474,12 @@ class ReadingsTest {
         assertNull(modernKana("いふ"))
         assertNull(modernKana("いふ", "イウエ"))
         assertNull(modernKana("いふう", "イウ"))
+        // How IPADIC says it, with ー for an old kana said long: きのふ is said きのー.
+        assertEquals("きのう", modernKana("きのふ", Furigana.saidAsSpelled("きのふ", "キノー")))
+        assertEquals("いい", modernKana("いひ", Furigana.saidAsSpelled("いひ", "イー")))
+        assertEquals("とおい", modernKana("とほい", Furigana.saidAsSpelled("とほい", "トーイ")))
+        assertEquals("キノ", Furigana.saidAsSpelled("きのふ", "キノ"))
+        assertEquals("アーフ", Furigana.saidAsSpelled("ああふ", "アーフ"))
         // Hiragana is ぁ to ゖ, both ends in.
         assertEquals(true, Furigana.inOldKana("ぁひゖ"))
         assertEquals(false, Furigana.inOldKana("ひ\u3097"))
@@ -609,8 +615,35 @@ class ReadingsTest {
             val yesterday = Readings.words("きのふ", Script.JAPANESE).single()
             assertEquals(listOf(null, "きのう", "きのう"), listOf(yesterday.reading, yesterday.modern, yesterday.lookup))
         }
-        // IPADIC alone has nothing to tell it by, and names nothing.
-        assertNull(Readings.words("きのふ", Script.JAPANESE).single().modern)
+        // IPADIC alone says it きのー, the way it's said today.
+        assertEquals("きのう", Readings.words("きのふ", Script.JAPANESE).single().modern)
+    }
+
+    @Test
+    fun aWordInOldKanaAloneIsTheWordItIsTodayWithOrWithoutUniDic() {
+        // Text, spelling today and lookup of each word with a spelling today, in a line in kana alone IPADIC splits or misreads.
+        val lines = listOf(
+            "おもひで" to listOf("おもひで", "おもいで", "思い出"),
+            "手をとりあふ" to listOf("とりあふ", "とりあう", "とりあう"),
+            "あひたい" to listOf("あひたい", "あいたい", "あう"),
+            "きのふ" to listOf("きのふ", "きのう", "きのう"),
+            "待つてゐたんだよ" to listOf("ゐたんだ", "いたんだ", "いる")
+        )
+        fun check() = lines.forEach { (line, expected) ->
+            val modern = Readings.words(line, Script.JAPANESE).filter { it.modern != null }.map { listOf(it.text, it.modern, it.lookup) }
+            assertEquals(line, listOf(expected), modern)
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
+    fun aWordInKanaAloneIsOldOnlyWhereItCanBe() {
+        // A particle starts no word, an adjective's い was never ひ, and a verb in ひ may be a verb and 日: 降る日 is ふるひ.
+        val lines = listOf("あとへはひく", "あめのふるひ", "ひふ", "あいうえお", "ふふふ", "あの日へ", "おひるのひ", "あひるのこ", "やまはふじ")
+        fun check() = lines.forEach { line -> assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern }) }
+        check()
+        TestUniDic.reading { check() }
     }
 
     @Test
