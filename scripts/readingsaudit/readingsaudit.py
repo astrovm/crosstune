@@ -138,19 +138,29 @@ def old_kana(words):
     return {kana: next(iter(lookups)) if len(lookups) == 1 else kana for kana, lookups in sorted(looked_up.items())}, sorted(modern)
 
 
+def old_kana_header(date, version):
+    """old-kana.txt's header: where its words come from, their licence and how they were changed, as CC BY-SA 4.0 asks."""
+    return [f"# JMdict {date}, by the Electronic Dictionary Research and Development Group, {JMDICT_URL}",
+            f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
+            f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
+            "# Changed: only the common words in kana with い or う after their first kana, each with how it's looked up,",
+            "# then the words in kana with ひ or ふ after their first kana, which are no old spelling.",
+            "# Made by scripts/readingsaudit/readingsaudit.py oldkana."]
+
+
 def oldkana(folder):
     """Writes the app's old-kana.txt from the JMdict in the folder: see old_kana."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
     today, modern = old_kana(jmdict["words"])
-    header = [f"# JMdict {jmdict['dictDate']}, by the Electronic Dictionary Research and Development Group, CC BY-SA 4.0",
-              f"# through jmdict-simplified {jmdict['version']}: the common words in kana with い or う after their first kana, and how",
-              "# each is looked up; then the words in kana with ひ or ふ after their first kana, which are no old spelling.",
-              "# Made by scripts/readingsaudit/readingsaudit.py oldkana."]
+    header = old_kana_header(jmdict["dictDate"], jmdict["version"])
     OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern) + "\n")
     print(f"{len(today)} words today and {len(modern)} modern words in {OLD_KANA}")
 
 
 OLD_KANA = ROOT / "app/src/main/resources/com/astrovm/crosstune/old-kana.txt"
+JMDICT_URL = "https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project"
+CC_BY_SA_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
+EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 
 
 def table(folder):

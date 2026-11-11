@@ -117,10 +117,19 @@ class OldKana(unittest.TestCase):
             with mock.patch.object(readingsaudit, "OLD_KANA", out), mock.patch("builtins.print") as said:
                 readingsaudit.oldkana(folder)
             lines = out.read_text().splitlines()
-            self.assertTrue(lines[0].startswith("# JMdict 2000-01-01") and "CC BY-SA 4.0" in lines[0])
-            self.assertIn("jmdict-simplified 9.9.9", lines[1])
+            header = "\n".join(line for line in lines if line.startswith("#"))
+            self.assertTrue(lines[0].startswith("# JMdict 2000-01-01"))
+            # Where it's from, its license and that it's changed, as the Group's licence asks.
+            for part in ("jmdict-simplified 9.9.9", "CC BY-SA 4.0", "Changed:", "https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project",
+                         "https://creativecommons.org/licenses/by-sa/4.0/", "https://www.edrdg.org/edrdg/licence.html"):
+                self.assertIn(part, header)
             self.assertEqual(["おもいで\t思い出", "くふう\t工夫", "くふう"], [line for line in lines if not line.startswith("#")])
             self.assertIn("2 words today and 1 modern words", said.call_args.args[0])
+
+    def test_the_committed_table_has_the_header_a_remake_writes(self):
+        header = [line for line in readingsaudit.OLD_KANA.read_text().splitlines() if line.startswith("#")]
+        date, version = header[0].split()[2].rstrip(","), header[1].split()[3].rstrip(".")
+        self.assertEqual(readingsaudit.old_kana_header(date, version), header)
 
 
 if __name__ == "__main__":
