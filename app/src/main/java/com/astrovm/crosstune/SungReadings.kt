@@ -53,7 +53,10 @@ internal class SungReadings(
             for (artist in listOf(song.artist, "")) {
                 for (page in songsFound(title, artist, song.artist)) {
                     if (!asked.add(page)) continue
-                    val fixes = matched(lines, read, linesOf(get(page)))
+                    val html = get(page)
+                    // A page without the words isn't one of its songs': it couldn't be asked, rather than it has none.
+                    if (!words.containsMatchIn(html)) throw IOException("UtaTen's page for a song has no words")
+                    val fixes = matched(lines, read, linesOf(html))
                     if (linesFixed(fixes) > linesFixed(best)) best = fixes
                     // Enough lines alike: it's this song.
                     if (linesFixed(best) * 3 >= ours || asked.size >= MAX_PAGES) return best.takeIf { linesFixed(it) * 3 >= ours }.orEmpty()
@@ -80,7 +83,10 @@ internal class SungReadings(
             .addQueryParameter("artist_name", artist)
             .addQueryParameter("title", title)
             .build()
-        val rows = searchRow.findAll(get(search.toString())).map { it.groupValues[1] to ChordFinder.unescape(it.groupValues[2]).trim() }.toList()
+        val found = get(search.toString())
+        val rows = searchRow.findAll(found).map { it.groupValues[1] to ChordFinder.unescape(it.groupValues[2]).trim() }.toList()
+        // Neither songs nor its "no words found": another page, one asking whether it's a person, say, which says nothing of the song.
+        if (rows.isEmpty() && NONE_FOUND !in found) throw IOException("UtaTen answered its search with a page it doesn't write")
         return rows.sortedByDescending { (_, by) -> SongNames.sameArtist(by, singer) || SongNames.artistInside(singer, by) }.map { (page, _) -> SITE_URL + page }
     }
 
@@ -110,9 +116,13 @@ internal class SungReadings(
 
         /**
          * Bumped when what was found before should be looked up again: 2 for songs a phone's pages found nothing for,
-         * 3 for those its search answered with nothing, as it does without a Referer.
+         * 3 for those its search answered with nothing, as it does without a Referer, 4 for those it answered with
+         * another page, which was taken as none.
          */
-        const val CACHE_VERSION = 3
+        const val CACHE_VERSION = 4
+
+        /** What its search says when it finds no words. */
+        private const val NONE_FOUND = "歌詞が見つかりませんでした"
 
         /** It answers a browser; a computer's, as a phone's gets pages laid out otherwise, which say nothing here. */
         const val BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"

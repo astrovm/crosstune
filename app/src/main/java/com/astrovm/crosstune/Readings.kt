@@ -953,21 +953,15 @@ internal object Readings {
      * as any line is, so the romaji is too, 頭ん中 as atama n naka, not the dictionary's reading
      * with the new one pasted over it, where it can't be found in a word, atama nchuu.
      */
-    private fun readAs(parts: List<Ruby>): LineReading {
+    fun readAs(parts: List<Ruby>): LineReading {
         val line = parts.joinToString("") { it.text }
-        // What each letter reads as: a kanji's reading on its first letter, nothing on the rest of it.
-        val reads = arrayOfNulls<String>(line.length)
-        var at = 0
-        for (part in parts) {
-            if (part.reading != null) part.text.indices.forEach { reads[at + it] = if (it == 0) part.reading else "" }
-            at += part.text.length
-        }
+        val reads = letterReadings(parts)
         val given = givenReadings(line)
         var from = 0
         val pieces = readAsGiven(together(pieces(withoutGiven(line))), given).map { piece ->
             val start = from.also { from += piece.surface.length }
             // Where each letter is in the line, past the readings it gives in brackets.
-            val letters = piece.surface.indices.map { i -> (start + i).let { it + given.filter { reading -> reading.end <= it }.sumOf { reading -> reading.brackets.length } } }
+            val letters = piece.surface.indices.map { inLine(start + it, given) }
             val kana = letters.indices.joinToString("") { reads[letters[it]] ?: piece.surface[it].toString() }
             val said = letters.indices.joinToString("") { reads[letters[it]]?.let(::longVowels) ?: piece.surface[it].toString() }
             if (kana == piece.kana) piece else piece.reading(kana, said)
@@ -979,6 +973,21 @@ internal object Readings {
             romanizedLine(pieces, typed = true)
         )
     }
+
+    /** What each letter of the line [parts] write reads as: a kanji's reading on its first letter, nothing on the rest of it. */
+    private fun letterReadings(parts: List<Ruby>): Array<String?> {
+        val reads = arrayOfNulls<String>(parts.sumOf { it.text.length })
+        var at = 0
+        for (part in parts) {
+            if (part.reading != null) part.text.indices.forEach { reads[at + it] = "" }
+            if (part.reading != null && part.text.isNotEmpty()) reads[at] = part.reading
+            at += part.text.length
+        }
+        return reads
+    }
+
+    /** Where the letter [at] of a line is in it as written, past the readings it gives in brackets, [given], before it. */
+    private fun inLine(at: Int, given: List<Given>) = at + given.filter { it.end <= at }.sumOf { it.brackets.length }
 
     /** A kanji's [kana] as it's said, せんせい as せんせー and しょう as しょー: drawn out, as romaji shows it. */
     private fun longVowels(kana: String) = drawnOutE(kana).replace(Regex("([おこごそぞとどのほぼぽもよろょ])う"), "$1ー")

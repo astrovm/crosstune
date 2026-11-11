@@ -2,6 +2,8 @@ package com.astrovm.crosstune
 
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
@@ -71,9 +73,6 @@ internal data class SavedLine(
     /** Whether it was read by an older dictionary than this version's, and is to be read again. */
     val readByOlder get() = readWith != null && readWith < Readings.VERSION
 
-    /** Whether it's read again as its song's words are read now: not when read by hand, nor, when only [older] ones are, when read by this version. */
-    fun rereads(older: Boolean) = !readByHand && (!older || readByOlder)
-
     /** It read as [read] says, by this version's dictionary; with none, as nothing reads it. */
     fun readBy(read: LineReading?): SavedLine = copy(
         reading = read?.reading?.takeIf { it != text },
@@ -85,15 +84,42 @@ internal data class SavedLine(
 
     /**
      * It read as [now], the same line read as its song's words read now, but for the readings UtaTen, ChatGPT or
-     * the user put right in it, which stay where [now] has only the dictionary's.
+     * the user put right in it, which stay where they are in the line, where [now] has only the dictionary's. Where
+     * [now] splits the line otherwise around one, so it can't take it, as one word 三本 for 三 and 本 put right one
+     * by one, that stretch stays as it was. Unchanged when the two don't write the same line.
      */
     fun rereadAs(now: SavedLine): SavedLine {
-        val parts = now.ruby
-        val fixedNow = parts.orEmpty().filter { it.by != null }.map { it.text }
-        val fixes = ruby.orEmpty().filter { it.text !in fixedNow }.mapNotNull { part -> part.by?.let { by -> part.reading?.let { ReadingFix(0, part.text, it, by) } } }
-        val read = if (parts == null || fixes.isEmpty()) null else Readings.corrected(listOf(LineReading(parts, now.reading ?: text, now.romanized.orEmpty(), now.typed ?: now.romanized.orEmpty())), fixes).first()
-        return if (read != null) readBy(read) else copy(reading = now.reading, romanized = now.romanized, ruby = parts, typed = now.typed, readWith = now.readWith)
+        val parts = now.ruby ?: listOf(Ruby(text))
+        val kept = ruby ?: return copy(reading = now.reading, romanized = now.romanized, ruby = now.ruby, typed = now.typed, readWith = now.readWith)
+        val read = keptOver(kept, parts, over = false) { kept[it].by != null && kept[it].reading != null } ?: return this
+        if (read == parts) return copy(reading = now.reading, romanized = now.romanized, ruby = now.ruby, typed = now.typed, readWith = now.readWith)
+        return readBy(Readings.readAs(read))
     }
+
+    /**
+     * It with what [edited], [seen] read again by hand, changed in [seen], where it changed it: the rest stays as it's
+     * kept now, put right meanwhile or not. Null when that changes nothing, or it's another line now.
+     */
+    fun editedAs(seen: SavedLine, edited: SavedLine): SavedLine? {
+        val parts = ruby
+        val seenParts = seen.ruby
+        val editedParts = edited.ruby
+        // A word, read as a whole.
+        if (seenParts == null || editedParts == null) {
+            return if (parts != null) null else copy(reading = edited.reading, romanized = edited.romanized, readByHand = true, typed = edited.typed).takeIf { it != this }
+        }
+        if (parts == null) return null
+        val before = seenParts.placed().toSet()
+        val placed = editedParts.placed()
+        val read = keptOver(editedParts, parts, over = true) { placed[it] !in before } ?: return null
+        return if (read == parts) null else readByHand(Readings.readAs(read))
+    }
+
+    /** It read as [read] says, put right by hand. */
+    private fun readByHand(read: LineReading) = copy(
+        ruby = read.parts, reading = read.reading, romanized = read.romanized.takeIf { it.isNotBlank() }, readByHand = true,
+        typed = read.typed.takeIf { it.isNotBlank() && it != read.romanized }
+    )
 
     /** Whether it can be played in the music app: it knows where it's sung. */
     val timed get() = startMs != null && endMs != null
@@ -132,15 +158,19 @@ internal data class SavedLine(
             if (word.isEmpty() || !word.all(Readings::isKana) || line == null) return this
             return copy(reading = word, romanized = Readings.romaji(word), readByHand = true, typed = Readings.romaji(word, typed = true).takeIf { it != Readings.romaji(word) })
         }
-        val shown = readable
-        val fixes = shown.indices.mapNotNull { index ->
-            val given = readings.getOrNull(index) ?: return@mapNotNull null
-            val fixed = given.trim()
-            if (fixed == shown[index].reading) null else ReadingFix(0, shown[index].text, fixed, Reader.USER)
+        val out = parts.map { listOf(it) }.toMutableList()
+        parts.indices.filter { parts[it].reading != null }.forEachIndexed { index, at ->
+            val given = readings.getOrNull(index)?.trim()?.takeIf { it != parts[at].reading } ?: return@forEachIndexed
+            // The part alone, with the kana written after it, so the reading lands on it and on no other with the same kanji.
+            val end = (at + 1 until parts.size).firstOrNull { parts[it].reading != null || parts[it].text.any(Readings::isHan) } ?: parts.size
+            val alone = parts.subList(at, end)
+            val read = Readings.corrected(listOf(LineReading(alone, "", "")), listOf(ReadingFix(0, parts[at].text, given, Reader.USER))).first().parts
+            if (read == alone) return@forEachIndexed
+            out[at] = read
+            for (i in at + 1 until end) out[i] = emptyList()
         }
-        val read = Readings.corrected(listOf(LineReading(parts, reading ?: text, romanized.orEmpty(), typed ?: romanized.orEmpty())), fixes).first()
-        if (read.parts == parts) return this
-        return copy(ruby = read.parts, reading = read.reading, romanized = read.romanized.takeIf { it.isNotBlank() }, readByHand = true, typed = read.typed.takeIf { it.isNotBlank() && it != read.romanized })
+        val read = out.flatten()
+        return if (read == parts) this else readByHand(Readings.readAs(read))
     }
 }
 
@@ -239,8 +269,11 @@ private fun changedWordsAs(name: String?): WordsAs? = wordsAsNamed(name)?.takeIf
 /** The lines kept, newest first, on the phone only. */
 internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
-    fun load(): List<SavedLine> {
-        val array = preferences.getString(KEY, null)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
+    fun load(): List<SavedLine> = load(preferences.getString(KEY, null))
+
+    /** The lines [kept] says, as kept. */
+    private fun load(kept: String?): List<SavedLine> {
+        val array = kept?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
         return asJapanWrites((0 until array.length()).mapNotNull { index ->
             val json = array.optJSONObject(index) ?: return@mapNotNull null
             val text = json.optString("text").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
@@ -248,7 +281,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
                 json.interval(), json.optInt("ease", START_EASE), json.optInt("step"), json.optLong("due"), json.time("start"), json.time("end"), json.time("next"), json.span("length"), json.optLong("lead"), json.text("app"), json.text("artwork"),
                 json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed"), json.reviews(),
-                readWith = json.optInt(READ_WITH).takeIf { json.has(READ_WITH) }
+                readWith = (json.opt(READ_WITH) as? Int)?.takeIf { it > 0 }
             )
         })
     }
@@ -315,18 +348,17 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         save(load().map { kept -> changes.firstOrNull { it.first.isSame(kept) }.let { change -> if (change == null) kept else change.second } })
 
     /**
-     * Puts how [lines] read, as kept, on the same lines kept before, but for those read by hand, and the readings
-     * put right in them, see [SavedLine.rereadAs]; only on those still read by an [older] dictionary, when asked.
+     * The lines kept as [change] makes them, worked out [on] another thread, as reading them again takes a while,
+     * and kept on the caller's; worked out again from those kept then when lines are kept otherwise meanwhile, so
+     * nothing kept meanwhile is lost. Null, and none kept, when [change] gives none.
      */
-    fun reread(lines: List<SavedLine>, older: Boolean = false): List<SavedLine> = save(
-        load().map { kept ->
-            val again = lines.firstOrNull { it.isSame(kept) }
-            if (again == null || !kept.rereads(older)) kept else kept.rereadAs(again)
+    suspend fun change(on: CoroutineDispatcher, change: (List<SavedLine>) -> List<SavedLine>?): List<SavedLine>? {
+        while (true) {
+            val since = preferences.getString(KEY, null)
+            val changed = withContext(on) { change(load(since)) } ?: return null
+            if (preferences.getString(KEY, null) == since) return save(changed)
         }
-    )
-
-    /** Keeps [line] read as it is now, put right by hand. */
-    fun readAs(line: SavedLine): List<SavedLine> = update(line) { it.copy(reading = line.reading, romanized = line.romanized, ruby = line.ruby, readByHand = true, typed = line.typed) }
+    }
 
     /** Keeps [explanation] with the line [text] of [title] by [artist], when that line's kept. */
     fun explain(text: String, title: String, artist: String, explanation: String): List<SavedLine> =
@@ -431,13 +463,51 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     }
 }
 
+/** [kept] with each of [lines], the same lines read again, read as it says, but those read by hand; see [SavedLine.rereadAs]. */
+internal fun rereadAs(kept: List<SavedLine>, lines: List<SavedLine>): List<SavedLine> = kept.map { line ->
+    val again = lines.firstOrNull { it.isSame(line) }
+    if (again == null || line.readByHand) line else line.rereadAs(again)
+}
+
+/** Each part where it starts in the line, with it. */
+private fun List<Ruby>.placed(): List<Pair<Int, Ruby>> = zip(runningFold(0) { at, part -> at + part.text.length }) { part, at -> at to part }
+
 /**
- * [older], lines kept and read by an older dictionary, as this version's reads them, whether or not their song is opened
- * again: those of Japanese songs, the ones with kana in a line of theirs [kept]. Each line is read alone, as a song's are.
+ * [now], parts of a line, with the parts of [kept], the same line in parts, that [carried] says laid over where they are
+ * in it, with as much around them as it takes to reach where both split the line, so the parts on each side still
+ * write it. Each stays only where [now] has nothing put right of its own there, but [over] it. Null when the two
+ * don't write the same line.
  */
-internal fun readAgain(older: List<SavedLine>, kept: List<SavedLine>): List<SavedLine> {
+internal fun keptOver(kept: List<Ruby>, now: List<Ruby>, over: Boolean, carried: (Int) -> Boolean): List<Ruby>? {
+    if (kept.joinToString("") { it.text } != now.joinToString("") { it.text }) return null
+    val keptAt = kept.runningFold(0) { at, part -> at + part.text.length }
+    val nowAt = now.runningFold(0) { at, part -> at + part.text.length }
+    val cuts = keptAt.intersect(nowAt.toSet()).sorted()
+    // Each stretch from where it starts to where it ends; ones that overlap are one.
+    val stretches = mutableListOf<Pair<Int, Int>>()
+    for (index in kept.indices.filter(carried)) {
+        val from = cuts.last { it <= keptAt[index] }
+        val to = cuts.first { it >= keptAt[index + 1] }
+        val last = stretches.lastOrNull()
+        if (last != null && from < last.second) stretches[stretches.lastIndex] = last.first to maxOf(last.second, to) else stretches += from to to
+    }
+    val stretchOf = { from: Int, to: Int -> stretches.firstOrNull { from >= it.first && to <= it.second } }
+    val taken = stretches.filter { stretch -> over || now.indices.none { stretchOf(nowAt[it], nowAt[it + 1]) == stretch && now[it].by != null } }
+    val ours = now.indices.filter { stretchOf(nowAt[it], nowAt[it + 1]) !in taken }.map { nowAt[it] to now[it] }
+    val theirs = kept.indices.filter { stretchOf(keptAt[it], keptAt[it + 1]) in taken }.map { keptAt[it] to kept[it] }
+    return (ours + theirs).sortedBy { it.first }.map { it.second }
+}
+
+/**
+ * [kept], the lines kept, with those read by an older dictionary read as this version's reads them, whether or not their
+ * song is opened again, see [SavedLine.rereadAs]: those of Japanese songs, the ones with kana in a line of theirs. Each line
+ * is read alone, as a song's are. Null when none is.
+ */
+internal fun readAgain(kept: List<SavedLine>): List<SavedLine>? {
     val japanese = kept.filter { line -> line.text.any(Readings::isKana) }.mapTo(mutableSetOf()) { it.title to it.artist }
-    return older.filter { it.title to it.artist in japanese }.map { it.readBy(Readings.of(listOf(it.text), Script.JAPANESE).first()) }
+    val older = { line: SavedLine -> line.readByOlder && !line.readByHand && line.title to line.artist in japanese }
+    if (kept.none(older)) return null
+    return kept.map { line -> if (older(line)) line.rereadAs(line.readBy(Readings.of(listOf(line.text), Script.JAPANESE).first())) else line }
 }
 
 /**

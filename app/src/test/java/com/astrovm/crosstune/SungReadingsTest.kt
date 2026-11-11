@@ -43,9 +43,14 @@ class SungReadingsTest {
         }
     }
 
-    private fun search(rows: List<Pair<String, String>>) = """<table class="searchResult artistLyricList">""" + rows.joinToString("") { (page, by) ->
-        """<tr><td><p class="searchResult__title"><a href="$page">Song</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">$by</a></p></td></tr>"""
-    } + "</table>"
+    /** Its search's answer: a row for each of [rows], or, with none, that it found no words, as it says so. */
+    private fun search(rows: List<Pair<String, String>>) = if (rows.isEmpty()) {
+        """<section class="contentBox"><div class="contentBox__body"><p class="noItem">ごめんなさい。歌詞が見つかりませんでした。<br /></p></div></section>"""
+    } else {
+        """<table class="searchResult artistLyricList">""" + rows.joinToString("") { (page, by) ->
+            """<tr><td><p class="searchResult__title"><a href="$page">Song</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">$by</a></p></td></tr>"""
+        } + "</table>"
+    }
 
     private fun ruby(kanji: String, kana: String) = """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>"""
 
@@ -188,6 +193,21 @@ class SungReadingsTest {
         assertNull(ask(cache))
         // Kept from before, but kept wrong, it's asked again.
         runBlocking { cache.put("utaten|${SungReadings.CACHE_VERSION}|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}", "not json") }
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
+        assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(cache)!!)
+    }
+
+    @Test
+    fun aPageUtaTenDoesntWriteIsNoAnswerNotASongItHasNoneFor() {
+        val cache = LookupCache(File(folder.root, "sung.json"), Dispatchers.Unconfined)
+        // A search answered with a page that's neither its results nor its "none found", one asking whether it's a person, say.
+        val elsewhere = "<html><body>Just a moment...</body></html>"
+        fake.handler = { request -> FakeSpotify.html(request, elsewhere) }
+        assertNull(ask(cache))
+        // The song found, but its page without the words.
+        fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to elsewhere))
+        assertNull(ask(cache))
+        // Neither was kept as none: once it answers, it's asked again.
         fake.handler = site(listOf("/lyric/ab0001/" to "Band"), mapOf("/lyric/ab0001/" to page))
         assertTrue(ReadingFix(0, "都会", "まち", Reader.SUNG) in ask(cache)!!)
     }

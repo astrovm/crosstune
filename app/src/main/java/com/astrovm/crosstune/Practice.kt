@@ -12,7 +12,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -615,17 +616,30 @@ internal class PracticeCards(
         if (practice.sound == LineSound.PLAYED && practice.line?.let { typeOf(it).options.back.sound } == true) replay()
     }
 
-    /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */
+    /** Card edits, one at a time, so one doesn't undo another. */
+    private val editing = Mutex()
+
+    /**
+     * The card's line read as [readings] say, one for each of its kanji, put right by hand: only what they change in it as
+     * shown, laid over it as it's kept by then, so what was put right meanwhile, by another edit or by UtaTen, stays.
+     */
     fun readAs(readings: List<String>) {
-        val line = uiState.practice?.line ?: return
+        val seen = uiState.practice?.line ?: return
         scope.launch {
-            val read = withContext(readDispatcher) { line.readAs(readings) }.takeIf { it != line } ?: return@launch
-            // Practice may have gone on meanwhile: the line's put right wherever it is in it now.
-            val practice = uiState.practice
-            uiState = uiState.copy(
-                savedLines = store.readAs(read),
-                practice = practice?.let { now -> now.copy(queue = now.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true, typed = read.typed) else it }) }
-            )
+            editing.withLock {
+                val saved = store.change(readDispatcher) { kept ->
+                    val edited = seen.readAs(readings).takeIf { it != seen } ?: return@change null
+                    val read = kept.firstOrNull { it.isSame(seen) }?.editedAs(seen, edited) ?: return@change null
+                    kept.map { if (it.isSame(read)) read else it }
+                } ?: return@withLock
+                val read = saved.first { it.isSame(seen) }
+                // Practice may have gone on meanwhile: the line's put right wherever it is in it now.
+                val practice = uiState.practice
+                uiState = uiState.copy(
+                    savedLines = saved,
+                    practice = practice?.let { now -> now.copy(queue = now.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true, typed = read.typed) else it }) }
+                )
+            }
         }
     }
 

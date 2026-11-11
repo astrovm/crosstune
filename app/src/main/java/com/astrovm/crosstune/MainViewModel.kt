@@ -447,12 +447,11 @@ internal class MainViewModel(
             }
         }
         // Lines kept and read by an older dictionary are read as this one reads them, songs opened again or not.
-        uiState.savedLines.filter { it.readByOlder }.takeIf { it.isNotEmpty() }?.let { older ->
+        if (uiState.savedLines.any { it.readByOlder }) {
             viewModelScope.launch {
                 // As they were read: with UniDic, when it's on the phone; never fetched for this.
                 uniDic?.let { if (Readings.uniDic == null) Readings.uniDic = it.tokenizer(fetch = false) }
-                val again = withContext(systemDispatcher) { readAgain(older, uiState.savedLines) }
-                uiState = uiState.copy(savedLines = savedLinesStore.reread(again, older = true))
+                savedLinesStore.change(systemDispatcher, ::readAgain)?.let { uiState = uiState.copy(savedLines = it) }
             }
         }
         updates?.let { checker ->
@@ -3705,11 +3704,12 @@ internal class MainViewModel(
      * Lines of [song] kept are read as its lines are now, put right, but for the ones put right by
      * hand; only those with no reading yet when [unread].
      */
-    private fun rereadSavedLines(song: MusicMetadata, unread: Boolean = false) {
+    private suspend fun rereadSavedLines(song: MusicMetadata, unread: Boolean = false) {
         val lines = wordLines()
         val again = uiState.savedLines.filter { it.isOf(song) && it.line == null && !it.readByHand && (!unread || it.ruby == null) }
             .mapNotNull { saved -> lines.indexOf(saved.text).takeIf { it >= 0 }?.let(::savedLineAt) }
-        if (again.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.reread(again))
+        if (again.isEmpty()) return
+        savedLinesStore.change(systemDispatcher) { kept -> rereadAs(kept, again) }?.let { uiState = uiState.copy(savedLines = it) }
     }
 
     /**
@@ -4126,6 +4126,11 @@ internal class MainViewModel(
         val learning = uiState.learning
         val lines = wordLines()
         val script = learning.script
+        if (!learning.reads && readingsJob?.isActive == true) {
+            // Turned off while they're worked out: nothing more is asked for them, and they're worked out again once on.
+            readingsJob?.cancel()
+            uiState = uiState.copy(learning = uiState.learning.copy(lines = emptyList()))
+        }
         val unread = learning.lines.isEmpty() && readingsJob?.isActive != true
         if (learning.reads && script != null && unread) {
             readingsJob = viewModelScope.launch {
@@ -4142,7 +4147,7 @@ internal class MainViewModel(
                 song?.let { rereadSavedLines(it, unread = script == Script.JAPANESE) }
                 if (script != Script.JAPANESE || song == null) return@launch
                 // Sung readings, 都会 as まち, from a site that writes them over the words.
-                sungReadings?.of(song, lines, read)?.let { fixes ->
+                sungReadingsOf(song, lines, read)?.let { fixes ->
                     if (wordLines() != lines || uiState.learning.lines != read) return@launch
                     if (fixes.isNotEmpty()) {
                         read = Readings.corrected(read, fixes)
@@ -4847,9 +4852,16 @@ internal class MainViewModel(
         if (uiState.chords.on) chordFinder?.chordsOf(song, lines)
         val script = Readings.scriptOf(lines)
         // Asked as when the words show: romaji and kana are made from the readings too.
-        if (uiState.learning.reads && script == Script.JAPANESE) sungReadings?.of(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) })
+        if (uiState.learning.reads && script == Script.JAPANESE) sungReadingsOf(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) })
         return true
     }
+
+    /**
+     * How [song]'s kanji are sung in its [lines], [read] as the dictionary reads them, from UtaTen: asked only while the
+     * words are read, in readings, Latin letters or kana, so never once that's been turned off, as while they were read.
+     */
+    private suspend fun sungReadingsOf(song: MusicMetadata, lines: List<String>, read: List<LineReading>): List<ReadingFix>? =
+        sungReadings?.takeIf { uiState.learning.reads }?.of(song, lines, read)
 
     /** Saved links keep what the service returned, so turning the setting off brings it back. */
     private fun String.forSharing(): String = if (uiState.cleanLinks) TrackingLinks.clean(this) else this
