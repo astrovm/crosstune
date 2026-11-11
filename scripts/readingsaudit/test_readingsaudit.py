@@ -229,6 +229,13 @@ class Fetch(unittest.TestCase):
                 readingsaudit.fetch(self.folder, opener=FakeGitHub(data, assets))
             self.assertFalse((self.folder / "jmdict.json").exists())
 
+    def test_takes_the_download_with_the_tags_plus_as_it_is_or_escaped(self):
+        data = zipped({"jmdict-eng-9.9.9.json": "{}"})
+        github = FakeGitHub(data)
+        github.release["assets"][1]["browser_download_url"] = DOWNLOAD.replace("%2B", "+")
+        readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual(DOWNLOAD.replace("%2B", "+"), github.asked[1].full_url)
+
     def test_wants_one_json_file_in_the_zip(self):
         for files, count in [({"a.json": "{}", "b.json": "{}"}, 2), ({"README.md": ""}, 0)]:
             with self.subTest(count), self.assertRaisesRegex(SystemExit, f"holds {count} JSON files"):

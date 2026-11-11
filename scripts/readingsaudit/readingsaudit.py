@@ -241,8 +241,9 @@ def fetch(folder, tag=None, opener=urllib.request.urlopen):
     if not expected.startswith("sha256:"):
         raise SystemExit(f"release {tag} gives no SHA-256 for {asset['name']}, so it can't be checked")
     download = asset["browser_download_url"]
-    pinned = f"https://github.com/scriptin/jmdict-simplified/releases/download/{urllib.parse.quote(tag, safe='')}/"
-    if not download.startswith(pinned):
+    # Compared decoded, as the + in a tag may come written as it is or as %2B.
+    pinned = f"https://github.com/scriptin/jmdict-simplified/releases/download/{tag}/"
+    if not urllib.parse.unquote(download).startswith(pinned):
         raise SystemExit(f"{asset['name']} isn't under release {tag}: {download}")
     with opener(urllib.request.Request(download, headers={"User-Agent": "crosstune-readingsaudit"})) as answer:
         data = answer.read()
