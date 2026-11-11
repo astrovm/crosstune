@@ -387,7 +387,8 @@ def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT, union_
         print(f"not fully guarded: {key[1]}\t{cases[key][0]}\t{key[3]}")
     for key in sorted(capped):
         print(f"not guarded, its song spelled: {key[1]}\t{cases[key][0]}\t{key[3]}")
-    locked = len(cases) - len(not_locked)
+    # A reading the union limit takes its row from is not locked, though it could be.
+    locked = len(cases) - len(not_locked) - len(capped)
     share = f"{100 * locked / len(cases):.1f}%" if cases else "none"
     print(f"golden: {len(rows)} rows, {len(set(rows) - set(old))} new, {len(regressions)} regressions, "
           f"{locked} of {len(cases)} right readings locked ({share}), {len(moved - capped)} not fully guarded, "

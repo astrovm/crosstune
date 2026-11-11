@@ -416,7 +416,7 @@ class Golden(unittest.TestCase):
             # The song's one line may not be spelled: 日, the first of three letters each held by one row, goes.
             self.assertEqual(["曜", "月"], [row[0] for row in golden_rows(dest)])
             self.assertIn("not guarded, its song spelled: 日\tび\tipadic", said)
-            self.assertIn("6 right readings locked (100.0%), 0 not fully guarded, 2 not guarded as their song would be spelled", said)
+            self.assertIn("4 of 6 right readings locked (66.7%), 0 not fully guarded, 2 not guarded as their song would be spelled", said)
             self.assertIn("0 of 1 lines spelled end to end", said)
 
     def test_a_reading_both_limits_move_is_named_once_as_not_guarded(self):
@@ -430,7 +430,7 @@ class Golden(unittest.TestCase):
             self.assertEqual(["月曜", "月曜"], [row[0] for row in golden_rows(dest)])
             self.assertIn("not guarded, its song spelled: 日\tび\tunidic", said)
             self.assertNotIn("not fully guarded: 日", said)
-            self.assertIn("4 not fully guarded, 2 not guarded as their song would be spelled", said)
+            self.assertIn("4 of 6 right readings locked (66.7%), 4 not fully guarded, 2 not guarded as their song would be spelled", said)
 
     def test_the_hole_counts_readings_no_row_guards_and_breaks_no_row_catches(self):
         with tempfile.TemporaryDirectory() as folder:
