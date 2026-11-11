@@ -195,7 +195,7 @@ by: Their authors, named in each preset's name
 license: None stated
 text: milkdrop-presets.txt
 url: https://github.com/projectM-visualizer/presets-cream-of-the-crop
-note: From projectM's Cream of the Crop, Milkdrop Original and En D packs; the stills in Settings are drawn from them. The packs state no licence; the text below is projectM's statement for them.
+note: From projectM's Cream of the Crop, Milkdrop Original and En D packs, and Ryan Geiss's favorite presets of January 2021 (https://www.geisswerks.com/about_milkdrop.html); the stills in Settings are drawn from them. None states a licence; the text below is projectM's statement for its packs.
 covers: file app/src/main/assets/milkdrop/*
 covers: file app/src/main/assets/milkdrop-thumbs/*
 
