@@ -30,6 +30,7 @@ env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
+  # CI reports CI / Required on a run started by hand only on this branch: ci.yml names it too.
   BRANCH: jmdict/remake
   TABLES: app/src/main/resources/com/astrovm/crosstune
 

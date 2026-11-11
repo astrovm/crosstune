@@ -188,7 +188,8 @@ jobs:
         with:
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           # A run started by hand gets main's history too, to compare its branch with where it left main.
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          # Written this way round, as `&& 0 ||` would give 2: 0 counts as false in an expression.
+          fetch-depth: ${{ github.event_name != 'workflow_dispatch' && 2 || 0 }}
 
       # Tangled new code is split up, never listed in detekt's baseline to pass. A run started by hand
       # checks it too, as its CI / Required stands for a pull request's (the JMdict workflow's).
@@ -198,7 +199,9 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" = pull_request ]; then base=HEAD^1; else base=$(git merge-base origin/main HEAD); fi
-          added=$(git diff "$base" HEAD -- config/detekt/baseline.xml | grep '^+.*<ID>' || true)
+          # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
+          diff=$(git diff "$base" HEAD -- config/detekt/baseline.xml)
+          added=$(grep '^+.*<ID>' <<< "$diff" || true)
           if [ -n "$added" ]; then
             echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
             echo "$added"
@@ -295,8 +298,10 @@ jobs:
   required-ci:
     name: CI / Required
     # Always report a result, including when a prerequisite failed or was skipped. Also on a run started
-    # by hand: the JMdict workflow's pull request gets its checks that way, as its token starts no workflow.
-    if: ${{ always() && github.event_name != 'push' }}
+    # by hand on jmdict/remake: the JMdict workflow's pull request gets its checks that way, as its token
+    # starts no workflow. A run by hand elsewhere tests a branch's head, not its merge with main, so it
+    # reports nothing that could pass for a pull request's check. jmdict/remake is BRANCH in jmdict.yml.
+    if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/jmdict/remake')) }}
     needs:
       - changes
       - site
