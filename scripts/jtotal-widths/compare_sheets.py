@@ -34,6 +34,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from collections import Counter
 from pathlib import Path
@@ -211,20 +212,26 @@ def read_app(path):
 
 def crawl(directory, urls, limit):
     (directory / "sheets").mkdir(parents=True, exist_ok=True)
-    meta, last = [], 0.0
+    meta, last, missing = [], 0.0, 0
     for number, url in enumerate(urls[:limit]):
         out = directory / "sheets" / f"{number:04}.html"
         if not out.exists():
             time.sleep(max(0.0, 1.1 - (time.monotonic() - last)))
             last = time.monotonic()
             request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; research crawler)"})
-            out.write_bytes(urllib.request.urlopen(request, timeout=35).read())
+            try:
+                out.write_bytes(urllib.request.urlopen(request, timeout=35).read())
+            except urllib.error.HTTPError as error:
+                # A guessed address that isn't a sheet is skipped, not a reason to stop the crawl.
+                print(f"{url}: HTTP {error.code}", file=sys.stderr)
+                missing += 1
+                continue
         meta.append({"file": out.name, "url": url})
     sheet = directory / "dat_st.css"
     if not sheet.exists():
         sheet.write_bytes(urllib.request.urlopen(STYLESHEET, timeout=35).read())
     (directory / "urls.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"{len(meta)} sheets in {directory}")
+    print(f"{len(meta)} sheets in {directory}" + (f", {missing} addresses missing" if missing else ""))
 
 
 def browser_in_container(directory):
@@ -232,17 +239,35 @@ def browser_in_container(directory):
     run_in_container(directory, ["/script/compare_sheets.py", "draw", "/work", "--fonts", "/fonts"])
 
 
+# What `--old` takes out of the template, each with what goes in its place: the font stack, and Java's Windows-31J.
+OLD = (
+    ("            val mono = ChordSheets.jTotalMonospace(page)\n", ""),
+    ("unescape(sheet), mono)", "unescape(sheet))"),
+    (' + """,\"mono\":$mono"""', ""),
+    ('"windows-31j"', '"Shift_JIS"'),
+)
+
+
+def old_template(source):
+    """The dump test as a checkout from before the app read a page's font stack and Windows-31J can run it."""
+    for with_stack, without in OLD:
+        if with_stack not in source:
+            raise ValueError(f"the template no longer has {with_stack!r}")
+        source = source.replace(with_stack, without)
+    return source
+
+
 def app_run(directory, tag, old):
     """Runs the code of this checkout on the crawled pages, in the test box."""
     build = REPO / "app/build/crawl"
     shutil.rmtree(build, ignore_errors=True)
     shutil.copytree(directory / "sheets", build / "sheets")
-    shutil.copy(directory / "urls.json", build / "urls.json")
+    rows = json.loads((directory / "urls.json").read_text(encoding="utf-8"))
+    (build / "urls.tsv").write_text("".join(f"{row['file']}\t{row['url']}\n" for row in rows), encoding="utf-8")
     (build / "tag.txt").write_text(tag, encoding="utf-8")
     source = TEMPLATE.read_text(encoding="utf-8")
     if old:
-        for with_stack, without in (("            val mono = ChordSheets.jTotalMonospace(page)\n", ""), ("unescape(sheet), mono)", "unescape(sheet))"), ('.put("mono", mono)', ""), ('"windows-31j"', '"Shift_JIS"')):
-            source = source.replace(with_stack, without)
+        source = old_template(source)
     # The sheets sit outside Gradle's inputs. A second replay writes the same test source, and Gradle
     # then skips the test, so the stamp makes this run a new source file.
     TEST.write_text(source + f"\n// replay {tag} {time.time_ns()}\n", encoding="utf-8")

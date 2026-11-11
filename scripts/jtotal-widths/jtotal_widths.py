@@ -18,13 +18,18 @@ give other widths for the scripts they draw differently, and the app can only fo
 The table ends up in app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt, one run per
 line: `FIRST[-LAST] WIDTH`, code points in hex.
 
-U+203B on the monospace stack is not one width. ChordSheets uses 1.650 or 2.000 columns from the
-script beside the mark, including the line above. The table keeps the Japanese-context width, 2.000.
+The container stands in for Windows, where the sheets are written: MS Gothic draws Japanese on both
+stacks, as Windows' Japanese fixed-width font is MS Gothic too. The Containerfile sends both names to
+Noto Sans Mono CJK JP. macOS draws a different page, because the stack's "Hiragino Kaku Gothic" is not
+a macOS font name, and Monaco then draws marks such as U+203B at 1.201 columns (Issue #830).
+`contexts.py` measures any machine's browser against the table, and `compare_sheets.py moves` counts
+the chords that land on another letter.
 """
 import argparse
 import hashlib
 import json
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -161,8 +166,14 @@ def environment(browser, name, stack, fonts):
         f"Unicode {unicodedata.unidata_version}",
         *font_packages(),
         inconsolata_hashes(fonts),
-        *(['MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans'] if ALIASES.exists() else []),
+        *([aliases(ALIASES.read_text(encoding="utf-8"))] if ALIASES.exists() else []),
     ]
+
+
+def aliases(config):
+    """The font names fontconfig answers with another font, as `config` (its local.conf) sets them."""
+    pairs = re.findall(r"<alias[^>]*>\s*<family>([^<]+)</family>\s*<prefer>\s*<family>([^<]+)</family>", config)
+    return "Fontconfig aliases: " + "; ".join(f"{name} is {font}" for name, font in pairs)
 
 
 def measure(out, stack=STACK, fonts=Path("/fonts")):

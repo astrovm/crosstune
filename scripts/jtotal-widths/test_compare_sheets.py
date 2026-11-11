@@ -169,5 +169,17 @@ class MovesTest(unittest.TestCase):
             c.moves_main(a, b, 5)
 
 
+class TemplateTest(unittest.TestCase):
+    def test_old_takes_the_font_stack_and_windows_31j_out_of_the_template(self):
+        source = c.old_template(c.TEMPLATE.read_text(encoding="utf-8"))
+        self.assertNotIn("jTotalMonospace", source)
+        self.assertNotIn("mono", source.split("fun json")[0].split("val lines")[1])
+        self.assertIn('"Shift_JIS"', source)
+
+    def test_a_template_without_a_part_old_takes_out_fails(self):
+        with self.assertRaises(ValueError):
+            c.old_template("class CrawlDumpTest")
+
+
 if __name__ == "__main__":
     unittest.main()

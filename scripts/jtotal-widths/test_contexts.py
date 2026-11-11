@@ -143,13 +143,16 @@ class HelpersTest(unittest.TestCase):
             browser = mock.Mock(version="156.0")
             with mock.patch.object(w.metadata, "version", return_value="1.64.1"), \
                     mock.patch.object(w, "font_packages", return_value=["fonts-x 1"]), \
-                    mock.patch.object(w, "ALIASES", Path(folder)):
+                    mock.patch.object(w, "ALIASES", Path(folder) / "local.conf"):
+                (Path(folder) / "local.conf").write_text(
+                    '<fontconfig>\n<alias binding="same"><family>MS Gothic</family><prefer><family>Noto Sans Mono CJK JP</family></prefer></alias>\n'
+                    '<alias binding="same"><family>monospace</family><prefer><family>Noto Sans Mono CJK JP</family></prefer></alias>\n</fontconfig>\n', encoding="utf-8")
                 found = w.environment(browser, "chromium", w.STACK, folder)
         empty = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         self.assertEqual(found[1:3], ["Chromium 156.0", "Playwright 1.64.1"])
         self.assertEqual(found[4], "fonts-x 1")
         self.assertIn(f"latin={empty}", found[5])
-        self.assertTrue(found[6].startswith("MS Gothic and Hiragino Kaku Gothic alias"))
+        self.assertEqual(found[6], "Fontconfig aliases: MS Gothic is Noto Sans Mono CJK JP; monospace is Noto Sans Mono CJK JP")
 
     def test_font_packages_say_what_the_machine_is(self):
         with mock.patch.object(w.shutil, "which", side_effect=lambda tool: tool == "dpkg-query"), \

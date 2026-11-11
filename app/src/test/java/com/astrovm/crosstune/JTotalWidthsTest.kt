@@ -22,11 +22,17 @@ class JTotalWidthsTest {
     }
 
     @Test
-    fun theMonospaceFallbackHasItsOwnWidths() {
-        assertEquals(2050, JTotalWidths.of('あ'.code, monospace = true))
-        val sheet = "${"x".repeat(41)}${jTotal("C")}<br>${"あ".repeat(22)}"
-        assertEquals(21, ChordSheets.fromJTotal(sheet).single().chords.single().at)
-        assertEquals(20, ChordSheets.fromJTotal(sheet, monospace = true).single().chords.single().at)
+    fun theMonospaceStackHasItsOwnWidths() {
+        // Kana is two columns on both stacks, as MS Gothic draws it. Ĳ comes from a different fallback.
+        assertEquals(2000, JTotalWidths.of('あ'.code, monospace = true))
+        assertEquals(1417, JTotalWidths.of(0x132, monospace = true))
+        val kana = "${"x".repeat(41)}${jTotal("C")}<br>${"あ".repeat(22)}"
+        assertEquals(21, ChordSheets.fromJTotal(kana).single().chords.single().at)
+        assertEquals(21, ChordSheets.fromJTotal(kana, monospace = true).single().chords.single().at)
+        // Five columns are nearest the fourth Ĳ's start at 1.470 each (4.41), and the b after four at 1.417 each (5.668).
+        val ligatures = "abcde${jTotal("C")}<br>\u0132\u0132\u0132\u0132b"
+        assertEquals(3, ChordSheets.fromJTotal(ligatures).single().chords.single().at)
+        assertEquals(4, ChordSheets.fromJTotal(ligatures, monospace = true).single().chords.single().at)
     }
 
     @Test

@@ -16,7 +16,7 @@
 # fonts-unifont 1:15.1.01-1build1
 # fonts-wqy-zenhei 0.9.45-8
 # Inconsolata v37 (Google Fonts), SHA-256: vi=a554042f62cd6e6723d2d80826d7d4051f81036014e028c85cf4f57dea25cf41, ext=9650fe3e6dc3721080a25b2ae1edff2486bfd78fc03b2d36a909998d940e4e2b, latin=9d5a0480d2bd3e43b124bf8f36782c8fc079f9f8b023c672bff67e9ceffc236b
-# MS Gothic and Hiragino Kaku Gothic alias Noto Sans Mono CJK JP; sans-serif aliases Noto Sans
+# Fontconfig aliases: MS Gothic is Noto Sans Mono CJK JP; Hiragino Kaku Gothic is Noto Sans Mono CJK JP; sans-serif is Noto Sans; monospace is Noto Sans Mono CJK JP
 A0-AC 1000
 AD 0
 AE-131 1000
