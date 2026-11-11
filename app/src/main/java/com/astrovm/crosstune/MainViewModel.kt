@@ -2502,8 +2502,8 @@ internal class MainViewModel(
 
     /** Whether the words found with no timing may be heard now: nothing else hears, and a music app on the phone plays them. */
     private fun mayHearUntimed(): Boolean {
-        val busy = singingJob?.isActive == true || singingTries >= SINGING_TRIES
-        if (busy || shazamLeads || nextPaused) return false
+        // A few whiles in a row with nothing sung heard, the hearing itself lets be.
+        if (singingJob?.isActive == true || shazamLeads || nextPaused) return false
         return mayCalibrate() && appFollowing?.let { it.app != null && it.clock.playing } == true
     }
 

@@ -111,7 +111,8 @@ internal object SungTiming {
                 }
             }
             val alike = pairs.filter { (h, w) -> likeness(heard[h].first, pieces[w].text) >= ALIKE }
-            val span = (pairs.minOf { it.first })..(pairs.maxOf { it.first })
+            // Followed back from the end, the pairs come last word first.
+            val span = pairs.last().first..pairs.first().first
             if (alike.size < MIN_WORDS || taken.any { it.first <= span.last && span.first <= it.last }) continue
             taken += span
             // Each word says where the line starts, by the letters before it; the most that agree say it, as the model may time the first word after a rest early.
@@ -128,9 +129,11 @@ internal object SungTiming {
      */
     private fun chained(candidates: List<Placed>, firstLetters: Map<Int, Int>): List<Placed> {
         if (candidates.isEmpty()) return emptyList()
-        val sorted = candidates.sortedWith(compareBy({ it.ms }, { it.line }))
+        // Candidates come in line order, and the sort keeps it for lines at one time.
+        val sorted = candidates.sortedBy { it.ms }
         val best = DoubleArray(sorted.size)
-        val from = IntArray(sorted.size) { -1 }
+        // Where each one's chain comes from, counted from 1, or 0 where it starts.
+        val from = IntArray(sorted.size)
         for (k in sorted.indices) {
             best[k] = sorted[k].support
             for (j in 0 until k) {
@@ -139,15 +142,15 @@ internal object SungTiming {
                 val letters = firstLetters.getValue(b.line) - firstLetters.getValue(a.line)
                 if (b.line > a.line && b.ms - a.ms >= letters * FAST_LETTER_MS && best[j] + b.support > best[k]) {
                     best[k] = best[j] + b.support
-                    from[k] = j
+                    from[k] = j + 1
                 }
             }
         }
-        var k = best.indices.maxBy { best[it] }
+        var k = best.indices.maxBy { best[it] } + 1
         val chain = mutableListOf<Placed>()
-        while (k >= 0) {
-            chain += sorted[k]
-            k = from[k]
+        while (k > 0) {
+            chain += sorted[k - 1]
+            k = from[k - 1]
         }
         return chain.reversed()
     }
@@ -155,7 +158,7 @@ internal object SungTiming {
     /** The pieces of [lines]' words, each with its line, the letters before it in its line, and before it in all. */
     private fun written(lines: List<String>): List<Written> {
         var all = 0
-        val pieces = lines.flatMapIndexed { line, text ->
+        val pieces = lines.withIndex().flatMap { (line, text) ->
             var before = 0
             SpokenWords.pieces(text).map { piece -> Written(piece, line, before, all).also { before += piece.length; all += piece.length } }
         }
