@@ -133,11 +133,11 @@ def golden_rows(dest):
 
 class Golden(unittest.TestCase):
 
-    def run_golden(self, folder, dest, accept=(), app=APP, width=0):
+    def run_golden(self, folder, dest, accept=(), app=APP, width=0, union_share=None):
         """golden with [width] letters of context: 0 shows the stable stretch itself."""
         fake = FakeContexts(app)
         with mock.patch("builtins.print") as said:
-            code = golden.golden(folder, dest, accept, fake, width)
+            code = golden.golden(folder, dest, accept, fake, width, union_share)
         return code, "\n".join(call.args[0] for call in said.call_args_list), fake
 
     def test_locks_every_right_reading_on_the_shortest_stretch_that_reads_so(self):
@@ -340,11 +340,12 @@ class Golden(unittest.TestCase):
             self.assertIn(["曜", "曜", "", "よう", "曜=よう", "both"], golden_rows(dest))
 
     def test_the_golden_command_takes_a_width_or_the_one_the_file_is_made_with(self):
-        for argv, width in ((["golden"], golden.CONTEXT), (["golden", "--width", "0"], 0)):
+        self.assertIsNone(golden.UNION_SHARE)
+        for argv, width, share in ((["golden"], golden.CONTEXT, None), (["golden", "--width", "0", "--union-share", "0.25"], 0, 0.25)):
             with mock.patch.object(readingsaudit, "data_dir", return_value=Path("/fake")), \
                     mock.patch.object(golden, "golden", return_value=0) as made, self.assertRaises(SystemExit):
                 readingsaudit.main(argv)
-            made.assert_called_once_with(Path("/fake"), golden.GOLDEN_FILE, [], width=width)
+            made.assert_called_once_with(Path("/fake"), golden.GOLDEN_FILE, [], width=width, union_share=share)
 
     def test_a_song_with_room_keeps_the_whole_lines_that_guard_the_most(self):
         placed = {
@@ -365,10 +366,71 @@ class Golden(unittest.TestCase):
 
     def test_the_summary_counts_whole_lines_and_the_stretches(self):
         rows = [("甲乙", "甲", "", "", "", "both"), ("甲", "甲", "", "", "", "both"), ("丙丁戊", "丙", "", "", "", "both")]
-        self.assertEqual("1 whole lyric lines, at most 1 of a song's 2 lines, stretches median 2 and longest 3 characters",
-                         golden.summary(rows, {"a": {"甲乙", "己"}, "b": {"x", "y", "z", "丙"}, "c": set()}))
-        self.assertEqual("0 whole lyric lines, at most 0 of a song's 0 lines, stretches median 0 and longest 0 characters",
+        # 甲乙丙丁戊 is no row, but two rows spell it. A song with one of its five lines spelled is not over a quarter,
+        # nor is one with one of four.
+        self.assertEqual("1 whole lyric lines, at most 1 of a song's 2 lines; 2 of 10 lines spelled end to end by the rows together, "
+                         "1 of 4 songs over a quarter that way; stretches median 2 and longest 3 characters",
+                         golden.summary(rows, {"a": {"甲乙", "己"}, "b": {"x", "y", "z", "丙", "甲乙丙丁戊"}, "c": set(),
+                                               "d": {"甲乙", "p", "q", "r"}}))
+        self.assertEqual("0 whole lyric lines, at most 0 of a song's 0 lines; 0 of 0 lines spelled end to end by the rows together, "
+                         "0 of 0 songs over a quarter that way; stretches median 0 and longest 0 characters",
                          golden.summary([], {}))
+
+    def test_a_line_is_spelled_when_the_stretches_together_hold_each_letter_where_it_is(self):
+        self.assertTrue(golden.spelled("甲乙丙", {"甲乙", "乙丙"}, 2))
+        self.assertTrue(golden.spelled("甲乙甲", {"甲", "乙"}, 1))
+        self.assertFalse(golden.spelled("甲乙丙", {"甲乙", "丙丁"}, 2))
+        self.assertFalse(golden.spelled("甲乙丙", {"甲乙", "丙乙"}, 2))
+        self.assertEqual({"s": {"甲乙"}}, golden.spelled_lines({"甲", "乙"}, {"s": {"甲乙", "丙", ""}}))
+        self.assertEqual([{"甲"}, {"乙甲"}, {"甲", "乙甲"}], golden.holders("甲乙甲", {"甲", "乙甲", "丙"}))
+
+    def test_a_song_over_the_union_share_loses_the_new_rows_over_its_cheapest_letter(self):
+        def placed():
+            return {("甲乙", "甲乙", 0, "ipadic"): [("甲乙",) * 5, None], ("甲", "甲", 0, "ipadic"): [("甲",) * 5, None],
+                    ("乙", "乙", 0, "ipadic"): [("乙",) * 5, None], ("丙丁", "丙", 0, "ipadic"): [("丙丁",) * 5, None]}
+        songs = {"s": {"甲乙", "丙丁", "戊", "己"}}
+        # No limit: nothing goes.
+        rows = placed()
+        self.assertEqual(set(), golden.cap_union(songs, set(), rows, None))
+        self.assertEqual(placed(), rows)
+        # One of four lines may be spelled. 丙丁 has a letter one stretch holds; each of 甲乙's is held by two.
+        rows = placed()
+        self.assertEqual({("丙丁", "丙", 0, "ipadic")}, golden.cap_union(songs, set(), rows, 0.25))
+        self.assertEqual(3, len(rows))
+        # A row already in the file stays, so 甲乙 is cut where it is held by the fewest new rows: 乙 and 甲乙.
+        rows = placed()
+        del rows[("丙丁", "丙", 0, "ipadic")]
+        self.assertEqual({("甲乙", "甲乙", 0, "ipadic"), ("乙", "乙", 0, "ipadic")}, golden.cap_union(songs, {("丙丁",) * 5}, rows, 0.25))
+        self.assertEqual([("甲", "甲", 0, "ipadic")], list(rows))
+        # Lines the file already spells stay spelled: there is nothing new to take away.
+        rows = {}
+        self.assertEqual(set(), golden.cap_union(songs, {("甲乙",) * 5, ("丙丁",) * 5}, rows, 0.25))
+
+    def test_the_golden_command_holds_a_song_to_the_union_share_and_names_what_it_leaves_unguarded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("月曜日", [["月", "げつ"], ["曜", "よう"], ["日", "び"]])])
+            dest = folder / "golden.tsv"
+            code, said, _fake = self.run_golden(folder, dest, union_share=0.25)
+            self.assertEqual(0, code, said)
+            # The song's one line may not be spelled: 日, the first of three letters each held by one row, goes.
+            self.assertEqual(["曜", "月"], [row[0] for row in golden_rows(dest)])
+            self.assertIn("not guarded, its song spelled: 日\tび\tipadic", said)
+            self.assertIn("6 right readings locked (100.0%), 0 not fully guarded, 2 not guarded as their song would be spelled", said)
+            self.assertIn("0 of 1 lines spelled end to end", said)
+
+    def test_a_reading_both_limits_move_is_named_once_as_not_guarded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("月曜日", [["月", "げつ"], ["曜", "よう"], ["日", "び"]])])
+            dest = folder / "golden.tsv"
+            # The quarter moves each row off the whole line, to 月曜 and 曜日, which spell it together: 曜日 goes.
+            code, said, _fake = self.run_golden(folder, dest, width=2, union_share=0.25)
+            self.assertEqual(0, code, said)
+            self.assertEqual(["月曜", "月曜"], [row[0] for row in golden_rows(dest)])
+            self.assertIn("not guarded, its song spelled: 日\tび\tunidic", said)
+            self.assertNotIn("not fully guarded: 日", said)
+            self.assertIn("4 not fully guarded, 2 not guarded as their song would be spelled", said)
 
     def test_the_hole_counts_readings_no_row_guards_and_breaks_no_row_catches(self):
         with tempfile.TemporaryDirectory() as folder:

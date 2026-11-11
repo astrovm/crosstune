@@ -265,21 +265,86 @@ def cap_whole_lines(songs, kept, placed):
     return moved
 
 
+# The most of one song's lines the rows may spell end to end together, each letter of the line in some row's stretch where
+# it is in the line. None: no such limit. WHOLE_SHARE counts only a line that is one row; this counts what the rows
+# give back together. PR #931 measured what 0.25 costs, for the owner to choose.
+UNION_SHARE = None
+
+
+def spelled(line, stretches, longest):
+    """Whether [stretches] together hold every letter of [line], each where it is in the line. None of them is longer than [longest]."""
+    held = [False] * len(line)
+    for i in range(len(line)):
+        for j in range(i + 1, min(len(line), i + longest) + 1):
+            if line[i:j] in stretches:
+                held[i:j] = [True] * (j - i)
+    return all(held)
+
+
+def spelled_lines(stretches, songs):
+    """Each song's lines that [stretches] spell end to end together: {song: set of lines}."""
+    longest = max(map(len, stretches), default=0)
+    return {song: {line for line in lines if line and spelled(line, stretches, longest)} for song, lines in songs.items()}
+
+
+def holders(line, stretches):
+    """For each letter of [line], the stretches of [stretches] that hold it where it is."""
+    held = [set() for _ in line]
+    for stretch in stretches:
+        for start in find_starts(line, stretch):
+            for i in range(start, start + len(stretch)):
+                held[i].add(stretch)
+    return held
+
+
+def cap_union(songs, kept, placed, share=UNION_SHARE):
+    """Hold each song to [share] of its lines spelled end to end by the rows together. [kept] is the rows already in the
+    file, which stay; [placed] maps each new case to [row, fallback]. A spelled line over the limit loses the new rows
+    over the one letter of it that the fewest of them hold and no kept row does, and their cases go from [placed].
+    The cases that go."""
+    dropped = set()
+    if share is None:
+        return dropped
+    old = {row[0] for row in kept}
+    for song in sorted(songs):
+        lines = sorted(songs[song])
+        while True:
+            new = {row[0] for row, _fallback in placed.values()}
+            over = sorted(spelled_lines(old | new, {song: lines})[song])
+            if len(over) <= int(len(lines) * share):
+                break
+            # The cheapest letter of any spelled line: held by no kept row, and by the fewest new stretches.
+            options = [(len(held), sorted(held)) for line in over for held in holders(line, old | new) if not held & old]
+            if not options:
+                break
+            _count, cut = min(options)
+            for key in [key for key, (row, _fallback) in placed.items() if row[0] in cut]:
+                del placed[key]
+                dropped.add(key)
+    return dropped
+
+
 def summary(rows, songs):
-    """What the file holds, in numbers: whole lyric lines, the largest share of one song's lines, and the stretches' lengths."""
+    """What the file holds, in numbers: whole lyric lines, the largest share of one song's lines, the lines the rows spell
+    together, and the stretches' lengths."""
     stretches = {row[0] for row in rows}
     lengths = sorted(len(stretch) for stretch in stretches)
     every = set().union(*songs.values()) if songs else set()
     shares = [(len(stretches & lines), len(lines)) for lines in songs.values() if lines]
     most = max(shares, key=lambda share: share[0] / share[1], default=(0, 0))
+    spelt = spelled_lines(stretches, songs)
+    over = sum(1 for song, lines in songs.items() if lines and len(spelt[song]) > len(lines) * 0.25)
     median = lengths[len(lengths) // 2] if lengths else 0
-    return (f"{len(stretches & every)} whole lyric lines, at most {most[0]} of a song's {most[1]} lines, "
+    return (f"{len(stretches & every)} whole lyric lines, at most {most[0]} of a song's {most[1]} lines; "
+            f"{len(set().union(*spelt.values()))} of {len(every)} lines spelled end to end by the rows together, "
+            f"{over} of {len(songs)} songs over a quarter that way; "
             f"stretches median {median} and longest {lengths[-1] if lengths else 0} characters")
 
 
-def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT):
+def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT, union_share=UNION_SHARE):
     """Write [dest] from the audit, every right reading locked on a stable stretch with [width] letters of its line on each
-    side. Add rows. Never drop or edit one, unless [accept] names its word and kana."""
+    side, and at most [union_share] of a song's lines spelled by the rows together. Add rows. Never drop or edit one,
+    unless [accept] names its word and kana."""
     accept = {tuple(pair) for pair in accept}
     old = read_golden(dest)
     cases = right_cases(folder)
@@ -309,6 +374,7 @@ def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT):
         start = find_starts(line, word)[occurrence]
         placed[key] = [row_on(line, word, start, stretch, kana, ruby), fallback and row_on(line, word, start, fallback, kana, ruby)]
     moved = cap_whole_lines(songs, kept, placed)
+    capped = cap_union(songs, kept, placed, union_share)
     for key, (row, _fallback) in placed.items():
         merged[row].add(key[3])
     rows = [key + (dictionary_tag(readers),) for key, readers in merged.items()]
@@ -317,12 +383,15 @@ def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT):
         print(f"regression: {row[1]}\t{row[3]}\t{row[5]}\t{row[0]}\t{row[4]}")
     for key in sorted(not_locked):
         print(f"not locked: {key[1]}\t{cases[key][0]}\t{key[3]}")
-    for key in sorted(moved):
+    for key in sorted(moved - capped):
         print(f"not fully guarded: {key[1]}\t{cases[key][0]}\t{key[3]}")
+    for key in sorted(capped):
+        print(f"not guarded, its song spelled: {key[1]}\t{cases[key][0]}\t{key[3]}")
     locked = len(cases) - len(not_locked)
     share = f"{100 * locked / len(cases):.1f}%" if cases else "none"
     print(f"golden: {len(rows)} rows, {len(set(rows) - set(old))} new, {len(regressions)} regressions, "
-          f"{locked} of {len(cases)} right readings locked ({share}), {len(moved)} not fully guarded, {dest}")
+          f"{locked} of {len(cases)} right readings locked ({share}), {len(moved - capped)} not fully guarded, "
+          f"{len(capped)} not guarded as their song would be spelled, {dest}")
     print(f"golden: {summary(rows, songs)}")
     return 1 if regressions or not_locked else 0
 

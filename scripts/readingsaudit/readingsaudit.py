@@ -676,6 +676,7 @@ def main(argv=None):
     parser.add_argument("--base", default="origin/main", help="lines: the commit to read the lines with first")
     parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
     parser.add_argument("--width", type=int, help="golden: the letters of context each row holds on each side of its stable stretch")
+    parser.add_argument("--union-share", type=float, help="golden: the most of a song's lines the rows may spell together, from 0 to 1")
     parser.add_argument("--golden", action="append", type=Path, default=[], metavar="FILE",
                         help="hole: a golden file to measure, instead of the one in the repo; again for more")
     args = parser.parse_args(argv)
@@ -700,7 +701,8 @@ def main(argv=None):
         # golden.py reads this module's audit, so it is loaded only here.
         import golden
         sys.exit(golden.golden(folder, args.out or golden.GOLDEN_FILE, args.accept,
-                                width=golden.CONTEXT if args.width is None else args.width) if args.step == "golden"
+                                width=golden.CONTEXT if args.width is None else args.width,
+                                union_share=golden.UNION_SHARE if args.union_share is None else args.union_share) if args.step == "golden"
                  else golden.hole(folder, args.golden or [golden.GOLDEN_FILE]))
     else:
         compare(folder, args.words, args.before)
