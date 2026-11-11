@@ -109,6 +109,20 @@ def listed_candidates(words):
             and all(is_han(c) or "ぁ" <= c <= "ゖ" or "ァ" <= c <= "ヶ" or c == "ー" for c in form)}
 
 
+JMDICT_URL = "https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project"
+EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
+CC_BY_SA_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
+
+
+def table_header(date, version):
+    """The table's header: where its words come from, their licence and how they were changed, as CC BY-SA 4.0 asks."""
+    return [f"# JMdict {date}, by the Electronic Dictionary Research and Development Group, {JMDICT_URL}",
+            f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
+            f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
+            "# Changed: only words of two kanji or more it reads one way only, kept where Crosstune reads them otherwise.",
+            "# Made by scripts/readingsaudit/readingsaudit.py table."]
+
+
 def old_kana(words):
     """The words in kana a word in old kana may be today, {kana: lookup}, and the words in kana with a ひ or ふ after their first kana.
 
@@ -158,18 +172,13 @@ def oldkana(folder):
 
 
 OLD_KANA = ROOT / "app/src/main/resources/com/astrovm/crosstune/old-kana.txt"
-JMDICT_URL = "https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project"
-CC_BY_SA_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
-EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
 
 
 def table(folder):
     """The candidates for the app's jmdict-readings.txt, for the test that keeps those the app reads otherwise."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
     candidates = listed_candidates(jmdict["words"])
-    header = [f"# JMdict {jmdict['dictDate']}, by the Electronic Dictionary Research and Development Group, CC BY-SA 4.0",
-              f"# through jmdict-simplified {jmdict['version']}: words of two kanji or more it reads one way only,",
-              "# kept where Crosstune reads them otherwise. Made by scripts/readingsaudit/readingsaudit.py table."]
+    header = table_header(jmdict["dictDate"], jmdict["version"])
     (folder / "listed.txt").write_text("\n".join(header + [f"{form}\t{kana}" for form, kana in candidates.items()]) + "\n")
     print(f"{len(candidates)} candidates in {folder / 'listed.txt'}")
     run(folder, "com.astrovm.crosstune.songcheck.JmdictReadings")

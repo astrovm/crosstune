@@ -35,6 +35,10 @@
     <string name="settings_default_label">Music app</string>
     <string name="setting_show_in_crosstune_first">Show in Crosstune first</string>
     <string name="settings_about_title">About</string>
+    <!-- Settings → About: the works by others in the app, with their licences. -->
+    <string name="settings_licenses">Licenses</string>
+    <string name="license_show">Show license</string>
+    <string name="license_hide">Hide license</string>
     <string name="settings_links_title">Open links from</string>
     <string name="rule_opens_in">Opens in %1$s</string>
     <string name="rule_default">Default (%1$s)</string>

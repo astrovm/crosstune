@@ -76,6 +76,11 @@ jobs:
       - name: Test, lint and build
         run: ./gradlew :app:ci :app:bundleRelease --build-cache
 
+      # Each licence text in Settings → About → Licenses is still the one its work publishes, fetched
+      # again; the NDK's own notice is read from the NDK the build above installed.
+      - name: Check licence texts against their sources
+        run: python3 scripts/notices.py check
+
       - name: Verify version metadata
         run: |
           expected="${TAG#v}"
@@ -220,8 +225,8 @@ jobs:
 
       - name: Compare with the signed APK
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q apksigcopier
+          sudo timeout 60 apt-get update -q || echo "::notice::apt-get update did not finish"
+          sudo apt-get -o Acquire::Retries=5 install -y -q apksigcopier
           # apksigcopier calls apksigner. The same JDK flag as the sign job, through a wrapper,
           # because apksigcopier does not take apksigner's -J options.
           tools="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
