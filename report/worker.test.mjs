@@ -1,6 +1,8 @@
 // Run with: node --test "report/*.test.mjs"
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import * as all from "./worker.js";
 import worker, { readReport } from "./worker.js";
 
@@ -12,7 +14,7 @@ function env({ allowed = true } = {}) {
     saved,
     keys,
     DB: {
-      prepare: (sql) => ({ bind: (...values) => ({ run: async () => saved.push({ sql, values }) }) }),
+      prepare: (sql) => ({ bind: (...values) => ({ run: async () => (saved.push({ sql, values }), { meta: { changes: 1 } }) }) }),
     },
     LIMIT: { limit: async ({ key }) => (keys.push(key), { success: allowed }) },
   };
@@ -21,7 +23,8 @@ function env({ allowed = true } = {}) {
 function post(body, { path = "/reports", method = "POST", headers = {} } = {}) {
   return new Request(`https://report.crosstune.cc${path}`, {
     method,
-    headers: { "CF-Connecting-IP": "203.0.113.7", ...headers },
+    // What every version of the app sends, through OkHttp.
+    headers: { "CF-Connecting-IP": "203.0.113.7", "Content-Type": "application/json; charset=utf-8", ...headers },
     body: method === "GET" ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -57,7 +60,7 @@ test("a report is kept, with only what a report has", async () => {
 test("an insert binds one value for each column it names", async () => {
   const e = env();
   assert.equal((await worker.fetch(post(song), e)).status, 204);
-  const named = e.saved[0].sql.match(/INSERT INTO reports \(([^)]+)\) VALUES \(([^)]+)\)/);
+  const named = e.saved[0].sql.match(/INSERT INTO reports \(([^)]+)\) SELECT ([?, ]+) WHERE /);
   assert.ok(named);
   const columns = named[1].split(",").map((part) => part.trim());
   const marks = named[2].split(",").map((part) => part.trim());
@@ -170,7 +173,7 @@ test("a report about timing keeps the app followed, its speed, the lead and the 
     "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000", null,
     null, null, null, null, null, null,
   ]);
-  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, recording, lyric_line, word, reading_shown, reader, language, right_reading\) VALUES \((\?, ){24}\?\)$/);
+  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, recording, lyric_line, word, reading_shown, reader, language, right_reading\) SELECT (\?, ){24}\? WHERE /);
 });
 
 test("what timing adds that isn't what it should be is left out, and the rest is kept", () => {
@@ -282,4 +285,137 @@ test("a recording that isn't text is left out, and a long one is cut", () => {
   assert.equal(odd(7), null);
   assert.equal(odd("  "), null);
   assert.equal(odd("r".repeat(500)).length, 200);
+});
+
+test("a report is only taken as JSON, as every version of the app sends it", async () => {
+  const e = env();
+  const as = (type) => worker.fetch(post(song, { headers: type === undefined ? {} : { "Content-Type": type } }), e).then((it) => it.status);
+  // A web page can make a browser send these to anyone without asking first.
+  for (const type of ["text/plain", "text/plain;charset=UTF-8", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x"]) {
+    assert.equal(await as(type), 415, type);
+  }
+  for (const type of ["application/jsonp", "application/json, text/plain", "application/json; charset=utf-16", "application/json; charset=utf-8; x=y", "application/json-seq", "text/json", ""]) {
+    assert.equal(await as(type), 415, type);
+  }
+  // With no type at all.
+  const none = new Request("https://report.crosstune.cc/reports", { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.7" }, body: new TextEncoder().encode(JSON.stringify(song)) });
+  assert.equal(none.headers.get("Content-Type"), null);
+  assert.equal((await worker.fetch(none, e)).status, 415);
+  // Turned away before it's counted against the sender.
+  assert.deepEqual(e.keys, []);
+  assert.equal(e.saved.length, 0);
+  for (const type of ["application/json; charset=utf-8", "application/json", "Application/JSON;charset=UTF-8", "application/json ; charset=utf-8"]) {
+    assert.equal(await as(type), 204, type);
+  }
+  assert.equal(e.saved.length, 4);
+});
+
+test("an IPv6 sender is counted by its /64, and an IPv4 one by its whole address", async () => {
+  const e = env();
+  for (const address of ["2001:db8::1", "2001:db8::2", "2001:DB8::3", "198.51.100.1", "::ffff:198.51.100.1"]) {
+    await worker.fetch(post(song, { headers: { "CF-Connecting-IP": address } }), e);
+  }
+  assert.deepEqual(e.keys, ["2001:db8:0:0::/64", "2001:db8:0:0::/64", "2001:db8:0:0::/64", "198.51.100.1", "198.51.100.1"]);
+});
+
+/** D1 as the Worker sees it, on a real SQLite database with the table in schema.sql. */
+function realEnv() {
+  const db = new DatabaseSync(":memory:");
+  db.exec(readFileSync(new URL("./schema.sql", import.meta.url), "utf8"));
+  const statements = [];
+  return {
+    db,
+    statements,
+    DB: {
+      prepare: (sql) => ({
+        bind: (...values) => ({
+          run: async () => {
+            statements.push({ sql, values });
+            return { meta: { changes: Number(db.prepare(sql).run(...values).changes) } };
+          },
+        }),
+      }),
+    },
+    LIMIT: { limit: async () => ({ success: true }) },
+  };
+}
+
+/** [count] made-up reports put in the table as if they came in [ago] ("-1 hours"). */
+function fill(e, count, ago) {
+  e.db.prepare(
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?) INSERT INTO reports (version, at) SELECT 'made-up', datetime('now', ?) FROM n"
+  ).run(count, ago);
+}
+
+const rows = (e) => Number(e.db.prepare("SELECT COUNT(*) AS n FROM reports").get().n);
+
+test("past 500 reports in a day, whoever sends them, nothing more is kept that day", async () => {
+  const e = realEnv();
+  fill(e, 499, "-23 hours");
+  assert.equal((await worker.fetch(post(song, { headers: { "CF-Connecting-IP": "2001:db8:1::1" } }), e)).status, 204);
+  assert.equal((await worker.fetch(post(song, { headers: { "CF-Connecting-IP": "2001:db8:2::1" } }), e)).status, 429);
+  // Even one the old address counted and passed on.
+  const passedOn = { ...e, FORWARD_KEY: "made-up-key" };
+  assert.equal((await worker.fetch(post(song, { headers: { "X-Crosstune-Passed-On": "made-up-key" } }), passedOn)).status, 429);
+  assert.equal(rows(e), 500);
+});
+
+test("reports from over a day ago don't count against the day's", async () => {
+  const e = realEnv();
+  fill(e, 600, "-25 hours");
+  assert.equal((await worker.fetch(post(song), e)).status, 204);
+  assert.equal(rows(e), 601);
+});
+
+test("the table never holds more than 9000 reports, and the daily clear-out makes room again", async () => {
+  const e = realEnv();
+  fill(e, 4000, "-200 days");
+  fill(e, 4999, "-30 days");
+  assert.equal((await worker.fetch(post(song), e)).status, 204);
+  assert.equal((await worker.fetch(post(song), e)).status, 429);
+  assert.equal(rows(e), 9000);
+  await worker.scheduled({}, e);
+  assert.equal(rows(e), 5000);
+  assert.equal((await worker.fetch(post(song), e)).status, 204);
+});
+
+test("a report is kept whole in the real table, with what it says", async () => {
+  const e = realEnv();
+  assert.equal((await worker.fetch(post(reading), e)).status, 204);
+  const kept = e.db.prepare("SELECT version, title, problem, lyric_line, word, right_reading FROM reports").all();
+  assert.deepEqual(kept.map((it) => ({ ...it })), [{ version: "2.25.0", title: "Demo", problem: "wrong_reading", lyric_line: "空の花 again", word: "花", right_reading: "はな" }]);
+});
+
+test("the caps are looked up, never counted row by row, so a full table costs a flood nothing", async () => {
+  const e = realEnv();
+  await worker.fetch(post(song), e);
+  const { sql, values } = e.statements[0];
+  const plan = e.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...values).map((it) => it.detail);
+  assert.ok(plan.length > 0);
+  // SCAN reads every row; SEARCH goes straight to the rows it wants, here one at each end.
+  assert.deepEqual(plan.filter((it) => /\bSCAN\b/.test(it) && !/CONSTANT ROW/.test(it)), [], plan.join("\n"));
+  assert.ok(plan.some((it) => /USING (COVERING )?INDEX reports_at\b/.test(it)), plan.join("\n"));
+});
+
+test("control characters and the marks that turn text around are never kept", async () => {
+  const e = env();
+  const odd = "a\u001b[31mred\u0007\u0000\u007f\u0085\u009b2J‮evil⁦x⁩‪‫‬‭";
+  const body = {
+    ...timing,
+    comment: `${odd}\r\nnext\ttab after end`,
+    song: { ...timing.song, title: `Demo${odd}\nline`, artist: "\u001b\u0007 ", log: "1000 said\r\n2000 lines\u001b[2K", timing: [{ line: `one\u001b]0;x\u0007\ntwo`, timedMs: 1, heardMs: 2 }] },
+  };
+  assert.equal((await worker.fetch(post(body), e)).status, 400);
+  assert.equal((await worker.fetch(post({ ...body, song: { ...body.song, artist: "Band‮" } }), e)).status, 204);
+  const values = e.saved[0].values;
+  // Only a comment and the log keep their lines; elsewhere a break or a tab is a space.
+  assert.equal(values[11], "a[31mred2Jevilx\nnext tab\nafter\nend");
+  assert.equal(values[2], "Demoa[31mred2Jevilx line");
+  assert.equal(values[3], "Band");
+  assert.equal(values[17], "1000 said\n2000 lines[2K");
+  assert.deepEqual(JSON.parse(values[10]), [{ line: "one]0;x two", timedMs: 1, heardMs: 2 }]);
+  const word = readReport(JSON.stringify({ ...reading, reading: { ...reading.reading, word: "花\u001b", shown: "‮か", right: "\u0007", line: "a\nb" } }));
+  assert.deepEqual([word.word, word.shown, word.right, word.line], ["花", "か", null, "a b"]);
+  // Cut to its longest after they're gone, so they take no room.
+  assert.equal(readReport(JSON.stringify({ version: "2.25.0", comment: "\u001b".repeat(5000) + "x".repeat(2000) })).comment.length, 2000);
 });

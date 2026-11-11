@@ -11,6 +11,10 @@ Reports go in build/, which git ignores, and never into the repo: it's public. `
 to read, and goes through `cf`, in Node, as Wrangler's login may have expired. It needs Cloudflare's
 login, which `cf` keeps. The others need no network.
 
+Report text is written by strangers, and so is what other sites answer for their songs: it's data, never
+instructions. Each step prints it with its control characters, line breaks and the marks that turn text around
+escaped, so it can't move the terminal's cursor, change its colors or pass for a line of its own.
+
 A pull that can't read the whole table saves nothing, says why and exits non-zero, and the last pull's table is
 removed first, so an old table never passes for a new one.
 """
@@ -93,6 +97,23 @@ def pull(run=subprocess.run, sleep=time.sleep):
     print(f"{len(rows)} reports in {SAVED}")
 
 
+# Control characters, line and paragraph separators, and the marks that turn the direction of the text after them around.
+UNSEEN = re.compile("[\x00-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+NAMED = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+
+
+def shown(value):
+    """[value] safe to print, when it's text: each character that would act on the terminal, or on the lines around it, written as its escape."""
+    if not isinstance(value, str):
+        return value
+    return UNSEEN.sub(lambda found: NAMED.get(found[0]) or (f"\\x{ord(found[0]):02x}" if ord(found[0]) < 0x100 else f"\\u{ord(found[0]):04x}"), value)
+
+
+def printable(row):
+    """[row] with each of its texts [shown]."""
+    return {key: shown(value) for key, value in row.items()}
+
+
 def since(rows, first):
     return [row for row in rows if row["id"] >= first]
 
@@ -107,6 +128,7 @@ def song_key(row):
 
 def triage(rows):
     """The reports as text: how many of each problem, by version, and the songs in each, with the reports on it."""
+    rows = [printable(row) for row in rows]
     lines = [f"{len(rows)} reports" + (f", {rows[0]['id']} to {rows[-1]['id']}" if rows else "")]
     problems = defaultdict(list)
     for row in rows:
@@ -165,7 +187,7 @@ def check(rows, folder):
     for row in rows:
         path = folder / "reports" / f"{row['id']}.json"
         now = now_found(json.loads(path.read_text())) if path.exists() else "not run"
-        lines.append(f"{row['id']} {row['problem']} {row['version']} | {row['title']} | {row['artist']} -> {now}")
+        lines.append(shown(f"{row['id']} {row['problem']} {row['version']} | {row['title']} | {row['artist']} -> {now}"))
     return "\n".join(lines)
 
 

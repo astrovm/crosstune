@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -251,6 +252,50 @@ class MainTest(unittest.TestCase):
             reports.main(["check", "--since", "39"])
         self.assertFalse(old.exists())
         self.assertIn("-> not run", said.call_args_list[1].args[0])
+
+
+# Made up: what a stranger could write in a report to move the cursor, recolor or retitle the terminal, or turn text around.
+NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg"
+UNSEEN = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+
+
+class ShownTest(unittest.TestCase):
+    def test_control_characters_and_turning_marks_are_shown_escaped(self):
+        self.assertEqual(
+            reports.shown(NASTY),
+            "a\\x1b[2J\\x1b]0;title\\x07b\\x00\\x7f\\x85\\x9bc\\u202ed\\u2066e\\u2069\\u2028f\\tg",
+        )
+        self.assertEqual(reports.shown("line\nbreak\r"), "line\\nbreak\\r")
+        self.assertEqual(reports.shown("Demo 花 أغنية"), "Demo 花 أغنية")
+        self.assertEqual(reports.shown(None), None)
+        self.assertEqual(reports.shown(7), 7)
+
+    def test_every_step_that_prints_prints_no_control_character(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder)
+            nasty = {
+                **row(39, problem="wrong_reading", title=NASTY, artist=NASTY, version=NASTY, android=NASTY, app=NASTY, comment=f"one\n  40: Fake | Song{NASTY}"),
+                "recording": NASTY, "word": NASTY, "reading_shown": NASTY, "right_reading": NASTY, "reader": NASTY, "language": NASTY, "lyric_line": NASTY,
+            }
+            (out / "reports.json").write_text(json.dumps([nasty, {**nasty, "id": 40, "problem": NASTY}]))
+            (out / "check" / "reports").mkdir(parents=True)
+            # What the finders found comes from other sites, so it's a stranger's text too.
+            found = {"lyrics": {"kind": "found", "source": NASTY, "lines": []}, "chords": {"kind": "found", "site": NASTY, "url": NASTY}}
+            (out / "check" / "reports" / "39.json").write_text(json.dumps(found))
+            (out / "check" / "reports" / "40.json").write_text(json.dumps({"lyrics": {"kind": NASTY}}))
+            with mock.patch.object(reports, "OUT", out), mock.patch.object(reports, "SAVED", out / "reports.json"), mock.patch.object(reports, "CHECK", out / "check"):
+                with mock.patch("builtins.print") as said:
+                    reports.main(["triage"])
+                    reports.main(["check"])
+                    reports.main(["songs"])
+        printed = [str(arg) for call in said.call_args_list for arg in call.args]
+        self.assertEqual(len(printed), 3)
+        for text in printed:
+            self.assertIsNone(UNSEEN.search(text), repr(text))
+        # A comment's lines stay in its own line, so it can't pass for a report of its own.
+        self.assertIn("    says: one\\n  40: Fake | Song", printed[0])
+        self.assertIn("\\x1b[2J", printed[0])
+        self.assertIn("found on a\\x1b[2J", printed[1])
 
 
 if __name__ == "__main__":

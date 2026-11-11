@@ -57,3 +57,19 @@ test("anything but a report is passed on uncounted, and without the key", async 
   assert.deepEqual(s.keys, []);
   assert.deepEqual(s.passed, [{ url: "https://report.crosstune.cc/reports", method: "GET" }]);
 });
+
+test("an IPv6 sender is counted by its /64 here too", async () => {
+  const s = setUp();
+  for (const address of ["2001:db8::1", "2001:db8::2"]) await forward.fetch(post("{}", { "CF-Connecting-IP": address }), s.env);
+  assert.deepEqual(s.keys, ["2001:db8:0:0::/64", "2001:db8:0:0::/64"]);
+});
+
+test("a report's type is passed on as it was sent, and none is made up, so the new address judges it", async () => {
+  const s = setUp();
+  await forward.fetch(post("{}", { "Content-Type": "text/plain" }), s.env);
+  await forward.fetch(new Request("https://report.crosstune.4st.li/reports", { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.7" }, body: new TextEncoder().encode("{}") }), s.env);
+  assert.deepEqual(s.passed.map((it) => it.headers), [
+    { "Content-Type": "text/plain", "X-Crosstune-Passed-On": "made-up-key" },
+    { "X-Crosstune-Passed-On": "made-up-key" },
+  ]);
+});

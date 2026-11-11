@@ -2,6 +2,8 @@
 // hand. Nothing here posts anywhere public: a comment, or a song, may say something personal by
 // mistake. The IP address only counts reports against the limit; it isn't kept.
 
+import { senderKey } from "./sender.js";
+
 /** More than a report with a long comment, every line put in time by hand and a minute of timing log needs. */
 const MAX_BYTES = 48 * 1024;
 
@@ -35,33 +37,67 @@ const MAX_POINTS = 300;
 /** How long a report is kept, as the privacy policy promises. Not exported: Workers take every export for an entrypoint. */
 const KEEP_DAYS = 180;
 
+/**
+ * The most reports kept from the last 24 hours, whoever sent them: the last defence when many senders fill it
+ * at once, past the limit for each one. People send about 7 a day. One phone's first start of a new version can
+ * owe up to 200, each song an earlier version kept in time. An app turned away keeps what it owes for later.
+ */
+const MAX_A_DAY = 500;
+
+/**
+ * The most reports the table holds. A report is at most [MAX_BYTES], about 52 KB once kept, so 9000 is under the
+ * 500 MB a database may hold on Cloudflare's free plan. 180 days of people's reports, at 7 a day, is about 1300.
+ */
+const MAX_KEPT = 9000;
+
+/** What every version of the app sends a report as, OkHttp's "application/json; charset=utf-8", with or without the charset. */
+const JSON_TYPE = /^application\/json\s*(;\s*charset=utf-8\s*)?$/i;
+
+/** The columns a report fills, in the order its values are bound. */
+const COLUMNS =
+  "version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
+  "lyric_line, word, reading_shown, reader, language, right_reading";
+
+/**
+ * A report put in the table, unless that would take it past [MAX_KEPT], or the last 24 hours past [MAX_A_DAY]: one
+ * statement, so two reports at once can't both take the last place. Ids only grow, as only the oldest are deleted, so
+ * the newest id less the oldest counts the rows, and less the first of the last day counts the day's. Each is one
+ * row looked up at an end of the table or of the reports_at index, never a count of every row, so a full table
+ * costs a flood of reports nothing. A gap left by deleting by hand only counts as more.
+ */
+const INSERT =
+  `INSERT INTO reports (${COLUMNS}) SELECT ${COLUMNS.split(",").map(() => "?").join(", ")} WHERE ` +
+  `coalesce((SELECT max(id) FROM reports) - (SELECT min(id) FROM reports) + 1, 0) < ${MAX_KEPT} AND ` +
+  `coalesce((SELECT max(id) FROM reports) - (SELECT id FROM reports WHERE at > datetime('now', '-1 day') ORDER BY at LIMIT 1) + 1, 0) < ${MAX_A_DAY}`;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname !== "/reports") return status(404);
     if (request.method !== "POST") return status(405);
+    // Only as JSON, as the app sends it. A web page can make its visitors' browsers send plain text or a form
+    // anywhere, without asking first; JSON needs the receiver's leave, which this never gives.
+    if (!JSON_TYPE.test(request.headers.get("Content-Type") ?? "")) return status(415);
     if (Number(request.headers.get("Content-Length") ?? 0) > MAX_BYTES) return status(413);
     // A report the old address passes on (forward.js) was counted there, against its sender's own
     // address. From here they all come from Cloudflare's, and would count as one sender.
     const passedOn = !!env.FORWARD_KEY && request.headers.get("X-Crosstune-Passed-On") === env.FORWARD_KEY;
     if (!passedOn) {
-      const { success } = await env.LIMIT.limit({ key: request.headers.get("CF-Connecting-IP") ?? "" });
+      const { success } = await env.LIMIT.limit({ key: senderKey(request.headers.get("CF-Connecting-IP")) });
       if (!success) return status(429);
     }
     const text = await request.text();
     if (new TextEncoder().encode(text).length > MAX_BYTES) return status(413);
     const report = readReport(text);
     if (!report) return status(400);
-    await env.DB.prepare(
-      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
-        "lyric_line, word, reading_shown, reader, language, right_reading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(
+    const { meta } = await env.DB.prepare(INSERT).bind(
       report.version, report.android, report.title, report.artist, report.app,
       report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
       report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
       report.line, report.word, report.shown, report.reader, report.language, report.right
     ).run();
-    return status(204);
+    // Full: the app keeps what it owes and tries again later.
+    return status(meta.changes === 0 ? 429 : 204);
   },
 
   // Once a day, the reports older than the policy allows go.
@@ -90,7 +126,7 @@ export function readReport(text) {
   const report = {
     version,
     android: textOf(json.android, LIMITS.android),
-    comment: textOf(json.comment, LIMITS.comment),
+    comment: textOf(json.comment, LIMITS.comment, LINES),
     // A problem it doesn't know is one the user sent, as far as it can tell.
     problem: PROBLEMS.has(json.problem) || json.problem === WRONG_READING ? json.problem : null,
     title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, source: null, timing: null,
@@ -114,7 +150,7 @@ export function readReport(text) {
     report.speed = speedOf(song.speed);
     report.leadMs = signedMs(song.leadMs);
     report.earlyMs = signedMs(song.earlyMs);
-    report.timingLog = textOf(song.log, LIMITS.log);
+    report.timingLog = textOf(song.log, LIMITS.log, LINES);
     // Which recording the timing was kept for, as the app named it: "SPOTIFY:id", or the app's own "pkg:id".
     report.recording = textOf(song.recording, LIMITS.recording);
     const timing = timingOf(song.timing);
@@ -148,10 +184,26 @@ function isObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** [value] as text up to [max] characters, or null when it isn't text or is blank. */
-function textOf(value, max) {
+/** Says [textOf] keeps a text's line breaks: only a comment and the timing log have more than one line. */
+const LINES = true;
+
+/** A line break, however it's written. */
+const BREAK = /\r\n?|[\n\u2028\u2029]/g;
+
+/**
+ * What's never kept: control characters, which can move a terminal's cursor, change its colors or its title when
+ * a report is printed, and the marks that turn the direction of the text after them around. Only "\n" stays, as
+ * every line break is made one, or a space, before.
+ */
+const UNSEEN = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
+
+/**
+ * [value] as text up to [max] characters, or null when it isn't text or is blank. A tab is a space, and so is a
+ * line break, unless the text keeps its [lines]; then every break is "\n".
+ */
+function textOf(value, max, lines = false) {
   if (typeof value !== "string") return null;
-  const trimmed = value.trim();
+  const trimmed = value.replace(BREAK, lines ? "\n" : " ").replace(/\t/g, " ").replace(UNSEEN, "").trim();
   return trimmed ? Array.from(trimmed).slice(0, max).join("") : null;
 }
 
