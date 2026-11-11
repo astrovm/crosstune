@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
+import urllib.error
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -58,7 +59,8 @@ class Table(unittest.TestCase):
             folder = Path(folder)
             jmdict = {"version": "9.9.9", "dictDate": "2000-01-01", "words": [entry([("星空", [])], [("ほしぞら", [], ["*"])])]}
             (folder / "jmdict.json").write_text(json.dumps(jmdict, ensure_ascii=False))
-            with mock.patch.object(readingsaudit, "run") as run, mock.patch("builtins.print"):
+            with mock.patch.object(readingsaudit, "run") as run, mock.patch("builtins.print"), \
+                    mock.patch.object(readingsaudit, "TABLE", folder / "none.txt"):
                 readingsaudit.table(folder, "./gradlew")
             run.assert_called_once_with(folder, "com.astrovm.crosstune.songcheck.JmdictReadings", "./gradlew")
             lines = (folder / "listed.txt").read_text().splitlines()
@@ -130,6 +132,7 @@ class OldKana(unittest.TestCase):
                      word([("工夫", [], True)], [("くふう", [], True, ["*"])], [(["n"], [])])]
             (folder / "jmdict.json").write_text(json.dumps({"version": "9.9.9", "dictDate": "2000-01-01", "words": words}, ensure_ascii=False))
             out = folder / "old-kana.txt"
+            # No file yet, so no date to keep to.
             with mock.patch.object(readingsaudit, "OLD_KANA", out), mock.patch("builtins.print") as said:
                 readingsaudit.oldkana(folder)
             lines = out.read_text().splitlines()
@@ -162,6 +165,14 @@ def zipped(files):
 
 
 class Answer(io.BytesIO):
+    """An HTTP answer that remembers how much was asked of it at most."""
+
+    asked = None
+
+    def read(self, size=-1):
+        self.asked = size
+        return super().read(size)
+
     def __enter__(self):
         return self
 
@@ -181,12 +192,22 @@ class FakeGitHub:
             {"name": ZIP_NAME, "size": len(data), "digest": digest, "browser_download_url": DOWNLOAD},
         ]}
         self.asked = []
+        self.timeouts = []
+        # Errors to raise, one per call, before answering: the network failing a few times.
+        self.failures = []
+        self.answers = []
 
-    def __call__(self, request):
+    def __call__(self, request, timeout=None):
         self.asked.append(request)
+        self.timeouts.append(timeout)
+        if self.failures:
+            raise self.failures.pop(0)
         if request.full_url.startswith(readingsaudit.JMDICT_RELEASES):
-            return Answer(json.dumps(self.release).encode())
-        return Answer(self.data)
+            answer = Answer(json.dumps(self.release).encode())
+        else:
+            answer = Answer(self.data)
+        self.answers.append(answer)
+        return answer
 
 
 class Fetch(unittest.TestCase):
@@ -194,7 +215,86 @@ class Fetch(unittest.TestCase):
     def setUp(self):
         self.folder = Path(self.enterContext(tempfile.TemporaryDirectory())) / "data"
         self.enterContext(mock.patch("builtins.print"))
-        self.enterContext(mock.patch.dict(os.environ, {"GH_TOKEN": ""}))
+        self.enterContext(mock.patch.dict(os.environ, {"GH_TOKEN": "", "GITHUB_OUTPUT": ""}))
+        self.waits = []
+        self.enterContext(mock.patch.object(readingsaudit.time, "sleep", self.waits.append))
+
+    def test_asks_with_a_timeout_and_tries_three_times_with_a_longer_wait_each_time(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "{}"}))
+        github.failures = [urllib.error.URLError("no route"), TimeoutError("timed out")]
+        readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual(4, len(github.asked))
+        self.assertEqual([readingsaudit.TIMEOUT] * 4, github.timeouts)
+        self.assertEqual([2, 4], self.waits)
+        self.assertTrue((self.folder / "jmdict.json").exists())
+
+    def test_gives_up_after_three_tries_and_says_why(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "{}"}))
+        github.failures = [urllib.error.URLError("no route")] * 3
+        with self.assertRaisesRegex(SystemExit, "3 tries.*no route"):
+            readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual([2, 4], self.waits)
+
+    def test_tries_again_on_a_server_error_but_not_on_a_missing_release(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "{}"}))
+        github.failures = [urllib.error.HTTPError("u", 502, "Bad Gateway", None, None)]
+        readingsaudit.fetch(self.folder, opener=github)
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "{}"}))
+        github.failures = [urllib.error.HTTPError("u", 404, "Not Found", None, None)]
+        with self.assertRaisesRegex(SystemExit, "404"):
+            readingsaudit.fetch(self.folder, "1.2.3+20000101000000", opener=github)
+        self.assertEqual(1, len(github.asked))
+
+    def test_reads_no_more_of_the_download_than_one_byte_past_its_size(self):
+        data = zipped({"jmdict-eng-9.9.9.json": "{}"})
+        github = FakeGitHub(data + b"x" * 1000)
+        github.release["assets"][1]["size"] = len(data)
+        with self.assertRaisesRegex(SystemExit, f"is {len(data) + 1} bytes or more"):
+            readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual(len(data) + 1, github.answers[1].asked)
+
+    def test_takes_no_zip_bigger_than_the_cap(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "{}"}))
+        github.release["assets"][1]["size"] = readingsaudit.MAX_ZIP_BYTES + 1
+        with self.assertRaisesRegex(SystemExit, "bigger than"):
+            readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual(1, len(github.asked))
+
+    def test_unzips_no_more_than_the_cap_whatever_the_zip_says(self):
+        github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": "x" * 100}))
+        with mock.patch.object(readingsaudit, "MAX_JSON_BYTES", 99), self.assertRaisesRegex(SystemExit, "more than 99 bytes"):
+            readingsaudit.fetch(self.folder, opener=github)
+        self.assertFalse((self.folder / "jmdict.json").exists())
+        # A zip that says its file is small but unzips to more is stopped, and nothing is kept.
+        data = bytearray(zipped({"jmdict-eng-9.9.9.json": "x" * 100}))
+        with zipfile.ZipFile(io.BytesIO(bytes(data))) as archive:
+            info = archive.infolist()[0]
+        # The size in the central directory, 4 bytes at offset 24 of its entry.
+        central = data.rindex(b"PK\x01\x02")
+        data[central + 24:central + 28] = (10).to_bytes(4, "little")
+        github = FakeGitHub(bytes(data))
+        with mock.patch.object(readingsaudit, "MAX_JSON_BYTES", 99), self.assertRaisesRegex(SystemExit, "doesn't unzip: Bad CRC"):
+            readingsaudit.fetch(self.folder, opener=github)
+        self.assertEqual(100, info.file_size)
+        self.assertFalse((self.folder / "jmdict.json").exists())
+
+    def test_takes_only_a_tag_jmdict_simplified_names_its_releases_with(self):
+        for tag in ("9.9.9+20000101000000,x", "9.9.9+20000101000000`x`", "latest", "9.9.9+2000"):
+            with self.subTest(tag):
+                with self.assertRaisesRegex(SystemExit, "isn't a jmdict-simplified release tag"):
+                    readingsaudit.fetch(self.folder, opener=FakeGitHub(zipped({"a.json": "{}"}), tag=tag))
+                github = FakeGitHub(zipped({"a.json": "{}"}))
+                with self.assertRaisesRegex(SystemExit, "isn't a jmdict-simplified release tag"):
+                    readingsaudit.fetch(self.folder, tag, opener=github)
+                self.assertEqual([], github.asked)
+        self.assertFalse((self.folder / "jmdict.json").exists())
+
+    def test_names_the_tag_for_the_workflow(self):
+        output = self.folder.parent / "output"
+        output.write_text("before=1\n")
+        with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}):
+            readingsaudit.fetch(self.folder, opener=FakeGitHub(zipped({"a.json": "{}"})))
+        self.assertEqual(f"before=1\ntag={TAG}\n", output.read_text())
 
     def test_puts_the_newest_jmdict_eng_in_the_folder_when_it_is_what_the_release_says(self):
         github = FakeGitHub(zipped({"jmdict-eng-9.9.9.json": '{"dictDate": "2000-01-01"}'}))
@@ -268,6 +368,11 @@ class Age(unittest.TestCase):
         self.assertTrue(any(line.startswith("old.txt is older than 90 days") for line in said))
         self.assertFalse(any(line.startswith("fresh.txt is older") for line in said))
 
+    def test_a_table_with_a_date_that_is_not_one_stops_the_check_and_says_so(self):
+        path = dated(self.folder, "bad.txt", "2026-13-45")
+        with self.assertRaisesRegex(SystemExit, "bad.txt has a JMdict date that is no date: 2026-13-45"):
+            readingsaudit.age([path], datetime.date(2000, 1, 1))
+
     def test_a_table_with_no_date_stops_the_check(self):
         path = self.folder / "undated.txt"
         path.write_text("星空\tほしぞら\n")
@@ -276,7 +381,37 @@ class Age(unittest.TestCase):
 
     def test_the_committed_tables_have_a_date_the_check_reads(self):
         for path in (readingsaudit.TABLE, readingsaudit.OLD_KANA):
-            self.assertGreaterEqual(readingsaudit.header_date(path), datetime.date(2026, 11, 9))
+            self.assertIsInstance(readingsaudit.header_date(path), datetime.date)
+
+
+class NoDowngrade(unittest.TestCase):
+    """A remake never goes back to an older JMdict than the committed lists: the licence asks for the newest."""
+
+    def setUp(self):
+        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(mock.patch("builtins.print"))
+        self.committed = dated(self.folder, "committed.txt", "2000-02-01")
+        jmdict = {"version": "9.9.9", "dictDate": "2000-01-01", "words": [entry([("星空", [])], [("ほしぞら", [], ["*"])])]}
+        (self.folder / "jmdict.json").write_text(json.dumps(jmdict, ensure_ascii=False))
+
+    def test_table_stops_on_an_older_jmdict_and_says_why(self):
+        with mock.patch.object(readingsaudit, "TABLE", self.committed), mock.patch.object(readingsaudit, "run") as run, \
+                self.assertRaisesRegex(SystemExit, "JMdict 2000-01-01 is older than the 2000-02-01 of committed.txt"):
+            readingsaudit.table(self.folder)
+        run.assert_not_called()
+        self.assertFalse((self.folder / "listed.txt").exists())
+
+    def test_oldkana_stops_on_an_older_jmdict_and_writes_nothing(self):
+        with mock.patch.object(readingsaudit, "OLD_KANA", self.committed), \
+                self.assertRaisesRegex(SystemExit, "newest version"):
+            readingsaudit.oldkana(self.folder)
+        self.assertIn("2000-02-01", self.committed.read_text())
+
+    def test_the_same_or_a_newer_jmdict_goes_on(self):
+        dated(self.folder, "committed.txt", "2000-01-01")
+        with mock.patch.object(readingsaudit, "OLD_KANA", self.committed):
+            readingsaudit.oldkana(self.folder)
+        self.assertTrue(self.committed.read_text().startswith("# JMdict 2000-01-01, "))
 
 
 class Run(unittest.TestCase):

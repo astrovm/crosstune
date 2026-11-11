@@ -34,8 +34,11 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -178,6 +181,7 @@ def old_kana_header(date, version):
 def oldkana(folder):
     """Writes the app's old-kana.txt from the JMdict in the folder: see old_kana."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
+    no_downgrade(jmdict["dictDate"], OLD_KANA)
     today, modern = old_kana(jmdict["words"])
     header = old_kana_header(jmdict["dictDate"], jmdict["version"])
     OLD_KANA.write_text("\n".join(header + [f"{kana}\t{lookup}" for kana, lookup in today.items()] + modern) + "\n")
@@ -190,6 +194,7 @@ OLD_KANA = ROOT / "app/src/main/resources/com/astrovm/crosstune/old-kana.txt"
 def table(folder, gradle=None):
     """The candidates for the app's jmdict-readings.txt, for the test that keeps those the app reads otherwise."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
+    no_downgrade(jmdict["dictDate"], TABLE)
     candidates = listed_candidates(jmdict["words"])
     header = table_header(jmdict["dictDate"], jmdict["version"])
     (folder / "listed.txt").write_text("\n".join(header + [f"{form}\t{kana}" for form, kana in candidates.items()]) + "\n")
@@ -216,13 +221,72 @@ JMDICT_RELEASES = "https://api.github.com/repos/scriptin/jmdict-simplified/relea
 JMDICT_ASSET = re.compile(r"jmdict-eng-\d[^/]*\.json\.zip")
 
 
+# jmdict-simplified's tags: its version, then when it was made. Nothing else reaches a URL or the workflow.
+TAG_FORM = re.compile(r"\d+\.\d+\.\d+\+\d{14}")
+# Seconds to wait on GitHub for each try.
+TIMEOUT = 60
+TRIES = 3
+# The zip is about 12 MB and its JSON about 120 MB: room to grow, but no download or unzip without end.
+MAX_ZIP_BYTES = 64 * 1024 * 1024
+MAX_JSON_BYTES = 512 * 1024 * 1024
+
+
+def with_tries(what, call):
+    """call(), tried again after 2 s and 4 s when the network or GitHub fails; a missing page fails at once."""
+    for attempt in range(1, TRIES + 1):
+        try:
+            return call()
+        except urllib.error.HTTPError as error:
+            if error.code < 500 and error.code != 429:
+                raise SystemExit(f"{what}: {error.code} {error.reason}")
+            failed = error
+        except (urllib.error.URLError, OSError) as error:
+            failed = error
+        if attempt == TRIES:
+            raise SystemExit(f"{what}: failed {TRIES} tries, the last with {failed}")
+        time.sleep(2 ** attempt)
+
+
 def github_json(url, opener):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "crosstune-readingsaudit"}
     # A runner's address shares GitHub's limit for anonymous calls with every other job on it.
     if os.environ.get("GH_TOKEN"):
         headers["Authorization"] = f"Bearer {os.environ['GH_TOKEN']}"
-    with opener(urllib.request.Request(url, headers=headers)) as answer:
-        return json.load(answer)
+
+    def ask():
+        with opener(urllib.request.Request(url, headers=headers), timeout=TIMEOUT) as answer:
+            return json.load(answer)
+    return with_tries(url, ask)
+
+
+def checked_tag(tag):
+    if not TAG_FORM.fullmatch(tag):
+        raise SystemExit(f"{tag!r} isn't a jmdict-simplified release tag, like 3.6.2+20261109214828")
+    return tag
+
+
+def unzip_json(data, name, out):
+    """Writes the zip's one JSON file to [out], if the zip says it is no bigger than MAX_JSON_BYTES.
+
+    zipfile unzips no more than the size the zip gives, and fails on the CRC when the file is longer.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            members = [m for m in archive.infolist() if m.filename.endswith(".json")]
+            if len(members) != 1:
+                raise SystemExit(f"{name} holds {len(members)} JSON files, not one")
+            if members[0].file_size > MAX_JSON_BYTES:
+                raise SystemExit(f"{name} unzips to more than {MAX_JSON_BYTES} bytes")
+            part = out.with_name(out.name + ".part")
+            try:
+                with archive.open(members[0]) as source, part.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+            except BaseException:
+                part.unlink(missing_ok=True)
+                raise
+            part.replace(out)
+    except zipfile.BadZipFile as error:
+        raise SystemExit(f"{name} doesn't unzip: {error}") from None
 
 
 def fetch(folder, tag=None, opener=urllib.request.urlopen):
@@ -230,9 +294,9 @@ def fetch(folder, tag=None, opener=urllib.request.urlopen):
 
     The file is taken by its release's tag, and must have the size and SHA-256 the release gives for it.
     """
-    url = f"{JMDICT_RELEASES}/latest" if tag is None else f"{JMDICT_RELEASES}/tags/{urllib.parse.quote(tag, safe='')}"
+    url = f"{JMDICT_RELEASES}/latest" if tag is None else f"{JMDICT_RELEASES}/tags/{urllib.parse.quote(checked_tag(tag), safe='')}"
     release = github_json(url, opener)
-    tag = release["tag_name"]
+    tag = checked_tag(release["tag_name"])
     assets = [a for a in release["assets"] if JMDICT_ASSET.fullmatch(a["name"])]
     if len(assets) != 1:
         raise SystemExit(f"release {tag} has {len(assets)} jmdict-eng zips, not one: {[a['name'] for a in release['assets']]}")
@@ -240,26 +304,35 @@ def fetch(folder, tag=None, opener=urllib.request.urlopen):
     expected = asset.get("digest") or ""
     if not expected.startswith("sha256:"):
         raise SystemExit(f"release {tag} gives no SHA-256 for {asset['name']}, so it can't be checked")
+    if asset["size"] > MAX_ZIP_BYTES:
+        raise SystemExit(f"release {tag} says {asset['name']} is {asset['size']} bytes, bigger than {MAX_ZIP_BYTES}")
     download = asset["browser_download_url"]
     # Compared decoded, as the + in a tag may come written as it is or as %2B.
     pinned = f"https://github.com/scriptin/jmdict-simplified/releases/download/{tag}/"
     if not urllib.parse.unquote(download).startswith(pinned):
         raise SystemExit(f"{asset['name']} isn't under release {tag}: {download}")
-    with opener(urllib.request.Request(download, headers={"User-Agent": "crosstune-readingsaudit"})) as answer:
-        data = answer.read()
+
+    def get():
+        request = urllib.request.Request(download, headers={"User-Agent": "crosstune-readingsaudit"})
+        with opener(request, timeout=TIMEOUT) as answer:
+            # One byte past the size is enough to know it's too long.
+            return answer.read(asset["size"] + 1)
+    data = with_tries(download, get)
+    if len(data) > asset["size"]:
+        raise SystemExit(f"{asset['name']} is {len(data)} bytes or more, release {tag} says {asset['size']}")
     if len(data) != asset["size"]:
         raise SystemExit(f"{asset['name']} is {len(data)} bytes, release {tag} says {asset['size']}")
     got = "sha256:" + hashlib.sha256(data).hexdigest()
     if got != expected:
         raise SystemExit(f"{asset['name']} has {got}, release {tag} says {expected}")
-    with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        members = [m for m in archive.namelist() if m.endswith(".json")]
-        if len(members) != 1:
-            raise SystemExit(f"{asset['name']} holds {len(members)} JSON files, not one")
-        folder.mkdir(parents=True, exist_ok=True)
-        # Written by its own name, whatever path the zip gives it.
-        (folder / "jmdict.json").write_bytes(archive.read(members[0]))
+    folder.mkdir(parents=True, exist_ok=True)
+    # Written by its own name, whatever path the zip gives it.
+    unzip_json(data, asset["name"], folder / "jmdict.json")
     print(f"jmdict-simplified {tag}, {asset['name']}, {got}, in {folder / 'jmdict.json'}")
+    # The workflow names the tag in its pull request; it has passed TAG_FORM, so it holds no newline.
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"tag={tag}\n")
     return tag
 
 
@@ -275,7 +348,18 @@ def header_date(path):
     found = re.match(r"# JMdict (\d{4}-\d{2}-\d{2}),", path.read_text().split("\n", 1)[0])
     if not found:
         raise SystemExit(f"{path} has no JMdict date in its first line")
-    return datetime.date.fromisoformat(found.group(1))
+    try:
+        return datetime.date.fromisoformat(found.group(1))
+    except ValueError:
+        raise SystemExit(f"{path} has a JMdict date that is no date: {found.group(1)}") from None
+
+
+def no_downgrade(dict_date, committed):
+    """Stops a remake from an older JMdict than [committed] has: the licence asks for the newest version."""
+    if committed.exists() and datetime.date.fromisoformat(dict_date) < header_date(committed):
+        raise SystemExit(f"JMdict {dict_date} is older than the {header_date(committed)} of {committed.name}."
+                         " The EDRDG licence asks for its newest version, so a remake never goes back;"
+                         " pick a newer jmdict-simplified release")
 
 
 def age(paths, today, max_days=MAX_AGE_DAYS):

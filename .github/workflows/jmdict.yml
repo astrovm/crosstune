@@ -64,9 +64,8 @@ jobs:
         run: |
           args=()
           if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
-          said=$(python3 scripts/readingsaudit/readingsaudit.py fetch "${args[@]}")
-          echo "$said"
-          echo "tag=$(sed -n 's/^jmdict-simplified \([^,]*\),.*/\1/p' <<< "$said")" >> "$GITHUB_OUTPUT"
+          # It writes tag= to GITHUB_OUTPUT, once the tag has the form of jmdict-simplified's.
+          python3 scripts/readingsaudit/readingsaudit.py fetch "${args[@]}"
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
