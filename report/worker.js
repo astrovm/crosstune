@@ -31,7 +31,7 @@ const LANGUAGE = /^[a-z_]+$/;
 /** What Android allows a package to be named: dotted words of letters, digits and underscores. */
 const PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
-/** The most lines put in time by hand a report carries. */
+/** The most lines put in time by hand a report keeps: the first ones, when the app sent more. */
 const MAX_POINTS = 300;
 
 /** How long a report is kept, as the privacy policy promises. Not exported: Workers take every export for an entrypoint. */
@@ -227,14 +227,14 @@ function speedOf(value) {
 }
 
 /**
- * The lines put in time by hand, as JSON, each with where the words had it and where it's heard:
- * null when there are none, undefined when they aren't lines put in time.
+ * The first [MAX_POINTS] lines put in time by hand, as JSON, each with where the words had it and where it's
+ * heard: null when there are none, undefined when they aren't lines put in time.
  */
 function timingOf(value) {
   if (value === undefined || value === null) return null;
-  if (!Array.isArray(value) || value.length > MAX_POINTS) return undefined;
+  if (!Array.isArray(value)) return undefined;
   const points = [];
-  for (const point of value) {
+  for (const point of value.slice(0, MAX_POINTS)) {
     if (!isObject(point)) return undefined;
     const timedMs = wholeMs(point.timedMs);
     const heardMs = signedMs(point.heardMs);

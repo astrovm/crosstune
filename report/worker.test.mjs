@@ -129,9 +129,15 @@ test("a song's details that aren't what they should be are left out", () => {
   assert.equal(report.timed, null);
   assert.equal(report.lengthMs, null);
   assert.equal(report.timing, null);
-  // Too many lines put in time is no report.
-  const many = Array.from({ length: 301 }, () => ({ line: "x", timedMs: 0, heardMs: 0 }));
-  assert.equal(readReport(JSON.stringify({ version: "2.12.0", song: { title: "Demo", artist: "Band", timing: many } })), null);
+  // More lines put in time than a report keeps: the first 300 are kept, and the report with them. The app doesn't
+  // cut them itself, and a report turned away for it would be lost.
+  const many = Array.from({ length: 450 }, (_, i) => ({ line: `line ${i}`, timedMs: i, heardMs: i }));
+  const kept = JSON.parse(readReport(JSON.stringify({ version: "2.12.0", song: { title: "Demo", artist: "Band", timing: many } })).timing);
+  assert.equal(kept.length, 300);
+  assert.deepEqual([kept[0].line, kept[299].line], ["line 0", "line 299"]);
+  // Past the 300th, a line isn't looked at, so one that isn't a line put in time costs nothing.
+  assert.equal(JSON.parse(readReport(JSON.stringify({ version: "2.12.0", song: { title: "Demo", artist: "Band", timing: [...many, 7] } })).timing).length, 300);
+  assert.equal(readReport(JSON.stringify({ version: "2.12.0", song: { title: "Demo", artist: "Band", timing: [7, ...many] } })), null);
 });
 
 test("reports older than the policy allows are deleted", async () => {
