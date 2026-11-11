@@ -30,6 +30,10 @@
 # GiB, slows a build down once it holds that much, as the kernel takes pages back. Both show how a test
 # does on a busy machine, without making the machine busy. Neither changes the slots.
 #
+# On a Mac the box runs in podman's machine, so the memory and the CPUs it can have are that machine's,
+# not the Mac's. A box asking for more than is there gets what is there, and is told. Nothing here needs
+# GNU's tools or a newer bash than the Mac's own: locks are taken through python3, which is needed anyway.
+#
 # Idle slot homes are evicted oldest first above 10 GiB (GRADLE_BOX_CACHE_BYTES overrides it).
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
 # A new seed is made only when the cache and its copy fit; its contents are then read-only.
@@ -45,6 +49,8 @@ root=$(git -C "$here" rev-parse --show-toplevel)
 common=$(cd "$root" && cd "$(git rev-parse --git-common-dir)" && pwd)
 state=${GRADLE_BOX_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/crosstune-gradle-box}
 sdk=${ANDROID_HOME:-$HOME/Android/Sdk}
+# Where Android Studio puts it on a Mac.
+[[ -d $sdk || -n ${ANDROID_HOME:-} || ! -d $HOME/Library/Android/sdk ]] || sdk=$HOME/Library/Android/sdk
 key=$HOME/.android/debug.keystore
 
 if [[ ! -d $sdk ]]; then
@@ -52,11 +58,32 @@ if [[ ! -d $sdk ]]; then
     exit 1
 fi
 
+# flock(1) isn't on a Mac. The lock is on the open file, so it stays with this shell, which keeps the
+# file open, after python3 that took it is gone. "now" gives up when another holds it.
+lock() {
+    python3 -c 'import fcntl, sys
+try:
+    fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX | (fcntl.LOCK_NB if sys.argv[2:] else 0))
+except BlockingIOError:
+    sys.exit(1)' "$@"
+}
+
+# Off Linux, podman runs the box in a machine of its own, which has to be on, and the box can have
+# no more memory or CPUs than it has.
+meminfo=${GRADLE_BOX_MEMINFO:-/proc/meminfo}
+machine=
+if [[ ! -r $meminfo ]]; then
+    if ! machine=$(podman info --format '{{.Host.MemTotal}} {{.Host.CPUs}}' 2>/dev/null) || [[ ! $machine =~ ^[0-9]+\ [0-9]+$ ]]; then
+        echo "gradle-box: podman isn't answering. On a Mac, start its machine: podman machine start" >&2
+        exit 1
+    fi
+fi
+
 # Git is in the image. Hold the lock only for the build, so a Gradle slot stays free meanwhile.
 ensure_box_image() {
     mkdir -p "$state"
     exec 8>"$state/image.lock"
-    flock 8
+    lock 8
     if ! nice -n 10 podman image exists "$image"; then
         echo "gradle-box: building $image" >&2
         local start
@@ -69,12 +96,24 @@ ensure_box_image() {
 ensure_box_image
 
 memory=${GRADLE_BOX_MEMORY:-16}
-ram=$(awk '/^MemTotal/ { print int($2 / 1048576 + 0.5) }' /proc/meminfo)
+if [[ -z $machine ]]; then
+    ram=$(awk '/^MemTotal/ { print int($2 / 1048576 + 0.5) }' "$meminfo")
+    cores=$(nproc)
+else
+    ram=$(awk -v bytes="${machine% *}" 'BEGIN { print int(bytes / 1073741824 + 0.5) }')
+    cores=${machine#* }
+    # All of a small machine goes to the one build: it is there for nothing else.
+    if ((memory > ram)); then
+        echo "gradle-box: podman's machine has $ram GiB, so the build gets that, not $memory. A full build needs more: podman machine set --memory" >&2
+        memory=$ram
+    fi
+    ((memory >= 1)) || memory=1
+fi
 fit=$((ram * 3 / 4 / memory))
 slots=${GRADLE_BOX_SLOTS:-$fit}
 ((slots <= fit)) || slots=$fit
 ((slots >= 1)) || slots=1
-cpus=$(($(nproc) / slots))
+cpus=$((cores / slots))
 ((cpus >= 1)) || cpus=1
 # A fraction, like 0.5, is fine: podman takes it as a share of one CPU.
 if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpus" 'BEGIN { exit !(want > 0 && want < have) }'; then
@@ -116,7 +155,7 @@ take_a_slot() {
     local n
     for ((n = 1; n <= slots; n++)); do
         exec 9>"$state/slot-$n.lock"
-        if flock -n 9; then
+        if lock 9 now; then
             slot=$n
             return 0
         fi
@@ -150,8 +189,16 @@ home=$state/gradle-$slot
 seed=$state/seed
 mkdir -p "$home"
 # Gradle itself isn't a dependency, so the read-only cache doesn't cover it.
+# A copy that shares the files' blocks where the disk can, with GNU's cp or the Mac's.
+copy() {
+    cp -a --reflink=auto "$1" "$2" 2>/dev/null || cp -a -c "$1" "$2" 2>/dev/null || cp -a "$1" "$2"
+}
+# What a folder takes on disk, in bytes.
+bytes() {
+    echo $(($(du -sk "$1" | cut -f1) * 1024))
+}
 if [[ -d $seed/wrapper && ! -d $home/wrapper ]]; then
-    cp -a --reflink=auto "$seed/wrapper" "$home/wrapper"
+    copy "$seed/wrapper" "$home/wrapper"
 fi
 box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
     -v "$root:$root" -v "$sdk:$sdk:ro" -v "$home:$home"
@@ -181,17 +228,18 @@ fi
 keep_downloads() {
     [[ -d $home/caches/modules-2 && ! -e $seed ]] || return 0
     local limit=${GRADLE_BOX_CACHE_BYTES:-10737418240} used downloads
-    used=$(du -sB1 "$state" | cut -f1)
-    downloads=$(du -sB1 "$home/caches/modules-2" | cut -f1)
-    [[ ! -d $home/wrapper ]] || downloads=$((downloads + $(du -sB1 "$home/wrapper" | cut -f1)))
+    used=$(bytes "$state")
+    downloads=$(bytes "$home/caches/modules-2")
+    [[ ! -d $home/wrapper ]] || downloads=$((downloads + $(bytes "$home/wrapper")))
     ((used + downloads <= limit)) || return 0
     local new=$state/seed.$$
     mkdir -p "$new"
-    cp -a --reflink=auto "$home/caches/modules-2" "$new/"
-    [[ ! -d $home/wrapper ]] || cp -a --reflink=auto "$home/wrapper" "$new/"
+    copy "$home/caches/modules-2" "$new/"
+    [[ ! -d $home/wrapper ]] || copy "$home/wrapper" "$new/"
     # Gradle takes a directory with these in it for one in use, not a read-only copy.
     find "$new" \( -name '*.lock' -o -name gc.properties \) -delete
-    mv -T "$new" "$seed" 2>/dev/null || rm -rf "$new"
+    # A rename, which fails when another build's seed is there already, where mv would move into it.
+    python3 -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' "$new" "$seed" 2>/dev/null || rm -rf "$new"
 }
 
 stalled_before=$(stalled total)

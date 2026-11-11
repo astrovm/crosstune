@@ -1,6 +1,7 @@
 """Runs gradle-box.sh for real, with a stand-in podman that says what it was asked and waits when told."""
 import hashlib
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -11,6 +12,15 @@ from pathlib import Path
 BOX = Path(__file__).with_name("gradle-box.sh")
 ROOT = Path(__file__).resolve().parents[2]
 FAKE_PODMAN = """#!/bin/sh
+if [ "$1" = "info" ]; then
+    echo "$*" >> "$FAKE_DIR/info"
+    if [ -z "$FAKE_MACHINE" ]; then
+        echo "Cannot connect to Podman" >&2
+        exit 125
+    fi
+    echo "$FAKE_MACHINE"
+    exit 0
+fi
 if [ "$1" = "image" ]; then
     if [ -n "$FAKE_NO_IMAGE" ]; then
         exit 1
@@ -51,6 +61,8 @@ class GradleBoxTest(unittest.TestCase):
         self.sdk = self.home / "Android" / "Sdk"
         self.sdk.mkdir(parents=True)
         self.pressure = self.dir / "pressure"
+        self.meminfo = self.dir / "meminfo"
+        self.meminfo.write_text("MemTotal:       67108864 kB\nMemFree:         1000000 kB\n")
         self.stall(lately=0, total_s=0)
 
     def start(self, run, *args, slots="1", **env):
@@ -59,7 +71,7 @@ class GradleBoxTest(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            env={
+            env={name: value for name, value in {
                 "PATH": f"{self.dir / 'bin'}:{os.environ['PATH']}",
                 "HOME": str(self.home),
                 "ANDROID_HOME": str(self.sdk),
@@ -69,11 +81,26 @@ class GradleBoxTest(unittest.TestCase):
                 "GRADLE_BOX_MEMORY": "1",
                 # The machine running the tests may be short of memory; these builds don't care.
                 "GRADLE_BOX_PRESSURE": str(self.pressure),
+                # The machine's memory, as Linux tells it, on a Mac too: 64 GiB.
+                "GRADLE_BOX_MEMINFO": str(self.meminfo),
                 "FAKE_DIR": str(self.dir),
                 "FAKE_RUN": run,
                 **env,
-            },
+            }.items() if value is not None},
         )
+
+    def tool(self, name, script):
+        """A stand-in for one of the machine's tools, ahead of the real one."""
+        path = self.dir / "bin" / name
+        path.write_text("#!/bin/sh\n" + script)
+        path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+    def only_a_macs_tools(self):
+        """cp, du and mv that take no GNU option, and no flock at all, as on a Mac."""
+        for name, option in (("cp", "--reflink*"), ("du", "-sB1"), ("mv", "-T")):
+            real = shutil.which(name)
+            self.tool(name, f'for arg in "$@"; do case "$arg" in {option}) echo "{name}: illegal option" >&2; exit 64;; esac; done\nexec {real} "$@"\n')
+        self.tool("flock", f'touch "{self.dir}/flock-asked"\necho "flock: command not found" >&2\nexit 127\n')
 
     def stall(self, lately, total_s):
         """Linux's memory pressure as /proc/pressure/memory says it: how much every task waited on memory."""
@@ -286,6 +313,77 @@ class GradleBoxTest(unittest.TestCase):
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertNotIn("memory", output)
+
+    def test_off_linux_the_box_gets_no_more_than_podmans_machine_has(self):
+        box = self.start("a", "help", GRADLE_BOX_MEMINFO=str(self.dir / "none"), GRADLE_BOX_MEMORY="16", FAKE_MACHINE="3221225472 3")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn("podman's machine has 3 GiB, so the build gets that, not 16", output)
+        command = self.asked()[0]
+        self.assertIn("--cpus 3 ", command)
+        self.assertIn("--memory 3g --memory-swap 3g", command)
+
+    def test_off_linux_a_box_that_fits_podmans_machine_is_told_nothing(self):
+        box = self.start("a", "help", GRADLE_BOX_MEMINFO=str(self.dir / "none"), FAKE_MACHINE="17179869184 8")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertNotIn("machine", output)
+        self.assertIn("--cpus 8 ", self.asked()[0])
+        self.assertIn("--memory 1g", self.asked()[0])
+
+    def test_off_linux_says_so_when_podmans_machine_is_off(self):
+        box = self.start("a", "help", GRADLE_BOX_MEMINFO=str(self.dir / "none"))
+        output, _ = box.communicate(timeout=20)
+        self.assertNotEqual(box.returncode, 0)
+        self.assertIn("podman machine start", output)
+        self.assertEqual(self.asked(), [])
+
+    def test_on_linux_podman_is_not_asked_about_a_machine(self):
+        box = self.start("a", "help")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertFalse((self.dir / "info").exists())
+
+    def test_the_sdk_is_found_where_a_mac_keeps_it(self):
+        sdk = self.home / "Library" / "Android" / "sdk"
+        sdk.mkdir(parents=True)
+        self.sdk.rmdir()
+        box = self.start("a", "help", ANDROID_HOME=None)
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn(f"-v {sdk}:{sdk}:ro", self.asked()[0])
+
+    def test_a_second_build_waits_with_only_a_macs_tools(self):
+        self.only_a_macs_tools()
+        self.hold("first")
+        first = self.start("first", "help")
+        self.wait_for("started.first")
+        second = self.start("second", "help")
+        time.sleep(0.5)
+        self.assertFalse((self.dir / "started.second").exists())
+        self.release("first")
+        output, _ = first.communicate(timeout=20)
+        self.assertEqual(first.returncode, 0, output)
+        output, _ = second.communicate(timeout=20)
+        self.assertEqual(second.returncode, 0, output)
+        self.assertTrue((self.dir / "started.second").exists())
+        self.assertFalse((self.dir / "flock-asked").exists())
+
+    def test_downloads_are_kept_and_read_with_only_a_macs_tools(self):
+        self.only_a_macs_tools()
+        box = self.start("a", "help", FAKE_DOWNLOADS="1")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertNotIn("illegal option", output)
+        self.assertTrue((self.seed() / "modules-2" / "files-2.1" / "some.jar").exists())
+        self.assertEqual([path.name for path in (self.dir / "state").glob("seed.*")], [])
+        (self.dir / "state" / "gradle-1" / "wrapper" / "dists" / "gradle.zip").unlink()
+        shutil.rmtree(self.dir / "state" / "gradle-1" / "wrapper")
+        again = self.start("b", "help")
+        output, _ = again.communicate(timeout=20)
+        self.assertEqual(again.returncode, 0, output)
+        self.assertNotIn("illegal option", output)
+        self.assertTrue((self.dir / "state" / "gradle-1" / "wrapper" / "dists" / "gradle.zip").exists())
 
     def test_fewer_cpus_can_be_asked_for_never_more(self):
         box = self.start("fewer", "help", GRADLE_BOX_CPUS="0.5")
