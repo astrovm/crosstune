@@ -762,6 +762,9 @@ private fun LicensesPage(onBack: () -> Unit) {
     // off this pass: the longest text is hundreds of thousands of characters.
     var splitGeneration by remember { mutableIntStateOf(0) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
+    // Made again with a licence open, the page needs its pieces at once, or the list can't go back to where it was
+    // scrolled to. Only then is a text split here; one opened by a press is split off this pass, below.
+    remember { Notices.all.filter { it.name in open }.forEach { LicenseSplits.make(it) } }
     val units = remember(open, splitGeneration) {
         open.mapNotNull { name -> LicenseSplits.of(name)?.let { name to it } }.toMap()
     }
