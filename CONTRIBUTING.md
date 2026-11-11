@@ -73,21 +73,21 @@ Chords from J-Total sit over the letter they sit over on J-Total's page. The pag
 
 Remake it with `python3 scripts/readingsaudit/readingsaudit.py table`, with `jmdict.json` (jmdict-eng) in the audit folder. It runs `JmdictReadings` in the build box, which keeps a word only where the app reads it otherwise. Then measure the change with the same script's `run` and `compare --before`, on a copy of the audit from before; its top has the commands.
 
-A word that already reads as it is sung stays that way. [`readings-golden.tsv`](app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv) locks each such word: the shortest line it is in, the kana, and whether IPADIC, UniDic or both read it so. `ReadingsGoldenTest` reads every row back with the app.
+A reading that is already right stays right. [`readings-golden.tsv`](app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv) locks every word the audit finds read as it is sung, with IPADIC, UniDic or both: its kana, and the parts they go over. Each is locked on the shortest stretch of its line that the app reads the same way, so the file holds bits of lines, not whole songs. `ReadingsGoldenTest` reads every row back with the app, and fails when the file has fewer rows than its header says.
 
-A fix that makes a word read right adds its row. From the audit folder:
+A fix that makes a word read right adds its row. After `run`, with the same audit folder:
 
 ```bash
 python3 scripts/readingsaudit/readingsaudit.py golden
 ```
 
-The command adds rows. It does not remove or change one. When a locked word now reads otherwise, it names the word and exits with an error. To keep a change you mean, name the word:
+It runs `GoldenContexts` in the build box, which finds each stretch. The command adds rows. It does not remove or change one. When a locked word now reads otherwise, it names the word and exits with an error, and so does a right reading it can't lock. A change you mean drops that lock, for that word and kana only:
 
 ```bash
-python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD
+python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA
 ```
 
-A change to `Readings.kt` or `Furigana.kt` has to change that file too. When no reading changes, put `golden: none` in a commit message.
+The lint job holds a pull request to the same rules. A pull request that removes or changes a row needs a line `golden: accept WORD KANA` in its body for each. One that changes how readings are made (`Readings.kt`, `Furigana.kt`, `UniDic.kt`, `jmdict-readings.txt`, `old-kana.txt` or the Kuromoji version) has to change the file too, or say `golden: none` on a line of its body when no reading changes. The job reads the body when it runs: after an edit, run it again.
 
 [`old-kana.txt`](app/src/main/resources/com/astrovm/crosstune/old-kana.txt) helps `Readings` read old kana in kana alone, which IPADIC splits: おもひで is おもいで. It lists JMdict's common words in kana with い or う after their first kana, each with the form it's looked up by, and the words in kana written with ひ or ふ today, おひる or くふう, where a ひ or ふ is no old kana. It's from JMdict as well, under the same license, and its header says so. Remake it with `python3 scripts/readingsaudit/readingsaudit.py oldkana`, with `jmdict.json` in the audit folder. Measure a change to old kana with `OldKanaNotes`, which lists every line that gets an old spelling note, with and without UniDic: `./gradlew :app:songCheck -PsongcheckTest=com.astrovm.crosstune.songcheck.OldKanaNotes -PsongcheckDir=FOLDER`, with the audit folder as `FOLDER` so its songs in `found/` count too. Then `diff` its `oldkana/` against a run from before. A note on a modern line is a false note.
 

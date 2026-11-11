@@ -183,16 +183,26 @@ jobs:
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      # The golden readings check reads the pull request's body.
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           fetch-depth: 2
 
-      # The pull request merged into main, and main before it. A readings change has to
-      # change the golden file, or say golden: none in a commit message.
-      - name: A readings change keeps the golden file
-        run: python3 scripts/readingsaudit/check_golden.py
+      # The pull request keeps every locked reading, and a readings change changes the golden file.
+      # Its marks are lines of its body, read as the body is now: after an edit, run this job again.
+      - name: A pull request keeps the locked readings
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.body // ""' > "$RUNNER_TEMP/pr-body.md"
+          python3 scripts/readingsaudit/check_golden.py --body-file "$RUNNER_TEMP/pr-body.md"
 
       # Tangled new code is split up, never listed in detekt's baseline to pass.
       - name: Detekt's baseline only shrinks
