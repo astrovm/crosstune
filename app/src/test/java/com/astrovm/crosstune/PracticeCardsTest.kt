@@ -1793,11 +1793,13 @@ class PracticeCardsTest {
         reached(ytMusic)
     }
 
+    // Each YouTube Music replay starts further on, as warm it was, not at 43000 paused, as cold: that's at the line already, and the rest would go unread.
+
     // YouTube Music, cold: it says the song's start, playing, then plays near the line, falls out, and comes back paused there.
     @Test
     fun youTubeMusicColdBackAtTheStartFirstStillGetsThere() {
         installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
-        replays(ytMusic, start = 43_270, from = 43_000, fromPlaying = false, Said(316, 0, playing = true), Said(366, 43_208, playing = true), Said(466, null), Said(1_011, 43_577))
+        replays(ytMusic, start = 43_270, from = 56_725, fromPlaying = false, Said(316, 0, playing = true), Said(366, 43_208, playing = true), Said(466, null), Said(1_011, 43_577))
         cards().start(null, before = null)
         reached(ytMusic)
     }
@@ -1806,7 +1808,7 @@ class PracticeCardsTest {
     @Test
     fun youTubeMusicColdPlayingOnFromWhereItWasStillGetsThere() {
         installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
-        replays(ytMusic, start = 43_270, from = 43_000, fromPlaying = false, Said(287, 43_052, playing = true), Said(386, 43_056, playing = true), Said(437, null), Said(963, 43_643))
+        replays(ytMusic, start = 43_270, from = 56_725, fromPlaying = false, Said(287, 43_052, playing = true), Said(386, 43_056, playing = true), Said(437, null), Said(963, 43_643))
         cards().start(null, before = null)
         reached(ytMusic)
     }
@@ -1815,7 +1817,7 @@ class PracticeCardsTest {
     @Test
     fun anAppPausedAtTheSongsStartIsWaitedFor() {
         installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
-        replays(ytMusic, start = 43_270, from = 43_000, fromPlaying = false, Said(292, 0), Said(408, 0), Said(558, null), Said(1_037, 0), Said(1_400, 43_270))
+        replays(ytMusic, start = 43_270, from = 56_725, fromPlaying = false, Said(292, 0), Said(408, 0), Said(558, null), Said(1_037, 0), Said(1_400, 43_270))
         cards().start(null, before = null)
         reached(ytMusic)
     }
