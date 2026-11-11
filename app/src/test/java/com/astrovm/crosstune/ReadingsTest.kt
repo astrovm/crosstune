@@ -670,6 +670,35 @@ class ReadingsTest {
     }
 
     @Test
+    fun aModernWordTheDictionarySplitsIsSaidAsItIsWritten() {
+        // IPADIC says the verb いふ as いう and いひ as いい. Inside a longer word written so today, that sound is the word's own.
+        // たいふう, こうふく and まほう are modern too, and their long vowels stay. おおはば's は is the particle wa, not old kana.
+        val lines = listOf(
+            "さいふ" to "saifu",
+            "かいひ" to "kaihi",
+            "ないふ" to "naifu",
+            "いふう" to "ifuu",
+            "けいひ" to "keihi",
+            "がいふう" to "gaifuu",
+            "ぼくのさいふ" to "bokunosaifu",
+            "たいふう" to "taifuu",
+            "こうふく" to "koofuku",
+            "まほう" to "mahoo",
+            "おおはば" to "oowaba",
+            "とかいふう" to "tokaifuu"
+        )
+        fun check() = lines.forEach { (line, romaji) ->
+            val read = Readings.of(listOf(line), Script.JAPANESE).single()
+            assertEquals("$line said [${read.romanized}]", romaji, read.romanized.replace(" ", ""))
+            assertEquals("$line kana", line, read.reading)
+            assertEquals(line, emptyList<String>(), Readings.words(line, Script.JAPANESE).mapNotNull { it.modern })
+            assertEquals(line, romaji, Readings.words(line, Script.JAPANESE).joinToString("") { it.romanized.orEmpty() })
+        }
+        check()
+        TestUniDic.reading { check() }
+    }
+
+    @Test
     fun threadsThatAskForATableAtOnceGetTheOneTableReadOnce() {
         // Issue #911: each thread that asked before the first had read the file read it again, into a table of its own.
         fun <T> atOnce(forget: () -> Unit, ask: () -> T): List<T> {

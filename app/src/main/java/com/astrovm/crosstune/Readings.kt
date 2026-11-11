@@ -98,7 +98,7 @@ internal object Readings {
      * worked out again: 2 for the readings a song is sung with, which were asked for in a way that found none,
      * and the dictionary's common misreadings, as 君 after a pause; 4 for counters, minutes, classical
      * verbs, the nouns IPADIC takes for suffixes, and the words JMdict reads one way only; 5 for words in old kana
-     * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ, 何分 as なんぷん,
+     * alone that IPADIC splits, とりあふ and おもひで, modern words in kana that only looked old, さいふ said as written, 何分 as なんぷん,
      * 洒落る, and numbers that start a longer word, 一重項.
      */
     const val VERSION = 5
@@ -177,7 +177,7 @@ internal object Readings {
     private fun pieces(line: String): List<Piece> {
         val text = line.mapIndexed { at, c -> NEW_FORMS[c] ?: KANJI_DIGITS[c]?.takeIf { counts(line, at) } ?: c }.joinToString("")
         val known = okurigana(line, text, ipadicPieces(line, text))
-        return modernPieces(uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known)
+        return saidAsWritten(modernPieces(uniDic?.let { mixed(known, uniDicPieces(it, line, text)) } ?: known))
     }
 
     /** [line] as IPADIC splits [text], the line with its kanji made the dictionary's. */
@@ -1192,6 +1192,19 @@ internal object Readings {
         val ruled = word.joinToString("") { it.today ?: it.surface }.trim { !it.isLetterOrDigit() }.takeIf { it != text }
         val modern = (if (inLongerWord(text, line, place)) null else spelledToday(text, kana, said, ipadicSaid)) ?: ruled
         return Word(text, kana.takeIf { it != text }, romaji(said), lookup = base, typed = romaji(typed, typed = true), by = by, modern = modern)
+    }
+
+    /**
+     * IPADIC says the verb いふ as いう, and いひ as いい. Where [inLongerWord] says that is not old kana,
+     * いふ in さいふ, the piece is said as it is written too: the note and the sound are one decision.
+     */
+    private fun saidAsWritten(pieces: List<Piece>): List<Piece> {
+        val line = pieces.joinToString("") { it.surface }
+        var at = 0
+        return pieces.map { piece ->
+            val place = at until (at + piece.surface.length).also { at = it }
+            if (piece.said != piece.kana && inLongerWord(piece.surface, line, place)) piece.reading(piece.kana, piece.kana) else piece
+        }
     }
 
     /** Whether a word in old kana alone, [text] at [place] in [line], is inside a longer word written so today: いふ in さいふ is 財布, whatever the dictionaries split. */
