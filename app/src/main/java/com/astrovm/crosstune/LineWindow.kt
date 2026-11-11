@@ -17,13 +17,15 @@ internal data class LineWindow(val start: Long, val end: Long) {
     fun near(position: Long) = abs(position - start) <= SEEK_SLACK_MS
 
     /**
-     * The app, sent here from [from], says it stopped short: paused before the line, as TIDAL at its 30 s preview's end, at a
-     * place it says is new. Where it was may be said again before it moves (paused, where playing on from there took it by
-     * then, as one paused before it seeks says), and so may the song's start, where YouTube Music sits while it loads: neither
-     * says it went anywhere. A real place short of the line does, so the app needn't be waited for.
+     * The app, sent here, says it stopped short: paused before the line, as TIDAL at its 30 s preview's end, at a place it
+     * says is new. Places it [was] may be said again before it moves: where it was said to be since it was sent, or was sent
+     * to a moment before, or where playing on from one of those took it by then, as one paused before it seeks says. So may
+     * the song's start, where YouTube Music sits while it loads. None says it went anywhere. A real place short of the line
+     * does, so the app needn't be waited for.
      */
-    fun stoppedShort(clock: PlaybackClock, from: PlaybackClock): Boolean =
-        !clock.playing && clock.positionMs in SEEK_SLACK_MS..<start - SEEK_SLACK_MS && abs(clock.positionMs - from.positionAt(clock.atMs)) > SEEK_SLACK_MS
+    fun stoppedShort(clock: PlaybackClock, was: List<PlaybackClock>): Boolean =
+        !clock.playing && clock.positionMs in SEEK_SLACK_MS..<start - SEEK_SLACK_MS &&
+            was.none { clock.positionMs in it.positionMs - SEEK_SLACK_MS..it.positionAt(clock.atMs) + SEEK_SLACK_MS }
 
     /** The app has played the line out. */
     fun over(position: Long) = position >= end
@@ -73,3 +75,24 @@ internal data class LineWindow(val start: Long, val end: Long) {
 
 /** Whether something that began at [since] has lasted [atLeast] ms by [now]; never, when it hasn't begun. */
 internal fun lasted(since: Long?, now: Long, atLeast: Long) = since != null && now - since >= atLeast
+
+/**
+ * Where Crosstune sent each app lately, by package, as a paused clock at that place: an app sent on to the next card a
+ * moment after the last may still say the last card's line, which isn't where it stopped. Times are [PlaybackClock.atMs]'s.
+ */
+internal class SentPlaces {
+    private val sent = mutableMapOf<String?, List<PlaybackClock>>()
+
+    /** Notes that [app] was sent to [positionMs] at [atMs], forgetting what's too old to matter. */
+    fun note(app: String?, positionMs: Long, atMs: Long) {
+        sent[app] = lately(app, atMs) + PlaybackClock(positionMs, atMs, playing = false)
+    }
+
+    /** Where [app] was sent in the [LATELY_MS] before [nowMs]. */
+    fun lately(app: String?, nowMs: Long): List<PlaybackClock> = sent[app].orEmpty().filter { nowMs - it.atMs <= LATELY_MS }
+
+    companion object {
+        /** How long a place an app was sent to may still be said: twice the wait for it to get there. */
+        const val LATELY_MS = 2 * LineWindow.SEEK_WAIT_MS
+    }
+}

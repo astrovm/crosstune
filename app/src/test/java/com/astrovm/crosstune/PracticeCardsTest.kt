@@ -1699,9 +1699,10 @@ class PracticeCardsTest {
 
     /**
      * What a music app said after it was sent to a line: [afterMs] after it was asked to pause there, at [positionMs], playing
-     * or not, or nothing, as one that falls out. [onTheWay]: paused where playing on from where it was took it by then.
+     * or not, or nothing, as one that falls out. [onTheWay]: paused where playing on from where it was took it by then. Its
+     * clock is from when it says it, or from [updatedMs] after it was sent, which may be before, as a report already on its way.
      */
-    private data class Said(val afterMs: Long, val positionMs: Long?, val playing: Boolean = false, val onTheWay: Boolean = false)
+    private data class Said(val afterMs: Long, val positionMs: Long?, val playing: Boolean = false, val onTheWay: Boolean = false, val updatedMs: Long? = null)
 
     /**
      * [app], at [from] and playing or not, says [said] once it's sent to [start], as it did on the Samsung (Issue #846), each with
@@ -1711,6 +1712,12 @@ class PracticeCardsTest {
         youTubeHasTheSong()
         keep(line(start = start))
         appPlays(app, speed = 1f, positionMs = from)
+        return answers(app, from, fromPlaying, *said)
+    }
+
+    /** [app], at [from] and playing or not, says [said] once it's next sent to a line, see [replays]. */
+    private fun answers(app: String, from: Long, fromPlaying: Boolean, vararg said: Said): AtomicLong {
+        val seeksBefore = playback.seeks.size
         playback.obeys = false
         val flow = playback.appPlaying.getValue(app)
         val song = flow.value
@@ -1719,12 +1726,13 @@ class PracticeCardsTest {
         val firstSaid = AtomicLong()
         val replayed = AtomicBoolean(false)
         playback.onPlay = { asked, play ->
-            if (asked == app && !play && playback.seeks.isNotEmpty() && replayed.compareAndSet(false, true)) {
+            if (asked == app && !play && playback.seeks.size > seeksBefore && replayed.compareAndSet(false, true)) {
                 val sent = System.nanoTime()
+                val sentAt = System.currentTimeMillis()
                 thread {
-                    said.forEach { (afterMs, positionMs, playing, onTheWay) ->
+                    said.forEach { (afterMs, positionMs, playing, onTheWay, updatedMs) ->
                         Thread.sleep(maxOf(0, afterMs - TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - sent)))
-                        val at = System.currentTimeMillis()
+                        val at = updatedMs?.let { sentAt + it } ?: System.currentTimeMillis()
                         flow.value = (if (onTheWay) was.positionAt(at) else positionMs)?.let { song?.copy(clock = PlaybackClock(it, at, 1f, playing)) }
                         firstSaid.compareAndSet(0, System.nanoTime())
                     }
@@ -1752,8 +1760,31 @@ class PracticeCardsTest {
         // The wait for an app to get there is 3 s. Given up on as soon as it said it stopped, even on a busy machine.
         assertTrue("TIDAL was given up on $waitedMs ms after it said it stopped", waitedMs < 1_000)
         assertTrue("$tidal stopped at 29952 ms, short of the line" in steps())
-        assertEquals(false, traits.of(tidal).seeks)
+        // Stopped short of this line, it may get to the next: it isn't remembered not to seek.
+        assertEquals(AppTraits(), traits.of(tidal))
         waitFor("the player takes over") { player.shown.isNotEmpty() }
+    }
+
+    // TIDAL given up on at once is left out till Crosstune starts again: then it's tried first again, as preferred.
+    @Test
+    fun anAppThatStoppedShortIsTriedAgainNextTime() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        val tidal = MusicService.TIDAL.packageName
+        installed(tidal, preferred = Destination.Service(MusicService.TIDAL))
+        replays(tidal, start = 43_270, from = 65, fromPlaying = true, Said(117, 29_952), Said(168, 29_952))
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        // Not again this time: practised again, the card goes straight to the player.
+        val tried = steps().count { it == "trying $tidal" }
+        cards.stop()
+        cards.start(null, before = null)
+        waitFor("the player plays it again") { player.shown.size > 1 }
+        assertEquals(tried, steps().count { it == "trying $tidal" })
+        cards.stop()
+        // Next time Crosstune starts, it is.
+        cards().start(null, before = null)
+        waitFor("$tidal is tried again") { steps().count { it == "trying $tidal" } > tried }
     }
 
     // Warm, TIDAL already stopped at its preview's end says that same place again: that isn't told from not having moved yet.
@@ -1813,13 +1844,16 @@ class PracticeCardsTest {
         reached(ytMusic)
     }
 
-    // YouTube Music, cold, paused at the song's start, as it was while loading, before it says the line: the start proves nothing.
+    // YouTube Music, cold, paused at the song's start, as it was while loading, and never anywhere else, as recorded: the start
+    // proves nothing, so it's waited for as long as any app is.
     @Test
     fun anAppPausedAtTheSongsStartIsWaitedFor() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
         installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
-        replays(ytMusic, start = 43_270, from = 56_725, fromPlaying = false, Said(292, 0), Said(408, 0), Said(558, null), Said(1_037, 0), Said(1_400, 43_270))
+        val said = replays(ytMusic, start = 43_270, from = 56_725, fromPlaying = false, Said(292, 0), Said(408, 0), Said(458, 0), Said(558, null), Said(1_037, 0))
         cards().start(null, before = null)
-        reached(ytMusic)
+        assertTrue(givenUpAfterMs(ytMusic, said) >= LineWindow.SEEK_WAIT_MS - 500)
+        assertTrue(steps().none { "short of the line" in it })
     }
 
     // Morphe's YouTube Music, cold: it plays on from where it was to the line, then pauses there.
@@ -1851,6 +1885,61 @@ class PracticeCardsTest {
         replays(ytMusic, start = 43_270, from = 10_000, fromPlaying = true, Said(100, null, onTheWay = true), Said(600, 43_270))
         cards().start(null, before = null)
         reached(ytMusic)
+    }
+
+    // The same, paused on the way 2 s on: past the slack from where it was, but where playing on took it.
+    @Test
+    fun anAppPausedLateOnTheWayIsWaitedFor() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 10_000, fromPlaying = true, Said(2_000, null, onTheWay = true), Said(2_300, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // Paused on the way, then saying that same place again later, with a new time: where playing on took it by then is past it.
+    @Test
+    fun anAppSayingAgainWhereItPausedIsWaitedFor() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 10_000, fromPlaying = true, Said(100, 10_100), Said(1_700, 10_100), Said(2_000, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // Back at the song's start playing, then paused there 1.7 s on, which Playback keeps as paused at 1700, where it played on to.
+    @Test
+    fun anAppBackAtTheStartThatPausesLaterIsWaitedFor() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 56_725, fromPlaying = false, Said(300, 0, playing = true), Said(2_000, 1_700), Said(2_300, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // A report the app made before it was sent, on its way to Crosstune, isn't its answer, wherever it says it is.
+    @Test
+    fun aReportFromBeforeTheAppWasSentIsWaitedPast() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        replays(ytMusic, start = 43_270, from = 5_000, fromPlaying = false, Said(150, 20_000, updatedMs = -200), Said(400, 43_270))
+        cards().start(null, before = null)
+        reached(ytMusic)
+    }
+
+    // Sent on from the last line before the card heard it got there, the app says that line: it isn't where it stopped.
+    @Test
+    fun theLastLineSaidAfterTheAppIsSentOnIsWaitedPast() {
+        installed(ytMusic, preferred = Destination.Service(MusicService.YOUTUBE_MUSIC))
+        youTubeHasTheSong()
+        keep(line("First star", start = 20_000))
+        appPlays(ytMusic, speed = 1f, positionMs = 5_000)
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the first line is there") { practice?.sound == LineSound.PLAYED }
+        cards.stop()
+        // The next, practised at once, sends it on while the card still has it where it was, paused.
+        answers(ytMusic, from = 5_000, fromPlaying = false, Said(150, 20_000), Said(400, 43_270))
+        screen.value = screen.value.copy(savedLines = listOf(line(start = 43_270)))
+        cards.start(null, before = null)
+        reached(ytMusic)
+        assertEquals(listOf(20_000L, 43_270L), playback.seeks)
     }
 
     @Test
