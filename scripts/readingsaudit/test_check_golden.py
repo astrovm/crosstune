@@ -37,17 +37,18 @@ def golden_text(*rows):
 class Marks(unittest.TestCase):
 
     def test_a_mark_is_a_whole_line_of_the_body(self):
-        self.assertEqual((True, set(), False), check_golden.marks("Refactor.\n\n  golden: none  \n"))
-        self.assertEqual((True, set(), False), check_golden.marks("golden: none"))
-        self.assertEqual((False, set(), True), check_golden.marks("Moved.\ngolden: lock changed\n"))
+        self.assertEqual((True, set(), False, set()), check_golden.marks("Refactor.\n\n  golden: none  \n"))
+        self.assertEqual((True, set(), False, set()), check_golden.marks("golden: none"))
+        self.assertEqual((False, set(), True, set()), check_golden.marks("Moved.\ngolden: lock changed\n"))
+        self.assertEqual((False, set(), False, {"0123abcd", "ff"}), check_golden.marks("golden: lines checked 0123abcd \n golden: lines checked ff"))
         # A lookalike, the phrase inside a sentence or a list item, and a quote of it do not count.
         for body in ("golden: nonexistent", "Put golden: none in the body.", "- golden: none", "`golden: none`", "",
-                     "golden: lock changed, sorry", "- golden: lock changed"):
-            self.assertEqual((False, set(), False), check_golden.marks(body), body)
+                     "golden: lock changed, sorry", "- golden: lock changed", "- golden: lines checked 0123abcd", "`golden: lines checked 0123abcd`"):
+            self.assertEqual((False, set(), False, set()), check_golden.marks(body), body)
 
     def test_an_accept_names_a_word_and_its_kana(self):
         body = "golden: accept 甲乙 こうおつ\ngolden: accept 丙\ngolden: accept 丙 へい てい\nsee golden: accept 丁 てい"
-        self.assertEqual((False, {("甲乙", "こうおつ")}, False), check_golden.marks(body))
+        self.assertEqual((False, {("甲乙", "こうおつ")}, False, set()), check_golden.marks(body))
 
 
 class Verdict(unittest.TestCase):
@@ -56,9 +57,21 @@ class Verdict(unittest.TestCase):
         self.assertEqual([], check_golden.verdict(False, False, set(), ""))
 
     def test_a_readings_change_needs_the_golden_file_or_the_mark(self):
-        self.assertIn("does not change the golden readings file", check_golden.verdict(True, False, set(), "")[0])
-        self.assertEqual([], check_golden.verdict(True, True, set(), ""))
-        self.assertEqual([], check_golden.verdict(True, False, set(), "golden: none"))
+        checked = "golden: lines checked 0123abcd\n"
+        self.assertIn("does not change the golden readings file", check_golden.verdict(True, False, set(), checked, digest="0123abcd")[0])
+        self.assertEqual([], check_golden.verdict(True, True, set(), checked, digest="0123abcd"))
+        self.assertEqual([], check_golden.verdict(True, False, set(), checked + "golden: none", digest="0123abcd"))
+
+    def test_a_readings_change_needs_its_whole_lines_read_for_the_same_pair(self):
+        problems = check_golden.verdict(True, True, set(), "", digest="0123abcd")
+        self.assertEqual(1, len(problems))
+        self.assertIn("readingsaudit.py lines", problems[0])
+        self.assertIn("golden: lines checked 0123abcd", problems[0])
+        # golden: none says no reading changes: the whole lines are what checks it.
+        self.assertTrue(check_golden.verdict(True, False, set(), "golden: none", digest="0123abcd"))
+        # A line for another pair of commits is for code that is no longer there.
+        self.assertTrue(check_golden.verdict(True, True, set(), "golden: lines checked 99999999", digest="0123abcd"))
+        self.assertEqual([], check_golden.verdict(False, False, set(), ""))
 
     def test_a_removed_row_needs_an_accept_for_its_word_and_kana(self):
         problems = check_golden.verdict(False, True, {ROW}, "")
@@ -119,6 +132,10 @@ class FakeDiff(unittest.TestCase):
         git(repo, "checkout", "-q", "-b", "pr")
         return repo
 
+    def checked(self, repo):
+        """The line readingsaudit.py lines prints for the readings at main and at the merge commit."""
+        return f"golden: lines checked {check_golden.readings_digest(repo, 'HEAD^1', 'HEAD')}\n"
+
     def write(self, repo, path, text):
         (repo / path).parent.mkdir(parents=True, exist_ok=True)
         (repo / path).write_text(text, encoding="utf-8")
@@ -138,7 +155,7 @@ class FakeDiff(unittest.TestCase):
             code, text = self.run_check(repo)
             self.assertEqual(1, code)
             self.assertIn("does not change the golden readings file", text)
-            self.assertEqual((0, ""), self.run_check(repo, "Refactor.\n\ngolden: none\n"))
+            self.assertEqual((0, ""), self.run_check(repo, f"Refactor.\n\ngolden: none\n{self.checked(repo)}"))
 
     def test_each_reading_source_and_the_dictionaries_version_count(self):
         for path in READING_SOURCES[1:]:
@@ -172,13 +189,40 @@ class FakeDiff(unittest.TestCase):
             commit(repo, "build: bump kuromoji")
             self.assertEqual(1, self.run_check(repo)[0])
 
+    def test_the_whole_lines_line_holds_for_the_readings_it_read_on_both_sides(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, golden_text(ROW))
+            self.write(repo, READINGS, "one\n")
+            self.merge(repo, "test: change a reading")
+            line = self.checked(repo)
+            start = check_golden.git(repo, "rev-parse", "HEAD^1").strip()
+            digest = check_golden.readings_digest(repo, start, "HEAD")
+            self.assertRegex(digest, "^[0-9a-f]{16}$")
+            self.assertEqual((0, ""), self.run_check(repo, "golden: none\n" + line))
+            # Another library or another file: the same readings, the same line.
+            self.write(repo, READING_BUILD, 'implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")\nimplementation("other:lib:2.0")\n')
+            self.write(repo, "README.md", "more\n")
+            commit(repo, "build: bump other")
+            self.assertEqual(digest, check_golden.readings_digest(repo, start, "HEAD"))
+            # A new commit to any source or to the Kuromoji version, on either side, needs the command again.
+            for path, text in [(READINGS, "two\n"), (READING_SOURCES[-1], "two\n"),
+                               (READING_BUILD, 'implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.1")\n'),
+                               (CATALOG, 'kuromoji = "0.9.1"\n')]:
+                self.write(repo, path, text)
+                commit(repo, f"test: change {path}")
+                self.assertNotEqual(check_golden.readings_digest(repo, start, "HEAD~1"), check_golden.readings_digest(repo, start, "HEAD"), path)
+                self.assertNotEqual(check_golden.readings_digest(repo, "HEAD~1", start), check_golden.readings_digest(repo, "HEAD", start), path)
+
     def test_the_golden_file_in_the_same_pull_request_passes(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)
             self.write(repo, READINGS, "one\n")
             self.write(repo, GOLDEN_REL, golden_text(ROW))
             self.merge(repo, "test: change a reading and lock it")
-            self.assertEqual((0, ""), self.run_check(repo))
+            code, text = self.run_check(repo)
+            self.assertEqual(1, code)
+            self.assertIn("readingsaudit.py lines", text)
+            self.assertEqual((0, ""), self.run_check(repo, self.checked(repo)))
 
     def test_adding_rows_passes_and_removing_or_changing_one_fails_until_accepted(self):
         with tempfile.TemporaryDirectory() as folder:

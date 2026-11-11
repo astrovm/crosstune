@@ -12,10 +12,13 @@ A mark in the body is a line of its own:
   golden: none               the readings code changes, and no reading does
   golden: accept WORD KANA   the locked rows of WORD read as KANA go, on purpose
   golden: lock changed       the lock itself changes: this checker, the golden code, its tests, or where the file is
+  golden: lines checked D    readingsaudit.py lines read every audit line whole with main's code and this one, and no
+                             right reading changed; D names what the readings are made of on both sides
 
 This reads only Git and the body, so it can be tested on a fake repository, with no GitHub.
 """
 import argparse
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 NONE = "golden: none"
 ACCEPT = "golden: accept "
 LOCK = "golden: lock changed"
+LINES = "golden: lines checked "
 # Where this checker and the golden code it imports live. The lint job copies this folder out of main's commit.
 SCRIPTS = "scripts/readingsaudit"
 CHECKER = f"{SCRIPTS}/check_golden.py"
@@ -36,24 +40,28 @@ LOCK_FILES = (
     "app/src/test/java/com/astrovm/crosstune/GoldenReadings.kt",
     "app/src/test/java/com/astrovm/crosstune/ReadingsGoldenTest.kt",
     "app/src/test/java/com/astrovm/crosstune/songcheck/GoldenContexts.kt",
+    f"{SCRIPTS}/wholelines.py",
+    "app/src/test/java/com/astrovm/crosstune/songcheck/WholeLines.kt",
 )
 
 
 def marks(body):
-    """(whether the body says golden: none, the (word, kana) pairs it accepts, whether it says golden: lock changed).
-    Only a whole line counts."""
-    none, accepted, lock = False, set(), False
+    """(whether the body says golden: none, the (word, kana) pairs it accepts, whether it says golden: lock changed,
+    the digests it says golden: lines checked for). Only a whole line counts."""
+    none, accepted, lock, checked = False, set(), False, set()
     for line in body.splitlines():
         line = line.strip()
         if line == NONE:
             none = True
         elif line == LOCK:
             lock = True
+        elif line.startswith(LINES):
+            checked.add(line[len(LINES):].strip())
         elif line.startswith(ACCEPT):
             words = line[len(ACCEPT):].split()
             if len(words) == 2:
                 accepted.add(tuple(words))
-    return none, accepted, lock
+    return none, accepted, lock, checked
 
 
 def rows_of(text):
@@ -71,9 +79,10 @@ def removed_rows(before, after):
     return {row for row in before if row not in after and not (len(row) == 6 and readers_of(row[5]) <= kept.get(row[:5], set()))}
 
 
-def verdict(readings_changed, golden_changed, removed, body, lock_changed=()):
-    """The reasons the pull request may not land. Empty when it may."""
-    none, accepted, lock = marks(body)
+def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), digest=None):
+    """The reasons the pull request may not land. Empty when it may. [digest] names what the readings are made of on
+    both sides, when the pull request changes them."""
+    none, accepted, lock, checked = marks(body)
     problems = []
     gone = sorted(row for row in removed if len(row) < 4 or (row[1], row[3]) not in accepted)
     if gone:
@@ -88,6 +97,12 @@ def verdict(readings_changed, golden_changed, removed, body, lock_changed=()):
             "This changes how readings are made and does not change the golden readings file.\n"
             "Update it with: python3 scripts/readingsaudit/readingsaudit.py golden\n"
             "When no reading changes, put a line in the pull request's body: golden: none"
+        )
+    if readings_changed and digest not in checked:
+        problems.append(
+            "This changes how readings are made, and the rows hold only a few letters of each line.\n"
+            "Read every audit line whole with main's code and this one: python3 scripts/readingsaudit/readingsaudit.py lines\n"
+            f"It prints a line for the pull request's body when no right reading changes: {LINES}{digest}"
         )
     if lock_changed and not lock:
         problems.append(
@@ -133,6 +148,17 @@ def lock_changes(changed):
     return touched
 
 
+def readings_digest(repo, base, head):
+    """What the readings are made of at [base] and at [head], in 16 hex digits: each source's blob, and the build's
+    Kuromoji lines. `readingsaudit.py lines` prints it for what it read, and this works it out again, so the line in
+    the body holds for that pair only: a new commit to the readings, here or on main, asks for the command again."""
+    made = []
+    for commit in (base, head):
+        made.append(git(repo, "ls-tree", commit, "--", *READING_SOURCES))
+        made += [line for path in READING_BUILDS for line in file_at(repo, commit, path).splitlines() if READING_BUILD_WORD in line]
+    return hashlib.sha256("\n".join(made).encode()).hexdigest()[:16]
+
+
 def golden_path(changed):
     """Where the golden file is after this range: its new name when it is moved."""
     return next((paths[1] for status, paths in changed if status == "R" and paths[0] == GOLDEN_REL), GOLDEN_REL)
@@ -152,7 +178,8 @@ def main(argv=None):
     before = rows_of(file_at(args.repo, args.base, GOLDEN_REL))
     after = rows_of(file_at(args.repo, args.head, golden_path(changed)))
     # Only the rows count: a comment or the header changed alone is no new lock.
-    problems = verdict(readings_changed, set(before) != set(after), removed_rows(set(before), set(after)), body, lock_changes(changed))
+    digest = readings_digest(args.repo, args.base, args.head) if readings_changed else None
+    problems = verdict(readings_changed, set(before) != set(after), removed_rows(set(before), set(after)), body, lock_changes(changed), digest)
     for problem in problems:
         print(problem)
     return 1 if problems else 0

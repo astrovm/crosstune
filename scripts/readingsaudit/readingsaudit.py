@@ -9,6 +9,7 @@
   python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
   python3 scripts/readingsaudit/readingsaudit.py golden    # lock every reading right today into readings-golden.tsv, through gradle-box; a row already there stays
   python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA   # and drop the lock on WORD read as KANA, when that change is on purpose
+  python3 scripts/readingsaudit/readingsaudit.py lines     # every audit line read whole by origin/main's code and HEAD's; a right reading that changes fails it. Before merging a readings change
   python3 scripts/readingsaudit/readingsaudit.py hole      # how many right readings the golden file guards on every wider stretch of their line, and how many a break on the whole line slips past; --golden FILE, again for more
   python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
   python3 scripts/readingsaudit/readingsaudit.py fetch     # put the newest jmdict-eng in the folder as jmdict.json; --tag TAG for another
@@ -207,16 +208,17 @@ def table(folder, gradle=None):
 
 
 # How Gradle runs unless --gradle says otherwise: in the build box, which keeps a machine's builds in turn.
-GRADLE_BOX = f"{ROOT / 'scripts/gradle-box/gradle-box.sh'} --max-workers=2"
+GRADLE_BOX = ("scripts/gradle-box/gradle-box.sh", "--max-workers=2")
 
 
-def songcheck(folder, test, gradle=None):
-    """Runs one songcheck test class through Gradle, gradle-box unless [gradle] says otherwise, on the audit folder. Its exit code."""
+def songcheck(folder, test, gradle=None, root=ROOT):
+    """Runs one songcheck test class through Gradle, gradle-box unless [gradle] says otherwise, on the audit folder, in
+    the checkout at [root]: gradle-box builds the checkout its script is in. Its exit code."""
     # gradle-box mounts SONGCHECK_DIR, so the words stay out of the checkout.
     env = {**os.environ, "SONGCHECK_DIR": str(folder)}
-    command = ["nice", "-n", "10", *shlex.split(gradle or GRADLE_BOX), ":app:songCheck",
-               f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
-    return subprocess.call(command, env=env, cwd=ROOT)
+    gradle = shlex.split(gradle) if gradle else [str(Path(root) / GRADLE_BOX[0]), *GRADLE_BOX[1:]]
+    command = ["nice", "-n", "10", *gradle, ":app:songCheck", f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
+    return subprocess.call(command, env=env, cwd=root)
 
 
 def run(folder, test="com.astrovm.crosstune.songcheck.ReadingsAudit", gradle=None):
@@ -664,13 +666,14 @@ def compare(folder, words, before=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age", "golden", "hole"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age", "golden", "hole", "lines"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
     parser.add_argument("--gradle", help="run, table: the Gradle command, instead of gradle-box")
     parser.add_argument("--tag", help="fetch: this jmdict-simplified release instead of the newest")
     parser.add_argument("--accept", action="append", nargs=2, default=[], metavar=("WORD", "KANA"),
-                        help="golden: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
+                        help="golden, lines: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
+    parser.add_argument("--base", default="origin/main", help="lines: the commit to read the lines with first")
     parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
     parser.add_argument("--width", type=int, help="golden: the letters of context each row holds on each side of its stable stretch")
     parser.add_argument("--golden", action="append", type=Path, default=[], metavar="FILE",
@@ -689,6 +692,10 @@ def main(argv=None):
         fetch(folder, args.tag)
     elif args.step == "age":
         sys.exit(age([TABLE, OLD_KANA], datetime.date.today()))
+    elif args.step == "lines":
+        # wholelines.py reads this module's audit too.
+        import wholelines
+        sys.exit(wholelines.lines(folder, args.accept, args.base))
     elif args.step in ("golden", "hole"):
         # golden.py reads this module's audit, so it is loaded only here.
         import golden
