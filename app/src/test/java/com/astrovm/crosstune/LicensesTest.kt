@@ -27,6 +27,8 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -170,6 +172,22 @@ class LicensesTest {
         composeRule.waitForIdle()
         assertEquals(1, LicenseSplits.times["projectM"])
         assertEquals(1, LicenseSplits.times["JMdict"])
+    }
+
+    @Test
+    fun aLicenceSplitForThePageIsLetGoOnceThePageIsLeft() {
+        LicenseSplits.clear()
+        openLicenses()
+        work("projectM").performClick()
+        composeRule.waitForIdle()
+        assertNotNull(LicenseSplits.of("projectM"))
+        // Once to close the licence, once to leave the page.
+        repeat(2) {
+            checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+            composeRule.waitForIdle()
+        }
+        assertTrue(shown(string(R.string.settings_about_title)))
+        assertNull(LicenseSplits.of("projectM"))
     }
 
     /** A phone, as a TV: Back from inside a long licence closes it and returns to its row, and the next Back leaves. */

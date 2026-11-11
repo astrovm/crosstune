@@ -18,6 +18,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
@@ -786,6 +787,9 @@ private fun LicensesPage(onBack: () -> Unit) {
             Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
         }) { name -> open = if (name in open) open - name else open + name }
     }
+    // The pieces are kept for as long as the page is shown, not for as long as the app runs: it stays up for days
+    // behind its notification access, and one text alone is about half a million characters.
+    DisposableEffect(Unit) { onDispose { LicenseSplits.clear() } }
     LaunchedEffect(open) {
         // Already split ones are kept. Only a work that is not split yet is split, and not while drawing.
         val openNotices = Notices.all.filter { it.name in open }
