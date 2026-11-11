@@ -2123,9 +2123,10 @@ internal class MainViewModel(
         uiState = uiState.copy(lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
         timeSavedLines(song)
-        // Whatever's switched on since, and wasn't worked out then, and readings that lacked something then: shown as they
-        // were until they're read again.
-        learn(again = kept.learning.readingsUnfinished)
+        // Whatever's switched on since, and wasn't worked out then.
+        learn()
+        // Readings that lacked something then, shown as they were until they're read again.
+        if (kept.learning.readingsUnfinished) readWords(wordLines())
         chords()
         return true
     }
@@ -4140,56 +4141,16 @@ internal class MainViewModel(
         }
     }
 
-    /** Works out what's switched on for the words shown, and isn't worked out yet; their readings [again], when they're shown already. */
-    private fun learn(again: Boolean = false) {
+    /** Works out what's switched on for the words shown, and isn't worked out yet. */
+    private fun learn() {
         val learning = uiState.learning
         val lines = wordLines()
-        val script = learning.script
         if (!learning.reads && readingsJob?.isActive == true) {
             // Turned off while they're worked out: nothing more is asked for them, and they're worked out again once on.
             readingsJob?.cancel()
             uiState = uiState.copy(learning = uiState.learning.copy(lines = emptyList()))
         }
-        val unread = (learning.lines.isEmpty() || again) && readingsJob?.isActive != true
-        if (learning.reads && script != null && unread) {
-            readingsJob = viewModelScope.launch {
-                if (script == Script.JAPANESE) readWithUniDic()
-                // Japanese loads its dictionary the first time, a moment better spent away from the screen.
-                val song = uiState.lyricsFor
-                var read = withContext(systemDispatcher) { Readings.of(lines, script) }
-                // The song's name and its artist's read the same way, to show how to say them.
-                val names = song?.let { withContext(systemDispatcher) { Readings.of(listOf(it.title, it.artist), script) } }.orEmpty()
-                // Read without UniDic while it may still come: read again with it, once it's here, when the words show again.
-                val withoutUniDic = script == Script.JAPANESE && uniDic != null && Readings.uniDic == null
-                uiState = uiState.copy(learning = uiState.learning.copy(lines = read, names = names, readingsUnfinished = withoutUniDic))
-                // Lines kept with no reading, as ones once written otherwise, are read as they are now; all of them, but
-                // for what was put right in them, once the dictionary's readings are all there are, as for Japanese once
-                // UtaTen's are known, since Japanese ones kept before UtaTen's were marked can't be told from the dictionary's.
-                song?.let { rereadSavedLines(it, unread = script == Script.JAPANESE) }
-                if (script != Script.JAPANESE || song == null) return@launch
-                // Sung readings, 都会 as まち, from a site that writes them over the words. Not had, UtaTen's asked again
-                // when the words show again; a song it has none for is kept as having none, and isn't.
-                val sung = sungReadingsOf(song, lines, read)
-                if (sung == null && sungReadings != null) unfinished(read)
-                sung?.let { fixes ->
-                    if (wordLines() != lines || uiState.learning.lines != read) return@launch
-                    if (fixes.isNotEmpty()) {
-                        read = Readings.corrected(read, fixes)
-                        uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
-                    }
-                    // With none from UtaTen, and no ChatGPT to put them right, the dictionary's are all there are.
-                    if (fixes.isNotEmpty() || !usesChatGpt()) rereadSavedLines(song)
-                }
-                // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
-                if (usesChatGpt()) {
-                    val checked = tutor?.checkReadings(song, lines, read) ?: return@launch unfinished(read)
-                    if (wordLines() == lines && uiState.learning.lines == read) {
-                        uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
-                        rereadSavedLines(song)
-                    }
-                }
-            }
-        }
+        if (learning.lines.isEmpty()) readWords(lines)
         val translator = translator ?: return
         if (learning.translation && uiState.lyrics.isNotEmpty() && learning.translations.isEmpty() && !learning.translating) {
             translationJob = viewModelScope.launch {
@@ -4228,6 +4189,56 @@ internal class MainViewModel(
                     ?.firstOrNull()?.takeUnless { it.equals(song.title.trim(), ignoreCase = true) }
                 if (uiState.lyricsFor == song) uiState = uiState.copy(learning = uiState.learning.copy(titleMeaning = meaning))
             }
+        }
+    }
+
+    /** Works out how [lines], the words shown, read, while readings are on and they aren't being worked out already. */
+    private fun readWords(lines: List<String>) {
+        val script = uiState.learning.script
+        if (!uiState.learning.reads || script == null || readingsJob?.isActive == true) return
+        readingsJob = viewModelScope.launch {
+            if (script == Script.JAPANESE) readWithUniDic()
+            // Japanese loads its dictionary the first time, a moment better spent away from the screen.
+            val song = uiState.lyricsFor
+            val read = withContext(systemDispatcher) { Readings.of(lines, script) }
+            // The song's name and its artist's read the same way, to show how to say them.
+            val names = song?.let { withContext(systemDispatcher) { Readings.of(listOf(it.title, it.artist), script) } }.orEmpty()
+            // Read without UniDic while it may still come: read again with it, once it's here, when the words show again.
+            val withoutUniDic = script == Script.JAPANESE && uniDic != null && Readings.uniDic == null
+            uiState = uiState.copy(learning = uiState.learning.copy(lines = read, names = names, readingsUnfinished = withoutUniDic))
+            // Lines kept with no reading, as ones once written otherwise, are read as they are now; all of them, but
+            // for what was put right in them, once the dictionary's readings are all there are, as for Japanese once
+            // UtaTen's are known, since Japanese ones kept before UtaTen's were marked can't be told from the dictionary's.
+            song?.let { rereadSavedLines(it, unread = script == Script.JAPANESE) }
+            if (script == Script.JAPANESE && song != null) putRight(song, lines, read)
+        }
+    }
+
+    /**
+     * [dictionary], how [song]'s [lines] read by the dictionary, put right where they're sung otherwise, from a site that
+     * writes the kana over the words, and by ChatGPT, signed in. One that can't be had is asked for again when the
+     * words show again; a song UtaTen has no page for is kept as having none, and isn't.
+     */
+    private suspend fun putRight(song: MusicMetadata, lines: List<String>, dictionary: List<LineReading>) {
+        var read = dictionary
+        // Sung readings, 都会 as まち.
+        val sung = sungReadingsOf(song, lines, read)
+        if (sung == null && sungReadings != null) unfinished(read)
+        sung?.let { fixes ->
+            if (wordLines() != lines || uiState.learning.lines != read) return
+            if (fixes.isNotEmpty()) {
+                read = Readings.corrected(read, fixes)
+                uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
+            }
+            // With none from UtaTen, and no ChatGPT to put them right, the dictionary's are all there are.
+            if (fixes.isNotEmpty() || !usesChatGpt()) rereadSavedLines(song)
+        }
+        // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
+        if (!usesChatGpt()) return
+        val checked = tutor?.checkReadings(song, lines, read) ?: return unfinished(read)
+        if (wordLines() == lines && uiState.learning.lines == read) {
+            uiState = uiState.copy(learning = uiState.learning.copy(lines = checked))
+            rereadSavedLines(song)
         }
     }
 
