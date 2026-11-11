@@ -24,6 +24,9 @@
     <string name="settings_default_label">Aplikacja muzyczna</string>
     <string name="setting_show_in_crosstune_first">Najpierw pokazuj w Crosstune</string>
     <string name="settings_about_title">Informacje</string>
+    <string name="settings_licenses">Licencje</string>
+    <string name="license_show">Pokaż licencję</string>
+    <string name="license_hide">Ukryj licencję</string>
     <string name="settings_links_title">Otwieraj linki z</string>
     <string name="rule_opens_in">Otwiera się w: %1$s</string>
     <string name="rule_default">Domyślnie (%1$s)</string>

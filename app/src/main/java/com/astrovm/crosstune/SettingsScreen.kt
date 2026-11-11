@@ -14,6 +14,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -110,7 +114,11 @@ internal fun SettingsScreen(
     // Kept out here, so a list is where it was on coming back from a page.
     val listScroll = rememberScrollState()
     val sourcesScroll = rememberScrollState()
-    val page = openSource?.takeIf { key -> key == VISUALS_PAGE || key == ADVANCED_PAGE || key == SOURCES_PAGE || sources.any { it.key == key } }
+    val page = openSource?.takeIf { key -> key in PAGES || sources.any { it.key == key } }
+    // The page just left for the list, so the row that opened it has the remote again.
+    val previous = remember { arrayOfNulls<String>(1) }
+    val backFrom = remember(page) { previous[0].takeIf { page == null } }
+    SideEffect { previous[0] = page }
     // Back from a page: the list, or the sources' from a source's own.
     val up = SOURCES_PAGE.takeIf { depth(page) == 2 }
     SwipedBackPages(page, back = up, label = "source", forward = { from, to -> depth(to) > depth(from) }, onBack = { onOpenSource(up) }) { key ->
@@ -119,20 +127,25 @@ internal fun SettingsScreen(
             VisualsPage(state.visualsSettings, actions, onBack = { onOpenSource(null) })
         } else if (key == ADVANCED_PAGE) {
             AdvancedPage(state, actions, onBack = { onOpenSource(null) })
+        } else if (key == LICENSES_PAGE) {
+            LicensesPage(onBack = { onOpenSource(null) })
         } else if (key == SOURCES_PAGE) {
             SourcesPage(state, actions, sources, sourcesScroll, onOpen = onOpenSource, onBack = { onOpenSource(null) })
         } else if (item != null) {
             SourcePage(item, state.destinations, state.installed, state.claimingAppsBySource.orEmpty(), state.onlyMusicVideos, actions, fixingLinks = state.fixingInOneTap == OneTapFix.LINKS, onBack = { onOpenSource(SOURCES_PAGE) })
         } else {
-            SettingsList(state, actions, sources, listScroll, onBack, onOpenSource)
+            SettingsList(state, actions, sources, listScroll, onBack, onOpenSource, backFrom)
         }
     }
 }
 
+/** The pages the list opens, each from a row of its own. */
+private val PAGES = setOf(VISUALS_PAGE, ADVANCED_PAGE, SOURCES_PAGE, LICENSES_PAGE)
+
 /** How deep a page is: the list, a page it opens, or a source's own page, opened from the sources'. */
 private fun depth(key: String?) = when (key) {
     null -> 0
-    VISUALS_PAGE, ADVANCED_PAGE, SOURCES_PAGE -> 1
+    in PAGES -> 1
     else -> 2
 }
 
@@ -184,9 +197,14 @@ private fun SettingsList(
     sources: List<SourceSettings>,
     scroll: ScrollState,
     onBack: () -> Unit,
-    onOpenSource: (String?) -> Unit
+    onOpenSource: (String?) -> Unit,
+    backFrom: String?
 ) {
     val openWebPage = rememberWebOpener()
+    // Each page's row, which has the remote again when its page goes back to the list.
+    val openers = remember { PAGES.associateWith { FocusRequester() } }
+    LaunchedEffect(backFrom) { backFrom?.let { openers.getValue(it).requestFocus() } }
+    fun opener(page: String) = Modifier.focusRequester(openers.getValue(page))
     val githubUrl = stringResource(R.string.github_repo_url)
     val privacyUrl = stringResource(R.string.privacy_policy_url)
 
@@ -226,7 +244,7 @@ private fun SettingsList(
             )
             // A TV has nowhere to allow links in, so they can't open here.
             if (state.phone != Phone.TV) {
-                SourcesRow(sources, onOpen = { onOpenSource(SOURCES_PAGE) })
+                SourcesRow(sources, opener(SOURCES_PAGE), onOpen = { onOpenSource(SOURCES_PAGE) })
             }
         }
 
@@ -275,7 +293,7 @@ private fun SettingsList(
         // Which visuals move behind the words, and how long each shows; how dark they are is set over them.
         SectionHeader(stringResource(R.string.settings_visuals_title))
         Group {
-            VisualsListRow(state.visualsSettings, onOpen = { onOpenSource(VISUALS_PAGE) })
+            VisualsListRow(state.visualsSettings, opener(VISUALS_PAGE), onOpen = { onOpenSource(VISUALS_PAGE) })
             VisualsChangeRow(state.visualsSettings.changeMs, actions.onVisualsChangeEveryChange)
         }
 
@@ -300,7 +318,7 @@ private fun SettingsList(
 
         // What few change, out of the way.
         Spacer(Modifier.height(16.dp))
-        Group { PageRow(stringResource(R.string.settings_advanced_title), onOpen = { onOpenSource(ADVANCED_PAGE) }) }
+        Group { PageRow(stringResource(R.string.settings_advanced_title), opener(ADVANCED_PAGE), onOpen = { onOpenSource(ADVANCED_PAGE) }) }
 
         SectionHeader(stringResource(R.string.settings_about_title))
         Group {
@@ -356,6 +374,7 @@ private fun SettingsList(
                 )
                 AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.size(20.dp))
             }
+            PageRow(stringResource(R.string.settings_licenses), opener(LICENSES_PAGE), onOpen = { onOpenSource(LICENSES_PAGE) })
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -556,10 +575,10 @@ private const val VISUALS_PAGE = "visuals"
 
 /** How many of the visuals are on, opening the list of them. */
 @Composable
-private fun VisualsListRow(settings: VisualsSettings, onOpen: () -> Unit) {
+private fun VisualsListRow(settings: VisualsSettings, modifier: Modifier, onOpen: () -> Unit) {
     val names = presetNames()
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(R.string.setting_visuals_list), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -645,9 +664,9 @@ private fun StepsRow(
 
 /** A row that opens a page of its own. */
 @Composable
-private fun PageRow(label: String, onOpen: () -> Unit) {
+private fun PageRow(label: String, modifier: Modifier, onOpen: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -660,10 +679,10 @@ private const val SOURCES_PAGE = "sources"
 
 /** How many sources' links Crosstune opens, opening the list of them; marked when one's links can't reach it yet. */
 @Composable
-private fun SourcesRow(sources: List<SourceSettings>, onOpen: () -> Unit) {
+private fun SourcesRow(sources: List<SourceSettings>, modifier: Modifier, onOpen: () -> Unit) {
     val trouble = sources.firstNotNullOfOrNull { it.trouble() }
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier = modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(stringResource(R.string.settings_links_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -704,6 +723,123 @@ private fun SourcesPage(state: UiState, actions: ScreenActions, sources: List<So
         }
     }
 }
+
+/** The page of the works by others that Crosstune ships or downloads, with their licences. */
+private const val LICENSES_PAGE = "licenses"
+
+/**
+ * Each work by others in the app, or downloaded by it: who it's by, its licence and what was changed,
+ * always shown; its licence's full text and where it is, under it once it's opened. The remote starts
+ * on the first, and steps through a licence a paragraph at a time, so a long one scrolls.
+ */
+@Composable
+private fun LicensesPage(onBack: () -> Unit) {
+    val openWebPage = rememberWebOpener()
+    val first = remember { FocusRequester() }
+    Page(
+        title = stringResource(R.string.settings_licenses),
+        navigationIcon = {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.back_button))
+            }
+        },
+        scrollState = rememberScrollState()
+    ) {
+        Group(modifier = Modifier.padding(top = 4.dp)) {
+            Notices.all.forEachIndexed { index, notice ->
+                NoticeRow(notice, if (index == 0) Modifier.focusRequester(first) else Modifier, openWebPage)
+            }
+        }
+    }
+    LaunchedEffect(Unit) { first.requestFocus() }
+}
+
+/** One work: tapped, its licence opens under it, and tapped again it closes. */
+@Composable
+private fun NoticeRow(notice: Notice, modifier: Modifier, openWebPage: (String) -> Unit) {
+    var open by rememberSaveable(notice.name) { mutableStateOf(false) }
+    Column {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = stringResource(if (open) R.string.license_hide else R.string.license_show)) { open = !open }
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(notice.name, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "${notice.by} · ${notice.license}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (notice.note != null) {
+                    Text(
+                        notice.note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+            val turn by animateFloatAsState(if (open) 180f else 0f, label = "license")
+            AppIcon(R.drawable.ic_expand_more, contentDescription = null, modifier = Modifier.padding(start = 12.dp).size(20.dp).rotate(turn))
+        }
+        if (open) {
+            if (notice.url != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { openWebPage(notice.url) }.padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        notice.url.removePrefix("https://"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AppIcon(R.drawable.ic_open_in_new, contentDescription = null, modifier = Modifier.padding(start = 12.dp).size(18.dp))
+                }
+            }
+            val paragraphs = remember(notice) { licenseParagraphs(Notices.text(notice)) }
+            paragraphs.forEach { LicenseParagraph(it) }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+/** A paragraph of a licence; the remote stops on each, marked, so the text scrolls on under it. */
+@Composable
+private fun LicenseParagraph(text: String) {
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .background(if (focused) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent)
+            .focusable()
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+    )
+}
+
+/**
+ * [text]'s paragraphs, apart where a line is blank, each paragraph's lines joined, as licences break
+ * them for a page as wide as a terminal; a line starting a list item stays a line of its own.
+ */
+internal fun licenseParagraphs(text: String): List<String> =
+    text.split(Regex("\n\\s*\n")).map { paragraph ->
+        paragraph.lines().map(String::trim).filter(String::isNotEmpty).fold("") { joined, line ->
+            when {
+                joined.isEmpty() -> line
+                LIST_ITEM.containsMatchIn(line) -> "$joined\n$line"
+                else -> "$joined $line"
+            }
+        }
+    }.filter(String::isNotEmpty)
+
+/** A line that starts an item of a list: "* Name", "- Name", "1. Definitions", "(a) You must". */
+private val LIST_ITEM = Regex("^([*•-]|\\(?([0-9]{1,3}|[a-z])[.)])\\s")
 
 /** The page of advanced settings. */
 private const val ADVANCED_PAGE = "advanced"

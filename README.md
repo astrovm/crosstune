@@ -125,4 +125,32 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Crosstune is licensed under the [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only).
 
-The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) come from [JMdict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) by the [Electronic Dictionary Research and Development Group](https://www.edrdg.org/edrdg/licence.html), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+Crosstune includes, or downloads when it's needed, these works by others. The app lists them, with each license's full text, in **Settings** → **About** → **Licenses**, from [`notices.txt`](app/src/main/resources/com/astrovm/crosstune/notices/notices.txt).
+
+| Work | By | License |
+| --- | --- | --- |
+| [JMdict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) | Electronic Dictionary Research and Development Group | CC BY-SA 4.0 |
+| [Kuromoji](https://github.com/atilika/kuromoji) | Atilika Inc. and contributors | Apache License 2.0 |
+| [IPADIC](https://github.com/atilika/kuromoji) | Nara Institute of Science and Technology (NAIST), with entries from ICOT Free Software | NAIST and ICOT licence |
+| [UniDic](https://repo1.maven.org/maven2/com/atilika/kuromoji/kuromoji-unidic/0.9.0/) | The UniDic Consortium | BSD 3-Clause License |
+| [projectM](https://github.com/projectM-visualizer/projectm) | The projectM Team | GNU LGPL 2.1 or later |
+| [projectM's expression parser](https://github.com/projectM-visualizer/projectm-eval) | The projectM Team | MIT License |
+| [HLSLParser](https://github.com/projectM-visualizer/projectm/tree/master/vendor/hlslparser) | Unknown Worlds Entertainment, Inc. | MIT License |
+| [OpenGL Mathematics (GLM)](https://github.com/g-truc/glm) | G-Truc Creation | MIT License |
+| [SOIL2 and stb_image](https://github.com/SpartanJ/SOIL2) | Martín Lucas Golini, Jonathan Dummer and Sean Barrett | MIT No Attribution, and public domain |
+| [MilkDrop presets](https://github.com/projectM-visualizer/presets-cream-of-the-crop) | Their authors, named in each preset's name | None stated |
+| [MilkDrop textures](https://github.com/projectM-visualizer/presets-milkdrop-texture-pack) | Their authors, from MilkDrop and its presets | None stated |
+| [whisper.cpp and ggml](https://github.com/ggml-org/whisper.cpp) | The ggml authors | MIT License |
+| [Whisper tiny speech model](https://huggingface.co/ggerganov/whisper.cpp) | OpenAI | MIT License |
+| [LLVM libc++](https://github.com/llvm/llvm-project/tree/main/libcxx) | The LLVM Project | Apache License 2.0 with LLVM Exceptions |
+| [Material Symbols](https://github.com/google/material-design-icons) | Google | Apache License 2.0 |
+| [Simple Icons](https://github.com/simple-icons/simple-icons) | Simple Icons contributors | CC0 1.0 |
+| [Roboto](https://github.com/googlefonts/roboto-classic) | The Roboto Project Authors | SIL Open Font License 1.1 |
+| [Shizuku API](https://github.com/RikkaApps/Shizuku-API) | RikkaW | MIT License |
+| [OkHttp and Okio](https://github.com/square/okhttp) | Square, Inc. | Apache License 2.0 |
+| [Guava](https://github.com/google/guava) | The Guava Authors | Apache License 2.0 |
+| [AndroidX, Jetpack Compose and Media3](https://android.googlesource.com/platform/frameworks/support) | The Android Open Source Project | Apache License 2.0 |
+| [Kotlin and kotlinx.coroutines](https://github.com/JetBrains/kotlin) | JetBrains s.r.o. and Kotlin Programming Language contributors | Apache License 2.0 |
+| [Reorderable](https://github.com/Calvin-LL/Reorderable) | Calvin Liang | Apache License 2.0 |
+
+The Japanese word readings in [`jmdict-readings.txt`](app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt) are made from [JMdict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) by the Electronic Dictionary Research and Development Group, under the [Group's licence](https://www.edrdg.org/edrdg/licence.html), and changed: only words of two kanji or more that JMdict reads one way only, where Crosstune reads them otherwise. They are under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) too.

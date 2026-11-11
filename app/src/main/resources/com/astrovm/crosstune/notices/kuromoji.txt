@@ -1,0 +1,18 @@
+# Kuromoji Japanese Morphological Analyzer
+
+Copyright 2010-2015 Atilika Inc. and contributors (see `CONTRIBUTORS.md`)
+
+# Authors
+
+* Gaute Lambertsen
+* Masaru Hasegawa
+* Christian Moen
+
+
+# Contributors
+
+* Dawid Weiss
+* Gerrard Hocks
+* Masaru Hasegawa
+* Yong-woon Lee
+* Yungho Yu

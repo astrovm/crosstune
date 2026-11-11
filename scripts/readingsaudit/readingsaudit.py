@@ -108,13 +108,25 @@ def listed_candidates(words):
             and all(is_han(c) or "ぁ" <= c <= "ゖ" or "ァ" <= c <= "ヶ" or c == "ー" for c in form)}
 
 
+JMDICT_URL = "https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project"
+EDRDG_LICENCE_URL = "https://www.edrdg.org/edrdg/licence.html"
+CC_BY_SA_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
+
+
+def table_header(date, version):
+    """The table's header: where its words come from, their licence and how they were changed, as CC BY-SA 4.0 asks."""
+    return [f"# JMdict {date}, by the Electronic Dictionary Research and Development Group, {JMDICT_URL}",
+            f"# through jmdict-simplified {version}. Licensed under CC BY-SA 4.0, {CC_BY_SA_URL}",
+            f"# as the Group's licence asks, {EDRDG_LICENCE_URL}",
+            "# Changed: only words of two kanji or more it reads one way only, kept where Crosstune reads them otherwise.",
+            "# Made by scripts/readingsaudit/readingsaudit.py table."]
+
+
 def table(folder):
     """The candidates for the app's jmdict-readings.txt, for the test that keeps those the app reads otherwise."""
     jmdict = json.loads((folder / "jmdict.json").read_text())
     candidates = listed_candidates(jmdict["words"])
-    header = [f"# JMdict {jmdict['dictDate']}, by the Electronic Dictionary Research and Development Group, CC BY-SA 4.0",
-              f"# through jmdict-simplified {jmdict['version']}: words of two kanji or more it reads one way only,",
-              "# kept where Crosstune reads them otherwise. Made by scripts/readingsaudit/readingsaudit.py table."]
+    header = table_header(jmdict["dictDate"], jmdict["version"])
     (folder / "listed.txt").write_text("\n".join(header + [f"{form}\t{kana}" for form, kana in candidates.items()]) + "\n")
     print(f"{len(candidates)} candidates in {folder / 'listed.txt'}")
     run(folder, "com.astrovm.crosstune.songcheck.JmdictReadings")

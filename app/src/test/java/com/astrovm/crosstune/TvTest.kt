@@ -15,6 +15,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.performImeAction
@@ -417,5 +418,64 @@ class TvTest {
         composeRule.waitForIdle()
         val choices = composeRule.onAllNodes(hasAnyAncestor(isDialog()) and hasClickAction()).fetchSemanticsNodes()
         assertEquals(true, choices.first().config.getOrElseNullable(SemanticsProperties.Focused) { null })
+    }
+
+    /** Settings on the remote's terms: Robolectric starts as a touch screen, where rows take no focus. */
+    private fun settingsByRemote() {
+        launch()
+        settings().performClick()
+        composeRule.waitForIdle()
+        composeRule.onRoot().performKeyInput { pressKey(Key.ShiftLeft) }
+    }
+
+    private fun focused() = composeRule.onNode(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true))
+
+    private fun pressOnFocused(key: Key) {
+        focused().performKeyInput { pressKey(key) }
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun onATvTheLicensesStartOnTheFirstWorkStepThroughItsLicenceAndBackLandsOnTheirRow() {
+        settingsByRemote()
+        val licenses = composeRule.onNode(hasText(string(R.string.settings_licenses)) and hasClickAction())
+        licenses.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        val jmdict = composeRule.onNode(hasText("JMdict") and hasClickAction())
+        jmdict.assertIsFocused()
+
+        // Opened, the remote steps down to where it is, then through the licence a paragraph at a time.
+        pressOnFocused(Key.DirectionCenter)
+        pressOnFocused(Key.DirectionDown)
+        composeRule.onNode(hasText("www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project") and hasClickAction()).assertIsFocused()
+        val licence = licenseParagraphs(Notices.text(Notices.all.first()))
+        repeat(30) { pressOnFocused(Key.DirectionDown) }
+        val at = focused().fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+        assertEquals(licence[29], at)
+        // Scrolled with it, far from the top.
+        jmdict.assertIsNotDisplayed()
+
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        licenses.assertIsFocused()
+    }
+
+    @Test
+    fun onATvBackFromAPageLandsOnTheRowThatOpenedIt() {
+        settingsByRemote()
+        val advanced = composeRule.onNode(hasText(string(R.string.settings_advanced_title)) and hasClickAction())
+        advanced.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        assertTrue(shown(string(R.string.settings_custom_title)))
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        advanced.assertIsFocused()
+
+        val visuals = composeRule.onNode(hasText(string(R.string.setting_visuals_list)) and hasClickAction())
+        visuals.performScrollTo().requestFocus()
+        pressOnFocused(Key.DirectionCenter)
+        checkNotNull(controller).get().onBackPressedDispatcher.onBackPressed()
+        composeRule.waitForIdle()
+        visuals.assertIsFocused()
     }
 }

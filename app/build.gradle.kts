@@ -1,5 +1,8 @@
 import java.lang.management.ManagementFactory
 import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
 
 plugins {
     id("com.android.application")
@@ -321,6 +324,23 @@ val robolectricDeps = tasks.register("robolectricDeps") {
     }
 }
 
+// The libraries in the release APK, a group:module a line, for NoticesTest: it fails when one has no
+// notice in Settings → About → Licenses, so a new library, or one a new version brings in, gets one.
+val releaseLibraries = tasks.register("releaseLibraries") {
+    val libraries = configurations.named("releaseRuntimeClasspath").flatMap { it.incoming.resolutionResult.rootComponent }.map { root ->
+        val seen = mutableSetOf<ResolvedComponentResult>()
+        fun walk(component: ResolvedComponentResult) {
+            if (seen.add(component)) component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { walk(it.selected) }
+        }
+        walk(root)
+        seen.mapNotNull { it.id as? ModuleComponentIdentifier }.map { "${it.group}:${it.module}" }.distinct().sorted()
+    }
+    val out = layout.buildDirectory.file("notices/release-libraries.txt")
+    inputs.property("libraries", libraries)
+    outputs.file(out)
+    doLast { out.get().asFile.writeText(libraries.get().joinToString("") { "$it\n" }) }
+}
+
 // Robolectric's Android 16 runtime reaches into JDK internals, its native graphics load a library,
 // and DataStore's protobuf reads memory through sun.misc.Unsafe; the JDK warns of the last two otherwise.
 val robolectricJvmArgs = listOf(
@@ -333,8 +353,9 @@ val robolectricJvmArgs = listOf(
 tasks.withType<Test>().configureEach {
     if (name != "shots") filter.excludeTestsMatching("com.astrovm.crosstune.shots.*")
     if (name != "songCheck") filter.excludeTestsMatching("com.astrovm.crosstune.songcheck.*")
-    dependsOn(robolectricDeps)
+    dependsOn(robolectricDeps, releaseLibraries)
     systemProperty("robolectric-deps.properties", layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path)
+    systemProperty("notices.libraries", layout.buildDirectory.file("notices/release-libraries.txt").get().asFile.path)
     // Robolectric loads a full Android runtime per SDK level the tests use.
     maxHeapSize = "3g"
     // Two test processes, each with that heap, where there's room for them, like CI's runner:
@@ -378,7 +399,7 @@ pitest {
     // Each mutant's classes are loaded again, and their adapters and stubs fill the JIT's small code
     // heap for them long before the Java heap fills, which PIT reports as a MEMORY_ERROR. One code
     // cache, unsplit, gives them the room.
-    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
+    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path, "-Dnotices.libraries=" + layout.buildDirectory.file("notices/release-libraries.txt").get().asFile.path))
 }
 
 // After the plugin's own setup, which gives the tests only what they compile against.
@@ -387,7 +408,7 @@ afterEvaluate {
         providers.gradleProperty("mutateLines").orNull?.let {
             inputs.file(it).withPathSensitivity(PathSensitivity.NONE)
         }
-        dependsOn(robolectricDeps)
+        dependsOn(robolectricDeps, releaseLibraries)
         // What the unit tests run with, like the app's resources, which Robolectric reads. The app's own
         // classes come from the folders PIT mutates, not the jar the tests get, or PIT finds nothing to mutate.
         additionalClasspath.setFrom(

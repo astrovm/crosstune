@@ -58,8 +58,19 @@ class Table(unittest.TestCase):
             run.assert_called_once_with(folder, "com.astrovm.crosstune.songcheck.JmdictReadings")
             lines = (folder / "listed.txt").read_text().splitlines()
             self.assertEqual("星空\tほしぞら", lines[-1])
-            self.assertTrue(lines[0].startswith("# JMdict 2000-01-01") and "CC BY-SA 4.0" in lines[0])
-            self.assertIn("jmdict-simplified 9.9.9", lines[1])
+            header = "\n".join(line for line in lines if line.startswith("#"))
+            self.assertTrue(lines[0].startswith("# JMdict 2000-01-01"))
+            self.assertIn("jmdict-simplified 9.9.9", header)
+            # Where the words come from, their licence and that they were changed, as CC BY-SA 4.0 asks.
+            for said in ("Electronic Dictionary Research and Development Group", readingsaudit.JMDICT_URL, "CC BY-SA 4.0",
+                         readingsaudit.CC_BY_SA_URL, readingsaudit.EDRDG_LICENCE_URL, "Changed:"):
+                self.assertIn(said, header)
+
+    def test_the_committed_table_has_the_header_a_remake_writes(self):
+        table = (Path(__file__).resolve().parents[2] / "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt").read_text()
+        header = [line for line in table.splitlines() if line.startswith("#")]
+        date, version = header[0].split()[2].rstrip(","), header[1].split()[3].rstrip(".")
+        self.assertEqual(readingsaudit.table_header(date, version), header)
 
 
 if __name__ == "__main__":

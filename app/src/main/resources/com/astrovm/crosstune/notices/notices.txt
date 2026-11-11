@@ -1,0 +1,182 @@
+# Every work by others that Crosstune ships or downloads, shown in Settings → About → Licenses.
+# One block per work, apart by a blank line: its name, then "key: value" lines.
+#   by       who made it
+#   license  its licence, by name
+#   text     files in this folder with the licence's full text and notices, shown one after the other
+#   url      where it, or its source, is; opened in the browser only on a tap
+#   note     what Crosstune changed, or what else the licence asks to say
+#   covers   what of the APK it is, for the :app:notices task, which fails the build on anything not covered
+#            and on a line that covers nothing. One per line:
+#              maven GROUP:MODULE     a library in the release APK, * for any part of a name
+#              submodule PATH         a Git submodule built into the APK
+#              file PATH              a bundled file, * for any name in one folder, ** for anything under it
+# Licence texts are copied from each work's own LICENSE or NOTICE file, never written by hand.
+
+JMdict
+by: Electronic Dictionary Research and Development Group
+license: CC BY-SA 4.0
+text: cc-by-sa-4.0.txt
+url: https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project
+note: Crosstune's word lists made from JMdict are changed: only words of two kanji or more that JMdict reads one way only, where Crosstune reads them otherwise. They are under CC BY-SA 4.0 too. The Group's licence: https://www.edrdg.org/edrdg/licence.html
+covers: file app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt
+
+Kuromoji
+by: Atilika Inc. and contributors
+license: Apache License 2.0
+text: kuromoji.txt apache-2.0.txt
+url: https://github.com/atilika/kuromoji
+covers: maven com.atilika.kuromoji:*
+
+IPADIC
+by: Nara Institute of Science and Technology (NAIST), with entries from ICOT Free Software
+license: NAIST and ICOT licence
+text: ipadic.txt
+url: https://github.com/atilika/kuromoji
+note: Inside Kuromoji, as mecab-ipadic-2.7.0-20070801.
+covers: maven com.atilika.kuromoji:kuromoji-ipadic
+
+UniDic
+by: The UniDic Consortium
+license: BSD 3-Clause License
+text: unidic.txt
+url: https://repo1.maven.org/maven2/com/atilika/kuromoji/kuromoji-unidic/0.9.0/
+note: Downloaded from Maven Central, inside Kuromoji, when it's first needed, as unidic-mecab 2.1.2. UniDic is under the GPL, the LGPL or the BSD License; Crosstune uses it under the BSD License.
+covers: maven com.atilika.kuromoji:kuromoji-unidic
+
+projectM
+by: The projectM Team
+license: GNU LGPL 2.1 or later
+text: projectm.txt lgpl-2.1.txt
+url: https://github.com/projectM-visualizer/projectm
+note: Built from source into Crosstune's visuals, with small changes: a fix to how the picture keeps its size, and two fixes to what warns when it's built. Crosstune's source, with projectM's and the changes, is at https://github.com/astrovm/crosstune
+covers: submodule third_party/projectm
+
+projectM's expression parser
+by: The projectM Team
+license: MIT License
+text: projectm-eval.txt
+url: https://github.com/projectM-visualizer/projectm-eval
+covers: submodule third_party/projectm
+
+HLSLParser
+by: Unknown Worlds Entertainment, Inc.
+license: MIT License
+text: hlslparser.txt
+url: https://github.com/projectM-visualizer/projectm/tree/master/vendor/hlslparser
+covers: submodule third_party/projectm
+
+OpenGL Mathematics (GLM)
+by: G-Truc Creation
+license: MIT License
+text: glm.txt
+url: https://github.com/g-truc/glm
+covers: submodule third_party/projectm
+
+SOIL2 and stb_image
+by: Martín Lucas Golini, Jonathan Dummer and Sean Barrett
+license: MIT No Attribution, and public domain
+text: soil2.txt
+url: https://github.com/SpartanJ/SOIL2
+covers: submodule third_party/projectm
+
+MilkDrop presets
+by: Their authors, named in each preset's name
+license: None stated
+text: milkdrop-presets.txt
+url: https://github.com/projectM-visualizer/presets-cream-of-the-crop
+note: From projectM's Cream of the Crop, Milkdrop Original and En D packs; the stills in Settings are drawn from them. The packs state no licence; the text below is projectM's statement for them.
+covers: file app/src/main/assets/milkdrop/*
+covers: file app/src/main/assets/milkdrop-thumbs/*
+
+MilkDrop textures
+by: Their authors, from MilkDrop and its presets
+license: None stated
+url: https://github.com/projectM-visualizer/presets-milkdrop-texture-pack
+note: From projectM's Milkdrop Texture Pack, which states no licence.
+covers: file app/src/main/assets/milkdrop-textures/*
+
+whisper.cpp and ggml
+by: The ggml authors
+license: MIT License
+text: whisper-cpp.txt
+url: https://github.com/ggml-org/whisper.cpp
+covers: submodule third_party/whisper.cpp
+
+Whisper tiny speech model
+by: OpenAI
+license: MIT License
+text: whisper-model.txt
+url: https://huggingface.co/ggerganov/whisper.cpp
+note: Downloaded when it's first needed, as ggml-tiny-q5_1.bin, converted for whisper.cpp by its authors.
+
+LLVM libc++
+by: The LLVM Project
+license: Apache License 2.0 with LLVM Exceptions
+text: llvm-exception.txt apache-2.0.txt
+url: https://github.com/llvm/llvm-project/tree/main/libcxx
+note: Built into the visuals and speech libraries, from Android's NDK.
+
+Material Symbols
+by: Google
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/google/material-design-icons
+
+Simple Icons
+by: Simple Icons contributors
+license: CC0 1.0
+text: cc0-1.0.txt
+url: https://github.com/simple-icons/simple-icons
+note: The music services' logos. Each logo is a trademark of its owner.
+
+Roboto
+by: The Roboto Project Authors
+license: SIL Open Font License 1.1
+text: roboto.txt
+url: https://github.com/googlefonts/roboto-classic
+note: Its bold letters draw the app's name on the TV home screen's tile.
+
+Shizuku API
+by: RikkaW
+license: MIT License
+text: shizuku.txt
+url: https://github.com/RikkaApps/Shizuku-API
+covers: maven dev.rikka.shizuku:*
+
+OkHttp and Okio
+by: Square, Inc.
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/square/okhttp
+covers: maven com.squareup.okhttp3:*
+covers: maven com.squareup.okio:*
+
+Guava
+by: The Guava Authors
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/google/guava
+covers: maven com.google.guava:*
+
+AndroidX, Jetpack Compose and Media3
+by: The Android Open Source Project
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://android.googlesource.com/platform/frameworks/support
+covers: maven androidx.*:*
+
+Kotlin and kotlinx.coroutines
+by: JetBrains s.r.o. and Kotlin Programming Language contributors
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/JetBrains/kotlin
+covers: maven org.jetbrains.kotlin:*
+covers: maven org.jetbrains.kotlinx:*
+covers: maven org.jetbrains:annotations
+
+Reorderable
+by: Calvin Liang
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/Calvin-LL/Reorderable
+covers: maven sh.calvin.reorderable:*
