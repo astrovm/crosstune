@@ -73,6 +73,13 @@ internal data class SavedLine(
     /** Whether it was read by an older dictionary than this version's, and is to be read again. */
     val readByOlder get() = readWith != null && readWith < Readings.VERSION
 
+    /**
+     * Whether it can be read again, keeping what was put right in it: what the user put right in a line is marked, once
+     * [readWith] says what read it. A word read by hand, with no parts, or a line put right before that, can't tell the
+     * user's readings from the dictionary's, so it stays as it is.
+     */
+    val rereadable get() = !readByHand || (ruby != null && readWith != null)
+
     /** It read as [read] says, by this version's dictionary; with none, as nothing reads it. */
     fun readBy(read: LineReading?): SavedLine = copy(
         reading = read?.reading?.takeIf { it != text },
@@ -84,16 +91,39 @@ internal data class SavedLine(
 
     /**
      * It read as [now], the same line read as its song's words read now, but for the readings UtaTen, ChatGPT or
-     * the user put right in it, which stay where they are in the line, where [now] has only the dictionary's. Where
+     * the user put right in it, which stay where they are in the line: UtaTen's and ChatGPT's where [now] has only the
+     * dictionary's, and the user's over all. Where
      * [now] splits the line otherwise around one, so it can't take it, as one word 三本 for 三 and 本 put right one
      * by one, that stretch stays as it was. Unchanged when the two don't write the same line.
      */
     fun rereadAs(now: SavedLine): SavedLine {
         val parts = now.ruby ?: listOf(Ruby(text))
         val kept = ruby ?: return copy(reading = now.reading, romanized = now.romanized, ruby = now.ruby, typed = now.typed, readWith = now.readWith)
-        val read = keptOver(kept, parts, over = false) { kept[it].by != null && kept[it].reading != null } ?: return this
+        val marked = { user: Boolean -> { index: Int -> kept[index].reading != null && kept[index].by?.let { it == Reader.USER } == user } }
+        // UtaTen's and ChatGPT's stay where [now] puts nothing right; the user's, over what [now] puts right too.
+        val theirs = keptOver(kept, parts, over = false, marked(false)) ?: return this
+        val read = keptOver(kept, theirs, over = true, marked(true)) ?: return this
         if (read == parts) return copy(reading = now.reading, romanized = now.romanized, ruby = now.ruby, typed = now.typed, readWith = now.readWith)
         return readBy(Readings.readAs(read))
+    }
+
+    /**
+     * It, line [was] of its song's words before they changed, read as the words read now, with what UtaTen, ChatGPT or the
+     * user put right in [was] laid over it where the same kanji are: the user's over all, the rest where nothing's put
+     * right in it already. Read by the dictionary first, when the words weren't read yet as it moved. Still read by
+     * hand while something the user put right is in it.
+     */
+    fun carrying(was: SavedLine): SavedLine {
+        val fixes = was.ruby.orEmpty().mapNotNull { part -> part.by?.let { by -> part.reading?.let { ReadingFix(0, part.text, it, by) } } }
+        if (fixes.isEmpty()) return this
+        val now = if (readWith != null) this else readBy(Readings.of(listOf(text), Script.JAPANESE).single())
+        val parts = now.ruby ?: listOf(Ruby(text))
+        val own = parts.filter { it.by != null && it.reading != null }.map { it.text }
+        // The user's first, so they take the kanji before anything else does.
+        val laid = fixes.filter { fix -> fix.by == Reader.USER || own.none { it in fix.kanji || fix.kanji in it } }.sortedBy { it.by != Reader.USER }
+        val read = Readings.corrected(listOf(LineReading(parts, "", "")), laid).single()
+        val carried = if (read.parts == parts) now else now.readBy(read)
+        return carried.copy(readByHand = was.readByHand && carried.ruby.orEmpty().any { it.by == Reader.USER })
     }
 
     /**
@@ -463,11 +493,18 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     }
 }
 
-/** [kept] with each of [lines], the same lines read again, read as it says, but those read by hand; see [SavedLine.rereadAs]. */
+/** [kept] with each of [lines], the same lines read again, read as it says, but those that can't be; see [SavedLine.rereadable] and [SavedLine.rereadAs]. */
 internal fun rereadAs(kept: List<SavedLine>, lines: List<SavedLine>): List<SavedLine> = kept.map { line ->
     val again = lines.firstOrNull { it.isSame(line) }
-    if (again == null || line.readByHand) line else line.rereadAs(again)
+    if (again == null || !line.rereadable) line else line.rereadAs(again)
 }
+
+/**
+ * [kept] with each line a song's words [moved] to, as the second of each pair, carrying what was put right in the line it
+ * was, the first; see [SavedLine.carrying]. Null when that changes none.
+ */
+internal fun carried(kept: List<SavedLine>, moved: List<Pair<SavedLine, SavedLine>>): List<SavedLine>? =
+    kept.map { line -> moved.firstOrNull { it.second.isSame(line) }?.first?.let(line::carrying) ?: line }.takeIf { it != kept }
 
 /** Each part where it starts in the line, with it. */
 private fun List<Ruby>.placed(): List<Pair<Int, Ruby>> = zip(runningFold(0) { at, part -> at + part.text.length }) { part, at -> at to part }
@@ -504,7 +541,7 @@ internal fun keptOver(kept: List<Ruby>, now: List<Ruby>, over: Boolean, carried:
  * kana in it, or in a reading kept for it. Not from kana in another line of the song. Each line is read alone, as a song's are. Null when none is.
  */
 internal fun readAgain(kept: List<SavedLine>): List<SavedLine>? {
-    val older = { line: SavedLine -> line.readByOlder && !line.readByHand && line.wasReadAsJapanese() }
+    val older = { line: SavedLine -> line.readByOlder && line.rereadable && line.wasReadAsJapanese() }
     if (kept.none(older)) return null
     return kept.map { line -> if (older(line)) line.rereadAs(line.readBy(Readings.of(listOf(line.text), Script.JAPANESE).first())) else line }
 }

@@ -102,6 +102,61 @@ class SavedLinesRereadTest {
     }
 
     @Test
+    fun aReadingTheUserPutRightWinsOverOneSungNow() {
+        val line = kept("都会の夜", Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よ", Reader.USER)).copy(readByHand = true)
+        val now = line.copy(reading = "まちのよる", ruby = listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よる", Reader.SUNG)), readWith = Readings.VERSION)
+        val again = line.rereadAs(now)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), again.read())
+        assertEquals("まちのよ", again.reading)
+    }
+
+    @Test
+    fun aLineTheWordsMovedToCarriesWhatWasPutRightInTheLineItWas() {
+        val was = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よ", Reader.USER)).copy(readByHand = true)
+        // Not read yet as it moved: the dictionary reads it first.
+        val moved = SavedLine("都会の夜に", reading = null, title = "Demo", artist = "Band")
+        val carried = moved.carrying(was)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), carried.read())
+        assertEquals("まちのよに", carried.reading)
+        assertEquals(Readings.VERSION, carried.readWith)
+        assertTrue(carried.readByHand)
+    }
+
+    @Test
+    fun whatTheWordsNowPutRightWinsOverWhatALineCarriesButTheUsers() {
+        val was = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よ", Reader.USER))
+        val moved = SavedLine(
+            "都会の夜に", reading = "みやこのよるに", title = "Demo", artist = "Band",
+            ruby = listOf(Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("の"), Ruby("夜", "よる", Reader.CHATGPT), Ruby("に")), readWith = Readings.VERSION
+        )
+        val carried = moved.carrying(was)
+        assertEquals(listOf(Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("夜", "よ", Reader.USER)), carried.read())
+        assertEquals("みやこのよに", carried.reading)
+        // The line it was wasn't read by hand, so it isn't either.
+        assertFalse(carried.readByHand)
+    }
+
+    @Test
+    fun aLineWithNothingPutRightCarriesNothingAndOneReadByHandWithoutTheUsersMarkIsntSaidToBeAnyMore() {
+        val moved = SavedLine("都会の夜に", reading = "とかいのよるに", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる"), Ruby("に")), readWith = Readings.VERSION)
+        assertEquals(moved, moved.carrying(kept("都会の夜", Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる")).copy(readByHand = true)))
+        // Only UtaTen's reading goes with it: the line isn't read by hand any more.
+        val sung = moved.carrying(kept("都会の夜", Ruby("都会", "とかい", Reader.SUNG), Ruby("の"), Ruby("夜", "よる")).copy(readByHand = true))
+        assertFalse(sung.readByHand)
+    }
+
+    @Test
+    fun keptLinesCarryWhatWasPutRightOnlyWhereALineMovedAndNoneWhenNothingChanges() {
+        val was = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よる"))
+        val moved = SavedLine("都会の夜に", reading = null, title = "Demo", artist = "Band")
+        val other = SavedLine("花", reading = "はな", title = "Demo", artist = "Band", ruby = listOf(Ruby("花", "はな")), readWith = Readings.VERSION)
+        val kept = carried(listOf(moved, other), listOf(was to moved))
+        assertEquals("まちのよるに", kept?.first()?.reading)
+        assertEquals(other, kept?.last())
+        assertNull(carried(listOf(other), listOf(was to moved)))
+    }
+
+    @Test
     fun aKeptLineReadAgainInTheStoreKeepsWhatWasPutRightWhereItWas() {
         val store = SavedLinesStore(prefs)
         val line = kept(

@@ -1178,6 +1178,34 @@ class ListeningTest {
     }
 
     @Test
+    fun aJapaneseSongWhoseSungReadingsCantBeReachedIsNotKeptUntilTheyCanBe() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        MainActivity.connectionFactory = { FakeConnection() }
+        val down = java.util.concurrent.atomic.AtomicBoolean(true)
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        fake.handler = { request ->
+            when {
+                request.url.host != "utaten.com" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""")
+                down.get() -> throw IOException("offline")
+                else -> utaTenSingsMachi(request)
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && described(string(R.string.keeping_offline)) }
+        settle()
+        assertFalse(described(string(R.string.kept_offline)))
+        // The next network it tries again, and keeps how its kanji are sung.
+        down.set(false)
+        controllerModel().unmeteredChanged(true)
+        waitForDescription(string(R.string.kept_offline))
+        waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/sung_readings.json").let { it.isFile && "まち" in it.readText() } }
+    }
+
+    @Test
     fun aNetworkBackWhileTheLastOneStillFailsIsTriedAgainToo() {
         MainActivity.connectionFactory = { FakeConnection() }
         val keeping = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -4684,6 +4712,141 @@ class ListeningTest {
         val kept = keptSungUnmarked { request -> FakeSpotify.html(request, "<html><body>Just a moment...</body></html>") }
         assertEquals("まちのよる", kept.reading)
         assertEquals(listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), kept.ruby)
+    }
+
+    /** UtaTen's search finding Demo by Band, and its page, which sings 都会 as まち and 夜 as よる. */
+    private fun utaTenSingsMachi(request: okhttp3.Request): okhttp3.Response {
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        return if (request.url.encodedPath == "/search") FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+        else FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
+    }
+
+    private fun lrclibRequests() = fake.requestedUrls.count { it.toHttpUrl().host == "lrclib.net" }
+
+    /** The words shown closed, as they're kept, and opened again: kept, so LRCLIB isn't asked again. */
+    private fun closedAndOpenedAgain(meanwhile: () -> Unit = {}) {
+        val looked = lrclibRequests()
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        meanwhile()
+        click(string(R.string.lyrics_button))
+        composeRule.waitForIdle()
+        assertEquals(looked, lrclibRequests())
+    }
+
+    /** Lets what's still being worked out away from the screen finish, as the fakes answer at once. */
+    private fun settle() {
+        val until = System.currentTimeMillis() + 500
+        while (System.currentTimeMillis() < until) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+    }
+
+    @Test
+    fun aSungReadingUtaTenCouldntGiveIsAskedForAgainWhenTheWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val up = java.util.concurrent.atomic.AtomicBoolean(false)
+        wordsOf(null, "都会の夜", sites = { request ->
+            when {
+                request.url.host != "utaten.com" -> null
+                up.get() -> utaTenSingsMachi(request)
+                else -> throw java.io.IOException("offline")
+            }
+        })
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("とかい") }
+        settle()
+        val asked = utatenRequests()
+        closedAndOpenedAgain { up.set(true) }
+        // UtaTen couldn't be asked then, so it's asked now, and the words read as they're sung.
+        waitUntil(TIMEOUT_MS) { readingShown("まち") }
+        assertTrue(utatenRequests() > asked)
+    }
+
+    @Test
+    fun aSongUtaTenHasNoPageForIsntAskedForAgainWhenItsWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        wordsOf(null, "都会の夜", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("とかい") }
+        settle()
+        val asked = utatenRequests()
+        closedAndOpenedAgain()
+        waitUntil(TIMEOUT_MS) { readingShown("とかい") }
+        settle()
+        assertEquals(asked, utatenRequests())
+    }
+
+    @Test
+    fun readingsChatGptCouldntCheckAreCheckedAgainWhenTheWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        val up = java.util.concurrent.atomic.AtomicBoolean(false)
+        openAi.reply = { body -> if (!up.get() && "You check the readings" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(null, "都会の夜", openAi = openAi, sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { openAi.askedFor("You check the readings") > 0 && readingShown("とかい") }
+        settle()
+        val asked = openAi.askedFor("You check the readings")
+        closedAndOpenedAgain { up.set(true) }
+        waitUntil(TIMEOUT_MS) { openAi.askedFor("You check the readings") > asked }
+    }
+
+    @Test
+    fun readingsMadeBeforeUniDicCameAreReadWithItWhenTheWordsShowAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        // Not fetched here: on a metered network, say.
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { false }) }
+        wordsOf(null, "君が溢した涙", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && readingShown("なみだ") }
+        settle()
+        assertFalse(readingShown("こぼ"))
+        // UniDic comes meanwhile, as for another song shown on Wi-Fi.
+        closedAndOpenedAgain { TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files")) }
+        waitUntil(UNIDIC_MS) { readingShown("こぼ") }
+    }
+
+    @Test
+    fun aLineKeptFollowsItsWordsWhenTheyChangeWithWhatWasPutRightInIt() {
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"まちのよ","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        // Found again with a word more, and UtaTen has none for it now.
+        wordsOf(null, "都会の夜に", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && SavedLinesStore(prefs()).load().single().text == "都会の夜に" }
+        settle()
+        val line = SavedLinesStore(prefs()).load().single()
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
+        assertEquals("まちのよに", line.reading)
+        assertTrue(line.readByHand)
+    }
+
+    @Test
+    fun aLinePutRightByHandIsReadByANewerDictionaryButWhereTheUserPutItRight() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"三本の木","reading":"さんほんのこ","title":"Other","artist":"Band","ruby":[["三本","さんほん"],["の",null],["木","こ","user"]],"byHand":true,"readWith":3}]"""
+        ).commit()
+        launch()
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().reading == "さんぼんのこ" }
+        val line = SavedLinesStore(prefs()).load().single()
+        assertEquals(listOf(Ruby("三本", "さんぼん"), Ruby("木", "こ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
+        assertTrue(line.readByHand)
+        assertEquals(Readings.VERSION, readWith("三本の木", "Other"))
+    }
+
+    @Test
+    fun aLinePutRightByHandTakesHowItsSungButWhereTheUserPutItRight() {
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよ","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        // UtaTen sings 夜 as よる: the user's よ stays, and its 都会 is sung まち.
+        wordsOf(null, "都会の夜", sites = { request -> utaTenSingsMachi(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { readingShown("まち") }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().reading == "まちのよ" }
+        val line = SavedLinesStore(prefs()).load().single()
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
+        assertTrue(line.readByHand)
     }
 
     /** Which [Readings.VERSION] read the line [text] of [title] kept, as kept; null when that isn't said. */

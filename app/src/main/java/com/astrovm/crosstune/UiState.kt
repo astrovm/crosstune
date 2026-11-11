@@ -517,6 +517,11 @@ internal data class Learning(
     val script: Script? = null,
     /** How each line reads, once worked out. */
     val lines: List<LineReading> = emptyList(),
+    /**
+     * Whether [lines] lack what couldn't be had as they were worked out: UtaTen's or ChatGPT's answer, or UniDic, not on
+     * the phone yet. Kept so, they're read again when the words show again.
+     */
+    val readingsUnfinished: Boolean = false,
     /** How the song's title and its artist read, in that order, once worked out with its lines. */
     val names: List<LineReading> = emptyList(),
     /** Each line translated, or null where it needs none, once done. */
