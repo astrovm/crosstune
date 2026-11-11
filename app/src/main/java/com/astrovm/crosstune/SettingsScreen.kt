@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.HorizontalDivider
@@ -749,24 +751,8 @@ private fun LicensesPage(onBack: () -> Unit) {
     var focusedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var entered by rememberSaveable { mutableStateOf(false) }
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
-    fun focusing(key: String) = Modifier
-        .focusRequester(requesters.getOrPut(key) { FocusRequester() })
-        .onFocusChanged { if (it.isFocused) focusedKey = key }
     val units = remember(open) { Notices.all.filter { it.name in open }.associate { it.name to licenseUnits(Notices.text(it)) } }
-    val color = MaterialTheme.colorScheme.surfaceContainerLow
-    val hairline = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-    val corner = MaterialTheme.shapes.large
-    // The group's rounded box, drawn a row at a time, as only the rows on screen are drawn.
-    val square = CornerSize(0)
-    fun box(first: Boolean, last: Boolean) = Modifier.background(
-        color,
-        corner.copy(
-            topStart = if (first) corner.topStart else square,
-            topEnd = if (first) corner.topEnd else square,
-            bottomEnd = if (last) corner.bottomEnd else square,
-            bottomStart = if (last) corner.bottomStart else square
-        )
-    )
+    val look = LicenseLook(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), MaterialTheme.shapes.large)
     LazyPage(
         title = stringResource(R.string.settings_licenses),
         navigationIcon = {
@@ -776,41 +762,64 @@ private fun LicensesPage(onBack: () -> Unit) {
         },
         listState = listState
     ) {
-        Notices.all.forEachIndexed { index, notice ->
-            val isOpen = notice.name in open
-            val last = index == Notices.all.lastIndex
-            val key = "work:${notice.name}"
-            item(key = key) {
-                Column(box(first = index == 0, last = last && !isOpen)) {
-                    if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = hairline)
-                    NoticeRow(notice, isOpen, focusing(key)) { open = if (isOpen) open - notice.name else open + notice.name }
-                }
-            }
-            if (isOpen) {
-                if (notice.url != null) {
-                    item(key = "url:${notice.name}") { NoticeLink(notice.url, box(first = false, last = false).then(focusing("url:${notice.name}")), openWebPage) }
-                }
-                val pieces = units.getValue(notice.name)
-                pieces.forEachIndexed { at, unit ->
-                    val unitKey = "text:${notice.name}:$at"
-                    item(key = unitKey) {
-                        val end = at == pieces.lastIndex
-                        LicensePiece(unit, end, box(first = false, last = last && end).then(focusing(unitKey)))
-                    }
-                }
-            }
-        }
+        licenseItems(open, units, look, openWebPage, focusing = { key ->
+            Modifier.focusRequester(requesters.getOrPut(key) { FocusRequester() }).onFocusChanged { if (it.isFocused) focusedKey = key }
+        }) { name -> open = if (name in open) open - name else open + name }
     }
     LaunchedEffect(Unit) {
         // Wait for the rows to be placed, as the list draws only those on screen.
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }.first { it.isNotEmpty() }
         withFrameNanos { }
-        if (!entered) {
-            // A fresh visit starts on the first work; made again, the page goes back to what the remote was on.
-            entered = true
-            requesters["work:${Notices.all.first().name}"]?.requestFocus()
-        } else {
-            focusedKey?.let { key -> requesters[key]?.takeIf { listState.layoutInfo.visibleItemsInfo.any { it.key == key } }?.requestFocus() }
+        // A fresh visit starts on the first work; made again, the page goes back to what the remote was on.
+        val key = if (entered) focusedKey else "work:${Notices.all.first().name}"
+        entered = true
+        key?.let { requesters[it] }?.takeIf { listState.layoutInfo.visibleItemsInfo.any { item -> item.key == key } }?.requestFocus()
+    }
+}
+
+/** How the licences' group looks: its color, its hairlines' and its rounded corners. */
+private class LicenseLook(val color: Color, val hairline: Color, val corner: CornerBasedShape) {
+    private val square = CornerSize(0)
+
+    /** The group's rounded box, drawn a row at a time, as only the rows on screen are drawn. */
+    fun box(first: Boolean, last: Boolean) = Modifier.background(
+        color,
+        corner.copy(
+            topStart = if (first) corner.topStart else square,
+            topEnd = if (first) corner.topEnd else square,
+            bottomEnd = if (last) corner.bottomEnd else square,
+            bottomStart = if (last) corner.bottomStart else square
+        )
+    )
+}
+
+/** Each work's row, and under an open one where it is and its licence's pieces, each keyed, so the list keeps its place. */
+private fun LazyListScope.licenseItems(
+    open: List<String>,
+    units: Map<String, List<LicenseUnit>>,
+    look: LicenseLook,
+    openWebPage: (String) -> Unit,
+    focusing: (String) -> Modifier,
+    onToggle: (String) -> Unit
+) {
+    Notices.all.forEachIndexed { index, notice ->
+        val isOpen = notice.name in open
+        val last = index == Notices.all.lastIndex
+        item(key = "work:${notice.name}") {
+            Column(look.box(first = index == 0, last = last && !isOpen)) {
+                if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = look.hairline)
+                NoticeRow(notice, isOpen, focusing("work:${notice.name}")) { onToggle(notice.name) }
+            }
+        }
+        if (isOpen && notice.url != null) {
+            item(key = "url:${notice.name}") { NoticeLink(notice.url, look.box(first = false, last = false).then(focusing("url:${notice.name}")), openWebPage) }
+        }
+        val pieces = units[notice.name].orEmpty()
+        pieces.forEachIndexed { at, unit ->
+            item(key = "text:${notice.name}:$at") {
+                val end = at == pieces.lastIndex
+                LicensePiece(unit, end, look.box(first = false, last = last && end).then(focusing("text:${notice.name}:$at")))
+            }
         }
     }
 }

@@ -96,7 +96,7 @@ internal class Inventory(private val root: File, libraries: File, cxx: File) {
         fun compiledFiles(cxx: File): Set<File> {
             val logs = cxx.walkTopDown().filter { it.name == ".ninja_deps" }.toList()
             val newest = logs.maxByOrNull { it.lastModified() }?.parentFile?.parentFile ?: return emptySet()
-            return logs.filter { it.parentFile.parentFile == newest }.flatMap { log -> ninjaDeps(log).map { path -> (if (File(path).isAbsolute) File(path) else File(log.parentFile, path)).normalize() } }.toSet()
+            return logs.filter { it.parentFile?.parentFile == newest }.flatMap { log -> ninjaDeps(log).map { path -> (if (File(path).isAbsolute) File(path) else File(log.parentFile, path)).normalize() } }.toSet()
         }
 
         /** The paths in a `.ninja_deps` log that an object file depends on. */
