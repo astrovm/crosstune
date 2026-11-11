@@ -1,6 +1,7 @@
 package com.astrovm.crosstune
 
 import android.os.SystemClock
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,7 +22,6 @@ import androidx.compose.ui.text.TextLayoutResult
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -151,9 +151,15 @@ class FollowsTheSongTest {
 
     // The player.
 
-    private fun player(lines: List<LyricLine> = emptyList(), byEar: Boolean = false) = show {
+    /** The player, with [lines] timed by ear as [byEar] says, and the colors of a line sung and of one not. */
+    private fun player(lines: List<LyricLine> = emptyList()) = show {
+        sungInk = MaterialTheme.colorScheme.onSurface
+        waitingInk = MaterialTheme.colorScheme.onSurfaceVariant
         PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions())
     }
+
+    private var sungInk = Color.Unspecified
+    private var waitingInk = Color.Unspecified
 
     /** The color [text] is drawn in, as it's shown alone, once a line's faded in. */
     private fun inkOf(text: String): Color {
@@ -202,39 +208,59 @@ class FollowsTheSongTest {
     @Test
     fun thePlayersPeekShowsTheFirstLineDimmedTillItsSung() {
         following = pausedAt(0)
-        player(peekLines)
-        val waiting = inkOf("One")
+        // Timed by a service, word by word, so each line says where its words end.
+        player(peekLines.map { it.copy(endMs = it.timeMs + 2_000) })
+        assertEquals(waitingInk, inkOf("One"))
         playsFrom(1_000)
         passes(FADE_MS)
-        val sung = inkOf("One")
-        assertNotEquals(waiting, sung)
-        // Timed by a service, the last line is up through the outro, as it's lit in the words.
+        assertEquals(sungInk, inkOf("One"))
+        // The last line is up through the outro, past where its words end, as it's lit in the words.
         playsFrom(150_000)
         passes(FADE_MS)
-        assertEquals(sung, inkOf("Three"))
+        assertEquals(sungInk, inkOf("Three"))
     }
 
     @Test
     fun thePlayersPeekGoesByTheLinesHeard() {
         following = pausedAt(0)
-        // Timed by ear, with a blank line after the first, which the peek leaves out.
-        player(heardLines.take(1) + LyricLine(LyricLine.NOT_HEARD, "") + heardLines.drop(1), byEar = true)
+        byEar = true
+        // With a blank line after the first, which the peek leaves out.
+        player(heardLines.take(1) + LyricLine(LyricLine.NOT_HEARD, "") + heardLines.drop(1))
         playsFrom(12_000)
         passes(FADE_MS)
-        val sung = inkOf(heardLines[0].text)
+        assertEquals(sungInk, inkOf(heardLines[0].text))
         // Sung through, it's not up as if still sung: the line coming next in the words is, dimmed.
         passes(1_000)
         assertFalse(exists(heardLines[0].text))
-        assertNotEquals(sung, inkOf(heardLines[1].text))
+        assertEquals(waitingInk, inkOf(heardLines[1].text))
         // Nothing changes till the next line heard, so the song's left alone meanwhile.
         passesAskingRarely(16_000)
         assertTrue(exists(heardLines[1].text))
         passes(1_000)
-        assertEquals(sung, inkOf(heardLines[3].text))
+        assertEquals(sungInk, inkOf(heardLines[3].text))
         assertFalse(exists(heardLines[1].text))
         // Past the last line, sung through, nothing comes: it stays, dimmed.
         passes(3_000)
-        assertNotEquals(sung, inkOf(heardLines[3].text))
+        assertEquals(waitingInk, inkOf(heardLines[3].text))
+    }
+
+    @Test
+    fun thePlayersPeekGoesByTheLinesHeardOnceTheyreSaidToBe() {
+        following = pausedAt(0)
+        player(heardLines)
+        playsFrom(13_200)
+        passes(FADE_MS)
+        // Taken for a service's, the line heard is up till the next.
+        assertEquals(sungInk, inkOf(heardLines[0].text))
+        // The same lines, said to be timed by ear, go by what's heard from then on.
+        byEar = true
+        passes(FADE_MS)
+        assertEquals(waitingInk, inkOf(heardLines[1].text))
+        playsFrom(32_000)
+        passes(FADE_MS)
+        assertEquals(sungInk, inkOf(heardLines[3].text))
+        passes(1_500)
+        assertEquals(waitingInk, inkOf(heardLines[3].text))
     }
 
     @Test
