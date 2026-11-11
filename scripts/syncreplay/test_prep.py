@@ -79,6 +79,31 @@ class WordsForTheRecordingTest(unittest.TestCase):
         self.assertEqual(self.found(cached=True, prepped=False), 0)
 
 
+class PartTest(unittest.TestCase):
+    """--part K/N checks a part of the songs alone: the N parts hold each song once."""
+
+    def test_the_parts_hold_each_song_once(self):
+        songs = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
+        parts = [r.part(songs, f'{k}/3') for k in (1, 2, 3)]
+        self.assertEqual(parts, [['a', 'd', 'g'], ['b', 'e'], ['c', 'f']])
+        self.assertEqual(r.part(songs, '1/1'), songs)
+
+    def test_with_no_part_every_song_is_taken(self):
+        self.assertEqual(r.part(['a', 'b'], None), ['a', 'b'])
+
+    def test_a_part_past_the_count_is_refused(self):
+        for which in ('0/3', '4/3'):
+            with self.assertRaises(SystemExit):
+                r.part(['a'], which)
+
+    def test_the_command_takes_a_part(self):
+        seen = []
+        with patch.object(r, 'prepped', return_value=['a', 'b', 'c']), patch.object(r, 'untimed', side_effect=lambda args: seen.append(r.part(args.ids or r.prepped(), args.part))), \
+                patch('sys.argv', ['syncreplay.py', 'untimed', '--part', '2/3']):
+            r.main()
+        self.assertEqual(seen, [['b']])
+
+
 class SharedFolderTest(unittest.TestCase):
     """SYNCREPLAY_DIR keeps the inputs for every checkout, while what one checkout asks and gets stays its own."""
 

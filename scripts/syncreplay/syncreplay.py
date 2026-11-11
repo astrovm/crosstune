@@ -10,7 +10,7 @@ far from where each line is really sung the app showed it.
   python3 scripts/syncreplay/syncreplay.py score ID [--from MS] [--placed]
   ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S [--again] [--app PACKAGE] [--uri URI]
   python3 scripts/syncreplay/syncreplay.py hear ID --model base-q5_1    # then run --model base-q5_1
-  python3 scripts/syncreplay/syncreplay.py untimed [ID...] [--again MS] [-v]   # the words' times taken off, then timed by the singing heard
+  python3 scripts/syncreplay/syncreplay.py untimed [ID...] [--again MS] [--part K/N] [-v]   # the words' times taken off, then timed by the singing heard
 
 ID is a YouTube id. LYRICS.json is the timed words the app finds for it, as [[ms, "line"], ...],
 e.g. from the app's lyrics.json cache. `prep` fetches the recording (yt-dlp), separates the voice
@@ -41,7 +41,8 @@ heard is found near where the app says, by bits short enough to still fit a reco
 by SungTiming on the JVM, in seconds: from the whiles the app would hear as the song plays from MS (--from),
 and with --again from a second play too, the first while that many ms in. It prints, per song, the lines
 sung in what was heard, those put within 1.0 s and 0.5 s of it, those put further off and those over 3 s off,
-those put where nothing was heard, and the worst; -v prints each line.
+those put where nothing was heard, and the worst; -v prints each line. --part K/N takes every Nth song
+of those prepped, from the Kth, so a change tuned on all of them can be checked on each part alone.
 Each line is held to its own truth by its words, as the words the app shows, which the check keeps from
 its cache, needn't be those given to prep: their lines break elsewhere, so their numbers mean other lines.
 `run --fingerprints FILE` also replays recorded fingerprint answers, as a video heard when its words
@@ -1138,9 +1139,19 @@ def untimed_input(song, starts, length_ms, other=""):
     return path, used
 
 
+def part(songs, which):
+    """Every Nth of [songs] from the Kth, for [which] as "K/N" counted from 1; all of them with none."""
+    if not which:
+        return songs
+    k, n = map(int, which.split("/"))
+    if not 1 <= k <= n:
+        sys.exit(f"--part {which}: K has to be from 1 to N")
+    return songs[k - 1::n]
+
+
 def untimed(args):
     """Each song's lines put in time by the singing heard, with their own times taken off, against when they're sung."""
-    songs = args.ids or prepped()
+    songs = part(args.ids or prepped(), args.part)
     lengths = {song: max(map(int, json.loads(heard_file(song, LENGTHS[0], APP_MODEL).read_text()))) + LENGTHS[0] for song in songs}
     wanted = {song: untimed_whiles(lengths[song], args.start, args.work) + (untimed_whiles(lengths[song], args.again, args.work) if args.again is not None else [])
               for song in songs}
@@ -1271,6 +1282,7 @@ def main():
     p.add_argument("-v", "--verbose", action="store_true", help="each line: when it's sung and where it was put")
     p.add_argument("--heard", default="", help="another hearing of each song, as `all --heard`; the nearest while in it")
     p.add_argument("--again", type=int, help="play it a second time, keeping what was heard, with the first while heard this many ms in")
+    p.add_argument("--part", help="K/N: every Nth song from the Kth, to check a part held out")
     p.set_defaults(go=untimed)
     p = steps.add_parser("phone")
     p.add_argument("id")
