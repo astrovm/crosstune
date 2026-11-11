@@ -877,6 +877,74 @@ class ListeningTest {
         waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/sung_readings.json").let { it.isFile && "まち" in it.readText() } }
     }
 
+    /**
+     * Whether a Japanese song's title and artist go to UtaTen with the words shown as [readings], [romaji]
+     * and [wordsAs] say: while its words show or, [offline], while it's kept offline.
+     */
+    private fun utaTenAsked(readings: Boolean, romaji: Boolean, wordsAs: WordsAs, offline: Boolean): Boolean {
+        prefs().edit().putBoolean("lyrics_readings", readings).putBoolean("lyrics_romanized", romaji).putString("lyrics_words_as", wordsAs.name).commit()
+        val asked = { fake.requestedUrls.any { it.toHttpUrl().host == "utaten.com" } }
+        val sites = { request: okhttp3.Request -> FakeSpotify.html(request, "").takeIf { request.url.host == "utaten.com" } }
+        if (offline) {
+            MainActivity.connectionFactory = { FakeConnection() }
+            MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+            fake.handler = { request -> sites(request) ?: FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""") }
+            allowMicrophone()
+            launch()
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.keep_offline))
+            // Kept once all it needs is looked up, UtaTen too when it's asked.
+            waitForDescription(string(R.string.kept_offline))
+        } else {
+            wordsOf(null, "都会の夜", sites = sites)
+            // Asked once the words are read, a moment after they show; with nothing to read, they're not.
+            if (readings || romaji || wordsAs != WordsAs.WRITTEN) waitUntil(TIMEOUT_MS) { asked() } else waitUntil(TIMEOUT_MS) { shown("都会の夜") }
+        }
+        composeRule.waitForIdle()
+        return asked()
+    }
+
+    @Test
+    fun aJapaneseSongsNameGoesToUtaTenWithReadingsOn() {
+        assertTrue(utaTenAsked(readings = true, romaji = false, wordsAs = WordsAs.WRITTEN, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongsNameGoesToUtaTenWithRomajiOn() {
+        assertTrue(utaTenAsked(readings = false, romaji = true, wordsAs = WordsAs.WRITTEN, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongsNameGoesToUtaTenWithItsWordsShownInKana() {
+        assertTrue(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.KANA, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongsNameDoesntGoToUtaTenWithItsWordsShownAsWritten() {
+        assertFalse(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.WRITTEN, offline = false))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithReadingsOn() {
+        assertTrue(utaTenAsked(readings = true, romaji = false, wordsAs = WordsAs.WRITTEN, offline = true))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithRomajiOn() {
+        assertTrue(utaTenAsked(readings = false, romaji = true, wordsAs = WordsAs.WRITTEN, offline = true))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithItsWordsShownInKana() {
+        assertTrue(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.KANA, offline = true))
+    }
+
+    @Test
+    fun aJapaneseSongKeptOfflineDoesntHaveItsNameGoToUtaTenWithItsWordsShownAsWritten() {
+        assertFalse(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.WRITTEN, offline = true))
+    }
+
     @Test
     fun withNoRoomLeftASongKeptOfflineSaysSo() {
         prefs().edit().putInt("offline_space_mb", 0).commit()
@@ -4355,13 +4423,73 @@ class ListeningTest {
         assertEquals("とかいのあした", kept.first { it.text == "都会の朝" }.reading)
     }
 
+    /** Kept as a version before [Readings.VERSION] 4 kept them, which read 三本 as さんほん: no word of what read them. */
+    private val keptBeforeVersion4 =
+        """{"text":"三本の花","reading":"さんほんのはな","romanized":"sanhon no hana","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["花","はな"]]},""" +
+            """{"text":"三本の木","reading":"さんほんのき","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["木","き"]],"byHand":true},""" +
+            """{"text":"都会の三本","reading":"まちのさんほん","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["三本","さんほん"]]},""" +
+            """{"text":"三本","reading":"さんほん","translation":"three","title":"Demo","artist":"Band","line":"三本の花"}"""
+
+    @Test
+    fun linesKeptReadByAnOlderDictionaryAreReadAsTheDictionaryReadsThemNowButForWhatItDidntRead() {
+        prefs().edit().putString("saved_lines", "[$keptBeforeVersion4]").commit()
+        // UtaTen hasn't the song, and ChatGPT isn't signed in: the dictionary's readings are all there are.
+        wordsOf(null, "三本の花\\n三本の木\\n都会の三本", sites = { request -> FakeSpotify.html(request, "").takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { readingShown("さんぼん") }
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().first { it.text == "三本の花" }.reading == "さんぼんのはな" }
+        val kept = SavedLinesStore(prefs()).load()
+        val line = kept.first { it.text == "三本の花" }
+        assertEquals(listOf(Ruby("三本", "さんぼん"), Ruby("の"), Ruby("花", "はな")), line.ruby)
+        assertEquals("sanbon no hana", line.romanized)
+        assertEquals(Readings.VERSION, readWith("三本の花", "Demo"))
+        // Put right by hand, it stays so.
+        assertEquals("さんほんのき", kept.first { it.text == "三本の木" }.reading)
+        // UtaTen's まち stays, and the dictionary's 三本 is read as it is now.
+        val sung = kept.first { it.text == "都会の三本" }
+        assertEquals("まちのさんぼん", sung.reading)
+        assertEquals(Ruby("都会", "まち", Reader.SUNG), sung.ruby?.first())
+        // A word kept has ChatGPT's reading, which the dictionary leaves.
+        assertEquals("さんほん", kept.first { it.line != null }.reading)
+    }
+
+    /** Which [Readings.VERSION] read the line [text] of [title] kept, as kept; null when that isn't said. */
+    private fun readWith(text: String, title: String): Int? {
+        val kept = org.json.JSONArray(prefs().getString("saved_lines", null))
+        val line = (0 until kept.length()).map(kept::getJSONObject).first { it.getString("text") == text && it.getString("title") == title }
+        return if (line.has("readWith")) line.getInt("readWith") else null
+    }
+
+    @Test
+    fun linesKeptOfASongNotOpenedAgainAreReadAsTheDictionaryReadsThemNowWhenTheyreKnownToBeItsReadings() {
+        prefs().edit().putString(
+            "saved_lines",
+            "[" + keptBeforeVersion4.replace("\"Demo\"", "\"Other\"") + "," +
+                // Kept by a version that said which dictionary read it: what isn't marked as put right is the dictionary's.
+                """{"text":"三本の花","reading":"さんほんのはな","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["花","はな"]],"readWith":3},""" +
+                """{"text":"都会の三本","reading":"まちのさんほん","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["三本","さんほん"]],"readWith":3},""" +
+                """{"text":"三本の木","reading":"さんほんのき","title":"Demo","artist":"Band","ruby":[["三本","さんほん","user"],["の",null],["木","き"]],"byHand":true,"readWith":3}]"""
+        ).commit()
+        launch()
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().first { it.text == "三本の花" && it.title == "Demo" }.reading == "さんぼんのはな" }
+        val kept = SavedLinesStore(prefs()).load()
+        val demo = kept.filter { it.title == "Demo" }
+        assertEquals(Readings.VERSION, readWith("三本の花", "Demo"))
+        assertEquals("まちのさんぼん", demo.first { it.text == "都会の三本" }.reading)
+        assertEquals("さんほんのき", demo.first { it.text == "三本の木" }.reading)
+        // Kept before that was said, UtaTen's readings were kept unmarked, as the dictionary's are: they wait for the song to be opened again.
+        val other = kept.filter { it.title == "Other" }
+        assertEquals(listOf("さんほんのはな", "さんほんのき", "まちのさんほん", "さんほん"), other.map { it.reading })
+        assertTrue(other.all { readWith(it.text, "Other") == null })
+    }
+
     @Test
     fun japaneseWordsWrittenChinasWayAreReadAsJapanWritesThemAndSoAreLinesKeptFromThem() {
         // Kept from words a Chinese site wrote with 瞬间 for 瞬間, and China's comma, so read wrong.
         prefs().edit().putString(
             "saved_lines",
             """[{"text":"真実の瞬间はいつも，","reading":"しんじつのまどか间はいつも，","title":"Demo","artist":"Band","ruby":[["真実","しんじつ"],["の",null],["瞬","まどか"],["间はいつも，",null]]},""" +
-                """{"text":"都会の夜","reading":"まちのよる","title":"Demo","artist":"Band","ruby":[["都会","まち"],["の",null],["夜","よる"]]}]"""
+                // Read as it's sung, marked so: UtaTen has nothing for the song now, and it stays.
+                """{"text":"都会の夜","reading":"まちのよる","title":"Demo","artist":"Band","ruby":[["都会","まち","utaten"],["の",null],["夜","よる"]]}]"""
         ).commit()
         wordsOf(null, "真実の瞬间はいつも，\\n仆や君のため，\\n都会の夜")
         waitUntil(TIMEOUT_MS) { readingShown("しゅんかん") && readingShown("ぼく") }

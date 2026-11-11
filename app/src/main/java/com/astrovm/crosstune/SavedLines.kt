@@ -53,13 +53,43 @@ internal data class SavedLine(
     /** How the other kinds of card it makes, by [CardType.id], are going, each as [interval], [ease], [step] and [due] are for the first kind. */
     val reviews: Map<String, Review> = emptyMap(),
     /** Which kind of card it is now, by [CardType.id]; its own schedule is the one in [interval], [ease], [step] and [due]. Not kept. */
-    val cardType: String = READ_TYPE
+    val cardType: String = READ_TYPE,
+    /**
+     * The [Readings.VERSION] that read it, so it's read again once the dictionary reads otherwise: what of its
+     * [ruby] has no [Ruby.by] is that version's. Null when not read, or kept before this was, when what UtaTen
+     * or ChatGPT put right wasn't marked either, so the dictionary's can't be told from theirs.
+     */
+    val readWith: Int? = null
 ) {
     /** It as the card of kind [id], with that card's schedule in the place of the first kind's. */
     fun forType(id: String): SavedLine {
         if (id == READ_TYPE) return copy(cardType = id)
         val review = reviews[id] ?: Review()
         return copy(cardType = id, interval = review.interval, ease = review.ease, step = review.step, due = review.due)
+    }
+
+    /** Whether it was read by an older dictionary than this version's, and is to be read again. */
+    val readByOlder get() = readWith != null && readWith < Readings.VERSION
+
+    /** It read as [read] says, by this version's dictionary; with none, as nothing reads it. */
+    fun readBy(read: LineReading?): SavedLine = copy(
+        reading = read?.reading?.takeIf { it != text },
+        romanized = read?.romanized?.takeIf { it.isNotBlank() && it != read.reading },
+        ruby = read?.parts?.takeIf { parts -> parts.any { it.reading != null } },
+        typed = read?.typed?.takeIf { it.isNotBlank() && it != read.romanized },
+        readWith = read?.let { Readings.VERSION }
+    )
+
+    /**
+     * It read as [now], the same line read as its song's words read now, but for the readings UtaTen, ChatGPT or
+     * the user put right in it, which stay where [now] has only the dictionary's.
+     */
+    fun rereadAs(now: SavedLine): SavedLine {
+        val parts = now.ruby
+        val fixedNow = parts.orEmpty().filter { it.by != null }.map { it.text }
+        val fixes = ruby.orEmpty().filter { it.text !in fixedNow }.mapNotNull { part -> part.by?.let { by -> part.reading?.let { ReadingFix(0, part.text, it, by) } } }
+        val read = if (parts == null || fixes.isEmpty()) null else Readings.corrected(listOf(LineReading(parts, now.reading ?: text, now.romanized.orEmpty(), now.typed ?: now.romanized.orEmpty())), fixes).first()
+        return if (read != null) readBy(read) else copy(reading = now.reading, romanized = now.romanized, ruby = parts, typed = now.typed, readWith = now.readWith)
     }
 
     /** Whether it can be played in the music app: it knows where it's sung. */
@@ -214,7 +244,8 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
             SavedLine(
                 text, json.text("reading"), json.text("romanized"), json.text("translation"), json.optString("title"), json.optString("artist"), json.text("explanation"),
                 json.interval(), json.optInt("ease", START_EASE), json.optInt("step"), json.optLong("due"), json.time("start"), json.time("end"), json.time("next"), json.span("length"), json.optLong("lead"), json.text("app"), json.text("artwork"),
-                json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed"), json.reviews()
+                json.text("line"), json.ruby(), json.optBoolean("byHand"), json.text("typed"), json.reviews(),
+                readWith = json.optInt(READ_WITH).takeIf { json.has(READ_WITH) }
             )
         })
     }
@@ -280,11 +311,14 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
     fun replaceAll(changes: List<Pair<SavedLine, SavedLine>>): List<SavedLine> =
         save(load().map { kept -> changes.firstOrNull { it.first.isSame(kept) }.let { change -> if (change == null) kept else change.second } })
 
-    /** Puts how [lines] read, as kept, on the same lines kept before, but for those read by hand. */
-    fun reread(lines: List<SavedLine>): List<SavedLine> = save(
+    /**
+     * Puts how [lines] read, as kept, on the same lines kept before, but for those read by hand, and the readings
+     * put right in them, see [SavedLine.rereadAs]; only on those still read by an [older] dictionary, when asked.
+     */
+    fun reread(lines: List<SavedLine>, older: Boolean = false): List<SavedLine> = save(
         load().map { kept ->
             val again = lines.firstOrNull { it.isSame(kept) }
-            if (again == null || kept.readByHand) kept else kept.copy(reading = again.reading, romanized = again.romanized, ruby = again.ruby, typed = again.typed)
+            if (again == null || kept.readByHand || (older && !kept.readByOlder)) kept else kept.rereadAs(again)
         }
     )
 
@@ -317,6 +351,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
                     .put("ruby", line.ruby?.let { parts -> JSONArray(parts.map { part -> JSONArray().put(part.text).put(part.reading ?: JSONObject.NULL).also { array -> part.by?.let { array.put(it.key) } } }) })
                     .apply { if (line.readByHand) put("byHand", true) }
                     .apply { if (line.reviews.isNotEmpty()) put("reviews", reviewsJson(line.reviews)) }
+                    .apply { line.readWith?.let { put(READ_WITH, it) } }
             )
         }
         preferences.edit { putString(KEY, array.toString()) }
@@ -354,6 +389,7 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
 
     companion object {
         private const val KEY = "saved_lines"
+        private const val READ_WITH = "readWith"
 
         /** How many lines are kept at most. */
         const val MAX = 500
@@ -390,6 +426,15 @@ internal class SavedLinesStore(private val preferences: SharedPreferences) {
         /** How long [line] waits before it's practised again, answered as [grade]. */
         fun waitFor(line: SavedLine, grade: Grade): Long = answered(line, grade, 0).due
     }
+}
+
+/**
+ * [older], lines kept and read by an older dictionary, as this version's reads them, whether or not their song is opened
+ * again: those of Japanese songs, the ones with kana in a line of theirs [kept]. Each line is read alone, as a song's are.
+ */
+internal fun readAgain(older: List<SavedLine>, kept: List<SavedLine>): List<SavedLine> {
+    val japanese = kept.filter { line -> line.text.any(Readings::isKana) }.mapTo(mutableSetOf()) { it.title to it.artist }
+    return older.filter { it.title to it.artist in japanese }.map { it.readBy(Readings.of(listOf(it.text), Script.JAPANESE).first()) }
 }
 
 /**

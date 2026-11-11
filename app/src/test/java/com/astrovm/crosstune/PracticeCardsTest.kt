@@ -6,11 +6,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.test.core.app.ApplicationProvider
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -123,6 +126,28 @@ class PracticeCardsTest {
         // A card turned already isn't turned again.
         cards.turn()
         assertTrue(playback.plays.isEmpty())
+    }
+
+    @Test
+    fun aCardsLineIsReadAgainAwayFromTheScreensThread() {
+        keep(line("夜の空").copy(reading = "よるのそら", romanized = "yoru no sora", ruby = listOf(Ruby("夜", "よる"), Ruby("の"), Ruby("空", "そら"))))
+        // Holds what it's given, until the test runs it.
+        val held = LinkedBlockingQueue<Runnable>()
+        val reading = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                held += block
+            }
+        }
+        val cards = PracticeCards(screen, scope, null, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, { System.currentTimeMillis() }, readDispatcher = reading)
+        cards.start(null, before = null)
+        cards.readAs(listOf("よ", "そら"))
+        // Asked, it's read on the dispatcher given, the dictionary loading there the first time, and not before it runs.
+        val read = checkNotNull(held.poll(60, TimeUnit.SECONDS))
+        assertEquals("よるのそら", store.load().single().reading)
+        read.run()
+        waitFor("the line read again") { store.load().single().reading == "よのそら" }
+        waitFor("the card read again") { practice?.line?.reading == "よのそら" }
+        assertTrue(store.load().single().readByHand)
     }
 
     @Test
@@ -341,7 +366,7 @@ class PracticeCardsTest {
         assertFalse(practice!!.line!!.readByHand)
 
         cards.readAs(listOf("りゅう", "ほし"))
-        assertTrue(practice!!.line!!.readByHand)
+        waitFor("the reading put right") { practice?.line?.readByHand == true }
         assertTrue(practice!!.line!!.reading!!.startsWith("りゅう"))
         assertTrue(screen.value.savedLines.single().readByHand)
     }

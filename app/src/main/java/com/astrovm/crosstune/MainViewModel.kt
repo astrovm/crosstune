@@ -311,7 +311,7 @@ internal class MainViewModel(
         private set
 
     /** Kept lines practised as cards. */
-    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, AppTraitsStore(preferences, wallClock), wallClock, now, reminders, newPlayer = newLinePlayer)
+    private val cards = PracticeCards(screen, viewModelScope, playback, matcher, savedLinesStore, AppTraitsStore(preferences, wallClock), wallClock, now, reminders, newPlayer = newLinePlayer, readDispatcher = systemDispatcher)
 
     /** Shizuku can start or stop at any time, which takes setting up in one tap with it. */
     private val stopWatchingOneTap = oneTap?.watch { uiState = uiState.withOneTap() }
@@ -444,6 +444,15 @@ internal class MainViewModel(
                 val read = withContext(systemDispatcher) { disk.entries().mapNotNull { (key, json) -> KeptWords.from(json)?.let { key to it } } }
                 // Any shown since are newer.
                 read.forEach { (key, words) -> if (key !in kept) kept[key] = words }
+            }
+        }
+        // Lines kept and read by an older dictionary are read as this one reads them, songs opened again or not.
+        uiState.savedLines.filter { it.readByOlder }.takeIf { it.isNotEmpty() }?.let { older ->
+            viewModelScope.launch {
+                // As they were read: with UniDic, when it's on the phone; never fetched for this.
+                uniDic?.let { if (Readings.uniDic == null) Readings.uniDic = it.tokenizer(fetch = false) }
+                val again = withContext(systemDispatcher) { readAgain(older, uiState.savedLines) }
+                uiState = uiState.copy(savedLines = savedLinesStore.reread(again, older = true))
             }
         }
         updates?.let { checker ->
@@ -3649,18 +3658,13 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return null
         val text = wordLines().getOrNull(index) ?: return null
         val learning = uiState.learning
-        val reading = learning.lines.getOrNull(index)
         return SavedLine(
             text,
-            reading?.reading?.takeIf { it != text },
-            reading?.romanized?.takeIf { it.isNotBlank() && it != reading.reading },
-            learning.translations.getOrNull(index),
-            song.title,
-            song.artist,
-            learning.explanation?.takeIf { it.index == index && it.done }?.text,
-            ruby = reading?.parts?.takeIf { parts -> parts.any { it.reading != null } },
-            typed = reading?.typed?.takeIf { it.isNotBlank() && it != reading.romanized }
-        ).timedAt(index)
+            translation = learning.translations.getOrNull(index),
+            title = song.title,
+            artist = song.artist,
+            explanation = learning.explanation?.takeIf { it.index == index && it.done }?.text
+        ).readBy(learning.lines.getOrNull(index)).timedAt(index)
     }
 
     /** This line, timed as line [index] of the timed words shown, when they are, with the app playing them. */
@@ -3727,7 +3731,7 @@ internal class MainViewModel(
             if (saved.line != null) return@mapNotNull (saved to saved.copy(line = now)).takeIf { saved.text in now }
             if (!taken.add(now)) return@mapNotNull null
             val read = savedLineAt(index) ?: return@mapNotNull null
-            val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, typed = read.typed, translation = read.translation ?: saved.translation)
+            val moved = saved.copy(text = now, reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = false, typed = read.typed, readWith = read.readWith, translation = read.translation ?: saved.translation)
             saved to if (times != null) moved.timedAt(index) else moved
         }
         if (changes.isNotEmpty()) uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
@@ -4122,7 +4126,7 @@ internal class MainViewModel(
         val learning = uiState.learning
         val lines = wordLines()
         val script = learning.script
-        if ((learning.readings || learning.romanized || learning.wordsAs != WordsAs.WRITTEN) && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
+        if (learning.reads && script != null && learning.lines.isEmpty() && readingsJob?.isActive != true) {
             readingsJob = viewModelScope.launch {
                 if (script == Script.JAPANESE) readWithUniDic()
                 // Japanese loads its dictionary the first time, a moment better spent away from the screen.
@@ -4131,15 +4135,20 @@ internal class MainViewModel(
                 // The song's name and its artist's read the same way, to show how to say them.
                 val names = song?.let { withContext(systemDispatcher) { Readings.of(listOf(it.title, it.artist), script) } }.orEmpty()
                 uiState = uiState.copy(learning = uiState.learning.copy(lines = read, names = names))
-                // Lines kept with no reading, as ones once written otherwise, are read as they are now.
-                song?.let { rereadSavedLines(it, unread = true) }
+                // Lines kept with no reading, as ones once written otherwise, are read as they are now; all of them, but
+                // for what was put right in them, once the dictionary's readings are all there are, as for Japanese once
+                // UtaTen's are known, since Japanese ones kept before UtaTen's were marked can't be told from the dictionary's.
+                song?.let { rereadSavedLines(it, unread = script == Script.JAPANESE) }
                 if (script != Script.JAPANESE || song == null) return@launch
                 // Sung readings, 都会 as まち, from a site that writes them over the words.
-                sungReadings?.of(song, lines, read)?.takeIf { it.isNotEmpty() }?.let { fixes ->
+                sungReadings?.of(song, lines, read)?.let { fixes ->
                     if (wordLines() != lines || uiState.learning.lines != read) return@launch
-                    read = Readings.corrected(read, fixes)
-                    uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
-                    rereadSavedLines(song)
+                    if (fixes.isNotEmpty()) {
+                        read = Readings.corrected(read, fixes)
+                        uiState = uiState.copy(learning = uiState.learning.copy(lines = read))
+                    }
+                    // With none from UtaTen, and no ChatGPT to put them right, the dictionary's are all there are.
+                    if (fixes.isNotEmpty() || !usesChatGpt()) rereadSavedLines(song)
                 }
                 // Signed in, ChatGPT puts right the readings the dictionary gets wrong in this song.
                 if (usesChatGpt()) {
@@ -4836,7 +4845,8 @@ internal class MainViewModel(
         if (uiState.learning.translation) translator?.translate(lines, translateInto())
         if (uiState.chords.on) chordFinder?.chordsOf(song, lines)
         val script = Readings.scriptOf(lines)
-        if (uiState.learning.readings && script == Script.JAPANESE) sungReadings?.of(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) })
+        // Asked as when the words show: romaji and kana are made from the readings too.
+        if (uiState.learning.reads && script == Script.JAPANESE) sungReadings?.of(song, lines, withContext(systemDispatcher) { Readings.of(lines, script) })
         return true
     }
 

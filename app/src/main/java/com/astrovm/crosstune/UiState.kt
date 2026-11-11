@@ -550,6 +550,12 @@ internal fun Learning.insteadOf(index: Int): String? {
     return null
 }
 
+/**
+ * Whether the words are read, for what's switched on: their readings, their romaji, or the words shown in kana
+ * or Latin letters, which are all made from how they're read.
+ */
+internal val Learning.reads: Boolean get() = readings || romanized || wordsAs != WordsAs.WRITTEN
+
 /** How the words show for the script they're in: only Japanese has kana, so the others show as written. */
 internal val Learning.showsAs: WordsAs get() = if (wordsAs == WordsAs.KANA && script != Script.JAPANESE) WordsAs.WRITTEN else wordsAs
 

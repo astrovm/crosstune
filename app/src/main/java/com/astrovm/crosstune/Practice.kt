@@ -5,11 +5,14 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -103,7 +106,9 @@ internal class PracticeCards(
     private val reminders: PracticeReminders? = null,
     private val songLoadMs: Long = MainViewModel.LOAD_SONG_MS,
     /** Makes the small YouTube player a line plays in when its music app can't move to it, once it's wanted; nullable so tests need none. */
-    private val newPlayer: (() -> LinePlayer)? = null
+    private val newPlayer: (() -> LinePlayer)? = null,
+    /** Where a card's line is read again: the dictionary loads the first time, and the screen would freeze meanwhile. */
+    private val readDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
     private var uiState by screen
     private var soundJob: Job? = null
@@ -612,13 +617,16 @@ internal class PracticeCards(
 
     /** The card's line read as [readings] say, one for each of its kanji, put right by hand. */
     fun readAs(readings: List<String>) {
-        val practice = uiState.practice ?: return
-        val line = practice.line ?: return
-        val read = line.readAs(readings).takeIf { it != line } ?: return
-        uiState = uiState.copy(
-            savedLines = store.readAs(read),
-            practice = practice.copy(queue = practice.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true, typed = read.typed) else it })
-        )
+        val line = uiState.practice?.line ?: return
+        scope.launch {
+            val read = withContext(readDispatcher) { line.readAs(readings) }.takeIf { it != line } ?: return@launch
+            // Practice may have gone on meanwhile: the line's put right wherever it is in it now.
+            val practice = uiState.practice
+            uiState = uiState.copy(
+                savedLines = store.readAs(read),
+                practice = practice?.let { now -> now.copy(queue = now.queue.map { if (it.isSame(read)) it.copy(reading = read.reading, romanized = read.romanized, ruby = read.ruby, readByHand = true, typed = read.typed) else it }) }
+            )
+        }
     }
 
     /** Says how well the card turned was known, and goes on to the next; one missed comes back after its song's others. */
