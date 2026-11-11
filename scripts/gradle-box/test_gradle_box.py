@@ -97,9 +97,16 @@ class GradleBoxTest(unittest.TestCase):
 
     def only_a_macs_tools(self):
         """cp, du and mv that take no GNU option, and no flock at all, as on a Mac."""
-        for name, option in (("cp", "--reflink*"), ("du", "-sB1"), ("mv", "-T")):
+        for name, option in (("du", "-sB1"), ("mv", "-T")):
             real = shutil.which(name)
             self.tool(name, f'for arg in "$@"; do case "$arg" in {option}) echo "{name}: illegal option" >&2; exit 64;; esac; done\nexec {real} "$@"\n')
+        # A Mac's cp shares blocks with -c, which GNU's doesn't know, so it is taken off on the way.
+        self.tool(
+            "cp",
+            'for arg in "$@"; do case "$arg" in --*) echo "cp: illegal option" >&2; exit 64;; esac; done\n'
+            'for arg in "$@"; do shift; [ "$arg" = -c ] && touch "$FAKE_DIR/cp-shared" || set -- "$@" "$arg"; done\n'
+            f'exec {shutil.which("cp")} "$@"\n',
+        )
         self.tool("flock", f'touch "{self.dir}/flock-asked"\necho "flock: command not found" >&2\nexit 127\n')
 
     def stall(self, lately, total_s):
@@ -318,16 +325,27 @@ class GradleBoxTest(unittest.TestCase):
         box = self.start("a", "help", GRADLE_BOX_MEMINFO=str(self.dir / "none"), GRADLE_BOX_MEMORY="16", FAKE_MACHINE="3221225472 3")
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
-        self.assertIn("podman's machine has 3 GiB, so the build gets that, not 16", output)
+        self.assertIn("podman's machine has 3.0 GiB, so the build gets that, not 16", output)
         command = self.asked()[0]
         self.assertIn("--cpus 3 ", command)
-        self.assertIn("--memory 3g --memory-swap 3g", command)
+        self.assertIn("--memory 3072m --memory-swap 3072m", command)
+
+    def test_off_linux_the_box_never_gets_more_than_a_machine_between_whole_gib(self):
+        for run, machine, memory, said, limit in (("most", "3865470566 3", "16", "3.6 GiB", "3686m"), ("least", "536870912 1", "1", "0.5 GiB", "512m")):
+            box = self.start(run, "help", GRADLE_BOX_MEMINFO=str(self.dir / "none"), GRADLE_BOX_MEMORY=memory, FAKE_MACHINE=machine)
+            output, _ = box.communicate(timeout=20)
+            self.assertEqual(box.returncode, 0, output)
+            self.assertIn(f"podman's machine has {said}", output)
+            self.assertIn(f"--memory {limit} --memory-swap {limit}", self.asked()[-1])
 
     def test_off_linux_a_box_that_fits_podmans_machine_is_told_nothing(self):
+        # The Mac's own count isn't the machine's.
+        self.tool("nproc", "echo 99\n")
         box = self.start("a", "help", GRADLE_BOX_MEMINFO=str(self.dir / "none"), FAKE_MACHINE="17179869184 8")
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertNotIn("machine", output)
+        self.assertTrue((self.dir / "info").exists())
         self.assertIn("--cpus 8 ", self.asked()[0])
         self.assertIn("--memory 1g", self.asked()[0])
 
@@ -369,6 +387,22 @@ class GradleBoxTest(unittest.TestCase):
         self.assertTrue((self.dir / "started.second").exists())
         self.assertFalse((self.dir / "flock-asked").exists())
 
+    def test_a_slot_another_holds_is_waited_for_with_only_a_macs_tools(self):
+        import fcntl
+        self.only_a_macs_tools()
+        state = self.dir / "state"
+        state.mkdir()
+        # Held as a build holds it, with no ticket in the queue: only the lock keeps the next out.
+        with (state / "slot-1.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            box = self.start("a", "help")
+            time.sleep(1.5)
+            self.assertFalse((self.dir / "started.a").exists())
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertTrue((self.dir / "started.a").exists())
+        self.assertFalse((self.dir / "flock-asked").exists())
+
     def test_downloads_are_kept_and_read_with_only_a_macs_tools(self):
         self.only_a_macs_tools()
         box = self.start("a", "help", FAKE_DOWNLOADS="1")
@@ -384,6 +418,8 @@ class GradleBoxTest(unittest.TestCase):
         self.assertEqual(again.returncode, 0, output)
         self.assertNotIn("illegal option", output)
         self.assertTrue((self.dir / "state" / "gradle-1" / "wrapper" / "dists" / "gradle.zip").exists())
+        self.assertFalse((self.dir / "state" / "gradle-1" / "wrapper" / "wrapper").exists())
+        self.assertTrue((self.dir / "cp-shared").exists())
 
     def test_fewer_cpus_can_be_asked_for_never_more(self):
         box = self.start("fewer", "help", GRADLE_BOX_CPUS="0.5")

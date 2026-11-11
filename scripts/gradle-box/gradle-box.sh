@@ -96,18 +96,22 @@ ensure_box_image() {
 ensure_box_image
 
 memory=${GRADLE_BOX_MEMORY:-16}
+limit=${memory}g
 if [[ -z $machine ]]; then
     ram=$(awk '/^MemTotal/ { print int($2 / 1048576 + 0.5) }' "$meminfo")
     cores=$(nproc)
 else
-    ram=$(awk -v bytes="${machine% *}" 'BEGIN { print int(bytes / 1073741824 + 0.5) }')
+    # In MiB and rounded down, as a box asking for a byte more than the machine has isn't started.
+    there=$((${machine% *} / 1048576))
+    ram=$((there / 1024))
     cores=${machine#* }
     # All of a small machine goes to the one build: it is there for nothing else.
-    if ((memory > ram)); then
-        echo "gradle-box: podman's machine has $ram GiB, so the build gets that, not $memory. A full build needs more: podman machine set --memory" >&2
+    if ((memory * 1024 > there)); then
+        echo "gradle-box: podman's machine has $(awk -v mib="$there" 'BEGIN { printf "%.1f", mib / 1024 }') GiB, so the build gets that, not $memory. A full build needs more: podman machine set --memory" >&2
+        limit=${there}m
         memory=$ram
+        ((memory >= 1)) || memory=1
     fi
-    ((memory >= 1)) || memory=1
 fi
 fit=$((ram * 3 / 4 / memory))
 slots=${GRADLE_BOX_SLOTS:-$fit}
@@ -189,9 +193,14 @@ home=$state/gradle-$slot
 seed=$state/seed
 mkdir -p "$home"
 # Gradle itself isn't a dependency, so the read-only cache doesn't cover it.
-# A copy that shares the files' blocks where the disk can, with GNU's cp or the Mac's.
+# A copy that shares the files' blocks where the disk can, and copies them where it can't. Which cp
+# is here is asked first, as a second try after one that failed halfway would copy into what it left.
 copy() {
-    cp -a --reflink=auto "$1" "$2" 2>/dev/null || cp -a -c "$1" "$2" 2>/dev/null || cp -a "$1" "$2"
+    if cp --version >/dev/null 2>&1; then
+        cp -a --reflink=auto "$1" "$2"
+    else
+        cp -a -c "$1" "$2"
+    fi
 }
 # What a folder takes on disk, in bytes.
 bytes() {
@@ -200,7 +209,7 @@ bytes() {
 if [[ -d $seed/wrapper && ! -d $home/wrapper ]]; then
     copy "$seed/wrapper" "$home/wrapper"
 fi
-box=(--rm --cpus "$cpus" --memory "${memory}g" --memory-swap "${memory}g"
+box=(--rm --cpus "$cpus" --memory "$limit" --memory-swap "$limit"
     -v "$root:$root" -v "$sdk:$sdk:ro" -v "$home:$home"
     -w "$root" -e "ANDROID_HOME=$sdk" -e "GRADLE_USER_HOME=$home")
 if [[ -n ${GRADLE_BOX_MEMORY_HIGH:-} ]]; then
