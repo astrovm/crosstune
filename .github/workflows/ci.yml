@@ -243,7 +243,9 @@ jobs:
           max-size: 1G
           save: ${{ github.event_name == 'push' }}
           evict-old-files: job
-          update-package-index: true
+          # ccache's own release, checked against the action's SHA-256, not apt: the runners' apt mirrors
+          # stopped resolving for hours on 2026-11-11, and every build failed before it began.
+          install: binary
 
       - name: Build
         run: ./gradlew :app:assembleDebug :app:assembleRelease --build-cache --configuration-cache
