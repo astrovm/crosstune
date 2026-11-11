@@ -1,0 +1,604 @@
+# Every work by others that Crosstune ships or downloads, shown in Settings → About → Licenses.
+# One block per work, apart by a blank line: its name, then "key: value" lines.
+#   by       who made it
+#   license  its licence, by name
+#   text     files in this folder with the licence's full text and notices, shown one after the other
+#   url      where it, or its source, is; opened in the browser only on a tap
+#   note     what Crosstune changed, or what else the licence asks to say
+#   covers   what of the APK it is, for the :app:notices task (in :app:ci), which fails on anything in the
+#            release APK no line covers, and on a line that covers nothing. One per line, exact, no wildcards
+#            unless said:
+#              maven GROUP:MODULE          a library in the release APK
+#              maven GROUP:MODULE!PATH     a licence or notice file inside that library
+#              file PATH                   a bundled file or a file dependency; * for any name in one folder
+#              submodule PATH              a Git submodule built into the APK
+#              source PATH                 a compiled native source or header; * and ** as in file
+#              source PATH ~ WORDS         the licence or origin lines in that file that hold WORDS; each such
+#                                          line in a compiled file needs one
+#              native NAME                 a library the NDK links into the native code
+#              download URL                a file the app downloads, as its code names it
+# Licence texts are copied byte for byte from where each work publishes it; notice-texts.txt in the
+# tests says where, and scripts/notices.py checks it.
+
+JMdict
+by: Electronic Dictionary Research and Development Group
+license: CC BY-SA 4.0
+text: edrdg-licence.txt cc-by-sa-4.0.txt jmdict-documentation.txt
+url: https://www.edrdg.org/dokuwiki/doku.php?id=wiki_index.php_jmdict-edict_dictionary_project
+note: Crosstune's word lists made from JMdict are changed. The readings: only words of two kanji or more that JMdict reads one way only, where Crosstune reads them otherwise. The words in kana: only the common ones with い or う after their first kana, each with how it's looked up, and those with ひ or ふ there. They are under CC BY-SA 4.0 too. Below are the Group's licence (https://www.edrdg.org/edrdg/licence.html), the CC BY-SA 4.0 licence, and JMdict's documentation.
+covers: file app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt
+covers: file app/src/main/resources/com/astrovm/crosstune/old-kana.txt
+
+Kuromoji
+by: Atilika Inc. and contributors
+license: Apache License 2.0
+text: kuromoji-notice.txt kuromoji-contributors.txt apache-2.0.txt
+url: https://github.com/atilika/kuromoji
+covers: maven com.atilika.kuromoji:kuromoji-core
+covers: maven com.atilika.kuromoji:kuromoji-ipadic
+covers: maven com.atilika.kuromoji:kuromoji-unidic
+covers: maven com.atilika.kuromoji:kuromoji-core!META-INF/CONTRIBUTORS.md
+covers: maven com.atilika.kuromoji:kuromoji-core!META-INF/LICENSE.md
+covers: maven com.atilika.kuromoji:kuromoji-ipadic!META-INF/CONTRIBUTORS.md
+covers: maven com.atilika.kuromoji:kuromoji-ipadic!META-INF/LICENSE.md
+covers: maven com.atilika.kuromoji:kuromoji-unidic!META-INF/CONTRIBUTORS.md
+covers: maven com.atilika.kuromoji:kuromoji-unidic!META-INF/LICENSE.md
+
+IPADIC
+by: Nara Institute of Science and Technology (NAIST), with entries from ICOT Free Software
+license: NAIST and ICOT licence
+text: ipadic.txt
+url: https://github.com/atilika/kuromoji
+note: Inside Kuromoji, as mecab-ipadic-2.7.0-20070801.
+covers: maven com.atilika.kuromoji:kuromoji-ipadic!META-INF/NOTICE.md
+
+UniDic
+by: The UniDic Consortium
+license: BSD 3-Clause License
+text: unidic.txt
+url: https://repo1.maven.org/maven2/com/atilika/kuromoji/kuromoji-unidic/0.9.0/
+note: Downloaded from Maven Central, inside Kuromoji, when it's first needed, as unidic-mecab 2.1.2. UniDic is under the GPL, the LGPL or the BSD License; Crosstune uses it under the BSD License.
+covers: maven com.atilika.kuromoji:kuromoji-unidic!META-INF/NOTICE.md
+covers: download https://repo1.maven.org/maven2/com/atilika/kuromoji/kuromoji-unidic/0.9.0/kuromoji-unidic-0.9.0.jar
+
+projectM
+by: The projectM Team
+license: GNU LGPL 2.1 or later
+text: projectm.txt lgpl-2.1.txt
+url: https://github.com/projectM-visualizer/projectm
+note: Built from source, v4.1.8, with changes in app/src/main/cpp/: the picture keeps its size, and two build warnings are fixed. This release's exact source, projectM and the changes with it: git clone --recursive --branch vX.Y.Z https://github.com/astrovm/crosstune, where X.Y.Z is this app's version, then build as CONTRIBUTING.md says. Rebuild the app from that source to replace projectM with a changed copy.
+covers: submodule third_party/projectm
+covers: source third_party/projectm/src/**
+covers: source BUILD/projectm/**
+covers: source app/src/main/cpp/projectm/Framebuffer.cpp
+covers: source third_party/projectm/src/api/include/projectM-4/audio.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/callbacks.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/core.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/debug.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/memory.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/parameters.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/projectM.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/render_opengl.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/touch.h ~ projectM Team
+covers: source third_party/projectm/src/api/include/projectM-4/types.h ~ projectM Team
+covers: source third_party/projectm/src/libprojectM/MilkdropPreset/MilkdropPreset.cpp ~ projectM Team
+covers: source third_party/projectm/src/libprojectM/MilkdropPreset/MilkdropPreset.hpp ~ projectM Team
+covers: source third_party/projectm/src/libprojectM/ProjectM.cpp ~ projectM Team
+covers: source third_party/projectm/src/libprojectM/ProjectM.hpp ~ projectM Team
+covers: source third_party/projectm/src/libprojectM/ProjectMCWrapper.hpp ~ projectM Team
+covers: source third_party/projectm/src/libprojectM/MilkdropPreset/Factory.hpp ~ Carmelo Piccione
+covers: source BUILD/projectm/src/libprojectM/MilkdropPreset/MilkdropStaticShaders.hpp ~ derived from the queried GLSL version
+
+MilkDrop's FFT
+by: Nullsoft, Inc.
+license: BSD 3-Clause License
+text: nullsoft-fft.txt
+url: https://github.com/projectM-visualizer/projectm/blob/v4.1.8/src/libprojectM/Audio/MilkdropFFT.cpp
+note: Inside projectM.
+covers: source third_party/projectm/src/libprojectM/Audio/MilkdropFFT.cpp ~ Nullsoft
+covers: source third_party/projectm/src/libprojectM/Audio/MilkdropFFT.hpp ~ Nullsoft
+
+projectM's expression parser
+by: The projectM Team
+license: MIT License
+text: projectm-eval.txt bison.txt
+url: https://github.com/projectM-visualizer/projectm-eval
+note: Inside projectM. Its parser is made by GNU Bison, whose special exception, below, lets it be shared under the MIT License.
+covers: submodule third_party/projectm/vendor/projectm-eval
+covers: source third_party/projectm/vendor/projectm-eval/**
+covers: source third_party/projectm/vendor/projectm-eval/projectm-eval/Compiler.c ~ Free Software Foundation
+covers: source third_party/projectm/vendor/projectm-eval/projectm-eval/Compiler.c ~ YYSTR is taken from yytname
+covers: source third_party/projectm/vendor/projectm-eval/projectm-eval/Compiler.h ~ Free Software Foundation
+
+HLSLParser
+by: Unknown Worlds Entertainment, Inc.
+license: MIT License
+text: hlslparser.txt
+url: https://github.com/projectM-visualizer/projectm/tree/v4.1.8/vendor/hlslparser
+note: Inside projectM. Crosstune changes GLSLGenerator.cpp so it doesn't warn when it's built; the file says so.
+covers: source third_party/projectm/vendor/hlslparser/**
+covers: source third_party/projectm/vendor/hlslparser/src/CodeWriter.cpp ~ Unknown Worlds Entertainment
+covers: source third_party/projectm/vendor/hlslparser/src/CodeWriter.h ~ Unknown Worlds Entertainment
+covers: source third_party/projectm/vendor/hlslparser/src/GLSLGenerator.cpp ~ Unknown Worlds Entertainment
+covers: source third_party/projectm/vendor/hlslparser/src/GLSLGenerator.h ~ Unknown Worlds Entertainment
+covers: source third_party/projectm/vendor/hlslparser/src/HLSLParser.cpp ~ Unknown Worlds Entertainment
+covers: source third_party/projectm/vendor/hlslparser/src/HLSLParser.h ~ Unknown Worlds Entertainment
+
+OpenGL Mathematics (GLM)
+by: G-Truc Creation
+license: MIT License
+text: glm.txt
+url: https://github.com/g-truc/glm
+note: Inside projectM, as 0.9.9.
+covers: source third_party/projectm/vendor/glm/**
+covers: source third_party/projectm/vendor/glm/integer.hpp ~ taken from bit
+
+SOIL2
+by: Martín Lucas Golini and Jonathan Dummer
+license: Public domain, and MIT License
+text: soil2.txt image-dxt.txt image-helper.txt mit.txt
+url: https://github.com/SpartanJ/SOIL2
+note: Inside projectM. Its image helpers name the MIT License without its text; the license's text is below.
+covers: source third_party/projectm/vendor/SOIL2/**
+covers: source third_party/projectm/vendor/SOIL2/SOIL2.c ~ Public Domain
+covers: source third_party/projectm/vendor/SOIL2/SOIL2.h ~ Jonathan Dummer
+covers: source third_party/projectm/vendor/SOIL2/image_DXT.c ~ public domain
+covers: source third_party/projectm/vendor/SOIL2/image_DXT.h ~ public domain
+covers: source third_party/projectm/vendor/SOIL2/image_helper.c ~ MIT license
+covers: source third_party/projectm/vendor/SOIL2/image_helper.h ~ MIT license
+
+stb_image and stb_image_write
+by: Sean Barrett and contributors
+license: Public domain
+text: stb-image.txt stb-image-write.txt
+url: https://github.com/nothings/stb
+note: Inside SOIL2, as stb_image 2.05 and stb_image_write 0.98.
+covers: source third_party/projectm/vendor/SOIL2/stb_image.h ~ public domain
+covers: source third_party/projectm/vendor/SOIL2/stb_image_write.h ~ public domain
+
+Independent JPEG Group's JPEG software
+by: Thomas G. Lane and the Independent JPEG Group
+license: IJG License
+text: ijg.txt
+url: https://www.ijg.org/
+note: This software is based in part on the work of the Independent JPEG Group: stb_image's JPEG decoder takes its IDCT from the IJG's jidctint.c.
+covers: source third_party/projectm/vendor/SOIL2/stb_image.h ~ IJG's 'slow'
+covers: source third_party/projectm/vendor/SOIL2/stb_image.h ~ jidctint
+
+ETC1 texture code
+by: Google Inc.
+license: Apache License 2.0
+text: etc1.txt apache-2.0.txt
+url: https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main/opengl/libs/ETC1/etc1.cpp
+note: Inside SOIL2.
+covers: source third_party/projectm/vendor/SOIL2/etc1_utils.c ~ Google Inc.
+covers: source third_party/projectm/vendor/SOIL2/etc1_utils.h ~ Google Inc.
+
+PowerVR SDK texture decompressor
+by: Imagination Technologies Ltd.
+license: MIT License
+text: powervr-decompress.txt powervr-sdk.txt
+url: https://github.com/powervr-graphics/Native_SDK
+note: Inside SOIL2, from the PowerVR SDK's PVRTDecompress.cpp. The licence is the SDK's, from its release R14.2-v3.4, the oldest in its public history with this file.
+covers: source third_party/projectm/vendor/SOIL2/stbi_pvr_c.h ~ Imagination Technologies
+covers: source third_party/projectm/vendor/SOIL2/pvr_helper.h ~ PowerVR SDK
+
+SDL
+by: Sam Lantinga
+license: zlib License
+text: sdl.txt
+url: https://github.com/libsdl-org/SDL
+note: SOIL2's check for an OpenGL extension is based on SDL2's.
+covers: source third_party/projectm/vendor/SOIL2/SOIL2.c ~ SDL2
+
+MilkDrop presets
+by: Their authors, named in each preset's name
+license: None stated
+text: milkdrop-presets.txt
+url: https://github.com/projectM-visualizer/presets-cream-of-the-crop
+note: From projectM's Cream of the Crop, Milkdrop Original and En D packs, and Ryan Geiss's favorite presets of January 2021 (https://www.geisswerks.com/about_milkdrop.html); the stills in Settings are drawn from them. None states a licence; the text below is projectM's statement for its packs.
+covers: file app/src/main/assets/milkdrop/*
+covers: file app/src/main/assets/milkdrop-thumbs/*
+
+MilkDrop textures
+by: Their authors, from MilkDrop and its presets
+license: None stated
+url: https://github.com/projectM-visualizer/presets-milkdrop-texture-pack
+note: From projectM's Milkdrop Texture Pack, which states no licence.
+covers: file app/src/main/assets/milkdrop-textures/*
+
+whisper.cpp and ggml
+by: The ggml authors
+license: MIT License
+text: whisper-cpp.txt
+url: https://github.com/ggml-org/whisper.cpp
+note: Built from source into Crosstune's speech timing. Crosstune changes whisper.cpp so it doesn't warn when it's built; the file says so.
+covers: submodule third_party/whisper.cpp
+covers: source third_party/whisper.cpp/**
+covers: source BUILD/whisper/**
+covers: source third_party/whisper.cpp/src/whisper.cpp ~ ported from llama.cpp
+covers: source third_party/whisper.cpp/src/whisper.cpp ~ The value 98 was taken from the original
+covers: source third_party/whisper.cpp/ggml/include/ggml-backend.h ~ meta device
+
+YaRN
+by: Jeffrey Quesnelle and Bowen Peng
+license: MIT License
+text: yarn.txt
+url: https://github.com/jquesnelle/yarn
+note: Inside ggml, its rotary position scaling.
+covers: source third_party/whisper.cpp/ggml/src/ggml-cpu/ops.cpp ~ Jeffrey Quesnelle and Bowen Peng
+
+Arm Optimized Routines
+by: Arm Limited
+license: MIT License
+text: arm-optimized-routines.txt
+url: https://github.com/ARM-software/optimized-routines
+note: Inside ggml, its fast math. Arm Optimized Routines is under the MIT License or the Apache License 2.0 with LLVM Exceptions; Crosstune uses it under the MIT License.
+covers: source third_party/whisper.cpp/ggml/src/ggml-cpu/vec.h ~ adapted from arm limited optimized routine
+
+Whisper
+by: OpenAI
+license: MIT License
+text: whisper.txt
+url: https://github.com/openai/whisper
+note: The tiny speech model is downloaded when it's first needed, as ggml-tiny-q5_1.bin, converted for whisper.cpp by its authors. whisper.cpp's word timing is based on Whisper's own.
+covers: download https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin
+covers: source third_party/whisper.cpp/src/whisper.cpp ~ openai/whisper
+
+LLVM libc++, libc++abi, libunwind, compiler-rt and clang's headers
+by: The LLVM Project
+license: Apache License 2.0 with LLVM Exceptions
+text: llvm-libcxx.txt llvm-libcxxabi.txt llvm-libunwind.txt llvm-compiler-rt.txt llvm-clang.txt
+url: https://github.com/llvm/llvm-project
+note: Built into the visuals and speech libraries, from Android's NDK r30 (clang 21).
+covers: native clang
+covers: native libc++
+covers: native libc++abi
+covers: native libunwind
+covers: native compiler-rt
+
+Android's C library headers
+by: The Android Open Source Project and others
+license: BSD and Apache License 2.0
+text: android-sysroot.txt
+url: https://android.googlesource.com/platform/bionic
+note: The visuals and speech libraries are built against them, from Android's NDK r30. The text is the NDK's notice for them.
+covers: native bionic
+
+Material Symbols and Material Icons
+by: Google
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/google/material-design-icons
+covers: file app/src/main/res/drawable/ic_add.xml
+covers: file app/src/main/res/drawable/ic_arrow_back.xml
+covers: file app/src/main/res/drawable/ic_bedtime.xml
+covers: file app/src/main/res/drawable/ic_bedtime_on.xml
+covers: file app/src/main/res/drawable/ic_bookmark.xml
+covers: file app/src/main/res/drawable/ic_bookmark_added.xml
+covers: file app/src/main/res/drawable/ic_check.xml
+covers: file app/src/main/res/drawable/ic_chevron_right.xml
+covers: file app/src/main/res/drawable/ic_close.xml
+covers: file app/src/main/res/drawable/ic_cloud_off.xml
+covers: file app/src/main/res/drawable/ic_content_copy.xml
+covers: file app/src/main/res/drawable/ic_content_paste.xml
+covers: file app/src/main/res/drawable/ic_delete.xml
+covers: file app/src/main/res/drawable/ic_download.xml
+covers: file app/src/main/res/drawable/ic_download_for_offline.xml
+covers: file app/src/main/res/drawable/ic_drag_handle.xml
+covers: file app/src/main/res/drawable/ic_edit.xml
+covers: file app/src/main/res/drawable/ic_error.xml
+covers: file app/src/main/res/drawable/ic_expand_more.xml
+covers: file app/src/main/res/drawable/ic_feedback.xml
+covers: file app/src/main/res/drawable/ic_flag.xml
+covers: file app/src/main/res/drawable/ic_float.xml
+covers: file app/src/main/res/drawable/ic_format_align_center.xml
+covers: file app/src/main/res/drawable/ic_format_align_left.xml
+covers: file app/src/main/res/drawable/ic_format_size.xml
+covers: file app/src/main/res/drawable/ic_heart.xml
+covers: file app/src/main/res/drawable/ic_info.xml
+covers: file app/src/main/res/drawable/ic_language.xml
+covers: file app/src/main/res/drawable/ic_link.xml
+covers: file app/src/main/res/drawable/ic_lock.xml
+covers: file app/src/main/res/drawable/ic_lyrics.xml
+covers: file app/src/main/res/drawable/ic_more_vert.xml
+covers: file app/src/main/res/drawable/ic_music_note.xml
+covers: file app/src/main/res/drawable/ic_notifications.xml
+covers: file app/src/main/res/drawable/ic_notifications_off.xml
+covers: file app/src/main/res/drawable/ic_notifications_on.xml
+covers: file app/src/main/res/drawable/ic_offline_pin.xml
+covers: file app/src/main/res/drawable/ic_open_in_new.xml
+covers: file app/src/main/res/drawable/ic_pause.xml
+covers: file app/src/main/res/drawable/ic_person.xml
+covers: file app/src/main/res/drawable/ic_play.xml
+covers: file app/src/main/res/drawable/ic_playlist_add.xml
+covers: file app/src/main/res/drawable/ic_queue_music.xml
+covers: file app/src/main/res/drawable/ic_recognize.xml
+covers: file app/src/main/res/drawable/ic_recognize_off.xml
+covers: file app/src/main/res/drawable/ic_refresh.xml
+covers: file app/src/main/res/drawable/ic_repeat.xml
+covers: file app/src/main/res/drawable/ic_repeat_one.xml
+covers: file app/src/main/res/drawable/ic_school.xml
+covers: file app/src/main/res/drawable/ic_search.xml
+covers: file app/src/main/res/drawable/ic_send.xml
+covers: file app/src/main/res/drawable/ic_settings.xml
+covers: file app/src/main/res/drawable/ic_shade.xml
+covers: file app/src/main/res/drawable/ic_share.xml
+covers: file app/src/main/res/drawable/ic_shuffle.xml
+covers: file app/src/main/res/drawable/ic_skip_next.xml
+covers: file app/src/main/res/drawable/ic_skip_previous.xml
+covers: file app/src/main/res/drawable/ic_star.xml
+covers: file app/src/main/res/drawable/ic_text_increase.xml
+covers: file app/src/main/res/drawable/ic_thumb_up.xml
+covers: file app/src/main/res/drawable/ic_timer.xml
+covers: file app/src/main/res/drawable/ic_translate.xml
+covers: file app/src/main/res/drawable/ic_tune.xml
+covers: file app/src/main/res/drawable/ic_visibility_off.xml
+covers: file app/src/main/res/drawable/ic_visuals.xml
+covers: file app/src/main/res/drawable/ic_shortcut_open_link.xml
+covers: file app/src/main/res/drawable/ic_shortcut_share.xml
+covers: file app/src/main/res/drawable/ic_shortcut_show.xml
+covers: file app/src/main/res/drawable/ic_open_link.xml
+covers: file app/src/main/res/drawable/ic_visibility.xml
+
+Simple Icons
+by: Simple Icons contributors
+license: CC0 1.0
+text: cc0-1.0.txt
+url: https://github.com/simple-icons/simple-icons
+note: The music services' logos. Each logo is a trademark of its owner.
+covers: file app/src/main/res/drawable/ic_service_amazonmusic.xml
+covers: file app/src/main/res/drawable/ic_service_applemusic.xml
+covers: file app/src/main/res/drawable/ic_service_audiomack.xml
+covers: file app/src/main/res/drawable/ic_service_bandcamp.xml
+covers: file app/src/main/res/drawable/ic_service_deezer.xml
+covers: file app/src/main/res/drawable/ic_service_soundcloud.xml
+covers: file app/src/main/res/drawable/ic_service_spotify.xml
+covers: file app/src/main/res/drawable/ic_service_tidal.xml
+covers: file app/src/main/res/drawable/ic_service_youtube.xml
+covers: file app/src/main/res/drawable/ic_service_youtubemusic.xml
+covers: file app/src/main/res/drawable/ic_translator_chatgpt.xml
+covers: file app/src/main/res/drawable/ic_translator_google.xml
+
+Roboto
+by: The Roboto Project Authors
+license: SIL Open Font License 1.1
+text: roboto.txt
+url: https://github.com/googlefonts/roboto-classic
+note: Its bold letters draw the app's name on the TV home screen's tile.
+covers: file app/src/main/res/drawable/tv_banner.xml
+
+Shizuku API
+by: RikkaW
+license: MIT License
+text: shizuku.txt
+url: https://github.com/RikkaApps/Shizuku-API
+covers: maven dev.rikka.shizuku:aidl
+covers: maven dev.rikka.shizuku:api
+covers: maven dev.rikka.shizuku:provider
+covers: maven dev.rikka.shizuku:shared
+
+OkHttp and Okio
+by: Square, Inc.
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/square/okhttp
+covers: maven com.squareup.okhttp3:okhttp
+covers: maven com.squareup.okhttp3:okhttp-android
+covers: maven com.squareup.okhttp3:okhttp-coroutines
+covers: maven com.squareup.okio:okio
+covers: maven com.squareup.okio:okio-jvm
+
+Guava
+by: The Guava Authors
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/google/guava
+covers: maven com.google.guava:failureaccess
+covers: maven com.google.guava:guava
+covers: maven com.google.guava:failureaccess!META-INF/LICENSE
+covers: maven com.google.guava:guava!META-INF/LICENSE
+covers: maven com.google.guava:listenablefuture
+
+Error Prone and J2ObjC annotations
+by: Google
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/google/error-prone
+covers: maven com.google.errorprone:error_prone_annotations
+covers: maven com.google.j2objc:j2objc-annotations
+
+JSpecify
+by: The JSpecify Authors
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/jspecify/jspecify
+covers: maven org.jspecify:jspecify
+
+AndroidX, Jetpack Compose and Media3
+by: The Android Open Source Project
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://android.googlesource.com/platform/frameworks/support
+covers: maven androidx.activity:activity
+covers: maven androidx.activity:activity-compose
+covers: maven androidx.activity:activity-ktx
+covers: maven androidx.annotation:annotation
+covers: maven androidx.annotation:annotation-experimental
+covers: maven androidx.annotation:annotation-jvm
+covers: maven androidx.arch.core:core-common
+covers: maven androidx.arch.core:core-runtime
+covers: maven androidx.autofill:autofill
+covers: maven androidx.collection:collection
+covers: maven androidx.collection:collection-jvm
+covers: maven androidx.collection:collection-ktx
+covers: maven androidx.compose.animation:animation
+covers: maven androidx.compose.animation:animation-android
+covers: maven androidx.compose.animation:animation-core
+covers: maven androidx.compose.animation:animation-core-android
+covers: maven androidx.compose.foundation:foundation
+covers: maven androidx.compose.foundation:foundation-android
+covers: maven androidx.compose.foundation:foundation-layout
+covers: maven androidx.compose.foundation:foundation-layout-android
+covers: maven androidx.compose.material3:material3
+covers: maven androidx.compose.material3:material3-android
+covers: maven androidx.compose.material:material-ripple
+covers: maven androidx.compose.material:material-ripple-android
+covers: maven androidx.compose.runtime:runtime
+covers: maven androidx.compose.runtime:runtime-android
+covers: maven androidx.compose.runtime:runtime-annotation
+covers: maven androidx.compose.runtime:runtime-annotation-android
+covers: maven androidx.compose.runtime:runtime-retain
+covers: maven androidx.compose.runtime:runtime-retain-android
+covers: maven androidx.compose.runtime:runtime-saveable
+covers: maven androidx.compose.runtime:runtime-saveable-android
+covers: maven androidx.compose.ui:ui
+covers: maven androidx.compose.ui:ui-android
+covers: maven androidx.compose.ui:ui-geometry
+covers: maven androidx.compose.ui:ui-geometry-android
+covers: maven androidx.compose.ui:ui-graphics
+covers: maven androidx.compose.ui:ui-graphics-android
+covers: maven androidx.compose.ui:ui-text
+covers: maven androidx.compose.ui:ui-text-android
+covers: maven androidx.compose.ui:ui-tooling-preview
+covers: maven androidx.compose.ui:ui-tooling-preview-android
+covers: maven androidx.compose.ui:ui-unit
+covers: maven androidx.compose.ui:ui-unit-android
+covers: maven androidx.compose.ui:ui-util
+covers: maven androidx.compose.ui:ui-util-android
+covers: maven androidx.compose:compose-bom
+covers: maven androidx.concurrent:concurrent-futures
+covers: maven androidx.concurrent:concurrent-futures-ktx
+covers: maven androidx.core:core
+covers: maven androidx.core:core-ktx
+covers: maven androidx.core:core-remoteviews
+covers: maven androidx.core:core-viewtree
+covers: maven androidx.customview:customview-poolingcontainer
+covers: maven androidx.datastore:datastore
+covers: maven androidx.datastore:datastore-core
+covers: maven androidx.datastore:datastore-preferences
+covers: maven androidx.datastore:datastore-preferences-core
+covers: maven androidx.emoji2:emoji2
+covers: maven androidx.exifinterface:exifinterface
+covers: maven androidx.glance:glance
+covers: maven androidx.glance:glance-appwidget
+covers: maven androidx.glance:glance-appwidget-proto
+covers: maven androidx.glance:glance-material3
+covers: maven androidx.graphics:graphics-path
+covers: maven androidx.interpolator:interpolator
+covers: maven androidx.lifecycle:lifecycle-common
+covers: maven androidx.lifecycle:lifecycle-common-java8
+covers: maven androidx.lifecycle:lifecycle-common-jvm
+covers: maven androidx.lifecycle:lifecycle-livedata
+covers: maven androidx.lifecycle:lifecycle-livedata-core
+covers: maven androidx.lifecycle:lifecycle-livedata-core-ktx
+covers: maven androidx.lifecycle:lifecycle-process
+covers: maven androidx.lifecycle:lifecycle-runtime
+covers: maven androidx.lifecycle:lifecycle-runtime-android
+covers: maven androidx.lifecycle:lifecycle-runtime-compose
+covers: maven androidx.lifecycle:lifecycle-runtime-compose-android
+covers: maven androidx.lifecycle:lifecycle-runtime-ktx
+covers: maven androidx.lifecycle:lifecycle-runtime-ktx-android
+covers: maven androidx.lifecycle:lifecycle-service
+covers: maven androidx.lifecycle:lifecycle-viewmodel
+covers: maven androidx.lifecycle:lifecycle-viewmodel-android
+covers: maven androidx.lifecycle:lifecycle-viewmodel-ktx
+covers: maven androidx.lifecycle:lifecycle-viewmodel-savedstate
+covers: maven androidx.lifecycle:lifecycle-viewmodel-savedstate-android
+covers: maven androidx.media3:media3-common
+covers: maven androidx.media3:media3-database
+covers: maven androidx.media3:media3-datasource
+covers: maven androidx.media3:media3-session
+covers: maven androidx.media:media
+covers: maven androidx.navigationevent:navigationevent
+covers: maven androidx.navigationevent:navigationevent-android
+covers: maven androidx.navigationevent:navigationevent-compose
+covers: maven androidx.navigationevent:navigationevent-compose-android
+covers: maven androidx.profileinstaller:profileinstaller
+covers: maven androidx.room:room-common
+covers: maven androidx.room:room-runtime
+covers: maven androidx.savedstate:savedstate
+covers: maven androidx.savedstate:savedstate-android
+covers: maven androidx.savedstate:savedstate-compose
+covers: maven androidx.savedstate:savedstate-compose-android
+covers: maven androidx.savedstate:savedstate-ktx
+covers: maven androidx.sqlite:sqlite
+covers: maven androidx.sqlite:sqlite-framework
+covers: maven androidx.startup:startup-runtime
+covers: maven androidx.tracing:tracing
+covers: maven androidx.versionedparcelable:versionedparcelable
+covers: maven androidx.window:window
+covers: maven androidx.window:window-core
+covers: maven androidx.window:window-core-android
+covers: maven androidx.work:work-runtime
+covers: maven androidx.work:work-runtime-ktx
+covers: maven androidx.annotation:annotation-jvm!META-INF/androidx/annotation/annotation/LICENSE.txt
+covers: maven androidx.collection:collection-jvm!META-INF/androidx/collection/collection/LICENSE.txt
+covers: maven androidx.collection:collection-ktx!META-INF/androidx/collection/collection-ktx/LICENSE.txt
+covers: maven androidx.glance:glance-appwidget-external-protobuf!META-INF/androidx/glance/glance-appwidget-external-protobuf/LICENSE.txt
+covers: maven androidx.glance:glance-appwidget-proto!META-INF/androidx/glance/glance-appwidget-proto/LICENSE.txt
+covers: maven androidx.lifecycle:lifecycle-common-java8!META-INF/androidx/lifecycle/lifecycle-common-java8/LICENSE.txt
+covers: maven androidx.lifecycle:lifecycle-common-jvm!META-INF/androidx/lifecycle/lifecycle-common/LICENSE.txt
+
+Protocol Buffers
+by: Google Inc.
+license: BSD 3-Clause License
+text: protobuf.txt
+url: https://github.com/protocolbuffers/protobuf
+note: Inside the home screen widget's library, Glance, as protobuf 4.28.2.
+covers: maven androidx.glance:glance-appwidget-external-protobuf
+
+Compose Multiplatform
+by: JetBrains s.r.o. and the Android Open Source Project
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/JetBrains/compose-multiplatform
+covers: maven org.jetbrains.androidx.lifecycle:lifecycle-common
+covers: maven org.jetbrains.androidx.lifecycle:lifecycle-runtime
+covers: maven org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose
+covers: maven org.jetbrains.androidx.lifecycle:lifecycle-viewmodel
+covers: maven org.jetbrains.androidx.savedstate:savedstate
+covers: maven org.jetbrains.androidx.savedstate:savedstate-compose
+covers: maven org.jetbrains.compose.animation:animation
+covers: maven org.jetbrains.compose.animation:animation-core
+covers: maven org.jetbrains.compose.annotation-internal:annotation
+covers: maven org.jetbrains.compose.collection-internal:collection
+covers: maven org.jetbrains.compose.foundation:foundation
+covers: maven org.jetbrains.compose.foundation:foundation-layout
+covers: maven org.jetbrains.compose.runtime:runtime
+covers: maven org.jetbrains.compose.runtime:runtime-saveable
+covers: maven org.jetbrains.compose.ui:ui
+covers: maven org.jetbrains.compose.ui:ui-geometry
+covers: maven org.jetbrains.compose.ui:ui-graphics
+covers: maven org.jetbrains.compose.ui:ui-text
+covers: maven org.jetbrains.compose.ui:ui-unit
+covers: maven org.jetbrains.compose.ui:ui-util
+
+Kotlin and kotlinx.coroutines
+by: JetBrains s.r.o. and Kotlin Programming Language contributors
+license: Apache License 2.0
+text: kotlinx-coroutines.txt apache-2.0.txt
+url: https://github.com/JetBrains/kotlin
+covers: maven org.jetbrains.kotlin:kotlin-stdlib
+covers: maven org.jetbrains.kotlin:kotlin-stdlib-common
+covers: maven org.jetbrains.kotlin:kotlin-stdlib-jdk7
+covers: maven org.jetbrains.kotlin:kotlin-stdlib-jdk8
+covers: maven org.jetbrains.kotlinx:atomicfu
+covers: maven org.jetbrains.kotlinx:atomicfu-jvm
+covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-android
+covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-bom
+covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-core
+covers: maven androidx.concurrent:concurrent-futures-ktx!META-INF/NOTICE.txt
+covers: maven org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm
+covers: maven org.jetbrains.kotlinx:kotlinx-serialization-bom
+covers: maven org.jetbrains.kotlinx:kotlinx-serialization-core
+covers: maven org.jetbrains.kotlinx:kotlinx-serialization-core-jvm
+covers: maven org.jetbrains:annotations
+
+Reorderable
+by: Calvin Liang
+license: Apache License 2.0
+text: apache-2.0.txt
+url: https://github.com/Calvin-LL/Reorderable
+covers: maven sh.calvin.reorderable:reorderable
+covers: maven sh.calvin.reorderable:reorderable-android

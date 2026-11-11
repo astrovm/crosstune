@@ -1,0 +1,8 @@
+/*
+	Jonathan Dummer
+	2007-07-31-10.32
+
+	simple DXT compression / decompression code
+
+	public domain
+*/

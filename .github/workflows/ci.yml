@@ -83,8 +83,10 @@ jobs:
       - name: Install media test tools
         run: |
           mkdir -p ~/apt-archives/partial
-          sudo apt-get update -qq
-          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-archives" -o Acquire::Retries=3 ffmpeg
+          # The list of packages is only needed when a package isn't in the kept archives. A runner that
+          # can't look a name up waits on it for minutes, so it gets a minute and then the job goes on.
+          sudo timeout 60 apt-get update -qq || echo "::notice::apt-get update did not finish, installing from what is kept"
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-archives" -o Acquire::Retries=5 ffmpeg
           # apt's own files are root's, and the cache is saved as the runner's user.
           sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
 
@@ -103,6 +105,7 @@ jobs:
           python3 -m unittest discover -s scripts/gradle-box -p "test_*.py"
           python3 -m unittest discover -s scripts/emulator -p "test_*.py"
           python3 -m unittest scripts/test_devicelock.py
+          python3 -m unittest scripts/test_notices.py
           python3 -m unittest discover -s scripts/record -p "test_*.py"
           python3 -m unittest discover -s scripts/reports -p "test_*.py"
           python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
@@ -136,7 +139,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run package
       - run: npm test
-      - run: npx playwright install --with-deps chromium
+      # The browser comes from Playwright's own host. What it needs from apt is mostly on the runner
+      # already, so apt gets two minutes and the test then says whether anything was missing.
+      - run: npx playwright install chromium
+      - run: timeout 120 npx playwright install-deps chromium || echo "::notice::Playwright's apt packages were not installed"
       - run: npm run e2e:panel
 
   # Unit tests with the 100% line coverage gate. They draw no visuals, so projectM isn't built.
@@ -237,20 +243,25 @@ jobs:
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only
       # what changed is compiled again. Saved from main, like Gradle's caches.
+      # A cache only saves time, so the build goes on without it when it can't be set up.
       - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
+        id: ccache
+        continue-on-error: true
         with:
           key: native
           max-size: 1G
           save: ${{ github.event_name == 'push' }}
           evict-old-files: job
-          update-package-index: true
+          # ccache's own release, checked against the action's SHA-256, not apt: the runners could not
+          # look up Ubuntu's mirrors for hours on 2026-11-11, and every build failed before it began.
+          install: binary
 
       - name: Build
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --build-cache --configuration-cache
+        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:notices --build-cache --configuration-cache
         env:
-          # CMake reads these to put ccache in front of the NDK's compilers.
-          CMAKE_C_COMPILER_LAUNCHER: ccache
-          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          # CMake reads these to put ccache in front of the NDK's compilers. Empty, it uses none.
+          CMAKE_C_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
+          CMAKE_CXX_COMPILER_LAUNCHER: ${{ steps.ccache.outcome == 'success' && 'ccache' || '' }}
           # The NDK is installed again each run, so the compiler is told apart by its contents, not its date.
           CCACHE_COMPILERCHECK: content
 
