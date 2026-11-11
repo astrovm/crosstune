@@ -71,18 +71,9 @@ internal object SungTiming {
         if (best.isEmpty()) return best
         val weight = best.sumOf { it.support }
         val sorted = candidates.sortedBy { it.ms }
-        // The best chain ending at each, and starting at each; one that can follow another is always later.
-        val ending = DoubleArray(sorted.size) { sorted[it].support }
-        val starting = DoubleArray(sorted.size) { sorted[it].support }
-        for (k in sorted.indices) for (j in 0 until k) if (follows(sorted[j], sorted[k], firstLetters)) ending[k] = maxOf(ending[k], ending[j] + sorted[k].support)
-        for (k in sorted.indices.reversed()) for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j], firstLetters)) starting[k] = maxOf(starting[k], starting[j] + sorted[k].support)
-        // For each, the best chain that can follow it from a line on: a chain with no line between the two.
-        val lines = sorted.maxOf { it.line } + 2
-        val after = Array(sorted.size) { DoubleArray(lines) }
-        for (k in sorted.indices) {
-            for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j], firstLetters)) after[k][sorted[j].line] = maxOf(after[k][sorted[j].line], starting[j])
-            for (line in lines - 2 downTo 0) after[k][line] = maxOf(after[k][line], after[k][line + 1])
-        }
+        val ending = ending(sorted, firstLetters)
+        val starting = starting(sorted, firstLetters)
+        val after = after(sorted, starting, firstLetters)
         return best.filter { placed ->
             val elsewhere = sorted.indices.filter { sorted[it].line == placed.line && abs(sorted[it].ms - placed.ms) > SAME_PLACE_MS }
                 .maxOfOrNull { ending[it] + starting[it] - sorted[it].support } ?: 0.0
@@ -93,6 +84,31 @@ internal object SungTiming {
             )
             maxOf(elsewhere, skipped) < weight - placed.support * SURE_SHARE
         }
+    }
+
+    /** The weight of the best chain ending at each of [sorted]; one that can follow another is always later. */
+    private fun ending(sorted: List<Placed>, firstLetters: Map<Int, Int>): DoubleArray {
+        val ending = DoubleArray(sorted.size) { sorted[it].support }
+        for (k in sorted.indices) for (j in 0 until k) if (follows(sorted[j], sorted[k], firstLetters)) ending[k] = maxOf(ending[k], ending[j] + sorted[k].support)
+        return ending
+    }
+
+    /** The weight of the best chain starting at each of [sorted]. */
+    private fun starting(sorted: List<Placed>, firstLetters: Map<Int, Int>): DoubleArray {
+        val starting = DoubleArray(sorted.size) { sorted[it].support }
+        for (k in sorted.indices.reversed()) for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j], firstLetters)) starting[k] = maxOf(starting[k], starting[j] + sorted[k].support)
+        return starting
+    }
+
+    /** For each of [sorted], the best chain that can follow it from each line on: a chain with no line between the two. */
+    private fun after(sorted: List<Placed>, starting: DoubleArray, firstLetters: Map<Int, Int>): Array<DoubleArray> {
+        val lines = sorted.maxOf { it.line } + 2
+        val after = Array(sorted.size) { DoubleArray(lines) }
+        for (k in sorted.indices) {
+            for (j in k + 1 until sorted.size) if (follows(sorted[k], sorted[j], firstLetters)) after[k][sorted[j].line] = maxOf(after[k][sorted[j].line], starting[j])
+            for (line in lines - 2 downTo 0) after[k][line] = maxOf(after[k][line], after[k][line + 1])
+        }
+        return after
     }
 
     /**
