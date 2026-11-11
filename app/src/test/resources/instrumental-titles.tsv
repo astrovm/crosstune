@@ -1,0 +1,69 @@
+# Titles and whether they say no one sings in the recording: SongNames.saysInstrumental and its copy in
+# scripts/songcheck/instrumental_rules.py are both tested against this list. yes or no, the title, and the artist when given, apart by tabs.
+yes	Song (Instrumental)
+yes	Song - Instrumental
+yes	Song - Instrumental	Band
+yes	Song (Instrumental Version)
+yes	Song [Inst.]
+yes	Song (Inst)
+yes	Song - Inst.
+yes	Song (Inst. Ver.)
+yes	Song (feat. Guest) [Instrumental]
+yes	Song（Instrumental）
+yes	Song （Ｉｎｓｔｒｕｍｅｎｔａｌ）
+yes	Song (Versión Instrumental)
+yes	Song (Instrumentale)
+yes	Song (Backing Track)
+yes	Song (Minus One)
+yes	Song (MR)
+yes	Song (Instrumental Piano)
+yes	Song - Piano Instrumental
+yes	Song (Remix by Someone - Instrumental)
+yes	Song (Other Band Version/Instrumental)
+yes	曲 (伴奏)
+yes	曲 (伴奏版)
+yes	曲 (纯音乐)
+yes	曲 (纯音乐版)
+yes	曲 (純音樂)
+yes	曲 (オフボーカル)
+yes	曲 (ｵﾌﾎﾞｰｶﾙ)
+yes	曲「伴奏」
+yes	曲〔伴奏〕
+yes	曲［伴奏］
+yes	曲〜伴奏〜
+yes	曲 〜off vocal ver.〜
+yes	曲 ~off vocal ver.~
+yes	曲 -OFF VOCAL ver.-
+yes	曲 off vocal ver.
+yes	曲 Off Vocal
+yes	曲　off vocal
+yes	Song off vocal version
+yes	Song Off Vocal Ver.
+yes	Song (Off Vocal Version)
+yes	노래 (인스트루멘탈)
+no	Instrumental
+no	Instrumental (Live)
+no	Band - Instrumental	Band
+no	Song (Instrumentalist Mix)
+no	Song (Vocal Version)
+no	Song (Instant Remix)
+no	Song (Mr. Nobody Remix)
+no	Off Vocal Ver. (Remix)
+no	Song (Karaoke Instrumental)
+no	Song (カラオケ) [Instrumental]
+no	Song (Originally Performed By Singer) [Instrumental]
+no	Song (Piano Cover) [Instrumental]
+no	Song (Vocal & Instrumental)
+no	Song (A Cappella & Instrumental)
+no	Song (Acapella & Instrumental)
+no	Song (Instrumental) [Vocal Mix]
+no	Song (with Instrumental Break)
+no	Song (Instrumental Intro)
+no	Song (Instrumental Outro)
+no	Song (Live at MIT Inst.)
+no	Song - Live at the Inst. of Tech
+no	Song (From the film Instrumental)
+no	Kiss Off Vocal
+no	Show Off Vocal
+no	Song (Show-Off Vocal Mix)
+yes	Song - Other Name - Piano Instrumental

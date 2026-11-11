@@ -61,51 +61,135 @@ class LyricsFinderTest {
         assertEquals(Lyrics.None, found(song))
     }
 
-    /** LRCLIB's copy of [title] by Band marked instrumental, as it keeps one, with no words. */
-    private fun instrumentalCopy(title: String = "Song") = """{"trackName":${quote(title)},"artistName":"Band","instrumental":true,"plainLyrics":null,"syncedLyrics":null}"""
+    /** LRCLIB's copy of [title] by [artist] marked instrumental, as it keeps one, with no words. */
+    private fun instrumentalCopy(title: String = "Song", artist: String = "Band") =
+        """{"trackName":${quote(title)},"artistName":${quote(artist)},"instrumental":true,"plainLyrics":null,"syncedLyrics":null}"""
 
     @Test
     fun aRecordingMostOfLrclibsCopiesMarkInstrumentalHasNoWords() {
         // Issue #861: some copies of an instrumental recording hold the song's words, sent for its name.
         respond("[${instrumentalCopy()},${instrumentalCopy()},${answer("Song", "Band", "Sung after all")}]")
-        assertEquals(Lyrics.Instrumental, found(song))
+        assertEquals(Lyrics.MarkedInstrumental, found(song))
         // Half of them is no more than a copy with words, as above.
         respond("[${instrumentalCopy()},${instrumentalCopy()},${answer("Song", "Band", "Sung after all")},${answer("Song", "Band", "Sung after all")}]")
         assertEquals("Sung after all", words(song))
     }
 
     @Test
+    fun anotherRecordingsMarksSayNothingOfThisOne() {
+        val sung = answer("Song Title", "Band Name", "Words sung by the band")
+        // Copies tagged as instrumentals of the song are other recordings of it, here the only ones marked.
+        respond("[$sung,${instrumentalCopy("Song Title (Inst.)", "Band Name")},${instrumentalCopy("Song Title (Instrumental)", "Band Name")}]")
+        for (title in listOf("Song Title (feat. Guest)", "Song Title - 2011 Remaster")) assertEquals(title, "Words sung by the band", words(MusicMetadata(title, "Band Name")))
+        // So are a tribute's and a lullaby record's, whose credits only hold the band's name.
+        respond("[$sung,${instrumentalCopy("Song Title", "Band Name Piano Tribute")},${instrumentalCopy("Song Title", "Lullaby Renditions of Band Name")}]")
+        assertEquals("Words sung by the band", words(MusicMetadata("Song Title", "Band Name")))
+        // And a shorter take's, when the lengths say so.
+        val short = lasting(instrumentalCopy("Song Title", "Band Name"), 95.0)
+        respond("[${lasting(sung, 200.0)},$short,$short]")
+        assertEquals("Words sung by the band", words(MusicMetadata("Song Title", "Band Name", lengthMs = 200_000)))
+        // Not knowing how long the song playing is, they can't be told apart.
+        assertEquals(Lyrics.MarkedInstrumental, found(MusicMetadata("Song Title", "Band Name")))
+    }
+
+    @Test
+    fun oneMarkedCopyGivesWayToWordsFoundElsewhere() {
+        // A copy sent with no words may be marked so, as one of a sung song's ten is.
+        everywhere("[${instrumentalCopy()}]", youTubeMusicPage("Words the video sings" to null))
+        assertEquals("Words the video sings", (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).words)
+    }
+
+    @Test
     fun aRecordingLrclibMarksInstrumentalHasNoneOfTheSongsWordsFromElsewhere() {
+        val marked = "[${instrumentalCopy()},${instrumentalCopy()}]"
         // Report 88: YouTube Music gives an instrumental recording the words of the song it plays, untimed.
-        everywhere("[${instrumentalCopy()}]", youTubeMusicPage("Words someone else sings" to null))
-        assertEquals(Lyrics.Instrumental, runBlocking { withYouTubeMusic().lyricsOf(song) })
-        // Nor NetEase's, timed word by word or not, as Letras's are for 2CELLOS' Viva la Vida.
+        everywhere(marked, youTubeMusicPage("Words someone else sings" to null))
+        assertEquals(Lyrics.MarkedInstrumental, runBlocking { withYouTubeMusic().lyricsOf(song) })
+        // Nor NetEase's, timed word by word or not.
         onNetEase("""{"lrc":{"lyric":"[00:10.00]Words someone else sings"},"yrc":{"lyric":"[10000,2000](10000,2000,0)Words"}}""") { request ->
-            FakeSpotify.html(request, if (request.url.host == "lrclib.net") "[${instrumentalCopy()}]" else """{"results":[]}""")
+            FakeSpotify.html(request, if (request.url.host == "lrclib.net") marked else """{"results":[]}""")
         }
-        assertEquals(Lyrics.Instrumental, found(song))
+        assertEquals(Lyrics.MarkedInstrumental, found(song))
         // The recording's own words, timed for it, are still the words sung in it.
-        everywhere("[${instrumentalCopy()}]", youTubeMusicPage("Own first" to 12_000, "Own second" to 15_500))
+        everywhere(marked, youTubeMusicPage("Own first" to 12_000, "Own second" to 15_500))
         val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
         assertEquals("Own first\nOwn second", (runBlocking { withYouTubeMusic().lyricsOf(known) } as Lyrics.Found).words)
+    }
+
+    /**
+     * LRCLIB with [lrclib] for each title asked, YouTube Music with untimed [videoWords], and NetEase with a
+     * song named [netEaseSong] by Band, which it marks as pure music.
+     */
+    private fun netEaseMarks(netEaseSong: String, videoWords: String? = null, lrclib: (String?) -> String = { "[]" }) {
+        fake.handler = { request ->
+            val url = request.url
+            when {
+                url.host == "lrclib.net" -> FakeSpotify.html(request, lrclib(url.queryParameter("track_name")))
+                url.encodedPath == "/youtubei/v1/next" -> FakeSpotify.html(request, """{"tabs":[{"browseEndpoint":{"browseId":"MPLYt_words"}}]}""")
+                url.encodedPath == "/youtubei/v1/browse" -> FakeSpotify.html(request, youTubeMusicPage(*listOfNotNull(videoWords?.let { it to null }).toTypedArray()))
+                url.encodedPath == "/api/search/get" -> FakeSpotify.html(request, """{"result":{"songs":[{"id":2,"name":${quote(netEaseSong)},"artists":[{"name":"Band"}]}]}}""")
+                url.host == "music.163.com" -> FakeSpotify.html(request, """{"pureMusic":true,"lrc":{"lyric":""}}""")
+                else -> FakeSpotify.html(request, """{"results":[]}""")
+            }
+        }
+    }
+
+    @Test
+    fun anInstrumentalMarkFromElsewhereGivesWayToWords() {
+        // NetEase marks a song of the same name pure music, which may be another recording of it.
+        netEaseMarks("Song", videoWords = "Words the video sings")
+        assertEquals("Words the video sings", (runBlocking { withYouTubeMusic().lyricsOf(song) } as Lyrics.Found).words)
+        // With nothing else found, it's an instrumental, as before.
+        netEaseMarks("Song")
+        assertEquals(Lyrics.Instrumental, found(song))
+    }
+
+    @Test
+    fun aMarkUnderOneOfTheTitlesNamesLeavesItsOtherNames() {
+        val named = MusicMetadata("Song Title - Other Name", "Band")
+        val sung = "[${answer("Other Name", "Band", "Words under the other name")}]"
+        // NetEase marks its first name pure music; LRCLIB has the words under its second.
+        netEaseMarks("Song Title") { title -> if (title == "Other Name") sung else "[]" }
+        assertEquals("Words under the other name", words(named))
+        // LRCLIB's own copies marked under its first name don't stop the second either.
+        netEaseMarks("Nothing") { title ->
+            when (title) {
+                "Song Title" -> "[${instrumentalCopy("Song Title")},${instrumentalCopy("Song Title")}]"
+                "Other Name" -> sung
+                else -> "[]"
+            }
+        }
+        assertEquals("Words under the other name", words(named))
+        // Marked under one of its names and nothing found under the others, its bare title's words are another recording's.
+        netEaseMarks("Nothing") { title ->
+            when (title) {
+                "Song (Piano Version)" -> "[${instrumentalCopy("Song (Piano Version)")},${instrumentalCopy("Song (Piano Version)")}]"
+                "Song" -> "[${answer("Song", "Band", "Words of the song sung")}]"
+                else -> "[]"
+            }
+        }
+        assertEquals(Lyrics.Instrumental, found(MusicMetadata("Song (Piano Version) - Other Name", "Band")))
     }
 
     @Test
     fun aRecordingLrclibMarksInstrumentalHasNoWordsUnderItsBareTitle() {
         // "Song" is the song sung; "Song (Piano Version)", the recording playing, has no one singing.
-        fake.handler = { request ->
-            FakeSpotify.html(request, when (request.url.queryParameter("track_name")) {
-                "Song (Piano Version)" -> "[${instrumentalCopy("Song (Piano Version)")}]"
-                "Song" -> "[${answer("Song", "Band", "Words of the song sung")}]"
-                else -> "[]"
-            })
+        fun lrclib(own: String) {
+            fake.handler = { request ->
+                FakeSpotify.html(request, when (request.url.queryParameter("track_name")) {
+                    "Song (Piano Version)" -> own
+                    "Song" -> "[${answer("Song", "Band", "Words of the song sung")}]"
+                    else -> "[]"
+                })
+            }
         }
-        assertEquals(Lyrics.Instrumental, found(MusicMetadata("Song (Piano Version)", "Band")))
-        // With no copy of its own at all, the bare title's words are still taken.
-        fake.handler = { request ->
-            FakeSpotify.html(request, if (request.url.queryParameter("track_name") == "Song") "[${answer("Song", "Band", "Words of the song sung")}]" else "[]")
+        lrclib("[${instrumentalCopy("Song (Piano Version)")},${instrumentalCopy("Song (Piano Version)")}]")
+        assertEquals(Lyrics.MarkedInstrumental, found(MusicMetadata("Song (Piano Version)", "Band")))
+        // One copy marked, or none at all, and the bare title's words are still taken.
+        for (own in listOf("[${instrumentalCopy("Song (Piano Version)")}]", "[]")) {
+            lrclib(own)
+            assertEquals(own, "Words of the song sung", words(MusicMetadata("Song (Piano Version)", "Band")))
         }
-        assertEquals("Words of the song sung", words(MusicMetadata("Song (Piano Version)", "Band")))
     }
 
     @Test
@@ -339,15 +423,23 @@ class LyricsFinderTest {
 
     @Test
     fun aCoverLrclibMarksInstrumentalHasNoneOfTheOriginalsWords() {
-        // 2CELLOS' "With or Without You": all 15 of LRCLIB's copies are marked instrumental.
-        onlyBy("Evanescence", "Bring Me to Life", answer("Bring Me to Life", "Evanescence", "Wake me up inside"))
-        val elsewhere = fake.handler
-        val cover = MusicMetadata("Bring Me to Life (Cyberpunk Shamisen Cover)", "TOKYO SAMURAI SYNDICATE")
-        fake.handler = { request ->
-            if (request.url.queryParameter("artist_name") != cover.artist) elsewhere(request)
-            else FakeSpotify.html(request, """[{"trackName":${quote(cover.title)},"artistName":${quote(cover.artist)},"instrumental":true}]""")
+        // All of a cello duo's copies of their cover are marked instrumental.
+        val cover = MusicMetadata("Old Song (Cello Cover of First Singer)", "Cello Duo")
+        fun lrclib(own: String) {
+            fake.handler = { request ->
+                when {
+                    request.url.host != "lrclib.net" -> FakeSpotify.html(request, """{"results":[]}""")
+                    request.url.queryParameter("artist_name") == "First Singer" -> FakeSpotify.html(request, "[${answer("Old Song", "First Singer", "Words the first singer sang")}]")
+                    request.url.queryParameter("artist_name") == cover.artist -> FakeSpotify.html(request, own)
+                    else -> FakeSpotify.html(request, "[]")
+                }
+            }
         }
-        assertEquals(Lyrics.Instrumental, found(cover))
+        lrclib("[${instrumentalCopy(cover.title, cover.artist)},${instrumentalCopy(cover.title, cover.artist)}]")
+        assertEquals(Lyrics.MarkedInstrumental, found(cover))
+        // One copy marked may be one sent with no words: the original's words, as before.
+        lrclib("[${instrumentalCopy(cover.title, cover.artist)}]")
+        assertEquals("Words the first singer sang", words(cover))
     }
 
     @Test
@@ -728,6 +820,13 @@ class LyricsFinderTest {
         // The store that names it as music apps do, then the one in its own country, for that same recording.
         assertEquals(true, fake.requestedUrls.any { it.startsWith("https://itunes.apple.com/search?") && "country=us" in it })
         assertEquals(true, fake.requestedUrls.any { it == "https://itunes.apple.com/lookup?id=42&country=jp" })
+    }
+
+    @Test
+    fun aRecordingLrclibMarksInstrumentalUnderItsOwnNamesHasNoWords() {
+        // The store's own names are this very recording's, so their marks are as good as under the names given.
+        japaneseSong(lrclib = { title -> if (title == "初恋") "[${instrumentalCopy("初恋", "三田 寛子")},${instrumentalCopy("初恋", "三田 寛子")}]" else "[]" })
+        assertEquals(Lyrics.MarkedInstrumental, found(hatsukoi))
     }
 
     @Test

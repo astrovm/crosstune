@@ -2041,7 +2041,8 @@ internal class MainViewModel(
                         LyricsFinder.Lyrics.None -> noWordsFound(song, likelyInstrumental = false)
                         // Having no words is what an instrumental is, not a problem.
                         LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyricsInstrumental = true)
-                        LyricsFinder.Lyrics.LikelyInstrumental -> {
+                        // Taken for an instrumental by its genre, or by LRCLIB's marks, which can be wrong: heard for a voice first.
+                        LyricsFinder.Lyrics.LikelyInstrumental, LyricsFinder.Lyrics.MarkedInstrumental -> {
                             uiState = uiState.copy(lyricsInstrumental = true)
                             noWordsFound(song, likelyInstrumental = true)
                         }

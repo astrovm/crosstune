@@ -519,6 +519,12 @@ internal class LyricsFinder(
         data object Instrumental : Lyrics
 
         /**
+         * Most of LRCLIB's copies of this very recording say no one sings in it, so the song's words found for
+         * its name are sung in another one (Issue #861). Still heard for a voice, as a copy can be marked wrongly.
+         */
+        data object MarkedInstrumental : Lyrics
+
+        /**
          * No service has words, and the store files the song under a genre that has none: most likely an
          * instrumental, though no service says so, and a singer in that genre may still sing it.
          */
@@ -549,7 +555,7 @@ internal class LyricsFinder(
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
         // Its title says no one sings in it, so whatever words are kept for its name are another recording's.
-        if (SongNames.saysInstrumental(metadata.title)) return FirstLook(Lyrics.Instrumental, final = true)
+        if (SongNames.saysInstrumental(metadata.title, metadata.artist)) return FirstLook(Lyrics.Instrumental, final = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) } }
         val lookup = Answers()
@@ -712,9 +718,9 @@ internal class LyricsFinder(
             return@coroutineScope Best(own, own = true)
         }
         val rest = elsewhere.await()
-        // Found under the recording's own names, that no one sings in it isn't bettered by the song's words
+        // LRCLIB's copies of the recording saying no one sings in it aren't bettered by the song's words
         // found for its name, as YouTube Music gives an instrumental recording (Issue #861).
-        if (rest is Lyrics.Instrumental) {
+        if (rest is Lyrics.MarkedInstrumental) {
             byWord.cancel()
             return@coroutineScope Best(rest)
         }
@@ -758,11 +764,11 @@ internal class LyricsFinder(
     private suspend fun <T : Lyrics> T.seen(): T = also { if (it is Lyrics.Found) currentCoroutineContext()[Answers]?.copies?.add(it) }
 
     /**
-     * With no words of its own for a cover, the words of the song it covers. Not for one a service marks
-     * instrumental: no one sings in it, as in 2CELLOS' "With or Without You" (Issue #861).
+     * With no words of its own for a cover, the words of the song it covers. Not for one LRCLIB's copies
+     * mark instrumental: no one sings in it, as in 2CELLOS' "With or Without You" (Issue #861).
      */
     private suspend fun Best.orOriginal(metadata: MusicMetadata, timeoutMs: Long): Best =
-        if (lyrics is Lyrics.None || lyrics is Lyrics.LikelyInstrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
+        if (lyrics is Lyrics.None || lyrics is Lyrics.Instrumental || lyrics is Lyrics.LikelyInstrumental) original(metadata, timeoutMs)?.let(::Best) ?: this else this
 
     /**
      * With no words under the names given, the words of the song a video's title names by itself, when
@@ -871,12 +877,13 @@ internal class LyricsFinder(
 
     /**
      * Words found over none, the better timed of two, and [first] among equals; with no words, an
-     * instrumental over "none", and "none" over one that wouldn't answer.
+     * instrumental over "none", one LRCLIB's copies mark over any, and "none" over one that wouldn't answer.
      */
     private fun better(first: Lyrics, second: Lyrics): Lyrics = when {
         first is Lyrics.Found && second is Lyrics.Found -> if (timing(second) > timing(first)) second else first
         first is Lyrics.Found -> first
         second is Lyrics.Found -> second
+        first is Lyrics.MarkedInstrumental || second is Lyrics.MarkedInstrumental -> Lyrics.MarkedInstrumental
         first is Lyrics.Instrumental || second is Lyrics.Instrumental -> Lyrics.Instrumental
         first is Lyrics.LikelyInstrumental || second is Lyrics.LikelyInstrumental -> Lyrics.LikelyInstrumental
         first is Lyrics.None || second is Lyrics.None -> Lyrics.None
@@ -928,21 +935,29 @@ internal class LyricsFinder(
      */
     private suspend fun anywhere(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         var fallback: Lyrics.Found? = null
+        // LRCLIB marks the recording instrumental under one of its names, so its bare title's words are another recording's.
+        var marked = false
         val names = SongNames.titleNames(metadata.title).distinct()
-        val answers = (names + SongNames.bareTitle(metadata.title)).distinct().map { title ->
+        val answers = (names + SongNames.bareTitle(metadata.title)).distinct().mapNotNull { title ->
             val kept = fallback
             // A bare title may name another edit; timedWell checks whether its times can be lent.
             if (title !in names && kept != null && romanizedScript(kept.words) == null) return kept
-            underName(metadata.copy(title = title), timeoutMs).also { answer ->
-                // No one sings in the recording as named, so words under its bare title are another recording's.
-                if (answer is Lyrics.Instrumental) return answer
-                if (answer is Lyrics.Found) {
-                    val native = romanizedScript(answer.words) == null
-                    fallback = if (kept == null) answer else betterNamed(kept, answer)
-                    // Untimed words stay as a fallback while the other names may have timings.
-                    if (native && timing(answer) >= WELL_TIMED && fallback === answer) return answer
-                }
+            if (title !in names && marked) return@mapNotNull null
+            val answer = underName(metadata.copy(title = title), timeoutMs)
+            if (answer is Lyrics.MarkedInstrumental) {
+                // Marked under the name it's played by, it's final. Under another of its names, which a sung
+                // song may have too, words under the rest still win (Issue #861).
+                if (title == metadata.title) return answer
+                marked = true
+                return@mapNotNull Lyrics.Instrumental
             }
+            if (answer is Lyrics.Found) {
+                val native = romanizedScript(answer.words) == null
+                fallback = if (kept == null) answer else betterNamed(kept, answer)
+                // Untimed words stay as a fallback while the other names may have timings.
+                if (native && timing(answer) >= WELL_TIMED && fallback === answer) return answer
+            }
+            answer
         }
         return fallback ?: answers.reduce(::better)
     }
@@ -962,7 +977,7 @@ internal class LyricsFinder(
     private suspend fun underName(metadata: MusicMetadata, timeoutMs: Long): Lyrics {
         val first = fromLrclib(metadata, timeoutMs).seen()
         // LRCLIB's copies of the recording say no one sings in it: words others keep under its name are the song's, sung elsewhere.
-        if (first is Lyrics.Instrumental) return first
+        if (first is Lyrics.MarkedInstrumental) return first
         val romanized = (first as? Lyrics.Found)?.let { romanizedScript(it.words) }
         // Words timed badly are no better than untimed ones: both give way to words timed well.
         val untimed = first is Lyrics.Found && timing(first) < WELL_TIMED
@@ -1137,10 +1152,9 @@ internal class LyricsFinder(
     private suspend fun wordsOf(answers: List<Answer>, metadata: MusicMetadata, timeoutMs: Long): Lyrics? {
         // The service's own answers first, then a close one, as [ExactMatcher] does. Among those, one
         // with timed words wins, so they can follow the song.
+        // Some copies of an instrumental hold the song's words, sent for its name (Issue #861).
+        if (noOneSings(answers, metadata)) return Lyrics.MarkedInstrumental
         val named = answers.filter { it.isExact(metadata) }.ifEmpty { answers.filter { it.belongsTo(metadata) } }
-        // Most copies marked instrumental: no one sings in the recording. Some copies of an instrumental
-        // hold the song's words, sent for its name; a sung song's copies are seldom marked (Issue #861).
-        if (named.count(Answer::instrumental) * 2 > named.size) return Lyrics.Instrumental
         // Timed copies of different lengths are different takes, e.g. a live one named the same, so
         // the one as long as the song comes first: as the app playing it or its service says, or
         // else the iTunes Store, asked only then.
@@ -1153,6 +1167,17 @@ internal class LyricsFinder(
         // Timed words are the words too, once their timings are taken off.
         val words = song.plain() ?: lines.joinToString("\n") { it.text }.trim().ifEmpty { return Lyrics.Instrumental.takeIf { named.any(Answer::instrumental) } }
         return Lyrics.Found(words, lines, song.lengthMs(), LRCLIB)
+    }
+
+    /**
+     * Whether LRCLIB's copies of the very recording [metadata] names mostly say no one sings in it: two at least,
+     * as one may be a copy sent with no words, as a sung song of 欅坂46's has. Another recording's copies say
+     * nothing of it, so they're left out (Issue #861).
+     */
+    private fun noOneSings(answers: List<Answer>, metadata: MusicMetadata): Boolean {
+        val copies = answers.filter { it.isRecording(metadata) }
+        val marked = copies.count(Answer::instrumental)
+        return marked >= MIN_MARKED && marked * 2 > copies.size
     }
 
     /**
@@ -1641,6 +1666,17 @@ internal class LyricsFinder(
             SongNames.normalize(title) == SongNames.normalize(metadata.title) && SongNames.sameArtist(artist, metadata.artist)
 
         /**
+         * The very recording, name for name but for a guest or remaster tag, so not "Song (Inst.)" for "Song (feat.
+         * Guest)"; by its artist, not one whose name holds theirs, "Band Piano Tribute"; and as long, when both say.
+         */
+        fun isRecording(metadata: MusicMetadata): Boolean {
+            if (!SongNames.same(title, metadata.title) || SongNames.artists(artist).none { it in SongNames.artists(metadata.artist) }) return false
+            val copyMs = lengthMs() ?: return true
+            val playingMs = metadata.lengthMs ?: return true
+            return abs(copyMs - playingMs) <= SAME_LENGTH_MS
+        }
+
+        /**
          * The same song, near enough: LRCLIB credits an artist as others do, so "Randy" is in
          * "Randy Nota Loca", and a title in another script is written out in letters.
          */
@@ -1830,6 +1866,9 @@ internal class LyricsFinder(
 
         /** How far apart two copies of the same take of a song may be in length. */
         const val SAME_LENGTH_MS = 3_000L
+
+        /** Fewer LRCLIB copies marked instrumental than this may be a copy someone sent with no words. */
+        const val MIN_MARKED = 2
 
         /** How close two copies' times are, on the middle line, when they're timed alike. */
         const val CLOSE_MS = 2_500L

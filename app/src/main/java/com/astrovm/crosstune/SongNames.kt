@@ -263,12 +263,29 @@ internal object SongNames {
     }
 
     /**
-     * Whether [title] says no one sings in the recording: "Song (Instrumental)", "Song - Inst.", "曲 (伴奏)",
-     * "曲 off vocal ver.". Not a karaoke track's or a cover's, which is sung along to, nor a song of that name.
+     * Whether [title] says no one sings in the recording: "Song (Instrumental)", "Song - Inst.", "曲 (伴奏版)",
+     * "曲 off vocal ver.". Not a karaoke track's or a cover's, which is sung along to, nor one that says a voice
+     * is in it too, "Song (Vocal & Instrumental)". Nor a tag that names a part of it, "(with Instrumental Break)",
+     * or something else, "(Live at MIT Inst.)", nor a song of that name, "Band - Instrumental" by Band.
      * Of 2,551 song names the iTunes Store gave, the 202 that say so are all instrumentals (Issue #861).
      */
-    fun saysInstrumental(title: String): Boolean =
-        instrumentalTag.containsMatchIn(title) && !karaoke.containsMatchIn(title) && coverOf(title) == null
+    fun saysInstrumental(title: String, artist: String = ""): Boolean {
+        // Written in full-width or half-width letters, "（Ｉｎｓｔ）" or "ｵﾌﾎﾞｰｶﾙ", it says the same.
+        val name = Normalizer.normalize(title, Normalizer.Form.NFKC)
+        if (karaoke.containsMatchIn(name) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
+        // What follows "Artist - " is the song's name, not a tag.
+        val dashed = dashTag.findAll(name).filterNot { artist.isNotBlank() && sameArtist(name.substring(0, it.range.first), artist) }
+        return (bracketTag.findAll(name) + dashed).any { onlyInstrumental(it.groupValues[1]) } || offVocalAtEnd.containsMatchIn(name)
+    }
+
+    /** Whether a [tag], what's in brackets or after a dash, says the whole recording is an instrumental. */
+    private fun onlyInstrumental(tag: String): Boolean {
+        val said = instrumentalWord.find(tag) ?: return false
+        val rest = words(tag.removeRange(said.range))
+        if (rest.any { it in PART_WORDS }) return false
+        // "Inst." and "MR" are short for other words too, so they say it alone, or with "Ver." only.
+        return !shortForm.matches(said.value) || rest.all { it in SAYS_VERSION }
+    }
 
     /** A cover's song: its [title], and its [artist] when the cover's title names them. */
     data class Covered(val title: String, val artist: String?)
@@ -280,15 +297,36 @@ internal object SongNames {
     )
     private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made (?:famous|popular) by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
 
-    private const val INSTRUMENTAL_WORDS = """instrumental|instrumentale|inst\.?|off[ -]?vocal|backing track|minus one|伴奏|オフボーカル|纯音乐|純音樂|인스트루멘탈"""
-    private const val NOT_A_LETTER_BEFORE = """(?<![\p{L}\p{N}])"""
-    private const val NOT_A_LETTER_AFTER = """(?![\p{L}\p{N}])"""
+    /**
+     * A word saying no one sings, not inside another word, nor the end of one joined by a hyphen, "Show-Off Vocal".
+     * A word in Chinese or Japanese may say "version" after it, "伴奏版".
+     */
+    private val instrumentalWord = Regex(
+        """(?<![\p{L}\p{N}])(?<![\p{L}\p{N}]-)(?:instrumentale?|inst\.?|off[ -]?vocal|backing track|minus one|(?-i:MR)|인스트루멘탈|""" +
+            """(?:伴奏|オフボーカル|纯音乐|純音樂|純音楽)(?:版本?|バージョン)?)(?![\p{L}\p{N}])""",
+        RegexOption.IGNORE_CASE
+    )
+    private val shortForm = Regex("""inst\.?|MR""", RegexOption.IGNORE_CASE)
 
-    /** A tag saying no one sings: in brackets, after a dash or a tilde, or "off vocal" ending the title. */
-    private val instrumentalTag = Regex(
-        """[(\[（【][^()\[\]（）【】]*?$NOT_A_LETTER_BEFORE(?:$INSTRUMENTAL_WORDS)$NOT_A_LETTER_AFTER[^()\[\]（）【】]*[)\]）】]""" +
-            """|\s[-–~〜]\s?[^-–~〜]*?$NOT_A_LETTER_BEFORE(?:$INSTRUMENTAL_WORDS)$NOT_A_LETTER_AFTER""" +
-            """|\soff[ -]?vocal(?: ver(?:sion|\.)?)?\s*$""",
+    /** A voice in the recording, other than in "off vocal": "(Vocal Mix)", "(A Cappella & Instrumental)". */
+    private val voiceIn = Regex("""(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b""", RegexOption.IGNORE_CASE)
+
+    /** What a tag naming a part of a song, or what it's from, says: "(with Instrumental Break)", "(From the film Instrumental)". */
+    private val PART_WORDS = setOf("with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie")
+    private val SAYS_VERSION = setOf("ver", "version", "versao")
+
+    /** What's in brackets, of any kind Chinese and Japanese titles use, once full-width ones are written as others. */
+    private val bracketTag = Regex("""[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]""")
+
+    /** What follows a dash, or a tilde, which a Japanese title may put right after its name: "曲〜伴奏〜". */
+    private val dashTag = Regex("""(?:(?<=\s)[-–]\s?|[~〜])([^-–~〜]*)""")
+
+    /**
+     * "Off vocal" ending the title with nothing around it, after a name in Chinese, Japanese or Korean, "曲 Off Vocal",
+     * or with "ver." after it, "Song off vocal ver.": "Kiss Off Vocal" may be the song "Kiss Off" sung.
+     */
+    private val offVocalAtEnd = Regex(
+        """(?:(?<=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af])\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$""",
         RegexOption.IGNORE_CASE
     )
     private val karaoke = Regex("""karaoke|カラオケ""", RegexOption.IGNORE_CASE)

@@ -59,6 +59,10 @@ class UnsungTest {
     @Volatile
     private var title = "Demo"
 
+    /** What LRCLIB answers for it. */
+    @Volatile
+    private var lrclib = "[]"
+
     @Before
     fun setUp() {
         MainActivity.httpClientFactory = { fake.client() }
@@ -84,7 +88,7 @@ class UnsungTest {
         fake.handler = { request ->
             when (request.url.host) {
                 "report.crosstune.cc" -> FakeSpotify.html(request, "", code = 204)
-                "lrclib.net" -> FakeSpotify.html(request, "[]")
+                "lrclib.net" -> FakeSpotify.html(request, lrclib)
                 "itunes.apple.com" -> FakeSpotify.html(request, genre?.let { """{"results":[{"trackId":7,"trackName":"$title","artistName":"Band","primaryGenreName":"$it","trackTimeMillis":200000}]}""" } ?: """{"results":[]}""")
                 else -> FakeSpotify.html(request, """{"title":"$title","author_name":"Band"}""")
             }
@@ -238,6 +242,19 @@ class UnsungTest {
         waitUntil { shows(R.string.lyrics_none) }
         assertEquals(2, singing.hears)
         assertEquals(emptyList<String>(), problems())
+        // So is one LRCLIB marks instrumental.
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        genre = null
+        markedOnLrclib()
+        // The fake answers by how many times it was heard in all: this third open hears music first.
+        singing.answers = listOf(music, voice, music, voice)
+        openLyrics(shown = R.string.lyrics_instrumental)
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        waitUntil { shows(R.string.lyrics_none) }
+        assertEquals(4, singing.hears)
+        assertEquals(emptyList<String>(), problems())
     }
 
     @Test
@@ -288,6 +305,35 @@ class UnsungTest {
     fun aMedleyOrAWholeConcertHasNoOneSongsWordsToMiss() {
         title = "Live 2007 (Recital Completo)"
         openLyrics()
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertEquals(0, singing.hears)
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    /** LRCLIB's copies of the song, both marked instrumental. */
+    private fun markedOnLrclib() {
+        val copy = """{"trackName":"$title","artistName":"Band","instrumental":true}"""
+        lrclib = "[$copy,$copy]"
+    }
+
+    @Test
+    fun aSongLrclibMarksInstrumentalIsSungAfterAllWhenSomeoneIsHeard() {
+        // Its copies may be marked wrongly, so it's heard as one taken for an instrumental by its genre is.
+        markedOnLrclib()
+        singing.answers = listOf(music, voice)
+        openLyrics(shown = R.string.lyrics_instrumental)
+        assertEquals(emptyList<String>(), problems())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertTrue(shows(R.string.lyrics_none))
+        assertFalse(shows(R.string.lyrics_instrumental))
+    }
+
+    @Test
+    fun aSongWhoseTitleSaysNoOneSingsInItIsNotHeard() {
+        title = "Demo (Instrumental)"
+        singing.answers = listOf(voice)
+        openLyrics(shown = R.string.lyrics_instrumental)
         passes(MainViewModel.VOICE_PAUSE_MS)
         assertEquals(0, singing.hears)
         assertEquals(emptyList<String>(), problems())
