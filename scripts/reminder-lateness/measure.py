@@ -350,6 +350,7 @@ def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup):
         if int(phone.shell('date +%s').decode().strip()) * 1000 >= target - 10_000:
             raise RuntimeError('Setup finished too close to the target; discard the run')
         wake_before = last_wake(phone.shell('dumpsys power').decode())
+        unattended_from = time.time() + clock_offset + 1
         if force_idle:
             stack.enter_context(temporary_setting(phone.forced_idle, phone.set_forced_idle, True))
         print(f'Target epoch ms: {target}. Waiting for the run to end.', flush=True)
@@ -361,7 +362,7 @@ def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup):
             time.sleep(min(30, remaining))
         wake_after = last_wake(phone.shell('dumpsys power').decode())
         notification = phone.shell('dumpsys notification').decode(errors='replace')
-        log = phone.command('logcat', '-d', '-v', 'epoch', '-s', 'AlarmManager', 'NotificationService', 'FreecessController', 'MARsPolicyManager').decode(errors='replace')
+        log = phone.command('logcat', '-d', '-v', 'epoch', '-s', 'AlarmManager', 'NotificationService', 'FreecessController', 'MARsPolicyManager', 'ActivityTaskManager').decode(errors='replace')
         relevant = []
         for line in log.splitlines():
             match = re.match(r'^\s*(\d+(?:\.\d+)?)\s+', line)
@@ -376,6 +377,8 @@ def run_measurement(phone, minutes, wait_minutes, force_idle, exact, backup):
                 if 'com.astrovm.crosstune.dev' in line:
                     print(line.replace(phone.serial, '[device]'), flush=True)
             raise
+        if activity_started_after(log, unattended_from):
+            raise RuntimeError('An activity started during the unattended run; discard this measurement')
         if wake_before != wake_after or screen_on(phone.shell('dumpsys deviceidle').decode()):
             raise RuntimeError('The phone woke during the run; discard this measurement')
         if posted is not None and posted < target:
@@ -588,6 +591,15 @@ def media_volume(dump):
     if len(matches) != 1:
         raise ValueError('Media volume is missing or ambiguous')
     return int(matches[0])
+
+
+def activity_started_after(log, started):
+    """Detect an activity launch during the unattended interval without printing its contents."""
+    for line in log.splitlines():
+        stamp = re.match(r'^\s*(\d+(?:\.\d+)?)\s+', line)
+        if stamp and float(stamp.group(1)) > started and 'ActivityTaskManager:' in line and re.search(r'\bSTART u\d+\b', line):
+            return True
+    return False
 
 
 if __name__ == '__main__':

@@ -660,5 +660,16 @@ class LaunchTest(unittest.TestCase):
             FakePhone().launch()
 
 
+class InterferenceTest(unittest.TestCase):
+    def test_finds_activity_launches_only_after_the_screen_went_off(self):
+        from measure import activity_started_after
+
+        log = ('1700000000.100 1 2 I ActivityTaskManager: START u0 {cmp=fake/.Main}\n'
+               '1700000100.300 1 2 I ActivityTaskManager: START u0 {cmp=other/.Main}\n')
+        self.assertTrue(activity_started_after(log, 1700000050.0))
+        self.assertFalse(activity_started_after(log, 1700000200.0))
+        self.assertFalse(activity_started_after('1700000100.300 1 2 I Other: START u0 {x}\n', 1700000050.0))
+
+
 if __name__ == '__main__':
     unittest.main()

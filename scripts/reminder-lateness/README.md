@@ -11,7 +11,7 @@ python3 scripts/reminder-lateness/measure.py --minutes 20 --wait-minutes 15
 
 Add `--exact` to allow exact alarms for the run. Add `--force-idle` to force Doze. The lead and wait must total at most 38 minutes. The script releases the lock after the run. Take it again for the next run.
 
-The script uses a fake due card. It records the alarm window and the notification creation time. It discards a run if the screen wakes. No notification by the end of the wait is an unobserved delivery, not a lateness value.
+The script uses a fake due card. It records the alarm window and the notification creation time. It discards a run if the screen wakes or another activity starts during the wait. No notification by the end of the wait is an unobserved delivery, not a lateness value.
 
 The script temporarily changes the dev app's exact-alarm and notification access and simulates an unplugged battery. It restores the original settings and preferences. It also restores forced Doze and the screen state when needed. It never changes media volume or Do Not Disturb. It refuses to run unless media volume is zero.
 
