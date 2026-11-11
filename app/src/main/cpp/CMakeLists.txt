@@ -42,10 +42,12 @@ crosstune_copy_tree("${PROJECT_ROOT}/third_party/projectm" "${PROJECTM_COPY}"
     vendor/hlslparser/src/GLSLGenerator.cpp src/libprojectM/MilkdropPreset/Waveform.hpp)
 crosstune_patch("${PROJECT_ROOT}/third_party/projectm/vendor/hlslparser/src/GLSLGenerator.cpp"
     "${PROJECTM_COPY}/vendor/hlslparser/src/GLSLGenerator.cpp"
-    "m_writer.Write(\",\", op);" "m_writer.Write(\",\");")
+    "m_writer.Write(\",\", op);" "m_writer.Write(\",\");"
+    "2026-11-09: a call to m_writer.Write no longer passes an argument its format doesn't use.")
 crosstune_patch("${PROJECT_ROOT}/third_party/projectm/src/libprojectM/MilkdropPreset/Waveform.hpp"
     "${PROJECTM_COPY}/src/libprojectM/MilkdropPreset/Waveform.hpp"
-    "    int m_samples{};         //!< Number of samples in the current waveform. Depends on the mode.\n" "")
+    "    int m_samples{};         //!< Number of samples in the current waveform. Depends on the mode.\n" ""
+    "2026-11-09: the unused m_samples field is gone.")
 add_subdirectory("${PROJECTM_COPY}" projectm EXCLUDE_FROM_ALL)
 # Our copy of projectM's Framebuffer.cpp, which keeps the picture when the visuals change size. Built
 # from the one this copy was made from only: a new projectM's needs the change brought over again.
@@ -92,7 +94,8 @@ if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
     # Its file with the fix to a size printed as a long, which is not what a size_t is on 32-bit phones.
     set(WHISPER_PATCHED "${CMAKE_BINARY_DIR}/patched/whisper.cpp/whisper.cpp")
     crosstune_patch("${PROJECT_ROOT}/third_party/whisper.cpp/src/whisper.cpp" "${WHISPER_PATCHED}"
-        "alignment heads masks size = %ld B" "alignment heads masks size = %zu B")
+        "alignment heads masks size = %ld B" "alignment heads masks size = %zu B"
+        "2026-11-09: the alignment heads masks size is printed with %zu, the format of a size_t.")
     get_target_property(WHISPER_SOURCES whisper SOURCES)
     list(TRANSFORM WHISPER_SOURCES REPLACE "^whisper\\.cpp$" "${WHISPER_PATCHED}")
     set_target_properties(whisper PROPERTIES SOURCES "${WHISPER_SOURCES}")

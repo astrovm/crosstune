@@ -24,6 +24,9 @@
     <string name="settings_default_label">音樂應用程式</string>
     <string name="setting_show_in_crosstune_first">先在 Crosstune 中顯示</string>
     <string name="settings_about_title">關於</string>
+    <string name="settings_licenses">授權條款</string>
+    <string name="license_show">顯示授權條款</string>
+    <string name="license_hide">隱藏授權條款</string>
     <string name="settings_links_title">開啟來自以下服務的連結</string>
     <string name="rule_opens_in">在 %1$s 中開啟</string>
     <string name="rule_default">預設（%1$s）</string>

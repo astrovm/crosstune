@@ -24,6 +24,9 @@
     <string name="settings_default_label">Muziek-app</string>
     <string name="setting_show_in_crosstune_first">Eerst in Crosstune tonen</string>
     <string name="settings_about_title">Over</string>
+    <string name="settings_licenses">Licenties</string>
+    <string name="license_show">Licentie tonen</string>
+    <string name="license_hide">Licentie verbergen</string>
     <string name="settings_links_title">Links openen van</string>
     <string name="rule_opens_in">Opent in %1$s</string>
     <string name="rule_default">Standaard (%1$s)</string>

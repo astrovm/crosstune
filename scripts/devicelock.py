@@ -5,9 +5,9 @@
   python3 scripts/devicelock.py release DEVICE [--who TEXT] [--force]
   python3 scripts/devicelock.py who [DEVICE]
 
-DEVICE is samsung or crosstune-phone. The locks are samsung.lock and
-crosstune-phone.lock in the agent cache: /mnt/data/agent-cache on mr, and
-~/.cache/agent-cache elsewhere. take waits in line. An earlier waiter gets
+DEVICE is samsung, or a test emulator in scripts/emulator/emulators.json:
+crosstune-phone or crosstune-tv. The lock is DEVICE.lock in the agent cache:
+/mnt/data/agent-cache on mr, and ~/.cache/agent-cache elsewhere. take waits in line. An earlier waiter gets
 the device before a later one, including when the holder takes it again:
 that new take goes to the back. flock(2) stays held for the whole turn, so
 a plain flock on the same file waits too. who reads the holder from that
@@ -32,7 +32,8 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DEVICES = ("samsung", "crosstune-phone")
+# The Samsung, and each test emulator emulator.py makes, which agents share the same way.
+DEVICES = ("samsung", *json.loads((Path(__file__).resolve().parent / "emulator" / "emulators.json").read_text()))
 # Long enough for a waiter already blocked in flock(2) to be woken before we
 # join the kernel queue again. An immediate relock jumps that waiter.
 YIELD_SECONDS = 0.05

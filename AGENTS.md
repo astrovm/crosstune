@@ -11,11 +11,12 @@ git submodule update --init --recursive   # projectM is built from source for th
 scripts/gradle-box/gradle-box.sh TASK...   # Gradle in a container, in turn with other checkouts; how agents and test runs build
 python3 scripts/build-site.py             # after changing site/; commit docs/ too
 python3 scripts/emulator/emulator.py check   # the test emulators, declared in scripts/emulator/emulators.json; `create` and `start` make and run them
-python3 scripts/devicelock.py take samsung --who "task" --minutes 15   # shared lock for samsung or crosstune-phone; waits in line, writes who holds it, lets go when the time is up. `release` ends yours, `who` shows the holder and the queue
+python3 scripts/devicelock.py take samsung --who "task" --minutes 15   # shared lock for samsung, crosstune-phone or crosstune-tv; waits in line, writes who holds it, lets go when the time is up. `release` ends yours, `who` shows the holder and the queue
 python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed on a real recording, line by line against when it's sung; prep first, see the script
 ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
 python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines
 python3 scripts/syncreplay/syncreplay.py untimed [--again MS] -v   # words with their times taken off, timed by the singing heard, line by line against when it's sung
+python3 scripts/notices.py check          # each licence text in Settings → About → Licenses against its source, fetched again
 node --test report/*.test.mjs             # the report Worker's tests
 python3 scripts/reports/reports.py triage --since ID   # the reports in D1, grouped; `pull` first, read-only, and they stay out of git
 ```
