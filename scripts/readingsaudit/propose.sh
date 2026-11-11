@@ -16,32 +16,47 @@ if git diff --quiet -- "${lists[@]}"; then
   exit 0
 fi
 bot="41898282+github-actions[bot]@users.noreply.github.com"
+base=$(git rev-parse HEAD)
 lease=""
-if git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null; then
-  # The branch is made again from main each time. A person's commit on it is never thrown away.
-  if git log --format=%ae "origin/main..origin/$BRANCH" | grep -vqxF "$bot"; then
+push=true
+head=$BRANCH
+# Exit code 2 is no such branch. Anything else is a failure, never taken as no branch.
+found=0
+git ls-remote -q --exit-code origin "refs/heads/$BRANCH" > /dev/null || found=$?
+if [ "$found" = 0 ]; then
+  git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+  # The branch is made again from main each time. A commit a person wrote, rebased or amended is
+  # never thrown away: each must be the workflow's as author and as committer.
+  if git log --format='%ae%n%ce' "origin/main..origin/$BRANCH" | grep -vqxF "$bot"; then
     echo "::error::$BRANCH has a commit by a person. Merge or close its pull request, then run this again."
     exit 1
   fi
   lease=$(git rev-parse "origin/$BRANCH")
-  # Already on main and made from this JMdict: nothing to push, and CI has seen it.
+  # Already on main and made from this JMdict: nothing to push. A run that pushed it may have failed
+  # before its pull request or CI, so those are still seen to.
   if git merge-base --is-ancestor origin/main "origin/$BRANCH" && git diff --quiet "origin/$BRANCH" -- "${lists[@]}"; then
     echo "::notice::$BRANCH already has the word lists JMdict $TAG makes"
-    exit 0
+    push=false
+    head=origin/$BRANCH
   fi
+elif [ "$found" != 2 ]; then
+  echo "::error::Can't read $BRANCH from origin (git ls-remote exit $found)"
+  exit 1
 fi
 
 # The JMdict date in a list's first line, from stdin.
 jmdict_date() { head -n1 | sed -n 's/^# JMdict \([0-9-]*\),.*/\1/p'; }
-before=$(git show "HEAD:${lists[0]}" | jmdict_date)
+before=$(git show "$base:${lists[0]}" | jmdict_date)
 after=$(jmdict_date < "${lists[0]}")
 title="chore(readings): remake the JMdict word lists from JMdict $after"
-git switch -q -C "$BRANCH"
-git add -- "${lists[@]}"
-git -c user.name="github-actions[bot]" -c user.email="$bot" commit -q -m "$title" \
-  -m "From jmdict-simplified $TAG, by .github/workflows/jmdict.yml: $RUN"
-# An empty lease: the branch must not be there yet.
-git push -q --force-with-lease="$BRANCH:$lease" origin "$BRANCH"
+if $push; then
+  git switch -q -C "$BRANCH"
+  git add -- "${lists[@]}"
+  git -c user.name="github-actions[bot]" -c user.email="$bot" commit -q -m "$title" \
+    -m "From jmdict-simplified $TAG, by .github/workflows/jmdict.yml: $RUN"
+  # An empty lease: the branch must not be there yet.
+  git push -q --force-with-lease="$BRANCH:$lease" origin "$BRANCH"
+fi
 
 body=$(mktemp)
 trap 'rm -f "$body"' EXIT
@@ -55,7 +70,7 @@ trap 'rm -f "$body"' EXIT
   echo "\`readingsaudit.py table\` and \`oldkana\` again, from jmdict-simplified \`$TAG\` (JMdict $after), checked against the size and SHA-256 its release gives. [Run]($RUN)."
   echo
   echo '```'
-  git diff --stat HEAD^ HEAD
+  git diff --stat "$base" "$head"
   echo '```'
   echo
   echo "## Done when"
@@ -68,7 +83,14 @@ pr=$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[
 if [ -n "$pr" ]; then
   gh pr edit "$pr" --title "$title" --body-file "$body"
 else
-  gh pr create --head "$BRANCH" --base main --title "$title" --body-file "$body"
+  if ! said=$(gh pr create --head "$BRANCH" --base main --title "$title" --body-file "$body" 2>&1); then
+    echo "$said" >&2
+    if grep -q "not permitted to create or approve pull requests" <<< "$said"; then
+      echo "::error::GitHub doesn't let this workflow open pull requests. Turn on Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests, then run the JMdict workflow again. $BRANCH is pushed."
+    fi
+    exit 1
+  fi
+  echo "$said"
 fi
 # A pull request opened or pushed with the workflow's token starts no workflow.
 gh workflow run ci.yml --ref "$BRANCH"

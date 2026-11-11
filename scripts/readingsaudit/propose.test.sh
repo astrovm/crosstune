@@ -5,9 +5,11 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir "$work/bin" "$work/gh"
+# A file fail-pr-create (or fail-workflow-run, ...) makes that call fail once, saying what the file holds.
 cat > "$work/bin/gh" <<'FAKE'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE/calls"
+if [ -f "$FAKE/fail-$1-$2" ]; then cat "$FAKE/fail-$1-$2" >&2; rm "$FAKE/fail-$1-$2"; exit 1; fi
 case "$1 $2" in
   "pr list") [ -f "$FAKE/open" ] && cat "$FAKE/open"; exit 0 ;;
   "pr create") while [ $# -gt 0 ]; do [ "$1" = --body-file ] && cp "$2" "$FAKE/body"; shift; done; echo 7 > "$FAKE/open" ;;
@@ -16,7 +18,17 @@ case "$1 $2" in
   *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 FAKE
-chmod +x "$work/bin/gh"
+# Git, but a file race makes the next push wait until another commit has reached the branch first.
+real_git=$(command -v git)
+cat > "$work/bin/git" <<FAKE
+#!/usr/bin/env bash
+if [ "\$1" = push ] && [ -f "\$FAKE/race" ]; then
+  rm "\$FAKE/race"
+  "$real_git" push -q --force origin "main:refs/heads/\$BRANCH"
+fi
+exec "$real_git" "\$@"
+FAKE
+chmod +x "$work/bin/gh" "$work/bin/git"
 export PATH="$work/bin:$PATH" FAKE="$work/gh"
 export BRANCH=jmdict/remake TABLES=lists TAG=9.9.9+20000201000000 RUN=https://example.invalid/run/1
 # The throwaway repositories get no hooks from the machine, so the test runs the same everywhere.
@@ -57,16 +69,57 @@ grep -q "were from JMdict 2000-01-01" "$FAKE/body" || fail "body lacks the old d
 grep -q "jmdict-simplified \`$TAG\` (JMdict 2000-02-01)" "$FAKE/body" || fail "body lacks the release"
 grep -q "2 files changed" "$FAKE/body" || fail "body lacks the diff"
 
-# The same lists again, branch already on main: nothing to push, gh not asked.
+# The same lists again, branch already on main: nothing pushed, the open pull request kept up to date,
+# and CI started again.
 git switch -q main && remade "" && rm "$FAKE/calls"
-propose || fail "second run failed"
+pushed=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
+propose || { cat "$work/out"; fail "second run failed"; }
 grep -q "already has the word lists" "$work/out" || fail "no notice for a branch already up to date"
-[ -z "$(calls)" ] || fail "asked gh for a branch already up to date"
+[ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$pushed" ] || fail "pushed a branch already up to date"
+grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not kept up to date"
+[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started for a branch already up to date"
+
+# A run pushed the branch, then gh failed: the next run with the same lists opens the pull request
+# and starts CI, without a push.
+rm "$FAKE/open" "$FAKE/calls"
+echo "HTTP 502" > "$FAKE/fail-pr-create"
+propose && fail "went on after gh failed"
+grep -q "HTTP 502" "$work/out" || fail "gh's error not shown"
+grep -q "workflow run" "$FAKE/calls" && fail "CI started without a pull request"
+rm "$FAKE/calls"
+propose || { cat "$work/out"; fail "run after a failed pull request failed"; }
+[ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$pushed" ] || fail "pushed again after a failed pull request"
+grep -q "^pr create --head $BRANCH " "$FAKE/calls" || fail "pull request not opened after it failed"
+[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started after a failed pull request"
+# The same when starting CI failed.
+rm "$FAKE/calls"
+echo "HTTP 500" > "$FAKE/fail-workflow-run"
+propose && fail "went on after starting CI failed"
+rm "$FAKE/calls"
+propose || { cat "$work/out"; fail "run after CI failed to start failed"; }
+grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not found after CI failed to start"
+[ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started again"
+
+# The repository doesn't let workflows open pull requests: the run says which setting to turn on.
+rm "$FAKE/open" "$FAKE/calls"
+echo "pull request create failed: GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest)" > "$FAKE/fail-pr-create"
+propose && fail "went on when pull requests can't be opened"
+grep -q "Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests" "$work/out" || fail "setting not named"
+rm "$FAKE/calls"
+propose > /dev/null || fail "no pull request after the setting was turned on"
+grep -q "Allow GitHub Actions" "$work/out" && fail "setting named when gh failed for another reason"
+
+# Asking gh for the open pull request fails: nothing more is asked, and the run fails.
+rm "$FAKE/calls"
+echo "HTTP 401" > "$FAKE/fail-pr-list"
+propose && fail "went on after gh pr list failed"
+[ "$(calls)" = "pr list --head $BRANCH --base main --state open --json number --jq .[0].number // empty" ] || fail "asked gh more after it failed"
 
 # Main moved on: the branch is made again from it, the open pull request edited, CI started again.
 git checkout -q -- lists && echo readme > README && person add README && person commit -q -m "docs: more" && main_to_origin
 remade "
 月夜	つきよ"
+rm "$FAKE/calls"
 propose || { cat "$work/out"; fail "update failed"; }
 git merge-base --is-ancestor origin/main "origin/$BRANCH" || fail "branch not made from the new main"
 [ "$(git rev-list --count "origin/main..origin/$BRANCH")" = 1 ] || fail "old commit kept"
@@ -74,13 +127,46 @@ grep -q "^pr edit 7 " "$FAKE/calls" || fail "open pull request not edited"
 grep -q "^pr create" "$FAKE/calls" && fail "a second pull request opened"
 [ "$(tail -n1 "$FAKE/calls")" = "workflow run ci.yml --ref $BRANCH" ] || fail "CI not started after the update"
 
-# A person's commit on the branch: nothing is thrown away, and the run fails.
-git switch -q "$BRANCH" && echo note > NOTE && person add NOTE && person commit -q -m "fix: by hand" && git push -q origin "$BRANCH"
-held=$(git rev-parse HEAD)
+# Another push reaches the branch between reading it and pushing: the lease refuses, nothing is lost.
 git switch -q main && remade "
-雨空	あまぞら" && rm "$FAKE/calls"
-propose && fail "went on over a person's commit"
-grep -q "has a commit by a person" "$work/out" || fail "no error for a person's commit"
-[ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$held" ] || fail "a person's commit was thrown away"
-[ -z "$(calls)" ] || fail "asked gh over a person's commit"
+雪空	ゆきぞら" && rm "$FAKE/calls"
+touch "$FAKE/race"
+propose && fail "pushed over a push it didn't see"
+[ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$(git rev-parse origin/main)" ] || fail "the other push was thrown away"
+[ -z "$(calls)" ] || fail "asked gh after the push was refused"
+
+# Origin can't be read: the run fails, and never takes it for a missing branch.
+git switch -q main && remade "
+風花	かざはな" && rm -f "$FAKE/calls"
+git remote set-url origin "$work/nowhere.git"
+propose && fail "went on without origin"
+grep -q "Can't read $BRANCH from origin" "$work/out" || fail "no error for an origin it can't read"
+[ -z "$(calls)" ] || fail "asked gh without origin"
+git remote set-url origin "$work/origin.git"
+
+# Commits a person made on the branch: nothing is thrown away, and the run fails. One the person
+# wrote, one the workflow wrote and the person rebased or amended, one the person wrote with the
+# workflow's address as its author.
+bot="41898282+github-actions[bot]@users.noreply.github.com"
+git fetch -q origin && git push -q --force origin "origin/main:refs/heads/$BRANCH"
+remade ""
+propose || { cat "$work/out"; fail "proposal before a person's commits failed"; }
+proposed=$(git rev-parse "$BRANCH")
+for how in wrote rebased authored-as-bot; do
+  git switch -q -C "$BRANCH" "$proposed"
+  case $how in
+    wrote) echo note > NOTE && person add NOTE && person commit -q -m "fix: by hand" ;;
+    rebased) person commit -q --amend --no-edit ;;
+    authored-as-bot) echo note > NOTE && person add NOTE && person commit -q --author="github-actions[bot] <$bot>" -m "fix: by hand" ;;
+  esac
+  git push -q --force origin "$BRANCH"
+  held=$(git rev-parse HEAD)
+  git switch -q main && remade "
+雨空	あまぞら" && rm -f "$FAKE/calls"
+  propose && fail "went on over a commit a person $how"
+  grep -q "has a commit by a person" "$work/out" || fail "no error for a commit a person $how"
+  [ "$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" = "$held" ] || fail "a commit a person $how was thrown away"
+  [ -z "$(calls)" ] || fail "asked gh over a commit a person $how"
+  git checkout -q -- lists
+done
 echo "propose.sh: all cases pass"
