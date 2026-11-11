@@ -451,7 +451,10 @@ internal class MainViewModel(
             viewModelScope.launch {
                 // As they were read: with UniDic, when it's on the phone; never fetched for this.
                 uniDic?.let { if (Readings.uniDic == null) Readings.uniDic = it.tokenizer(fetch = false) }
-                savedLinesStore.change(systemDispatcher, ::readAgain)?.let { uiState = uiState.copy(savedLines = it) }
+                savedLinesStore.change(systemDispatcher, ::readAgain)?.let { fresh ->
+                    // A session started while this ran copied the old lines. It shows these, and keeps its order and schedule.
+                    uiState = uiState.copy(savedLines = fresh, practice = uiState.practice?.withReadings(fresh))
+                }
             }
         }
         updates?.let { checker ->
@@ -4858,10 +4861,11 @@ internal class MainViewModel(
 
     /**
      * How [song]'s kanji are sung in its [lines], [read] as the dictionary reads them, from UtaTen: asked only while the
-     * words are read, in readings, Latin letters or kana, so never once that's been turned off, as while they were read.
+     * words are read, in readings, Latin letters or kana. Checked again before each request, so one already sent
+     * doesn't lead to another once that's been turned off, on screen or while a song is kept offline.
      */
     private suspend fun sungReadingsOf(song: MusicMetadata, lines: List<String>, read: List<LineReading>): List<ReadingFix>? =
-        sungReadings?.takeIf { uiState.learning.reads }?.of(song, lines, read)
+        sungReadings?.takeIf { uiState.learning.reads }?.of(song, lines, read) { uiState.learning.reads }
 
     /** Saved links keep what the service returned, so turning the setting off brings it back. */
     private fun String.forSharing(): String = if (uiState.cleanLinks) TrackingLinks.clean(this) else this

@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -152,6 +153,52 @@ class SavedLinesRereadTest {
         assertEquals("さんぼんのはな", again.reading)
         assertEquals(line.copy(reading = again.reading, romanized = again.romanized, ruby = again.ruby, typed = again.typed, readWith = Readings.VERSION), again)
         assertEquals(again, store.load().single())
+    }
+
+    @Test
+    fun aKanjiOnlyLineIsReadAgainFromWhatItKeepsAndAChineseLineWithNoReadingIsLeft() {
+        // No kana in the line, and no other line of the song has any: it was still read as Japanese.
+        val kanji = SavedLine("三本", reading = "さんほん", title = "Demo", artist = "Band", ruby = listOf(Ruby("三本", "さんほん")), readWith = 3)
+        val unread = SavedLine("你好", title = "Song", artist = "Singer", translation = "hola")
+        // Pinyin, not kana: a Chinese line that was read stays a Chinese line. readWith alone does not make it Japanese.
+        val pinyin = SavedLine("爱", reading = "ai", title = "Song", artist = "Singer", ruby = listOf(Ruby("爱", "ai")), readWith = 3)
+        val marked = SavedLine("谢谢", title = "Song", artist = "Singer", translation = "gracias", readWith = 3)
+        val again = readAgain(listOf(kanji, unread, pinyin, marked))
+        assertNotNull("a kanji-only line was left, because no line of its song has kana", again)
+        val read = again!!.first { it.text == "三本" }
+        assertEquals("さんぼん", read.reading)
+        assertEquals(Readings.VERSION, read.readWith)
+        assertEquals(unread, again.first { it.text == "你好" })
+        assertEquals(pinyin, again.first { it.text == "爱" })
+        assertEquals(marked, again.first { it.text == "谢谢" })
+    }
+
+    @Test
+    fun aSessionsCardTakesTheReadingKeptNowAndOneTheRefreshDoesntHoldStays() {
+        val card = SavedLine(
+            "三本の花", reading = "さんほんのはな", title = "Demo", artist = "Band", interval = 4, due = 9, readWith = 3,
+            ruby = listOf(Ruby("三本", "さんほん"), Ruby("の"), Ruby("花", "はな")),
+        )
+        val other = SavedLine("別", reading = "べつ", title = "Other", artist = "X", interval = 2, due = 1)
+        val stored = card.copy(
+            reading = "さんぼんのはな", romanized = "sanbon no hana", typed = "sanbonnohana", readWith = Readings.VERSION,
+            ruby = listOf(Ruby("三本", "さんぼん"), Ruby("の"), Ruby("花", "はな")),
+        )
+        val practice = Practice(queue = listOf(card, other), total = 2, lastSong = card)
+        val shown = practice.withReadings(listOf(stored))
+        val first = shown.queue.first()
+        assertEquals("さんぼんのはな", first.reading)
+        assertEquals("sanbon no hana", first.romanized)
+        assertEquals("sanbonnohana", first.typed)
+        assertEquals(stored.ruby, first.ruby)
+        assertEquals(Readings.VERSION, first.readWith)
+        assertEquals(4, first.interval)
+        assertEquals(9L, first.due)
+        assertEquals(listOf("三本の花", "別"), shown.queue.map { it.text })
+        assertEquals(other, shown.queue[1])
+        assertEquals("さんぼんのはな", shown.lastSong?.reading)
+        assertEquals(4, shown.lastSong?.interval)
+        assertNull(practice.copy(lastSong = null).withReadings(listOf(stored)).lastSong)
     }
 
     @Test

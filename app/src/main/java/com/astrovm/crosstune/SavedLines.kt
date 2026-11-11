@@ -500,14 +500,31 @@ internal fun keptOver(kept: List<Ruby>, now: List<Ruby>, over: Boolean, carried:
 
 /**
  * [kept], the lines kept, with those read by an older dictionary read as this version's reads them, whether or not their
- * song is opened again, see [SavedLine.rereadAs]: those of Japanese songs, the ones with kana in a line of theirs. Each line
- * is read alone, as a song's are. Null when none is.
+ * song is opened again, see [SavedLine.rereadAs]. A line counts as Japanese from what it stores itself:
+ * kana in it, or in a reading kept for it. Not from kana in another line of the song. Each line is read alone, as a song's are. Null when none is.
  */
 internal fun readAgain(kept: List<SavedLine>): List<SavedLine>? {
-    val japanese = kept.filter { line -> line.text.any(Readings::isKana) }.mapTo(mutableSetOf()) { it.title to it.artist }
-    val older = { line: SavedLine -> line.readByOlder && !line.readByHand && line.title to line.artist in japanese }
+    val older = { line: SavedLine -> line.readByOlder && !line.readByHand && line.wasReadAsJapanese() }
     if (kept.none(older)) return null
     return kept.map { line -> if (older(line)) line.rereadAs(line.readBy(Readings.of(listOf(line.text), Script.JAPANESE).first())) else line }
+}
+
+/**
+ * Whether this line was read as Japanese. Kana in the line, or in a reading kept for it, says so.
+ * [readWith] alone does not: a line of any script keeps that, and a Chinese reading is not kana.
+ */
+private fun SavedLine.wasReadAsJapanese(): Boolean {
+    if (text.any(Readings::isKana)) return true
+    return readingsKept().any { it.any(Readings::isKana) }
+}
+
+/** The line and the readings kept on it, so kana there says it was read as Japanese. */
+private fun SavedLine.readingsKept(): List<String> = buildList {
+    reading?.let { add(it) }
+    ruby?.forEach { part ->
+        add(part.text)
+        part.reading?.let { add(it) }
+    }
 }
 
 /**

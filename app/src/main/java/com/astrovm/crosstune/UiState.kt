@@ -426,7 +426,29 @@ internal data class Practice(
     val cantComeBack: Boolean = false
 ) {
     val line: SavedLine? get() = queue.firstOrNull()
+
+    /**
+     * This session's lines as [saved] keeps them now: only how they read. A refresh while the session
+     * runs then shows the new reading. The order and each card's schedule stay as the session has them.
+     */
+    fun withReadings(saved: List<SavedLine>): Practice {
+        val fresh = { line: SavedLine ->
+            val stored = saved.find { it.isSame(line) }
+            if (stored == null) line else line.withReadingFrom(stored)
+        }
+        return copy(queue = queue.map(fresh), lastSong = lastSong?.let(fresh))
+    }
 }
+
+/** [stored]'s reading on this card, which keeps its place in the session and its schedule. */
+private fun SavedLine.withReadingFrom(stored: SavedLine) = copy(
+    reading = stored.reading,
+    romanized = stored.romanized,
+    ruby = stored.ruby,
+    typed = stored.typed,
+    readWith = stored.readWith,
+    readByHand = stored.readByHand,
+)
 
 /** How a card's line sounds: not at all, on its way in the music app or the small player, playing, or ready to play (again). */
 internal enum class LineSound { NONE, LOADING, PLAYING, PLAYED }

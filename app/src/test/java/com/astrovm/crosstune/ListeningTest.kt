@@ -1021,6 +1021,110 @@ class ListeningTest {
         assertFalse(utaTenAskedOnceTurnedOff(offline = true))
     }
 
+    /** How many requests reached UtaTen. */
+    private fun utatenRequests() = fake.requestedUrls.count { it.toHttpUrl().host == "utaten.com" }
+
+    /**
+     * How many requests reach UtaTen when readings are turned off after the first one has already left,
+     * while the words show or, [offline], while the song is kept offline. The first answer is held until then.
+     */
+    private fun utatenRequestsOnceTheFirstIsOut(offline: Boolean): Int {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val hold = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val ruby = """<span class="ruby"><span class="rb">都会</span><span class="rt">まち</span></span>"""
+        val search = """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>"""
+        val page = """<div class="hiragana" >${ruby}の${ruby.replace("都会", "夜").replace("まち", "よる")}<br /></div>"""
+        val sites = { request: okhttp3.Request ->
+            if (request.url.host != "utaten.com") null
+            else {
+                // The first request is the search. Held, so readings can be turned off before the song's page is opened.
+                if (started.count == 1L) {
+                    started.countDown()
+                    hold.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                }
+                FakeSpotify.html(request, if (request.url.encodedPath == "/search") search else page)
+            }
+        }
+        if (offline) {
+            MainActivity.connectionFactory = { FakeConnection() }
+            MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+            fake.handler = { request -> sites(request) ?: FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""") }
+            allowMicrophone()
+            launch()
+            recognize()
+            waitForText("Demo")
+            click(string(R.string.keep_offline))
+        } else {
+            wordsOf(null, "都会の夜", sites = sites)
+        }
+        // Idle the screen while the first request is out: waiting here without that never lets it leave.
+        waitUntil(TIMEOUT_MS) { started.count == 0L }
+        composeRule.runOnIdle { controllerModel().setReadings(false) }
+        hold.countDown()
+        // The fake answers at once, so a second request would already have left.
+        val until = System.currentTimeMillis() + 3_000
+        while (utatenRequests() < 2 && System.currentTimeMillis() < until) {
+            composeRule.waitForIdle()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        return utatenRequests()
+    }
+
+    @Test
+    fun noFurtherUtaTenRequestLeavesOnceReadingsAreTurnedOffAfterTheFirstHasLeft() {
+        assertEquals(fake.requestedUrls.filter { "utaten.com" in it }.toString(), 1, utatenRequestsOnceTheFirstIsOut(offline = false))
+    }
+
+    @Test
+    fun noFurtherUtaTenRequestLeavesFromASongKeptOfflineOnceReadingsAreTurnedOffAfterTheFirstHasLeft() {
+        assertEquals(fake.requestedUrls.filter { "utaten.com" in it }.toString(), 1, utatenRequestsOnceTheFirstIsOut(offline = true))
+        val kept = listOf(File(app.cacheDir, "sung_readings.json"), File(app.noBackupFilesDir, "kept/sung_readings.json"))
+            .filter { it.isFile }.joinToString { it.readText() }
+        assertFalse("a result was kept after readings were turned off: $kept", "utaten|${SungReadings.CACHE_VERSION}|" in kept)
+    }
+
+    @Test
+    fun aSongKeptOfflineBeforeNoneWasCachedAgainStillShowsHowItsKanjiAreSungWithNoNetwork() {
+        MainActivity.connectionFactory = { FakeConnection() }
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        fake.handler = { request ->
+            when {
+                request.url.host != "utaten.com" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""")
+                request.url.encodedPath == "/search" ->
+                    FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Demo</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+                else -> FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        val pinned = File(app.noBackupFilesDir, "kept/sung_readings.json")
+        waitUntil(TIMEOUT_MS) { pinned.isFile && "まち" in pinned.readText() && "utaten|4|" in pinned.readText() }
+        controller?.destroyAndSettle()
+        // What version 3 kept for this song, still pinned: the version is in the key.
+        pinned.writeText(pinned.readText().replace("utaten|4|", "utaten|3|"))
+        File(app.cacheDir, "sung_readings.json").delete()
+        fake.requestedUrls.clear()
+        fake.handler = { request ->
+            if (request.url.host == "utaten.com") throw IOException("offline")
+            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""")
+        }
+        launch()
+        recognize()
+        waitForText("Demo")
+        waitForDescription(string(R.string.kept_offline))
+        click(string(R.string.lyrics_button))
+        waitUntil(TIMEOUT_MS) { readingShown("まち") || readingShown("とかい") || utatenRequests() > 0 }
+        assertEquals(fake.requestedUrls.filter { "utaten.com" in it }.toString(), 0, utatenRequests())
+        assertTrue(readingShown("まち"))
+        assertFalse(readingShown("とかい"))
+    }
+
     @Test
     fun withNoRoomLeftASongKeptOfflineSaysSo() {
         prefs().edit().putInt("offline_space_mb", 0).commit()
@@ -4632,6 +4736,30 @@ class ListeningTest {
         assertEquals("まちのさんぼん", sung.reading)
         assertEquals(4, sung.interval)
         waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines == store.load() }
+    }
+
+    @Test
+    fun aCardStartedWhileKeptLinesAreReadAgainShowsTheReadingTheyHaveNow() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"三本の花","reading":"さんほんのはな","title":"Demo","artist":"Band","ruby":[["三本","さんほん"],["の",null],["花","はな"]],"readWith":3,"interval":4,"due":9}]"""
+        ).commit()
+        val gate = Gate().apply { held = true }
+        MainActivity.systemDispatcher = gate
+        launch()
+        waitUntil(TIMEOUT_MS) { gate.queued.isNotEmpty() }
+        click("${string(R.string.saved_practice)}, ${string(R.string.practice_due, 1)}")
+        click(string(R.string.practice_all_songs))
+        click(string(R.string.practice_show))
+        assertTrue("the card copied the reading from before the refresh", readingShown("さんほん"))
+        gate.letGo()
+        waitUntil(TIMEOUT_MS) { readingShown("さんぼん") }
+        assertFalse(readingShown("さんほん"))
+        val practice = controllerModel().uiState.practice
+        assertEquals(listOf("三本の花"), practice?.queue?.map { it.text })
+        assertEquals(0, practice?.done)
+        assertEquals(4, practice?.queue?.single()?.interval)
+        assertEquals(9L, practice?.queue?.single()?.due)
     }
 
     @Test
