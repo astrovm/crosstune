@@ -83,7 +83,9 @@ jobs:
       - name: Install media test tools
         run: |
           mkdir -p ~/apt-archives/partial
-          sudo apt-get -o Acquire::Retries=5 update -qq
+          # The list of packages is only needed when a package isn't in the kept archives. A runner that
+          # can't look a name up waits on it for minutes, so it gets a minute and then the job goes on.
+          sudo timeout 60 apt-get update -qq || echo "::notice::apt-get update did not finish, installing from what is kept"
           sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-archives" -o Acquire::Retries=5 ffmpeg
           # apt's own files are root's, and the cache is saved as the runner's user.
           sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
@@ -237,11 +239,11 @@ jobs:
 
       # Installed here, not by the cache action below: apt tries a download once, and one failed name
       # lookup on the runner failed the whole build. With ccache already there, the action only
-      # restores its cache.
+      # restores its cache. Without it, the action fails and the build goes on with no cache.
       - name: Install ccache
         run: |
-          sudo apt-get -o Acquire::Retries=5 update
-          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends ccache
+          sudo timeout 60 apt-get update -qq || echo "::notice::apt-get update did not finish"
+          sudo timeout 180 apt-get -o Acquire::Retries=5 install -y --no-install-recommends ccache || echo "::notice::ccache was not installed"
 
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only

@@ -225,7 +225,7 @@ jobs:
 
       - name: Compare with the signed APK
         run: |
-          sudo apt-get -o Acquire::Retries=5 update -q
+          sudo timeout 60 apt-get update -q || echo "::notice::apt-get update did not finish"
           sudo apt-get -o Acquire::Retries=5 install -y -q apksigcopier
           # apksigcopier calls apksigner. The same JDK flag as the sign job, through a wrapper,
           # because apksigcopier does not take apksigner's -J options.
