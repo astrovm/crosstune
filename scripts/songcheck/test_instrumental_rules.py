@@ -30,7 +30,7 @@ class InstrumentalRulesTest(unittest.TestCase):
             if not line.strip() or line.startswith("#"):
                 continue
             says, title, *artist = line.split("\t")
-            self.assertEqual(says == "yes", instrumental_rules.says_instrumental(title, *artist), line)
+            self.assertEqual(says == "yes", instrumental_rules.says_instrumental(title, (artist or [""])[0]), line)
 
     def test_each_rule_counts_instrumentals_fixed_and_sung_songs_that_lose_words(self):
         songs = [

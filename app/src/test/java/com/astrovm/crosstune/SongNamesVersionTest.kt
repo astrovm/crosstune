@@ -15,7 +15,8 @@ class SongNamesVersionTest {
         assertEquals(SongNames.Covered("アイドル", null), SongNames.coverOf("アイドル【歌ってみた】"))
         assertEquals(SongNames.Covered("Zombie", "The Cranberries"), SongNames.coverOf("Zombie (Originally Performed by The Cranberries) [Karaoke]"))
         assertEquals(SongNames.Covered("Halo", "Beyoncé"), SongNames.coverOf("Halo (Made Famous by Beyoncé)"))
-        assertEquals(SongNames.Covered("Song", "Singer"), SongNames.coverOf("Song (Made Popular By Singer) [Instrumental Version]"))
+        // A karaoke label's "Made Popular By" is left as it was: whether its tracks show the song's words is still to be decided (Issue #922).
+        assertNull(SongNames.coverOf("Song (Made Popular By Singer) [Instrumental Version]"))
         // A song named with the word is the artist's own, as is a tag that's all there is.
         for (own in listOf("Cover Me", "Undercover (Remix)", "Cover Girl - Live", "(Cover)")) assertNull(own, SongNames.coverOf(own))
     }

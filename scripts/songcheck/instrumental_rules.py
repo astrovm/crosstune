@@ -32,8 +32,8 @@ EAST_ASIAN = "[぀-ヿ㐀-䶿一-鿿가-힯]"
 OFF_VOCAL_AT_END = re.compile(
     r"(?:(?<=" + EAST_ASIAN + r")\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$", re.I
 )
-KARAOKE = re.compile(r"karaoke|カラオケ", re.I)
-COVER_WORDS = r"\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade (?:famous|popular) by\b|カバー|歌ってみた|翻唱|커버"
+SING_ALONG = re.compile(r"karaoke|カラオケ|\bmade popular by\b", re.I)
+COVER_WORDS = r"\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"
 COVER = [re.compile(r"[(\[【][^)\]】]*(?:" + COVER_WORDS + r")[^)\]】]*[)\]】]", re.I), re.compile(r"\s[-–]\s[^-–]*(?:" + COVER_WORDS + r").*$", re.I)]
 INSTRUMENTAL_GENRES = {"Instrumental", "インストゥルメンタル", "演奏曲", "Instrumentale"}
 SAME_LENGTH_S = 3.0
@@ -63,10 +63,10 @@ def only_instrumental(tag):
     return not SHORT.fullmatch(said.group(0)) or rest <= VERSION_WORDS
 
 
-def says_instrumental(title, artist=""):
+def says_instrumental(title, artist):
     """Whether the title says no one sings in the recording, as SongNames.saysInstrumental."""
     name = unicodedata.normalize("NFKC", title)
-    if KARAOKE.search(name) or any(cover.search(name) for cover in COVER) or VOICE.search(name):
+    if SING_ALONG.search(name) or SING_ALONG.search(artist) or any(cover.search(name) for cover in COVER) or VOICE.search(name):
         return False
     tags = [m.group(1) for m in BRACKET.finditer(name)]
     tags += [m.group(1) for m in DASH.finditer(name) if not (artist and names_artist(name[: m.start()], artist))]

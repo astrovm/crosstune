@@ -264,15 +264,15 @@ internal object SongNames {
 
     /**
      * Whether [title] says no one sings in the recording: "Song (Instrumental)", "Song - Inst.", "曲 (伴奏版)",
-     * "曲 off vocal ver.". Not a karaoke track's or a cover's, which is sung along to, nor one that says a voice
+     * "曲 off vocal ver.". Not a karaoke track's or a cover's, which is sung along to, by its title or a karaoke label's name, nor one that says a voice
      * is in it too, "Song (Vocal & Instrumental)". Nor a tag that names a part of it, "(with Instrumental Break)",
      * or something else, "(Live at MIT Inst.)", nor a song of that name, "Band - Instrumental" by Band.
      * Of 2,551 song names the iTunes Store gave, the 202 that say so are all instrumentals (Issue #861).
      */
-    fun saysInstrumental(title: String, artist: String = ""): Boolean {
+    fun saysInstrumental(title: String, artist: String): Boolean {
         // Written in full-width or half-width letters, "（Ｉｎｓｔ）" or "ｵﾌﾎﾞｰｶﾙ", it says the same.
         val name = Normalizer.normalize(title, Normalizer.Form.NFKC)
-        if (karaoke.containsMatchIn(name) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
+        if (listOf(name, artist).any(singAlong::containsMatchIn) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
         // What follows "Artist - " is the song's name, not a tag.
         val dashed = dashTag.findAll(name).filterNot { artist.isNotBlank() && sameArtist(name.substring(0, it.range.first), artist) }
         return (bracketTag.findAll(name) + dashed).any { onlyInstrumental(it.groupValues[1]) } || offVocalAtEnd.containsMatchIn(name)
@@ -290,12 +290,12 @@ internal object SongNames {
     /** A cover's song: its [title], and its [artist] when the cover's title names them. */
     data class Covered(val title: String, val artist: String?)
 
-    private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade (?:famous|popular) by\b|カバー|歌ってみた|翻唱|커버"""
+    private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
     private val coverTags = listOf(
         Regex("""[(\[【][^)\]】]*(?:$COVER_WORDS)[^)\]】]*[)\]】]""", RegexOption.IGNORE_CASE),
         Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
     )
-    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made (?:famous|popular) by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
 
     /**
      * A word saying no one sings, not inside another word, nor the end of one joined by a hyphen, "Show-Off Vocal".
@@ -329,7 +329,11 @@ internal object SongNames {
         """(?:(?<=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af])\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$""",
         RegexOption.IGNORE_CASE
     )
-    private val karaoke = Regex("""karaoke|カラオケ""", RegexOption.IGNORE_CASE)
+    /**
+     * A track made to sing along to, as karaoke labels name theirs, "Song (Made Popular By Singer) [Instrumental Version]"
+     * by "Party Tyme Karaoke". Whether it shows the words of the song it plays is still to be decided (Issue #922).
+     */
+    private val singAlong = Regex("""karaoke|カラオケ|\bmade popular by\b""", RegexOption.IGNORE_CASE)
 
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {

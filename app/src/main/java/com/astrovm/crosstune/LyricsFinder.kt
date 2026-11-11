@@ -875,19 +875,24 @@ internal class LyricsFinder(
     /** What [best] found, and whether it's the recording's own words, timed for it. */
     private data class Best(val lyrics: Lyrics, val own: Boolean = false)
 
-    /**
-     * Words found over none, the better timed of two, and [first] among equals; with no words, an
-     * instrumental over "none", one LRCLIB's copies mark over any, and "none" over one that wouldn't answer.
-     */
+    /** Words found over none, the better timed of two, and [first] among equals; with no words, the one that [says] more. */
     private fun better(first: Lyrics, second: Lyrics): Lyrics = when {
         first is Lyrics.Found && second is Lyrics.Found -> if (timing(second) > timing(first)) second else first
-        first is Lyrics.Found -> first
-        second is Lyrics.Found -> second
-        first is Lyrics.MarkedInstrumental || second is Lyrics.MarkedInstrumental -> Lyrics.MarkedInstrumental
-        first is Lyrics.Instrumental || second is Lyrics.Instrumental -> Lyrics.Instrumental
-        first is Lyrics.LikelyInstrumental || second is Lyrics.LikelyInstrumental -> Lyrics.LikelyInstrumental
-        first is Lyrics.None || second is Lyrics.None -> Lyrics.None
-        else -> Lyrics.Unavailable
+        says(second) > says(first) -> second
+        else -> first
+    }
+
+    /**
+     * How much an answer says of the song, most for words: one LRCLIB's copies mark instrumental over another
+     * service's mark, either over a genre with no words, that over "none", and "none" over one that wouldn't answer.
+     */
+    private fun says(answer: Lyrics): Int = when (answer) {
+        is Lyrics.Found -> 5
+        Lyrics.MarkedInstrumental -> 4
+        Lyrics.Instrumental -> 3
+        Lyrics.LikelyInstrumental -> 2
+        Lyrics.None -> 1
+        Lyrics.Unavailable -> 0
     }
 
     /** Words as kept: the plain words and each timed line, and whether they're still to be timed better. */
