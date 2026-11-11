@@ -47,8 +47,8 @@ internal object Furigana {
 
     /**
      * [text] spelled today, by rule, with where each of its letters comes from in [text] ([origins], a contracted pair
-     * giving the same origin to each letter it makes), the places in [text] where a ひ, ふ or へ was changed ([plain]),
-     * where a pair like けふ starts ([contracted]), and where the first change is ([first]).
+     * giving the same origin to each letter it makes), the places in the spelling today where a ひ, ふ or へ was changed
+     * ([plain]), and the places in [text] where a pair like けふ starts ([contracted]) and where the first change is ([first]).
      */
     class Today(val text: String, val origins: List<Int>, val plain: List<Int>, val contracted: List<Int>, val first: Int)
 

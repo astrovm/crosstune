@@ -2,6 +2,7 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -627,7 +628,15 @@ class ReadingsTest {
             "手をとりあふ" to listOf("とりあふ", "とりあう", "とりあう"),
             "あひたい" to listOf("あひたい", "あいたい", "あう"),
             "きのふ" to listOf("きのふ", "きのう", "きのう"),
-            "待つてゐたんだよ" to listOf("ゐたんだ", "いたんだ", "いる")
+            "待つてゐたんだよ" to listOf("ゐたんだ", "いたんだ", "いる"),
+            // Its first kana is never an old ending: ひろふ is ひろう, not いろう.
+            "ひろふ" to listOf("ひろふ", "ひろう", "ひろう"),
+            "ひきあふ" to listOf("ひきあふ", "ひきあう", "ひきあう"),
+            // Wherever it is in the line, and whatever marks are around it.
+            "ずっとふるふ" to listOf("ふるふ", "ふるう", "ふるう"),
+            "あっといふま" to listOf("といふ", "という", "という"),
+            "「あやふく」" to listOf("あやふく", "あやうく", "あやうい"),
+            "いふ（「ずっと」）" to listOf("いふ", "いう", "いう")
         )
         fun check() = lines.forEach { (line, expected) ->
             val modern = Readings.words(line, Script.JAPANESE).filter { it.modern != null }.map { listOf(it.text, it.modern, it.lookup) }
@@ -642,12 +651,33 @@ class ReadingsTest {
         // A particle starts no word, an adjective's い was never ひ, and a verb in ひ may be a verb and 日: 降る日 is ふるひ.
         val lines = listOf("あとへはひく", "あめのふるひ", "ひふ", "あいうえお", "ふふふ", "あの日へ", "おひるのひ", "あひるのこ", "やまはふじ").map { it to emptyList<String>() } +
             // A word written so today that holds the old kana and more is that word: 財布, 回避, 手札, 威風, 都会風.
-            listOf("さいふ", "かいひ", "てふだ", "いふう", "かいらいせいふ", "とかいふう", "せいふ").map { it to emptyList() } +
+            listOf("さいふ", "ぼくのさいふ", "かいひ", "てふだ", "いふう", "かいらいせいふ", "とかいふう", "せいふ", "せいひ", "いひん").map { it to emptyList() } +
             // Where it's the word itself, the old one stays: いふ is いう more than 畏怖.
             listOf("いふ" to listOf("いう"), "ちょうちょうといふ" to listOf("という"))
-        fun check() = lines.forEach { (line, modern) -> assertEquals(line, modern, Readings.words(line, Script.JAPANESE).mapNotNull { it.modern }) }
+        fun check() = lines.forEach { (line, modern) ->
+            val words = Readings.words(line, Script.JAPANESE)
+            assertEquals(line, modern, words.mapNotNull { it.modern })
+            // And no word goes missing: the words are the whole line.
+            assertEquals(line, line, words.joinToString("") { it.text })
+        }
         check()
         TestUniDic.reading { check() }
+        // Nor one the dictionary can't name today, あふぎ (Issue #904).
+        assertEquals("あふぎ", Readings.words("あふぎ", Script.JAPANESE).joinToString("") { it.text })
+    }
+
+    @Test
+    fun theWordsInKanaFromJmdictAreReadFromTheirFile() {
+        // Read from the file again, and its header is no word.
+        Readings.oldKanaRead = null
+        val table = Readings.oldKana
+        assertTrue(table.modern.isNotEmpty() && table.modern.none { it.startsWith("#") })
+        assertEquals("思い出", table.today["おもいで"])
+        assertTrue("くふう" in table.modern && "おもいで" !in table.modern)
+        assertEquals(table.modern.maxOf { it.length }, table.longest)
+        assertTrue(table.modern.first().length < table.longest)
+        // Read once: the same table after.
+        assertSame(table, Readings.oldKana)
     }
 
     @Test

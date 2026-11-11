@@ -255,7 +255,7 @@ internal object Readings {
     private fun kanaToday(word: List<Piece>, line: String, at: Int): List<Piece>? {
         val text = word.joinToString("") { it.surface }
         val changed = text.indices.filter { it > 0 && text[it] in KANA_SAID }
-        if (word.size < 2 || changed.isEmpty() || !text.all { it in 'ぁ'..'ゖ' }) return null
+        if (word.size < 2 || changed.isEmpty() || !Furigana.inOldKana(text)) return null
         // A word starts with no particle: は and ひく in あとへはひく are no はいく.
         if (word[0].kind in GRAMMAR || grouped(word).size < 2 || changed.any { writtenToday(line, at + it) }) return null
         val today = text.mapIndexed { i, c -> if (i in changed) KANA_SAID.getValue(c) else c }.joinToString("")
@@ -299,16 +299,23 @@ internal object Readings {
     private val NOUNS = setOf("名詞", "副詞")
 
     /** Words in kana from JMdict: those a word in old kana alone may be [today], each with the form it's looked up by, and those written with a ひ or ふ today, [modern]. */
-    private class OldKana(val today: Map<String, String>, val modern: Set<String>) {
+    internal class OldKana(val today: Map<String, String>, val modern: Set<String>) {
         val longest = modern.maxOf { it.length }
     }
 
-    /** [OldKana], from [OLD_KANA_WORDS]: made by `scripts/readingsaudit`, see CONTRIBUTING.md. Read when a line first needs it. */
-    private val oldKana by lazy {
-        checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
-            val (today, modern) = lines.filterNot { it.startsWith('#') }.partition { '\t' in it }
-            OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet())
-        }
+    /**
+     * [OldKana], from [OLD_KANA_WORDS]: made by `scripts/readingsaudit`, see CONTRIBUTING.md. Read when a line first
+     * needs it, as [oldKana]; null to read it again.
+     */
+    @Volatile
+    internal var oldKanaRead: OldKana? = null
+
+    internal val oldKana: OldKana
+        get() = oldKanaRead ?: readOldKana().also { oldKanaRead = it }
+
+    private fun readOldKana(): OldKana = checkNotNull(Readings::class.java.getResourceAsStream(OLD_KANA_WORDS)).bufferedReader().useLines { lines ->
+        val (today, modern) = lines.filterNot { it.startsWith('#') }.partition { '\t' in it }
+        OldKana(today.associate { it.substringBefore('\t') to it.substringAfter('\t') }, modern.toSet())
     }
 
     private const val OLD_KANA_WORDS = "/com/astrovm/crosstune/old-kana.txt"
