@@ -236,14 +236,16 @@ jobs:
 
       # projectM is compiled six times, debug and release for three ABIs, and Gradle can't cache native
       # builds. ccache gives back the same objects for the same source, compiler and flags, so only
-      # what changed is compiled again. Saved from main, like Gradle's caches.
+      # what changed is compiled again. Saved from main, like Gradle's caches. Installed as the action's own
+      # release binary, checked by its sha256, not with apt: when the runner can't reach Ubuntu's mirrors,
+      # apt fails the build, as it did for every branch on 2026-11-11.
       - uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
         with:
           key: native
           max-size: 1G
           save: ${{ github.event_name == 'push' }}
           evict-old-files: job
-          update-package-index: true
+          install: binary
 
       - name: Build
         run: ./gradlew :app:assembleDebug :app:assembleRelease --build-cache --configuration-cache
