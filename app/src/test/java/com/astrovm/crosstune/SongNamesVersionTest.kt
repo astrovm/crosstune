@@ -125,4 +125,38 @@ class SongNamesVersionTest {
         assertEquals("(Intro)", SongNames.bareTitle("(Intro)"))
         assertEquals("Song", SongNames.bareTitle("  Song  "))
     }
+
+    @Test
+    fun aMarkInAnotherScriptCountsOnlyAsAWordOfItsOwn() {
+        fun other(name: String, title: String = "Fake Song", artist: String = "Fake Band") = SongNames.saysAnotherVersion(name, title, artist)
+        // Inside a longer word in its script, a sound mark off, or widths apart, it's another word.
+        for (same in listOf("インストール", "Fake Song インストール", "ATV Sizes", "Fake Song ATV Sizes", "ライフ", "ライフ・イズ", "반주자", "커버리지", "라이브러리", "TV Sizes")) {
+            assertFalse(same, other(same))
+        }
+        // As a word of its own, in brackets, with what's between its letters, or in full or half width, it says so.
+        for (said in listOf(
+            "Fake Song (インスト)", "Fake Song (TV Size)", "Fake Song TV-size", "Fake Song (オフ・ヴォーカル)", "Fake Song (Off Vocal)",
+            "Fake Song ライブ版", "Fake Song (반주)", "Fake Song 라이브 버전", "Fake Song 翻唱版", "Fake Song 卡拉OK版", "Fake Song (ＴＶサイズ)",
+            "Fake Song ｶﾗｵｹ", "Fake Song【カラオケ】", "Fake Song 메들리", "Fake Song 混音版"
+        )) {
+            assertTrue(said, other(said))
+        }
+        // The song's own name says it, so it's no other version.
+        assertFalse(SongNames.saysAnotherVersion("ライブ (Fake Band)", "ライブ", "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersion("Fake Song (Fake カバー)", "Fake Song", "Fake カバー"))
+        assertTrue(SongNames.saysAnotherVersion("ライフ (ライブ)", "ライフ", "Fake Band"))
+        // Many songs in one is a word of its own too: メドレー, and not inside a longer word.
+        assertTrue(SongNames.manySongs(MusicMetadata("夏メドレー", "Fake Band")))
+        assertFalse(SongNames.manySongs(MusicMetadata("メドレーズ", "Fake Band")))
+    }
+
+    @Test
+    fun aNameInFullWidthIsTheSameNameButIsKeptAsWritten() {
+        assertEquals(SongNames.normalize("Love Song"), SongNames.normalize("ＬＯＶＥ ＳＯＮＧ"))
+        assertTrue(SongNames.same("ＬＯＶＥ ＳＯＮＧ", "Love Song"))
+        assertEquals("カラオケ", SongNames.normalize("ｶﾗｵｹ"))
+        // What's kept for a song stays under the name it was kept under.
+        assertEquals("ｌｏｖｅｓｏｎｇ", SongNames.keyOf("ＬＯＶＥ ＳＯＮＧ"))
+        assertEquals(SongNames.normalize("Édition"), SongNames.keyOf("Edition!"))
+    }
 }

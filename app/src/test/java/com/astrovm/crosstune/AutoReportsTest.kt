@@ -82,8 +82,8 @@ class AutoReportsTest {
     @Test
     fun aReportOwedIsKeptUntilItGoesAndThenForgotten() {
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
-        reports.owe(song("Demo"), """{"fake":1}""")
-        reports.owe(song("Demo"), """{"fake":2}""")
+        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, """{"fake":1}""")
+        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, """{"fake":2}""")
         assertEquals(listOf("""{"fake":2}"""), AutoReports(preferences).owed().map { it.json })
         reports.paid(reports.owed().single())
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
@@ -92,7 +92,7 @@ class AutoReportsTest {
 
     @Test
     fun aReportThatWentAnotherWayIsNotOwedAnyMore() {
-        reports.owe(song("Demo"), "{}")
+        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "{}")
         reports.remember(song("Demo"), SongProblem.TIMED_BY_HAND)
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
         // Gone from what's kept too, not only hidden.
@@ -101,8 +101,8 @@ class AutoReportsTest {
 
     @Test
     fun reportsOwedForSeveralSongsAreKeptAndOneIsPutBackAlone() {
-        reports.owe(song("One"), "1")
-        reports.owe(song("Two"), "2")
+        reports.owe(song("One"), SongProblem.TIMED_BY_HAND, "1")
+        reports.owe(song("Two"), SongProblem.TIMED_BY_HAND, "2")
         assertEquals(listOf("1", "2"), reports.owed().map { it.json })
         reports.owedNothing(song("one"))
         assertEquals(listOf("2"), reports.owed().map { it.json })
@@ -113,7 +113,7 @@ class AutoReportsTest {
     @Test
     fun onlyTheLatestReportsOwedAreKept() {
         assertEquals(20, AutoReports.MAX_OWED)
-        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.TIMED_BY_HAND, "$it") }
         assertEquals((1..AutoReports.MAX_OWED).map { "$it" }, reports.owed().map { it.json })
     }
 
@@ -127,11 +127,11 @@ class AutoReportsTest {
 
     @Test
     fun aReportOwedIsStillOwedOnlyAsItWasKept() {
-        reports.owe(song("Demo"), "1")
+        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "1")
         val first = reports.owed().single()
         assertTrue(reports.owes(first))
         // Put in time again: the newer goes, not the one read before.
-        reports.owe(song("Demo"), "2")
+        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "2")
         assertFalse(reports.owes(first))
         reports.paid(reports.owed().single())
         assertFalse(reports.owes(first))
@@ -143,7 +143,7 @@ class AutoReportsTest {
         repeat(30) { songs.put("song$it\u0000band", JSONObject().put("words", "1").put("points", JSONArray().put(JSONArray().put(0).put(100)))) }
         preferences.edit().putString("lyrics_sync", songs.toString()).commit()
         reports.keepEarlier("2.24.0", "16 (36)")
-        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.TIMED_BY_HAND, "$it") }
         val owed = reports.owed()
         assertEquals(30, owed.count { it.earlier })
         assertEquals(AutoReports.MAX_OWED, owed.count { !it.earlier })
@@ -202,9 +202,55 @@ class AutoReportsTest {
 
     @Test
     fun aReportTheBoxTurnedAwayIsNoLongerOwedNorTakenAsSent() {
-        reports.owe(song("Song"), "{}")
+        reports.owe(song("Song"), SongProblem.TIMED_BY_HAND, "{}")
         reports.dropped(reports.owed().single())
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
         assertFalse(reports.reported(song("Song"), SongProblem.TIMED_BY_HAND))
+    }
+
+    @Test
+    fun aProblemFoundIsOwedBesideTheWordsPutInTimeAndOnlyItsLatestAreKept() {
+        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "by hand")
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.NO_LYRICS, "$it") }
+        // The same song's other problem is owed apart, and the same problem again gives way to the newer.
+        reports.owe(song("Song 20"), SongProblem.NO_CHORDS, "chords")
+        reports.owe(song("Song 20"), SongProblem.NO_LYRICS, "newer")
+        assertEquals(listOf("by hand") + (2 until AutoReports.MAX_OWED).map { "$it" } + listOf("chords", "newer"), reports.owed().map { it.json })
+    }
+
+    @Test
+    fun aProblemTheBoxTurnedAwayIsntSentAgainButWordsPutInTimeByHandStillGo() {
+        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "{}")
+        reports.turnedAway(song("Demo"), SongProblem.TIMED_BY_HAND)
+        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+        assertFalse(reports.reported(song("Demo"), SongProblem.TIMED_BY_HAND))
+        reports.turnedAway(song("Demo"), SongProblem.NO_LYRICS)
+        assertTrue(reports.reported(song("Demo"), SongProblem.NO_LYRICS))
+        // Neither went, so neither counts for the day.
+        repeat(AutoReports.FOUND_A_DAY - 1) { reports.remember(song("Song $it"), SongProblem.NO_TIMING) }
+        assertTrue(reports.mayFind())
+    }
+
+    @Test
+    fun onlySoManyProblemsFoundGoInADayByUtcAndTheNextDayMoreDo() {
+        var now = 3 * ReportBox.DAY_MS - 1
+        val reports = AutoReports(preferences, session = 1, now = { now })
+        assertEquals(23, AutoReports.FOUND_A_DAY)
+        repeat(AutoReports.FOUND_A_DAY - 1) { reports.remember(song("Song $it"), SongProblem.NO_TIMING) }
+        // Timing kept from an earlier version is its own share, so it doesn't count.
+        preferences.edit().putString("lyrics_sync", JSONObject().put("old\u0000band", JSONObject().put("points", JSONArray().put(JSONArray().put(0).put(9)))).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        reports.paid(reports.owed().single())
+        assertTrue(reports.mayFind())
+        reports.paid(AutoReports.Owed(reports.owedKey(song("Demo")), "{}"))
+        assertFalse(reports.mayFind())
+        assertFalse(AutoReports(preferences, now = { now }).mayFind())
+        now++
+        assertTrue(reports.mayFind())
+        reports.remember(song("Next day"), SongProblem.NO_LYRICS)
+        assertTrue(reports.mayFind())
+        // What was kept of the day before, broken, counts as nothing.
+        preferences.edit().putString("auto_reports_found_today", "${now / ReportBox.DAY_MS}:many").commit()
+        assertTrue(reports.mayFind())
     }
 }

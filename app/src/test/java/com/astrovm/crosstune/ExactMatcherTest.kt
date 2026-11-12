@@ -499,54 +499,83 @@ class ExactMatcherTest {
         assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, stayWithMe) })
     }
 
-    @Test
-    fun aSongNamedInAnotherScriptIsFoundOnYouTubeMusicByItsArtistAndLength() {
-        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
-        val apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis (Director's Edit Version)", "Yoko Takahashi", 245_093))
-        val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
-        fun find(songs: List<String>) = runBlocking {
-            namesAndTabs(songs = songs, apple = apple)
-            matcher().find(MusicService.YOUTUBE_MUSIC, angel)
-        }
-        // Its artist and its length, to the second, are the song's, whatever it's called.
-        assertEquals(
-            "https://music.youtube.com/watch?v=xyVatKhd4s4",
-            find(listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:06", videoId = "xyVatKhd4s4")))
-        )
-        // Not another artist's, another length, or a title in the same script, which is compared by its words.
-        assertNull(find(listOf(youTubeMusicRow(named, "Someone Else • Zankoku na Tenshi no Thesis • 4:06", videoId = "other000000"))))
-        assertNull(find(listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:20", videoId = "longer00000"))))
-        assertNull(find(listOf(youTubeMusicRow("Another Song", "Yoko Takahashi • Another Album • 4:06", videoId = "latin000000"))))
-    }
+    /** A video put up by a fan that names the song both ways, as its Latin name and as [own]. */
+    private fun bothWays(own: String = "残酷な天使のテーゼ", latin: String = "A Cruel Angel's Thesis") =
+        youTubeMusicRow("$own ($latin) - Yoko Takahashi", "Fan • 1M views • 4:06", videoId = "video000000")
 
-    /** What [angel]'s search on YouTube Music finds among [rows], each "name" to "artist • album • length", with Apple's lengths and names. */
-    private fun findAngel(rows: List<Pair<String, String>>, lengthMs: Long = 245_093, japan: String? = null): String? = runBlocking {
+    /**
+     * What [angel]'s search on YouTube Music finds among [rows], each "name" to "artist • album • length", with
+     * Apple's lengths and names, or else Deezer's [deezerSeconds], and [videos]. When nothing is found, the songs
+     * shown to pick from go to [shown], and [picked] is the answer.
+     */
+    private fun findAngel(
+        rows: List<Pair<String, String>>,
+        lengthMs: Long? = 245_093,
+        japan: String? = null,
+        videos: List<String> = emptyList(),
+        deezerSeconds: Long? = null,
+        shown: MutableList<List<String>> = mutableListOf(),
+        picked: Int? = null
+    ): String? = runBlocking {
         namesAndTabs(
             songs = rows.mapIndexed { index, (name, details) -> youTubeMusicRow(name, details, videoId = "row${index}0000000") },
-            apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis (Director's Edit Version)", "Yoko Takahashi", lengthMs)),
-            elsewhere = japan?.let { mapOf("JP" to appleSong(it, "高橋洋子", lengthMs)) }.orEmpty()
+            videos = videos,
+            apple = lengthMs?.let { mapOf("AR" to appleSong("A Cruel Angel's Thesis (Director's Edit Version)", "Yoko Takahashi", it)) }.orEmpty(),
+            elsewhere = japan?.let { mapOf("JP" to appleSong(it, "高橋洋子", lengthMs ?: 0)) }.orEmpty(),
+            deezer = deezerSeconds?.let { """[{"title":"A Cruel Angel's Thesis","artist":{"name":"Yoko Takahashi"},"duration":$it}]""" } ?: "[]"
         )
-        matcher().find(MusicService.YOUTUBE_MUSIC, angel)
+        ExactMatcher(fake.client(), "AR", pick = { _, songs, videos -> if (videos) null else picked.also { shown += songs } }).find(MusicService.YOUTUBE_MUSIC, angel)
     }
 
     private val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
 
+    private val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
+
     @Test
-    fun aSongInAnotherScriptIsNotAnAccentedTitleItsKaraokeOrAnotherSongAsLong() {
+    fun aSongInAnotherScriptThatAVideoNamesBothWaysIsTheSong() {
+        // Its artist and its length are the song's, and a video names it both ways.
+        val row = listOf(named to "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:06")
+        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(row, videos = listOf(bothWays())))
+        // Not another artist's, another length, or a title in the same script, which is compared by its words.
+        assertNull(findAngel(listOf(named to "Someone Else • Zankoku na Tenshi no Thesis • 4:06"), videos = listOf(bothWays())))
+        assertNull(findAngel(listOf(named to "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:20"), videos = listOf(bothWays())))
+        assertNull(findAngel(listOf("Another Song" to "Yoko Takahashi • Another Album • 4:06"), videos = listOf(bothWays("Another Song"))))
+        // A video naming it only one way, or another song both ways, says nothing.
+        for (video in listOf(bothWays(latin = "Evangelion"), bothWays(own = "Opening"), bothWays(own = "魂のルフラン"))) {
+            assertNull(video, findAngel(row, videos = listOf(video)))
+        }
+    }
+
+    @Test
+    fun aSongInAnotherScriptThatNothingProvesIsPickedFromFirst() {
+        // PR #797's song: by its artist and as long, but no store or video names it, so it's shown first to pick from.
+        val shown = mutableListOf<List<String>>()
+        val rows = listOf("Fake Song" to "Yoko Takahashi • Fake Album • 3:00", named to "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:06")
+        assertNull(findAngel(rows, shown = shown))
+        assertEquals(listOf("$named | Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:06", "Fake Song | Yoko Takahashi • Fake Album • 3:00"), shown.single())
+        assertEquals("https://music.youtube.com/watch?v=row10000000", findAngel(rows, picked = 0))
+        // By default nothing is picked.
+        assertNull(runBlocking { matcher().find(MusicService.YOUTUBE_MUSIC, angel) })
+    }
+
+    @Test
+    fun aSongInAnotherScriptIsNotAnAccentedTitleOrItsKaraoke() {
         fun find(song: MusicMetadata, row: String, details: String, appleTitle: String) = runBlocking {
-            namesAndTabs(songs = listOf(youTubeMusicRow(row, details, videoId = "wrong000000")), apple = mapOf("AR" to appleSong(appleTitle, song.artist, 245_000)))
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow(row, details, videoId = "wrong000000")), videos = listOf(bothWays(row, song.title)),
+                apple = mapOf("AR" to appleSong(appleTitle, song.artist, 245_000))
+            )
             matcher().find(MusicService.YOUTUBE_MUSIC, song)
         }
         assertNull(find(MusicMetadata("Fake Song", "Fake Singer"), "Canción Falsa", "Fake Singer • Otro Álbum • 4:06", "Fake Song"))
         assertNull(find(angel, "残酷な天使のテーゼ (オフ・ヴォーカル)", "Yoko Takahashi • 残酷な天使のテーゼ • 4:06", "A Cruel Angel's Thesis"))
-        assertNull(find(angel, "魂のルフラン", "Yoko Takahashi • 魂のルフラン • 4:04", "A Cruel Angel's Thesis"))
     }
 
     @Test
     fun accentedLettersAreNoOtherScript() {
-        // As long as the song to the second, by its artist, and alone: only its letters, Latin ones, keep it out.
-        assertNull(findAngel(listOf("Canción Cruel" to "Yoko Takahashi • Otro Álbum • 4:05")))
-        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(listOf("残酷な天使のテーゼ" to "Yoko Takahashi • Otro Álbum • 4:05")))
+        // As long as the song, by its artist, alone and named both ways: only its letters, Latin ones, keep it out.
+        assertNull(findAngel(listOf("Canción Cruel" to "Yoko Takahashi • Otro Álbum • 4:05"), videos = listOf(bothWays("Canción Cruel"))))
+        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(listOf("残酷な天使のテーゼ" to "Yoko Takahashi • Otro Álbum • 4:05"), videos = listOf(bothWays())))
     }
 
     @Test
@@ -561,29 +590,46 @@ class ExactMatcherTest {
             "잔혹한 천사의 테제 (반주)" to "Yoko Takahashi • 잔혹한 천사의 테제 • 4:05",
             // Its album says so.
             "残酷な天使のテーゼ" to "Yoko Takahashi • Karaoke Picks • 4:05"
-        ).forEach { row -> assertNull(row.first, findAngel(listOf(row))) }
+        ).forEach { row ->
+            val shown = mutableListOf<List<String>>()
+            assertNull(row.first, findAngel(listOf(row), videos = listOf(bothWays(SongNames.bareTitle(row.first))), shown = shown))
+            // Nor is it shown first to pick from.
+            assertEquals(row.first, listOf("${row.first} | ${row.second}"), shown.single())
+        }
     }
 
     @Test
-    fun aSongInAnotherScriptIsAsLongToTheSecond() {
-        // YouTube Music's whole seconds put the same recording less than one off.
+    fun aSongInAnotherScriptIsAsLongAsYouTubeMusicsSecondsAreFromAppleOrDeezer() {
+        // 4:06 is 246 s. Against Apple's milliseconds, YouTube Music's are from 0.7 s shorter to 1 s longer.
         val row = listOf("残酷な天使のテーゼ" to "Yoko Takahashi • 残酷な天使のテーゼ • 4:06")
-        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs = 245_001))
-        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs = 246_999))
-        // A second or more either way is another recording, or another song. It was 3 s, which let in songs 2 s apart.
-        assertNull(findAngel(row, lengthMs = 245_000))
-        assertNull(findAngel(row, lengthMs = 247_000))
+        val videos = listOf(bothWays())
+        assertEquals(-700L..1_000L, ExactMatcher.RECORDING_OFF_MS)
+        for (lengthMs in listOf(245_000L, 246_700L)) assertEquals("$lengthMs", "https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs, videos = videos))
+        for (lengthMs in listOf(244_999L, 246_701L)) assertNull("$lengthMs", findAngel(row, lengthMs, videos = videos))
+        // Against Deezer's whole seconds, a second either way, as each rounds its own way.
+        assertEquals(1_000L, ExactMatcher.SAME_SECONDS_MS)
+        for (seconds in listOf(245L, 246L, 247L)) assertEquals("$seconds", "https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs = null, videos = videos, deezerSeconds = seconds))
+        for (seconds in listOf(244L, 248L)) assertNull("$seconds", findAngel(row, lengthMs = null, videos = videos, deezerSeconds = seconds))
     }
 
     @Test
-    fun aSongInAnotherScriptIsTakenOnlyWhenItsTheOneThatFits() {
-        // Two of the artist's songs as long are either.
-        assertNull(findAngel(listOf("残酷な天使のテーゼ" to "Yoko Takahashi • A • 4:05", "魂のルフラン" to "Yoko Takahashi • B • 4:05")))
+    fun twoSongsInAnotherScriptAsLongArePickedFromUnlessAVideoNamesOne() {
+        val rows = listOf("Fake Song" to "Yoko Takahashi • A • 3:00", "魂のルフラン" to "Yoko Takahashi • B • 4:05", "残酷な天使のテーゼ" to "Yoko Takahashi • A • 4:05")
+        // Both as long are either, so they're shown first to pick from, in their order.
+        val shown = mutableListOf<List<String>>()
+        assertNull(findAngel(rows, shown = shown))
+        assertEquals(listOf(1, 2, 0).map { "${rows[it].first} | ${rows[it].second}" }, shown.single())
+        // A video naming one both ways makes it the song.
+        assertEquals("https://music.youtube.com/watch?v=row20000000", findAngel(rows, videos = listOf(bothWays())))
+        // Both named so, the ones named go first.
+        shown.clear()
+        assertNull(findAngel(rows.reversed(), videos = listOf(bothWays("残酷な天使のテーゼ / 魂のルフラン")), shown = shown))
+        assertEquals(listOf("残酷な天使のテーゼ", "魂のルフラン", "Fake Song"), shown.single().map { it.substringBefore(" | ") })
         // One song given twice is one.
         val twice = listOf("残酷な天使のテーゼ" to "Yoko Takahashi • A • 4:05", "残酷な天使のテーゼ" to "Yoko Takahashi • A • 4:05")
         assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", runBlocking {
             namesAndTabs(
-                songs = twice.map { (name, details) -> youTubeMusicRow(name, details, videoId = "xyVatKhd4s4") },
+                songs = twice.map { (name, details) -> youTubeMusicRow(name, details, videoId = "xyVatKhd4s4") }, videos = listOf(bothWays()),
                 apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis (Director's Edit Version)", "Yoko Takahashi", 245_093))
             )
             matcher().find(MusicService.YOUTUBE_MUSIC, angel)
@@ -593,11 +639,35 @@ class ExactMatcherTest {
     @Test
     fun aStoresNameInThatScriptTellsTheSongFromAnotherAsLong() {
         val japan = "残酷な天使のテーゼ (Director's Edit Version)"
-        val rows = listOf("魂のルフラン" to "Yoko Takahashi • B • 4:05", "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis" to "Yoko Takahashi • A • 4:05")
+        val rows = listOf("魂のルフラン" to "Yoko Takahashi • B • 4:05", named to "Yoko Takahashi • A • 4:05")
         // Named as Japan's store names it, but for what it adds in brackets, it's the song, whatever else is as long.
         assertEquals("https://music.youtube.com/watch?v=row10000000", findAngel(rows, japan = japan))
-        // Named otherwise in Japanese, it's another song, however alone and as long.
-        assertNull(findAngel(rows.take(1), japan = japan))
+        // Named otherwise in Japanese, it's another song, however alone, as long, and named both ways, nor shown first.
+        val shown = mutableListOf<List<String>>()
+        assertNull(findAngel(listOf("Fake Song" to "Yoko Takahashi • C • 3:00") + rows.take(1), japan = japan, videos = listOf(bothWays("魂のルフラン")), shown = shown))
+        assertEquals("Fake Song", shown.single().first().substringBefore(" | "))
+    }
+
+    @Test
+    fun kanjiAndKanaAreOneScriptAndLatinLettersNone() {
+        // Known as 群青 in Japan, たぶん is a song in its script, in kana as its words are, so another.
+        val song = MusicMetadata("Gunjou", "YOASOBI")
+        fun find(rows: List<String>, videos: List<String>, title: String = "Gunjou", japan: String? = "群青", shown: MutableList<List<String>> = mutableListOf()) = runBlocking {
+            namesAndTabs(
+                songs = rows.mapIndexed { index, name -> youTubeMusicRow(name, "YOASOBI • THE BOOK • ${if (name == "Fake Song") "3:00" else "4:09"}", videoId = "row${index}0000000") },
+                videos = videos,
+                apple = mapOf("AR" to appleSong(title, "YOASOBI", 248_500)),
+                elsewhere = japan?.let { mapOf("JP" to appleSong(it, "YOASOBI", 248_500)) }.orEmpty()
+            )
+            ExactMatcher(fake.client(), "AR", pick = { _, songs, videos -> if (!videos) shown += songs; null }).find(MusicService.YOUTUBE_MUSIC, song.copy(title = title))
+        }
+        val shown = mutableListOf<List<String>>()
+        assertNull(find(listOf("Fake Song", "たぶん"), listOf(youTubeMusicRow("たぶん (Gunjou)", "Fan • 1M views • 4:09", videoId = "video000000")), shown = shown))
+        assertEquals(listOf("Fake Song", "たぶん"), shown.single().map { it.substringBefore(" | ") })
+        // Known only in Japanese, a song in Latin letters isn't one in another script.
+        shown.clear()
+        assertNull(find(listOf("Fake Song", "Blue"), emptyList(), title = "群青", japan = null, shown = shown))
+        assertEquals(listOf("Fake Song", "Blue"), shown.single().map { it.substringBefore(" | ") })
     }
 
     @Test

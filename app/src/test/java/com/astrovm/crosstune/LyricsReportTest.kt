@@ -579,22 +579,92 @@ class LyricsReportTest {
         assertEquals(1_000L, timing.getLong("heardMs") - timing.getLong("timedMs"))
     }
 
+    /** Words with no timing, which Crosstune finds is a problem. */
+    private val plain = """[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]"""
+
+    /** The song's words opened again in an app started anew, found again rather than read from what was kept. */
+    private fun openedAgain() {
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics { shown("Plain one") }
+        settled()
+    }
+
     @Test
-    fun anAutomaticReportThatDidntGetThereGoesTheNextTimeOnly() {
+    fun aProblemFoundThatDidntGetThereIsKeptAndGoesAtTheNextStartOnce() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         reportsDown = true
-        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
+        lyricsAre(plain)
         openLyrics { shown("Plain one") }
         waitUntil { problems() == listOf("no_timing") }
+        assertEquals(1, owed())
         reportsDown = false
-        repeat(2) {
-            controller!!.destroyAndSettle()
-            File(app.cacheDir, "lyrics.json").delete()
-            File(app.cacheDir, "kept_words.json").delete()
-            openLyrics { shown("Plain one") }
-            settled()
-        }
+        // A song played once still goes: at the next start, with nothing opened.
+        controller!!.destroyAndSettle()
+        started()
+        waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing", "no_timing"), problems())
+        assertEquals(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)], fake.requestBodies[fake.requestedUrls.lastIndexOf(ReportSender.URL)])
+        // Gone, it isn't sent again when it's found again.
+        openedAgain()
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+    }
+
+    @Test
+    fun aProblemFoundThatTheBoxHasNoRoomForTodayOrThatAnotherAnswersIsKeptToo() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        lyricsAre(plain)
+        // Full for the day, or a network's own answer, as a 403 from a proxy or a 404 while the box moves. Each start
+        // after the first sends the one kept, then the one found again.
+        for ((tries, code) in listOf(429, 403, 404).withIndex()) {
+            answerTo = { code }
+            if (controller == null) openLyrics { shown("Plain one") } else openedAgain()
+            waitUntil { problems().size == 2 * tries + 1 }
+            assertEquals(code.toString(), 1, owed())
+            assertFalse(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.NO_TIMING))
+        }
+    }
+
+    @Test
+    fun aProblemFoundPastTheDaysShareWaitsOnThePhoneForALaterDay() {
+        val today = System.currentTimeMillis() / ReportBox.DAY_MS
+        prefs().edit().putBoolean("auto_reports", true).putString("auto_reports_found_today", "$today:${AutoReports.FOUND_A_DAY}").commit()
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        settled()
+        waitUntil { owed() == 1 }
+        assertEquals(emptyList<String>(), problems())
+        // Started again the same day, it still waits; the next day, it goes.
+        controller!!.destroyAndSettle()
+        started()
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        prefs().edit().putString("auto_reports_found_today", "${today - 1}:${AutoReports.FOUND_A_DAY}").commit()
+        controller!!.destroyAndSettle()
+        started()
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("no_timing"), problems())
+    }
+
+    @Test
+    fun wordsPutInTimeByHandThatTheBoxTurnsAwayAsTheyreLeftArentTakenAsSent() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        answerTo = { 400 }
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        waitUntil { owed() == 0 }
+        assertFalse(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.TIMED_BY_HAND))
+        // Put in time again, that report goes.
+        answerTo = { null }
+        controller!!.destroyAndSettle()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand", "timed_by_hand") }
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.TIMED_BY_HAND))
     }
 
     @Test
@@ -769,7 +839,7 @@ class LyricsReportTest {
     }
 
     /** [songs] put in time before, whose reports wait on the phone: made up, as what they say doesn't matter. */
-    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), """{"fake":"$it"}""") }
+    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), SongProblem.TIMED_BY_HAND, """{"fake":"$it"}""") }
 
     private fun sentFakes() = fake.requestedUrls.indices.filter { fake.requestedUrls[it] == ReportSender.URL }.map { fake.requestBodies[it] }
 
@@ -864,6 +934,18 @@ class LyricsReportTest {
         openLyrics()
         composeRule.waitForIdle()
         assertEquals(2, sentFakes().size)
+    }
+
+    @Test
+    fun timingReportsOwedThatAnAnswerNotTheBoxsOnThemStopsWaitForTheNextStart() {
+        owedFor("Old one", "Old two")
+        answerTo = { 403 }
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(2, owed())
     }
 
     @Test

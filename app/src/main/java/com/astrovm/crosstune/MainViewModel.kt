@@ -191,7 +191,7 @@ internal class MainViewModel(
     private val leadStore = LeadStore(preferences)
     private val gapStore = ShazamGapStore(preferences)
     private val sungStore = SungStore(preferences)
-    private val autoReports = AutoReports(preferences)
+    private val autoReports = AutoReports(preferences, now = wallClock)
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
@@ -3357,8 +3357,16 @@ internal class MainViewModel(
             // Found before it's followed, or before following it said anything, as a song with no words always is.
             val playing = if (report.app == null) playback?.takeIf { it.hasAccess() }?.follow(song)?.first() else null
             val player = report.player?.let { it.copy(appPackage = it.appPackage ?: playing?.appPackage, speed = it.speed ?: playing?.clock?.speed) }
-            // One that didn't get there goes the next time it's found; one the box turned away never would.
-            if (sender.send(report.copy(app = report.app ?: playing?.app, player = player)) != Delivery.FAILED) autoReports.remember(song, problem)
+            val json = withContext(systemDispatcher) { report.copy(app = report.app ?: playing?.app, player = player).json() }
+            // Past the day's share, it waits on the phone for a start on a later day.
+            if (!autoReports.mayFind()) return@launch autoReports.owe(song, problem, json)
+            when (sender.send(json)) {
+                Delivery.SENT -> autoReports.remember(song, problem)
+                // Never sent again as it is; words put in time by hand again later still go.
+                Delivery.REFUSED -> autoReports.turnedAway(song, problem)
+                // One that didn't get there waits on the phone for the next start.
+                Delivery.FAILED -> autoReports.owe(song, problem, json)
+            }
         }
     }
 
@@ -3381,15 +3389,22 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val sender = reports ?: return
         if (!timedByHand) return
-        autoReports.owe(song, reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).json())
+        val report = reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND)
+        // Made off the main thread, as one with thousands of lines takes a while; one for later timing replaces it.
+        owing?.cancel()
+        owing = viewModelScope.launch { autoReports.owe(song, SongProblem.TIMED_BY_HAND, withContext(systemDispatcher) { report.json() }) }
     }
+
+    /** The report on words put in time by hand being made, to be kept owed. */
+    private var owing: Job? = null
 
     /** Held while reports owed go, so a start and a yes close together don't send one twice. */
     private val owedGoing = Mutex()
 
     /**
      * Each report owed goes, once a song, and is dropped when it got there or the box turned it away; one that
-     * didn't get there waits for the next time. Words still in front of the user are left out: they may be put in time some more, and go once they're left.
+     * didn't get there waits for the next time, and a problem found past the day's share for a later day.
+     * Words still in front of the user are left out: they may be put in time some more, and go once they're left.
      */
     private fun sendOwed() {
         val sender = reports ?: return
@@ -3398,8 +3413,8 @@ internal class MainViewModel(
             owedGoing.withLock {
                 val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
                 for (owed in autoReports.owed().filter { it.key != inFront }) {
-                    // Gone another way meanwhile, as the words it's for were left.
-                    if (!autoReports.owes(owed)) continue
+                    // Gone another way meanwhile, as the words it's for were left; or past the day's share, for a later day.
+                    if (!autoReports.owes(owed) || !owed.earlier && !autoReports.mayFind()) continue
                     val delivery = sender.send(owed.json)
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
                     if (delivery == Delivery.FAILED) break
@@ -3469,6 +3484,7 @@ internal class MainViewModel(
     fun resetSync() {
         val song = uiState.lyricsFor ?: return
         timedByHand = false
+        owing?.cancel()
         autoReports.owedNothing(song)
         // Undone while the singing was being heard through the song, it isn't heard on.
         if (liningUp) {

@@ -233,23 +233,30 @@ class ReportTest {
         var code = 400
         fake.handler = { request -> FakeSpotify.html(request, "", code = code) }
         val sender = ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined)
-        // Not one it takes, too big, or not as JSON: the same report always will be.
-        for (refused in listOf(400, 404, 405, 413, 415, 499)) {
+        // Not one it reads, too big, not as JSON, or not one it takes: the same report always will be.
+        for (refused in listOf(400, 413, 415, 422)) {
             code = refused
             assertEquals(refused.toString(), Delivery.REFUSED, sender.send("{}"))
         }
-        // Too soon, too many, or the box down, it may get there later.
-        for (later in listOf(408, 429, 500, 503)) {
+        // Too soon, too many, the box down, or an answer that isn't the box's about the report, as a network's own
+        // 403 or a 404 while the box moves: it may get there later.
+        for (later in listOf(199, 300, 401, 403, 404, 405, 408, 414, 416, 421, 423, 429, 499, 500, 503)) {
             code = later
             assertEquals(later.toString(), Delivery.FAILED, sender.send("{}"))
         }
-        code = 200
-        assertEquals(Delivery.SENT, sender.send("{}"))
+        for (sent in listOf(200, 204, 299)) {
+            code = sent
+            assertEquals(sent.toString(), Delivery.SENT, sender.send("{}"))
+        }
     }
 
     /** What report/worker.js, the box, has as [name]: a number, or a product as "48 * 1024". */
     private fun boxNumber(box: String, name: String): Long =
-        Regex("""const $name = ([\d *]+);""").find(box)!!.groupValues[1].split("*").map { it.trim().toLong() }.reduce(Long::times)
+        boxPart(box, """const $name = ([\d *]+);""").split("*").map { it.trim().toLong() }.reduce(Long::times)
+
+    /** What [pattern]'s group matches in report/worker.js, [box]; it fails when the box has none. */
+    private fun boxPart(box: String, pattern: String): String =
+        checkNotNull(Regex(pattern).find(box)) { "report/worker.js has nothing like $pattern" }.groupValues[1]
 
     @Test
     fun everyLimitTheAppKeepsToIsTheBoxs() {
@@ -257,12 +264,35 @@ class ReportTest {
         val box = java.io.File("../report/worker.js").readText()
         assertEquals(boxNumber(box, "MAX_BYTES"), ReportBox.MAX_BYTES.toLong())
         assertEquals(boxNumber(box, "MAX_POINTS"), ReportBox.MAX_POINTS.toLong())
-        val limits = Regex("""const LIMITS = \{([^}]*)\}""").find(box)!!.groupValues[1]
+        val limits = boxPart(box, """const LIMITS = \{([^}]*)\}""")
         assertEquals(Regex("""(\w+): (\d+)""").findAll(limits).associate { it.groupValues[1] to it.groupValues[2].toInt() }, ReportBox.LIMITS)
         // A time it takes is a whole day at most, either way, and where the words had a line is never before the start.
         assertTrue(box.contains("value >= 0 && value <= 24 * 60 * 60 * 1000"))
         assertTrue(box.contains("Math.abs(value) <= 24 * 60 * 60 * 1000"))
         assertEquals(24 * 60 * 60 * 1000L, ReportBox.DAY_MS)
+        // The characters it never keeps, when it says which: the app keeps none of them either, and no others.
+        Regex("""const UNSEEN = /\[([^\]]+)]/g""").find(box)?.let { found ->
+            val unseen = Regex("[${found.groupValues[1]}]")
+            val differ = (0..0xFFFF).map(::Char).filter { unseen.matches(it.toString()) != ReportBox.UNSEEN.matches(it.toString()) }
+            assertEquals(emptyList<Char>(), differ)
+        }
+    }
+
+    @Test
+    fun aTextIsCleanedAsTheBoxCleansIt() {
+        fun title(text: String) = ReportBox.cut(text, "title")
+        // Control characters and the marks that turn the text around go; a break or a tab is a space.
+        assertEquals("ab", title("a\u0000\u0001\u001f\u007f\u0085\u009f\u202a\u202e\u2066\u2069b"))
+        assertEquals("a b c d e f", title("a\nb\r\nc\rd\u2028e\tf"))
+        assertEquals("a\u00adb\u200bc", title("a\u00adb\u200bc"))
+        // A comment and the log keep their lines, each break made one.
+        assertEquals("a\nb\nc\nd", ReportBox.cut("a\r\nb\u2029c\rd", "comment"))
+        assertEquals("a\nb", ReportBox.cut("a\nb", "log"))
+        // Trimmed as JavaScript trims, which takes off a byte order mark and every space, and only those.
+        assertEquals("a", title("\ufeff\u00a0\u1680\u2000\u200a\u202f\u205f\u3000 a \u3000\u2029\u000b\u000c"))
+        assertEquals("\u200ba\u180e", title("\u200ba\u180e"))
+        // Nothing but what it never keeps, it's blank: the song isn't sent.
+        assertFalse(JSONObject(Report("2.30.0", MusicMetadata("\u202e\u0007", "Band"), comment = "Wrong").json()).has("song"))
     }
 
     /** The lines put in time in what [report] sends. */
@@ -295,21 +325,45 @@ class ReportTest {
     }
 
     @Test
-    fun aReportPastTheBoxsSizeLosesTheLinesThatTellLeastThenTheLog() {
+    fun aReportPastTheBoxsSizeLosesTheLinesThatTellLeastAndNoMore() {
         val long = "空".repeat(300)
         val lines = (0 until 300).map { HandTiming(long, it * 1000L, it * 1000L + (it % 7) * 100) }
         val player = PlayerTiming("com.example.player", 1f, 0, 0, "lead 0")
         val report = Report("2.30.0", MusicMetadata("Song", "Band"), timing = lines, player = player)
         val json = report.json()
-        assertTrue(json.toByteArray().size.toString(), json.toByteArray().size <= ReportBox.MAX_BYTES)
-        val times = sentLines(report).map { it.getLong("timedMs") }
+        val bytes = json.toByteArray().size
+        assertTrue(bytes.toString(), bytes <= ReportBox.MAX_BYTES)
+        val sent = sentLines(report)
+        val times = sent.map { it.getLong("timedMs") }
         assertTrue(times.size in 1 until 300)
         assertTrue(times.containsAll(listOf(0L, 299_000L)))
+        // One more line, and the comma before it, wouldn't fit.
+        assertTrue(bytes.toString(), bytes + sent.minOf { it.toString().toByteArray().size } + 1 > ReportBox.MAX_BYTES)
         assertEquals("lead 0", JSONObject(json).getJSONObject("song").getString("log"))
-        // With no lines left to lose, the log goes, which only an odd one is that long.
-        val odd = Report("2.30.0", MusicMetadata("Song", "Band"), player = player.copy(log = "\u0001".repeat(8192)))
-        assertTrue(odd.json().toByteArray().size <= ReportBox.MAX_BYTES)
-        assertFalse(JSONObject(odd.json()).getJSONObject("song").has("log"))
+    }
+
+    @Test
+    fun everyTextAtItsLongestStillFitsWithoutTheLines() {
+        // Four bytes a character, the most any takes, as what's escaped in two is never longer.
+        fun longest(field: String) = "\uD83C\uDFB5".repeat(ReportBox.LIMITS.getValue(field))
+        val player = PlayerTiming(longest("appPackage"), 1f, 0, 0, longest("log"))
+        val report = Report(
+            longest("version"), MusicMetadata(longest("title"), longest("artist")), app = longest("app"), android = longest("android"),
+            comment = longest("comment"), source = longest("source"), player = player, problem = SongProblem.TIMED_BY_HAND,
+            timing = listOf(HandTiming(longest("line"), 0, 0))
+        )
+        val json = JSONObject(report.json())
+        assertTrue(report.json().toByteArray().size <= ReportBox.MAX_BYTES)
+        assertEquals(longest("log"), json.getJSONObject("song").getString("log"))
+        assertEquals(longest("comment"), json.getString("comment"))
+    }
+
+    @Test
+    fun thousandsOfLinesPutInTimeStillMakeAReportTheBoxTakes() {
+        val lines = (0 until 5000).map { HandTiming("空".repeat(300), it * 500L, it * 500L + (it * 37 % 11) * 10) }
+        val report = Report("2.30.0", MusicMetadata("Song", "Band"), timing = lines)
+        assertTrue(report.json().toByteArray().size <= ReportBox.MAX_BYTES)
+        assertEquals(listOf(0L, 4999 * 500L), sentLines(report).map { it.getLong("timedMs") }.let { listOf(it.first(), it.last()) })
     }
 
     @Test
@@ -328,6 +382,31 @@ class ReportTest {
         assertFalse(JSONObject(Report("2.30.0", MusicMetadata("Song", " "), comment = "Wrong").json()).has("song"))
         assertFalse(JSONObject(Report("2.30.0", MusicMetadata("", "Band"), comment = "Wrong").json()).has("song"))
         assertEquals("Wrong", JSONObject(Report("2.30.0", MusicMetadata("", "Band"), comment = "Wrong").json()).getString("comment"))
+    }
+
+    @Test
+    fun theLineTheOnesEitherSideMissByLeastGoesFirstThenTheNextAsTheyChange() {
+        // In time order: 0 heard at 0, 1000 at 1600, 2000 at 2000, 3000 at 3050, 4000 at 4000, given out of order.
+        val points = listOf(2000L to 2000L, 0L to 0L, 4000L to 4000L, 1000L to 1600L, 3000L to 3050L)
+        // 3000 is 50 from where 2000 and 4000 put it, 2000 is 325 early, 1000 is 600 late: 3000 goes. Then 2000 is 400
+        // from where 1000 and 4000 put it, and goes; then 1000. The last goes before the first.
+        assertEquals(listOf(4, 0, 3, 2, 1), ReportBox.dropOrder(points))
+        assertEquals(listOf(0, 1, 2, 3), ReportBox.telling(points, 4))
+        assertEquals(listOf(1, 2, 3), ReportBox.telling(points, 3))
+        assertEquals(listOf(1, 2), ReportBox.telling(points, 2))
+        assertEquals(listOf(1), ReportBox.telling(points, 1))
+        assertEquals(points.indices.toList(), ReportBox.telling(points, 6))
+    }
+
+    @Test
+    fun aWrongReadingIsOfferedOnlyWhenTheBoxTakesIt() {
+        val word = Word("花", "か", "ka")
+        assertTrue(ReadingReport.takes(MusicMetadata("Song", "Band"), word, listOf("か")))
+        assertFalse(ReadingReport.takes(MusicMetadata(" ", "Band"), word, listOf("か")))
+        assertFalse(ReadingReport.takes(MusicMetadata("Song", "\u202e"), word, listOf("か")))
+        assertFalse(ReadingReport.takes(MusicMetadata("Song", "Band"), Word("\u0007", "か", "ka"), listOf("か")))
+        assertFalse(ReadingReport.takes(MusicMetadata("Song", "Band"), word, listOf(" ")))
+        assertFalse(ReadingReport.takes(MusicMetadata("Song", "Band"), word, emptyList()))
     }
 
     @Test

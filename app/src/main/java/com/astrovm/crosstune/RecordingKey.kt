@@ -9,7 +9,7 @@ import kotlin.math.abs
 /** Keeps different performances and video edits from sharing lyrics or corrections. */
 internal object RecordingKey {
     fun of(song: MusicMetadata): String {
-        val name = "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+        val name = "${SongNames.keyOf(song.title)}\u0000${SongNames.keyOf(song.artist)}"
         val link = song.url?.let { MusicLinks.parse(it) as? LinkInput.Link }?.link
         val recording = song.recordingId ?: link?.takeIf { it.type == ItemType.TRACK }?.let { "${it.service}:${it.id}" }
         return name + recording?.let { "\u0000$it" }.orEmpty() + song.lengthMs?.takeIf { it > 0 }?.let { "\u0000$it" }.orEmpty()
@@ -61,7 +61,7 @@ internal class SteadyLengths(private val preferences: SharedPreferences) {
     @Synchronized
     fun known(title: String, artist: String): List<Long> = seen.optJSONArray(keyOf(title, artist))?.let { known -> (0 until known.length()).map(known::getLong) }.orEmpty()
 
-    private fun keyOf(title: String, artist: String) = "${SongNames.normalize(title)}\u0000${SongNames.normalize(artist)}"
+    private fun keyOf(title: String, artist: String) = "${SongNames.keyOf(title)}\u0000${SongNames.keyOf(artist)}"
 
     companion object {
         const val SAME_MS = 1_500L

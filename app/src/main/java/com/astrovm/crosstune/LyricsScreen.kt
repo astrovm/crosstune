@@ -2395,7 +2395,10 @@ private fun LineSheet(index: Int, state: UiState, actions: ScreenActions, onDism
                     val examples = learning.examples?.takeIf { it.word == meaning.word && it.index == index }?.asking
                     WordCard(
                         meaning, examples, canFindExamples = signedIn, romajiTyped = learning.romajiTyped,
-                        onWrongReading = { markingWrong = meaning.word }, flag = flag
+                        // Offered only when the box takes it: a word and a reading, in a song with a title and an artist.
+                        onWrongReading = { markingWrong = meaning.word }
+                            .takeIf { state.lyricsFor?.let { ReadingReport.takes(it, meaning.word, meaning.word.shown(learning.romajiTyped)) } == true },
+                        flag = flag
                     ) { actions.onFindExamples(index) }
                 }
             }

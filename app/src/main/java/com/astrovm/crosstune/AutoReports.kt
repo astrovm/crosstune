@@ -29,10 +29,14 @@ internal enum class SongProblem(
 
 /**
  * Whether the user lets Crosstune report problems it finds by itself, and which it has: each song's
- * problem goes once. It asks once an app session, [session], and gives up asking after the offer
- * was closed [MAX_CLOSES] times.
+ * problem goes once, and at most [FOUND_A_DAY] a day by the wall clock, [now]. It asks once an app
+ * session, [session], and gives up asking after the offer was closed [MAX_CLOSES] times.
  */
-internal class AutoReports(private val preferences: SharedPreferences, private val session: Long = Process.getStartElapsedRealtime()) {
+internal class AutoReports(
+    private val preferences: SharedPreferences,
+    private val session: Long = Process.getStartElapsedRealtime(),
+    private val now: () -> Long = System::currentTimeMillis
+) {
 
     /** Yes or no, or null while the user hasn't said. */
     var allowed: Boolean?
@@ -42,7 +46,7 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         }
 
     private fun keyOf(song: MusicMetadata, problem: SongProblem) =
-        "${problem.key}\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+        "${problem.key}\u0000${SongNames.keyOf(song.title)}\u0000${SongNames.keyOf(song.artist)}"
 
     /** Whether the offer to allow them wasn't made yet in this app session: the process, so it's asked again once the app is started anew. */
     fun mayAsk(): Boolean = preferences.getLong(KEY_ASKED_IN, NEVER) != session
@@ -71,22 +75,44 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
     /** [song]'s [problem] reported, so it isn't again; only the latest are remembered. */
     fun remember(song: MusicMetadata, problem: SongProblem) = remember(keyOf(song, problem))
 
-    private fun remember(key: String) {
+    /**
+     * The report on [song]'s [problem] turned away by the box, as it always will be: it isn't sent again each time
+     * it's found, as it would be the same. Words put in time by hand are only no longer owed, not taken as sent,
+     * so when they're put in time again, that report still goes. Neither counts for the day: see [mayFind].
+     */
+    fun turnedAway(song: MusicMetadata, problem: SongProblem) =
+        if (problem == SongProblem.TIMED_BY_HAND) forget(keyOf(song, problem)) else remember(keyOf(song, problem), went = false)
+
+    /** [key] done with, as it [went] to the box, so it counts for the day, or was turned away. */
+    private fun remember(key: String, went: Boolean = true) {
         val list = (sent() - key) + key
         // Written at once, so one that went isn't sent again if the app is ended right after.
-        preferences.edit().putString(KEY_SENT, JSONArray(list.takeLast(MAX_SENT)).toString()).commit()
+        val edit = preferences.edit().putString(KEY_SENT, JSONArray(list.takeLast(MAX_SENT)).toString())
+        if (went && !key.startsWith(EARLIER_START)) edit.putString(KEY_FOUND_TODAY, "${today()}:${foundToday() + 1}")
+        edit.commit()
         // Reported, it isn't owed.
         forget(key)
     }
 
+    /** Whether another problem found may go today, or has to wait for a later day: see [FOUND_A_DAY]. */
+    fun mayFind(): Boolean = foundToday() < FOUND_A_DAY
+
+    /** How many problems found went today. */
+    private fun foundToday(): Int =
+        preferences.getString(KEY_FOUND_TODAY, null)?.split(':')?.takeIf { it.first() == today() }?.getOrNull(1)?.toIntOrNull() ?: 0
+
+    /** Today, as the box counts its days: by UTC. */
+    private fun today(): String = (now() / ReportBox.DAY_MS).toString()
+
     /**
-     * A report on [song]'s words put in time by hand, [json] as it'd be sent, kept on the phone whatever the
-     * user's answer is, until it's sent: the words are only left, and reported, a while after, the app may be
-     * killed before, and the answer may come later. An older one for the same song gives way; the latest
-     * [MAX_OWED] are kept. One that didn't get there waits for the next start.
+     * A report on [song]'s [problem], [json] as it'd be sent, kept on the phone until it's sent. Words put in time by
+     * hand are owed whatever the user's answer is: they're only left, and reported, a while after, the app may be
+     * killed before, and the answer may come later. A problem found is owed when its report didn't get there, or
+     * had to wait for a later day. An older one for the same song and problem gives way. The latest [MAX_OWED] of
+     * each, by hand and found, are kept, so the oldest go first. Each waits for the next start.
      */
-    fun owe(song: MusicMetadata, json: String) {
-        val key = owedKey(song)
+    fun owe(song: MusicMetadata, problem: SongProblem, json: String) {
+        val key = keyOf(song, problem)
         keep(kept().filter { it.key != key } + Owed(key, json))
     }
 
@@ -101,10 +127,13 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         (0 until list.length()).map { list.getJSONObject(it) }.map { Owed(it.getString("key"), it.getString("json")) }
     }.getOrDefault(emptyList())
 
-    /** The latest [MAX_OWED] put in time by hand are kept, and every one kept from an earlier version, of which there are only so many. */
+    /**
+     * The latest [MAX_OWED] put in time by hand are kept, the latest [MAX_OWED] problems found, and every one kept from
+     * an earlier version, of which there are only so many.
+     */
     private fun keep(owed: List<Owed>) {
-        val byHand = owed.filterNot { it.earlier }.takeLast(MAX_OWED).toSet()
-        val list = JSONArray(owed.filter { it.earlier || it in byHand }.map { JSONObject().put("key", it.key).put("json", it.json) })
+        val latest = owed.filterNot { it.earlier }.groupBy { it.key.startsWith(BY_HAND_START) }.values.flatMap { it.takeLast(MAX_OWED) }.toSet()
+        val list = JSONArray(owed.filter { it.earlier || it in latest }.map { JSONObject().put("key", it.key).put("json", it.json) })
         preferences.edit().putString(KEY_OWED, list.toString()).commit()
     }
 
@@ -163,13 +192,14 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
     /** The report [owed] was turned away by the box, as it always will be: it's no longer owed, and isn't taken as sent. */
     fun dropped(owed: Owed) = forget(owed.key)
 
+
     /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */
     fun owes(owed: Owed): Boolean = owed in owed()
 
     /** A report kept to be sent, under the [key] of the song and problem it's for. */
     data class Owed(val key: String, val json: String) {
         /** Kept from an earlier version, rather than put in time by hand in this one. */
-        val earlier: Boolean get() = key.startsWith("$EARLIER\u0000")
+        val earlier: Boolean get() = key.startsWith(EARLIER_START)
     }
 
     companion object {
@@ -188,8 +218,19 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         /** What a report on a song's timing kept from an earlier version says it is: by hand or by ear, it can't tell. */
         const val EARLIER = "kept_timing"
 
-        /** The reports owed that are kept: the latest songs put in time by hand. */
+        /** How the keys of reports kept from an earlier version, and of those on words put in time by hand, start. */
+        private const val EARLIER_START = "$EARLIER\u0000"
+        private val BY_HAND_START = "${SongProblem.TIMED_BY_HAND.key}\u0000"
+        private const val KEY_FOUND_TODAY = "auto_reports_found_today"
+
+        /** The reports owed that are kept of each: the latest songs put in time by hand, and the latest problems found. */
         const val MAX_OWED = 20
+
+        /**
+         * The most problems found, words put in time by hand among them, that go in a day: the box takes 70 a day from one
+         * network, room for 3 phones, and one phone found at most 22 in a day in 115 real reports over 14 days.
+         */
+        const val FOUND_A_DAY = 23
 
         /** The offer closed this many times is taken as a no. */
         const val MAX_CLOSES = 3

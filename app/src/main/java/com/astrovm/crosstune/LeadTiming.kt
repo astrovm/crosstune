@@ -83,7 +83,7 @@ internal class ShazamGapStore(private val preferences: SharedPreferences) {
 
     /** By the words' length too, as words for another release are timed another way. */
     private fun key(song: MusicMetadata, wordsMs: Long) =
-        "${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}\u0000${wordsMs / 1000}\u0000"
+        "${SongNames.keyOf(song.title)}\u0000${SongNames.keyOf(song.artist)}\u0000${wordsMs / 1000}\u0000"
 
     private fun all(): JSONObject = try {
         JSONObject(preferences.getString("shazam_gaps", null) ?: "{}")

@@ -103,28 +103,39 @@ internal data class Report(
 
     /**
      * What [ReportSender] sends: nothing but what's here, and nothing [ReportBox] turns away. Of the lines put in
-     * time by hand, those that tell most are kept, to its count and then its size; past its size without them,
-     * the log goes too. The rest, cut to its lengths, always fits.
+     * time by hand, those that tell most are kept, to its count and then its size. The rest, cut to its lengths,
+     * always fits: 11,222 characters of 4 bytes at most, under 45 KB. Each line's bytes are counted once, so it takes
+     * a few milliseconds for thousands of lines; still, it's made off the main thread, as [ReportSender] does.
      */
     fun json(): String {
-        val usable = timing.filter { ReportBox.takes(it.timedMs, it.heardMs) }
-        var points = usable.slice(ReportBox.telling(usable.map { it.timedMs to it.heardMs }, ReportBox.MAX_POINTS))
-        var log = player?.log
-        var json = jsonWith(points, log)
-        while (json.toByteArray().size > ReportBox.MAX_BYTES && (points.isNotEmpty() || log != null)) {
-            if (points.isEmpty()) log = null else points = points.slice(ReportBox.telling(points.map { it.timedMs to it.heardMs }, points.size - 1))
-            json = jsonWith(points, log)
-        }
-        return json
+        // Without a song the box takes, there are no lines to send.
+        val usable = if (songTaken) timing.filter { ReportBox.takes(it.timedMs, it.heardMs) } else emptyList()
+        val order = ReportBox.dropOrder(usable.map { it.timedMs to it.heardMs })
+        val sizes = usable.map { pointJson(it).toString().toByteArray().size }
+        val log = player?.log
+        var gone = (usable.size - ReportBox.MAX_POINTS).coerceAtLeast(0)
+        val bare = jsonWith(emptyList(), log).toByteArray().size
+        // What the lines add around their own bytes: the field's name and brackets, and a comma between two.
+        val around = usable.firstOrNull()?.let { jsonWith(listOf(it), log).toByteArray().size - bare - sizes.first() } ?: 0
+        var sum = (gone until usable.size).sumOf { sizes[order[it]] }
+        fun bytes() = bare + if (gone < usable.size) around + sum + (usable.size - gone - 1) else 0
+        while (bytes() > ReportBox.MAX_BYTES) sum -= sizes[order[gone++]]
+        val left = order.drop(gone).toSet()
+        return jsonWith(usable.filterIndexed { index, _ -> index in left }, log)
     }
+
+    /** The box takes a song only with its title and its artist. */
+    private val songTaken: Boolean get() = song?.let { ReportBox.cut(it.title, "title").isNotEmpty() && ReportBox.cut(it.artist, "artist").isNotEmpty() } == true
+
+    /** A line put in time, as the report has it. */
+    private fun pointJson(line: HandTiming) = JSONObject().put("line", ReportBox.cut(line.line, "line")).put("timedMs", line.timedMs).put("heardMs", line.heardMs)
 
     private fun jsonWith(points: List<HandTiming>, log: String?): String = JSONObject().apply {
         put("version", ReportBox.cut(version, "version"))
         put("android", ReportBox.cut(android, "android"))
         ReportBox.cut(comment, "comment").takeIf { it.isNotEmpty() }?.let { put("comment", it) }
         problem?.let { put("problem", it.key) }
-        // The box takes a song only with its title and its artist.
-        song?.takeIf { ReportBox.cut(it.title, "title").isNotEmpty() && ReportBox.cut(it.artist, "artist").isNotEmpty() }?.let {
+        song?.takeIf { songTaken }?.let {
             put("song", JSONObject().apply {
                 put("title", ReportBox.cut(it.title, "title"))
                 put("artist", ReportBox.cut(it.artist, "artist"))
@@ -135,7 +146,7 @@ internal data class Report(
                 lengthMs?.let { ms -> put("lengthMs", ms) }
                 source?.let { put("source", ReportBox.cut(it, "source")) }
                 player?.let { putPlayer(it, log) }
-                if (points.isNotEmpty()) put("timing", JSONArray(points.map { line -> JSONObject().put("line", ReportBox.cut(line.line, "line")).put("timedMs", line.timedMs).put("heardMs", line.heardMs) }))
+                if (points.isNotEmpty()) put("timing", JSONArray(points.map(::pointJson)))
             })
         }
     }.toString()
@@ -196,6 +207,14 @@ internal data class ReadingReport(
     companion object {
         /** The problem the report Worker files it under. */
         const val WRONG_READING = "wrong_reading"
+
+        /**
+         * Whether the box takes a report that [word]'s reading [shown] in [song] is wrong: it needs the song's title and
+         * artist, the word and its reading, once [ReportBox.cut] has cleaned them. Otherwise it's never offered.
+         */
+        fun takes(song: MusicMetadata, word: Word, shown: List<String>): Boolean =
+            listOf(song.title to "title", song.artist to "artist", word.text to "word", shown.joinToString(" / ") to "shown")
+                .all { (text, field) -> ReportBox.cut(text, field).isNotEmpty() }
     }
 }
 
@@ -207,15 +226,21 @@ internal enum class Delivery {
     /** The box turned it away, as it always will: it isn't one it takes. */
     REFUSED,
 
-    /** It didn't get there for now: no network, the box down, busy (408) or full for the while (429). */
+    /**
+     * It didn't get there for now: no network, the box down, busy (408) or full for the day (429), or an answer that
+     * isn't the box's about the report, as a network's own 403 or a 404 while the box moves.
+     */
     FAILED;
 
     companion object {
-        fun of(code: Int): Delivery = when {
-            code in 200..299 -> SENT
-            code in 400..499 && code != 408 && code != 429 -> REFUSED
+        fun of(code: Int): Delivery = when (code) {
+            in 200..299 -> SENT
+            in REFUSALS -> REFUSED
             else -> FAILED
         }
+
+        /** What the box says of the report itself: not one it reads (400), too big (413), not JSON (415), or not one it takes (422). */
+        private val REFUSALS = setOf(400, 413, 415, 422)
     }
 }
 
@@ -237,39 +262,76 @@ internal object ReportBox {
     /** A day, the furthest a time in a report may be. */
     const val DAY_MS = 24 * 60 * 60 * 1000L
 
-    /** [text] as the box keeps its [field]: trimmed, and no longer than its limit, in characters, not UTF-16 units. */
+    /** The texts the box keeps line breaks in: a comment and the timing log. Every other one is a single line. */
+    private val LINES = setOf("comment", "log")
+
+    /** A line break, however it's written, as the box finds one. */
+    private val BREAK = Regex("""\r\n?|[\n\u2028\u2029]""")
+
+    /**
+     * What the box never keeps: control characters, and the marks that turn the direction of the text after them
+     * around. Only "\n" stays, as every line break is made one, or a space, before. ReportTest holds it to worker.js.
+     */
+    val UNSEEN = Regex("""[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]""")
+
+    /** What JavaScript's trim() takes off either end, as the box trims with it: Kotlin's leaves U+FEFF. */
+    private const val SPACES = "\t\n\u000b\u000c\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+
+    /**
+     * [text] as the box keeps its [field]: each line break a space, or "\n" where it keeps them, a tab a space, without
+     * what it never keeps, trimmed, and no longer than its limit, in characters, not UTF-16 units.
+     */
     fun cut(text: String, field: String): String {
-        val trimmed = text.trim()
+        val clean = text.replace(BREAK, if (field in LINES) "\n" else " ").replace('\t', ' ').replace(UNSEEN, "").trim { it in SPACES }
         val max = LIMITS.getValue(field)
-        return if (trimmed.codePointCount(0, trimmed.length) <= max) trimmed else trimmed.substring(0, trimmed.offsetByCodePoints(0, max))
+        return if (clean.codePointCount(0, clean.length) <= max) clean else clean.substring(0, clean.offsetByCodePoints(0, max))
     }
 
     /** Whether the box takes a line the words had at [timedMs] and that's heard at [heardMs]. */
     fun takes(timedMs: Long, heardMs: Long): Boolean = timedMs in 0..DAY_MS && heardMs in -DAY_MS..DAY_MS
 
+    /** Which of [points], each where the words had a line and where it's heard, to keep, at most [max], in their order: see [dropOrder]. */
+    fun telling(points: List<Pair<Long, Long>>, max: Int): List<Int> =
+        (points.indices - dropOrder(points).take((points.size - max).coerceAtLeast(0)).toSet()).sorted()
+
     /**
-     * Which of [points], each where the words had a line and where it's heard, to keep, at most [max], in their
-     * order. The words move in a straight line between two lines put in time ([LyricsSync.timeOf]), so a line
-     * that's where the two either side put it says nothing they don't: the one they miss by least goes first,
-     * again and again. The first and the last, which say where the rest go on from, stay to the end.
+     * Each of [points], each where the words had a line and where it's heard, in the order they go, the one that tells
+     * least first. The words move in a straight line between two lines put in time ([LyricsSync.timeOf]), so a line
+     * that's where the two either side put it says nothing they don't: the one they miss by least goes first, then
+     * the next, as each that goes changes what its neighbours miss by. The first and the last, which say where the rest
+     * go on from, go last, the last before the first. Of two that miss by as much, the earlier goes first.
      */
-    fun telling(points: List<Pair<Long, Long>>, max: Int): List<Int> {
-        val kept = points.indices.sortedBy { points[it].first }.toMutableList()
-        while (kept.size > max) {
-            val inOrder = kept.map(points::get)
-            kept.removeAt((1 until kept.lastIndex).minByOrNull { missedBy(inOrder, it) } ?: kept.lastIndex)
+    fun dropOrder(points: List<Pair<Long, Long>>): List<Int> {
+        val inOrder = points.indices.sortedBy { points[it].first }
+        val before = IntArray(inOrder.size) { it - 1 }
+        val after = IntArray(inOrder.size) { it + 1 }
+        val gone = BooleanArray(inOrder.size)
+        // What each misses by, with when it was worked out, so an answer from before a neighbour went is passed over.
+        val missed = LongArray(inOrder.size)
+        val queue = java.util.PriorityQueue<Pair<Long, Int>>(compareBy<Pair<Long, Int>> { it.first }.thenBy { it.second })
+        fun weigh(at: Int) {
+            missed[at] = missedBy(points[inOrder[before[at]]], points[inOrder[at]], points[inOrder[after[at]]])
+            queue += missed[at] to at
         }
-        return kept.sorted()
+        (1 until inOrder.lastIndex).forEach(::weigh)
+        val order = mutableListOf<Int>()
+        while (queue.isNotEmpty()) {
+            val (miss, at) = queue.poll()
+            if (gone[at] || miss != missed[at]) continue
+            gone[at] = true
+            order += inOrder[at]
+            after[before[at]] = after[at]
+            before[after[at]] = before[at]
+            listOf(before[at], after[at]).filter { it in 1 until inOrder.lastIndex }.forEach(::weigh)
+        }
+        return order + inOrder.filterIndexed { at, _ -> !gone[at] }.reversed()
     }
 
-    /** How far from where the lines either side of it put it the line [at] in [points] is heard. */
-    private fun missedBy(points: List<Pair<Long, Long>>, at: Int): Long {
-        val (beforeMs, beforeHeard) = points[at - 1]
-        val (afterMs, afterHeard) = points[at + 1]
-        val (lineMs, heard) = points[at]
-        val span = afterMs - beforeMs
-        val put = if (span == 0L) beforeHeard else beforeHeard + (lineMs - beforeMs) * (afterHeard - beforeHeard) / span
-        return kotlin.math.abs(heard - put)
+    /** How far from where the lines either side of it, [earlier] and [later], put it the [line] is heard. */
+    private fun missedBy(earlier: Pair<Long, Long>, line: Pair<Long, Long>, later: Pair<Long, Long>): Long {
+        val span = later.first - earlier.first
+        val put = if (span == 0L) earlier.second else earlier.second + (line.first - earlier.first) * (later.second - earlier.second) / span
+        return kotlin.math.abs(line.second - put)
     }
 }
 
@@ -285,17 +347,18 @@ internal class ReportSender(
     private val url: String = URL
 ) {
     /** How [report] went. */
-    suspend fun send(report: Report): Delivery = post(report.json())
+    suspend fun send(report: Report): Delivery = post(report::json)
 
     /** How [report], on a wrong reading, went. */
-    suspend fun send(report: ReadingReport): Delivery = post(report.json())
+    suspend fun send(report: ReadingReport): Delivery = post(report::json)
 
     /** How a report that was kept as its [json], what [Report.json] said, went. */
-    suspend fun send(json: String): Delivery = post(json)
+    suspend fun send(json: String): Delivery = post { json }
 
-    private suspend fun post(json: String): Delivery = withContext(ioDispatcher) {
+    /** Sends what [json] makes, made off the main thread too, as a report with thousands of lines takes a while. */
+    private suspend fun post(json: () -> String): Delivery = withContext(ioDispatcher) {
         try {
-            client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { Delivery.of(it.code) }
+            client.newCall(Request.Builder().url(url).post(json().toRequestBody(JSON)).build()).execute().use { Delivery.of(it.code) }
         } catch (_: IOException) {
             Delivery.FAILED
         }

@@ -661,10 +661,13 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
-        theSongInAnotherScript(items.map(::row), names)?.let { return Answer(watchUrl + it.id) }
+        val inAnotherScript = inAnotherScript(items.map(::row), names, videos.map(::row))
+        inAnotherScript.song?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
-        // Last, the songs, then the videos, are picked from, each asked about apart.
-        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
+        // Last, the songs, then the videos, are picked from, each asked about apart: first the ones in
+        // another script that may be it, as nothing proved one is.
+        val songs = (inAnotherScript.maybe + playable(items)).distinctBy { it.id }.take(PICK_FROM)
+        return Answer(null, ToPick(metadata, songs, playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
     }
 
     /** The songs or videos among [items] that play. */
@@ -722,7 +725,7 @@ internal class ExactMatcher(
      * there, so its Japanese, Korean and Chinese stores give 終わらない歌 for Owaranai Uta, 봄날 for
      * Spring Day and 松原みき for Miki Matsubara. Deezer gives its length when Apple doesn't have it.
      */
-    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>)
+    private class Names(val titles: Set<String>, val artists: Set<String>, val lengthsMs: List<Long>, val inWholeSeconds: Boolean = false)
 
     private suspend fun namesOf(metadata: MusicMetadata): Names {
         val titles = mutableSetOf(metadata.title)
@@ -741,13 +744,12 @@ internal class ExactMatcher(
                 artists += it.optString("artistName").ifBlank { null } ?: return@forEach
             }
         }
-        if (lengthsMs.isEmpty()) {
-            answering {
-                searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
-                    ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
-            }?.let(lengthsMs::add)
+        if (lengthsMs.isNotEmpty()) return Names(titles, artists, lengthsMs)
+        val deezer = answering {
+            searchDeezer(metadata).firstOrNull { matches(metadata, MetadataParsers.deezerTitle(it), it.optJSONObject("artist")?.optString("name").orEmpty()) }
+                ?.optLong("duration")?.takeIf { it > 0 }?.times(1000)
         }
-        return Names(titles, artists, lengthsMs)
+        return Names(titles, artists, listOfNotNull(deezer), inWholeSeconds = true)
     }
 
     /**
@@ -839,30 +841,57 @@ internal class ExactMatcher(
         return named && by && sameLength(row, names)
     }
 
+    /** Of the song results in another script: the one that's the song, when something proves it, and the ones that [maybe] are. */
+    private class InAnotherScript(val song: Row?, val maybe: List<Row>)
+
     /**
      * The song result named in a script the song's known names aren't ("残酷な天使のテーゼ - Zankoku na Tenshi no
      * Thesis" for "A Cruel Angel's Thesis"), which has no words to compare. Its artist is the song's, nothing
-     * in it or its album says it's another version, and it's as long as a known recording of it to the
-     * second: YouTube Music gives whole seconds, so the same recording is less than one off. Two songs of
-     * one artist can still be that close, so it's taken only when it's the one result that fits, unless
-     * a store names the song so: "残酷な天使のテーゼ (Director's Edit Version)" names "残酷な天使のテーゼ".
+     * in it or its album says it's another version, and it's as long as a known recording of it: see
+     * [sameRecording]. Being the one result that fits doesn't make it the song, as another of the artist's
+     * can be as long, so it's taken when a store names the song so, "残酷な天使のテーゼ (Director's Edit
+     * Version)" naming "残酷な天使のテーゼ", or when it's the one a video names both ways (see [namedBothWays]).
+     * Otherwise those in another script [InAnotherScript.maybe] are it, to be picked from first.
      * Accented letters are Latin ones, and "Canción Falsa" is compared by its words, so it's never here.
      */
-    private fun theSongInAnotherScript(rows: List<Row>, names: Names): Row? {
+    private fun inAnotherScript(rows: List<Row>, names: Names, videos: List<Row>): InAnotherScript {
         val known = names.titles.flatMap(::scriptsOf).toSet()
         val wanted = names.artists.flatMap(SongNames::artists).toSet()
         val credited = names.artists.joinToString(" ")
         val fits = rows.filter { row ->
             val length = row.lengthMs
-            row.id != null && length != null && names.lengthsMs.any { kotlin.math.abs(length - it) < SAME_RECORDING_MS } &&
+            row.id != null && length != null && sameRecording(length, names) &&
                 SongNames.artists(row.details.first()).any(wanted::contains) &&
                 names.titles.none { SongNames.saysAnotherVersion("${row.name} ${row.details.getOrNull(1).orEmpty()}", it, credited) }
         }
         // Named as a store names it in that script, without what the store adds in brackets.
         val bare = names.titles.filter { scriptsOf(it).isNotEmpty() }.map { SongNames.normalize(SongNames.bareTitle(SongNames.withoutEditionTag(it))) }
-        fits.firstOrNull { row -> SongNames.titleNames(row.name).any { SongNames.normalize(SongNames.bareTitle(it)) in bare } }?.let { return it }
+        fits.firstOrNull { row -> SongNames.titleNames(row.name).any { SongNames.normalize(SongNames.bareTitle(it)) in bare } }?.let { return InAnotherScript(it, emptyList()) }
         // In a script one of its known names is in, it's another song, as its words are another's.
-        return fits.filter { row -> (scriptsOf(row.name) - known).isNotEmpty() }.distinctBy { it.id }.singleOrNull()
+        val other = fits.filter { row -> (scriptsOf(row.name) - known).isNotEmpty() }.distinctBy { it.id }
+        val named = other.filter { namedBothWays(it, names, known, videos) }
+        return InAnotherScript(named.singleOrNull(), named + (other - named.toSet()))
+    }
+
+    /**
+     * Whether a video's title names [row] both ways, in the script its own name is in and as the song's
+     * Latin name, "Unconditional (無條件) - Eason Chan" for 無條件: someone saying the two are one song, as a
+     * store would. Of 151 songs named both ways by Apple's stores, a video named 83 results so, none wrong.
+     */
+    private fun namedBothWays(row: Row, names: Names, known: Set<Character.UnicodeScript>, videos: List<Row>): Boolean {
+        val latin = names.titles.filter { scriptsOf(it).isEmpty() }.map { SongNames.normalize(SongNames.bareTitle(it)) }.filter { it.isNotEmpty() }
+        val own = SongNames.titleNames(row.name).filter { (scriptsOf(it) - known).isNotEmpty() }.map { SongNames.normalize(SongNames.bareTitle(it)) }.filter { it.isNotEmpty() }
+        return videos.any { video -> video.id != null && SongNames.normalize(video.name).let { said -> latin.any(said::contains) && own.any(said::contains) } }
+    }
+
+    /**
+     * Whether a result [lengthMs] long, in YouTube Music's whole seconds, is a recording of the song as long as
+     * one of [Names.lengthsMs]. Apple's milliseconds and Deezer's whole seconds put the same recording
+     * apart differently: see [RECORDING_OFF_MS] and [SAME_SECONDS_MS].
+     */
+    private fun sameRecording(lengthMs: Long, names: Names): Boolean = names.lengthsMs.any { known ->
+        val off = lengthMs - known
+        if (names.inWholeSeconds) kotlin.math.abs(off) <= SAME_SECONDS_MS else off in RECORDING_OFF_MS
     }
 
     /** The scripts other than Latin [text] has letters in, with kanji and kana as one, as Japanese writes them together. */
@@ -1026,8 +1055,14 @@ internal class ExactMatcher(
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
 
-        /** How far apart, exclusive, one recording's lengths can be, given in whole seconds by one side. */
-        const val SAME_RECORDING_MS = 1_000L
+        /**
+         * How far YouTube Music's whole seconds are from Apple's milliseconds for one recording: on 65 songs on the
+         * same release, 62 were from 0.635 s shorter to 1 s longer, and the other 3 were 3.7 s or more off.
+         */
+        val RECORDING_OFF_MS = -700L..1_000L
+
+        /** How far YouTube Music's whole seconds are from Deezer's for one recording: 35 of 46 within a second, inclusive. */
+        const val SAME_SECONDS_MS = 1_000L
 
         /** Kanji, hiragana and katakana, which one title in Japanese mixes. */
         private val JAPANESE = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA)

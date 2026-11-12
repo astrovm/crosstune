@@ -103,7 +103,7 @@ internal class ChordFinder(
 
     /** [song]'s chords, from a sheet whose words line up with [texts], the lines shown. */
     suspend fun chordsOf(song: MusicMetadata, texts: List<String>, timeoutMs: Long = TIMEOUT_MS): Chords = withContext(ioDispatcher) {
-        val key = "$CACHE_VERSION\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
+        val key = "$CACHE_VERSION\u0000${SongNames.keyOf(song.title)}\u0000${SongNames.keyOf(song.artist)}"
         note("lookup title=${song.title} artist=${song.artist} lines=${texts.size}")
         // One kept before a page of the words alone stopped counting as chords is looked up again.
         cache?.get(key)?.let { kept ->

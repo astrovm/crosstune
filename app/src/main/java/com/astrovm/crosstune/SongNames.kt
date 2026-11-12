@@ -87,10 +87,20 @@ internal object SongNames {
     private const val WIDE_SPACE = '\u3000'
     private val EAST_ASIAN = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
 
-    /** Letters and digits only, no marks and no case: "Édition" and "Edition" are one word. */
-    fun normalize(text: String): String =
-        Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
-            .replace(lettersAndDigits, "")
+    /**
+     * Letters and digits only, no marks, no case and no width: "Édition", "Edition" and "Ｅｄｉｔｉｏｎ" are one word, and
+     * "ｶﾗｵｹ" is "カラオケ".
+     */
+    fun normalize(text: String): String = folded(text, Normalizer.Form.NFKD)
+
+    /**
+     * [text] as what's kept for a song is found by: as [normalize], but with widths as written, as it was before
+     * it folded them, so timing, lengths and reports kept under a name in full-width letters are still found.
+     */
+    fun keyOf(text: String): String = folded(text, Normalizer.Form.NFD)
+
+    private fun folded(text: String, form: Normalizer.Form): String =
+        Normalizer.normalize(text, form).replace(marks, "").lowercase(Locale.ROOT).replace(lettersAndDigits, "")
 
     /** "The" only counts as an article when it is a word of its own, so not in "Thelonious". */
     fun withoutArticle(name: String): String = name.replace(leadingArticle, "")
@@ -99,7 +109,7 @@ internal object SongNames {
     fun words(title: String): Set<String> = wordList(title).toSet()
 
     private fun wordList(title: String): List<String> =
-        Normalizer.normalize(title, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
+        Normalizer.normalize(title, Normalizer.Form.NFKD).replace(marks, "").lowercase(Locale.ROOT)
             .split(wordSplit).filter { it.isNotEmpty() }
 
     /**
@@ -126,8 +136,37 @@ internal object SongNames {
     fun saysAnotherVersion(name: String, title: String, artist: String): Boolean {
         val own = words(title) + words(artist)
         if ((words(name) - own).any { it in VERSION_WORDS }) return true
-        val letters = normalize(name)
-        return VERSION_MARKS.any { it in letters && it !in normalize(title) && it !in normalize(artist) }
+        return VERSION_MARKS.any { it.foundIn(name) && !it.foundIn(title) && !it.foundIn(artist) }
+    }
+
+    /**
+     * A mark, as another script writes it, "カラオケ" or "tvサイズ", found in a name where it's a word of its own: not
+     * inside a longer one in its script, as インスト is in インストール, or "tv size" in "ATV Sizes". Compared composed,
+     * so ライブ is never ライフ and one Hangul syllable never part of another, and with widths folded, "ＴＶサイズ".
+     * What's between its letters doesn't count, "オフ・ヴォーカル" or "TV-size". Chinese puts no space between its
+     * words, so a mark's Han letters are found next to any.
+     */
+    private class Mark(written: String) {
+        private val letters = composed(written).filter(Char::isLetterOrDigit)
+        private val pattern = Regex(
+            (wordOf(letters.first())?.let { "(?<!$it)" } ?: "") + letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*""") +
+                (wordOf(letters.last())?.let { "(?!$it)" } ?: "")
+        )
+
+        fun foundIn(name: String): Boolean = pattern.containsMatchIn(composed(name))
+
+        companion object {
+            private fun composed(text: String) = Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase(Locale.ROOT)
+
+            /** What else [letter]'s word may be written in, so a mark that starts or ends with it is inside a longer one. */
+            private fun wordOf(letter: Char): String? = when (Character.UnicodeScript.of(letter.code)) {
+                Character.UnicodeScript.LATIN, Character.UnicodeScript.COMMON -> """[\p{IsLatin}\p{N}]"""
+                // The long vowel mark and the sound marks are written with kana, though every script has them.
+                Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA -> """[\p{IsHiragana}\p{IsKatakana}\u30fc\uff70\u3099-\u309c]"""
+                Character.UnicodeScript.HANGUL -> """\p{IsHangul}"""
+                else -> null
+            }
+        }
     }
 
     /** Words a video's title has when it's another version of the song, or not the song at all. */
@@ -139,10 +178,7 @@ internal object SongNames {
         "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox"
     )
 
-    /**
-     * The same, as other scripts write them, found anywhere in a title; written as [normalize]
-     * leaves them, which takes the marks off ブ and splits 커버 into its letters.
-     */
+    /** The same, as other scripts write them, each a word of its own in a title: see [Mark]. */
     private val VERSION_MARKS = listOf(
         "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
         "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방",
@@ -150,7 +186,7 @@ internal object SongNames {
         "offvocal", "tvsize", "オフボーカル", "オフヴォーカル", "インスト", "tvサイズ", "テレビサイズ", "纯音乐", "純音樂", "인스트", "반주",
         // Remixed, or sung live: "(リミックス)", "(混音)", "(리믹스)", "(演唱会)".
         "リミックス", "混音", "리믹스", "演唱会", "演唱會"
-    ).map(::normalize)
+    ).map(::Mark)
 
     /**
      * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,
@@ -160,7 +196,7 @@ internal object SongNames {
     fun manySongs(song: MusicMetadata): Boolean {
         val names = "${song.title} ${song.artist}"
         val words = wordList(names)
-        if (words.any { it in MANY_SONGS_WORDS } || MANY_SONGS_MARKS.any { it in normalize(names) } || countsSongs(words)) return true
+        if (words.any { it in MANY_SONGS_WORDS } || MANY_SONGS_MARKS.any { it.foundIn(names) } || countsSongs(words)) return true
         return wholeShow.containsMatchIn(names) || song.title.split(" / ").count { it.isNotBlank() } >= MIN_SONGS_IN_A_TITLE
     }
 
@@ -178,7 +214,7 @@ internal object SongNames {
     private val SONGS_COUNTED = setOf("songs", "hits", "audios", "tracks", "canciones", "temas", "exitos", "musicas", "cancoes", "chansons", "titres", "lieder")
     private const val MIN_SONGS_COUNTED = 10
     private const val COUNTED_WITHIN = 3
-    private val MANY_SONGS_MARKS = listOf("メドレー", "串烧", "串燒", "메들리").map(::normalize)
+    private val MANY_SONGS_MARKS = listOf("メドレー", "串烧", "串燒", "메들리").map(::Mark)
 
     /** A whole show or album as one, in the languages its uploads are named in: "Full Concert", "(Recital Completo)". */
     private val wholeShow = Regex(
