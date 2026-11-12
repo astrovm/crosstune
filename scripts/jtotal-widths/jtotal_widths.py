@@ -30,7 +30,7 @@ Japanese, it trims none, as MS Gothic has no narrow forms.
 
 Not measured: a real Japanese desktop's own settings (the runner is a server image with the Japanese
 fonts added), Firefox, and macOS, which draws a different page as "Hiragino Kaku Gothic" is not a
-macOS font name (Issue #830). `contexts.py` measures any machine's browser against the tables, and
+macOS font name (Issue #976). `contexts.py` measures any machine's browser against the tables, and
 `compare_sheets.py moves` counts the chords that land on another letter.
 """
 import argparse

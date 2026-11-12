@@ -82,9 +82,9 @@ What the run measures:
 - Whether a full-width bracket or stop is trimmed beside another, at a line's start or at its end. In Japanese, none is, on either stack. Only an English browser on the monospace stack trims, as it draws Japanese in Yu Gothic.
 - MS PGothic in MS Gothic's place, and an English browser, for how much those would move.
 - The sheets the app's tests place chords on, drawn in all three browsers. [`invented.py`](scripts/jtotal-widths/invented.py) writes them, and `show` prints where each chord is.
-- The same sheets and J-Total's own, at the page's 15px, as a screen Windows scales by 100%, 125% and 150% draws them. The tables are measured at 40px, where a fraction of a pixel is a smaller part of a letter.
+- The same sheets and J-Total's own, at the page's 15px, as a screen Windows scales by 100%, 125% and 150% draws them. The tables are measured at 40px, where a fraction of a pixel is a smaller part of a letter. At 15px, MS Gothic draws a full-width letter 16px wide, 2.133 columns, at all three scales: there 2,985 of the 71,370 chords sit on another letter than the app puts them on (Issue #976).
 
-Not measured: a real Japanese desktop's own settings (the runner is a server image with the Japanese fonts added), Firefox, and macOS, which draws a different page as the stack's Hiragino name is not a macOS font name (Issue #830).
+Not measured: a real Japanese desktop's own settings (the runner is a server image with the Japanese fonts added), Firefox, and macOS, which draws a different page as the stack's Hiragino name is not a macOS font name (Issue #976).
 
 `container DIR` measures the same in the [Containerfile](scripts/jtotal-widths/Containerfile)'s container (it needs podman). Its fonts are not Windows', so it draws Greek and Cyrillic narrower and trims brackets: it is there to compare, not to make the tables. [`contexts.py`](scripts/jtotal-widths/contexts.py) measures any machine's browser on the same code points, in 20 contexts, and `diff` prints where two machines differ, with the font each one used. Its top has the commands.
 
