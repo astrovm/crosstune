@@ -17,7 +17,11 @@ class LinearPatternsTest {
         val patterns = appPatterns()
         val slow = patterns.mapNotNull { (where, pattern) ->
             val worst = hostileTexts(pattern.pattern()).maxOf { text -> millisToReadAll(pattern, text) }
-            if (worst > LIMIT_MS) "$where ${worst}ms ${pattern.pattern().take(80)}" else null
+            when {
+                worst == OVERFLOWED -> "$where overflows the stack ${pattern.pattern().take(80)}"
+                worst > LIMIT_MS -> "$where ${worst}ms ${pattern.pattern().take(80)}"
+                else -> null
+            }
         }
         assertEquals(emptyList<String>(), slow)
     }
@@ -50,6 +54,14 @@ class LinearPatternsTest {
         val fast = Pattern.compile("<[^<>]*+>")
         assertEquals(true, hostileTexts(slow.pattern()).maxOf { millisToReadAll(slow, it) } > LIMIT_MS)
         assertEquals(true, hostileTexts(fast.pattern()).maxOf { millisToReadAll(fast, it) } <= LIMIT_MS)
+    }
+
+    @Test
+    fun aPatternThatRunsOutOfStackIsNamedAndNotTheEndOfTheTest() {
+        val deep = Pattern.compile("(?:a|b)*c")
+        assertEquals(OVERFLOWED, millisToReadAll(deep, "a".repeat(LENGTH)))
+        // The same, with no group to repeat and tried only where a run starts.
+        assertEquals(true, millisToReadAll(Pattern.compile("(?<![ab])[ab]*+c"), "a".repeat(LENGTH)) <= LIMIT_MS)
     }
 
     @Test
@@ -166,7 +178,11 @@ class LinearPatternsTest {
         return plain.toString()
     }
 
-    /** How long the pattern takes to find all it finds in the text, stopped at [GIVE_UP_MS]. */
+    /**
+     * How long the pattern takes to find all it finds in the text, stopped at [GIVE_UP_MS], or [OVERFLOWED] when it
+     * runs out of stack, as a repeated group does with one call for each repeat: then that one pattern is named, and
+     * the others are still timed.
+     */
     private fun millisToReadAll(pattern: Pattern, text: String): Long {
         val began = System.nanoTime()
         val matcher = pattern.matcher(Deadline(text, began + GIVE_UP_MS * 1_000_000))
@@ -174,6 +190,8 @@ class LinearPatternsTest {
             generateSequence { matcher.takeIf { it.find() } }.count()
         } catch (_: Deadline.Passed) {
             return GIVE_UP_MS
+        } catch (_: StackOverflowError) {
+            return OVERFLOWED
         }
         return (System.nanoTime() - began) / 1_000_000
     }
@@ -195,6 +213,7 @@ class LinearPatternsTest {
         const val LENGTH = 20_000
         const val LIMIT_MS = 300L
         const val GIVE_UP_MS = 1_000L
+        const val OVERFLOWED = Long.MAX_VALUE
         val RUNS = listOf("x", " ", "\n", "<", "<a ", "<p>", "[", "(", "（", "a ", "&#", "-", "歌", "x\"")
         const val OPERATORS = "\\[](){}?*+|^$."
         const val ESCAPED_PLAIN = "<>\"'/=.-:()[]{}?+*|&#;"
