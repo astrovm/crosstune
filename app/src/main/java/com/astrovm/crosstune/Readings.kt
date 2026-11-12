@@ -1057,9 +1057,10 @@ internal object Readings {
     fun readAs(parts: List<Ruby>, script: Script): LineReading {
         if (script == Script.JAPANESE) return readAs(parts)
         val read = of(listOf(parts.joinToString("") { it.text }), script).single()
-        if (read.parts == parts || script != Script.CHINESE) return read.copy(parts = parts)
-        // Each reading in its place, in Latin letters already, so Android writes out the rest around it as it does a line.
-        // It puts a space between a syllable and a letter next to it, "wǒ ài nǐ a", but none before "!".
+        // Words are only ever Chinese from Android 10 on, see scriptOf.
+        if (read.parts == parts || script != Script.CHINESE || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return read.copy(parts = parts)
+        // Each reading in its place, in Latin letters already, so Android writes out the rest around it as it does a line,
+        // "。" as ".". It puts a space between a syllable and a letter next to it, "wǒ ài nǐ a", but none before "!".
         val given = buildString {
             parts.zipWithNext().forEach { (before, part) ->
                 append(before.reading ?: before.text)
@@ -1067,7 +1068,8 @@ internal object Readings {
             }
             parts.lastOrNull()?.let { append(it.reading ?: it.text) }
         }
-        val said = of(listOf(given), script).single().romanized
+        // Not through of(), which leaves out a line in Latin letters already, as this one is.
+        val said = chinese(given).romanized
         return LineReading(parts, said, said)
     }
 
