@@ -569,8 +569,10 @@ class ExactMatcherTest {
         // YouTube Music's whole seconds put the same recording less than one off.
         val row = listOf("残酷な天使のテーゼ" to "Yoko Takahashi • 残酷な天使のテーゼ • 4:06")
         assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs = 245_001))
+        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs = 246_999))
+        // A second or more either way is another recording, or another song. It was 3 s, which let in songs 2 s apart.
         assertNull(findAngel(row, lengthMs = 245_000))
-        assertNull(findAngel(row, lengthMs = 247_001))
+        assertNull(findAngel(row, lengthMs = 247_000))
     }
 
     @Test
@@ -596,21 +598,6 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=row10000000", findAngel(rows, japan = japan))
         // Named otherwise in Japanese, it's another song, however alone and as long.
         assertNull(findAngel(rows.take(1), japan = japan))
-    }
-
-    @Test
-    fun aSongInAnotherScriptMayBeAsFarFromTheKnownLengthAsTheSameSongIsAndNoFarther() {
-        val angel = MusicMetadata("A Cruel Angel's Thesis", "Yoko Takahashi")
-        val named = "残酷な天使のテーゼ - Zankoku na Tenshi no Thesis"
-        fun find(length: String) = runBlocking {
-            namesAndTabs(songs = listOf(youTubeMusicRow(named, "Yoko Takahashi • Zankoku na Tenshi no Thesis • $length", videoId = "xyVatKhd4s4")), apple = mapOf("AR" to appleSong("A Cruel Angel's Thesis", "Yoko Takahashi", 245_000)))
-            matcher().find(MusicService.YOUTUBE_MUSIC, angel)
-        }
-        // 3 s past the known 4:05 is the same song; a second more is not, and nor is 3 s short of it, or a second less.
-        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:08"))
-        assertNull(find("4:09"))
-        assertEquals("https://music.youtube.com/watch?v=xyVatKhd4s4", find("4:02"))
-        assertNull(find("4:01"))
     }
 
     @Test
