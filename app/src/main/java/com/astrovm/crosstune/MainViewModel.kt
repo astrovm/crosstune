@@ -1918,6 +1918,9 @@ internal class MainViewModel(
 
     /** What was heard sung of the song shown, its words found with no timing, to time them by: this time, and the times before. */
     private var heardStretches: List<HeardStretch> = emptyList()
+
+    /** The [heardStretches] the lines shown were timed by: the timing of the last while heard is stopped when Crosstune goes out of sight. */
+    private var timedBy: List<HeardStretch> = emptyList()
     private var singingTries = 0
 
     /**
@@ -1995,6 +1998,7 @@ internal class MainViewModel(
         foundLines = emptyList()
         found = null
         heardStretches = emptyList()
+        timedBy = emptyList()
         unsung = null
         restored = null
         syncPoints = emptyList()
@@ -2497,6 +2501,8 @@ internal class MainViewModel(
         singingJob = viewModelScope.launch {
             // Shown from what was kept, what was heard before isn't loaded yet.
             if (heardStretches.isEmpty()) heardStretches = store?.load(song, words).orEmpty()
+            // What was heard last time, kept as its timing was stopped, is timed now: heard enough, it's never heard again.
+            if (heardStretches != timedBy) timeByEar(song)
             // A few whiles in a row with nothing sung heard, it's let be till the app's clock starts or jumps.
             while (!heardEnough(song) && singingTries < SINGING_TRIES) {
                 val heard = hearStretch(hearing, song, words) ?: return@launch
@@ -2558,6 +2564,7 @@ internal class MainViewModel(
         // Timed words found meanwhile, or these written otherwise, as in their own script: this is out of date.
         // Left, or heard again, the job doing this is stopped, so it never gets here.
         if (foundLines.isNotEmpty() || uiState.lyrics != words) return
+        timedBy = heard
         // Nothing heard is sure of any line now, so the lines lit before go dark too.
         if (lines.isEmpty() && !uiState.lyricsTimedByEar) return
         uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = lines.isNotEmpty())

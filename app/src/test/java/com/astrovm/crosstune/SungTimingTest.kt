@@ -342,6 +342,31 @@ class SungTimingTest {
     }
 
     @Test
+    fun unspacedLinesSungFastOneAfterTheOtherAreBothPlaced() {
+        val japanese = listOf("君の名前を呼んだ", "夜明けの空に")
+        val korean = listOf("너를 만나러 가는 길", "바람이 불어와")
+        for ((lyrics, letterMs) in listOf(japanese to 120L, japanese to 150L, japanese to 180L, korean to 150L, korean to 200L)) {
+            for (gapMs in listOf(0L, 300L)) {
+                // Each line heard clearly, as one phrase, the next sung right after the first.
+                val second = 10_000L + SpokenWords.pieces(lyrics[0]).size * letterMs + gapMs
+                val heardSo = listOf(lyrics[0] to 10_000L + SungTiming.HEARD_LATE_MS, lyrics[1] to second + SungTiming.HEARD_LATE_MS)
+                val placed = SungTiming.linesMs(lyrics, listOf(heard(9_000, heardSo)), 60_000)
+                assertEquals("$lyrics at $letterMs ms a letter, $gapMs ms apart", setOf(0, 1), placed.keys)
+                assertTrue(placed.getValue(0) in 9_700L..10_300L)
+                assertTrue(placed.getValue(1) in second - 300..second + 300)
+            }
+        }
+    }
+
+    @Test
+    fun theLastLineHeardInJapaneseIsLitTillItsSung() {
+        val japanese = listOf("君の名前を呼んだ", "夜明けの空に")
+        val timed = SungTiming.timed(japanese, listOf(heard(9_000, listOf(japanese[0] to 10_000L + SungTiming.HEARD_LATE_MS))), 60_000)
+        // Eight letters, each a syllable: sung through in about a second, then a little longer.
+        assertEquals(10_000L + 8 * 120 + 1_000, timed[0].endMs)
+    }
+
+    @Test
     fun aLetterOfUnspacedWritingIsSungAsLongAsASyllable() {
         assertEquals(5, SpokenWords.sungLetters("every"))
         // The speech model hears a Japanese letter about 300 ms after the one before, not a Latin letter's 70 ms.

@@ -291,6 +291,44 @@ class UntimedSingingTest {
     }
 
     @Test
+    fun aPaceKeptFromBeforeLeavesLinesTimedByEarWhereTheyreHeardAsTheVideosSpeedIsLearnt() {
+        openLyrics()
+        val song = state().lyricsFor!!
+        controller!!.destroyAndSettle()
+        // An earlier Crosstune kept a pace for these words, though they have no timing to pace.
+        LyricsSyncStore(app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)).save(song, emptyList(), emptyList(), 0.8)
+        File(app.cacheDir, "kept_words.json").delete()
+        // A video: Shazam listens along as the singing's heard.
+        val shazam = Channel<Heard>(Channel.UNLIMITED)
+        var listens = 0
+        MainActivity.hearingFactory = { SongHearing { listens++; shazam.receive() } }
+        try {
+            singing.answer = { sung(count = 4) }
+            openLyrics()
+            plays(video = true)
+            waitUntil { state().lyricsTimedByEar && listens >= 1 }
+            val heard = lineStarts()
+            assertEquals((0..3).map(::lineMs) + List(2) { LyricLine.NOT_HEARD }, heard)
+            // Then it hears the song a few seconds apart, where the video has it, a little fast each time:
+            // enough to take the video's speed off its clock, which changes the words' pace.
+            repeat(MainViewModel.LEAD_SPEED_HEARINGS) { heardSo ->
+                composeRule.runOnIdle {
+                    ShadowSystemClock.advanceBy(Duration.ofMillis(4_000))
+                    val at = SystemClock.elapsedRealtime()
+                    shazam.trySend(Heard.Song(MusicMetadata("Demo", "Band"), null, startedFromMs + at - startedAt, at, "sped", speed = 1.05f))
+                }
+                waitUntil { listens >= heardSo + 2 || !state().listeningAlong }
+            }
+            composeRule.waitForIdle()
+            // Timed by the clock of what plays, the lines heard stay where they're sung.
+            assertEquals(heard, lineStarts())
+            assertTrue(state().lyricsTimedByEar)
+        } finally {
+            MainActivity.hearingFactory = null
+        }
+    }
+
+    @Test
     fun whatsHeardIsKeptForNextTime() {
         singing.answer = { sung() }
         openLyrics()
@@ -599,6 +637,32 @@ class UntimedSingingTest {
         assertEquals(0, singing.hears)
         composeRule.runOnIdle { model().resumeFollowingNext() }
         waitUntil { state().lyricsTimedByEar }
+    }
+
+    @Test
+    fun theLastWhileHeardIsTimedThoughCrosstuneWentOutOfSightAsItWas() {
+        val gate = Gate()
+        MainActivity.systemDispatcher = gate
+        // The first three whiles hear the first line, and the last, which hears the song enough, four.
+        singing.answer = {
+            if (singing.hears == 4) gate.held = true
+            sung(count = if (singing.hears < 4) 1 else 4)
+        }
+        openLyrics()
+        plays()
+        // The last while heard is kept, and timed away from the screen, held there.
+        waitUntil { gate.queued.isNotEmpty() }
+        assertEquals(listOf(lineMs(0)) + List(5) { LyricLine.NOT_HEARD }, lineStarts())
+        // Out of sight meanwhile, the timing is stopped.
+        composeRule.runOnIdle { model().pauseFollowingNext() }
+        gate.letGo()
+        composeRule.waitForIdle()
+        assertEquals(listOf(lineMs(0)) + List(5) { LyricLine.NOT_HEARD }, lineStarts())
+        // Back, it's heard enough, so it's not heard again, but what was heard is timed.
+        composeRule.runOnIdle { model().resumeFollowingNext() }
+        waitUntil { lineStarts().count { it != LyricLine.NOT_HEARD } == 4 }
+        assertEquals((0..3).map(::lineMs) + List(2) { LyricLine.NOT_HEARD }, lineStarts())
+        assertEquals(4, singing.hears)
     }
 
     @Test
