@@ -37,14 +37,18 @@ const SAID = {
   right_reading: "the right reading",
 };
 
-/** The columns the Worker's insert names, as it sends them to D1. */
+/**
+ * The columns the Worker's insert names, as it sends them to D1, but `at`: when the server got the report, which the
+ * phone doesn't send. The privacy text says how long reports are kept, counted from it.
+ */
 async function columns() {
   let sql = "";
-  // A statement as D1 gives it: it runs as it is, or bound to values.
-  const runs = { run: async () => ({ meta: { changes: 1 } }), first: async () => ({ why: null }) };
+  // A statement as D1 gives it: it runs as it is, or bound to values, alone or in a batch.
+  const result = { results: [{ why: null }], meta: { changes: 1 } };
+  const runs = { run: async () => result, first: async () => result.results[0], all: async () => result };
   const statement = { ...runs, bind: () => runs };
   const env = {
-    DB: { prepare: (text) => (text.startsWith("INSERT INTO reports (") && (sql = text), statement) },
+    DB: { prepare: (text) => (text.startsWith("INSERT INTO reports (") && (sql = text), statement), batch: async (statements) => statements.map(() => result) },
     LIMIT: { limit: async () => ({ success: true }) },
     NETWORK_KEY: "made-up-key",
   };
@@ -54,7 +58,7 @@ async function columns() {
     body: JSON.stringify({ version: "2.25.0", song: { title: "Demo", artist: "Band" } }),
   });
   await worker.fetch(request, env);
-  return sql.match(/INSERT INTO reports \(([^)]+)\)/)[1].split(",").map((it) => it.trim());
+  return sql.match(/INSERT INTO reports \(([^)]+)\)/)[1].split(",").map((it) => it.trim()).filter((it) => it !== "at");
 }
 
 /** Whether [text] says [words], or one of them. */

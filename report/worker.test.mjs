@@ -6,36 +6,65 @@ import { DatabaseSync } from "node:sqlite";
 import * as all from "./worker.js";
 import worker, { kindOf, networkDayKey, readReport, sameKey } from "./worker.js";
 
+/** How many values the Worker binds to a report before its limits: when it came in, then each column. */
+const REPORT_VALUES = 26;
+
 /**
- * D1 and the rate limit, as a test needs them: the reports saved, every other statement asked, and whether the
- * limit lets one through. Every statement changes a row, so no count is ever reached.
+ * D1 and the rate limit, as a test needs them: the reports saved, with the values of their columns, when they came
+ * in and all that was bound; every other statement asked; and whether the limit lets one through. Every statement
+ * changes a row and finds no reason to turn a report away, so no count is ever reached.
  */
 function env({ allowed = true } = {}) {
   const saved = [];
   const asked = [];
   const keys = [];
-  return {
-    saved,
-    asked,
-    keys,
-    NETWORK_KEY: "made-up-key",
-    DB: {
-      prepare: (sql) =>
-        statement((values) => ({
-          run: async () => ((sql.startsWith("INSERT INTO reports ") ? saved : asked).push({ sql, values }), { meta: { changes: 1 } }),
-          first: async () => (asked.push({ sql, values }), { why: null }),
-        })),
-    },
-    LIMIT: { limit: async ({ key }) => (keys.push(key), { success: allowed }) },
+  const execute = (sql, values) => {
+    if (sql.startsWith("INSERT INTO reports ")) saved.push({ sql, values: values.slice(1, REPORT_VALUES), at: values[0], bound: values });
+    else asked.push({ sql, values });
+    return { results: [{ why: null }], meta: { changes: 1 } };
   };
+  return { saved, asked, keys, NETWORK_KEY: "made-up-key", DB: d1(execute), LIMIT: { limit: async ({ key }) => (keys.push(key), { success: allowed }) } };
 }
 
 /**
- * A prepared statement as D1 gives it: it runs as it is, with no values, or bound to some. [runs] makes what runs it
- * from the values.
+ * D1 as the Worker sees it, over [execute], which runs one statement's SQL with its values at once and gives what D1
+ * would: { results, meta: { changes } }. A statement runs as it is, with no values, or bound to some. A batch is one
+ * transaction: [begin], then each statement in turn, then [commit]; if one fails, [rollback] and the error, so none
+ * of it stays. [away] is awaited before and after each call to D1, as the network is.
  */
-function statement(runs) {
-  return { ...runs([]), bind: (...values) => runs(values) };
+function d1(execute, { away = () => null, begin = () => {}, commit = () => {}, rollback = () => {} } = {}) {
+  const statement = (sql, values) => {
+    const now = () => execute(sql, values);
+    const later = async (pick) => {
+      await away();
+      const result = now();
+      await away();
+      return pick(result);
+    };
+    return {
+      now,
+      run: () => later((it) => it),
+      all: () => later((it) => it),
+      first: () => later((it) => it.results[0] ?? null),
+    };
+  };
+  return {
+    prepare: (sql) => ({ ...statement(sql, []), bind: (...values) => statement(sql, values) }),
+    batch: async (statements) => {
+      await away();
+      begin();
+      let results;
+      try {
+        results = statements.map((it) => it.now());
+      } catch (error) {
+        rollback();
+        throw error;
+      }
+      commit();
+      await away();
+      return results;
+    },
+  };
 }
 
 /** A request, with what Cloudflare tells of its sender in [cf]. */
@@ -80,15 +109,17 @@ test("a report is kept, with only what a report has", async () => {
 test("an insert binds one value for each column it names", async () => {
   const e = env();
   assert.equal((await worker.fetch(post(song), e)).status, 204);
-  const named = e.saved[0].sql.match(/INSERT INTO reports \(([^)]+)\) SELECT ([?, ]+) WHERE /);
+  const named = e.saved[0].sql.match(/INSERT INTO reports \(([^)]+)\) SELECT ([?\d, ]+) WHERE /);
   assert.ok(named);
   const columns = named[1].split(",").map((part) => part.trim());
   const marks = named[2].split(",").map((part) => part.trim());
-  assert.equal(columns.length, marks.length);
-  assert.equal(marks.length, e.saved[0].values.length);
-  assert.ok(marks.every((mark) => mark === "?"));
-  assert.equal(columns[18], "recording");
-  assert.deepEqual(columns.slice(19), ["lyric_line", "word", "reading_shown", "reader", "language", "right_reading"]);
+  assert.equal(columns.length, REPORT_VALUES);
+  assert.deepEqual(marks, columns.map((_, i) => `?${i + 1}`));
+  // Then the day, the network's key and its number for the kind, which only the limits read.
+  assert.equal(e.saved[0].bound.length, REPORT_VALUES + 3);
+  assert.equal(columns[0], "at");
+  assert.equal(columns[19], "recording");
+  assert.deepEqual(columns.slice(20), ["lyric_line", "word", "reading_shown", "reader", "language", "right_reading"]);
 });
 
 test("a report about the app, with no song, is kept too", async () => {
@@ -214,7 +245,7 @@ test("a report about timing keeps the app followed, its speed, the lead and the 
     "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000", null,
     null, null, null, null, null, null,
   ]);
-  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, recording, lyric_line, word, reading_shown, reader, language, right_reading\) SELECT (\?, ){24}\? WHERE /);
+  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, recording, lyric_line, word, reading_shown, reader, language, right_reading\) SELECT (\?\d+, ){25}\?26 WHERE /);
 });
 
 test("what timing adds that isn't what it should be is left out, and the rest is kept", () => {
@@ -364,34 +395,27 @@ test("an IPv6 sender is counted by its /64, and an IPv4 one by its whole address
  * [slow], each statement waits for the next turn of the event loop before it runs, and its answer for the one after,
  * as one to D1 waits on the network: reports sent at once then run their statements in between each other's.
  */
-function realEnv({ slow = false } = {}) {
+function realEnv({ slow = false, failing = () => false } = {}) {
   const db = new DatabaseSync(":memory:");
   for (const file of ["schema.sql", "limits.sql"]) db.exec(readFileSync(new URL(`./${file}`, import.meta.url), "utf8"));
   const statements = [];
-  const away = () => (slow ? new Promise(setImmediate) : null);
+  const execute = (sql, values) => {
+    if (failing(sql)) throw new Error("D1_ERROR: a made-up failure");
+    statements.push({ sql, values });
+    const prepared = db.prepare(sql);
+    if (prepared.columns().length > 0) return { results: prepared.all(...values), meta: { changes: 0 } };
+    return { results: [], meta: { changes: Number(prepared.run(...values).changes) } };
+  };
   return {
     db,
     statements,
     NETWORK_KEY: "made-up-key",
-    DB: {
-      prepare: (sql) =>
-        statement((values) => ({
-          run: async () => {
-            await away();
-            statements.push({ sql, values });
-            const changes = Number(db.prepare(sql).run(...values).changes);
-            await away();
-            return { meta: { changes } };
-          },
-          first: async () => {
-            await away();
-            statements.push({ sql, values });
-            const row = db.prepare(sql).get(...values) ?? null;
-            await away();
-            return row;
-          },
-        })),
-    },
+    DB: d1(execute, {
+      away: () => (slow ? new Promise(setImmediate) : null),
+      begin: () => db.exec("BEGIN"),
+      commit: () => db.exec("COMMIT"),
+      rollback: () => db.exec("ROLLBACK"),
+    }),
     LIMIT: { limit: async () => ({ success: true }) },
   };
 }
@@ -622,9 +646,8 @@ test("reports sent at once from one network keep exactly its day's", async () =>
   const answers = await Promise.all(Array.from({ length: 60 }, (_, i) => worker.fetch(from(`203.0.113.${i}`), e)));
   assert.equal(answers.filter((it) => it.status === 204).length, 10);
   assert.ok(answers.filter((it) => it.status === 429).every((it) => it.headers.get("X-Crosstune-Refused") === "network"));
-  // Every report read the network's count before any was counted, so this was the count's own guard.
-  const asked = e.statements.map((it) => (it.sql.startsWith("SELECT") ? "check" : it.sql.startsWith("INSERT INTO network_days") ? "count" : "other"));
-  assert.ok(asked.lastIndexOf("check") < asked.indexOf("count"));
+  // Every report read room before any was kept, so the batch's own guard kept the network to its day.
+  assert.ok(e.statements.slice(0, 60).every((it) => it.sql.startsWith("SELECT")));
   assert.equal(rows(e), 10);
   assert.deepEqual(e.db.prepare("SELECT n FROM network_days").all().map((it) => it.n), [10]);
 });
@@ -637,11 +660,65 @@ test("reports that race for the day's last place leave no network's count behind
   assert.equal(answers.filter((it) => it.status === 204).length, 1);
   assert.ok(answers.filter((it) => it.status === 429).every((it) => it.headers.get("X-Crosstune-Refused") === "full"));
   assert.equal(rows(e), 500);
-  // Each counted its network before the day was full; the 59 turned away took theirs back.
+  // A network is counted in the same transaction as its report, only when the report went in.
   assert.equal(networkDays(e), 1);
   assert.deepEqual(refusals(e), { "day_full:user": 59 });
-  // The one kept: its network, itself, two counts. Each turned away: its network counted, taken back and deleted, and a refusal.
-  assert.equal(changed(e) - before, 4 + 59 * 4);
+  // The one kept: itself, two counts and its network. Each turned away: its refusal only.
+  assert.equal(changed(e) - before, 4 + 59);
+});
+
+test("reports that race for the table's last bytes are turned away for the table, not the day", async () => {
+  const e = realEnv({ slow: true });
+  hold(e, "user", 50 * MB - 1);
+  const answers = await Promise.all(Array.from({ length: 60 }, () => worker.fetch(from(anotherNetwork()), e)));
+  assert.equal(answers.filter((it) => it.status === 204).length, 1);
+  assert.ok(answers.filter((it) => it.status === 429).every((it) => it.headers.get("X-Crosstune-Refused") === "full"));
+  assert.equal(networkDays(e), 1);
+  assert.deepEqual(refusals(e), { "kept_full:user": 59 });
+});
+
+test("a report that can't be kept leaves no network's count, and a count that can't be written leaves no report", async () => {
+  // D1 fails a statement: the batch is one transaction, so the report, its counts and its network's go together.
+  for (const failing of ["INSERT INTO reports ", "INSERT INTO network_days "]) {
+    const e = realEnv({ failing: (sql) => sql.startsWith(failing) });
+    await assert.rejects(worker.fetch(from("203.0.113.7"), e), /made-up failure/);
+    assert.equal(rows(e), 0);
+    assert.equal(networkDays(e), 0);
+    assert.deepEqual(counts(e), []);
+  }
+});
+
+test("a network that sent its day's is free again the next day, before the daily clear-out", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2030-01-01T23:00:00Z") });
+  const e = realEnv();
+  const send = () => worker.fetch(from("203.0.113.7"), e);
+  for (let i = 0; i < 10; i++) assert.equal((await send()).status, 204);
+  assert.equal((await send()).headers.get("X-Crosstune-Refused"), "network");
+  t.mock.timers.setTime(Date.parse("2030-01-02T00:00:01Z"));
+  assert.equal((await send()).status, 204);
+  // Yesterday's count is still there: the next day's key is another one.
+  assert.deepEqual(e.db.prepare("SELECT day, n FROM network_days ORDER BY day").all().map((it) => `${it.day}=${it.n}`), ["2030-01-01=10", "2030-01-02=1"]);
+});
+
+test("a report's day is the Worker's one clock: when it came in, its day's share, its network's day and its refusal", async (t) => {
+  // A second before midnight on the Worker's clock, whatever D1's says: none of them may fall on the next day.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2030-01-01T23:59:59.999Z") });
+  const e = realEnv();
+  assert.equal((await worker.fetch(from("203.0.113.7"), e)).status, 204);
+  assert.deepEqual({ ...e.db.prepare("SELECT at FROM reports").get() }, { at: "2030-01-01 23:59:59" });
+  assert.equal(counted(e, "2030-01-01:user"), 1);
+  assert.deepEqual(e.db.prepare("SELECT day FROM network_days").all().map((it) => it.day), ["2030-01-01"]);
+  e.db.prepare("UPDATE report_counts SET n = 500 WHERE key = '2030-01-01:user'").run();
+  assert.equal((await worker.fetch(from("203.0.114.7"), e)).headers.get("X-Crosstune-Refused"), "full");
+  assert.deepEqual(e.db.prepare("SELECT day, why, n FROM refusals").all().map((it) => ({ ...it })), [{ day: "2030-01-01", why: "day_full:user", n: 1 }]);
+});
+
+test("a network that sent its day's is turned away by the first read: its refusal is all that's written", async () => {
+  const e = realEnv();
+  for (let i = 0; i < 10; i++) await worker.fetch(from("203.0.113.7"), e);
+  const from10 = e.statements.length;
+  assert.equal((await worker.fetch(from("203.0.113.8"), e)).headers.get("X-Crosstune-Refused"), "network");
+  assert.deepEqual(e.statements.slice(from10).map((it) => it.sql.split(" ").slice(0, 3).join(" ")), ["SELECT CASE WHEN", "INSERT INTO refusals"]);
 });
 
 test("a phone sending the timings it kept from before leaves room for a problem it finds live", async () => {
@@ -817,16 +894,16 @@ test("a kept report is kept whole in the real table, with what it says", async (
 test("every statement a report costs looks rows up, never reads the table through, kept or turned away", async () => {
   const e = realEnv({ slow: true });
   fill(e, 499);
-  // Two at once for the day's last place: one kept, and the other's network taken back and turned away.
+  // Two at once for the day's last place: one kept, the other turned away by the batch.
   await Promise.all([worker.fetch(from(anotherNetwork()), e), worker.fetch(from(anotherNetwork()), e)]);
   // Kept, then turned away for the network.
   for (let i = 0; i < 71; i++) await worker.fetch(from("2001:db8::1", found), e);
   await worker.fetch(from("2001:db8::1", keptTiming), e);
   hold(e, "kept", 150 * MB);
   await worker.fetch(from("2001:db8::1", keptTiming), e);
-  // For each kind: reading the limits, keeping the report. Once: counting the network, taking it back, and a refusal.
+  // For each kind: reading the limits, keeping the report. Once: counting the network, and a refusal.
   const asked = new Set(e.statements.map((it) => it.sql));
-  assert.equal(asked.size, 10);
+  assert.equal(asked.size, 8);
   for (const { sql, values } of e.statements) {
     const plan = e.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...values).map((it) => it.detail);
     // SCAN reads every row; SEARCH goes straight to the rows it wants.

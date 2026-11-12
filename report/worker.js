@@ -92,37 +92,47 @@ const COLUMNS =
   "version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
   "lyric_line, word, reading_shown, reader, language, right_reading";
 
-/** The bytes of [kind] the table holds, and how many came in today, as limits.sql's triggers keep them. */
-const heldOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = 'bytes:${kind}'), 0)`;
-const todayOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = date('now') || ':${kind}'), 0)`;
-const room = (kind) => `${heldOf(kind)} < ${SHARE_BYTES[kind]} AND ${todayOf(kind)} < ${SHARE_A_DAY[kind]}`;
+/** How many values a report binds: when it came in, then each column. */
+const VALUES = 1 + COLUMNS.split(",").length;
 
 /**
- * Why a report of each kind is turned away for its kind's share, if it is: 'kept_full' or 'day_full', else null. One
- * read before anything is written, so a report turned away costs a refusal's write at most, and no count. A
- * network's day isn't read here: counting it (COUNT_NETWORK) is the one place that turns it away, so two reports at
- * once can't both take its last one.
+ * The bytes of [kind] the table holds, how many came in on the day bound at [day], and how many the network bound at
+ * [key] sent that day, as limits.sql keeps them. Each reads one row, never the reports.
+ */
+const heldOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = 'bytes:${kind}'), 0)`;
+const dayOf = (kind, day) => `coalesce((SELECT n FROM report_counts WHERE key = ?${day} || ':${kind}'), 0)`;
+const sentOf = (key) => `coalesce((SELECT n FROM network_days WHERE key = ?${key}), 0)`;
+
+/**
+ * Why a report of each kind is turned away, if it is: 'kept_full' or 'day_full' for its kind's share, 'network' when
+ * its network sent its day's, else null. Bound to the day, the network's key and its number for the kind. Read once
+ * before anything is written, so a report turned away costs a refusal's write at most, and no count; and again in the
+ * batch that keeps a report, to say why it wasn't kept.
  */
 const CHECK = Object.fromEntries(KINDS.map((kind) => [kind,
-  `SELECT CASE WHEN ${heldOf(kind)} >= ${SHARE_BYTES[kind]} THEN 'kept_full' WHEN ${todayOf(kind)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' END AS why`,
+  `SELECT CASE WHEN ${heldOf(kind)} >= ${SHARE_BYTES[kind]} THEN 'kept_full' WHEN ${dayOf(kind, 1)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' ` +
+  `WHEN ${sentOf(2)} >= ?3 THEN 'network' END AS why`,
 ]));
 
 /**
- * A report of each kind put in the table, unless that would take its kind past its share of the table or the day: one
- * statement, so two reports at once can't both take the last place. It reads two counts, one row each, never the reports.
+ * A report of each kind put in the table, with when it came in, unless that would take its kind past its share of
+ * the table or the day, or its network past its day's. It turns away exactly what CHECK names, so a report not kept
+ * always has a reason.
  */
 const INSERT = Object.fromEntries(KINDS.map((kind) => [kind,
-  `INSERT INTO reports (${COLUMNS}) SELECT ${COLUMNS.split(",").map(() => "?").join(", ")} WHERE ${room(kind)}`,
+  `INSERT INTO reports (at, ${COLUMNS}) SELECT ${Array.from({ length: VALUES }, (_, i) => `?${i + 1}`).join(", ")} ` +
+  `WHERE ${heldOf(kind)} < ${SHARE_BYTES[kind]} AND ${dayOf(kind, VALUES + 1)} < ${SHARE_A_DAY[kind]} AND ${sentOf(VALUES + 2)} < ?${VALUES + 3}`,
 ]));
 
-/** One more report from a network today, unless it sent its day's: then nothing changes. */
-const COUNT_NETWORK = "INSERT INTO network_days (key, day, n) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET n = n + 1 WHERE n < ?";
+/**
+ * One more report from a network on its day, only when the statement before it kept one: SQLite's changes() counts
+ * the rows that statement put in itself, not its triggers'. It runs in the same batch, one transaction, so a count
+ * never stays without its report, and a report never goes in without its count.
+ */
+const COUNT_NETWORK = "INSERT INTO network_days (key, day, n) SELECT ?1, ?2, 1 WHERE changes() = 1 ON CONFLICT (key) DO UPDATE SET n = n + 1";
 
-/** A network's report taken back, as its kind's share filled before it was kept; a count back at nothing goes. */
-const UNCOUNT_NETWORK = ["UPDATE network_days SET n = n - 1 WHERE key = ?", "DELETE FROM network_days WHERE key = ? AND n <= 0"];
-
-/** One more report turned away today, for the reason given, up to [MAX_REFUSALS]. */
-const REFUSE = `INSERT INTO refusals (day, why, n) VALUES (date('now'), ?, 1) ON CONFLICT (day, why) DO UPDATE SET n = n + 1 WHERE n < ${MAX_REFUSALS}`;
+/** One more report turned away on its day, for the reason given, up to [MAX_REFUSALS]. */
+const REFUSE = `INSERT INTO refusals (day, why, n) VALUES (?, ?, 1) ON CONFLICT (day, why) DO UPDATE SET n = n + 1 WHERE n < ${MAX_REFUSALS}`;
 
 /** What the daily clear-out deletes: reports past the days they're kept, then the counts no one asks anymore. */
 const CLEAR_OUT = [
@@ -156,31 +166,35 @@ export default {
     // Without the secret, a network can't be counted without keeping its address, so nothing is kept: the limits
     // are what keep one sender from turning everyone else's reports away. Deploying asks for it (secrets.required in
     // wrangler.jsonc), so only a mistake gets here.
+    // The one clock a report is counted by: when it came in, its day's share, its network's day and its refusal all
+    // take their day from here, so none of them can fall on another day at midnight.
+    const { at, day } = momentOf(new Date());
     if (!env.NETWORK_KEY) {
       console.error("NETWORK_KEY isn't set: no report is kept until it is (wrangler secret put NETWORK_KEY)");
-      await refuse(env, "no_key");
+      await refuse(env, day, "no_key");
       return refused(503, "no_key");
     }
-    const day = new Date().toISOString().slice(0, 10);
     const kind = kindOf(report.problem);
     const key = await networkDayKey(env.NETWORK_KEY, day, kind, networkOf(address));
     const most = NETWORK_A_DAY[kind];
-    const check = async () => (await env.DB.prepare(CHECK[kind]).first())?.why;
-    const why = await check();
-    if (why) return turnAway(env, kind, why);
-    const counted = await env.DB.prepare(COUNT_NETWORK).bind(key, day, most).run();
-    // The network sent its day's, maybe with another report meanwhile.
-    if (counted.meta.changes === 0) return turnAway(env, kind, "network");
-    const { meta } = await env.DB.prepare(INSERT[kind]).bind(
-      report.version, report.android, report.title, report.artist, report.app,
-      report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
-      report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
-      report.line, report.word, report.shown, report.reader, report.language, report.right
-    ).run();
-    if (meta.changes !== 0) return status(204);
-    // The kind's share filled meanwhile, so the network didn't send this one after all.
-    for (const sql of UNCOUNT_NETWORK) await env.DB.prepare(sql).bind(key).run();
-    return turnAway(env, kind, (await check()) ?? "day_full");
+    const check = () => env.DB.prepare(CHECK[kind]).bind(day, key, most);
+    const why = (await check().first())?.why;
+    if (why) return turnAway(env, day, kind, why);
+    // Reports in flight at once can all read room above. The batch is one transaction: the report goes in only if
+    // there is still room, its network is counted only if it went in, and the last statement reads why it didn't.
+    const [kept, , after] = await env.DB.batch([
+      env.DB.prepare(INSERT[kind]).bind(
+        at, report.version, report.android, report.title, report.artist, report.app,
+        report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
+        report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
+        report.line, report.word, report.shown, report.reader, report.language, report.right,
+        day, key, most
+      ),
+      env.DB.prepare(COUNT_NETWORK).bind(key, day),
+      check(),
+    ]);
+    if (kept.meta.changes !== 0) return status(204);
+    return turnAway(env, day, kind, after.results[0].why);
   },
 
   // Once a day, the reports older than the policy allows go, and the counts no one asks anymore. Each delete runs
@@ -204,9 +218,9 @@ function status(code) {
   return new Response(null, { status: code });
 }
 
-/** A report of [kind] turned away for [why] ("network", "day_full" or "kept_full"): counted, and answered with 429. */
-async function turnAway(env, kind, why) {
-  await refuse(env, `${why}:${kind}`);
+/** A report of [kind] turned away on [day] for [why] ("network", "day_full" or "kept_full"): counted, and answered with 429. */
+async function turnAway(env, day, kind, why) {
+  await refuse(env, day, `${why}:${kind}`);
   return refused(429, why.endsWith("_full") ? "full" : why);
 }
 
@@ -220,9 +234,19 @@ function refused(code, why) {
   return new Response(null, { status: code, headers: { "X-Crosstune-Refused": why } });
 }
 
-/** Counts a report turned away today for [why], up to [MAX_REFUSALS]. */
-async function refuse(env, why) {
-  await env.DB.prepare(REFUSE).bind(why).run();
+/** Counts a report turned away on [day] for [why], up to [MAX_REFUSALS]. */
+async function refuse(env, day, why) {
+  await env.DB.prepare(REFUSE).bind(day, why).run();
+}
+
+/**
+ * [now] as a report is counted by: [at], when it came in, written as SQLite's CURRENT_TIMESTAMP writes it (UTC, to the
+ * second), so the clear-out and the triggers read it as before; and [day], its UTC day, the one limits.sql's
+ * triggers take from [at].
+ */
+function momentOf(now) {
+  const iso = now.toISOString();
+  return { at: `${iso.slice(0, 10)} ${iso.slice(11, 19)}`, day: iso.slice(0, 10) };
 }
 
 /**
