@@ -33,12 +33,21 @@ VERSION_WORDS = {
     "reverb", "sped", "nightcore", "8d", "demo", "medley", "mashup", "amv", "mmd", "ver", "tribute", "ktv",
     "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox",
 }
-VERSION_MARKS = [
-    "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
-    "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방",
-    "offvocal", "tvsize", "オフボーカル", "オフヴォーカル", "インスト", "tvサイズ", "テレビサイズ", "纯音乐", "純音樂", "인스트", "반주",
-    "リミックス", "混音", "리믹스", "演唱会", "演唱會",
-]
+# SongNames.VERSION_MARKS: each mark, and the Latin words that mean it, which the song's own name may say.
+VERSION_MARKS = {
+    "カラオケ": {"karaoke"}, "ライブ": {"live"}, "弾き語り": set(), "歌ってみた": {"cover"}, "演奏してみた": {"cover"},
+    "弾いてみた": {"cover"}, "叩いてみた": {"cover"}, "ピアノ": {"piano"}, "ギター": {"guitar"}, "カバー": {"cover"},
+    "メドレー": {"medley"}, "練習": {"practice"}, "オルゴール": {"orgel", "musicbox"}, "アカペラ": {"acapella", "cappella"},
+    "アコースティック": {"acoustic"}, "翻唱": {"cover"}, "伴奏": {"instrumental", "karaoke"}, "伴唱": {"karaoke"},
+    "卡拉ok": {"karaoke"}, "커버": {"cover"}, "라이브": {"live"}, "노래방": {"karaoke"},
+    "串烧": {"medley"}, "串燒": {"medley"}, "메들리": {"medley"},
+    "offvocal": {"instrumental", "karaoke"}, "tvsize": set(), "オフボーカル": {"instrumental", "karaoke"},
+    "オフヴォーカル": {"instrumental", "karaoke"}, "インスト": {"inst", "instrumental"}, "tvサイズ": set(), "テレビサイズ": set(),
+    "纯音乐": {"instrumental"}, "純音樂": {"instrumental"}, "인스트": {"inst", "instrumental"}, "반주": {"instrumental", "karaoke"},
+    "リミックス": {"remix"}, "混音": {"remix"}, "리믹스": {"remix"}, "演唱会": {"live", "concert"}, "演唱會": {"live", "concert"},
+}
+# SongNames.Mark.HOLD_A_MARK: words that only hold a mark's letters, as "ドライブ" holds "ライブ".
+HOLD_A_MARK = re.compile("インストール|ドライブ|ライブラリ|ディスカバー|リカバー|드라이브|라이브러리|디스커버|커버리지|반주자")
 ARTIST_SPLIT = re.compile(r"\s*(?:,|&|、|×|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\band\b)\s*", re.IGNORECASE)
 BRACKETS = re.compile(r"\s*[(\[（【「『].*?[)\]）】」』]\s*")
 
@@ -60,13 +69,35 @@ def words(text):
     return set(re.split(r"[^\w]+", unicodedata.normalize("NFKD", text).lower())) - {""}
 
 
-def says_another_version(name, title, artist):
-    if (words(name) - words(title) - words(artist)) & VERSION_WORDS:
+def mark_found(mark, name):
+    """SongNames.Mark.foundIn: the mark's letters in a row, anything but letters and digits between them; one in Latin
+    letters only as a word of its own."""
+    text = HOLD_A_MARK.sub(" ", unicodedata.normalize("NFKC", name).lower())
+    letters = [c for c in unicodedata.normalize("NFKC", mark).lower() if c.isalnum()]
+    pattern = r"(?:[^\w]|_)*".join(re.escape(c) for c in letters)
+    a_word = all("LATIN" in unicodedata.name(c, "") for c in letters)
+
+    def goes_on(c):
+        return c is not None and ("LATIN" in unicodedata.name(c, "") or c.isdigit() or unicodedata.category(c) == "Mn")
+    for m in re.finditer(pattern, text):
+        before = text[m.start() - 1] if m.start() > 0 else None
+        after = text[m.end()] if m.end() < len(text) else None
+        if not a_word or not goes_on(before) and not goes_on(after):
+            return True
+    return False
+
+
+# SongNames.SHORT_FOR: what a name writes short for the song's own word.
+SHORT_FOR = {"version": "ver", "instrumental": "inst"}
+
+
+def says_another_version(name, title, artist, album=""):
+    own = words(title) | words(artist) | words(album)
+    own |= {SHORT_FOR[w] for w in own if w in SHORT_FOR}
+    if (words(name) - own) & VERSION_WORDS:
         return True
-    composed = unicodedata.normalize("NFKC", name).lower()
-    squashed = "".join(c for c in composed if c.isalnum())
-    own = normalize(title) + normalize(artist)
-    return any(mark in squashed and mark not in own for mark in VERSION_MARKS)
+    return any(mark_found(mark, name) and not mark_found(mark, title) and not mark_found(mark, artist) and not means & own
+               for mark, means in VERSION_MARKS.items())
 
 
 def title_names(name):
@@ -114,7 +145,8 @@ def found_by_name(song, results):
     """Whether the app finds it before the rule: a result named as the song, by its artist."""
     title = normalize(song["title"])
     wanted = artists(song["artist"])
-    return any(r["id"] and any(normalize(n) == title or bare(n) == bare(song["title"]) for n in title_names(r["name"])) and artists(r["details"][0]) & wanted for r in results)
+    return any(r["id"] and any(normalize(n) == title or bare(n) == bare(song["title"]) for n in title_names(r["name"]) + app_title_names(r["name"]))
+               and artists(r["details"][0]) & wanted for r in results)
 
 
 def deezer_seconds(song):
@@ -128,18 +160,19 @@ def deezer_seconds(song):
 def window_ms(name):
     """Which of a result's lengths, against a known one, count as the same recording."""
     return {
-        "<1000 both ways (PR now)": (lambda off, whole: -1000 < off < 1000),
+        "<1000 both ways": (lambda off, whole: -1000 < off < 1000),
         "-500..+1500 ms, ±1000 s": (lambda off, whole: -1000 <= off <= 1000 if whole else -500 <= off <= 1500),
-        "-700..+1000 ms, ±1000 s (new)": (lambda off, whole: -1000 <= off <= 1000 if whole else -700 <= off <= 1000),
+        "-700..+1000 ms, ±1000 s": (lambda off, whole: -1000 <= off <= 1000 if whole else -700 <= off <= 1000),
+        "±3000 ms (now)": (lambda off, whole: -3000 <= off <= 3000),
     }[name]
 
 
 def fits_of(song, results, lengths, inside):
-    """The results the rule finds fit, as it checks them knowing only the song's Latin names."""
+    """The results the rule finds fit, as it checks them knowing only the song's Latin names and its US album."""
     fits = [r for r in results if r["id"] and r["lengthMs"] is not None and not latin(r["name"]) and
             any(inside(r["lengthMs"] - ms, whole) for ms, whole in lengths) and
             artists(r["details"][0]) & artists(song["artist"]) and
-            not says_another_version(f"{r['name']} {r['details'][1] if len(r['details']) > 2 else ''}", song["title"], song["artist"])]
+            not says_another_version(f"{r['name']} {r['details'][1] if len(r['details']) > 2 else ''}", song["title"], song["artist"], song["album"])]
     return list({r["id"]: r for r in fits}.values())
 
 
@@ -155,9 +188,12 @@ RIGHT_BY_EYE = {
     ("Kenshi Yonezu", "烏 - Raven - Karasu - Raven"),
     ("Keisuke Kuwata & Yumi Matsutoya", "Kissin' Christmas (クリスマスだからじゃない) 2023 - Kissin' Christmas (Christmas Dakarajanai) 2023"),
     ("Toshiki Kadomatsu", "After 5 Crash / Tokyo Tower / 初恋 / I'll Do My Best - After 5 Crash / Tokyo Tower / Hatsukoi / I'll Do My Best"),
+    # Korea's names for the songs the stores give only in Latin letters.
+    ("Lee Sun Hee", "아! 옛날이여"),
+    ("Lee Sun Hee", "A girl's pray (소녀의 기도)"),
 }
 
-WINDOWS = ("<1000 both ways (PR now)", "-500..+1500 ms, ±1000 s", "-700..+1000 ms, ±1000 s (new)")
+WINDOWS = ("<1000 both ways", "-500..+1500 ms, ±1000 s", "-700..+1000 ms, ±1000 s", "±3000 ms (now)")
 
 
 TRAILING_TAG = re.compile(r"(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$")
@@ -177,6 +213,14 @@ def app_title_names(title):
     """SongNames.titleNames, but for the old Recent titles and the wide space: the name, and its two halves by a dash."""
     halves = [half.strip() for half in title.split(" - ") if half.strip()]
     return [title] + (halves if len(halves) == 2 else [])
+
+
+def names_another(song, row):
+    """ExactMatcher.namesAnother: the row names itself in Latin letters too, with no word of the song's name."""
+    said = {w for w in re.split(r"[^a-z0-9]+", unicodedata.normalize("NFKD", song["title"]).lower()) if w}
+    latin_words = [ws for ws in ({w for w in re.split(r"[^a-z0-9]+", unicodedata.normalize("NFKD", n).lower()) if w}
+                                 for n in app_title_names(row["name"]) if latin(n)) if ws]
+    return bool(latin_words) and not any(ws & said for ws in latin_words)
 
 
 def named_both_ways(song, row, videos):

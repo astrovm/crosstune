@@ -921,8 +921,10 @@ class ChatGptTest {
         assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
         answering(" 2.\n")
         assertEquals(1, runBlocking { tutor.pickSong(song, rows) })
-        // None, a number past the list, no number or no answer is no pick.
-        listOf("0", "3", "None", "").forEach { text ->
+        // None is none; a number past the list, no number or no answer is no pick, as it couldn't say.
+        answering("0")
+        assertEquals(NONE_PICKED, runBlocking { tutor.pickSong(song, rows) })
+        listOf("3", "None", "").forEach { text ->
             answering(text)
             assertNull(text, runBlocking { tutor.pickSong(song, rows) })
         }
@@ -949,7 +951,9 @@ class ChatGptTest {
         )
         assertTrue(asked.getString("instructions").contains("its title, not its channel"))
         assertEquals("low", asked.getJSONObject("reasoning").getString("effort"))
-        listOf("0", "3", "None").forEach { text ->
+        answering("0")
+        assertEquals(NONE_PICKED, runBlocking { tutor.pickSong(song, rows, videos = true) })
+        listOf("3", "None").forEach { text ->
             answering(text)
             assertNull(text, runBlocking { tutor.pickSong(song, rows, videos = true) })
         }
@@ -1266,7 +1270,7 @@ class ChatGptTest {
     fun theSearchResultPickedIsTheOneNumberedOrNone() {
         val tutor = tutor()
         val rows = listOf("A | X", "B | Y")
-        listOf("2" to 1, "1." to 0, "3" to null, "0" to null, "none" to null, "" to null).forEach { (text, picked) ->
+        listOf("2" to 1, "1." to 0, "3" to null, "0" to NONE_PICKED, "none" to null, "" to null).forEach { (text, picked) ->
             answering(text)
             assertEquals(text, picked, runBlocking { tutor.pickSong(aSong, rows) })
             assertEquals(text, picked, runBlocking { tutor.pickSong(aSong, rows, videos = true) })
