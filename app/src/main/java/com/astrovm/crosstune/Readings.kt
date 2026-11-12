@@ -1063,12 +1063,18 @@ internal object Readings {
         val given = buildString {
             parts.zipWithNext().forEach { (before, part) ->
                 append(before.reading ?: before.text)
-                if (before.reading != null && part.text.firstOrNull()?.isLetter() == true || part.reading != null && before.text.lastOrNull()?.isLetter() == true) append(' ')
+                if (spacedApart(before, part)) append(' ')
             }
             parts.lastOrNull()?.let { append(it.reading ?: it.text) }
         }
         val said = of(listOf(given), script).single().romanized
         return LineReading(parts, said, said)
+    }
+
+    /** Whether Android writes a space between [before] and [part], read in Latin letters: a syllable and a letter next to it. */
+    private fun spacedApart(before: Ruby, part: Ruby): Boolean {
+        val syllableThenLetter = before.reading != null && part.text.firstOrNull()?.isLetter() == true
+        return syllableThenLetter || part.reading != null && before.text.lastOrNull()?.isLetter() == true
     }
 
     /**

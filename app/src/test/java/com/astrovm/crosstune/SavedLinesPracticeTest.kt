@@ -344,6 +344,8 @@ class SavedLinesPracticeTest {
         // Where it's put right by hand, it stays so, after the phone's restarted too. The rest is read as it's sung.
         val kept = SavedLinesStore(prefs).load().first { it.text == morning.text }
         assertEquals("まちのあした", kept.reading)
+        // とかい was there already, so the user put right only 朝.
+        assertEquals(Ruby("朝", "あした", Reader.USER), kept.ruby?.last())
         assertTrue(kept.readByHand)
         assertFalse(SavedLinesStore(prefs).load().first { it.text == night.text }.readByHand)
     }

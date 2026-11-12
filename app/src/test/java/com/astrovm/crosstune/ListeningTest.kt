@@ -4643,6 +4643,7 @@ class ListeningTest {
         assertEquals("まちのよる", kept.first { it.text == "都会の夜" }.reading)
         // Where it's put right by hand, before that was marked, it stays so: the dictionary reads 朝 あさ. The rest is read as it's sung.
         assertEquals("まちのあした", kept.first { it.text == "都会の朝" }.reading)
+        assertEquals(Ruby("朝", "あした", Reader.USER), kept.first { it.text == "都会の朝" }.ruby?.last())
     }
 
     /** UtaTen's answer for a song it hasn't: its search, saying it found no words. */
