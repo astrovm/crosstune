@@ -231,9 +231,9 @@ internal object Furigana {
             // A kanji group ending at a run from the next one on, and at a place from each on: where the best of them ends,
             // as the run it ends at and the place in the reading. Kept for the next run, and for the first with kanji after it.
             // Three rows each, used in turn: one for this run, one for the next and one for the first with kanji after it.
-            // Its reading ends after the kanji's starts, so a group's rows are kept from the second place on.
-            val runRows = Array(3) { IntArray(width) }
-            val endRows = Array(3) { IntArray(width) }
+            // Its reading ends after the kanji's starts, so a group whose reading ends from a place on is kept one before it.
+            val runRows = Array(3) { IntArray(size) }
+            val endRows = Array(3) { IntArray(size) }
             var later = 0
             var kanjiRow = 0
             for (i in runs.indices.reversed()) {
@@ -243,7 +243,7 @@ internal object Furigana {
                 for (at in 0..size) {
                     found = NONE
                     if (isKana[i]) written(i, at)
-                    if (at < size) kanji(i, runRows[kanjiRow][at + 1], endRows[kanjiRow][at + 1])
+                    if (at < size) kanji(i, runRows[kanjiRow][at], endRows[kanjiRow][at])
                     best[i * width + at] = found
                     next[i * width + at] = foundNext
                 }
@@ -264,7 +264,8 @@ internal object Furigana {
 
         /**
          * The best ends of a kanji group ending at the [j]th run or later, for each place its reading may end from, as tried
-         * in order, into [groupRun] and [groupEnd], from [laterRun] and [laterEnd], the same for the run after it, if any.
+         * in order, into [groupRun] and [groupEnd] one before that place, from [laterRun] and [laterEnd], the same for the run
+         * after it, if any.
          * Of ends as good, the first tried: the group ending soonest, its reading ending soonest.
          */
         private fun groups(j: Int, laterRun: IntArray, laterEnd: IntArray, groupRun: IntArray, groupEnd: IntArray) {
@@ -273,9 +274,9 @@ internal object Furigana {
             for (at in size downTo 1) {
                 // This run, the reading ending here or, when that's better, later.
                 if (best[after + at] >= best[after + end]) end = at
-                val laterBetter = j != runs.lastIndex && best[after + end] < best[(laterRun[at] + 1) * width + laterEnd[at]]
-                groupRun[at] = if (laterBetter) laterRun[at] else j
-                groupEnd[at] = if (laterBetter) laterEnd[at] else end
+                val laterBetter = j != runs.lastIndex && best[after + end] < best[(laterRun[at - 1] + 1) * width + laterEnd[at - 1]]
+                groupRun[at - 1] = if (laterBetter) laterRun[at - 1] else j
+                groupEnd[at - 1] = if (laterBetter) laterEnd[at - 1] else end
             }
         }
 
