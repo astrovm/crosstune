@@ -128,13 +128,13 @@ class ReportTest {
         fake.handler = { request -> FakeSpotify.html(request, "", code = code) }
         val sender = ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined)
         val report = Report("2.12.0", android = "16 (36)")
-        assertTrue(sender.send(report))
+        assertEquals(Delivery.SENT, sender.send(report))
         assertEquals(listOf("https://report.crosstune.cc/reports"), fake.requestedUrls)
         assertEquals(report.json(), fake.requestBodies.single())
         code = 503
-        assertFalse(sender.send(report))
+        assertEquals(Delivery.FAILED, sender.send(report))
         fake.handler = { throw IOException("offline") }
-        assertFalse(sender.send(report))
+        assertEquals(Delivery.FAILED, sender.send(report))
     }
 
     private val marked = ReadingReport(
@@ -170,11 +170,11 @@ class ReportTest {
         var code = 204
         fake.handler = { request -> FakeSpotify.html(request, "", code = code) }
         val sender = ReportSender(fake.client(), "2.25.0", Dispatchers.Unconfined)
-        assertTrue(sender.send(marked))
+        assertEquals(Delivery.SENT, sender.send(marked))
         assertEquals(listOf(ReportSender.URL), fake.requestedUrls)
         assertEquals(marked.json(), fake.requestBodies.single())
         code = 503
-        assertFalse(sender.send(marked))
+        assertEquals(Delivery.FAILED, sender.send(marked))
     }
 
     @Test
@@ -191,7 +191,7 @@ class ReportTest {
             }
             Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(204).message("No Content").body(answer.buffer().asResponseBody(null, 0)).build()
         }
-        assertTrue(ReportSender(fake.client(), "2.25.0", Dispatchers.Unconfined).send(marked))
+        assertEquals(Delivery.SENT, ReportSender(fake.client(), "2.25.0", Dispatchers.Unconfined).send(marked))
         assertTrue(closed)
     }
 
@@ -211,7 +211,7 @@ class ReportTest {
             }
             FakeSpotify.html(request, "").newBuilder().body(body).build()
         }
-        assertTrue(ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined).send("{}"))
+        assertEquals(Delivery.SENT, ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined).send("{}"))
         assertEquals(1, closed)
     }
 
@@ -225,5 +225,116 @@ class ReportTest {
         assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = true, asked = "http://127.0.0.1.example.com/reports"))
         assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = true, asked = ""))
         assertEquals(ReportSender.URL, ReportSender.urlFor(debuggable = true, asked = null))
+    }
+
+    @Test
+    fun theBoxTurnsAReportAwayForGoodOnlyWhenItAlwaysWould() = runBlocking {
+        val fake = FakeSpotify()
+        var code = 400
+        fake.handler = { request -> FakeSpotify.html(request, "", code = code) }
+        val sender = ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined)
+        // Not one it takes, too big, or not as JSON: the same report always will be.
+        for (refused in listOf(400, 404, 405, 413, 415, 499)) {
+            code = refused
+            assertEquals(refused.toString(), Delivery.REFUSED, sender.send("{}"))
+        }
+        // Too soon, too many, or the box down, it may get there later.
+        for (later in listOf(408, 429, 500, 503)) {
+            code = later
+            assertEquals(later.toString(), Delivery.FAILED, sender.send("{}"))
+        }
+        code = 200
+        assertEquals(Delivery.SENT, sender.send("{}"))
+    }
+
+    /** What report/worker.js, the box, has as [name]: a number, or a product as "48 * 1024". */
+    private fun boxNumber(box: String, name: String): Long =
+        Regex("""const $name = ([\d *]+);""").find(box)!!.groupValues[1].split("*").map { it.trim().toLong() }.reduce(Long::times)
+
+    @Test
+    fun everyLimitTheAppKeepsToIsTheBoxs() {
+        // The box is in this repository, so a change to either side that the other doesn't follow fails here.
+        val box = java.io.File("../report/worker.js").readText()
+        assertEquals(boxNumber(box, "MAX_BYTES"), ReportBox.MAX_BYTES.toLong())
+        assertEquals(boxNumber(box, "MAX_POINTS"), ReportBox.MAX_POINTS.toLong())
+        val limits = Regex("""const LIMITS = \{([^}]*)\}""").find(box)!!.groupValues[1]
+        assertEquals(Regex("""(\w+): (\d+)""").findAll(limits).associate { it.groupValues[1] to it.groupValues[2].toInt() }, ReportBox.LIMITS)
+        // A time it takes is a whole day at most, either way, and where the words had a line is never before the start.
+        assertTrue(box.contains("value >= 0 && value <= 24 * 60 * 60 * 1000"))
+        assertTrue(box.contains("Math.abs(value) <= 24 * 60 * 60 * 1000"))
+        assertEquals(24 * 60 * 60 * 1000L, ReportBox.DAY_MS)
+    }
+
+    /** The lines put in time in what [report] sends. */
+    private fun sentLines(report: Report) = JSONObject(report.json()).getJSONObject("song").optJSONArray("timing")
+        ?.let { lines -> (0 until lines.length()).map { lines.getJSONObject(it) } }.orEmpty()
+
+    @Test
+    fun ofMoreLinesPutInTimeThanTheBoxKeepsThoseThatTellLeastGo() {
+        // 301 lines, all half a second late but one, which is three: each of the rest is where the two either side put it.
+        val lines = (0..300).map { HandTiming("Line $it", it * 1000L, it * 1000L + if (it == 150) 3000 else 500) }
+        val report = Report("2.30.0", MusicMetadata("Long", "Band"), timing = lines, android = "16 (36)")
+        val sent = sentLines(report)
+        assertEquals(ReportBox.MAX_POINTS, sent.size)
+        val times = sent.map { it.getLong("timedMs") }
+        // The first and the last, where the rest go on from, and the one off from the others stay; one in a straight run goes.
+        assertTrue(times.containsAll(listOf(0L, 150_000L, 300_000L)))
+        assertFalse(times.contains(1000L))
+        assertEquals(times.sorted(), times)
+        assertTrue(report.json().toByteArray().size <= ReportBox.MAX_BYTES)
+    }
+
+    @Test
+    fun linesTheBoxTakesNoneOfAreLeftOutAndTheRestGo() {
+        val day = ReportBox.DAY_MS
+        val lines = listOf(
+            HandTiming("Before the start", -1, 0), HandTiming("At the start", 0, -day), HandTiming("A day in", day, day),
+            HandTiming("Past a day", day + 1, 0), HandTiming("Heard a day after", 0, day + 1), HandTiming("Heard a day before", 0, -day - 1)
+        )
+        assertEquals(listOf("At the start", "A day in"), sentLines(Report("2.30.0", MusicMetadata("Song", "Band"), timing = lines)).map { it.getString("line") })
+    }
+
+    @Test
+    fun aReportPastTheBoxsSizeLosesTheLinesThatTellLeastThenTheLog() {
+        val long = "空".repeat(300)
+        val lines = (0 until 300).map { HandTiming(long, it * 1000L, it * 1000L + (it % 7) * 100) }
+        val player = PlayerTiming("com.example.player", 1f, 0, 0, "lead 0")
+        val report = Report("2.30.0", MusicMetadata("Song", "Band"), timing = lines, player = player)
+        val json = report.json()
+        assertTrue(json.toByteArray().size.toString(), json.toByteArray().size <= ReportBox.MAX_BYTES)
+        val times = sentLines(report).map { it.getLong("timedMs") }
+        assertTrue(times.size in 1 until 300)
+        assertTrue(times.containsAll(listOf(0L, 299_000L)))
+        assertEquals("lead 0", JSONObject(json).getJSONObject("song").getString("log"))
+        // With no lines left to lose, the log goes, which only an odd one is that long.
+        val odd = Report("2.30.0", MusicMetadata("Song", "Band"), player = player.copy(log = "\u0001".repeat(8192)))
+        assertTrue(odd.json().toByteArray().size <= ReportBox.MAX_BYTES)
+        assertFalse(JSONObject(odd.json()).getJSONObject("song").has("log"))
+    }
+
+    @Test
+    fun eachTextIsCutToWhatTheBoxKeepsCountingCharactersNotHalves() {
+        val title = "\uD83C\uDFB5".repeat(301)
+        val report = Report("2.30.0", MusicMetadata("  $title ", "Band"), comment = "x".repeat(2001), player = PlayerTiming(null, null, null, 0, "y".repeat(8193)))
+        val json = JSONObject(report.json())
+        assertEquals("\uD83C\uDFB5".repeat(300), json.getJSONObject("song").getString("title"))
+        assertEquals(2000, json.getString("comment").length)
+        assertEquals(8192, json.getJSONObject("song").getString("log").length)
+        assertEquals("x".repeat(100), JSONObject(marked.copy(right = "x".repeat(101)).json()).getJSONObject("reading").getString("right"))
+    }
+
+    @Test
+    fun aSongWithoutItsTitleOrArtistIsLeftOutAsTheBoxTakesNoneSo() {
+        assertFalse(JSONObject(Report("2.30.0", MusicMetadata("Song", " "), comment = "Wrong").json()).has("song"))
+        assertFalse(JSONObject(Report("2.30.0", MusicMetadata("", "Band"), comment = "Wrong").json()).has("song"))
+        assertEquals("Wrong", JSONObject(Report("2.30.0", MusicMetadata("", "Band"), comment = "Wrong").json()).getString("comment"))
+    }
+
+    @Test
+    fun linesPutInTimeAtTheSameMomentOrTooFewToTellApartGoFromTheEnd() {
+        // The middle of three at one moment is where the one before it is: it tells nothing.
+        assertEquals(listOf(0, 2, 3), ReportBox.telling(listOf(0L to 0L, 0L to 0L, 0L to 7L, 5000L to 0L), 3))
+        assertEquals(listOf(0), ReportBox.telling(listOf(0L to 0L, 10L to 0L), 1))
+        assertEquals(emptyList<Int>(), ReportBox.telling(listOf(0L to 0L), 0))
     }
 }

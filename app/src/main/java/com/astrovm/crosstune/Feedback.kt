@@ -101,35 +101,52 @@ internal data class Report(
 
     fun githubUrl(): String = "$REPO/issues/new".toHttpUrl().newBuilder().addQueryParameter("title", title).addQueryParameter("body", body).build().toString()
 
-    /** What [ReportSender] sends: nothing but what's here. */
-    fun json(): String = JSONObject().apply {
-        put("version", version)
-        put("android", android)
-        comment.trim().takeIf { it.isNotEmpty() }?.let { put("comment", it) }
+    /**
+     * What [ReportSender] sends: nothing but what's here, and nothing [ReportBox] turns away. Of the lines put in
+     * time by hand, those that tell most are kept, to its count and then its size; past its size without them,
+     * the log goes too. The rest, cut to its lengths, always fits.
+     */
+    fun json(): String {
+        val usable = timing.filter { ReportBox.takes(it.timedMs, it.heardMs) }
+        var points = usable.slice(ReportBox.telling(usable.map { it.timedMs to it.heardMs }, ReportBox.MAX_POINTS))
+        var log = player?.log
+        var json = jsonWith(points, log)
+        while (json.toByteArray().size > ReportBox.MAX_BYTES && (points.isNotEmpty() || log != null)) {
+            if (points.isEmpty()) log = null else points = points.slice(ReportBox.telling(points.map { it.timedMs to it.heardMs }, points.size - 1))
+            json = jsonWith(points, log)
+        }
+        return json
+    }
+
+    private fun jsonWith(points: List<HandTiming>, log: String?): String = JSONObject().apply {
+        put("version", ReportBox.cut(version, "version"))
+        put("android", ReportBox.cut(android, "android"))
+        ReportBox.cut(comment, "comment").takeIf { it.isNotEmpty() }?.let { put("comment", it) }
         problem?.let { put("problem", it.key) }
-        song?.let {
+        // The box takes a song only with its title and its artist.
+        song?.takeIf { ReportBox.cut(it.title, "title").isNotEmpty() && ReportBox.cut(it.artist, "artist").isNotEmpty() }?.let {
             put("song", JSONObject().apply {
-                put("title", it.title)
-                put("artist", it.artist)
-                app?.let { name -> put("app", name) }
+                put("title", ReportBox.cut(it.title, "title"))
+                put("artist", ReportBox.cut(it.artist, "artist"))
+                app?.let { name -> put("app", ReportBox.cut(name, "app")) }
                 put("timed", timed)
                 put("synced", synced)
                 put("sung", sung)
                 lengthMs?.let { ms -> put("lengthMs", ms) }
-                source?.let { put("source", it) }
-                player?.let { putPlayer(it) }
-                if (timing.isNotEmpty()) put("timing", JSONArray(timing.map { line -> JSONObject().put("line", line.line).put("timedMs", line.timedMs).put("heardMs", line.heardMs) }))
+                source?.let { put("source", ReportBox.cut(it, "source")) }
+                player?.let { putPlayer(it, log) }
+                if (points.isNotEmpty()) put("timing", JSONArray(points.map { line -> JSONObject().put("line", ReportBox.cut(line.line, "line")).put("timedMs", line.timedMs).put("heardMs", line.heardMs) }))
             })
         }
     }.toString()
 
-    private fun JSONObject.putPlayer(player: PlayerTiming) {
-        player.appPackage?.let { put("appPackage", it) }
+    private fun JSONObject.putPlayer(player: PlayerTiming, log: String?) {
+        player.appPackage?.let { put("appPackage", ReportBox.cut(it, "appPackage")) }
         // Whole hundredths, as a Float's own digits (1.100000023841858) say nothing more.
         player.speed?.let { put("speed", (it * 100.0).roundToLong() / 100.0) }
         player.leadMs?.let { put("leadMs", it) }
         put("earlyMs", player.earlyMs)
-        player.log.takeIf { it.isNotEmpty() }?.let { put("log", it) }
+        log?.let { ReportBox.cut(it, "log") }?.takeIf { it.isNotEmpty() }?.let { put("log", it) }
     }
 
     fun emailUrl(): String = "mailto:$EMAIL?subject=${Uri.encode(title.ifEmpty { "Crosstune" })}&body=${Uri.encode(body)}"
@@ -156,28 +173,103 @@ internal data class ReadingReport(
     private val right: String = "",
     private val android: String = "${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})"
 ) {
+    /** What [ReportSender] sends, each text cut to what [ReportBox] keeps of it. */
     fun json(): String = JSONObject().apply {
-        put("version", version)
-        put("android", android)
+        put("version", ReportBox.cut(version, "version"))
+        put("android", ReportBox.cut(android, "android"))
         put("problem", WRONG_READING)
         put("song", JSONObject().apply {
-            put("title", song.title)
-            put("artist", song.artist)
-            source?.let { put("source", it) }
+            put("title", ReportBox.cut(song.title, "title"))
+            put("artist", ReportBox.cut(song.artist, "artist"))
+            source?.let { put("source", ReportBox.cut(it, "source")) }
         })
         put("reading", JSONObject().apply {
-            put("line", line)
-            put("word", word.text)
-            put("shown", shown.joinToString(" / "))
-            put("reader", word.by.joinToString("+") { it.key })
-            put("language", script.name.lowercase())
-            right.trim().takeIf { it.isNotEmpty() }?.let { put("right", it) }
+            put("line", ReportBox.cut(line, "line"))
+            put("word", ReportBox.cut(word.text, "word"))
+            put("shown", ReportBox.cut(shown.joinToString(" / "), "shown"))
+            put("reader", ReportBox.cut(word.by.joinToString("+") { it.key }, "reader"))
+            put("language", ReportBox.cut(script.name.lowercase(), "language"))
+            ReportBox.cut(right, "right").takeIf { it.isNotEmpty() }?.let { put("right", it) }
         })
     }.toString()
 
     companion object {
         /** The problem the report Worker files it under. */
         const val WRONG_READING = "wrong_reading"
+    }
+}
+
+/** How a report sent went, as [ReportSender] tells by the box's answer. */
+internal enum class Delivery {
+    /** The box has it. */
+    SENT,
+
+    /** The box turned it away, as it always will: it isn't one it takes. */
+    REFUSED,
+
+    /** It didn't get there for now: no network, the box down, busy (408) or full for the while (429). */
+    FAILED;
+
+    companion object {
+        fun of(code: Int): Delivery = when {
+            code in 200..299 -> SENT
+            code in 400..499 && code != 408 && code != 429 -> REFUSED
+            else -> FAILED
+        }
+    }
+}
+
+/**
+ * What Crosstune's box for reports, report/worker.js, takes. A report past [MAX_BYTES], or with a line put in time
+ * out of [takes], it turns away for good; a text past its length in [LIMITS] it cuts, and of more than [MAX_POINTS]
+ * lines it keeps the first. Each must be as worker.js has it: ReportTest reads it to check.
+ */
+internal object ReportBox {
+    const val MAX_BYTES = 48 * 1024
+    const val MAX_POINTS = 300
+
+    /** The longest each text may be, in characters, by the name the box gives it. */
+    val LIMITS = mapOf(
+        "version" to 40, "android" to 40, "title" to 300, "artist" to 300, "app" to 100, "source" to 100, "comment" to 2000, "line" to 300,
+        "appPackage" to 150, "log" to 8192, "recording" to 200, "word" to 100, "shown" to 300, "reader" to 100, "language" to 20, "right" to 100
+    )
+
+    /** A day, the furthest a time in a report may be. */
+    const val DAY_MS = 24 * 60 * 60 * 1000L
+
+    /** [text] as the box keeps its [field]: trimmed, and no longer than its limit, in characters, not UTF-16 units. */
+    fun cut(text: String, field: String): String {
+        val trimmed = text.trim()
+        val max = LIMITS.getValue(field)
+        return if (trimmed.codePointCount(0, trimmed.length) <= max) trimmed else trimmed.substring(0, trimmed.offsetByCodePoints(0, max))
+    }
+
+    /** Whether the box takes a line the words had at [timedMs] and that's heard at [heardMs]. */
+    fun takes(timedMs: Long, heardMs: Long): Boolean = timedMs in 0..DAY_MS && heardMs in -DAY_MS..DAY_MS
+
+    /**
+     * Which of [points], each where the words had a line and where it's heard, to keep, at most [max], in their
+     * order. The words move in a straight line between two lines put in time ([LyricsSync.timeOf]), so a line
+     * that's where the two either side put it says nothing they don't: the one they miss by least goes first,
+     * again and again. The first and the last, which say where the rest go on from, stay to the end.
+     */
+    fun telling(points: List<Pair<Long, Long>>, max: Int): List<Int> {
+        val kept = points.indices.sortedBy { points[it].first }.toMutableList()
+        while (kept.size > max) {
+            val inOrder = kept.map(points::get)
+            kept.removeAt((1 until kept.lastIndex).minByOrNull { missedBy(inOrder, it) } ?: kept.lastIndex)
+        }
+        return kept.sorted()
+    }
+
+    /** How far from where the lines either side of it put it the line [at] in [points] is heard. */
+    private fun missedBy(points: List<Pair<Long, Long>>, at: Int): Long {
+        val (beforeMs, beforeHeard) = points[at - 1]
+        val (afterMs, afterHeard) = points[at + 1]
+        val (lineMs, heard) = points[at]
+        val span = afterMs - beforeMs
+        val put = if (span == 0L) beforeHeard else beforeHeard + (lineMs - beforeMs) * (afterHeard - beforeHeard) / span
+        return kotlin.math.abs(heard - put)
     }
 }
 
@@ -192,20 +284,20 @@ internal class ReportSender(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val url: String = URL
 ) {
-    /** Whether [report] got there. */
-    suspend fun send(report: Report): Boolean = post(report.json())
+    /** How [report] went. */
+    suspend fun send(report: Report): Delivery = post(report.json())
 
-    /** Whether [report], on a wrong reading, got there. */
-    suspend fun send(report: ReadingReport): Boolean = post(report.json())
+    /** How [report], on a wrong reading, went. */
+    suspend fun send(report: ReadingReport): Delivery = post(report.json())
 
-    /** Whether a report that was kept as its [json], what [Report.json] said, got there. */
-    suspend fun send(json: String): Boolean = post(json)
+    /** How a report that was kept as its [json], what [Report.json] said, went. */
+    suspend fun send(json: String): Delivery = post(json)
 
-    private suspend fun post(json: String): Boolean = withContext(ioDispatcher) {
+    private suspend fun post(json: String): Delivery = withContext(ioDispatcher) {
         try {
-            client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { it.isSuccessful }
+            client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { Delivery.of(it.code) }
         } catch (_: IOException) {
-            false
+            Delivery.FAILED
         }
     }
 

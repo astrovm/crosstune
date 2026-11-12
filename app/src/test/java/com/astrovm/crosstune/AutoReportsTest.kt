@@ -154,12 +154,17 @@ class AutoReportsTest {
     }
 
     @Test
-    fun aSongKeptBeforeWithMoreLinesThanTheBoxTakesSendsTheFirstOnes() {
-        val points = JSONArray().apply { repeat(301) { put(JSONArray().put(it * 1000L).put(it * 1000L + 5)) } }
+    fun aSongKeptBeforeWithMoreLinesThanTheBoxTakesSendsThoseThatTellMost() {
+        val points = JSONArray().apply { repeat(301) { put(JSONArray().put(it * 1000L).put(it * 1000L + if (it == 150) 3000 else 5)) } }
         preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band\u0000123", JSONObject().put("points", points)).toString()).commit()
         reports.keepEarlier("2.24.0", "16 (36)")
         val song = JSONObject(reports.owed().single().json).getJSONObject("song")
-        assertEquals(300, song.getJSONArray("timing").length())
+        val timing = song.getJSONArray("timing")
+        assertEquals(300, timing.length())
+        val times = (0 until timing.length()).map { timing.getJSONObject(it).getLong("timedMs") }
+        // The ends and the line off from the rest stay; one in a straight run goes.
+        assertTrue(times.containsAll(listOf(0L, 150_000L, 300_000L)))
+        assertFalse(times.contains(1000L))
         // A key with a length and no recording.
         assertEquals(123L, song.getLong("lengthMs"))
         assertFalse(song.has("recording"))
@@ -173,5 +178,33 @@ class AutoReportsTest {
         val song = JSONObject(reports.owed().single().json).getJSONObject("song")
         assertFalse(song.has("lengthMs"))
         assertFalse(song.has("recording"))
+    }
+
+    @Test
+    fun aSongKeptBeforeSendsOnlyTheLinesAndTheTextsTheBoxTakes() {
+        val points = JSONArray().put(JSONArray().put(-1).put(100)).put(JSONArray().put(0).put(ReportBox.DAY_MS + 1)).put(JSONArray().put(500).put(600))
+        val key = "${"t".repeat(301)}\u0000band\u0000${"r".repeat(201)}\u0000"
+        preferences.edit().putString("lyrics_sync", JSONObject().put(key, JSONObject().put("points", points)).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        val song = JSONObject(reports.owed().single().json).getJSONObject("song")
+        assertEquals("""[{"timedMs":500,"heardMs":600}]""", song.getJSONArray("timing").toString())
+        assertEquals("t".repeat(300), song.getString("title"))
+        assertEquals("r".repeat(200), song.getString("recording"))
+    }
+
+    @Test
+    fun aSongKeptBeforeWithNoLineTheBoxTakesIsNotOwed() {
+        val points = JSONArray().put(JSONArray().put(-1).put(100))
+        preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band", JSONObject().put("points", points)).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+    }
+
+    @Test
+    fun aReportTheBoxTurnedAwayIsNoLongerOwedNorTakenAsSent() {
+        reports.owe(song("Song"), "{}")
+        reports.dropped(reports.owed().single())
+        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
+        assertFalse(reports.reported(song("Song"), SongProblem.TIMED_BY_HAND))
     }
 }

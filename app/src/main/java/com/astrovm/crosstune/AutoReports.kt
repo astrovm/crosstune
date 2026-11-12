@@ -134,16 +134,19 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         val (title, artist) = parts.getOrNull(0).orEmpty() to parts.getOrNull(1).orEmpty()
         if (title.isBlank() || artist.isBlank()) return null
         val array = saved.optJSONArray("points") ?: return null
-        val points = (0 until array.length()).mapNotNull { array.optJSONArray(it)?.takeIf { point -> point.length() == 2 } }.take(MAX_POINTS)
+        // Only those the box takes, and of more than it takes, those that tell most.
+        val usable = (0 until array.length()).mapNotNull { array.optJSONArray(it)?.takeIf { point -> point.length() == 2 } }
+            .filter { ReportBox.takes(it.optLong(0), it.optLong(1)) }
+        val points = usable.slice(ReportBox.telling(usable.map { it.optLong(0) to it.optLong(1) }, ReportBox.MAX_POINTS))
         if (points.isEmpty()) return null
         // The key ends with the recording, then the length, each only when it was known.
         val rest = parts.drop(2)
         val length = rest.lastOrNull()?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }
         val recording = rest.firstOrNull()?.takeIf { it.isNotEmpty() && it != length }
         val heard = "$key\u0000${saved.optString("words")}".replace('\n', ' ') in sung
-        val song = JSONObject().put("title", title).put("artist", artist).put("sung", heard)
+        val song = JSONObject().put("title", ReportBox.cut(title, "title")).put("artist", ReportBox.cut(artist, "artist")).put("sung", heard)
             .put("timing", JSONArray(points.map { JSONObject().put("timedMs", it.optLong(0)).put("heardMs", it.optLong(1)) }))
-        recording?.let { song.put("recording", it) }
+        recording?.let { song.put("recording", ReportBox.cut(it, "recording")) }
         length?.let { song.put("lengthMs", it.toLong()) }
         val json = JSONObject().put("version", version).put("android", android).put("problem", EARLIER).put("song", song)
         return Owed("$EARLIER\u0000$key", json.toString())
@@ -156,6 +159,9 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
 
     /** The report [owed] went. */
     fun paid(owed: Owed) = remember(owed.key)
+
+    /** The report [owed] was turned away by the box, as it always will be: it's no longer owed, and isn't taken as sent. */
+    fun dropped(owed: Owed) = forget(owed.key)
 
     /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */
     fun owes(owed: Owed): Boolean = owed in owed()
@@ -181,9 +187,6 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
 
         /** What a report on a song's timing kept from an earlier version says it is: by hand or by ear, it can't tell. */
         const val EARLIER = "kept_timing"
-
-        /** The most points the box for reports takes in one. */
-        private const val MAX_POINTS = 300
 
         /** The reports owed that are kept: the latest songs put in time by hand. */
         const val MAX_OWED = 20

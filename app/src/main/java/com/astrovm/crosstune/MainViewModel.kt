@@ -3293,7 +3293,7 @@ internal class MainViewModel(
         val report = reportOn(sender, uiState.lyricsFor, comment)
         uiState = uiState.copy(report = ReportStatus.SENDING)
         viewModelScope.launch {
-            val sent = sender.send(report)
+            val sent = sender.send(report) == Delivery.SENT
             uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
@@ -3310,7 +3310,7 @@ internal class MainViewModel(
         val report = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
         uiState = uiState.copy(report = ReportStatus.SENDING)
         viewModelScope.launch {
-            val sent = sender.send(report)
+            val sent = sender.send(report) == Delivery.SENT
             uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
@@ -3357,8 +3357,8 @@ internal class MainViewModel(
             // Found before it's followed, or before following it said anything, as a song with no words always is.
             val playing = if (report.app == null) playback?.takeIf { it.hasAccess() }?.follow(song)?.first() else null
             val player = report.player?.let { it.copy(appPackage = it.appPackage ?: playing?.appPackage, speed = it.speed ?: playing?.clock?.speed) }
-            // One that didn't get there goes the next time it's found.
-            if (sender.send(report.copy(app = report.app ?: playing?.app, player = player))) autoReports.remember(song, problem)
+            // One that didn't get there goes the next time it's found; one the box turned away never would.
+            if (sender.send(report.copy(app = report.app ?: playing?.app, player = player)) != Delivery.FAILED) autoReports.remember(song, problem)
         }
     }
 
@@ -3388,8 +3388,8 @@ internal class MainViewModel(
     private val owedGoing = Mutex()
 
     /**
-     * Each report owed goes, once a song, and is dropped when it got there; one that didn't waits for the next
-     * time. Words still in front of the user are left out: they may be put in time some more, and go once they're left.
+     * Each report owed goes, once a song, and is dropped when it got there or the box turned it away; one that
+     * didn't get there waits for the next time. Words still in front of the user are left out: they may be put in time some more, and go once they're left.
      */
     private fun sendOwed() {
         val sender = reports ?: return
@@ -3400,9 +3400,11 @@ internal class MainViewModel(
                 for (owed in autoReports.owed().filter { it.key != inFront }) {
                     // Gone another way meanwhile, as the words it's for were left.
                     if (!autoReports.owes(owed)) continue
+                    val delivery = sender.send(owed.json)
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
-                    if (!sender.send(owed.json)) break
-                    autoReports.paid(owed)
+                    if (delivery == Delivery.FAILED) break
+                    // One the box turned away it always will, so it's dropped, and the rest go on.
+                    if (delivery == Delivery.SENT) autoReports.paid(owed) else autoReports.dropped(owed)
                     // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
                     delay(reportPaceMs)
                 }

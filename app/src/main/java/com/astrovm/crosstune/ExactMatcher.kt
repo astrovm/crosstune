@@ -661,7 +661,7 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
-        items.map(::row).firstOrNull { isTheSongInAnotherScript(it, names) }?.let { return Answer(watchUrl + it.id) }
+        theSongInAnotherScript(items.map(::row), names)?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
@@ -840,17 +840,36 @@ internal class ExactMatcher(
     }
 
     /**
-     * A song result named in a script the song's known names aren't ("残酷な天使のテーゼ - Zankoku na Tenshi no
-     * Thesis" for "A Cruel Angel's Thesis"), which there are no words to compare. Its artist is the song's and
-     * it is as long as a known recording of it, to the second, which two songs of one artist hardly share.
+     * The song result named in a script the song's known names aren't ("残酷な天使のテーゼ - Zankoku na Tenshi no
+     * Thesis" for "A Cruel Angel's Thesis"), which has no words to compare. Its artist is the song's, nothing
+     * in it or its album says it's another version, and it's as long as a known recording of it to the
+     * second: YouTube Music gives whole seconds, so the same recording is less than one off. Two songs of
+     * one artist can still be that close, so it's taken only when it's the one result that fits, unless
+     * a store names the song so: "残酷な天使のテーゼ (Director's Edit Version)" names "残酷な天使のテーゼ".
+     * Accented letters are Latin ones, and "Canción Falsa" is compared by its words, so it's never here.
      */
-    private fun isTheSongInAnotherScript(row: Row, names: Names): Boolean {
-        val length = row.lengthMs ?: return false
-        if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
-        if (row.name.none { it.isLetter() && Character.UnicodeBlock.of(it) != Character.UnicodeBlock.BASIC_LATIN }) return false
+    private fun theSongInAnotherScript(rows: List<Row>, names: Names): Row? {
+        val known = names.titles.flatMap(::scriptsOf).toSet()
         val wanted = names.artists.flatMap(SongNames::artists).toSet()
-        return SongNames.artists(row.details.first()).any(wanted::contains)
+        val credited = names.artists.joinToString(" ")
+        val fits = rows.filter { row ->
+            val length = row.lengthMs
+            row.id != null && length != null && names.lengthsMs.any { kotlin.math.abs(length - it) < SAME_RECORDING_MS } &&
+                SongNames.artists(row.details.first()).any(wanted::contains) &&
+                names.titles.none { SongNames.saysAnotherVersion("${row.name} ${row.details.getOrNull(1).orEmpty()}", it, credited) }
+        }
+        // Named as a store names it in that script, without what the store adds in brackets.
+        val bare = names.titles.filter { scriptsOf(it).isNotEmpty() }.map { SongNames.normalize(SongNames.bareTitle(SongNames.withoutEditionTag(it))) }
+        fits.firstOrNull { row -> SongNames.titleNames(row.name).any { SongNames.normalize(SongNames.bareTitle(it)) in bare } }?.let { return it }
+        // In a script one of its known names is in, it's another song, as its words are another's.
+        return fits.filter { row -> (scriptsOf(row.name) - known).isNotEmpty() }.distinctBy { it.id }.singleOrNull()
     }
+
+    /** The scripts other than Latin [text] has letters in, with kanji and kana as one, as Japanese writes them together. */
+    private fun scriptsOf(text: String): Set<Character.UnicodeScript> = text.codePoints().toArray().asSequence()
+        .filter { Character.isLetter(it) }.map { Character.UnicodeScript.of(it) }
+        .map { if (it in JAPANESE) Character.UnicodeScript.HAN else it }
+        .filter { it !in NOT_A_SCRIPT }.toSet()
 
     /**
      * A video result, "Title | Channel • 1.2M views • 3:45", that plays the song: one of its names in
@@ -1006,7 +1025,15 @@ internal class ExactMatcher(
 
         /** How far another release of a song, e.g. a remaster or a video's, may be from its length. */
         const val SAME_LENGTH_MS = 8_000L
-        const val SAME_SONG_LENGTH_MS = 3_000L
+
+        /** How far apart, exclusive, one recording's lengths can be, given in whole seconds by one side. */
+        const val SAME_RECORDING_MS = 1_000L
+
+        /** Kanji, hiragana and katakana, which one title in Japanese mixes. */
+        private val JAPANESE = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA)
+
+        /** Latin, and what every script shares, as "ー" and marks: no other script by themselves. */
+        private val NOT_A_SCRIPT = setOf(Character.UnicodeScript.LATIN, Character.UnicodeScript.COMMON, Character.UnicodeScript.INHERITED)
 
         /** How far a video ChatGPT picks may be from the song's length, as a video may open or end with more. */
         const val PICKED_VIDEO_LENGTH_MS = 45_000L

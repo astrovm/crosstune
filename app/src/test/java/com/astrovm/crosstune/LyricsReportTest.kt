@@ -62,6 +62,10 @@ class LyricsReportTest {
     @Volatile
     private var reportsDown = false
 
+    /** The box's answer to a report, by what it says, when it's another than [reportsDown]'s. */
+    @Volatile
+    private var answerTo: (String) -> Int? = { null }
+
     /** Holds a report on its way until it's let through. */
     @Volatile
     private var reportsHeld: CountDownLatch? = null
@@ -88,7 +92,7 @@ class LyricsReportTest {
             when (request.url.host) {
                 "report.crosstune.cc" -> {
                     reportsHeld?.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                    FakeSpotify.html(request, "", code = if (reportsDown) 503 else 204)
+                    FakeSpotify.html(request, "", code = answerTo(FakeSpotify.bodyOf(request)) ?: if (reportsDown) 503 else 204)
                 }
                 "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]""")
                 else -> FakeSpotify.html(request, """{"title":"Demo","author_name":"Band"}""")
@@ -594,6 +598,22 @@ class LyricsReportTest {
     }
 
     @Test
+    fun anAutomaticReportTheBoxTurnedAwayIsNotSentAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        answerTo = { 400 }
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
+        openLyrics { shown("Plain one") }
+        waitUntil { problems() == listOf("no_timing") }
+        answerTo = { null }
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics { shown("Plain one") }
+        settled()
+        assertEquals(listOf("no_timing"), problems())
+    }
+
+    @Test
     fun aLineTappedIntoTimeOffersTooAndLeftUnansweredNothingGoes() {
         openLyrics()
         composeRule.runOnIdle { model().syncLine(1) }
@@ -819,6 +839,45 @@ class LyricsReportTest {
         assertEquals(2, owed())
         reportsDown = false
         // The app started anew: they go at the start.
+        controller!!.destroyAndSettle()
+        openLyrics()
+        waitUntil { owed() == 0 }
+        assertEquals(3, sentFakes().size)
+    }
+
+    @Test
+    fun aTimingReportOwedThatTheBoxTurnsAwayIsDroppedAndTheNextGoes() {
+        owedFor("Old one", "Old two")
+        // Made by a version that put more lines in it than the box takes, which it never will.
+        answerTo = { body -> 400.takeIf { "Old one" in body } }
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 2 }
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("""{"fake":"Old one"}""", """{"fake":"Old two"}"""), sentFakes())
+        // Turned away, it isn't taken as sent, so the song's words put in time again still go.
+        assertFalse(AutoReports(prefs()).reported(MusicMetadata("Old one", "Band"), SongProblem.TIMED_BY_HAND))
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Old two", "Band"), SongProblem.TIMED_BY_HAND))
+        // Started again, nothing is left to go.
+        controller!!.destroyAndSettle()
+        openLyrics()
+        composeRule.waitForIdle()
+        assertEquals(2, sentFakes().size)
+    }
+
+    @Test
+    fun timingReportsOwedThatTheBoxHasNoRoomForNowWaitForTheNextStart() {
+        owedFor("Old one", "Old two")
+        answerTo = { 429 }
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(1, sentFakes().size)
+        assertEquals(2, owed())
+        answerTo = { null }
         controller!!.destroyAndSettle()
         openLyrics()
         waitUntil { owed() == 0 }
