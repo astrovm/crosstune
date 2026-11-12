@@ -273,7 +273,7 @@ class SungWordsTest {
         val heard = sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_300L, "let" to 3_000L, "me" to 3_300L, "go" to 3_600L)
         assertEquals(mapOf(0 to 300L, 1 to 2_700L), SungAlignment.linesMs(heard, fromTheStart, words, -700))
         // Heard by one of its timed words only, it keeps to the rest.
-        assertEquals(mapOf(0 to 300L, 1 to 2_300L), SungAlignment.linesMs(sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_700L), fromTheStart, words, -700))
+        assertEquals(mapOf(0 to 300L, 1 to 2_300L), SungAlignment.linesMs(sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_700L, "me" to 3_300L), fromTheStart, words, -700))
     }
 
     /** A verse of eight lines, then a chorus of three sung twice, three seconds a line. */

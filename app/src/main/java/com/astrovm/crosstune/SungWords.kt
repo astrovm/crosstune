@@ -403,7 +403,8 @@ internal object SungAlignment {
      */
     private fun wordsOf(line: LyricLine, nextMs: Long?, index: Int): List<Word> {
         val words = if (line.words.isNotEmpty()) {
-            line.words.flatMap { word -> SpokenWords.heardFrom(word.text, word.timeMs) }
+            // A word of ours after the first in a timed word, as "me" in "let me ", has no time of its own: it's guessed.
+            line.words.flatMap { word -> SpokenWords.heardFrom(word.text, word.timeMs).mapIndexed { at, (text, ms) -> text to ms.takeIf { at == 0 || SpokenWords.isUnspaced(text) } } }
         } else {
             pieces(line.text).mapIndexed { at, text -> text to line.timeMs.takeIf { at == 0 } }
         }
