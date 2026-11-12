@@ -1059,8 +1059,15 @@ internal object Readings {
         val read = of(listOf(parts.joinToString("") { it.text }), script).single()
         if (read.parts == parts || script != Script.CHINESE) return read.copy(parts = parts)
         // Each reading in its place, in Latin letters already, so Android writes out the rest around it as it does a line.
-        val given = parts.joinToString("") { part -> part.reading?.let { " $it " } ?: part.text }
-        val said = of(listOf(given), script).single().romanized.ifEmpty { given }.split(" ").filter(String::isNotEmpty).joinToString(" ")
+        // It puts a space between a syllable and a letter next to it, "wǒ ài nǐ a", but none before "!".
+        val given = buildString {
+            parts.zipWithNext().forEach { (before, part) ->
+                append(before.reading ?: before.text)
+                if (before.reading != null && part.text.firstOrNull()?.isLetter() == true || part.reading != null && before.text.lastOrNull()?.isLetter() == true) append(' ')
+            }
+            parts.lastOrNull()?.let { append(it.reading ?: it.text) }
+        }
+        val said = of(listOf(given), script).single().romanized
         return LineReading(parts, said, said)
     }
 
