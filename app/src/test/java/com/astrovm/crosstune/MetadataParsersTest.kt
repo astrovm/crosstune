@@ -238,8 +238,9 @@ class MetadataParsersTest {
         for (title in listOf("Artist - Song (Official Video [4K])", "Artist - Song (Official Video (Remastered))", "Artist - Song [Lyrics (English)]", "Artist - Song ([Lyrics])")) {
             assertEquals(title, MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
         }
-        // One that only holds it keeps what it says of the song.
-        assertEquals(MusicMetadata("Song (Live at Wembley)", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live at Wembley [HD])", "Channel"))
+        // Its words are read as words, as main read them with no brackets in it: one says it's a video, and it goes whole.
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live at Wembley [HD])", "Channel"))
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (x[[4K]2 y])", "Channel"))
         assertEquals(MusicMetadata("Song (Live (2020))", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live (2020))", "Channel"))
         // A bracket that never closes, or one too many, is read from the first one to the first close, as it always was.
         for (title in listOf("Artist - Song (Lyrics()", "Artist - Song ((Lyrics)", "Artist - Song (Official Video :( )")) {

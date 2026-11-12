@@ -95,6 +95,12 @@ internal fun bracketTags(text: String, opens: String, closes: String): List<IntR
     return tags
 }
 
+/**
+ * Whether a pattern that ignores case reads [char] as one of a to z: those, and the letters whose other case is one,
+ * the Kelvin sign as "k", "ſ" as "s", "ı" and "İ" as "i".
+ */
+internal fun isLatinLetterIgnoringCase(char: Char) = char.lowercaseChar() in 'a'..'z' || char.uppercaseChar() in 'A'..'Z'
+
 /** Whether each bracket in [text] closes, in order, with the bracket of its own kind: [closes] pairs with [opens]. */
 internal fun bracketsInOrder(text: String, opens: String, closes: String): Boolean {
     val open = StringBuilder()

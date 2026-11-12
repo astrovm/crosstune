@@ -45,15 +45,56 @@ internal object MetadataParsers {
     )
 
     /**
-     * The artist on the first line, and the song in the first 「」 or 『』 after them with more than spaces in it:
-     * "YOASOBI「アイドル」". What follows is anything, a line break too. "Vlog" on a line of its own is no artist, so
+     * The artist on the first line, and the song in the first 「」 or 『』 after them with something in it:
+     * "YOASOBI「アイドル」". One with only spaces in it is taken out first, see [withoutBlankSong]. What follows is anything, a line break too. "Vlog" on a line of its own is no artist, so
      * "Vlog\nYOASOBI「アイドル」" is no song.
      */
-    private val bracketedSongRegex = Regex("""^(?>(.*?)$SPACES_START\s*+[「『](?![\s\p{Z}]*+[」』]))([^」』]++)[」』](?s:.*)""")
+    private val bracketedSongRegex = Regex("""^(?>(.*?)$SPACES_START\s*+[「『](?![」』]))([^」』]++)[」』](?s:.*)""")
 
-    /** The artist and the song of a title that names the song in 「」 or 『』, as [bracketedSongRegex] reads it. A blank 「 」 names none. */
+    /** The artist and the song of a title that names the song in 「」 or 『』, as [bracketedSongRegex] reads it. */
     fun bracketedSong(title: String): Pair<String, String>? =
-        bracketedSongRegex.matchEntire(title)?.destructured?.let { (artist, song) -> (artist to song).takeIf { song.isNotBlank() } }
+        bracketedSongRegex.matchEntire(withoutBlankSong(title))?.destructured?.let { (artist, song) -> artist to song }
+
+    /**
+     * [title], with no blank song, to the end of the line its song in 「」 or 『』 closes on: the lines after it say
+     * nothing of the song, so a Spotify page's title on that line is read as one, as main read it with no line after.
+     */
+    private fun songLine(title: String): String {
+        val song = bracketedSongRegex.matchEntire(title)?.groups?.get(2) ?: return title
+        val end = (song.range.last + 2 until title.length).firstOrNull { isLineBreak(title[it]) } ?: return title
+        return title.substring(0, end)
+    }
+
+    /**
+     * [title] without the 「」 or 『』 that [bracketedSongRegex] reads its song in while that has only spaces, "A「 」『Song』"
+     * being "A『Song』": main named a song with no name. That's the first that opens on the first line, or after only
+     * spaces, with something in it before it closes. A title is read as if it had none.
+     */
+    private fun withoutBlankSong(title: String): String {
+        var kept: StringBuilder? = null
+        var from = 0
+        var at = 0
+        // Past the first line, a song's bracket opens only after spaces.
+        var pastLine = false
+        while (at < title.length) {
+            val char = title[at]
+            val close = if (char in SONG_OPENS) title.indexOfAny(SONG_CLOSES, at + 1) else at
+            if (close > at + 1) {
+                if (!title.substring(at + 1, close).isBlank()) break
+                kept = (kept ?: StringBuilder()).append(title, from, at)
+                from = close + 1
+                at = from
+                continue
+            }
+            pastLine = pastLine || isLineBreak(char)
+            if (close < 0 || pastLine && !isPatternSpace(char)) break
+            at = close + 1
+        }
+        return kept?.append(title, from, title.length)?.toString() ?: title
+    }
+
+    private const val SONG_OPENS = "「『"
+    private val SONG_CLOSES = charArrayOf('」', '』')
 
     /** Video titles often carry release noise such as "(Official Video)" or "[Lyrics]". */
     private const val MUSIC_TAG_WORDS = """\b(?:official|oficial|officiel|offiziell\w*|ufficiale|oficjalny|resmi|videoclip|videoclipe|clipe|audio|lyrics?|letra|visuali[sz]er|mv|m/v)\b|клип|официальн|رسمي|كليب|公式|官方|歌詞|歌词|가사|뮤직비디오"""
@@ -92,8 +133,8 @@ internal object MetadataParsers {
      */
     private val trailingNoise: List<(CharSequence) -> IntRange?> by lazy {
         listOf(
-            { text -> if (endsOnAWord(text)) trailingQualityRegex.find(text, beforeLetters(text, text.length, QUALITY_LETTERS))?.range else null },
-            { text -> if (endsOnAWord(text)) trailingVideoNoiseRegex.find(text, beforeLetters(text, text.length, VIDEO_NOISE_LETTERS))?.range else null },
+            { text -> if (endsOnAWord(text)) trailingQualityRegex.find(text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS))?.range else null },
+            { text -> if (endsOnAWord(text)) trailingVideoNoiseRegex.find(text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS))?.range else null },
             ::danglingDash,
         )
     }
@@ -103,8 +144,8 @@ internal object MetadataParsers {
      * patterns end: "Lyrics", "HD |", "Video". A run of dashes is cut one at a time, and isn't read by them each time.
      */
     private fun endsOnAWord(text: CharSequence): Boolean {
-        val last = spacesStart(text, if (text.isNotEmpty() && isLineBreak(text.last())) text.length - 1 else text.length) - 1
-        return last >= 0 && text[last].let { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '|' }
+        val last = spacesStart(text, lineEnd(text)) - 1
+        return last >= 0 && text[last].let { isLatinLetterIgnoringCase(it) || it in '0'..'9' || it == '|' }
     }
     private const val QUALITY_LETTERS = 12
     private const val VIDEO_NOISE_LETTERS = 25
@@ -234,9 +275,11 @@ internal object MetadataParsers {
      * An Ancient Linux Terminal Problem" by "Brodie Robertson", is no song. Not [byDash], "Artist - Song"
      * alone doesn't say it.
      */
-    fun musicVideo(title: String, channel: String, byDash: Boolean = true): MusicMetadata? {
-        spotifyPageSplitAtItsDash(title, channel)?.let { return it }
-        spotifyPage(title)?.let { return it }
+    fun musicVideo(said: String, channel: String, byDash: Boolean = true): MusicMetadata? {
+        val title = withoutBlankSong(said)
+        val line = songLine(title)
+        spotifyPageSplitAtItsDash(line, channel)?.let { return it }
+        spotifyPage(line)?.let { return it }
         val song = youtubeVideo(title, channel) ?: return null
         val says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.containsMatchIn(title) ||
             bracketedSong(title) != null || (byDash && artistSeparator(title) > 0) ||
@@ -346,10 +389,12 @@ internal object MetadataParsers {
      * or many, as a compilation's "Various Artists", may name it in the title, "Artist - Song", as a video does.
      * A title alone still identifies what is playing, even if it cannot say who made it.
      */
-    fun playerSong(title: String, artist: String): MusicMetadata? =
-        (spotifyPageSplitAtItsDash(title, artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
+    fun playerSong(said: String, artist: String): MusicMetadata? {
+        val title = withoutBlankSong(said)
+        return (spotifyPageSplitAtItsDash(songLine(title), artist) ?: if (noArtist(artist)) youtubeVideo(title.replace(audioExtension, ""), "") else MusicMetadata(title, artist))
             ?.let { if (noArtist(it.artist)) it.copy(artist = "") else it }
             ?.takeIf { it.title.isNotBlank() && !namesAFile(it) }
+    }
 
     fun noArtist(artist: String) = artist.isBlank() || noOneArtist.matches(artist.trim())
 
@@ -367,67 +412,20 @@ internal object MetadataParsers {
     )
 
     /**
-     * [text] without the tags that say what the video is, and the spaces before each: "Song (Official Video [4K])" is
-     * "Song". A tag that says it of a tag inside it only, "Song (Live at Wembley [HD])", loses just that one, and
-     * goes too when nothing else is left in it, "Song ([Lyrics])". Where a bracket doesn't close in order, tags are
-     * read as [bracketTags] reads them, as main did. Read once, from the left, with the tags still open.
+     * [text] without the tags that say what the video is, and the spaces before each: "Song (Official Video)" is "Song".
+     * A tag that holds tags is read whole, as main read the title with no tag in another: "Song (Live at Wembley [HD])"
+     * says it's a video, so it goes. Where a bracket doesn't close in order, tags are read as [bracketTags] reads them,
+     * as main did.
      */
     private fun withoutVideoNoise(text: String): String {
-        if (!bracketsInOrder(text, TAG_OPENS, TAG_CLOSES)) return withoutFlatVideoNoise(text)
-        val kept = StringBuilder()
-        val open = ArrayList<OpenTag>()
-        for (char in text) {
-            when (char) {
-                in TAG_OPENS -> {
-                    open += OpenTag(kept.length)
-                    kept.append(char)
-                }
-                in TAG_CLOSES -> {
-                    val tag = open.removeAt(open.lastIndex)
-                    val outer = open.lastOrNull()
-                    val goes = videoNoiseWords.containsMatchIn(tag.words) || (tag.lost && !tag.lettered)
-                    if (goes) {
-                        kept.setLength(tag.start)
-                        dropEndSpaces(kept)
-                    } else {
-                        kept.append(char)
-                    }
-                    outer?.words?.append(' ')
-                    outer?.lost = outer.lost || goes || tag.lost
-                    outer?.lettered = outer.lettered || !goes
-                }
-                else -> {
-                    kept.append(char)
-                    open.lastOrNull()?.let { tag ->
-                        tag.words.append(char)
-                        tag.lettered = tag.lettered || !char.isWhitespace()
-                    }
-                }
-            }
-        }
-        return kept.toString()
-    }
-
-    /** [withoutVideoNoise] where a bracket doesn't close in order: each of [bracketTags]' tags, alone. */
-    private fun withoutFlatVideoNoise(text: String): String {
         val kept = StringBuilder()
         var from = 0
         for (tag in bracketTags(text, TAG_OPENS, TAG_CLOSES)) {
             kept.append(text, from, tag.first)
-            if (videoNoiseWords.containsMatchIn(text.substring(tag.first + 1, tag.last))) dropEndSpaces(kept) else kept.append(text, tag.first, tag.last + 1)
+            if (videoNoiseWords.containsMatchIn(text.substring(tag))) dropEndSpaces(kept) else kept.append(text, tag.first, tag.last + 1)
             from = tag.last + 1
         }
         return kept.append(text, from, text.length).toString()
-    }
-
-    /**
-     * A tag [withoutVideoNoise] is in, which starts at [start] of what it keeps: its own words, with a space for each tag
-     * inside it, whether it lost one of them, and whether what's left in it is more than spaces.
-     */
-    private class OpenTag(val start: Int) {
-        val words = StringBuilder()
-        var lost = false
-        var lettered = false
     }
 
     /** [text] without the spaces it ends with, as a pattern's `\s` reads them. */
@@ -476,8 +474,7 @@ internal object MetadataParsers {
      * space, the dash, and only spaces after it to the end, or to a line break that ends the text.
      */
     private fun danglingDash(text: CharSequence): IntRange? {
-        val lineStop = if (text.isNotEmpty() && isLineBreak(text.last())) text.length - 1 else text.length
-        val dash = spacesStart(text, lineStop) - 1
+        val dash = spacesStart(text, lineEnd(text)) - 1
         if (dash < 1 || text[dash] !in DASHES) return null
         val start = spacesStart(text, dash)
         return if (start < dash) start until spacesEnd(text, dash + 1) else null
@@ -488,7 +485,7 @@ internal object MetadataParsers {
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
         // Removing one suffix can expose another: "Song Official Video HD" or "Song HD (Lyrics)".
-        var rawTitle = withoutTrailingNoise(withoutVideoNoise(withoutSubtitlesTag(title)).trim())
+        var rawTitle = withoutTrailingNoise(withoutVideoNoise(withoutSubtitlesTag(withoutBlankSong(title))).trim())
         rawTitle = rawTitle.replace(trackNumberRegex, "").ifEmpty { return null }
         val author = channel.removeSuffix(" - Topic").removeSuffix("VEVO").trim()
         // Japanese videos name the song in brackets after the artist, whatever follows them:

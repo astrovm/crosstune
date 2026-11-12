@@ -11,33 +11,37 @@ import org.junit.Test
 class LongTitlesTest {
     @Test
     fun noTitleTakesLongToRead() {
-        val titles = listOf(
-            // A run of line breaks, then something that isn't a space.
-            "Artist - Song " + "\n".repeat(LENGTH) + ")",
-            // A dash that a pass strips, again and again.
-            " - ".repeat(LENGTH / 3),
-            // A cover after a dash on each line but the last.
-            " - Cover".repeat(LENGTH / 16) + "\n" + " - Cover".repeat(LENGTH / 16),
-            "Song " + "(".repeat(LENGTH),
-            "Song " + "((Lyrics)".repeat(LENGTH / 9),
-            "Song " + " (Live)".repeat(LENGTH / 7),
-            "Song " + " (feat. A".repeat(LENGTH / 9),
-            "Song " + " ft. A".repeat(LENGTH / 6) + ")",
-            "Song " + "(((Live)))".repeat(LENGTH / 10),
-            "Song " + "(".repeat(LENGTH / 2) + ")".repeat(LENGTH / 2),
-            // The review's slowest: a player's title of dashes, and guests that each end where the next starts.
-            " - ".repeat(LENGTH / 3) + "\n",
-            " ft. a  ".repeat(LENGTH / 8) + ")",
-        ) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(LENGTH / piece.length) + ending } }
-        // Once, so the first call's start-up isn't timed.
-        read("Artist - Song (Official Video)")
-        val slow = titles.mapNotNull { title ->
+        // Each once, shorter, so that what's timed is the reading and not the start-up of the code that reads it.
+        titles(LENGTH / 10).forEach(::read)
+        val slow = titles(LENGTH).mapNotNull { title ->
             val began = System.nanoTime()
             read(title)
             val millis = (System.nanoTime() - began) / 1_000_000
             "${title.take(20).replace("\n", "\\n")}…${title.takeLast(2).replace("\n", "\\n")} ${millis}ms".takeIf { millis > LIMIT_MS }
         }
         assertEquals(emptyList<String>(), slow)
+    }
+
+    /** The worst titles found for the readers, each about [length] long. */
+    private fun titles(length: Int): List<String> {
+        return listOf(
+            // A run of line breaks, then something that isn't a space.
+            "Artist - Song " + "\n".repeat(length) + ")",
+            // A dash that a pass strips, again and again.
+            " - ".repeat(length / 3),
+            // A cover after a dash on each line but the last.
+            " - Cover".repeat(length / 16) + "\n" + " - Cover".repeat(length / 16),
+            "Song " + "(".repeat(length),
+            "Song " + "((Lyrics)".repeat(length / 9),
+            "Song " + " (Live)".repeat(length / 7),
+            "Song " + " (feat. A".repeat(length / 9),
+            "Song " + " ft. A".repeat(length / 6) + ")",
+            "Song " + "(((Live)))".repeat(length / 10),
+            "Song " + "(".repeat(length / 2) + ")".repeat(length / 2),
+            // The review's slowest: a player's title of dashes, and guests that each end where the next starts.
+            " - ".repeat(length / 3) + "\n",
+            " ft. a  ".repeat(length / 8) + ")",
+        ) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(length / piece.length) + ending } }
     }
 
     @Test
@@ -86,7 +90,7 @@ class LongTitlesTest {
             " (M/V", " Cover", " - Cover", "\nCover", " cover of a", " in the style of a (", " Lyrics", " HD", " Official Video",
             " Video", " (Live)", "(Live) ", " - Live", " Remastered", " - Remastered 2012", " (Remastered", "Remix ", "「a」",
             "a「", "（歌：", "（歌：a）", "(歌", " sub esp", "|| sub español ", " - Song, Lyrics, and Music Video by ", "song by ",
-            " | Spotify", " by ", "\u3000", "\u0085",
+            " | Spotify", " by ", "\u3000", "\u0085", " ft. a - Remaster)", " ft. a - Remaster", "x[[4K]2 ",
         )
 
         /** How each of [PIECES]' titles ends: as it is, on a bracket, a line break, or a word. */

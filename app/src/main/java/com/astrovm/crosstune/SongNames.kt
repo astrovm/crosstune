@@ -134,19 +134,35 @@ internal object SongNames {
 
     /**
      * [title] without the tags it ends on, again until one says it's another recording or none is left but the tags:
-     * [withoutEditionTag]'s loop once nothing else changes. The title is cut short, not copied, on each pass.
+     * [withoutEditionTag]'s loop once nothing else changes. The title is cut short, not copied, on each pass. A cut that
+     * takes the last bracket with it lets a guest before that bracket run to the end, "Song ft. X - Remastered 2011)",
+     * so the loop's next pass would cut it off: only what's between the brackets left and the end is read for one, once.
      */
     private fun withoutEndTags(title: String): String {
         val firstLetter = title.indexOfFirst { !it.isWhitespace() }.takeIf { it >= 0 } ?: title.length
-        var kept = Kept(title, title.length, "")
+        var stripped = Kept(title, title.length, "")
+        var unfeatured = stripped
+        var bracket = title.lastIndexOfAny(BRACKETS)
         while (true) {
-            val tag = editionTagIn(kept) ?: return kept.toString()
-            if (words(kept.substring(tag)).any { it in OTHER_RECORDING }) return kept.toString()
-            val shorter = kept.without(tag)
-            if (shorter.end <= firstLetter && shorter.after.isBlank()) return kept.toString()
-            kept = shorter
+            val tag = editionTagIn(unfeatured)
+            if (tag != null && words(unfeatured.substring(tag)).any { it in OTHER_RECORDING }) return unfeatured.toString()
+            val shorter = if (tag == null) unfeatured else unfeatured.without(tag)
+            if (shorter.end <= firstLetter && shorter.after.isBlank()) return stripped.toString()
+            if (tag == null) return unfeatured.toString()
+            stripped = shorter
+            unfeatured = shorter
+            if (bracket >= shorter.end) {
+                bracket = title.lastIndexOfAny(BRACKETS, shorter.end - 1)
+                val open = title.substring(bracket + 1, shorter.end) + shorter.after
+                val guestless = withoutFeaturing(open)
+                // The guest runs to the end, or to the line break that ends the title, which stays.
+                val same = guestless.commonPrefixWith(open).length
+                if (guestless != open) unfeatured = Kept(title, bracket + 1 + same, guestless.substring(same))
+            }
         }
     }
+
+    private val BRACKETS = "()[]".toCharArray()
 
     /**
      * The [editionTag] that ends [text], as main's pattern found it. A tag starts at the last bracket that opens, or
@@ -502,7 +518,7 @@ internal object SongNames {
     private val accompaniment = Regex("""karaoke|カラオケ|\bbacking tracks?\b|\bminus ones?\b""", RegexOption.IGNORE_CASE)
 
     /** What YouTube adds to an artist's name for their channel: "BandVEVO", "Band - Topic". */
-    private val channel = Regex("""VEVO$|\s*-\s*Topic$""")
+    private val channel = Regex("""VEVO$|$SPACES_START\s*+-\s*+Topic$""")
     private val SAYS_VERSION = setOf("ver", "version", "versao")
 
     /** What's in brackets, of any kind Chinese and Japanese titles use, once full-width ones are written as others. */

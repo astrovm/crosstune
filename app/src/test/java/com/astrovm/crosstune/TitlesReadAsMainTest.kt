@@ -21,10 +21,49 @@ class TitlesReadAsMainTest {
     fun aBlankBracketNamesNoSong() {
         assertNull(MetadataParsers.bracketedSong("Artist「 」"))
         assertNull(MetadataParsers.bracketedSong("Artist『　』"))
-        // The next one does.
-        assertEquals("Artist「 」 Band" to "Song", MetadataParsers.bracketedSong("Artist「 」 Band「Song」"))
-        val title = "/ \n 「 」 \n in the style of Q"
-        assertEquals(MusicMetadata(title, ""), MetadataParsers.playerSong(title, ""))
+        // The next one does, read as if the blank one wasn't there, as main read that title.
+        assertEquals("Artist Band" to "Song", MetadataParsers.bracketedSong("Artist「 」 Band「Song」"))
+        // A blank one main didn't read the song in stays: it read the song before it, or none past its first line.
+        assertEquals("" to "x『 ", MetadataParsers.bracketedSong("「x『 」"))
+        assertEquals("" to "『", MetadataParsers.bracketedSong("「『」」"))
+        assertEquals("A「」" to "x", MetadataParsers.bracketedSong("A「」「 」『x』"))
+        assertNull(MetadataParsers.bracketedSong("A「x"))
+        // Past the first line, one after only spaces is read, as main's pattern reached it; one after a word isn't.
+        assertEquals("A" to "x", MetadataParsers.bracketedSong("A\n「 」『x』"))
+        assertNull(MetadataParsers.bracketedSong("A\nB「 」『x』"))
+        assertEquals(MusicMetadata("/ \n  \n in the style of Q", ""), MetadataParsers.playerSong("/ \n 「 」 \n in the style of Q", ""))
+    }
+
+    @Test
+    fun aGuestBeforeAnEndTagGoesWithTheTag() {
+        // A tag led by a dash that closes a bracket it didn't open, "- Remastered 2011)", leaves the guest at the end.
+        for (title in listOf("Song ft. X - Remastered 2011)", "Song feat. X - Remastered)", "Song ft. X - 2011 Remaster]", "Song featuring X - Single Version)")) {
+            assertEquals(title, "Song", SongNames.withoutEditionTag(title))
+        }
+        assertEquals("Song\n", SongNames.withoutEditionTag("Song ft. X - Remastered 2011)\n"))
+        assertEquals("Song (Live)", SongNames.withoutEditionTag("Song ft. X - Remastered (Live)"))
+    }
+
+    @Test
+    fun aLetterThatIsOneOfAToZIgnoringCaseIsALetter() {
+        // The Kelvin sign is "k", "ſ" is "s", "ı" and "İ" are "i", to a pattern that ignores case, as main's did.
+        for (title in listOf("Song 4\u212A", "Song - Lyric\u017F", "Song Lyr\u0131cs", "Song Lyr\u0130cs")) {
+            assertEquals(title, MusicMetadata("Song", "Channel"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
+        assertEquals(MusicMetadata("Song H\u0131", "Channel"), MetadataParsers.youtubeVideo("Song H\u0131", "Channel"))
+    }
+
+    @Test
+    fun aTitleEndsBeforeTheLineBreakAPatternEndsBefore() {
+        // "\u0085" ends a line to a pattern's end, and isn't a space to trim; the others are both.
+        assertEquals(MusicMetadata("Song\u0085", "Artist"), MetadataParsers.youtubeVideo("Artist - Song | Lyrics |HD|\u0085", "Channel"))
+        assertEquals(MusicMetadata("Song\u0085", "Artist"), MetadataParsers.youtubeVideo("Artist - Song -\u0085", "Channel"))
+        for (end in listOf("\u2028", "\u2029", "\r\n")) {
+            assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song | Lyrics |HD|$end", "Channel"))
+        }
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song 4K\u2028", "Channel"))
+        // Not one with more after it.
+        assertEquals(MusicMetadata("Song | Lyrics |HD|\u0085x", "Artist"), MetadataParsers.youtubeVideo("Artist - Song | Lyrics |HD|\u0085x", "Channel"))
     }
 
     @Test
@@ -77,6 +116,17 @@ class TitlesReadAsMainTest {
         assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.playerSong("song and lyrics by Artist | Spotify", "Song"))
         // A description over two lines is no page's: the player's title and artist, as they are.
         assertEquals(MusicMetadata("song and lyrics by \nArtist | Spotify", "Song"), MetadataParsers.playerSong("song and lyrics by \nArtist | Spotify", "Song"))
+    }
+
+    @Test
+    fun aSpotifyPageIsReadOnTheLineItsSongClosesOn() {
+        // The lines after a song in 「」 say nothing of it: it's read as main read the title without them.
+        val page = "Song - song and lyrics by Artist『x』 | Spotify"
+        for (title in listOf(page, "$page\nmore")) {
+            assertEquals(title, MusicMetadata("Song", "Artist『x』"), MetadataParsers.musicVideo(title, "Channel"))
+            assertEquals(title, MusicMetadata("x", "Song - song and lyrics by Artist"), MetadataParsers.playerSong(title, ""))
+            assertEquals(title, MusicMetadata("x", "Song - song and lyrics by Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
     }
 
     private companion object {
