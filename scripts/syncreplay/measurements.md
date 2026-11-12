@@ -655,3 +655,24 @@ The rule picks share 0.5, 5 s, 70 ms, 550 ms: one line off fewer than 6 s on `tu
 - 5 s moves every count by 1 or 2, on `held` and on all songs, and puts one fewer within 1.0 s. That's noise, so 6 s stays.
 - On the held songs, lines off fall from 44 to 26 and over 3 s from 23 to 9, but 10 fewer are within 1.0 s (201 to 191). On `tune` 5 more are. So the rule that leaves a line untimed costs good lines on songs it wasn't picked on. Issue #928 has it.
 - Per part, main → now, within 1.0 s / off / over 3 s: part 1 201 / 44 / 23 → 191 / 26 / 9, part 2 240 / 26 / 6 → 236 / 13 / 2, part 3 153 / 60 / 20 → 162 / 18 / 4.
+
+### A letter of unspaced writing (Issue #892 review)
+
+The review found that a heard word in unspaced writing gave each of its letters the word's own time (`SungWords.kt`). The fix gave each letter 70 ms after the one before, as `SungTiming.kt` had. Then `all` put Ghibli-style Japanese lines up to 1.4 s early (ZS6p32gX_yk: 13 to 5 lines within 0.5 s).
+
+The cause: whisper tiny hears Japanese as long phrases, and a phrase's letters are sung far slower than 70 ms each. Over the phrases heard in the Japanese songs, a letter's share of its phrase is 463 ms (median; 300 to 610 ms between the quartiles). A line's first three letters found in a heard phrase, 38 cases, start within 0.5 s of the truth: 10 with every letter at the phrase's start, 10 at 70 ms a letter, 13 at 300 ms, 17 at 400 ms, 14 at 500 ms, 15 at 600 ms.
+
+So a letter of unspaced writing (Han, kana, Hangul) counts as a few of ours, each 70 ms (`SpokenWords.sungLetters`), everywhere a timing counts letters: where heard and timed words' letters are sung, where a line starts by the letters before a word, how far apart two lines must be, and how long a line is lit. Swept on `untimed --again 12000`, with the rule above (within 1.0 s / off / over 3 s / wrong):
+
+| Letters | `tune` | `held` | All songs |
+|---|---|---|---|
+| 1 (70 ms, before) | 398 / 32 / 6 / 58 | 191 / 26 / 9 / 39 | 589 / 58 / 15 / 97 |
+| 3 | 402 / 33 / 8 / 59 | 195 / 27 / 9 / 36 | |
+| 4 (280 ms) | 403 / 33 / 6 / 58 | 196 / 28 / 8 / 37 | 599 / 61 / 14 / 95 |
+| 5 | 404 / 34 / 7 / 57 | 199 / 25 / 6 / 34 | 603 / 59 / 13 / 91 |
+| 6 | 400 / 36 / 7 / 60 | 197 / 27 / 6 / 34 | 597 / 63 / 13 / 94 |
+| 8 | 393 / 37 / 8 / 63 | 197 / 23 / 5 / 31 | 590 / 60 / 13 / 94 |
+
+- On `tune`, 1 and 4 pass the rule's bounds (at least 398 within 1.0 s, at most 6 over 3 s); 3, 5, 6 and 8 put 7 or 8 over 3 s. Between them, the rule's last step picks 1 by one line off (32 against 33).
+- 4 puts 5 more lines within 1.0 s on `tune` and 5 more on `held`, the songs it wasn't picked on. One line off more is noise, as with `SAME_PLACE_MS` above. And 70 ms a letter is what broke the timed lyrics. So 4 it is.
+- The truths were made before the replay's hearing gave each letter its own time (6 November), with each letter at its word's start. They're not made again, so that `untimed` and `all` measure as they did. A Japanese or Korean line's truth can be early by the letters before it in its word.

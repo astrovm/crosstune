@@ -407,11 +407,11 @@ internal object SungAlignment {
         } else {
             pieces(line.text).mapIndexed { at, text -> text to line.timeMs.takeIf { at == 0 } }
         }
-        val letters = words.sumOf { it.first.length }
+        val letters = words.sumOf { SpokenWords.sungLetters(it.first) }
         val sungFor = (nextMs ?: (line.timeMs + LAST_LINE_MS)) - line.timeMs
         var before = 0
         return words.map { (text, ms) ->
-            Word(text, ms, ms ?: (line.timeMs + sungFor * before * 4 / 5 / letters), index).also { before += text.length }
+            Word(text, ms, ms ?: (line.timeMs + sungFor * before * 4 / 5 / letters), index).also { before += SpokenWords.sungLetters(text) }
         }
     }
 

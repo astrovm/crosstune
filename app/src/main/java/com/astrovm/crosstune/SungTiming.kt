@@ -17,9 +17,19 @@ internal object SpokenWords {
      */
     fun heardFrom(text: String, ms: Long): List<Pair<String, Long>> {
         var before = 0L
-        return pieces(text).map { piece -> (piece to ms + before * SungTiming.LETTER_MS).also { before += piece.length } }
+        return pieces(text).map { piece -> (piece to ms + before * SungTiming.LETTER_MS).also { before += sungLetters(piece) } }
     }
 
+    /**
+     * How many letters [piece] takes to sing, each about [SungTiming.LETTER_MS]: a letter of unspaced writing is a
+     * whole syllable, or a word, and takes as long as [UNSPACED_LETTERS] of ours.
+     */
+    fun sungLetters(piece: String): Int = if (unspaced.matches(piece)) UNSPACED_LETTERS else piece.length
+
+    /** Picked on the songs heard, as scripts/syncreplay/measurements.md has it: a Japanese letter, as whisper hears it, is near 300 ms. */
+    private const val UNSPACED_LETTERS = 4
+
+    private val unspaced = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]")
     private val writing = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+")
 
     /** A word as it sounds, near enough: lower case, without accents or anything but letters and digits. */
@@ -45,7 +55,7 @@ internal object SungTiming {
         if (starts.isEmpty()) return emptyList()
         return lines.mapIndexed { index, text ->
             val start = starts[index] ?: return@mapIndexed LyricLine(LyricLine.NOT_HEARD, text)
-            LyricLine(start, text, endMs = if (index + 1 in starts) null else start + SpokenWords.pieces(text).sumOf { it.length } * SUNG_LETTER_MS + LINGER_MS)
+            LyricLine(start, text, endMs = if (index + 1 in starts) null else start + SpokenWords.pieces(text).sumOf { SpokenWords.sungLetters(it) } * SUNG_LETTER_MS + LINGER_MS)
         }
     }
 
@@ -54,7 +64,7 @@ internal object SungTiming {
         val stretches = heard.sortedBy { it.fromMs }
         val written = written(lines)
         if (written.isEmpty()) return emptyMap()
-        val total = written.last().letters + written.last().text.length
+        val total = written.last().letters + SpokenWords.sungLetters(written.last().text)
         val candidates = written.groupBy { it.line }.flatMap { (line, pieces) ->
             val expected = lengthMs * (INTRO + (1 - INTRO - OUTRO) * pieces.first().letters / total)
             // Each while alone, as words heard at the end of one and the start of the next weren't sung together.
@@ -227,7 +237,7 @@ internal object SungTiming {
         var all = 0
         val pieces = lines.withIndex().flatMap { (line, text) ->
             var before = 0
-            SpokenWords.pieces(text).map { piece -> Written(piece, line, before, all).also { before += piece.length; all += piece.length } }
+            SpokenWords.pieces(text).map { piece -> Written(piece, line, before, all).also { before += SpokenWords.sungLetters(piece); all += SpokenWords.sungLetters(piece) } }
         }
         // A word in many lines says little of which it is, though a line sung again says nothing against its words; one letter, as "a" or "の", even less.
         val counts = pieces.groupBy { it.text }.mapValues { (_, its) -> its.map { lines[it.line] }.distinct().size }

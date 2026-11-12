@@ -290,8 +290,17 @@ def heard_pieces(word, start):
     heard, before = [], 0
     for piece in pieces(word):
         heard.append((piece, round(start + before * SUNG_LETTER_S, 3)))
-        before += len(piece)
+        before += sung_letters(piece)
     return heard
+
+
+# A letter of unspaced writing is a syllable, as long as this many of ours to sing, as SpokenWords.sungLetters has it.
+UNSPACED_LETTERS = 4
+
+
+def sung_letters(piece):
+    """How many letters [piece] takes to sing, each about SUNG_LETTER_S."""
+    return UNSPACED_LETTERS if re.fullmatch(f"[{UNSPACED}]", piece) else len(piece)
 
 
 def line_starts(heard, lines):

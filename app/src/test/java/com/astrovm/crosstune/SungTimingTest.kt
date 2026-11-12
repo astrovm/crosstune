@@ -24,7 +24,7 @@ class SungTimingTest {
     private fun sungAt(startMs: Long, text: String): List<Pair<String, Long>> {
         var before = 0
         return text.split(' ').map { word ->
-            (word to startMs + SungTiming.HEARD_LATE_MS + before * SungTiming.LETTER_MS).also { before += SpokenWords.pieces(word).sumOf { it.length } }
+            (word to startMs + SungTiming.HEARD_LATE_MS + before * SungTiming.LETTER_MS).also { before += SpokenWords.pieces(word).sumOf { SpokenWords.sungLetters(it) } }
         }
     }
 
@@ -334,10 +334,18 @@ class SungTimingTest {
     @Test
     fun wordsInJapaneseAreMatchedALetterAtATime() {
         val japanese = listOf("君の名前を呼んだ", "夜明けの空に")
-        val heardSo = listOf("君の" to 10_550L, "名前を" to 10_690L, "呼んだ" to 10_900L)
+        val letterMs = SpokenWords.sungLetters("君") * SungTiming.LETTER_MS
+        val heardSo = listOf("君の" to 10_550L, "名前を" to 10_550L + 2 * letterMs, "呼んだ" to 10_550L + 5 * letterMs)
         val placed = SungTiming.linesMs(japanese, listOf(heard(9_000, heardSo)), 60_000)
         // Each letter of a word heard is sung a little after the one before, so each says the line starts where it's sung.
         assertEquals(mapOf(0 to 10_000L), placed)
+    }
+
+    @Test
+    fun aLetterOfUnspacedWritingIsSungAsLongAsASyllable() {
+        assertEquals(5, SpokenWords.sungLetters("every"))
+        // The speech model hears a Japanese letter about 300 ms after the one before, not a Latin letter's 70 ms.
+        assertTrue(SpokenWords.sungLetters("夜") * SungTiming.LETTER_MS in 250L..450L)
     }
 
     @Test

@@ -619,8 +619,8 @@ echo '[[["Every", 8.9], ["time", 9.2]], [["Every", 8.9]]]'
         env = {key: value for key, value in os.environ.items() if key != 'WHISPER_PYTHON'}
         with patch.dict(os.environ, env, clear=True), patch.object(r, 'truth_model', return_value=model), patch.object(r, 'audio'):
             heard = r.words_heard(Path('vocals.wav'), 'ja')
-        self.assertEqual(heard, [[('歩', 10.0), ('く', 10.07), ('朝', 10.14), ('の', 10.21), ('every', 11.0)]])
-        self.assertEqual(r.line_starts(heard[0], ['夜の海を歩く', '朝の光']), {1: 10.14})
+        self.assertEqual(heard, [[('歩', 10.0), ('く', 10.28), ('朝', 10.56), ('の', 10.84), ('every', 11.0)]])
+        self.assertEqual(r.line_starts(heard[0], ['夜の海を歩く', '朝の光']), {1: 10.56})
 
 
 class SungLanguageTest(unittest.TestCase):
@@ -675,7 +675,7 @@ class EveryWritingTest(unittest.TestCase):
     def test_hearing_gives_each_letter_a_time_a_letter_after_the_one_before(self):
         with patch.dict(os.environ, {'WHISPER_PYTHON': 'gpu'}), \
                 patch.object(r.subprocess, 'run', return_value=SimpleNamespace(stdout=json.dumps([[['移り', 5.0], ['行く', 6.0]]]))):
-            self.assertEqual([[('移', 5.0), ('り', 5.07), ('行', 6.0), ('く', 6.07)]], r.words_heard(Path('voice.wav'), 'ja'))
+            self.assertEqual([[('移', 5.0), ('り', 5.28), ('行', 6.0), ('く', 6.28)]], r.words_heard(Path('voice.wav'), 'ja'))
 
 
 class AgreedTest(unittest.TestCase):
