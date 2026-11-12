@@ -264,6 +264,9 @@ class LyricsFinderTest {
         // With none found, it's likely an instrumental, heard for a voice as a genre's are.
         respond("[]")
         for (title in listOf("曲 (伴奏)", "曲 off vocal ver.", "曲 -OFF VOCAL ver.-")) assertEquals(title, Lyrics.LikelyInstrumental, found(MusicMetadata(title, "Band")))
+        // Unreachable, nothing's known yet: a failed lookup isn't a song without words.
+        respond("""{"message":"nothing here"}""")
+        assertEquals(Lyrics.Unavailable, found(MusicMetadata("Song (Instrumental)", "Band")))
         // Kept marked, so the next look marks them too, offline as well.
         val file = File.createTempFile("lyrics-instrumental", ".json").apply { delete(); deleteOnExit() }
         val kept = LyricsFinder(fake.client(), "test", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined))
