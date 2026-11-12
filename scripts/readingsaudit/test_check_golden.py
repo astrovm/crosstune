@@ -37,18 +37,20 @@ def golden_text(*rows):
 class Marks(unittest.TestCase):
 
     def test_a_mark_is_a_whole_line_of_the_body(self):
-        self.assertEqual((True, set(), False, set()), check_golden.marks("Refactor.\n\n  golden: none  \n"))
-        self.assertEqual((True, set(), False, set()), check_golden.marks("golden: none"))
-        self.assertEqual((False, set(), True, set()), check_golden.marks("Moved.\ngolden: lock changed\n"))
-        self.assertEqual((False, set(), False, {"0123abcd", "ff"}), check_golden.marks("golden: lines checked 0123abcd \n golden: lines checked ff"))
+        self.assertEqual((True, set(), False, set(), False), check_golden.marks("Refactor.\n\n  golden: none  \n"))
+        self.assertEqual((True, set(), False, set(), False), check_golden.marks("golden: none"))
+        self.assertEqual((False, set(), True, set(), False), check_golden.marks("Moved.\ngolden: lock changed\n"))
+        self.assertEqual((False, set(), False, {"0123abcd", "ff"}, False), check_golden.marks("golden: lines checked 0123abcd \n golden: lines checked ff"))
+        self.assertEqual((False, set(), False, set(), True), check_golden.marks("A new audit.\n golden: new audit \n"))
         # A lookalike, the phrase inside a sentence or a list item, and a quote of it do not count.
         for body in ("golden: nonexistent", "Put golden: none in the body.", "- golden: none", "`golden: none`", "",
-                     "golden: lock changed, sorry", "- golden: lock changed", "- golden: lines checked 0123abcd", "`golden: lines checked 0123abcd`"):
-            self.assertEqual((False, set(), False, set()), check_golden.marks(body), body)
+                     "golden: lock changed, sorry", "- golden: lock changed", "- golden: lines checked 0123abcd", "`golden: lines checked 0123abcd`",
+                     "golden: new audits", "- golden: new audit", "`golden: new audit`"):
+            self.assertEqual((False, set(), False, set(), False), check_golden.marks(body), body)
 
     def test_an_accept_names_a_word_and_its_kana(self):
         body = "golden: accept 甲乙 こうおつ\ngolden: accept 丙\ngolden: accept 丙 へい てい\nsee golden: accept 丁 てい"
-        self.assertEqual((False, {("甲乙", "こうおつ")}, False, set()), check_golden.marks(body))
+        self.assertEqual((False, {("甲乙", "こうおつ")}, False, set(), False), check_golden.marks(body))
 
 
 class Verdict(unittest.TestCase):
@@ -91,6 +93,62 @@ class Verdict(unittest.TestCase):
         problems = check_golden.verdict(False, False, set(), "", {"b.kt", "a.py"})
         self.assertIn("changes the golden readings lock itself:\n  a.py\n  b.kt\n", problems[0])
         self.assertEqual([], check_golden.verdict(False, False, set(), "golden: lock changed", {"a.py"}))
+
+
+    def test_a_change_to_the_audit_line_needs_its_mark(self):
+        change = "  was: # audit: 3450 lines\n  now: # audit: 12 lines\n"
+        problems = check_golden.verdict(False, False, set(), "", audit_changed=change)
+        self.assertEqual(1, len(problems))
+        self.assertIn("audit line changes", problems[0])
+        self.assertIn(change, problems[0])
+        self.assertTrue(problems[0].endswith("golden: new audit"), problems[0])
+        self.assertEqual([], check_golden.verdict(False, False, set(), "Why.\ngolden: new audit", audit_changed=change))
+        # The other marks say other things.
+        for body in ("golden: lock changed", "golden: none", "golden: lines checked 0123abcd"):
+            self.assertTrue(check_golden.verdict(False, False, set(), body, audit_changed=change), body)
+
+
+AUDIT = "# audit: 3450 lines, 14376 right readings, sha256 b607a4aef67a5746"
+
+
+def with_audit(line, *rows):
+    """The golden file with [line] as its audit line, where readingsaudit.py lines writes it."""
+    return golden_text(*rows).replace("# rows: ", f"{line}\n# rows: ") if line else golden_text(*rows)
+
+
+class AuditChange(unittest.TestCase):
+
+    def test_the_same_audit_line_is_no_change(self):
+        self.assertIsNone(check_golden.audit_change(with_audit(AUDIT, ROW), with_audit(AUDIT, ROW, OTHER), False))
+        self.assertIsNone(check_golden.audit_change(golden_text(ROW), golden_text(ROW), False))
+        self.assertIsNone(check_golden.audit_change("", "", True))
+
+    def test_another_audit_is_a_change_and_says_how_many_lines_go(self):
+        cut = "# audit: 12 lines, 40 right readings, sha256 0123456789abcdef"
+        change = check_golden.audit_change(with_audit(AUDIT), with_audit(cut), True)
+        self.assertEqual(f"  was: {AUDIT}\n  now: {cut}\nThe audit had 3450 lines and now has 12: 3438 fewer.\n", change)
+        bigger = "# audit: 3460 lines, 14376 right readings, sha256 b607a4aef67a5746"
+        self.assertIn("The audit had 3450 lines and now has 3460: 10 more.\n", check_golden.audit_change(with_audit(AUDIT), with_audit(bigger), False))
+        # The same count of other lines is another audit too.
+        other = AUDIT.replace("b607a4aef67a5746", "0123456789abcdef")
+        self.assertIn("now has 3450: as many.\n", check_golden.audit_change(with_audit(AUDIT), with_audit(other), True))
+
+    def test_an_audit_line_added_removed_or_unreadable_is_a_change(self):
+        self.assertEqual(f"  was: none\n  now: {AUDIT}\n", check_golden.audit_change(golden_text(ROW), with_audit(AUDIT, ROW), True))
+        self.assertEqual(f"  was: {AUDIT}\n  now: none\n", check_golden.audit_change(with_audit(AUDIT, ROW), golden_text(ROW), True))
+        self.assertEqual(f"  was: {AUDIT}\n  now: none\n", check_golden.audit_change(with_audit(AUDIT, ROW), "", True))
+        broken = "# audit: some lines"
+        self.assertEqual(f"  was: {AUDIT}\n  now: {broken}\n", check_golden.audit_change(with_audit(AUDIT), with_audit(broken), True))
+        twice = with_audit(AUDIT).replace("# rows: ", f"{AUDIT}\n# rows: ")
+        self.assertEqual(f"  was: {AUDIT}\n  now: {AUDIT} / {AUDIT}\n", check_golden.audit_change(with_audit(AUDIT), twice, True))
+
+    def test_the_right_readings_alone_change_with_the_readings_only(self):
+        more = AUDIT.replace("14376", "14380")
+        # lines writes the count for this checkout's code, and the readings change asks for its line in the body.
+        self.assertIsNone(check_golden.audit_change(with_audit(AUDIT), with_audit(more), True))
+        # With no readings change, the count has no reason to move.
+        self.assertEqual(f"  was: {AUDIT}\n  now: {more}\nThe audit had 3450 lines and now has 3450: as many.\n",
+                         check_golden.audit_change(with_audit(AUDIT), with_audit(more), False))
 
 
 class Removed(unittest.TestCase):
@@ -326,6 +384,35 @@ class FakeDiff(unittest.TestCase):
             code, text = self.run_check(repo, "golden: lock changed")
             self.assertEqual(1, code)
             self.assertIn("removes or changes 1 locked readings", text)
+
+
+    def test_a_smaller_audit_fails_until_the_body_says_so(self):
+        cut = "# audit: 12 lines, 40 right readings, sha256 0123456789abcdef"
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, with_audit(AUDIT, ROW))
+            # What lines --new-audit writes on a cut-short audit folder: the rows stay, the audit line changes.
+            self.write(repo, GOLDEN_REL, with_audit(cut, ROW))
+            self.merge(repo, "test: name a smaller audit")
+            code, text = self.run_check(repo)
+            self.assertEqual(1, code)
+            self.assertIn("3438 fewer", text)
+            for body in ("golden: lock changed", "golden: none"):
+                self.assertEqual(1, self.run_check(repo, body)[0], body)
+            self.assertEqual((0, ""), self.run_check(repo, "A new audit, on purpose.\ngolden: new audit\n"))
+
+    def test_the_first_audit_line_needs_the_mark_and_the_right_readings_move_with_the_readings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, golden_text(ROW))
+            self.write(repo, GOLDEN_REL, with_audit(AUDIT, ROW))
+            self.merge(repo, "test: name the audit")
+            self.assertEqual(1, self.run_check(repo)[0])
+            self.assertEqual((0, ""), self.run_check(repo, "golden: new audit"))
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, with_audit(AUDIT, ROW))
+            self.write(repo, READINGS, "one\n")
+            self.write(repo, GOLDEN_REL, with_audit(AUDIT.replace("14376", "14380"), ROW, OTHER))
+            self.merge(repo, "test: read four more right")
+            self.assertEqual((0, ""), self.run_check(repo, self.checked(repo)))
 
 
 STEP = "A pull request keeps the locked readings"

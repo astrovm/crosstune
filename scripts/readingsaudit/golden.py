@@ -8,6 +8,7 @@
 This file is part of the lock: check_golden.py asks a pull request that changes it to say so in its body.
 """
 import json
+import re
 from collections import Counter, defaultdict
 
 import readingsaudit as audit
@@ -16,9 +17,11 @@ import readingsaudit as audit
 # with any more of the line around it too, and CONTEXT more letters of the line on each side.
 GOLDEN_REL = "app/src/test/resources/com/astrovm/crosstune/readings-golden.tsv"
 GOLDEN_FILE = audit.ROOT / GOLDEN_REL
-# What the readings are made of. A pull request that changes one has to change the golden file too, or say so.
+# What the readings are made of. A pull request that changes one has to change the golden file too, or say so. Every app
+# file the locks' test code calls is here: SungReadings.kt matches UtaTen's readings to the line for the shown layers.
 READING_SOURCES = (
     "app/src/main/java/com/astrovm/crosstune/Readings.kt",
+    "app/src/main/java/com/astrovm/crosstune/SungReadings.kt",
     "app/src/main/java/com/astrovm/crosstune/Furigana.kt",
     "app/src/main/java/com/astrovm/crosstune/UniDic.kt",
     "app/src/main/resources/com/astrovm/crosstune/jmdict-readings.txt",
@@ -31,6 +34,7 @@ READING_BUILD_WORD = "kuromoji"
 GOLDEN_COUNT = "# rows: "
 # The line that names the audit the file was made from, and how many readings the code reads right on it.
 AUDIT = "# audit: "
+AUDIT_LINE = re.compile(r"# audit: (\d+) lines, (\d+) right readings, sha256 ([0-9a-f]{16})")
 # The letters of the line each row holds on each side of its stable stretch, where the line has them. A rule that reads a
 # word by the text next to its stretch fails a row too: the fewest that catch every break measured in PR #931.
 CONTEXT = 3
@@ -56,6 +60,12 @@ GOLDEN_HEADER = [
 # What ends a line for Python's splitlines or Kotlin's lineSequence, and the field separator. GoldenReadings.LINE_ENDS is the same.
 LINE_ENDS = set("\t\n\r\x0b\x0c\x1c\x1d\x1e\x85  ")
 DICTIONARIES = ("ipadic", "unidic", "both")
+
+
+def audit_line(text):
+    """(lines, right readings, hash) from a golden file's text; None when it has no audit line."""
+    found = next((AUDIT_LINE.fullmatch(line.rstrip("\r")) for line in text.split("\n") if line.startswith(AUDIT)), None)
+    return found and (int(found[1]), int(found[2]), found[3])
 
 
 def find_starts(line, word):

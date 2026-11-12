@@ -4,8 +4,8 @@
   python3 scripts/readingsaudit/readingsaudit.py lines                          # origin/main against HEAD
   python3 scripts/readingsaudit/readingsaudit.py lines --base REF               # against another commit
   python3 scripts/readingsaudit/readingsaudit.py lines --accept WORD KANA       # WORD read as KANA changes, on purpose
-  python3 scripts/readingsaudit/readingsaudit.py lines --accept-romaji          # the romaji of lines read right changes, on purpose
-  python3 scripts/readingsaudit/readingsaudit.py lines --new-audit              # the audit folder is new, on purpose
+  python3 scripts/readingsaudit/readingsaudit.py lines --accept-romaji          # the romaji of lines read right changes, on purpose; no mark
+  python3 scripts/readingsaudit/readingsaudit.py lines --new-audit              # the audit folder is new, on purpose: a lock change
 
 The golden rows hold a reading with a few letters of its line, so a rule that looks further along the line, or at
 its length, gets past them. This reads each line of the audit whole, as the app shows it, with both dictionaries,
@@ -26,7 +26,9 @@ this: CI can't run it, as the lines are songs' words.
 So the lines it reads are the ones the golden file was made from, the golden file's header names the audit: how
 many lines, a hash of them, and how many readings the code reads right on them. An audit folder that is empty, cut
 short or another one fails, and so does main's code reading another number right than main's file says, as that is
-another build. The command writes the line for this checkout's code, to commit; --new-audit names a new audit.
+another build. The command writes the line for this checkout's code, to commit; --new-audit names a new audit, and
+prints how many lines go. check_golden.py fails a change to the line's lines or hash without `golden: new audit` in
+the body. CI reads no mark for romaji: --accept-romaji prints none, and the body says why for the reader.
 
 The lines stay in the audit folder, never in Git. main's code is checked out in a worktree of its own in the agent
 cache, and both checkouts are built in one gradle-box run, then the worktree is removed.
@@ -36,7 +38,6 @@ This file is part of the lock: check_golden.py asks a pull request that changes 
 import contextlib
 import hashlib
 import json
-import re
 import shutil
 import subprocess
 import tempfile
@@ -54,9 +55,6 @@ DICTIONARIES = ("ipadic", "unidic")
 PARTS = (("ruby", "parts"), ("shown", "shown"))
 ROMAJI = (("romaji", "parts", "romaji"), ("shown romaji", "shown", "shownRomaji"))
 WORDS = (("words", "parts", "words"), ("shown words", "shown", "shownWords"))
-ACCEPT_ROMAJI = "golden: accept romaji"
-# The golden file's line that names the audit it was made from. golden.py keeps it as it is.
-AUDIT_LINE = re.compile(r"# audit: (\d+) lines, (\d+) right readings, sha256 ([0-9a-f]{16})")
 
 
 def audit_lines(folder):
@@ -79,12 +77,6 @@ def audit_songs(folder):
 def audit_hash(entries, songs):
     """16 hex digits that name the audit's lines and songs."""
     return hashlib.sha256(json.dumps([entries, songs], ensure_ascii=False).encode()).hexdigest()[:16]
-
-
-def audit_line(header):
-    """(lines, right readings, hash) from a golden file's text; None when it has no audit line."""
-    found = next((AUDIT_LINE.fullmatch(line.rstrip("\r")) for line in header.split("\n") if line.startswith(golden.AUDIT)), None)
-    return found and (int(found[1]), int(found[2]), found[3])
 
 
 def answer_name(at):
@@ -229,14 +221,22 @@ def golden_at(repo, commit):
 
 
 def audit_problem(recorded, lines, digest):
-    """Why the audit folder is not the one the golden file was made from; None when it is."""
+    """Why the audit folder is not the one the golden file was made from; None when it is. It names no way around the
+    check: a new audit is a lock change, and CONTRIBUTING says how to make one."""
     if recorded is None:
-        return "readings-golden.tsv names no audit. Record this one, on purpose: run again with --new-audit"
+        return "readings-golden.tsv names no audit, so this can't tell the lines are the ones it was made from."
     if (recorded[0], recorded[2]) != (lines, digest):
         return (f"The audit folder has {lines} lines, sha256 {digest}; readings-golden.tsv was made from {recorded[0]} "
-                f"lines, sha256 {recorded[2]}. Use the audit it was made from: this one is empty, cut short or another. "
-                f"A new audit on purpose: run golden, then lines --new-audit")
+                f"lines, sha256 {recorded[2]}. Use the audit it was made from: this one is empty, cut short or another.")
     return None
+
+
+def audit_drop(recorded, lines, digest):
+    """The audit the golden file names against the one in the folder, for --new-audit to say before it names it."""
+    if recorded is None:
+        return f"readings-golden.tsv names no audit. This one has {lines} lines, sha256 {digest}."
+    return (f"readings-golden.tsv names an audit of {recorded[0]} lines, sha256 {recorded[2]}. This one has {lines} lines, "
+            f"sha256 {digest}: {check_golden.lines_drop(recorded[0], lines)}.")
 
 
 def write_audit_line(path, line):
@@ -259,14 +259,19 @@ def lines(folder, accepted, base="origin/main", repo=audit.ROOT, read=read_whole
     if not entries:
         raise SystemExit(f"The audit folder {folder} has no lines with UtaTen's ruby.")
     digest = audit_hash(entries, songs)
-    recorded = audit_line(golden_at(repo, head))
-    if not new_audit and (problem := audit_problem(recorded, len(entries), digest)):
+    recorded = golden.audit_line(golden_at(repo, head))
+    problem = audit_problem(recorded, len(entries), digest)
+    if problem and not new_audit:
         raise SystemExit(problem)
+    if new_audit:
+        print(audit_drop(recorded, len(entries), digest))
+    if problem:
+        print(f"The pull request needs a line in its body: {check_golden.NEW_AUDIT}")
     with checkout(repo, base_commit, folder.parent) as tree:
         before, after = read(folder, [tree, repo], entries, songs)
     found, right, used, romaji_used = changes(entries, songs, before, after, {tuple(pair) for pair in accepted}, accept_romaji)
     # main's golden file names what main's code reads right on the same audit: another number is another build.
-    on_main = audit_line(golden_at(repo, base_commit))
+    on_main = golden.audit_line(golden_at(repo, base_commit))
     if on_main and on_main[::2] == (len(entries), digest) and on_main[1] != right["ruby"]:
         raise SystemExit(f"main's code reads {right['ruby']} readings right on these lines, and main's readings-golden.tsv "
                          f"says {on_main[1]}: the build or the dictionaries are not the ones it was made with.")
@@ -275,19 +280,20 @@ def lines(folder, accepted, base="origin/main", repo=audit.ROOT, read=read_whole
     for layer, word, kana, name, text, was, now in found:
         print(f"  {layer}: {word} {kana} {name}: {was} -> {now}  in {text}")
     if found:
-        print("A change on purpose: run again with --accept WORD KANA, or --accept-romaji, and put each in the body as it prints")
+        print("A change on purpose: run again with --accept WORD KANA, or --accept-romaji, and put the lines it prints in the body")
         return 1
     # The file names the audit, and what this checkout reads right on it, for the pull requests after this one.
     head_right = changes(entries, songs, after, after)[1]["ruby"]
     want = f"{golden.AUDIT}{len(entries)} lines, {head_right} right readings, sha256 {digest}"
-    if recorded != audit_line(want):
+    if recorded != golden.audit_line(want):
         write_audit_line(Path(repo) / golden.GOLDEN_REL, want)
         print(f"readings-golden.tsv now names this audit: {want}\nCommit it, then run lines again.")
         return 1
+    if romaji_used:
+        print("The romaji of lines read right changes, as --accept-romaji lets it. CI reads no line for it: "
+              "say why in the pull request's body.")
     print("Put these lines in the pull request's body:")
     for word, kana in used:
         print(f"{check_golden.ACCEPT}{word} {kana}")
-    if romaji_used:
-        print(ACCEPT_ROMAJI)
     print(f"{check_golden.LINES}{check_golden.readings_digest(repo, base_commit, head)}")
     return 0

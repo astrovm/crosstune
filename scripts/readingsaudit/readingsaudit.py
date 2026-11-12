@@ -683,7 +683,7 @@ def main(argv=None):
                         help="golden, lines: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
     parser.add_argument("--base", default="origin/main", help="lines: the commit to read the lines with first")
     parser.add_argument("--accept-romaji", action="store_true", help="lines: the romaji of lines read right changes, on purpose")
-    parser.add_argument("--new-audit", action="store_true", help="lines: the audit folder is new, on purpose: name it in the golden file")
+    parser.add_argument("--new-audit", action="store_true", help="lines: the audit folder is new, on purpose: name it in the golden file, and say golden: new audit in the body")
     parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
     parser.add_argument("--width", type=int, help="golden: the letters of context each row holds on each side of its stable stretch")
     parser.add_argument("--union-share", type=float, help="golden: the most of a song's lines the rows may spell together, from 0 to 1")

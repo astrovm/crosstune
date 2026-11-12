@@ -78,10 +78,10 @@ class AuditLines(unittest.TestCase):
 
     def test_the_audit_line_is_read_from_the_golden_files_header(self):
         line = "# audit: 3 lines, 14 right readings, sha256 0123456789abcdef"
-        self.assertEqual((3, 14, "0123456789abcdef"), wholelines.audit_line(f"# Locked.\n{line}\r\n# rows: 1\nrow\n"))
-        self.assertIsNone(wholelines.audit_line("# Locked.\n# rows: 1\n"))
-        self.assertIsNone(wholelines.audit_line("# audit: 3 lines, sha256 0123456789abcdef\n"))
-        self.assertIsNone(wholelines.audit_line(""))
+        self.assertEqual((3, 14, "0123456789abcdef"), golden.audit_line(f"# Locked.\n{line}\r\n# rows: 1\nrow\n"))
+        self.assertIsNone(golden.audit_line("# Locked.\n# rows: 1\n"))
+        self.assertIsNone(golden.audit_line("# audit: 3 lines, sha256 0123456789abcdef\n"))
+        self.assertIsNone(golden.audit_line(""))
 
 
 class ReadWhole(unittest.TestCase):
@@ -295,6 +295,7 @@ class Command(unittest.TestCase):
             digest = check_golden.readings_digest(repo, git(repo, "rev-parse", "main"), "HEAD")
             self.assertTrue(text.endswith(f"\ngolden: lines checked {digest}\n"), text)
             self.assertNotIn("golden: accept", text)
+            self.assertNotIn("golden: new audit", text)
 
     def test_a_change_fails_until_accepted_and_the_accept_goes_in_the_body(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -314,7 +315,7 @@ class Command(unittest.TestCase):
             self.assertEqual(0, code, text)
             self.assertIn("\ngolden: accept 夢 ゆめ\ngolden: lines checked ", text)
 
-    def test_romaji_accepted_is_said_in_the_body(self):
+    def test_romaji_accepted_is_for_the_reader_and_prints_no_mark(self):
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder)
             self.record(repo)
@@ -322,7 +323,11 @@ class Command(unittest.TestCase):
             self.assertEqual(1, self.run_lines(repo, other)[0])
             code, text = self.run_lines(repo, other, accept_romaji=True)
             self.assertEqual(0, code, text)
-            self.assertIn("\ngolden: accept romaji\ngolden: lines checked ", text)
+            # check_golden.py reads no romaji mark, so none is printed as if it needed one.
+            self.assertNotIn("golden: accept", text)
+            self.assertIn("\nThe romaji of lines read right changes, as --accept-romaji lets it. CI reads no line for it: "
+                          "say why in the pull request's body.\n", text)
+            self.assertTrue(text.split("\n")[-2].startswith("golden: lines checked "), text)
 
     def test_an_audit_folder_that_is_not_the_one_the_golden_file_names_is_refused(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -331,11 +336,14 @@ class Command(unittest.TestCase):
             with self.assertRaises(SystemExit) as stop:
                 self.run_lines(repo)
             self.assertIn("names no audit", str(stop.exception))
+            # A new audit is a lock change: the refusal points to the audit the file names, not around it.
+            self.assertNotIn("--new-audit", str(stop.exception))
             # Another audit, as one cut short or another folder.
             self.record(repo, lines=2)
             with self.assertRaises(SystemExit) as stop:
                 self.run_lines(repo)
             self.assertIn("this one is empty, cut short or another", str(stop.exception))
+            self.assertNotIn("--new-audit", str(stop.exception))
             # As many lines, but other ones.
             self.record(repo)
             other = self.audit(repo)
@@ -356,9 +364,13 @@ class Command(unittest.TestCase):
             self.record(repo, lines=2)
             code, text = self.run_lines(repo, new_audit=True)
             self.assertEqual(1, code, text)
+            # What goes, said before anything is read, and that the pull request needs the mark.
+            digest = wholelines.audit_hash(wholelines.audit_lines(self.audit(repo)), wholelines.audit_songs(self.audit(repo)))
+            self.assertTrue(text.startswith(f"readings-golden.tsv names an audit of 2 lines, sha256 {digest}. This one has 1 lines, "
+                                            f"sha256 {digest}: 1 fewer.\nThe pull request needs a line in its body: golden: new audit\n"), text)
             self.assertIn("Commit it, then run lines again", text)
             written = (repo / golden.GOLDEN_REL).read_text()
-            self.assertEqual((1, 4), wholelines.audit_line(written)[:2])
+            self.assertEqual((1, 4), golden.audit_line(written)[:2])
             # Once, just before the row count, and the rows stay.
             self.assertTrue(written.startswith("# Locked.\n# audit: 1 lines, 4 right readings, sha256 "), written)
             self.assertTrue(written.endswith("\n# rows: 1\nrow\n"), written)
@@ -368,6 +380,25 @@ class Command(unittest.TestCase):
             self.assertIn("Commit the readings change and the golden file first", str(stop.exception))
             commit(repo, "test: name the new audit")
             self.assertEqual(0, self.run_lines(repo)[0])
+
+    def test_a_new_audit_on_the_audit_named_already_needs_no_mark(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder)
+            self.record(repo)
+            code, text = self.run_lines(repo, new_audit=True)
+            self.assertEqual(0, code, text)
+            self.assertTrue(text.startswith("readings-golden.tsv names an audit of 1 lines, "), text)
+            self.assertIn(": as many.\n1 whole lines", text)
+            self.assertNotIn("golden: new audit", text)
+
+    def test_a_new_audit_says_how_many_lines_it_has_against_the_one_named(self):
+        self.assertEqual("readings-golden.tsv names no audit. This one has 5 lines, sha256 ab.", wholelines.audit_drop(None, 5, "ab"))
+        self.assertEqual("readings-golden.tsv names an audit of 3450 lines, sha256 cd. This one has 12 lines, sha256 ab: 3438 fewer.",
+                         wholelines.audit_drop((3450, 9, "cd"), 12, "ab"))
+        self.assertEqual("readings-golden.tsv names an audit of 3 lines, sha256 cd. This one has 5 lines, sha256 ab: 2 more.",
+                         wholelines.audit_drop((3, 9, "cd"), 5, "ab"))
+        self.assertEqual("readings-golden.tsv names an audit of 5 lines, sha256 ab. This one has 5 lines, sha256 ab: as many.",
+                         wholelines.audit_drop((5, 9, "ab"), 5, "ab"))
 
     def test_main_reading_another_number_right_on_its_own_audit_is_another_build(self):
         with tempfile.TemporaryDirectory() as folder:

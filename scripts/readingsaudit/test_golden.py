@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -711,6 +712,54 @@ class Golden(unittest.TestCase):
         self.assertEqual(golden.GOLDEN_HEADER + audit_line + [f"# rows: {len(rows)}"], header)
         self.assertGreater(len(rows), 0)
         self.assertEqual(sorted(rows, key=golden.row_sort_key), rows)
+
+
+# The test code that reads the readings for both locks: the rows, and the whole lines.
+HARNESSES = (
+    "app/src/test/java/com/astrovm/crosstune/GoldenReadings.kt",
+    "app/src/test/java/com/astrovm/crosstune/ReadingsGoldenTest.kt",
+    "app/src/test/java/com/astrovm/crosstune/songcheck/GoldenContexts.kt",
+    "app/src/test/java/com/astrovm/crosstune/songcheck/WholeLines.kt",
+)
+APP_DIR = "app/src/main/java/com/astrovm/crosstune"
+
+
+def declared(root):
+    """Each class, object and interface the app declares, by name, with the file it is in."""
+    found = {}
+    for path in sorted((root / APP_DIR).glob("*.kt")):
+        for name in re.findall(r"^(?:[a-z]+\s+)*(?:class|object|interface)\s+([A-Z]\w*)", path.read_text(encoding="utf-8"), re.MULTILINE):
+            found.setdefault(name, set()).add(f"{APP_DIR}/{path.name}")
+    return found
+
+
+def called(root, harness, names):
+    """The app files whose names [harness] uses."""
+    text = (root / harness).read_text(encoding="utf-8")
+    return {path for name, paths in names.items() if re.search(rf"\b{name}\b", text) for path in paths}
+
+
+class Sources(unittest.TestCase):
+
+    def test_each_reading_source_is_there(self):
+        for path in golden.READING_SOURCES:
+            self.assertTrue((readingsaudit.ROOT / path).is_file(), path)
+
+    def test_every_app_file_the_locks_read_through_is_a_reading_source(self):
+        names = declared(readingsaudit.ROOT)
+        for harness in HARNESSES:
+            self.assertEqual(set(), called(readingsaudit.ROOT, harness, names) - set(golden.READING_SOURCES), harness)
+
+    def test_a_file_named_in_a_harness_is_found(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / APP_DIR).mkdir(parents=True)
+            (root / APP_DIR / "One.kt").write_text("internal data class Ruby(val text: String)\nobject Readings {\n    class Inner\n}\n")
+            (root / APP_DIR / "Two.kt").write_text("private object SungReadings\n// class Commented is still a name\n")
+            (root / "Harness.kt").write_text("val x = SungReadings.matched(Readings.of())\nval RubyLike = 1\n")
+            names = declared(root)
+            self.assertEqual({"Ruby": {f"{APP_DIR}/One.kt"}, "Readings": {f"{APP_DIR}/One.kt"}, "SungReadings": {f"{APP_DIR}/Two.kt"}}, names)
+            self.assertEqual({f"{APP_DIR}/One.kt", f"{APP_DIR}/Two.kt"}, called(root, "Harness.kt", names))
 
 
 if __name__ == "__main__":

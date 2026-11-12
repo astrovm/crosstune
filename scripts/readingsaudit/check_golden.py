@@ -14,6 +14,7 @@ A mark in the body is a line of its own:
   golden: lock changed       the lock itself changes: this checker, the golden code, its tests, or where the file is
   golden: lines checked D    readingsaudit.py lines read every audit line whole with main's code and this one, and no
                              right reading changed; D names what the readings are made of on both sides
+  golden: new audit          the golden file's audit line changes: lines reads another audit from now on, on purpose
 
 This reads only Git and the body, so it can be tested on a fake repository, with no GitHub.
 """
@@ -24,11 +25,13 @@ import sys
 from pathlib import Path
 
 from golden import (
+    AUDIT,
     FIELDS,
     GOLDEN_REL,
     READING_BUILD_WORD,
     READING_BUILDS,
     READING_SOURCES,
+    audit_line,
     readers_of,
 )
 
@@ -37,6 +40,7 @@ NONE = "golden: none"
 ACCEPT = "golden: accept "
 LOCK = "golden: lock changed"
 LINES = "golden: lines checked "
+NEW_AUDIT = "golden: new audit"
 # Where this checker and the golden code it imports live. The lint job copies this folder out of main's commit.
 SCRIPTS = "scripts/readingsaudit"
 CHECKER = f"{SCRIPTS}/check_golden.py"
@@ -54,21 +58,23 @@ LOCK_FILES = (
 
 def marks(body):
     """(whether the body says golden: none, the (word, kana) pairs it accepts, whether it says golden: lock changed,
-    the digests it says golden: lines checked for). Only a whole line counts."""
-    none, accepted, lock, checked = False, set(), False, set()
+    the digests it says golden: lines checked for, whether it says golden: new audit). Only a whole line counts."""
+    none, accepted, lock, checked, new_audit = False, set(), False, set(), False
     for line in body.splitlines():
         line = line.strip()
         if line == NONE:
             none = True
         elif line == LOCK:
             lock = True
+        elif line == NEW_AUDIT:
+            new_audit = True
         elif line.startswith(LINES):
             checked.add(line[len(LINES):].strip())
         elif line.startswith(ACCEPT):
             words = line[len(ACCEPT):].split()
             if len(words) == 2:
                 accepted.add(tuple(words))
-    return none, accepted, lock, checked
+    return none, accepted, lock, checked, new_audit
 
 
 def rows_of(text):
@@ -86,10 +92,30 @@ def removed_rows(before, after):
             if row not in after and not (len(row) == FIELDS and readers_of(row[-1]) <= kept.get(row[:-1], set()))}
 
 
-def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), digest=None):
+def lines_drop(was, now):
+    """How many audit lines go from [was] to [now], in words."""
+    return f"{was - now} fewer" if now < was else f"{now - was} more" if now > was else "as many"
+
+
+def audit_change(before, after, readings_changed):
+    """How the golden file's audit line changes from [before] to [after], to show the author; None when it does not.
+    The lines and their hash name the audit `lines` reads, so a change there is a new audit, said in the body. The right
+    readings alone change with the readings: `lines` writes them, and the readings change asks for its line."""
+    was, now = ([line.rstrip("\r") for line in text.split("\n") if line.startswith(AUDIT)] for text in (before, after))
+    if was == now:
+        return None
+    old, new = audit_line(before), audit_line(after)
+    one = len(was) == len(now) == 1 and old and new
+    if one and readings_changed and old[::2] == new[::2]:
+        return None
+    change = f"  was: {' / '.join(was) or 'none'}\n  now: {' / '.join(now) or 'none'}\n"
+    return change + (f"The audit had {old[0]} lines and now has {new[0]}: {lines_drop(old[0], new[0])}.\n" if one else "")
+
+
+def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), digest=None, audit_changed=None):
     """The reasons the pull request may not land. Empty when it may. [digest] names what the readings are made of on
-    both sides, when the pull request changes them."""
-    none, accepted, lock, checked = marks(body)
+    both sides, when the pull request changes them. [audit_changed] says how the golden file's audit line changes."""
+    none, accepted, lock, checked, new_audit = marks(body)
     problems = []
     gone = sorted(row for row in removed if len(row) < 4 or (row[1], row[3]) not in accepted)
     if gone:
@@ -116,6 +142,12 @@ def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), di
             "This changes the golden readings lock itself:\n"
             + "".join(f"  {path}\n" for path in sorted(lock_changed))
             + f"Say why in the pull request's body, with a line: {LOCK}"
+        )
+    if audit_changed and not new_audit:
+        problems.append(
+            "The golden file's audit line changes, so readingsaudit.py lines reads another audit from now on:\n"
+            + audit_changed
+            + f"Say why in the pull request's body, with a line: {NEW_AUDIT}"
         )
     return problems
 
@@ -187,11 +219,12 @@ def main(argv=None):
     changed = changes(args.repo, args.base, args.head)
     names = {path for _status, paths in changed for path in paths}
     readings_changed = bool(names & set(READING_SOURCES)) or dictionaries_changed(args.repo, args.base, args.head)
-    before = rows_of(file_at(args.repo, args.base, GOLDEN_REL))
-    after = rows_of(file_at(args.repo, args.head, golden_path(changed)))
-    # Only the rows count: a comment or the header changed alone is no new lock.
+    was, now = file_at(args.repo, args.base, GOLDEN_REL), file_at(args.repo, args.head, golden_path(changed))
+    before, after = rows_of(was), rows_of(now)
+    # The rows are the first lock, and the audit line names what the second one reads. A comment changed alone is neither.
     digest = readings_digest(args.repo, args.base, args.head) if readings_changed else None
-    problems = verdict(readings_changed, set(before) != set(after), removed_rows(set(before), set(after)), body, lock_changes(changed), digest)
+    problems = verdict(readings_changed, set(before) != set(after), removed_rows(set(before), set(after)), body, lock_changes(changed),
+                       digest, audit_change(was, now, readings_changed))
     for problem in problems:
         print(problem)
     return 1 if problems else 0
