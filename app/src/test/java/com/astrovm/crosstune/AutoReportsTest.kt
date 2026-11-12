@@ -82,8 +82,8 @@ class AutoReportsTest {
     @Test
     fun aReportOwedIsKeptUntilItGoesAndThenForgotten() {
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, """{"fake":1}""")
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, """{"fake":2}""")
+        reports.owe(song("Demo"), """{"fake":1}""")
+        reports.owe(song("Demo"), """{"fake":2}""")
         assertEquals(listOf("""{"fake":2}"""), AutoReports(preferences).owed().map { it.json })
         reports.paid(reports.owed().single())
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
@@ -92,7 +92,7 @@ class AutoReportsTest {
 
     @Test
     fun aReportThatWentAnotherWayIsNotOwedAnyMore() {
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "{}")
+        reports.owe(song("Demo"), "{}")
         reports.remember(song("Demo"), SongProblem.TIMED_BY_HAND)
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
         // Gone from what's kept too, not only hidden.
@@ -101,8 +101,8 @@ class AutoReportsTest {
 
     @Test
     fun reportsOwedForSeveralSongsAreKeptAndOneIsPutBackAlone() {
-        reports.owe(song("One"), SongProblem.TIMED_BY_HAND, "1")
-        reports.owe(song("Two"), SongProblem.TIMED_BY_HAND, "2")
+        reports.owe(song("One"), "1")
+        reports.owe(song("Two"), "2")
         assertEquals(listOf("1", "2"), reports.owed().map { it.json })
         reports.owedNothing(song("one"))
         assertEquals(listOf("2"), reports.owed().map { it.json })
@@ -113,26 +113,8 @@ class AutoReportsTest {
     @Test
     fun onlyTheLatestReportsOwedAreKept() {
         assertEquals(20, AutoReports.MAX_OWED)
-        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.TIMED_BY_HAND, "$it") }
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
         assertEquals((1..AutoReports.MAX_OWED).map { "$it" }, reports.owed().map { it.json })
-    }
-
-    @Test
-    fun theLatestProblemsFoundThatDidntGetThereAreKeptBesideTheLatestPutInTimeByHand() {
-        repeat(AutoReports.MAX_OWED + 1) {
-            reports.owe(song("Song $it"), SongProblem.NO_TIMING, "found $it")
-            reports.owe(song("Song $it"), SongProblem.TIMED_BY_HAND, "by hand $it")
-        }
-        val owed = reports.owed().map { it.json }
-        // The oldest of each went first, and neither took the other's place.
-        assertEquals((1..AutoReports.MAX_OWED).map { "found $it" }, owed.filter { it.startsWith("found") })
-        assertEquals((1..AutoReports.MAX_OWED).map { "by hand $it" }, owed.filter { it.startsWith("by hand") })
-        // Each song's problem is owed apart, and once.
-        reports.owe(song("Song 20"), SongProblem.NO_TIMING, "found again")
-        assertEquals(AutoReports.MAX_OWED * 2, reports.owed().size)
-        reports.paid(reports.owed().single { it.json == "found again" })
-        assertTrue(reports.reported(song("Song 20"), SongProblem.NO_TIMING))
-        assertFalse(reports.reported(song("Song 20"), SongProblem.TIMED_BY_HAND))
     }
 
     @Test
@@ -145,11 +127,11 @@ class AutoReportsTest {
 
     @Test
     fun aReportOwedIsStillOwedOnlyAsItWasKept() {
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "1")
+        reports.owe(song("Demo"), "1")
         val first = reports.owed().single()
         assertTrue(reports.owes(first))
         // Put in time again: the newer goes, not the one read before.
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "2")
+        reports.owe(song("Demo"), "2")
         assertFalse(reports.owes(first))
         reports.paid(reports.owed().single())
         assertFalse(reports.owes(first))
@@ -161,7 +143,7 @@ class AutoReportsTest {
         repeat(30) { songs.put("song$it\u0000band", JSONObject().put("words", "1").put("points", JSONArray().put(JSONArray().put(0).put(100)))) }
         preferences.edit().putString("lyrics_sync", songs.toString()).commit()
         reports.keepEarlier("2.24.0", "16 (36)")
-        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.TIMED_BY_HAND, "$it") }
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
         val owed = reports.owed()
         assertEquals(30, owed.count { it.earlier })
         assertEquals(AutoReports.MAX_OWED, owed.count { !it.earlier })
