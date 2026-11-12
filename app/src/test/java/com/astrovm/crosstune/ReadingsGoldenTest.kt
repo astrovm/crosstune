@@ -103,11 +103,21 @@ class ReadingsGoldenTest {
         assertEquals("", GoldenReadings.sheetAt(words, line, "夢", 0, "ゆめ"))
         // A word the sheet lacks is passed over, and the next is found after it.
         assertEquals("mita|mita", GoldenReadings.sheetAt(listOf(Word("無"), Word("夢"), Word("見た", "みた", "mita")), line, "見た", null, "みた"))
+        // A longer word of the sheet at the same letter, read alike, is not the row's word.
+        assertEquals("", GoldenReadings.sheetAt(listOf(Word("夢を", "ゆめ", "yume", typed = "yume")), line, "夢", null, "ゆめ"))
+        // The second of two words alike is the one after the first, not the first again.
+        val twice = listOf(Word("夢", "ゆめ", "yume", typed = "yume"), Word("と"), Word("夢", "ゆめ", "imu", typed = "imu"))
+        assertEquals("imu|imu", GoldenReadings.sheetAt(twice, "夢と夢", "夢", 1, "ゆめ"))
         // Its parts are put right from the song's words, whatever the dictionary read.
         val wrong = listOf(Ruby("夢", "む"), Ruby("を"), Ruby("見", "み"), Ruby("た"))
         assertEquals("夢=ゆめ", GoldenReadings.shownAt(wrong, line, "夢", null, "ゆめ"))
         assertEquals("", GoldenReadings.shownAt(wrong, line, "夢", 1, "ゆめ"))
         assertEquals("", GoldenReadings.shownAt(wrong, "夢を", "夢", null, "ゆめ"))
+        // A word twice in the line needs its index.
+        assertEquals("", GoldenReadings.shownAt(listOf(Ruby("夢", "む"), Ruby("と"), Ruby("夢", "む")), "夢と夢", "夢", null, "ゆめ"))
+        // With the dictionary's reading gone, a fix can't tell いま from い for 今 before まで, and gives い.
+        // That doesn't read いま, so the row locks nothing there.
+        assertEquals("", GoldenReadings.shownAt(listOf(Ruby("今", "いま"), Ruby("まで")), "今まで", "今", null, "いま"))
         val row = GoldenReadings.Row(line, "夢", null, "ゆめ", "夢=ゆめ", "both", "yume|yume", "夢=ゆめ")
         assertNull(GoldenReadings.broken(row, parts, words))
         // Empty locks ask nothing.

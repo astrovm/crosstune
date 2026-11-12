@@ -111,6 +111,7 @@ internal object GoldenReadings {
      * [Readings.corrected] makes the fix. Empty when what it shows doesn't read [kana].
      */
     fun shownAt(parts: List<Ruby>, line: String, word: String, index: Int?, kana: String): String {
+        if (parts.joinToString("") { it.text } != line) return ""
         val start = startOf(line, word, index) ?: return ""
         val end = start + word.length
         var at = 0
@@ -120,7 +121,7 @@ internal object GoldenReadings {
             if (from >= start && at <= end) Ruby(part.text) else part
         }
         val fix = ReadingFix(0, word, Readings.hiragana(kana), Reader.SUNG)
-        val shown = rubyAt(Readings.corrected(listOf(LineReading(blank, "", "")), listOf(fix)).single().parts, line, word, index)
+        val shown = over(Readings.corrected(listOf(LineReading(blank, "", "")), listOf(fix)).single().parts, start, end)
         return shown?.takeIf { Readings.hiragana(read(it)) == Readings.hiragana(kana) }.orEmpty()
     }
 
@@ -128,7 +129,11 @@ internal object GoldenReadings {
     fun rubyAt(parts: List<Ruby>, line: String, word: String, index: Int?): String? {
         if (parts.joinToString("") { it.text } != line) return null
         val start = startOf(line, word, index) ?: return null
-        val end = start + word.length
+        return over(parts, start, start + word.length)
+    }
+
+    /** The parts of [parts] from letter [start] to [end], as [rubyAt] writes them; null when none starts or ends there. */
+    private fun over(parts: List<Ruby>, start: Int, end: Int): String? {
         val over = mutableListOf<String>()
         var at = 0
         for (part in parts) {
