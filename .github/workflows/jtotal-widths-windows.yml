@@ -69,6 +69,18 @@ jobs:
           $w measure $out/en-mono.json --mono --cp932
           $w trims $out/en-main-trims.json
           $w trims $out/en-mono-trims.json --mono
+      - name: Draw the tests' sheets
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The sheets the app's tests place chords on, drawn as a reader on Windows sees them. `invented.py show` reads each.
+          python scripts/jtotal-widths/invented.py write windows/invented
+          fonts=$(python -c "import sys; sys.path.insert(0, 'scripts/jtotal-widths'); import jtotal_widths; print(jtotal_widths.container_fonts())")
+          d="python scripts/jtotal-widths/compare_sheets.py draw windows/invented --fonts $fonts --lang ja"
+          $d --out chromium.json
+          $d --out edge.json --browser "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+          $d --out chrome.json --browser "C:/Program Files/Google/Chrome/Application/chrome.exe"
+          for b in chromium edge chrome; do echo "== $b"; python scripts/jtotal-widths/invented.py show windows/invented/$b.json; done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jtotal-widths-windows

@@ -210,18 +210,19 @@ def japanese_profile(folder, lang):
     return folder
 
 
-def open_page(p, browser_name, lang, profile=None):
+def open_page(p, browser_name, lang, profile=None, viewport=(1200, 800), scale=1):
     """A page to measure on. An installed browser with a language gets a profile in that language, in `profile`."""
+    size = {"width": viewport[0], "height": viewport[1]}
     if lang and profile is not None and Path(browser_name).exists():
-        context = p.chromium.launch_persistent_context(str(japanese_profile(profile, lang)), executable_path=browser_name,
-                                                       headless=True, args=[f"--lang={lang}"], locale=lang, viewport={"width": 1200, "height": 800})
+        context = p.chromium.launch_persistent_context(str(japanese_profile(profile, lang)), executable_path=browser_name, headless=True,
+                                                       args=[f"--lang={lang}"], locale=lang, viewport=size, device_scale_factor=scale)
         page = context.pages[0] if context.pages else context.new_page()
         cdp = context.new_cdp_session(page)
         version = cdp.send("Browser.getVersion")["product"].split("/")[-1]
         opened = Opened(version, context.close)
     else:
         browser = launch(p, browser_name, lang)
-        page = browser.new_page(viewport={"width": 1200, "height": 800}, locale=lang)
+        page = browser.new_page(viewport=size, device_scale_factor=scale, locale=lang)
         cdp = page.context.new_cdp_session(page) if browser_name != "webkit" else None
         opened = Opened(browser.version, browser.close)
     if cdp:

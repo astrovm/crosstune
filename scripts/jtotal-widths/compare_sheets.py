@@ -288,7 +288,7 @@ def app_run(directory, tag, old):
 def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, out="browser.json"):
     """Draws every page in `browser_name` on this machine, with its fonts, and writes where the letters are to `out`."""
     from playwright.sync_api import sync_playwright
-    from jtotal_widths import FONTS, environment, launch
+    from jtotal_widths import FONTS, environment, open_page
 
     css = (directory / "dat_st.css").read_bytes().decode(CHARSET, "replace")
     faces = "".join(
@@ -297,8 +297,7 @@ def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, ou
     )
     pages = []
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
-        browser = launch(p, browser_name, lang)
-        page = browser.new_page(viewport={"width": 1280, "height": 900}, device_scale_factor=4, locale=lang)
+        browser, page, _ = open_page(p, browser_name, lang, Path(tmp) / "profile", viewport=(1280, 900), scale=4)
         page.route("**/*", lambda r: r.continue_() if r.request.url.startswith("file:") else r.abort())
         html = Path(tmp) / "sheet.html"
         for item in json.loads((directory / "urls.json").read_text(encoding="utf-8")):
@@ -307,9 +306,9 @@ def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, ou
                 continue
             text = re.sub(r'<link href="/ssi_dat/dat_st.css[^>]*>', lambda _: "<style>" + css + "</style>", raw)
             text = re.sub(r"(?is)<script\b.*?</script[^>]*>", "", text)
-            text = re.sub(r"(?i)charset=.?[A-Za-z_0-9-]+.?", 'charset="utf-8"', text)
             text = text.replace("</head>", "<style>" + faces + " *{font-size:40px !important}</style></head>", 1)
-            html.write_text(text, encoding="utf-8")
+            # Served as J-Total serves it, in Shift_JIS. A letter the decoder could not read stays the replacement mark.
+            html.write_bytes(text.encode(CHARSET, "xmlcharrefreplace"))
             page.goto(html.as_uri())
             page.evaluate("document.fonts.ready")
             pages.append({**page.evaluate(JS), "url": item["url"]})
