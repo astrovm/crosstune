@@ -51,6 +51,9 @@ LINES = [
     ("abcdef", "あ）：い"),
     ("ﾞ", "abcd"),
     ("ﾟ", "abcd"),
+    # A letter above U+FFFF, which a page holds as one reference and JavaScript as two halves.
+    ("&#134071;", "abcd"),
+    ("xx", "&#134071;ab"),
 ]
 
 
