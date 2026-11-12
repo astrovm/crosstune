@@ -4851,13 +4851,14 @@ class ListeningTest {
 
     @Test
     fun aLineKeptCarriesWhatTheUserPutRightWhenItsWordsChangeWithReadingsOff() {
-        prefs().edit().putString(
+        // Readings are on unless turned off, and reading the words would keep the line again and show it as kept.
+        prefs().edit().putBoolean("lyrics_readings", false).putString(
             "saved_lines",
             """[{"text":"都会の夜","reading":"とかいのよ","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
         ).commit()
         wordsOf(null, "都会の夜に")
         // Nothing reads the words on screen, so the line's read by the dictionary away from it, with the user's 夜.
-        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.singleOrNull()?.ruby.orEmpty().any { it.by == Reader.USER } }
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.singleOrNull()?.let { it.text == "都会の夜に" && it.ruby.orEmpty().any { part -> part.by == Reader.USER } } == true }
         settle()
         val line = SavedLinesStore(prefs()).load().single()
         assertEquals("都会の夜に", line.text)
@@ -4909,6 +4910,9 @@ class ListeningTest {
             "saved_lines",
             """[{"text":"都会の夜","reading":"とかいのよる","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よる"]],"readWith":${Readings.VERSION}}]"""
         ).commit()
+        // UniDic is on the phone already, so only ChatGPT leaves the readings to be read again.
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
         val openAi = signedInWithChatGpt()
         val answers = openAi.reply
         openAi.reply = { body -> if ("You check the readings" in body.getString("instructions")) 500 to "" else answers(body) }

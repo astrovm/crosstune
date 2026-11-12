@@ -165,6 +165,12 @@ class SavedLinesRereadTest {
         assertEquals(listOf(night), movedTo(listOf(night, Ruby("夜", "よる", Reader.USER)), "夜夜", "夜"))
         // Parts that don't write the line, as an older version may have kept, carry nothing.
         assertEquals(listOf(Ruby("夜と")), movedTo(listOf(night), "夜と", "夜と"))
+        // A word found again where one moved has taken its second letter isn't laid over it, though its first is free.
+        val sky = Ruby("雨風雲", "あめかぜくも", Reader.USER)
+        assertEquals(
+            listOf(Ruby("空"), Ruby("夜"), sky),
+            movedTo(listOf(sky, Ruby("と"), Ruby("夜雨", "よさめ", Reader.USER)), "雨風雲と夜雨", "空夜雨風雲")
+        )
     }
 
     @Test
