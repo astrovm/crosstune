@@ -62,3 +62,6 @@ CREATE TABLE IF NOT EXISTS reports (
   -- The right reading, when the user typed it.
   right_reading TEXT
 );
+
+
+-- The counts that keep this table from being filled, and their index, are in limits.sql: run it after this file.
