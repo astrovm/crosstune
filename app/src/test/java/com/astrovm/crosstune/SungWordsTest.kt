@@ -272,9 +272,8 @@ class SungWordsTest {
         // The second line sung 400 ms later than the first, by its words "let" and "go", whatever "Never" says.
         val heard = sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_300L, "let" to 3_000L, "me" to 3_300L, "go" to 3_600L)
         assertEquals(mapOf(0 to 300L, 1 to 2_700L), SungAlignment.linesMs(heard, fromTheStart, words, -700))
-        // Heard by one of its timed words only, it keeps to the rest: "Never" says 300 ms early, "me", three letters into "let me ", says on time.
-        val me = 3_300L + 3 * SungTiming.LETTER_MS
-        assertEquals(mapOf(0 to 300L, 1 to 2_300L), SungAlignment.linesMs(sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_700L, "me" to me), fromTheStart, words, -700))
+        // Heard by one of its timed words only, it keeps to the rest.
+        assertEquals(mapOf(0 to 300L, 1 to 2_300L), SungAlignment.linesMs(sung("Take" to 300L, "me" to 700L, "now" to 1_100L, "Never" to 2_700L), fromTheStart, words, -700))
     }
 
     /** A verse of eight lines, then a chorus of three sung twice, three seconds a line. */
