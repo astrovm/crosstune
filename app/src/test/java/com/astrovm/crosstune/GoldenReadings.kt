@@ -2,8 +2,10 @@ package com.astrovm.crosstune
 
 /**
  * readings-golden.tsv's rows, and the one way a row is checked: the parts the app reads over one
- * occurrence of a word in a stretch of a line, written `text=reading|text`. [ReadingsGoldenTest] checks
- * each row with it, and the songcheck `GoldenContexts` finds each row's stretch with it, so the two agree.
+ * occurrence of a word in a stretch of a line, written `text=reading|text`; the word sheet's romaji for it;
+ * and the parts it shows there once the song's words put the word's reading right. [ReadingsGoldenTest]
+ * checks each row with [broken], and the songcheck `GoldenContexts` finds each row's stretch and what it
+ * locks with the same functions, so the two agree.
  */
 internal object GoldenReadings {
 
@@ -14,7 +16,20 @@ internal object GoldenReadings {
 
     val DICTIONARIES = setOf("ipadic", "unidic", "both")
 
-    data class Row(val line: String, val word: String, val index: Int?, val kana: String, val ruby: String, val dictionary: String) {
+    /**
+     * A locked reading. [sheet] is the word sheet's `romanized|typed` for the word, and [shown] the parts shown over it once a
+     * fix reads it [kana]; each is empty when the row doesn't lock it.
+     */
+    data class Row(
+        val line: String,
+        val word: String,
+        val index: Int?,
+        val kana: String,
+        val ruby: String,
+        val dictionary: String,
+        val sheet: String = "",
+        val shown: String = ""
+    ) {
         fun readBy(dictionary: String) = this.dictionary == "both" || this.dictionary == dictionary
     }
 
@@ -33,24 +48,86 @@ internal object GoldenReadings {
         val fields = raw.split('\t')
         check(fields.size == FIELDS) { "A golden row needs $FIELDS fields: $raw" }
         val (line, word, index, kana, ruby) = fields
+        val sheet = fields[SHEET]
+        val shown = fields[SHOWN]
         val dictionary = fields[FIELDS - 1]
         check(dictionary in DICTIONARIES) { "A golden row's dictionary is ipadic, unidic or both: $raw" }
         check(index.isEmpty() || index.all(Char::isDigit)) { "A golden row's index is empty or a number: $raw" }
-        val parts = ruby.split('|').map { it.substringBefore('=') to it.substringAfter('=', "") }
-        check(parts.joinToString("") { it.first } == word) { "A golden row's ruby has to spell its word: $raw" }
-        check(parts.joinToString("") { it.second.ifEmpty { it.first } } == kana) { "A golden row's ruby has to read as its kana: $raw" }
-        return Row(line, word, index.ifEmpty { null }?.toInt(), kana, ruby, dictionary)
+        check(spelled(ruby) == word) { "A golden row's ruby has to spell its word: $raw" }
+        check(read(ruby) == kana) { "A golden row's ruby has to read as its kana: $raw" }
+        check(sheet.isEmpty() || sheet.split('|').let { it.size == 2 && it.all(String::isNotEmpty) }) {
+            "A golden row's sheet is empty or romanized|typed: $raw"
+        }
+        // The parts shown after the fix may split the word otherwise, but they spell it and read it the same.
+        check(shown.isEmpty() || (spelled(shown) == word && Readings.hiragana(read(shown)) == Readings.hiragana(kana))) {
+            "A golden row's shown parts are empty or spell its word as its kana: $raw"
+        }
+        return Row(line, word, index.ifEmpty { null }?.toInt(), kana, ruby, dictionary, sheet, shown)
+    }
+
+    private fun parts(ruby: String) = ruby.split('|').map { it.substringBefore('=') to it.substringAfter('=', "") }
+
+    /** What parts written `text=reading|text` spell, and how they read. */
+    private fun spelled(ruby: String) = parts(ruby).joinToString("") { it.first }
+
+    private fun read(ruby: String) = parts(ruby).joinToString("") { it.second.ifEmpty { it.first } }
+
+    /**
+     * What [row] gets wrong with [parts], the parts read over its line, and [words], the word sheet of its line, for the
+     * dictionary that read them; null when the row holds. Empty locks ask nothing.
+     */
+    fun broken(row: Row, parts: List<Ruby>, words: List<Word>): String? {
+        val ruby = rubyAt(parts, row.line, row.word, row.index)
+        val sheet = sheetAt(words, row.line, row.word, row.index, row.kana)
+        val shown = shownAt(parts, row.line, row.word, row.index, row.kana)
+        return listOfNotNull(
+            "ruby=${row.ruby} got=${ruby ?: parts.joinToString("|") { it.text }}".takeIf { ruby != row.ruby },
+            "sheet=${row.sheet} got=$sheet".takeIf { row.sheet.isNotEmpty() && sheet != row.sheet },
+            "shown=${row.shown} got=$shown".takeIf { row.shown.isNotEmpty() && shown != row.shown }
+        ).joinToString(" ").ifEmpty { null }
+    }
+
+    /**
+     * The word sheet's romaji for the occurrence of [word] in [line] that [index] names, `romanized|typed`, when the sheet
+     * has a word just there that reads [kana]; empty when it hasn't. Its words are found in the line in turn, as
+     * [Readings.asShown] finds them.
+     */
+    fun sheetAt(words: List<Word>, line: String, word: String, index: Int?, kana: String): String {
+        val start = startOf(line, word, index) ?: return ""
+        var from = 0
+        for (each in words) {
+            val at = line.indexOf(each.text, from).takeIf { it >= 0 } ?: continue
+            from = at + each.text.length
+            if (at == start && each.text == word && each.reading?.let(Readings::hiragana) == Readings.hiragana(kana)) {
+                return listOfNotNull(each.romanized, each.typed).takeIf { it.size == 2 }?.joinToString("|").orEmpty()
+            }
+        }
+        return ""
+    }
+
+    /**
+     * The parts the app shows over the occurrence of [word] in [line] that [index] names, written as [rubyAt] writes them,
+     * when the song's words read it [kana] and the dictionary had it otherwise: its parts lose their readings, then
+     * [Readings.corrected] makes the fix. Empty when what it shows doesn't read [kana].
+     */
+    fun shownAt(parts: List<Ruby>, line: String, word: String, index: Int?, kana: String): String {
+        val start = startOf(line, word, index) ?: return ""
+        val end = start + word.length
+        var at = 0
+        val blank = parts.map { part ->
+            val from = at
+            at += part.text.length
+            if (from >= start && at <= end) Ruby(part.text) else part
+        }
+        val fix = ReadingFix(0, word, Readings.hiragana(kana), Reader.SUNG)
+        val shown = rubyAt(Readings.corrected(listOf(LineReading(blank, "", "")), listOf(fix)).single().parts, line, word, index)
+        return shown?.takeIf { Readings.hiragana(read(it)) == Readings.hiragana(kana) }.orEmpty()
     }
 
     /** The parts [parts] puts over the occurrence of [word] in [line] that [index] names; null when they don't start and end with it. */
     fun rubyAt(parts: List<Ruby>, line: String, word: String, index: Int?): String? {
         if (parts.joinToString("") { it.text } != line) return null
-        val found = starts(line, word)
-        val start = when {
-            index == null && found.size == 1 -> found[0]
-            index != null && found.size > 1 && index in found.indices -> found[index]
-            else -> return null
-        }
+        val start = startOf(line, word, index) ?: return null
         val end = start + word.length
         val over = mutableListOf<String>()
         var at = 0
@@ -64,6 +141,16 @@ internal object GoldenReadings {
             at = stop
         }
         return over.joinToString("|")
+    }
+
+    /** Where the occurrence of [word] in [line] that [index] names starts: null when [index] isn't there, or is needed and missing. */
+    private fun startOf(line: String, word: String, index: Int?): Int? {
+        val found = starts(line, word)
+        return when {
+            index == null && found.size == 1 -> found[0]
+            index != null && found.size > 1 && index in found.indices -> found[index]
+            else -> null
+        }
     }
 
     /** Where [word] starts in [line], a word that overlaps itself too. The same search as readingsaudit.find_starts. */
@@ -163,5 +250,7 @@ internal object GoldenReadings {
     /** Characters Python's splitlines or Kotlin's lineSequence take for the end of a line, and the field separator. */
     val LINE_ENDS = setOf('\t', '\n', '\r', '\u000B', '\u000C', '\u001C', '\u001D', '\u001E', '\u0085', ' ', ' ')
 
-    private const val FIELDS = 6
+    private const val SHEET = 5
+    private const val SHOWN = 6
+    private const val FIELDS = 8
 }

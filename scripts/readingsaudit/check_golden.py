@@ -23,7 +23,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from golden import GOLDEN_REL, READING_BUILD_WORD, READING_BUILDS, READING_SOURCES, readers_of
+from golden import FIELDS, GOLDEN_REL, READING_BUILD_WORD, READING_BUILDS, READING_SOURCES, readers_of
 
 ROOT = Path(__file__).resolve().parents[2]
 NONE = "golden: none"
@@ -70,13 +70,13 @@ def rows_of(text):
 
 
 def removed_rows(before, after):
-    """The rows of [before] that [after] does not keep. A row is kept when [after] has its line, word, index, kana and
-    ruby with the same dictionaries or more: a fix that makes the other dictionary read it right too keeps it."""
+    """The rows of [before] that [after] does not keep. A row is kept when [after] has all of it but the dictionary, the
+    last field, with the same dictionaries or more: a fix that makes the other dictionary read it right too keeps it."""
     kept = {}
     for row in after:
-        if len(row) == 6:
-            kept[row[:5]] = kept.get(row[:5], set()) | readers_of(row[5])
-    return {row for row in before if row not in after and not (len(row) == 6 and readers_of(row[5]) <= kept.get(row[:5], set()))}
+        kept[row[:-1]] = kept.get(row[:-1], set()) | readers_of(row[-1])
+    return {row for row in before
+            if row not in after and not (len(row) == FIELDS and readers_of(row[-1]) <= kept.get(row[:-1], set()))}
 
 
 def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), digest=None):

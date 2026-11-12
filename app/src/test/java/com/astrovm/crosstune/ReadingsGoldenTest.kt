@@ -10,7 +10,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Every reading in readings-golden.tsv still reads the way it did when it was locked, kana and where they go.
+ * Every reading in readings-golden.tsv still reads the way it did when it was locked, kana and where they go,
+ * and, where the row locks them, the word sheet's romaji for it and what shows once a fix reads it so.
  * The file is what `readingsaudit.py golden` wrote: each reading the audit found right, on the shortest
  * stretch of its line that the app reads the same way, alone and with any more of the line around it.
  * A row that fails is printed with what the app gave.
@@ -41,11 +42,10 @@ class ReadingsGoldenTest {
         val broken = mutableListOf<String>()
         for ((line, lineRows) in rows.filter { it.readBy(via) }.groupBy { it.line }) {
             val parts = Readings.of(listOf(line), Script.JAPANESE).single().parts
+            val words = Readings.words(line, Script.JAPANESE)
             for (row in lineRows) {
-                val got = GoldenReadings.rubyAt(parts, line, row.word, row.index)
-                if (got != row.ruby) {
-                    broken += "line=${row.line} word=${row.word} index=${row.index ?: ""} dictionary=${row.dictionary} via=$via " +
-                        "expected=${row.ruby} got=${got ?: parts.joinToString("|") { it.text }}"
+                GoldenReadings.broken(row, parts, words)?.let { got ->
+                    broken += "line=${row.line} word=${row.word} index=${row.index ?: ""} dictionary=${row.dictionary} via=$via $got"
                 }
             }
         }
@@ -55,7 +55,7 @@ class ReadingsGoldenTest {
     @Test
     fun aFileCutShortOrWithoutItsCountFails() {
         val header = "# Locked readings.\n"
-        val row = "夢を\t夢\t\tゆめ\t夢=ゆめ\tboth\n"
+        val row = "夢を\t夢\t\tゆめ\t夢=ゆめ\t\t\tboth\n"
         assertEquals(1, GoldenReadings.rows("${header}# rows: 1\n$row").size)
         assertThrows(IllegalStateException::class.java) { GoldenReadings.rows("${header}# rows: 2\n$row") }
         assertThrows(IllegalStateException::class.java) { GoldenReadings.rows("${header}$row") }
@@ -67,13 +67,55 @@ class ReadingsGoldenTest {
     @Test
     fun aRowThatIsNotWholeFails() {
         fun rows(row: String) = GoldenReadings.rows("# rows: 1\n$row\n")
-        assertEquals(GoldenReadings.Row("夢を", "夢", 1, "ゆめ", "夢=ゆめ", "unidic"), rows("夢を\t夢\t1\tゆめ\t夢=ゆめ\tunidic").single())
-        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ") }
-        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\tsudachi") }
-        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\tone\tゆめ\t夢=ゆめ\tboth") }
+        assertEquals(GoldenReadings.Row("夢を", "夢", 1, "ゆめ", "夢=ゆめ", "unidic"), rows("夢を\t夢\t1\tゆめ\t夢=ゆめ\t\t\tunidic").single())
+        assertEquals(
+            GoldenReadings.Row("思い出", "思い出", null, "おもいで", "思=おも|い|出=で", "both", "omoide|omoide", "思い出=おもいで"),
+            rows("思い出\t思い出\t\tおもいで\t思=おも|い|出=で\tomoide|omoide\t思い出=おもいで\tboth").single()
+        )
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\t\t\tsudachi") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\tone\tゆめ\t夢=ゆめ\t\t\tboth") }
         // The ruby has to spell the word and read as the kana, so a row edited by hand can't lock something else.
-        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t今=ゆめ\tboth") }
-        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=いま\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t今=ゆめ\t\t\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=いま\t\t\tboth") }
+        // The sheet is two romaji, and the shown parts spell the word as its kana, in katakana too.
+        assertEquals("ユメ", rows("夢を\t夢\t\tゆめ\t夢=ゆめ\t\t夢=ユメ\tboth").single().shown.substringAfter('='))
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\tyume\t\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\tyume|\t\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\t|yume\t\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\ta|b|c\t\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\t\t今=ゆめ\tboth") }
+        assertThrows(IllegalStateException::class.java) { rows("夢を\t夢\t\tゆめ\t夢=ゆめ\t\t夢=いま\tboth") }
+    }
+
+    @Test
+    fun aRowLocksTheWordSheetAndWhatAFixShowsWhenItHasThem() {
+        val line = "夢を見た"
+        val parts = listOf(Ruby("夢", "ゆめ"), Ruby("を"), Ruby("見", "み"), Ruby("た"))
+        val words = listOf(Word("夢", "ゆめ", "yume", typed = "yume"), Word("を"), Word("見た", "みた", "mita"))
+        assertEquals("yume|yume", GoldenReadings.sheetAt(words, line, "夢", null, "ゆめ"))
+        assertEquals("yume|yume", GoldenReadings.sheetAt(words, line, "夢", null, "ユメ"))
+        // Another reading, a word that starts there but is longer, no romaji, or an occurrence that isn't there: nothing to lock.
+        assertEquals("", GoldenReadings.sheetAt(words, line, "夢", null, "む"))
+        assertEquals("", GoldenReadings.sheetAt(words, line, "見", null, "み"))
+        assertEquals("", GoldenReadings.sheetAt(listOf(Word("夢", "ゆめ")), line, "夢", null, "ゆめ"))
+        assertEquals("", GoldenReadings.sheetAt(listOf(Word("夢", "ゆめ", "yume", typed = null)), line, "夢", null, "ゆめ"))
+        assertEquals("", GoldenReadings.sheetAt(words, line, "夢", 0, "ゆめ"))
+        // A word the sheet lacks is passed over, and the next is found after it.
+        assertEquals("mita|mita", GoldenReadings.sheetAt(listOf(Word("無"), Word("夢"), Word("見た", "みた", "mita")), line, "見た", null, "みた"))
+        // Its parts are put right from the song's words, whatever the dictionary read.
+        val wrong = listOf(Ruby("夢", "む"), Ruby("を"), Ruby("見", "み"), Ruby("た"))
+        assertEquals("夢=ゆめ", GoldenReadings.shownAt(wrong, line, "夢", null, "ゆめ"))
+        assertEquals("", GoldenReadings.shownAt(wrong, line, "夢", 1, "ゆめ"))
+        assertEquals("", GoldenReadings.shownAt(wrong, "夢を", "夢", null, "ゆめ"))
+        val row = GoldenReadings.Row(line, "夢", null, "ゆめ", "夢=ゆめ", "both", "yume|yume", "夢=ゆめ")
+        assertNull(GoldenReadings.broken(row, parts, words))
+        // Empty locks ask nothing.
+        assertNull(GoldenReadings.broken(row.copy(sheet = "", shown = ""), parts, emptyList()))
+        assertEquals("sheet=yume|yume got=", GoldenReadings.broken(row, parts, emptyList()))
+        assertEquals("ruby=夢=ゆめ got=夢|を|見|た", GoldenReadings.broken(row.copy(sheet = "", shown = ""), parts.map { Ruby(it.text) }, words))
+        assertEquals("ruby=夢=ゆめ got=夢=む", GoldenReadings.broken(row.copy(sheet = "", shown = ""), wrong, words))
+        assertEquals("shown=夢=ユメ got=夢=ゆめ", GoldenReadings.broken(row.copy(shown = "夢=ユメ"), parts, words))
     }
 
     @Test

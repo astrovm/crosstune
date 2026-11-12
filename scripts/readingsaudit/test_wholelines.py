@@ -336,9 +336,10 @@ class Command(unittest.TestCase):
             self.assertIn("this one is empty, cut short or another", str(stop.exception))
             # As many lines, but other ones.
             self.record(repo)
-            song(self.audit(repo), "a", [("空", [["空", "そら"]])])
+            other = self.audit(repo)
+            song(other, "a", [("空", [["空", "そら"]])])
             with self.assertRaises(SystemExit) as stop:
-                wholelines.lines(self.audit(repo), [], base="main", repo=repo, read=None)
+                wholelines.lines(other, [], base="main", repo=repo, read=None)
             self.assertIn("this one is empty, cut short or another", str(stop.exception))
             # An empty folder, even as a new audit.
             empty = repo.parent / "empty"

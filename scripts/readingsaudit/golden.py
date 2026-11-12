@@ -41,9 +41,12 @@ GOLDEN_HEADER = [
     "# A song never has more than a quarter of its lines here whole: past that, a reading is locked on the longest",
     "# stretch short of its line that reads so.",
     "# Rows are sorted by the stretch, so songs are not in order. There is no song title and no artist name.",
-    "# Columns, separated by a tab: line, word, index, kana, ruby, dictionary.",
+    "# Columns, separated by a tab: line, word, index, kana, ruby, sheet, shown, dictionary.",
     "# line is the stretch. index is empty when the word is in it once. Otherwise it is the occurrence, from 0.",
     "# ruby is the word's parts as the app splits it, text=reading or text alone, joined by |.",
+    "# sheet is the word sheet's romaji for the word, as said and as typed, joined by |, when the sheet has the word",
+    "# there with this kana. shown is the word's parts once the song's words put its reading right (Readings.corrected),",
+    "# written as ruby is, when they read as the kana. Each is empty when the row does not lock it.",
     "# dictionary is ipadic, unidic or both.",
     "# Regenerate: python3 scripts/readingsaudit/readingsaudit.py golden",
     "# The command adds rows. It does not remove or change a row.",
@@ -123,19 +126,30 @@ def readers_of(tag):
     return {"ipadic", "unidic"} if tag == "both" else {tag}
 
 
-def check_fields(row):
-    """A row ReadingsGoldenTest reads back as written: six fields, none with a tab or a line end, and a line that is no comment."""
-    if any(set(part) & LINE_ENDS for part in row) or not row[0] or row[0].startswith("#"):
-        raise SystemExit(f"a golden row can't be written: {row!r}")
-    line, word, field, kana, ruby, tag = row
+FIELDS = 8
+
+
+def ruby_text(ruby):
+    """What parts written text=reading|text spell, and how they read."""
     parts = [part.split("=", 1) for part in ruby.split("|")]
-    if (tag not in DICTIONARIES or (field and not field.isdigit()) or "".join(p[0] for p in parts) != word
-            or "".join(p[-1] for p in parts) != kana or word not in line):
-        raise SystemExit(f"a golden row needs a dictionary, an index, and ruby that spells its word as its kana: {row!r}")
+    return "".join(p[0] for p in parts), "".join(p[-1] for p in parts)
+
+
+def check_fields(row):
+    """A row ReadingsGoldenTest reads back as written: eight fields, none with a tab or a line end, and a line that is no
+    comment. GoldenReadings.rows checks the same."""
+    if len(row) != FIELDS or any(set(part) & LINE_ENDS for part in row) or not row[0] or row[0].startswith("#"):
+        raise SystemExit(f"a golden row can't be written: {row!r}")
+    line, word, field, kana, ruby, sheet, shown, tag = row
+    if (tag not in DICTIONARIES or (field and not field.isdigit()) or ruby_text(ruby) != (word, kana) or word not in line
+            or (sheet and not (sheet.count("|") == 1 and all(sheet.split("|"))))
+            or (shown and (ruby_text(shown)[0] != word or audit.hiragana(ruby_text(shown)[1]) != audit.hiragana(kana)))):
+        raise SystemExit(f"a golden row needs a dictionary, an index, ruby that spells its word as its kana, and a sheet "
+                         f"and shown parts that are empty or say the same: {row!r}")
 
 
 def row_sort_key(row):
-    return (row[0], row[1], -1 if row[2] == "" else int(row[2]), row[3], row[4], row[5])
+    return (row[0], row[1], -1 if row[2] == "" else int(row[2]), *row[3:])
 
 
 def read_golden(path):
@@ -148,8 +162,8 @@ def read_golden(path):
         if not raw or raw.startswith("#"):
             continue
         fields = tuple(raw.split("\t"))
-        if len(fields) != 6:
-            raise SystemExit(f"a golden row needs 6 fields: {raw}")
+        if len(fields) != FIELDS:
+            raise SystemExit(f"a golden row needs {FIELDS} fields: {raw}")
         check_fields(fields)
         rows.append(fields)
     return rows
@@ -216,11 +230,12 @@ def song_lines(folder):
 WHOLE_SHARE = 0.25
 
 
-def row_on(line, word, start, span, kana, ruby):
-    """The row that locks the occurrence of [word] at [start] on line[span]: stretch, word, index, kana, ruby."""
+def row_on(line, word, start, span, kana, ruby, locks):
+    """The row that locks the occurrence of [word] at [start] on line[span]: stretch, word, index, kana, ruby, and
+    [locks], its sheet and shown parts there. All but the dictionary."""
     stretch = line[span[0]:span[1]]
     found = find_starts(stretch, word)
-    return (stretch, word, str(found.index(start - span[0])) if len(found) > 1 else "", kana, ruby)
+    return (stretch, word, str(found.index(start - span[0])) if len(found) > 1 else "", kana, ruby, *locks)
 
 
 def cases_tried(cases, keys, rows):
@@ -232,7 +247,7 @@ def cases_tried(cases, keys, rows):
     for key in keys:
         line, word, occurrence, tag = key
         start = find_starts(line, word)[occurrence]
-        found = ((at, span_of(rows[at], line, word, start)) for at in by_word[(word, cases[key][1])] if tag in readers_of(rows[at][5]))
+        found = ((at, span_of(rows[at], line, word, start)) for at in by_word[(word, cases[key][1])] if tag in readers_of(rows[at][-1]))
         tried[key] = [(at, span) for at, span in found if span]
     return tried
 
@@ -240,8 +255,8 @@ def cases_tried(cases, keys, rows):
 def job_of(cases, keys, rows, tried, lines, width=0):
     """What GoldenContexts reads: the rows to check, each case with the spans to try in UTF-16, every lyric line, and the
     letters of context a row holds on each side of its stable stretch."""
-    return {"rows": [[row[0], row[1], int(row[2]) if row[2] else None, row[4], row[5]] for row in rows],
-            "cases": [[*key[:3], cases[key][1], key[3], [[units(key[0], a), units(key[0], b)] for _at, (a, b) in tried[key]]]
+    return {"rows": [[row[0], row[1], int(row[2]) if row[2] else None, *row[3:]] for row in rows],
+            "cases": [[*key[:3], *cases[key], key[3], [[units(key[0], a), units(key[0], b)] for _at, (a, b) in tried[key]]]
                       for key in keys],
             "lines": sorted(lines), "width": width}
 
@@ -363,7 +378,7 @@ def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT, union_
             if (row[1], row[3]) in accept:
                 continue
             regressions.append(row)
-        merged[row[:5]] |= readers_of(row[5])
+        merged[row[:-1]] |= readers_of(row[-1])
     kept = set(merged)
     placed, not_locked = {}, [key for key, (_kana, ruby) in cases.items() if not writable(key[1], ruby)]
     for key, got in zip(keys, answer["cases"]):
@@ -374,10 +389,11 @@ def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT, union_
             not_locked.append(key)
             continue
         # A row already there that holds all of the stretch locks it as well, so a second run writes the same file.
-        if any(a <= stretch[0] and stretch[1] <= b and old[at][:5] in kept for at, (a, b) in tried[key]):
+        if any(a <= stretch[0] and stretch[1] <= b and old[at][:-1] in kept for at, (a, b) in tried[key]):
             continue
         start = find_starts(line, word)[occurrence]
-        placed[key] = [row_on(line, word, start, stretch, kana, ruby), fallback and row_on(line, word, start, fallback, kana, ruby)]
+        placed[key] = [row_on(line, word, start, stretch, kana, ruby, got["locks"]),
+                       fallback and row_on(line, word, start, fallback, kana, ruby, got["fallback locks"])]
     moved = cap_whole_lines(songs, kept, placed)
     capped = cap_union(songs, kept, placed, union_share)
     for key, (row, _fallback) in placed.items():
@@ -385,7 +401,7 @@ def golden(folder, dest, accept, contexts=golden_contexts, width=CONTEXT, union_
     rows = [key + (dictionary_tag(readers),) for key, readers in merged.items()]
     write_golden(dest, rows)
     for row in sorted(regressions, key=row_sort_key):
-        print(f"regression: {row[1]}\t{row[3]}\t{row[5]}\t{row[0]}\t{row[4]}")
+        print(f"regression: {row[1]}\t{row[3]}\t{row[-1]}\t{row[0]}\t{row[4]}")
     for key in sorted(not_locked):
         print(f"not locked: {key[1]}\t{cases[key][0]}\t{key[3]}")
     for key in sorted(moved - capped):

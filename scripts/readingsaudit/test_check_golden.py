@@ -16,8 +16,8 @@ HERE = Path(__file__).resolve().parent
 
 READINGS = READING_SOURCES[0]
 READING_BUILD, CATALOG = READING_BUILDS
-ROW = ("甲乙", "甲乙", "", "こうおつ", "甲乙=こうおつ", "both")
-OTHER = ("丙", "丙", "", "へい", "丙=へい", "both")
+ROW = ("甲乙", "甲乙", "", "こうおつ", "甲乙=こうおつ", "kouotsu|kouotsu", "甲乙=こうおつ", "both")
+OTHER = ("丙", "丙", "", "へい", "丙=へい", "", "", "both")
 
 
 def git(repo, *args):
@@ -96,7 +96,7 @@ class Verdict(unittest.TestCase):
 class Removed(unittest.TestCase):
 
     def test_a_row_that_another_dictionary_now_reads_so_too_is_kept(self):
-        ipadic, both, unidic = (ROW[:5] + (tag,) for tag in ("ipadic", "both", "unidic"))
+        ipadic, both, unidic = (ROW[:-1] + (tag,) for tag in ("ipadic", "both", "unidic"))
         self.assertEqual(set(), check_golden.removed_rows({ipadic}, {both}))
         self.assertEqual(set(), check_golden.removed_rows({both}, {ipadic, unidic}))
         self.assertEqual(set(), check_golden.removed_rows({ipadic}, {ipadic}))
@@ -104,7 +104,10 @@ class Removed(unittest.TestCase):
         self.assertEqual({both}, check_golden.removed_rows({both}, {ipadic}))
         self.assertEqual({ipadic}, check_golden.removed_rows({ipadic}, {unidic}))
         # Any other field changed is another row.
-        self.assertEqual({ipadic}, check_golden.removed_rows({ipadic}, {("甲乙", "甲乙", "", "こういつ", "甲乙=こういつ", "both")}))
+        self.assertEqual({ipadic}, check_golden.removed_rows({ipadic}, {("甲乙", "甲乙", "", "こういつ", "甲乙=こういつ", "", "", "both")}))
+        # The word sheet's romaji and the parts a fix shows are locked too: one changed, or no longer locked, drops the row.
+        for other in (ROW[:5] + ("kouotu|kouotu", ROW[6], "both"), ROW[:5] + ("", ROW[6], "both"), ROW[:6] + ("甲=こう|乙=おつ", "both")):
+            self.assertEqual({ipadic}, check_golden.removed_rows({ipadic}, {other}))
         self.assertEqual({("甲乙",)}, check_golden.removed_rows({("甲乙",)}, {both, ("甲乙", "甲乙")}))
 
 
@@ -243,8 +246,9 @@ class FakeDiff(unittest.TestCase):
             self.write(repo, GOLDEN_REL, golden_text(OTHER, ROW))
             self.merge(repo, "test: lock another reading")
             self.assertEqual((0, ""), self.run_check(repo))
-        changed = ("甲乙", "甲乙", "", "こういつ", "甲乙=こういつ", "both")
-        for after in (golden_text(), golden_text(OTHER), golden_text(changed)):
+        changed = ("甲乙", "甲乙", "", "こういつ", "甲乙=こういつ", "", "", "both")
+        romaji = ROW[:5] + ("kouotu|kouotu",) + ROW[6:]
+        for after in (golden_text(), golden_text(OTHER), golden_text(changed), golden_text(romaji)):
             with tempfile.TemporaryDirectory() as folder:
                 repo = self.repo(folder, golden_text(ROW))
                 self.write(repo, GOLDEN_REL, after)
@@ -262,7 +266,7 @@ class FakeDiff(unittest.TestCase):
             self.assertEqual(1, self.run_check(repo)[0])
 
     def test_a_row_another_dictionary_now_reads_so_too_passes_and_one_it_no_longer_does_fails(self):
-        ipadic, both = ROW[:5] + ("ipadic",), ROW[:5] + ("both",)
+        ipadic, both = ROW[:-1] + ("ipadic",), ROW[:-1] + ("both",)
         with tempfile.TemporaryDirectory() as folder:
             repo = self.repo(folder, golden_text(ipadic))
             self.write(repo, GOLDEN_REL, golden_text(both))

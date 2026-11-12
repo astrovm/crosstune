@@ -5,6 +5,7 @@ import com.astrovm.crosstune.Readings
 import com.astrovm.crosstune.Ruby
 import com.astrovm.crosstune.Script
 import com.astrovm.crosstune.TestUniDic
+import com.astrovm.crosstune.Word
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Test
@@ -18,11 +19,13 @@ import java.io.File
  * writes `golden-job.json` and runs it through Gradle's `songCheck` task, then reads `golden-answer.json`.
  * Both go in the audit folder, as they hold the songs' lines.
  *
- * A case is the line, the word, its occurrence from 0, its ruby, the dictionary, and stretches to try as [from, to],
- * in UTF-16 units. Its answer: `stretch`, the shortest stable stretch a row can hold (see [GoldenReadings.Around]),
- * with up to the job's `width` more letters of the line on each side; `whole`, whether the whole line reads it so;
- * `fallback`, when the stretch is the whole line, the longest stretch short of it that is no line of `lines`, stable
- * when one is; and `spans`, for each stretch tried, whether it is good and whether it is stable.
+ * A row is the golden file's, with its index a number or null. A case is the line, the word, its occurrence from 0,
+ * its kana, its ruby, the dictionary, and stretches to try as [from, to], in UTF-16 units. Its answer: `stretch`, the
+ * shortest stable stretch a row can hold (see [GoldenReadings.Around]), with up to the job's `width` more letters of
+ * the line on each side; `whole`, whether the whole line reads it so; `fallback`, when the stretch is the whole line,
+ * the longest stretch short of it that is no line of `lines`, stable when one is; `locks` and `fallback locks`, the
+ * row's sheet and shown parts on each of them; and `spans`, for each stretch tried, whether it is good and whether it
+ * is stable.
  */
 @RunWith(RobolectricTestRunner::class)
 class GoldenContexts {
@@ -56,17 +59,29 @@ class GoldenContexts {
         // Each stretch is read once for each dictionary, as many cases try the same ones.
         val read = HashMap<String, List<Ruby>>()
         val reader = { stretch: String -> read.getOrPut(stretch) { Readings.of(listOf(stretch), Script.JAPANESE).single().parts } }
-        job.rows.forEachIndexed { i, row ->
-            if (row.getString(ROW_DICTIONARY) != dictionary && row.getString(ROW_DICTIONARY) != "both") return@forEachIndexed
-            val index = if (row.isNull(ROW_INDEX)) null else row.getInt(ROW_INDEX)
-            val line = row.getString(0)
-            holds[i][column] = GoldenReadings.rubyAt(reader(line), line, row.getString(1), index) == row.getString(ROW_RUBY)
+        val sheets = HashMap<String, List<Word>>()
+        val sheet = { stretch: String -> sheets.getOrPut(stretch) { Readings.words(stretch, Script.JAPANESE) } }
+        job.rows.forEachIndexed { i, json ->
+            val row = GoldenReadings.Row(
+                json.getString(0), json.getString(1), if (json.isNull(ROW_INDEX)) null else json.getInt(ROW_INDEX), json.getString(ROW_KANA),
+                json.getString(ROW_RUBY), json.getString(ROW_DICTIONARY), json.getString(ROW_SHEET), json.getString(ROW_SHOWN)
+            )
+            if (!row.readBy(dictionary)) return@forEachIndexed
+            holds[i][column] = GoldenReadings.broken(row, reader(row.line), sheet(row.line)) == null
+        }
+        /** What a row on line[from, to) locks besides its ruby: the word sheet's romaji and the parts a fix shows. */
+        fun locks(around: GoldenReadings.Around, span: Pair<Int, Int>, word: String, kana: String): JSONArray {
+            val (stretch, index) = around.stretch(span.first, span.second)
+            return JSONArray()
+                .put(GoldenReadings.sheetAt(sheet(stretch), stretch, word, index, kana))
+                .put(GoldenReadings.shownAt(reader(stretch), stretch, word, index, kana))
         }
         job.cases.forEachIndexed { i, case ->
             if (case.getString(CASE_DICTIONARY) != dictionary) return@forEachIndexed
             val line = case.getString(0)
             val word = case.getString(1)
             val start = GoldenReadings.starts(line, word)[case.getInt(CASE_OCCURRENCE)]
+            val kana = case.getString(CASE_KANA)
             val around = GoldenReadings.Around(line, word, start, case.getString(CASE_RUBY), reader)
             val stretch = around.shortestStable()?.let { around.widened(it, job.width) }
             val fallback = if (stretch == 0 to line.length) around.longestShortOfLine(job.lines) else null
@@ -79,6 +94,8 @@ class GoldenContexts {
                 .put("stretch", stretch?.let(::pair) ?: JSONObject.NULL)
                 .put("whole", around.good(0, line.length))
                 .put("fallback", fallback?.let(::pair) ?: JSONObject.NULL)
+                .put("locks", stretch?.let { locks(around, it, word, kana) } ?: JSONObject.NULL)
+                .put("fallback locks", fallback?.let { locks(around, it, word, kana) } ?: JSONObject.NULL)
                 .put("spans", JSONArray(spans))
         }
     }
@@ -87,11 +104,15 @@ class GoldenContexts {
 
     private companion object {
         const val ROW_INDEX = 2
-        const val ROW_RUBY = 3
-        const val ROW_DICTIONARY = 4
+        const val ROW_KANA = 3
+        const val ROW_RUBY = 4
+        const val ROW_SHEET = 5
+        const val ROW_SHOWN = 6
+        const val ROW_DICTIONARY = 7
         const val CASE_OCCURRENCE = 2
-        const val CASE_RUBY = 3
-        const val CASE_DICTIONARY = 4
-        const val CASE_SPANS = 5
+        const val CASE_KANA = 3
+        const val CASE_RUBY = 4
+        const val CASE_DICTIONARY = 5
+        const val CASE_SPANS = 6
     }
 }
