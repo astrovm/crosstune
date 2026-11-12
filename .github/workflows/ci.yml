@@ -193,12 +193,33 @@ jobs:
       - name: Detekt's baseline only shrinks
         if: github.event_name == 'pull_request'
         run: |
-          added=$(git diff HEAD^1 HEAD -- config/detekt/baseline.xml | grep '^+.*<ID>' || true)
+          # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
+          diff=$(git diff HEAD^1 HEAD -- config/detekt/baseline.xml)
+          # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
+          added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
           if [ -n "$added" ]; then
             echo "::error file=config/detekt/baseline.xml::This adds to detekt's baseline. Split the code it flags up instead."
             echo "$added"
             exit 1
           fi
+
+      # The workflows, with shellcheck on their scripts. actionlint's own release, checked against the
+      # SHA-256 its checksums file gives for that version.
+      - name: Lint workflows
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          # actionlint skips the scripts without a word when shellcheck is missing.
+          if ! command -v shellcheck > /dev/null; then
+            echo "::error::shellcheck isn't on this runner, so actionlint wouldn't check the workflows' scripts"
+            exit 1
+          fi
+          tarball="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$tarball" "https://github.com/rhysd/actionlint/releases/download/v$VERSION/$tarball"
+          echo "$SHA256  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
