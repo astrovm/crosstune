@@ -16,9 +16,9 @@
 #
 # GRADLE_BOX_MEMORY is each build's limit in GiB, 16 by default: :app:ci holds about 13 at its peak,
 # between Gradle, the Kotlin compiler and, from 12 GiB, two test processes side by side, and at 8 or 12
-# one of them gets killed. A few test classes (--tests) hold under 5, so 6 is plenty for them. Builds
+# one of them gets killed. A few test classes (--tests) hold up to 6, so 7 is enough for them. Builds
 # run side by side while what they ask for, added up, fits in three quarters of the RAM, and one
-# always runs: three that ask for 6 run beside each other where one that asks for 16 runs alone. Each
+# always runs: three that ask for 7 run beside each other where one that asks for 16 runs alone. Each
 # gets the share of the CPUs that its memory is of that. GRADLE_BOX_SLOTS can lower how many run at
 # once, never raise it: every checkout shares the machine, so more than fit would run it out of memory.
 #
