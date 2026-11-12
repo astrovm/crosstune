@@ -1,6 +1,10 @@
 // Takes the problems people report from Crosstune and keeps them private, in D1, to be read by
 // hand. Nothing here posts anywhere public: a comment, or a song, may say something personal by
-// mistake. The IP address only counts reports against the limit; it isn't kept.
+// mistake. The IP address only counts reports against the limits: it isn't kept. Each network is
+// counted for the day under a key made with a secret, which can't be traced back to it without the
+// secret (limits.sql).
+
+import { networkOf, senderKey } from "./sender.js";
 
 /** More than a report with a long comment, every line put in time by hand and a minute of timing log needs. */
 const MAX_BYTES = 48 * 1024;
@@ -29,49 +33,242 @@ const LANGUAGE = /^[a-z_]+$/;
 /** What Android allows a package to be named: dotted words of letters, digits and underscores. */
 const PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
-/** The most lines put in time by hand a report carries. */
+/** The most lines put in time by hand a report keeps: the first ones, when the app sent more. */
 const MAX_POINTS = 300;
 
 /** How long a report is kept, as the privacy policy promises. Not exported: Workers take every export for an entrypoint. */
 const KEEP_DAYS = 180;
+
+/**
+ * What a report is, for the limits: one a person sends ("user", a problem in the lyrics or a reading marked wrong),
+ * one the app finds live ("found"), or a song's timing an earlier version kept ("kept"). Each kind has its own room,
+ * so one can't use up another's.
+ */
+export function kindOf(problem) {
+  if (problem === KEPT_TIMING) return "kept";
+  return PROBLEMS.has(problem) ? "found" : "user";
+}
+
+/** The timing an earlier version kept, as v2.24.0 on sends it (AutoReports.EARLIER). */
+const KEPT_TIMING = "kept_timing";
+
+/**
+ * The most reports one network (an IPv4 /24, an IPv6 /48) may send in a day (UTC), for each kind: room for 3 phones on
+ * their busiest day, as homes and carriers share addresses. In 115 real reports over 14 days, one phone sent at most
+ * 3 reports of its own a day, and found at most 22 problems. One phone's first start of a new version owes up to 200
+ * timings it kept, sent until one is turned away; the rest wait on the phone for a later start.
+ */
+const NETWORK_A_DAY = { user: 10, found: 70, kept: 200 };
+
+/**
+ * The most reports of each kind kept from one day (UTC), whoever sent them: the last wall when many networks send at
+ * once. Each kind has its own share, and a sender can claim any kind, so a flood fills one share and the others hold.
+ * Each is over 100 times its real peak, 3 and 22 a day, and kept timings take 15 phones' first starts. Measured on
+ * local D1, the worst day, every share kept from networks of their own, 1000 refusals for each reason, and the daily
+ * clear-out deleting a day as full, writes about 64,000 rows, inside the 100,000 D1's free plan writes a day.
+ */
+const SHARE_A_DAY = { user: 500, found: 2500, kept: 3000 };
+
+/**
+ * The most bytes of reports of each kind the table holds, as limits.sql counts them, so one kind's flood can't fill it
+ * for the others. Real reports count about 200 bytes, so a kind's day share kept every day for the 180 days a report
+ * is kept takes 19, 77 and 96 MB: honest use never meets these. A flood of the biggest reports the Worker takes fills
+ * one in 1 to 2 days. On disk the table is about 1.03 times what's counted, so the 350 MB in all stays under the
+ * 500 MB a database may hold on Cloudflare's free plan.
+ */
+const SHARE_BYTES = { user: 50_000_000, found: 150_000_000, kept: 150_000_000 };
+
+/** The kinds, in the order the limits are named. */
+const KINDS = ["user", "found", "kept"];
+
+/** How many refusals for each reason a day are counted: past it, a refusal costs no write. */
+const MAX_REFUSALS = 1000;
+
+/** What every version of the app sends a report as, OkHttp's "application/json; charset=utf-8", with or without the charset. */
+const JSON_TYPE = /^application\/json\s*(;\s*charset=utf-8\s*)?$/i;
+
+/** The columns a report fills, in the order its values are bound. */
+const COLUMNS =
+  "version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
+  "lyric_line, word, reading_shown, reader, language, right_reading";
+
+/** How many values a report binds: when it came in, then each column. */
+const VALUES = 1 + COLUMNS.split(",").length;
+
+/**
+ * The bytes of [kind] the table holds, how many came in on the day bound at [day], and how many the network bound at
+ * [key] sent that day, as limits.sql keeps them. Each reads one row, never the reports.
+ */
+const heldOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = 'bytes:${kind}'), 0)`;
+const dayOf = (kind, day) => `coalesce((SELECT n FROM report_counts WHERE key = ?${day} || ':${kind}'), 0)`;
+const sentOf = (key) => `coalesce((SELECT n FROM network_days WHERE key = ?${key}), 0)`;
+
+/**
+ * Why a report of each kind is turned away, if it is: 'kept_full' or 'day_full' for its kind's share, 'network' when
+ * its network sent its day's, else null. Bound to the day, the network's key and its number for the kind. Read once
+ * before anything is written, so a report turned away costs a refusal's write at most, and no count; and again in the
+ * batch that keeps a report, to say why it wasn't kept.
+ */
+const CHECK = Object.fromEntries(KINDS.map((kind) => [kind,
+  `SELECT CASE WHEN ${heldOf(kind)} >= ${SHARE_BYTES[kind]} THEN 'kept_full' WHEN ${dayOf(kind, 1)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' ` +
+  `WHEN ${sentOf(2)} >= ?3 THEN 'network' END AS why`,
+]));
+
+/**
+ * A report of each kind put in the table, with when it came in, unless that would take its kind past its share of
+ * the table or the day, or its network past its day's. It turns away exactly what CHECK names, so a report not kept
+ * always has a reason.
+ */
+const INSERT = Object.fromEntries(KINDS.map((kind) => [kind,
+  `INSERT INTO reports (at, ${COLUMNS}) SELECT ${Array.from({ length: VALUES }, (_, i) => `?${i + 1}`).join(", ")} ` +
+  `WHERE ${heldOf(kind)} < ${SHARE_BYTES[kind]} AND ${dayOf(kind, VALUES + 1)} < ${SHARE_A_DAY[kind]} AND ${sentOf(VALUES + 2)} < ?${VALUES + 3}`,
+]));
+
+/**
+ * One more report from a network on its day, only when the statement before it kept one: SQLite's changes() counts
+ * the rows that statement put in itself, not its triggers'. It runs in the same batch, one transaction, so a count
+ * never stays without its report, and a report never goes in without its count.
+ */
+const COUNT_NETWORK = "INSERT INTO network_days (key, day, n) SELECT ?1, ?2, 1 WHERE changes() = 1 ON CONFLICT (key) DO UPDATE SET n = n + 1";
+
+/** One more report turned away on its day, for the reason given, up to [MAX_REFUSALS]. */
+const REFUSE = `INSERT INTO refusals (day, why, n) VALUES (?, ?, 1) ON CONFLICT (day, why) DO UPDATE SET n = n + 1 WHERE n < ${MAX_REFUSALS}`;
+
+/** What the daily clear-out deletes: reports past the days they're kept, then the counts no one asks anymore. */
+const CLEAR_OUT = [
+  ["DELETE FROM reports WHERE at < datetime('now', ?)", `-${KEEP_DAYS} days`],
+  ["DELETE FROM network_days WHERE day < date('now')"],
+  ["DELETE FROM report_counts WHERE key NOT LIKE 'bytes:%' AND key < date('now', '-1 day')"],
+  ["DELETE FROM refusals WHERE day < date('now', ?)", `-${KEEP_DAYS} days`],
+];
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname !== "/reports") return status(404);
     if (request.method !== "POST") return status(405);
+    // Only as JSON, as the app sends it. A web page can make its visitors' browsers send plain text or a form
+    // anywhere, without asking first; JSON needs the receiver's leave, which this never gives.
+    if (!JSON_TYPE.test(request.headers.get("Content-Type") ?? "")) return status(415);
     if (Number(request.headers.get("Content-Length") ?? 0) > MAX_BYTES) return status(413);
-    // A report the old address passes on (forward.js) was counted there, against its sender's own
-    // address. From here they all come from Cloudflare's, and would count as one sender.
-    const passedOn = !!env.FORWARD_KEY && request.headers.get("X-Crosstune-Passed-On") === env.FORWARD_KEY;
+    // A report the old address passes on (forward.js) was counted there for the minute, against its sender's own
+    // address, which it passes on too. From here they all come from Cloudflare's, and would count as one sender.
+    const passedOn = await sameKey(request.headers.get("X-Crosstune-Passed-On"), env.FORWARD_KEY);
+    const address = (passedOn ? request.headers.get("X-Crosstune-Sender") : null) ?? request.headers.get("CF-Connecting-IP");
     if (!passedOn) {
-      const { success } = await env.LIMIT.limit({ key: request.headers.get("CF-Connecting-IP") ?? "" });
-      if (!success) return status(429);
+      const { success } = await env.LIMIT.limit({ key: senderKey(address) });
+      if (!success) return refused(429, "minute");
     }
     const text = await request.text();
     if (new TextEncoder().encode(text).length > MAX_BYTES) return status(413);
     const report = readReport(text);
     if (!report) return status(400);
-    await env.DB.prepare(
-      "INSERT INTO reports (version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
-        "lyric_line, word, reading_shown, reader, language, right_reading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(
-      report.version, report.android, report.title, report.artist, report.app,
-      report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
-      report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
-      report.line, report.word, report.shown, report.reader, report.language, report.right
-    ).run();
-    return status(204);
+    // Without the secret, a network can't be counted without keeping its address, so nothing is kept: the limits
+    // are what keep one sender from turning everyone else's reports away. Deploying asks for it (secrets.required in
+    // wrangler.jsonc), so only a mistake gets here.
+    // The one clock a report is counted by: when it came in, its day's share, its network's day and its refusal all
+    // take their day from here, so none of them can fall on another day at midnight.
+    const { at, day } = momentOf(new Date());
+    if (!env.NETWORK_KEY) {
+      console.error("NETWORK_KEY isn't set: no report is kept until it is (wrangler secret put NETWORK_KEY)");
+      await refuse(env, day, "no_key");
+      return refused(503, "no_key");
+    }
+    const kind = kindOf(report.problem);
+    const key = await networkDayKey(env.NETWORK_KEY, day, kind, networkOf(address));
+    const most = NETWORK_A_DAY[kind];
+    const check = () => env.DB.prepare(CHECK[kind]).bind(day, key, most);
+    const why = (await check().first())?.why;
+    if (why) return turnAway(env, day, kind, why);
+    // Reports in flight at once can all read room above. The batch is one transaction: the report goes in only if
+    // there is still room, its network is counted only if it went in, and the last statement reads why it didn't.
+    const [kept, , after] = await env.DB.batch([
+      env.DB.prepare(INSERT[kind]).bind(
+        at, report.version, report.android, report.title, report.artist, report.app,
+        report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
+        report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
+        report.line, report.word, report.shown, report.reader, report.language, report.right,
+        day, key, most
+      ),
+      env.DB.prepare(COUNT_NETWORK).bind(key, day),
+      check(),
+    ]);
+    if (kept.meta.changes !== 0) return status(204);
+    return turnAway(env, day, kind, after.results[0].why);
   },
 
-  // Once a day, the reports older than the policy allows go.
+  // Once a day, the reports older than the policy allows go, and the counts no one asks anymore. Each delete runs
+  // whatever happened to the others, so one that fails can't keep old reports past the days the policy promises;
+  // the run still fails after, with each error, so it's seen.
   async scheduled(controller, env) {
-    await env.DB.prepare("DELETE FROM reports WHERE at < datetime('now', ?)").bind(`-${KEEP_DAYS} days`).run();
+    const errors = [];
+    for (const [sql, ...values] of CLEAR_OUT) {
+      try {
+        await env.DB.prepare(sql).bind(...values).run();
+      } catch (error) {
+        console.error(`The daily clear-out couldn't run ${sql}:`, error);
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0) throw new AggregateError(errors, "The daily clear-out failed in part");
   },
 };
 
 function status(code) {
   return new Response(null, { status: code });
+}
+
+/** A report of [kind] turned away on [day] for [why] ("network", "day_full" or "kept_full"): counted, and answered with 429. */
+async function turnAway(env, day, kind, why) {
+  await refuse(env, day, `${why}:${kind}`);
+  return refused(429, why.endsWith("_full") ? "full" : why);
+}
+
+/**
+ * A report turned away, saying [why]: "minute", "network", "full" or "no_key". The app reads only the status, so keep
+ * 429 (and 503) for "not now" and 400, 413 and 415 for a report that is never taken. A timing it owes waits for a later
+ * start, and a person's own report says it wasn't sent. A problem found live that is turned away is lost: Issue #964,
+ * fixed in the app by PR #947, keeps it for "not now". The reason is for whoever looks at the answer.
+ */
+function refused(code, why) {
+  return new Response(null, { status: code, headers: { "X-Crosstune-Refused": why } });
+}
+
+/** Counts a report turned away on [day] for [why], up to [MAX_REFUSALS]. */
+async function refuse(env, day, why) {
+  await env.DB.prepare(REFUSE).bind(day, why).run();
+}
+
+/**
+ * [now] as a report is counted by: [at], when it came in, written as SQLite's CURRENT_TIMESTAMP writes it (UTC, to the
+ * second), so the clear-out and the triggers read it as before; and [day], its UTC day, the one limits.sql's
+ * triggers take from [at].
+ */
+function momentOf(now) {
+  const iso = now.toISOString();
+  return { at: `${iso.slice(0, 10)} ${iso.slice(11, 19)}`, day: iso.slice(0, 10) };
+}
+
+/**
+ * Whether [given] is [key], compared in constant time: both are hashed with SHA-256 first, so the compare is always
+ * of 32 bytes, and how long it takes says nothing of how much of the key was right. No key, or an empty one, is none.
+ */
+export async function sameKey(given, key) {
+  if (!given || !key) return false;
+  const [a, b] = await Promise.all([given, key].map(async (it) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(it)))));
+  let differ = 0;
+  for (let i = 0; i < a.length; i++) differ |= a[i] ^ b[i];
+  return differ === 0;
+}
+
+/**
+ * The key a [network]'s reports of [kind] are counted under on [day]: an HMAC-SHA256 of all three with [secret]. It
+ * can't be traced back to the network without the secret, and it is another one each day.
+ */
+export async function networkDayKey(secret, day, kind, network) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${day}\n${kind}\n${network}`));
+  return Array.from(new Uint8Array(mac), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** The report in [text], with only what a report has, or null when it isn't one. */
@@ -90,7 +287,7 @@ export function readReport(text) {
   const report = {
     version,
     android: textOf(json.android, LIMITS.android),
-    comment: textOf(json.comment, LIMITS.comment),
+    comment: textOf(json.comment, LIMITS.comment, LINES),
     // A problem it doesn't know is one the user sent, as far as it can tell.
     problem: PROBLEMS.has(json.problem) || json.problem === WRONG_READING ? json.problem : null,
     title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, source: null, timing: null,
@@ -114,7 +311,7 @@ export function readReport(text) {
     report.speed = speedOf(song.speed);
     report.leadMs = signedMs(song.leadMs);
     report.earlyMs = signedMs(song.earlyMs);
-    report.timingLog = textOf(song.log, LIMITS.log);
+    report.timingLog = textOf(song.log, LIMITS.log, LINES);
     // Which recording the timing was kept for, as the app named it: "SPOTIFY:id", or the app's own "pkg:id".
     report.recording = textOf(song.recording, LIMITS.recording);
     const timing = timingOf(song.timing);
@@ -148,10 +345,26 @@ function isObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** [value] as text up to [max] characters, or null when it isn't text or is blank. */
-function textOf(value, max) {
+/** Says [textOf] keeps a text's line breaks: only a comment and the timing log have more than one line. */
+const LINES = true;
+
+/** A line break, however it's written. */
+const BREAK = /\r\n?|[\n\u2028\u2029]/g;
+
+/**
+ * What's never kept: control characters, which can move a terminal's cursor, change its colors or its title when
+ * a report is printed, and the marks that turn the direction of the text after them around. Only "\n" stays, as
+ * every line break is made one, or a space, before.
+ */
+const UNSEEN = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
+
+/**
+ * [value] as text up to [max] characters, or null when it isn't text or is blank. A tab is a space, and so is a
+ * line break, unless the text keeps its [lines]; then every break is "\n".
+ */
+function textOf(value, max, lines = false) {
   if (typeof value !== "string") return null;
-  const trimmed = value.trim();
+  const trimmed = value.replace(BREAK, lines ? "\n" : " ").replace(/\t/g, " ").replace(UNSEEN, "").trim();
   return trimmed ? Array.from(trimmed).slice(0, max).join("") : null;
 }
 
@@ -175,14 +388,14 @@ function speedOf(value) {
 }
 
 /**
- * The lines put in time by hand, as JSON, each with where the words had it and where it's heard:
- * null when there are none, undefined when they aren't lines put in time.
+ * The first [MAX_POINTS] lines put in time by hand, as JSON, each with where the words had it and where it's
+ * heard: null when there are none, undefined when they aren't lines put in time.
  */
 function timingOf(value) {
   if (value === undefined || value === null) return null;
-  if (!Array.isArray(value) || value.length > MAX_POINTS) return undefined;
+  if (!Array.isArray(value)) return undefined;
   const points = [];
-  for (const point of value) {
+  for (const point of value.slice(0, MAX_POINTS)) {
     if (!isObject(point)) return undefined;
     const timedMs = wholeMs(point.timedMs);
     const heardMs = signedMs(point.heardMs);
