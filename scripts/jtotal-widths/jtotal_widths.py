@@ -147,10 +147,24 @@ def shift_jis_page(html):
     return html.encode("cp932")
 
 
+def base_letter(code):
+    """The letter `code` is measured after. A mark joins the letter before it, and Chromium draws the two in
+    one font: after あ, a Latin accent pulls あ itself into another font. So a mark is measured after a
+    letter it is written after: ﾞ and ﾟ after ｶ, the kana sound marks after か, any other mark after a.
+    Every other letter is measured after あ, as lyrics are Japanese."""
+    if code in (0xFF9E, 0xFF9F):
+        return "ｶ"
+    if code in (0x3099, 0x309A):
+        return "か"
+    return "a" if unicodedata.category(chr(code)) in ("Mn", "Me") else "あ"
+
+
 def probe_rows(codes, as_entity=()):
-    """One row for the base `ああ` and one for each code point between two of them."""
-    return '<div><tt data-base="1">ああ</tt></div>' + "".join(
-        f'<div><tt data-c="{c}">あ<span>{written(c, as_entity)}</span>あ</tt></div>' for c in codes
+    """One row for each base pair, such as `ああ`, and one for each code point between its two base letters."""
+    bases = sorted({base_letter(c) for c in codes})
+    return "".join(f'<div><tt data-base="{b}">{b}{b}</tt></div>' for b in bases) + "".join(
+        f'<div><tt data-c="{c}" data-b="{base_letter(c)}">{base_letter(c)}<span>{written(c, as_entity)}</span>{base_letter(c)}</tt></div>'
+        for c in codes
     )
 
 
@@ -160,10 +174,11 @@ def probe_rows(codes, as_entity=()):
 PROBE_JS = """() => {
   const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
   const digit = probe.getBoundingClientRect().width;
-  const base = document.querySelector('tt[data-base]').getBoundingClientRect().width;
+  const base = {};
+  for (const tt of document.querySelectorAll('tt[data-base]')) base[tt.dataset.base] = tt.getBoundingClientRect().width;
   const out = {}, read = {};
   for (const tt of document.querySelectorAll('tt[data-c]')) {
-    out[tt.dataset.c] = Math.round((tt.getBoundingClientRect().width - base) / digit * 1000);
+    out[tt.dataset.c] = Math.round((tt.getBoundingClientRect().width - base[tt.dataset.b]) / digit * 1000);
     read[tt.dataset.c] = tt.querySelector('span').textContent.codePointAt(0);
   }
   return {digit, out, read};
@@ -231,7 +246,7 @@ def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lan
             batch_of(retry, as_entity=set(retry))
         found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
         found.append(f"Page Shift_JIS with no language; browser language {lang or 'as Playwright starts it'}")
-        found.append(f"One digit is {digit} CSS px at 40px. A width is what the letter adds between two hiragana.")
+        found.append(f"One digit is {digit} CSS px at 40px. A width is what the letter adds between two of its base letters (base_letter).")
         browser.close()
     if misread:
         raise SystemExit(f"read as other letters even as references: {sorted(misread)[:20]}")

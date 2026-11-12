@@ -65,13 +65,7 @@ FONT_CONTEXTS = ("hiragana", "latin")  # where the browser is asked which font d
 BATCH = 200
 
 
-def in_cp932(code):
-    """True for a letter a Shift_JIS page can hold without a numeric reference."""
-    try:
-        chr(code).encode("cp932")
-    except UnicodeEncodeError:
-        return False
-    return True
+in_cp932 = w.in_cp932
 
 
 def emoji(code):
@@ -112,11 +106,7 @@ MEASURE_JS = """() => {
 }"""
 
 
-def platform_fonts(cdp, selector):
-    """The fonts the browser drew each node of `selector` with, in document order."""
-    root = cdp.send("DOM.getDocument", {"depth": 0})["root"]["nodeId"]
-    nodes = cdp.send("DOM.querySelectorAll", {"nodeId": root, "selector": selector})["nodeIds"]
-    return [sorted({f["familyName"] for f in cdp.send("CSS.getPlatformFontsForNode", {"nodeId": node})["fonts"]}) for node in nodes]
+platform_fonts = w.platform_fonts
 
 
 def measure(out, code_list, stack, fonts, browser_name, lang=None):

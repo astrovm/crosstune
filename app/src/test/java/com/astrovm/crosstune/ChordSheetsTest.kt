@@ -423,7 +423,18 @@ class ChordSheetsTest {
         }
     }
 
-    private fun at(sheet: String, monospace: Boolean) = ChordSheets.fromJTotal(sheet, monospace).single().chords.single().at
+    @Test
+    fun jTotalsHalfwidthSoundMarksTakeAColumnEach() {
+        // Drawn in Chromium on both stacks: ﾞ and ﾟ draw as part of the kana before them, and still move the line on
+        // by a column. With no width, each chord would land one letter later, on い.
+        for (monospace in listOf(false, true)) {
+            assertEquals(2, at("xx${jTotal("C")}<br>ｶﾞあい", monospace))
+            assertEquals(2, at("xx${jTotal("C")}<br>ﾊﾟあい", monospace))
+            assertEquals(4, at("xxxx${jTotal("C")}<br>ｶﾞｶﾞあい", monospace))
+        }
+    }
+
+    private fun at(sheet: String, monospace: Boolean) =ChordSheets.fromJTotal(sheet, monospace).single().chords.single().at
 
     @Test
     fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
