@@ -113,7 +113,9 @@ class ReadingsGoldenTest {
         // Empty locks ask nothing.
         assertNull(GoldenReadings.broken(row.copy(sheet = "", shown = ""), parts, emptyList()))
         assertEquals("sheet=yume|yume got=", GoldenReadings.broken(row, parts, emptyList()))
-        assertEquals("ruby=夢=ゆめ got=夢|を|見|た", GoldenReadings.broken(row.copy(sheet = "", shown = ""), parts.map { Ruby(it.text) }, words))
+        assertEquals("ruby=夢=ゆめ got=夢", GoldenReadings.broken(row.copy(sheet = "", shown = ""), parts.map { Ruby(it.text) }, words))
+        // Parts that don't start and end with the word are printed whole.
+        assertEquals("ruby=夢=ゆめ got=夢を見た", GoldenReadings.broken(row.copy(sheet = "", shown = ""), listOf(Ruby("夢を見た")), words))
         assertEquals("ruby=夢=ゆめ got=夢=む", GoldenReadings.broken(row.copy(sheet = "", shown = ""), wrong, words))
         assertEquals("shown=夢=ユメ got=夢=ゆめ", GoldenReadings.broken(row.copy(shown = "夢=ユメ"), parts, words))
     }
