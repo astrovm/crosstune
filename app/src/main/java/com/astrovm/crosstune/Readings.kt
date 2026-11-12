@@ -1050,6 +1050,36 @@ internal object Readings {
     private fun isSaid(c: Char) = c in 'ぁ'..'ゟ' || c == 'ー'
 
     /**
+     * The line [parts] write, read as they say, in [script]: Japanese as [readAs] reads it; Chinese in pinyin, each part
+     * as its reading says, or as Android reads it where it has none; the rest, with no readings on their parts, as Android
+     * reads the line.
+     */
+    fun readAs(parts: List<Ruby>, script: Script): LineReading {
+        if (script == Script.JAPANESE) return readAs(parts)
+        val read = of(listOf(parts.joinToString("") { it.text }), script).single()
+        // Words are only ever Chinese from Android 10 on, see scriptOf.
+        if (read.parts == parts || script != Script.CHINESE || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return read.copy(parts = parts)
+        // Each reading in its place, in Latin letters already, so Android writes out the rest around it as it does a line,
+        // "。" as ".". It puts a space between a syllable and a letter next to it, "wǒ ài nǐ a", but none before "!".
+        val given = buildString {
+            parts.zipWithNext().forEach { (before, part) ->
+                append(before.reading ?: before.text)
+                if (spacedApart(before, part)) append(' ')
+            }
+            parts.lastOrNull()?.let { append(it.reading ?: it.text) }
+        }
+        // Not through of(), which leaves out a line in Latin letters already, as this one is.
+        val said = chinese(given).romanized
+        return LineReading(parts, said, said)
+    }
+
+    /** Whether Android writes a space between [before] and [part], read in Latin letters: a syllable and a letter next to it. */
+    private fun spacedApart(before: Ruby, part: Ruby): Boolean {
+        val syllableThenLetter = before.reading != null && part.text.firstOrNull()?.isLetter() == true
+        return syllableThenLetter || part.reading != null && before.text.lastOrNull()?.isLetter() == true
+    }
+
+    /**
      * The line [parts] write, in kana and romaji, with each kanji read as they say: split into words
      * as any line is, so the romaji is too, 頭ん中 as atama n naka, not the dictionary's reading
      * with the new one pasted over it, where it can't be found in a word, atama nchuu.

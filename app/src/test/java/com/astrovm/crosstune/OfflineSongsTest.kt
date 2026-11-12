@@ -29,6 +29,19 @@ class OfflineSongsTest {
     private val list = MusicMetadata("Mix", "", ItemType.PLAYLIST, url = "https://open.spotify.com/playlist/9", tracks = listOf(song, other))
 
     @Test
+    fun aSongKeptWithoutItsSungReadingsStaysSoAcrossRestartsUntilItHasThem() = runBlocking {
+        val mix = songs().keep(list)
+        songs().saved(mix.id, song, unread = true)
+        songs().saved(mix.id, other)
+        // Kept all the same: done, with one still to be read.
+        val restarted = checkNotNull(songs().has(list))
+        assertTrue(restarted.done)
+        assertEquals(setOf(OfflineSongs.keyOf(song)), restarted.unread)
+        songs().saved(mix.id, song)
+        assertEquals(emptySet<String>(), checkNotNull(songs().has(list)).unread)
+    }
+
+    @Test
     fun aSongOrAListIsKeptWithItsSongsUntilLetGo() = runBlocking {
         val songs = songs()
         val kept = songs.keep(song)

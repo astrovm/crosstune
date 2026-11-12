@@ -2,12 +2,9 @@ package com.astrovm.crosstune
 
 import android.content.Context
 import android.text.format.DateFormat
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
@@ -107,7 +104,7 @@ private fun ReminderTimeDialog(minute: Int, onPick: (Int) -> Unit, onOff: () -> 
             }) { Text(stringResource(R.string.player_sleep_off)) }
         },
         title = { Text(stringResource(R.string.practice_remind_me)) },
-        // Scrolls where a big font or a turned phone leaves it no room.
-        text = { Column(modifier = Modifier.verticalScroll(rememberScrollState())) { TimePicker(time) } }
+        // Scrolls where a big font or a turned phone leaves it no room, as all of a dialog's text does.
+        text = { TimePicker(time) }
     )
 }

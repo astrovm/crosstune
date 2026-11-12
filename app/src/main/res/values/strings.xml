@@ -340,7 +340,7 @@
     <string name="report_failed">Couldn\'t send it. Check your connection and try again.</string>
     <string name="reading_wrong">Wrong reading</string>
     <string name="reading_right">Right reading (optional)</string>
-    <string name="reading_what_goes">Sends the word, the reading shown, its line, the song\'s name and the app and Android versions. Only Crosstune\'s developer reads it.</string>
+    <string name="reading_what_goes">Sends the word, the reading shown and what made it, its line and script, the reading you type, the song\'s title and artist, where its lyrics came from, and the app and Android versions. Only Crosstune\'s developer reads it.</string>
     <string name="auto_report_offer">Report problems like this one automatically?</string>
     <string name="auto_report_offer_words_off">This song\'s words were off. Report ones like it automatically?</string>
     <string name="auto_report_yes">Yes</string>
