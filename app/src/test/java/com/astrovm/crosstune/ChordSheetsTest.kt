@@ -518,6 +518,17 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalReadsACssCommentFromItsOpeningToTheFirstCloseAfterIt() {
+        val monoRule = "tt { font-family: 'Inconsolata', monospace; }"
+        // A comment at the very start of the page's CSS.
+        assertEquals(false, ChordSheets.jTotalMonospace("<style>/* $monoRule */</style>"))
+        // The slash that opens a comment doesn't also close it: "/*/" is still open.
+        assertEquals(false, ChordSheets.jTotalMonospace("<style>/*/ $monoRule */</style>"))
+        // The rule right after the close, with no space: the close is all that goes.
+        assertEquals(true, ChordSheets.jTotalMonospace("<style>/* x */$monoRule</style>"))
+    }
+
+    @Test
     fun jTotalsSheetIsFromItsFirstStartToTheEndAfterIt() {
         assertEquals("ab", ChordSheets.jTotalSheet("x<!--HPSTART-->ab<!--HPEND-->c<!--HPSTART-->d<!--HPEND-->"))
         assertEquals("", ChordSheets.jTotalSheet("<!--HPSTART--><!--HPEND-->"))
