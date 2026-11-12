@@ -215,20 +215,23 @@ internal class PracticeCards(
 
     /**
      * Whether [app] is worth one of the card's tries. One the card can't open, as it would cover the card, is only when it already
-     * has [song], as its media session says, which asks no service; else it's left out, and the card offers to Allow it only when
-     * it's [known], as it would be tried then. Any other app that isn't [known] needs the song on its service, or it plays whatever
-     * it finds by the name.
+     * has [song] open and can move in it, as its media session says, which asks no service. One that has it and can't, as on
+     * Spotify's free plan, is skipped: opening it wouldn't move it either. Else it's left out, and the card offers to Allow it, as
+     * it may be tried then. Any other app that isn't [known] needs the song on its service, or it plays whatever it finds by the name.
      */
     private suspend fun worthATry(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, known: Boolean): Boolean {
         if (source.comesBackByItself() || !playsOnlyFromItsOwnLink(app)) return known || hasSong(app, song)
-        if (alreadyHas(source, song, app)) return true
-        if (known) leaveOut(app, line) else step("$app would cover the card, and may not have the song")
+        val open = openIn(source, song, app)
+        if (open?.canSeek == true) return true
+        if (open == null) leaveOut(app, line) else step("$app has the song open and can't move in it")
         return false
     }
 
-    /** Whether [app] already has [song], playing or paused, as its media session says. */
-    private suspend fun alreadyHas(source: PlaybackSource, song: MusicMetadata, app: String?): Boolean =
-        withTimeoutOrNull(FIND_SONG_MS) { source.follow(song, app).first { it != null } } != null
+    /** [song] as [app] has it open, playing or paused, as its media session says: as soon as it can move in it, or as it last was. */
+    private suspend fun openIn(source: PlaybackSource, song: MusicMetadata, app: String?): Following? {
+        var last: Following? = null
+        return withTimeoutOrNull(FIND_SONG_MS) { source.follow(song, app).first { following -> following?.also { last = it }?.canSeek == true } } ?: last
+    }
 
     /** Whether the service [app] is of has [song], as its links say. */
     private suspend fun hasSong(app: String?, song: MusicMetadata): Boolean =

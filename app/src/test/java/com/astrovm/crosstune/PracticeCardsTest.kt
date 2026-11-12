@@ -2420,7 +2420,7 @@ class PracticeCardsTest {
     }
 
     @Test
-    fun aSpotifyTheCardCantOpenIsAskedNothingAndPlaysTheLineOnlyWhenItAlreadyPlaysTheSong() {
+    fun aSpotifyTheCardCantOpenIsAskedNothingOfferedToAllowAndPlaysTheLineOnlyWhenItAlreadyPlaysTheSong() {
         spotifyHasTheSong()
         youTubeHasTheSong()
         keep(line("One"), line("Two", start = 20_000))
@@ -2431,8 +2431,8 @@ class PracticeCardsTest {
         val cards = cards()
         cards.start(null, before = null)
         waitForThePlayer("the player is on the line")
-        // Not known to have the song, it isn't offered to Allow: it may not have it at all.
-        assertFalse(practice!!.cantComeBack)
+        // Allowed to show over other apps, the card could open it, so it says so, though nothing is asked about the song till then.
+        assertTrue(practice!!.cantComeBack)
         assertTrue(playback.opened.isEmpty())
         // Already playing the song, it plays the next line, which needs no link either.
         appPlays(spotify, speed = 1f, positionMs = 19_500)
@@ -2462,12 +2462,55 @@ class PracticeCardsTest {
         cards(songLoadMs = 300).start(null, before = null)
         waitFor("the line is ready, in an app or the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
         assertEquals(listOf("trying $tidal", "trying $apple", "trying $deezer"), steps().filter { it.startsWith("trying") })
-        assertTrue("$spotify would cover the card, and may not have the song" in steps())
+        assertTrue("$spotify would cover the card" in steps())
         assertEquals(listOf<String?>(deezer), playback.seekedApps.toList())
         assertTrue(player.shown.isEmpty())
-        // It may not have the song at all, so the card doesn't offer to Allow it, and nothing about the song is sent for it.
-        assertFalse(practice!!.cantComeBack)
+        // Allowed to show over other apps, the card could open it, so it says so. Nothing about the song is sent for it till then.
+        assertTrue(practice!!.cantComeBack)
         assertTrue(lookups().toString(), lookups().none { it in setOf("labs.api.listenbrainz.org", "open.spotify.com") })
+    }
+
+    @Test
+    fun aSpotifyLeftOutThatsNeitherPreferredNorTheLinesIsOpenedOnceAllowed() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(line("One"), line("Two", start = 20_000))
+        // Songs open in a browser, and Spotify is the only music app.
+        installed(spotify, preferred = Destination.Custom("web", "Web", "https://example.com/search?q={query}"))
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards(songLoadMs = 300)
+        cards.start(null, before = null)
+        waitForThePlayer("the player is on the line")
+        assertTrue(practice!!.cantComeBack)
+        assertTrue(lookups().toString(), "labs.api.listenbrainz.org" !in lookups())
+        // Allowed, the next card opens it on its own link.
+        playback.comesBackByItself = true
+        turnInThePlayer(cards)
+        cards.grade(Grade.GOOD)
+        waitFor("Spotify opens, or the player plays the line") { playback.opened.isNotEmpty() || player.shown.size > 2 }
+        assertEquals(listOf(spotify to "https://open.spotify.com/track/$SPOTIFY_ID"), playback.opened.toList())
+    }
+
+    @Test
+    fun aSpotifyFreeThatCantBeOpenedTakesNoTryAndIsNotOfferedToAllow() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
+        keep(line())
+        val (apple, deezer, tidal) = listOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL).map { it.packageName }
+        installed(tidal, spotify, apple, deezer, preferred = Destination.Service(MusicService.TIDAL))
+        // Spotify, on its free plan, has the song open and can't move in it; Deezer, the third app the card can try, plays it.
+        appPlays(spotify, canSeek = false)
+        appPlays(deezer, speed = 1f, positionMs = 9_500)
+        playback.comesBackByItself = false
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the line is ready, in an app or the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $tidal", "trying $apple", "trying $deezer"), steps().filter { it.startsWith("trying") })
+        assertTrue("$spotify has the song open and can't move in it" in steps())
+        assertEquals(listOf<String?>(deezer), playback.seekedApps.toList())
+        // Opened, it wouldn't move either, so Allow wouldn't help.
+        assertFalse(practice!!.cantComeBack)
     }
 
     @Test
