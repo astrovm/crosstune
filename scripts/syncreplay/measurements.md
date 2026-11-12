@@ -702,3 +702,78 @@ The replay set has no such lines. Its 6 Japanese and Korean songs have 62 pairs 
 | Now | 404 / 32 / 6 / 58 | 196 / 30 / 9 / 39 | 600 / 62 / 15 / 97 | 415 / 369 / 311 / 54 / 20 / 0 / 56 |
 
 Only Japanese songs move. K0sXE5_JhMg gets 1 line more within 1.0 s and 2 fewer off. SaeY5sxStGM and ZS6p32gX_yk get 1 and 2 more off: a line sung 6.5 s after the one before is put 1.5 s after it, which the bound let through as 167 ms a letter. That's the price of letting fast singing through. `all` is as on main, every song.
+
+### Words heard one at a time (Issue #892 third review)
+
+The third review found that Korean heard a word at a time, as whisper hears it, was lit over 1 s early when sung fast. Each heard word gave the line's start by the letters before it at 280 ms a syllable, and the earliest won, so a line sung at 120 ms a syllable started (syllables before its last word) × 160 ms early. The replay set has too few fast lines in Japanese or Korean to show it (Issue #977).
+
+`syncreplay.py synthetic` sings made-up lines in each writing at each pace: 50 songs of 8 lines, 3 or 4 words a line, heard a word at a time, 15% of words missed, ±80 ms on each, rests of up to 1.5 s. `--timing FILE` scores another `SungTiming.kt` on the same songs. `SyntheticSingingTest` holds the app to these numbers. Within 1.0 s / off, of 400 lines:
+
+| Writing | Pace | Main | `6ff930c4` | Now |
+|---|---:|---:|---:|---:|
+| Latin | 120 ms | 394 / 0 | 383 / 0 | 388 / 0 |
+| Latin | 400 ms | 314 / 67 | 382 / 3 | 382 / 3 |
+| Japanese | 120 ms | 400 / 0 | 141 / 252 | 396 / 2 |
+| Japanese | 150 ms | 400 / 0 | 256 / 144 | 394 / 5 |
+| Japanese | 280 ms | 306 / 94 | 399 / 1 | 399 / 1 |
+| Japanese | 400 ms | 202 / 194 | 397 / 2 | 397 / 2 |
+| Korean | 120 ms | 400 / 0 | 152 / 241 | 395 / 3 |
+| Korean | 150 ms | 400 / 0 | 261 / 139 | 398 / 0 |
+| Korean | 280 ms | 321 / 77 | 400 / 0 | 400 / 0 |
+| Korean | 400 ms | 199 / 198 | 396 / 2 | 396 / 2 |
+| Chinese | 120 ms | 400 / 0 | 140 / 254 | 397 / 1 |
+| Chinese | 400 ms | 191 / 205 | 399 / 1 | 399 / 1 |
+
+At the paces not shown, now is within 5 lines of the best of the three in each writing; `synthetic` prints them all.
+
+What changed: each word heard says where the line starts by its own start and the letters before it in the line. The letters go by as fast as the words heard from the first to the last say, between 20 ms and 70 ms a letter, and the earliest of those says where the line starts. Sung slower than 70 ms a letter, a word held or a rest makes the later words look late, and the first word heard says it.
+
+Tried, two plays (within 1.0 s / off / over 3 s, and right on main but wrong now):
+
+| Start rule | Replay | Synthetic |
+|---|---|---|
+| A Hangul syllable as 2 letters, not 4 (the reviewer's) | 599 / 63 / 15 | Korean 120 ms 375 to 377 within, 400 ms 342 |
+| The pace fit from the first word to the last, from the first | 554 within | |
+| The same pace, the earliest of each word's start (kept) | 597 / 63 / 15 / 7 | 382 to 400 within everywhere |
+| One pace for the whole song, from the words heard | 558 to 603 within, 13 to 65 wrong | |
+
+Item 2 of the review: a Japanese line not heard, whose last 2 letters start the next line, was lit where the next is sung, 1.4 to 7.9 s late. A line found by fewer than 3 words now also needs to be no closer to the line beside it than that line's syllables take at a quick pace (60 ms a letter, a syllable as 4). That's the bound main had for any line. Two plays: 597 / 61 / 14, and the wrong lines go from 7 to 6.
+
+#### Against main
+
+`untimed-main.json` keeps the lines main puts within 1.0 s, by how the replay was run (`--write-main`, with `--timing` main's `SungTiming.kt`): 594 on two plays, 372 on one. Every `untimed` run now prints, against it, "right on main, wrong now" (put over 1.0 s off), "right on main, dark now" (`-v` lists them) and "not right on main, right now".
+
+| Timing | Plays | Timed | Within 1.0 s | Within 0.5 s | Off | > 3 s | Unheard | Wrong | Right on main, wrong now | Dark now | Right now, not on main |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Main | 2 | 724 | 594 | 485 | 130 | 49 | 0 | 173 | 0 | 0 | 0 |
+| `6ff930c4` | 2 | 662 | 600 | 492 | 62 | 15 | 0 | 97 | 7 | 39 | 52 |
+| Now | 2 | 658 | 597 | 499 | 61 | 14 | 0 | 93 | 6 | 45 | 54 |
+| Main | 1 | 447 | 372 | 316 | 92 | 43 | 0 | 100 | 0 | 0 | 0 |
+| `6ff930c4` | 1 | 415 | 369 | 311 | 54 | 20 | 0 | 56 | 7 | 22 | 26 |
+| Now | 1 | 408 | 364 | 313 | 52 | 20 | 0 | 53 | 6 | 29 | 27 |
+
+Tried to bring "wrong now" to 0, two plays then one (within 1.0 s / off / over 3 s, then wrong now). The first four were measured before item 2's fix, the rest after it:
+
+| Change to the start rule | Two plays | One play |
+|---|---|---|
+| Main's rule: the median of the most starts within 1.5 s | 575 / 91 / 20, 1 | 1 |
+| The earliest of the most starts within 0.5 to 1.5 s | 578 to 587 / 70 to 92, 3 to 5 | 2 to 4 |
+| No start when the earliest is 0.5 to 1.5 s before the most that agree | 554 to 588 / 64 to 72 / 17 to 22, 6 to 11 | 2 to 4 |
+| Words further apart than 200 ms a letter and 0 to 4 s held, split; the most words kept | 518 to 598 / 62 to 81 / 17 to 29, 5 to 13 | 1 to 5 |
+| The first word dropped when further from the next than that (0 to 1 s held) | 590 to 597 / 61 to 74 / 16 to 19, 2 to 4 | 3 to 5 |
+| No start when the first or any 2 words are that far apart | 580 to 600 / 60 to 63 / 15 to 21, 4 to 6 | 4 to 6 |
+| The first word dropped, and no start when the earliest is 1 to 2.5 s before the most that agree | 580 to 594 / 61 to 63 / 16, 3 | 3 to 4 |
+
+Each takes lines main had right back, and puts others off, some over 3 s: dropping a word heard early lights iH8To-d2pX0 line 3 7.2 s late, where its first word was right and the rest were heard 6.6 s later. Nothing in the times of one line's words tells a word heard early from a line held, so none is kept. The lines, sung / main / now, in s:
+
+| Song, line | Plays | Sung | Main | Now | Why |
+|---|---|---:|---:|---:|---|
+| FXovf5dsRTw 16 | 2 | 64.0 | 63.1 | 63.0 | Put between two by its letters, 0.1 s from main |
+| LhLmgg_u29k 6 | 1, 2 | 28.3 | 27.7 | 27.3 | Put between two by its letters; the line after is 1.0 s early on main too |
+| YkLLcIKhJ64 24 | 1, 2 | 147.9 | 147.8 | 146.9 | Its first word heard 1.0 s before it's sung, the rest on time |
+| iH8To-d2pX0 16 | 1, 2 | 369.2 | 369.1 | 371.7 | One match takes words of two singings of the line, 12 s apart |
+| uEV4RqqnlSE 4 | 2 | 37.9 | 37.8 | 35.6 | A short word of it heard 2.3 s before the rest |
+| uEV4RqqnlSE 3 | 2 | 35.5 | 35.5 | 34.1 | Put between line 2 and line 4 |
+| BciS5krYL80 7 | 1 | 75.4 | 75.3 | 72.5 | Its one-letter first word heard 2.8 s before the next |
+| CH6t8l-jGYI 16 | 1 | 173.0 | 173.1 | 171.8 | Its first word heard 1.6 s before the next |
+| OtXIsUjDOk8 18 | 1 | 106.0 | 106.2 | 110.3 | Its words heard again 4.9 s later, nearer than 6 s, so taken as one place |

@@ -144,8 +144,46 @@ class UntimedScoreTest(unittest.TestCase):
             Path(f'{path}.placed').write_text('R\t1\n1\t9000\nR\t2\n1\t5000\n2\t8300\n3\t13000\n4\t60000\n')
             with contextlib.redirect_stdout(io.StringIO()) as shown:
                 rows = r.untimed_score(['a'], {'a': (path, [0])})
-        self.assertEqual(rows['a'], dict(heard=4, timed=3, on=2, close=2, off=2, far=1, unheard=1, wrong=3))
+        # Lines 1 and 2 end within 1 s; 1 to 4 end put.
+        self.assertEqual(rows['a'], dict(heard=4, timed=3, on=2, close=2, off=2, far=1, unheard=1, wrong=3, right=[1, 2], put=[1, 2, 3, 4]))
         self.assertIn(' off >3 s unheard wrong ', shown.getvalue())
+
+
+class AgainstMainTest(unittest.TestCase):
+    """Each run held to the lines main put within 1 s, run the same way: right on main and wrong or dark now."""
+
+    def run_as(self, **given):
+        return argparse.Namespace(**{**dict(start=0, work=4500, again=None, heard='', nearest=False, write_main=False, verbose=False), **given})
+
+    def test_a_run_is_kept_by_how_it_was_run(self):
+        self.assertEqual(r.untimed_key(self.run_as()), 'from 0 work 4500')
+        self.assertEqual(r.untimed_key(self.run_as(again=12000, heard='.other', nearest=True)), 'from 0 work 4500 again 12000 heard .other nearest True')
+
+    def test_lines_right_on_main_are_wrong_dark_or_still_right(self):
+        # Main had lines 1, 2 and 5 right; now 1 is right, 2 put off, 5 dark, and 7 right that main didn't have.
+        rows = dict(a=dict(right=[1, 7], put=[1, 2, 7]), b=dict(right=[0], put=[0]))
+        self.assertEqual(r.against_main(dict(a=[1, 2, 5]), rows), ([('a', 2)], [('a', 5)], [('a', 7)]))
+
+    def test_main_is_kept_then_held_to(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'UNTIMED_MAIN', Path(directory) / 'main.json'):
+            r.held_to_main(self.run_as(write_main=True), dict(a=dict(right=[1, 2], put=[1, 2])))
+            r.held_to_main(self.run_as(write_main=True, again=12000), dict(a=dict(right=[3], put=[3])))
+            self.assertEqual(json.loads(r.UNTIMED_MAIN.read_text()), {'from 0 work 4500': dict(a=[1, 2]), 'from 0 work 4500 again 12000': dict(a=[3])})
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                r.held_to_main(self.run_as(verbose=True), dict(a=dict(right=[2], put=[1, 2])))
+            self.assertEqual(shown.getvalue(), 'right on main, wrong now: 1  a:1\nright on main, dark now: 0\nnot right on main, right now: 0\n')
+            # Run some other way, nothing is kept to hold it to.
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                r.held_to_main(self.run_as(work=3000), dict(a=dict(right=[], put=[1])))
+            self.assertEqual(shown.getvalue(), '')
+
+    def test_another_timing_takes_the_checkouts_place(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            other = Path(directory) / 'main.kt'
+            other.write_text('main')
+            sources = r.timing_copied(other, [Path('SungTiming.kt'), Path('SyncedLyrics.kt')])
+            self.assertEqual(sources, [Path(directory) / 'other-timing' / 'SungTiming.kt', Path('SyncedLyrics.kt')])
+            self.assertEqual(sources[0].read_text(), 'main')
 
 
 class SharedFolderTest(unittest.TestCase):

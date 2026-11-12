@@ -128,9 +128,10 @@ class SungTimingTest {
         assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(one, listOf(heard(9_000, heardSo)), 60_000))
         // Without the first word, the second says it.
         assertEquals(mapOf(0 to 12_000L), SungTiming.linesMs(one, listOf(heard(9_000, heardSo.drop(1))), 60_000))
-        // Any word can be the earliest, the last too: here it says 11.8 s, by its 17 letters before.
-        val lastEarliest = heardSo.drop(1).dropLast(1) + ("down" to 11_800L + late + 17 * SungTiming.LETTER_MS)
-        assertEquals(mapOf(0 to 11_800L), SungTiming.linesMs(one, listOf(heard(9_000, lastEarliest)), 60_000))
+        // Words closer together than their letters take are sung faster: here 12 letters in 640 ms, from "every" to
+        // "down", so the 5 before "every" take 266 ms, not 350, and the line starts at 12.084 s.
+        val fast = heardSo.drop(1).dropLast(1) + ("down" to 11_800L + late + 17 * SungTiming.LETTER_MS)
+        assertEquals(mapOf(0 to 12_084L), SungTiming.linesMs(one, listOf(heard(9_000, fast)), 60_000))
     }
 
     @Test
@@ -356,6 +357,50 @@ class SungTimingTest {
                 assertTrue(placed.getValue(1) in second - 300..second + 300)
             }
         }
+    }
+
+    @Test
+    fun unspacedLinesHeardAWordAtATimeStartWhereTheyreSungAtAnyPace() {
+        // Made-up words of four syllables, three to a line, heard a word at a time, as the speech model hears Korean and Japanese.
+        val korean = listOf(listOf("바람소리", "하늘나라", "구름사이"), listOf("별빛가득", "노래하며", "꿈을꾸네"))
+        val japanese = listOf(listOf("さくらの", "はなびら", "まいおち"), listOf("ゆめのな", "かであう", "ひかりよ"))
+        for ((words, space) in listOf(korean to " ", japanese to "")) {
+            for (syllableMs in listOf(120L, 150L, 200L, 280L, 400L)) {
+                val lines = words.map { it.joinToString(space) }
+                val starts = mutableListOf<Long>()
+                val heardSo = mutableListOf<Pair<String, Long>>()
+                var ms = 10_000L
+                for (line in words) {
+                    starts += ms
+                    for (word in line) {
+                        heardSo += word to ms + SungTiming.HEARD_LATE_MS
+                        ms += word.length * syllableMs
+                    }
+                    ms += 300
+                }
+                val placed = SungTiming.linesMs(lines, listOf(heard(9_000, heardSo)), 60_000)
+                // However fast the syllables before the last word go by, each line starts where its first is sung.
+                starts.forEachIndexed { line, start ->
+                    assertEquals("line $line at $syllableMs ms a syllable", start.toDouble(), (placed[line] ?: 0L).toDouble(), 300.0)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun aJapaneseLineIsntLitByTwoLettersThatStartTheNext() {
+        // The second line, sung at 12 s, goes unheard; its last two letters start the third, heard at 20 s.
+        val japanese = listOf("君の名前を呼んだ", "あの日の約束", "約束の空へ帰ろう")
+        val first = japanese[0] to 10_000L + SungTiming.HEARD_LATE_MS
+        val heardSo = listOf(first, japanese[2] to 20_000L + SungTiming.HEARD_LATE_MS)
+        // Found by those two just before the third, closer than its syllables can be sung, they're the third's own.
+        assertEquals(mapOf(0 to 10_000L, 2 to 20_000L), SungTiming.linesMs(japanese, listOf(heard(9_000, heardSo)), 60_000))
+        // Two letters heard right after a line, as long after as its 8 syllables take sung quick, are the next line's.
+        val short = listOf("君の名前を呼んだ", "夜明け")
+        fun timedSecondAt(startMs: Long) = SungTiming.linesMs(short, listOf(heard(9_000, listOf(first, "夜明" to startMs + SungTiming.HEARD_LATE_MS))), 60_000)
+        assertEquals(mapOf(0 to 10_000L, 1 to 11_920L), timedSecondAt(11_920))
+        // Any closer, they could be the first line's.
+        assertEquals(mapOf(0 to 10_000L), timedSecondAt(11_919))
     }
 
     @Test

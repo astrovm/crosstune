@@ -1124,10 +1124,10 @@ def kotlin_jars():
     return sorted(folder.glob("*.jar"))
 
 
-def untimed_classes():
+def untimed_classes(sources=None):
     """SungTiming.kt and the replay compiled, in a container, once for each change to them."""
     import hashlib
-    sources = [ROOT / name for name in UNTIMED_SOURCES]
+    sources = sources or [ROOT / name for name in UNTIMED_SOURCES]
     key = hashlib.sha256(b"".join(path.read_bytes() for path in sources) + kotlin_version().encode()).hexdigest()[:16]
     classes = OUT / "untimed-classes" / key
     if not (classes / "done").exists():
@@ -1212,11 +1212,80 @@ def untimed(args):
         with ThreadPoolExecutor(SONGS_HEARD_AT_ONCE) as pool:
             list(pool.map(heard_all, songs))
     inputs = {song: untimed_input(song, [s // STEP_MS * STEP_MS for s in wanted[song]] if not args.nearest else wanted[song], lengths[song], args.heard) for song in songs}
-    classes = untimed_classes()
+    sources = [ROOT / name for name in UNTIMED_SOURCES]
+    classes = untimed_classes(timing_copied(args.timing, sources) if args.timing else None)
     stdlib = next(str(jar) for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
     subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", "-v", f"{own()}:{own()}", JDK_IMAGE,
                     "java", "-cp", f"{classes}:{stdlib}", "com.astrovm.crosstune.UntimedReplayKt", *(str(path) for path, _ in inputs.values())], check=True)
-    return untimed_score(songs, inputs, args.verbose)
+    rows = untimed_score(songs, inputs, args.verbose)
+    held_to_main(args, rows)
+    return rows
+
+
+def held_to_main(args, rows):
+    """With --write-main, [rows]' lines within ON_TIME_UNTIMED_S are kept as main's, for the replay run this way;
+    otherwise, when main's are kept for it, the lines main had right and doesn't now are shown."""
+    key = untimed_key(args)
+    stored = json.loads(UNTIMED_MAIN.read_text()) if UNTIMED_MAIN.exists() else {}
+    if args.write_main:
+        stored[key] = {**stored.get(key, {}), **{song: row["right"] for song, row in rows.items()}}
+        UNTIMED_MAIN.write_text(json.dumps(stored, indent=1, sort_keys=True) + "\n")
+    elif key in stored:
+        print_against_main(against_main(stored[key], rows), args.verbose)
+
+
+# The lines main puts within ON_TIME_UNTIMED_S, by how the replay was run and by song, line numbers only:
+# what each later change to SungTiming is held to. Made with `untimed --timing <main's SungTiming.kt> --write-main`.
+UNTIMED_MAIN = Path(__file__).with_name("untimed-main.json")
+
+
+def untimed_key(args):
+    """How the replay was run, as the lines main had right are kept for it."""
+    return " ".join(f"{name} {value}" for name, value in (("from", args.start), ("work", args.work), ("again", args.again), ("heard", args.heard or None),
+                                                           ("nearest", args.nearest or None)) if value is not None)
+
+
+def against_main(main, rows):
+    """Of the lines [main] put within ON_TIME_UNTIMED_S, by song: those now put further off, and those now
+    left dark, as (song, line); and the lines main didn't have right that are right now, as (song, line)."""
+    wrong, dark, gained = [], [], []
+    for song, row in rows.items():
+        if song not in main:
+            continue
+        right = set(main[song])
+        wrong += [(song, n) for n in sorted(right) if n in row["put"] and n not in row["right"]]
+        dark += [(song, n) for n in sorted(right) if n not in row["put"]]
+        gained += [(song, n) for n in row["right"] if n not in right]
+    return wrong, dark, gained
+
+
+def print_against_main(found, verbose=False):
+    wrong, dark, gained = found
+    print(f"right on main, wrong now: {len(wrong)}" + "".join(f"  {song}:{n}" for song, n in wrong))
+    print(f"right on main, dark now: {len(dark)}" + ("".join(f"  {song}:{n}" for song, n in dark) if verbose else ""))
+    print(f"not right on main, right now: {len(gained)}")
+
+
+def timing_copied(timing, sources):
+    """[sources] with another SungTiming.kt, as main's, in place of the checkout's: copied where the container sees it."""
+    copy = OUT / "other-timing" / "SungTiming.kt"
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(timing, copy)
+    return [copy, *sources[1:]]
+
+
+# Made-up songs, each writing sung at each pace, timed by SungTiming.kt (app/src/test/.../SyntheticSinging.kt).
+SYNTHETIC_SOURCE = "app/src/test/java/com/astrovm/crosstune/SyntheticSinging.kt"
+
+
+def synthetic(args):
+    """Made-up lines heard a word at a time, for each writing and pace: within 1 s, off, dark. --timing scores
+    another SungTiming.kt, as main's, with the same songs; its folder is mounted read-only."""
+    sources = [ROOT / UNTIMED_SOURCES[0], ROOT / UNTIMED_SOURCES[1], ROOT / SYNTHETIC_SOURCE]
+    classes = untimed_classes(timing_copied(args.timing, sources) if args.timing else sources)
+    stdlib = next(str(jar) for jar in kotlin_jars() if jar.name.startswith("kotlin-stdlib-"))
+    subprocess.run(["podman", "run", "--rm", "-v", f"{OUT}:{OUT}:ro", JDK_IMAGE,
+                    "java", "-cp", f"{classes}:{stdlib}", "com.astrovm.crosstune.SyntheticSingingKt"], check=True)
 
 
 def untimed_rounds(path):
@@ -1251,7 +1320,8 @@ def untimed_score(songs, inputs, verbose=False):
                    off=sum(abs(lag) > ON_TIME_UNTIMED_S for lag in lags.values()),
                    far=sum(abs(lag) > FAR_UNTIMED_S for lag in lags.values()),
                    unheard=sum(not any(a - ON_TIME_UNTIMED_S <= at <= b + ON_TIME_UNTIMED_S for a, b in spans) for at in final.values()),
-                   wrong=sum(any(n in r and abs(r[n] - sung[n]) > ON_TIME_UNTIMED_S for r in rounds) for n in sung))
+                   wrong=sum(any(n in r and abs(r[n] - sung[n]) > ON_TIME_UNTIMED_S for r in rounds) for n in sung),
+                   right=sorted(n for n in heard_lines if n in lags and abs(lags[n]) <= ON_TIME_UNTIMED_S), put=sorted(final))
         for key in totals:
             totals[key] += row[key]
         rows[song] = row
@@ -1331,7 +1401,12 @@ def main():
     p.add_argument("--heard", default="", help="another hearing of each song, as `all --heard`; the nearest while in it")
     p.add_argument("--again", type=int, help="play it a second time, keeping what was heard, with the first while heard this many ms in")
     p.add_argument("--part", type=part_arg, help="tune: the songs a change is tuned on; held: those it's then checked on; K/N: part K of N, by song ID")
+    p.add_argument("--timing", help="another SungTiming.kt to replay, as main's")
+    p.add_argument("--write-main", action="store_true", help="keep the lines this run puts within 1 s as main's, in untimed-main.json")
     p.set_defaults(go=untimed)
+    p = steps.add_parser("synthetic", help="made-up lines heard a word at a time, each writing at each pace")
+    p.add_argument("--timing", help="another SungTiming.kt to score, as main's")
+    p.set_defaults(go=synthetic)
     p = steps.add_parser("phone")
     p.add_argument("id")
     p.add_argument("--seconds", type=int, required=True, help="how far into the song to watch")
