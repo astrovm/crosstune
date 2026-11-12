@@ -13,6 +13,7 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -72,7 +73,9 @@ internal class ExactMatcher(
     private val timeoutMs: Long = TIMEOUT_MS,
     private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,
     /** A Spotify artist's id by their name, see [MusicBrainz.spotifyArtist]; none by default. */
-    private val spotifyArtist: suspend (String) -> String? = { null }
+    private val spotifyArtist: suspend (String) -> String? = { null },
+    /** Where names are read, 桜 as さくら (see [SongNames.writtenAlike]): off the main thread, as the first read loads a dictionary. */
+    private val readingDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
@@ -673,7 +676,7 @@ internal class ExactMatcher(
             videos.await() to names.await()
         }
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
-        val inAnotherScript = inAnotherScript(items.map(::row), names, videos.map(::row))
+        val inAnotherScript = withContext(readingDispatcher) { inAnotherScript(items.map(::row), names, videos.map(::row)) }
         inAnotherScript.song?.let { return Answer(watchUrl + it.id) }
         videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart: first the ones in
@@ -879,12 +882,14 @@ internal class ExactMatcher(
         val known = names.titles.flatMap(::scriptsOf).toSet()
         val wanted = names.artists.flatMap(SongNames::artists).toSet()
         val credited = names.artists.joinToString(" ")
-        val albums = names.albums.joinToString(" ")
+        val albums = names.albums.map(SongNames::normalize).toSet()
         val fits = rows.filter { row ->
             val length = row.lengthMs
+            // Its album says what it is too, "Karaoke Picks", but for the song's own album: "& Instrumental" isn't this song's.
+            val album = row.details.getOrNull(1)?.takeIf { SongNames.normalize(it) !in albums }.orEmpty()
             row.id != null && length != null && names.lengthsMs.any { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS } &&
                 SongNames.artists(row.details.first()).any(wanted::contains) &&
-                names.titles.none { SongNames.saysAnotherVersion("${row.name} ${row.details.getOrNull(1).orEmpty()}", it, credited, albums) }
+                names.titles.none { SongNames.saysAnotherVersion("${row.name} $album", it, credited, inOtherWords = true) }
         }
         // Named as a store names it in that script, without what the store adds in brackets.
         val own = names.titles.filter { scriptsOf(it).isNotEmpty() }.map { SongNames.bareTitle(SongNames.withoutEditionTag(it)) }

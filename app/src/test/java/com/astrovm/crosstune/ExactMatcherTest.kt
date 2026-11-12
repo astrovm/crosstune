@@ -612,6 +612,11 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=row00000000", find(MusicMetadata("桜", "Fake Band"), "さくら", "桜"))
         // Read otherwise, it's another song in the same script.
         assertNull(find(MusicMetadata("さくら", "Fake Band"), "桜の雨", "さくら"))
+        // Read with its sound marks, and kanji never against kanji, as main opened none of these.
+        assertNull(find(MusicMetadata("ばら", "Fake Band"), "原", "ばら"))
+        assertNull(find(MusicMetadata("きんか", "Fake Band"), "銀河", "きんか"))
+        assertNull(find(MusicMetadata("かっこう", "Fake Band"), "学校", "かっこう"))
+        assertNull(find(MusicMetadata("雨", "Fake Band"), "飴", "雨"))
         assertNull(find(MusicMetadata("小幸運", "田馥甄"), "小日子", "小幸運"))
     }
 
@@ -651,6 +656,62 @@ class ExactMatcherTest {
         // Saying what its title doesn't, it's another version.
         assertNull(find("Nagoriyuki", "なごり雪 (ライブ)", "Folk Festival"))
         assertNull(find("Nagoriyuki (Live)", "なごり雪 (カラオケ)", "Folk Festival"))
+        // Its album is the song's, so it says nothing of what the row is: the instrumental on "& Instrumental" isn't the song.
+        assertNull(find("Fake Song", "偽の歌 (Instrumental)", "Naughty Boys & Instrumental"))
+        assertEquals("https://music.youtube.com/watch?v=row00000000", find("Fake Song", "偽の歌", "Naughty Boys & Instrumental"))
+    }
+
+    /** A video on Fake Band's channel, 1:30, for [title], also called [japan] in Japan's store, with no song row. */
+    private fun findVideo(title: String, video: String, japan: String? = null) = runBlocking {
+        namesAndTabs(
+            videos = listOf(youTubeMusicRow(video, "Fake Band • 1M views • 1:30", videoId = "video000000")),
+            apple = mapOf("AR" to appleSong(title, "Fake Band", 90_000)),
+            elsewhere = japan?.let { mapOf("JP" to appleSong(it, "Fake Band", 90_000)) }.orEmpty()
+        )
+        matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, "Fake Band"))
+    }
+
+    @Test
+    fun aVideoSayingVerIsAnotherVersionAsOnMain() {
+        assertEquals("https://music.youtube.com/watch?v=video000000", findVideo("Fake Song (Single Version)", "Fake Song"))
+        for (tag in listOf("TV", "English", "Short", "Dance", "Live")) {
+            assertNull(tag, findVideo("Fake Song (Single Version)", "Fake Song ($tag ver.)"))
+        }
+    }
+
+    @Test
+    fun aVideoOfABandLiveIsAnotherVersionAsOnMain() {
+        assertEquals("https://music.youtube.com/watch?v=video000000", findVideo("Fake Song", "Fake Song"))
+        for (live in listOf("バンドライブ", "サウンドライブ", "ワールドライブ", "밴드라이브")) {
+            assertNull(live, findVideo("Fake Song", "Fake Song ($live)"))
+        }
+    }
+
+    @Test
+    fun aVideoSayingInItsScriptWhatTheSongsTitleSaysIsAnotherVersionAsOnMain() {
+        // "Live Forever" is called "曲" in Japan: "曲 (ライブ)" is a live one, as main had it.
+        assertEquals("https://music.youtube.com/watch?v=video000000", findVideo("Live Forever", "曲", japan = "曲"))
+        assertNull(findVideo("Live Forever", "曲 (ライブ)", japan = "曲"))
+    }
+
+    @Test
+    fun aNameIsReadOffTheThreadThatAsks() {
+        val dispatched = java.util.concurrent.atomic.AtomicInteger()
+        val reading = object : kotlinx.coroutines.CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+                dispatched.incrementAndGet()
+                kotlinx.coroutines.Dispatchers.Default.dispatch(context, block)
+            }
+        }
+        val found = runBlocking {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow("桜", "Fake Band • 桜 • 4:26", videoId = "row00000000")),
+                deezer = """[{"title":"さくら","artist":{"name":"Fake Band"},"duration":266}]"""
+            )
+            ExactMatcher(fake.client(), "AR", readingDispatcher = reading).find(MusicService.YOUTUBE_MUSIC, MusicMetadata("さくら", "Fake Band"))
+        }
+        assertEquals("https://music.youtube.com/watch?v=row00000000", found)
+        assertTrue(dispatched.get() > 0)
     }
 
     @Test

@@ -46,8 +46,9 @@ VERSION_MARKS = {
     "纯音乐": {"instrumental"}, "純音樂": {"instrumental"}, "인스트": {"inst", "instrumental"}, "반주": {"instrumental", "karaoke"},
     "リミックス": {"remix"}, "混音": {"remix"}, "리믹스": {"remix"}, "演唱会": {"live", "concert"}, "演唱會": {"live", "concert"},
 }
-# SongNames.Mark.HOLD_A_MARK: words that only hold a mark's letters, as "ドライブ" holds "ライブ".
-HOLD_A_MARK = re.compile("インストール|ドライブ|ライブラリ|ディスカバー|リカバー|드라이브|라이브러리|디스커버|커버리지|반주자")
+# SongNames.Mark.HOLD_A_MARK: words that only hold a mark's letters, as "ドライブ" holds "ライブ", where a word starts.
+HOLD_A_MARK = re.compile("(?<![\u30a1-\u30fa\u30fc-\u30ff\u1100-\u11ff\u3130-\u318f\uac00-\ud7af])"
+                         "(?:インストール|ドライブ|ライブラリ|ディスカバー|リカバー|드라이브|라이브러리|디스커버|커버리지|반주자)")
 ARTIST_SPLIT = re.compile(r"\s*(?:,|&|、|×|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\band\b)\s*", re.IGNORECASE)
 BRACKETS = re.compile(r"\s*[(\[（【「『].*?[)\]）】」』]\s*")
 
@@ -91,13 +92,26 @@ def mark_found(mark, name):
 SHORT_FOR = {"version": "ver", "instrumental": "inst"}
 
 
-def says_another_version(name, title, artist, album=""):
-    own = words(title) | words(artist) | words(album)
-    own |= {SHORT_FOR[w] for w in own if w in SHORT_FOR}
+def only_said(name, short, said):
+    """SongNames.onlySaid: each tag in Latin letters with [short] in it says nothing but what the title [said]."""
+    folded = "".join(c for c in unicodedata.normalize("NFD", name) if not unicodedata.combining(c)).lower()
+    return all(short not in tag or tag <= said | {short} for tag in (words(t) for t in re.split(r"[^a-z0-9\s.'-]+", folded)))
+
+
+def says_another_version(name, title, artist, in_other_words=False):
+    """SongNames.saysAnotherVersion: what the title says in Latin letters, or short, counts only [in_other_words]."""
+    said = words(title) if in_other_words else set()
+    own = words(title) | words(artist) | {SHORT_FOR[w] for w in said if w in SHORT_FOR and only_said(name, SHORT_FOR[w], said)}
     if (words(name) - own) & VERSION_WORDS:
         return True
-    return any(mark_found(mark, name) and not mark_found(mark, title) and not mark_found(mark, artist) and not means & own
+    return any(mark_found(mark, name) and not mark_found(mark, title) and not mark_found(mark, artist) and not means & said
                for mark, means in VERSION_MARKS.items())
+
+
+def album_said(row, song):
+    """ExactMatcher.inAnotherScript: the row's album, but for the song's own, which says nothing of the row."""
+    album = row["details"][1] if len(row["details"]) > 2 else ""
+    return "" if normalize(album) == normalize(song["album"]) else album
 
 
 def title_names(name):
@@ -172,7 +186,7 @@ def fits_of(song, results, lengths, inside):
     fits = [r for r in results if r["id"] and r["lengthMs"] is not None and not latin(r["name"]) and
             any(inside(r["lengthMs"] - ms, whole) for ms, whole in lengths) and
             artists(r["details"][0]) & artists(song["artist"]) and
-            not says_another_version(f"{r['name']} {r['details'][1] if len(r['details']) > 2 else ''}", song["title"], song["artist"], song["album"])]
+            not says_another_version(f"{r['name']} {album_said(r, song)}", song["title"], song["artist"], in_other_words=True)]
     return list({r["id"]: r for r in fits}.values())
 
 
