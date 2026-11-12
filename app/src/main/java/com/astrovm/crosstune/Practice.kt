@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -202,14 +203,34 @@ internal class PracticeCards(
         val preferred = (uiState.defaultDestination as? Destination.Service)?.service
         var tried = 0
         for (app in ranked(line)) {
-            // An app that's neither preferred nor the one the line was kept from needs the song on its service, or it plays whatever it finds by the name.
+            // The preferred app, and the one the line was kept from, are tried whatever their services say.
             val known = app == null || app == line.app || MusicService.ofPackage(app) == preferred
-            if (tried >= MAX_APPS || (!known && !hasSong(app, song))) continue
+            if (tried >= MAX_APPS || !worthATry(source, song, line, app, known)) continue
             tried++
             step("trying ${app ?: "any app"}")
             if (inMusicApp(source, song, line, app, play)) return true
         }
         return false
+    }
+
+    /**
+     * Whether [app] is worth one of the card's tries. One the card can't open, as it would cover the card, is only when it already
+     * has [song] open and can move in it, as its media session says, which asks no service. One that has it and can't, as on
+     * Spotify's free plan, is skipped: opening it wouldn't move it either. Else it's left out, and the card offers to Allow it, as
+     * it may be tried then. Any other app that isn't [known] needs the song on its service, or it plays whatever it finds by the name.
+     */
+    private suspend fun worthATry(source: PlaybackSource, song: MusicMetadata, line: SavedLine, app: String?, known: Boolean): Boolean {
+        if (source.comesBackByItself() || !playsOnlyFromItsOwnLink(app)) return known || hasSong(app, song)
+        val open = openIn(source, song, app)
+        if (open?.canSeek == true) return true
+        if (open == null) leaveOut(app, line) else step("$app has the song open and can't move in it")
+        return false
+    }
+
+    /** [song] as [app] has it open, playing or paused, as its media session says: as soon as it can move in it, or as it last was. */
+    private suspend fun openIn(source: PlaybackSource, song: MusicMetadata, app: String?): Following? {
+        var last: Following? = null
+        return withTimeoutOrNull(FIND_SONG_MS) { source.follow(song, app).first { following -> following?.also { last = it }?.canSeek == true } } ?: last
     }
 
     /** Whether the service [app] is of has [song], as its links say. */
@@ -444,10 +465,11 @@ internal class PracticeCards(
         val song = MusicMetadata(line.title, line.artist)
         // The length kept with the line is the recording the words were timed on. This session's is only a stand-in.
         val expectedMs = line.lengthMs ?: lengths[line.title to line.artist]
-        val music = matcher.find(MusicService.YOUTUBE_MUSIC, song)
-        // Any other video is taken only when it's as long as the song, which has to be known to tell.
-        val link = music ?: expectedMs?.let { matcher.find(MusicService.YOUTUBE, song) }
-        val id = link?.toHttpUrlOrNull()?.queryParameter("v") ?: return null
+        // Asked once more only when the search failed, as offline or slow: one that found nothing would find the same again,
+        // and ask Apple, Deezer and ChatGPT the same again too.
+        val asked = matcher.lookFor(MusicService.YOUTUBE_MUSIC, song)
+        val found = if (asked == ExactMatcher.Match.Failed) matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) else asked
+        val id = (found as? ExactMatcher.Match.Found)?.url?.toHttpUrlOrNull()?.queryParameter("v") ?: return null
         return id to expectedMs
     }
 
@@ -503,11 +525,11 @@ internal class PracticeCards(
     private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, at: Long?, latest: () -> Following?, onStuck: (Following?) -> Unit, line: SavedLine?): Boolean {
         // Opened, an app covers the card, and without showing over other apps Crosstune can't come back, nor open the next app from behind it.
         val opens = source.comesBackByItself()
-        // This app plays only its own link, and opening it would cover the card. The link is not read first:
-        // the card leaves the app out either way, and the line plays on. The link is read after, so a later card that can open the app already has it.
+        // This app plays only its own link, and opening it would cover the card, so it's left out. A card checks that before it tries
+        // the app, see [worthATry]; this is for going back to what played before, or the song gone from it since. Its link isn't
+        // looked up either: a service is asked about a song only for an app about to be opened, see Privacy in the README.
         if (!opens && playsOnlyFromItsOwnLink(app)) {
             leaveOut(app, line)
-            scope.launch { ownLinkOf(song, app) }
             return false
         }
         val ownLink = ownLinkOf(song, app)

@@ -15,11 +15,13 @@ import kotlin.concurrent.thread
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,7 +37,9 @@ import org.robolectric.shadows.ShadowLog
 class PracticeCardsTest {
     private val screen = mutableStateOf(UiState())
     private val playback = FakePlayback().apply { obeys = true }
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** The first error a card's work threw, which the scope would otherwise swallow, leaving a wait to run out. */
+    private val crashed = AtomicReference<Throwable?>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error -> crashed.compareAndSet(null, error) })
     private val store = SavedLinesStore(ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("practice-cards", Context.MODE_PRIVATE))
 
     @After
@@ -50,8 +54,10 @@ class PracticeCardsTest {
     /** What the phone has seen each music app do. */
     private val traits = AppTraitsStore(ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("practice-traits", Context.MODE_PRIVATE).also { it.edit().clear().commit() }) { wall }
 
-    private fun cards(source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player, now: () -> Long = { System.currentTimeMillis() }) =
-        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
+    private fun cards(
+        source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player,
+        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR")
+    ) = PracticeCards(screen, scope, source, matcher, store, traits, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
 
     /** YouTube Music having the demo song, 3:20 long, as its video "demo0000000". */
     private fun youTubeHasTheSong() {
@@ -91,9 +97,16 @@ class PracticeCardsTest {
     private fun waitFor(what: String, seconds: Long = 60, until: () -> Boolean) {
         val deadline = System.currentTimeMillis() + seconds * 1_000
         while (!until()) {
+            crashed.get()?.let { throw AssertionError("A card's work failed while waiting for: $what", it) }
             check(System.currentTimeMillis() < deadline) { "Never got to: $what" }
             Thread.sleep(20)
         }
+    }
+
+    /** Waits for the small player to be on the line, and fails at once when the card settles on no sound, as it then never will be. */
+    private fun waitForThePlayer(what: String = "the player is on the line", seconds: Long = 60) {
+        waitFor(what, seconds) { player.shown.isNotEmpty() || practice?.sound == LineSound.NONE }
+        check(player.shown.isNotEmpty()) { "The card has no sound, so never got to: $what" }
     }
 
     /** The music app playing the demo song from just before the line, on a clock 20 times as fast, so the line is over in a moment. */
@@ -485,7 +498,7 @@ class PracticeCardsTest {
         playing(canSeek = false)
         val cards = cards()
         cards.start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(Shown("demo0000000", 10_000, 15_000 + MainViewModel.LINE_TAIL_MS, 200_000, play = false), player.shown.single())
         assertEquals("demo0000000", practice?.video)
         assertEquals(listOf(false), playback.plays)
@@ -519,7 +532,7 @@ class PracticeCardsTest {
         playing(canSeek = false, playing = false)
         val cards = cards()
         cards.start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         // Nothing played, so nothing is paused.
         assertTrue(playback.plays.isEmpty())
         assertTrue(playback.seeks.isEmpty())
@@ -533,7 +546,7 @@ class PracticeCardsTest {
         youTubeHasTheSong()
         playing(canSeek = false)
         cards().start(null, before = null)
-        waitFor("the player plays it") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player plays it")
         assertTrue(player.shown.single().play)
         assertEquals(LineSound.PLAYING, practice?.sound)
     }
@@ -546,7 +559,7 @@ class PracticeCardsTest {
         playback.access = true
         playback.canPlaySongs = false
         cards(songLoadMs = 300).start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals("demo0000000", practice?.video)
     }
 
@@ -557,7 +570,7 @@ class PracticeCardsTest {
         playing(canSeek = false)
         val cards = cards()
         cards.start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         // The player finds the video isn't as long as the song, or can't load it.
         player.end(LineEnd.FAILED)
         assertEquals(LineSound.NONE, practice?.sound)
@@ -608,7 +621,7 @@ class PracticeCardsTest {
         playing(canSeek = false)
         val cards = cards()
         cards.start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         val first = player.pauses
         cards.turn()
         waitFor("it plays") { player.shown.size == 2 }
@@ -663,7 +676,7 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         playback.playing.value = Following(PlaybackClock(0, System.currentTimeMillis(), playing = true), "Spotify", canSeek = false, appPackage = MusicService.SPOTIFY.packageName)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertTrue(playback.seeks.isEmpty())
         assertTrue(playback.songsAsked.isEmpty())
         assertEquals(1, playback.cameBack)
@@ -733,7 +746,7 @@ class PracticeCardsTest {
         playback.canPlaySongs = false
         val cards = cards(songLoadMs = 300)
         cards.start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertFalse(player.shown.last().play)
         cards.turn()
         waitFor("it plays") { player.shown.last().play }
@@ -787,7 +800,7 @@ class PracticeCardsTest {
         assertTrue("it came back before the wait to be sure", System.currentTimeMillis() - playingAt < MainViewModel.LOAD_SONG_MS / 2)
         assertTrue(playback.seeks.isEmpty())
         // It's never moved, and the line is played in the player, without coming back twice.
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertTrue(playback.seeks.isEmpty())
         assertEquals(1, playback.cameBack)
     }
@@ -947,7 +960,7 @@ class PracticeCardsTest {
         // It plays a moment, and then, behind Crosstune, stops itself.
         Thread.sleep(200)
         flow.value = Following(PlaybackClock(10_200, System.currentTimeMillis(), 1f, playing = false), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         assertEquals(AppTraits(seeks = true, keeps = false), traits.of(morphe))
         assertEquals("demo0000000", practice?.video)
         // The next card doesn't go through the app again.
@@ -1049,7 +1062,7 @@ class PracticeCardsTest {
         waitFor("the line plays in the app") { playback.playedApps.zip(playback.plays).contains(morphe to true) }
         Thread.sleep(100)
         flow.value = Following(PlaybackClock(10_100, System.currentTimeMillis(), 1f, playing = false), "Music", canSeek = true, appPackage = morphe, durationMs = 200_000)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         assertEquals(listOf("trying $morphe", "$morphe stopped playing the line", "the YouTube player"), steps())
     }
 
@@ -1074,7 +1087,7 @@ class PracticeCardsTest {
         val cards = cards(songLoadMs = 1_500)
         cards.start(null, before = null)
         // Opened on its own link, Spotify never starts, as YouTube Music cold opened sometimes doesn't: nothing's seen of what it can do.
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(1, playback.opened.size)
         assertEquals(AppTraits(), traits.of(MusicService.SPOTIFY.packageName))
         turnInThePlayer(cards)
@@ -1154,7 +1167,8 @@ class PracticeCardsTest {
         installed(spotify, preferred = Destination.Alternative(Frontend.entries.first()))
         appPlays(spotify)
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        // Over at whichever comes first, so an app tried by mistake, which then plays the line, fails at once rather than when the wait runs out.
+        waitFor("the player is on the line, or an app is tried") { player.shown.isNotEmpty() || playback.followedApps.isNotEmpty() }
         assertTrue(playback.followedApps.isEmpty())
     }
 
@@ -1166,7 +1180,8 @@ class PracticeCardsTest {
         installed(MusicService.TIDAL.packageName)
         appPlays(MusicService.TIDAL.packageName)
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        // Over at whichever comes first, so an app tried by mistake, which then plays the line, fails at once rather than when the wait runs out.
+        waitFor("the player is on the line, or an app is tried") { player.shown.isNotEmpty() || playback.followedApps.isNotEmpty() }
         assertTrue(playback.followedApps.isEmpty())
     }
 
@@ -1178,7 +1193,7 @@ class PracticeCardsTest {
         installed(*apps.toTypedArray())
         apps.forEach { appPlays(it, canSeek = false) }
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(3, playback.followedApps.distinct().size)
         assertEquals(3, apps.count { traits.of(it).seeks == false })
     }
@@ -1210,7 +1225,7 @@ class PracticeCardsTest {
         // No app is asked for, so the one that plays is the one that's marked.
         playing(canSeek = false)
         cards().start(null, before = null)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         assertEquals(AppTraits(seeks = false), traits.of(spotify))
     }
 
@@ -1224,7 +1239,7 @@ class PracticeCardsTest {
         playback.access = true
         playback.appPlaying[spotify] = MutableStateFlow(Following(PlaybackClock(10_000, System.currentTimeMillis()), "Music", canSeek = false))
         cards().start(null, before = null)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         assertEquals(AppTraits(seeks = false), traits.of(spotify))
         assertEquals(listOf("trying $spotify", "$spotify plays and does not move", "$spotify did not move to the line", "the YouTube player"), steps())
     }
@@ -1248,7 +1263,7 @@ class PracticeCardsTest {
         playback.access = true
         playback.canPlaySongs = false
         cards(songLoadMs = 300).start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertTrue(player.shown.last().play)
     }
 
@@ -1262,7 +1277,7 @@ class PracticeCardsTest {
         cards.start(null, before = null)
         waitFor("it's looking") { practice?.sound == LineSound.LOADING }
         cards.turn()
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertTrue(player.shown.last().play)
     }
 
@@ -1301,7 +1316,7 @@ class PracticeCardsTest {
         val flow = playback.appPlaying.getValue(ytMusic)
         playback.onPlay = { app, play -> if (app == ytMusic && play) flow.value = null }
         cards().start(null, before = null)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         assertEquals("demo0000000", practice?.video)
         assertEquals(emptyList<String>(), playedSteps())
         assertEquals(listOf("trying $ytMusic", "$ytMusic did not play the line", "the YouTube player"), steps())
@@ -1323,7 +1338,7 @@ class PracticeCardsTest {
             if (app == ytMusic && play) flow.value = flow.value?.copy(clock = PlaybackClock(0, System.currentTimeMillis(), 1f))
         }
         cards().start(null, before = null)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         assertEquals(emptyList<String>(), playedSteps())
         assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
         assertEquals(listOf(ytMusic), playback.pausedApps.distinct())
@@ -1459,7 +1474,7 @@ class PracticeCardsTest {
             }
         }
         cards().start(null, before = null)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         assertEquals(listOf(10_000L, 10_000L), playback.seeks.toList())
         assertEquals(AppTraits(keeps = false), traits.of(ytMusic))
     }
@@ -1522,7 +1537,7 @@ class PracticeCardsTest {
         playback.comesBackByItself = false
         val shownAt = System.currentTimeMillis()
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         // Not the 12 s each app opened behind Crosstune would wait for nothing: neither was opened, as neither could be come back from.
         assertTrue("the player waited ${System.currentTimeMillis() - shownAt} ms", System.currentTimeMillis() - shownAt < MainViewModel.LOAD_SONG_MS)
         assertTrue(playback.opened.isEmpty())
@@ -1544,7 +1559,7 @@ class PracticeCardsTest {
         playback.comesBackByItself = false
         val cards = cards()
         cards.start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertTrue(playback.opened.isEmpty())
         // Allowed, the next card opens Spotify, which wasn't put aside for the session.
         playback.comesBackByItself = true
@@ -1670,7 +1685,7 @@ class PracticeCardsTest {
         waitFor("Spotify opens") { playback.opened.isNotEmpty() }
         playing(canSeek = false)
         // It's paused at once, and still known to be stuck, as Spotify's free plan is: the line goes to the player.
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(false, playback.plays.first())
         assertEquals(AppTraits(seeks = false), traits.of(spotify))
         assertTrue(playback.seeks.isEmpty())
@@ -1689,7 +1704,7 @@ class PracticeCardsTest {
         // As TIDAL without an account: only a 30 s preview, here over before the line starts at 10 s.
         playback.appPlaying.getValue(tidal).value = playback.appPlaying.getValue(tidal).value!!.copy(durationMs = 8_000)
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         // Never sent there, nor played to its end and on into the next song.
         assertTrue(playback.seeks.isEmpty())
         assertFalse(playback.plays.contains(true))
@@ -1763,7 +1778,7 @@ class PracticeCardsTest {
         assertTrue("$tidal stopped at 29952 ms, short of the line" in steps())
         // Stopped short of this line, it may get to the next: it isn't remembered not to seek.
         assertEquals(AppTraits(), traits.of(tidal))
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
     }
 
     // TIDAL given up on at once is left out till Crosstune starts again: then it's tried first again, as preferred.
@@ -1775,7 +1790,7 @@ class PracticeCardsTest {
         replays(tidal, start = 43_270, from = 65, fromPlaying = true, Said(117, 29_952), Said(168, 29_952))
         val cards = cards()
         cards.start(null, before = null)
-        waitFor("the player takes over") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player takes over")
         // Not again this time: practised again, the card goes straight to the player.
         val tried = steps().count { it == "trying $tidal" }
         cards.stop()
@@ -1968,7 +1983,7 @@ class PracticeCardsTest {
         appPlays(tidal)
         playback.appPlaying.getValue(tidal).value = playback.appPlaying.getValue(tidal).value!!.copy(durationMs = 8_000)
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(listOf("trying $tidal", "$tidal did not get to the line", "the YouTube player"), steps())
         assertEquals(AppTraits(seeks = false), traits.of(tidal))
     }
@@ -1989,7 +2004,7 @@ class PracticeCardsTest {
         waitFor("it's tried") { steps().isNotEmpty() }
         cards.turn()
         flow.value = preview
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(listOf("trying $tidal", "$tidal did not play the line", "the YouTube player"), steps())
         assertEquals(AppTraits(keeps = false), traits.of(tidal))
     }
@@ -2096,7 +2111,7 @@ class PracticeCardsTest {
         val flow = MutableStateFlow<Following?>(null)
         playback.appPlaying[tidal] = flow
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(listOf("trying $tidal", "$tidal did not move to the line", "the YouTube player"), steps())
         // As TIDAL woken cold: it starts the song from its start a second after it's given up on.
         flow.value = Following(PlaybackClock(0, System.currentTimeMillis(), 1f), "Music", canSeek = true, appPackage = tidal, durationMs = 200_000)
@@ -2117,7 +2132,7 @@ class PracticeCardsTest {
         playback.appPlaying[qobuz] = MutableStateFlow(null)
         val started = System.currentTimeMillis()
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line")
         assertEquals(listOf("trying $qobuz", "$qobuz did not move to the line", "the YouTube player"), steps())
         // Not swapped for TIDAL, which would play the song while the card waits on Qobuz until it gives up.
         assertTrue(playback.songsAsked.isEmpty())
@@ -2151,7 +2166,7 @@ class PracticeCardsTest {
     private fun holdSpotifyLink() = holdHosts("listenbrainz.org", "spotify.com")
 
     @Test
-    fun withoutTheOverlayThePlayerStartsWhileASpotifyLookupTheLineDoesNotNeedIsStillWaiting() {
+    fun withoutTheOverlayThePlayerStartsAtOnceAndSpotifyIsNotAskedAboutTheSong() {
         val (gate, started) = holdSpotifyLink()
         keep(keptFromSpotify)
         installed(spotify, ytMusic)
@@ -2163,7 +2178,7 @@ class PracticeCardsTest {
         val startedAt = System.currentTimeMillis()
         try {
             cards.start(null, before = null)
-            waitFor("the player is on the line", seconds = 15) { player.shown.isNotEmpty() }
+            waitForThePlayer("the player is on the line", seconds = 15)
             val waited = System.currentTimeMillis() - startedAt
             // The phone measured 6.05 s for this card, and 1.84 s once the link was remembered.
             // A lookup that is still open is given up after 5 s, so the player has to be up before that.
@@ -2172,18 +2187,17 @@ class PracticeCardsTest {
             assertTrue(practice!!.cantComeBack)
             assertTrue(playback.opened.isEmpty())
             assertEquals(Shown("demo0000000", 10_000, 15_000 + MainViewModel.LINE_TAIL_MS, null, play = false), player.shown.single())
-            // The link is still read, so a later card that can open Spotify already has it. Dropping that read leaves this closed.
-            assertTrue(started.await(5, TimeUnit.SECONDS))
             cards.replay()
             waitFor("the line plays again") { player.shown.size >= 2 }
-            assertEquals(1, gate.count)
+            // Spotify's link isn't looked up for a card that leaves Spotify out: its title and artist go nowhere for it.
+            assertEquals(1, started.count)
         } finally {
             gate.countDown()
         }
     }
 
     @Test
-    fun withoutTheOverlayALineAlreadyPlayingInAnotherAppIsReadyWhileASpotifyLookupIsStillWaiting() {
+    fun withoutTheOverlayALineAlreadyPlayingInAnotherAppIsReadyAndSpotifyIsNotAskedAboutTheSong() {
         val (gate, started) = holdSpotifyLink()
         keep(keptFromSpotify)
         installed(spotify, morphe)
@@ -2201,7 +2215,7 @@ class PracticeCardsTest {
             assertTrue(player.shown.isEmpty())
             assertTrue(practice!!.cantComeBack)
             assertTrue(playback.opened.isEmpty())
-            assertTrue(started.await(5, TimeUnit.SECONDS))
+            assertEquals(1, started.count)
         } finally {
             gate.countDown()
         }
@@ -2225,7 +2239,7 @@ class PracticeCardsTest {
             assertTrue(player.shown.isEmpty())
             assertTrue(playback.opened.isEmpty())
             gate.countDown()
-            waitFor("the player is on the line") { player.shown.isNotEmpty() }
+            waitForThePlayer("the player is on the line")
             assertEquals(Shown("demo0000000", 10_000, 15_000 + MainViewModel.LINE_TAIL_MS, null, play = false), player.shown.single())
         } finally {
             gate.countDown()
@@ -2241,7 +2255,7 @@ class PracticeCardsTest {
         playback.access = true
         playback.comesBackByItself = false
         cards(songLoadMs = 500).start(null, before = null)
-        waitFor("the player is on the line", seconds = 15) { player.shown.isNotEmpty() }
+        waitForThePlayer("the player is on the line", seconds = 15)
         // TIDAL plays a song it is asked for by name. Leaving it out before that ask would skip an app that can play the line.
         assertEquals(tidal, playback.songsAsked.single().second)
         assertTrue(playback.opened.isEmpty())
@@ -2338,6 +2352,256 @@ class PracticeCardsTest {
         tidalCards.start(null, before = Before(MusicMetadata("Before", "Band"), 4_000, null))
         waitFor("it's stopped") { playback.pausedApps.isNotEmpty() }
         return tidal to flow
+    }
+    /** Five music apps: Spotify, the one songs open in, and four others whose services a card could ask. */
+    private val five = listOf(spotify, MusicService.APPLE_MUSIC.packageName, MusicService.DEEZER.packageName, MusicService.TIDAL.packageName, MusicService.SOUNDCLOUD.packageName)
+
+    /** The host each lookup so far went to, in order. */
+    private fun lookups() = sites.requestedUrls.map { it.toHttpUrl().host }
+
+    /** Apple Music's and Deezer's stores having the song, so a card tries their apps; Spotify's has nothing for it. */
+    private fun appleAndDeezerHaveTheSong() {
+        val before = sites.handler
+        sites.handler = { request ->
+            when (request.url.host) {
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[{"trackName":"Demo","artistName":"Band","trackViewUrl":"https://music.apple.com/us/song/demo/1"}]}""")
+                "api.deezer.com" -> FakeSpotify.html(request, """{"data":[{"title":"Demo","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1"}]}""")
+                else -> before(request)
+            }
+        }
+    }
+
+    @Test
+    fun aCardAsksTheServiceOfEachAppOnlyAsItGetsToItAndNoneOnceThreeWereTried() {
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
+        keep(line(), types = hearIt)
+        installed(*five.toTypedArray())
+        playback.access = true
+        cards(songLoadMs = 300).start(null, before = null)
+        waitForThePlayer("the player is on the line")
+        // Three apps tried, in order, and asked of no service but their own: TIDAL's and SoundCloud's are never asked.
+        assertEquals(five.take(3), playback.followedApps.distinct())
+        assertEquals(
+            listOf(
+                // Spotify, through ListenBrainz, then YouTube Music, which is asked for the song as it has no Spotify link.
+                "labs.api.listenbrainz.org", "music.youtube.com",
+                "itunes.apple.com", "api.deezer.com",
+                // The small player's video.
+                "music.youtube.com"
+            ),
+            lookups()
+        )
+    }
+
+    @Test
+    fun anAppLeftOutHasItsLinkLookedUpOnlyOnceItCanBeOpened() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(keptFromSpotify.copy(text = "One"), keptFromSpotify.copy(text = "Two", startMs = 20_000, endMs = 25_000))
+        installed(*five.toTypedArray())
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards(songLoadMs = 300)
+        cards.start(null, before = null)
+        waitForThePlayer("the player is on the line")
+        // Spotify would cover the card for good, so it isn't opened, and nothing is asked about its song.
+        assertTrue(practice!!.cantComeBack)
+        Thread.sleep(300)
+        val spotifyHosts = setOf("labs.api.listenbrainz.org", "open.spotify.com")
+        assertTrue(lookups().toString(), lookups().none { it in spotifyHosts })
+        // Allowed, the next card opens it, and only then looks its link up.
+        playback.comesBackByItself = true
+        turnInThePlayer(cards)
+        cards.grade(Grade.GOOD)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        assertEquals(spotify, playback.opened.single().first)
+        assertTrue(lookups().toString(), "labs.api.listenbrainz.org" in lookups())
+    }
+
+    @Test
+    fun aSpotifyTheCardCantOpenIsAskedNothingOfferedToAllowAndPlaysTheLineOnlyWhenItAlreadyPlaysTheSong() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(line("One"), line("Two", start = 20_000))
+        // Spotify is neither the app the user prefers nor the one the lines were kept from, and opening it would cover the card.
+        installed(spotify, preferred = Destination.Service(MusicService.APPLE_MUSIC))
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards()
+        cards.start(null, before = null)
+        waitForThePlayer("the player is on the line")
+        // Allowed to show over other apps, the card could open it, so it says so, though nothing is asked about the song till then.
+        assertTrue(practice!!.cantComeBack)
+        assertTrue(playback.opened.isEmpty())
+        // Already playing the song, it plays the next line, which needs no link either.
+        appPlays(spotify, speed = 1f, positionMs = 19_500)
+        turnInThePlayer(cards)
+        val shown = player.shown.size
+        cards.grade(Grade.GOOD)
+        waitFor("Spotify, or the player, plays the line") { playback.seekedApps.contains(spotify) || player.shown.size > shown }
+        assertEquals(listOf<String?>(spotify), playback.seekedApps.toList())
+        assertEquals(listOf("music.youtube.com"), lookups().distinct())
+    }
+
+    /**
+     * TIDAL preferred, with Spotify, Apple Music and Deezer, and Deezer already playing the song. Crosstune can't show over other
+     * apps, as on a TV, and ListenBrainz doesn't know the song. Spotify, which would cover the card, doesn't play it: it's left out
+     * without a lookup and takes none of the three tries, so Deezer, the third app tried, plays the line, as it did before.
+     */
+    private fun aSpotifyThatCantBeOpenedTakesNoneOfTheTries(phone: Phone) {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        screen.value = screen.value.copy(phone = phone)
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
+        keep(line())
+        val (apple, deezer, tidal) = listOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL).map { it.packageName }
+        installed(spotify, apple, deezer, tidal, preferred = Destination.Service(MusicService.TIDAL))
+        appPlays(deezer, speed = 1f, positionMs = 9_500)
+        playback.comesBackByItself = false
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the line is ready, in an app or the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $tidal", "trying $apple", "trying $deezer"), steps().filter { it.startsWith("trying") })
+        assertTrue("$spotify would cover the card" in steps())
+        assertEquals(listOf<String?>(deezer), playback.seekedApps.toList())
+        assertTrue(player.shown.isEmpty())
+        // Allowed to show over other apps, the card could open it, so it says so. Nothing about the song is sent for it till then.
+        assertTrue(practice!!.cantComeBack)
+        assertTrue(lookups().toString(), lookups().none { it in setOf("labs.api.listenbrainz.org", "open.spotify.com") })
+    }
+
+    @Test
+    fun aSpotifyLeftOutThatsNeitherPreferredNorTheLinesIsOpenedOnceAllowed() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(line("One"), line("Two", start = 20_000))
+        // Songs open in a browser, and Spotify is the only music app.
+        installed(spotify, preferred = Destination.Custom("web", "Web", "https://example.com/search?q={query}"))
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards(songLoadMs = 300)
+        cards.start(null, before = null)
+        waitForThePlayer("the player is on the line")
+        assertTrue(practice!!.cantComeBack)
+        assertTrue(lookups().toString(), "labs.api.listenbrainz.org" !in lookups())
+        // Allowed, the next card opens it on its own link.
+        playback.comesBackByItself = true
+        turnInThePlayer(cards)
+        cards.grade(Grade.GOOD)
+        waitFor("Spotify opens, or the player plays the line") { playback.opened.isNotEmpty() || player.shown.size > 2 }
+        assertEquals(listOf(spotify to "https://open.spotify.com/track/$SPOTIFY_ID"), playback.opened.toList())
+    }
+
+    @Test
+    fun aSpotifyFreeThatCantBeOpenedTakesNoTryAndIsNotOfferedToAllow() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
+        keep(line())
+        val (apple, deezer, tidal) = listOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL).map { it.packageName }
+        installed(tidal, spotify, apple, deezer, preferred = Destination.Service(MusicService.TIDAL))
+        // Spotify, on its free plan, has the song open and can't move in it; Deezer, the third app the card can try, plays it.
+        appPlays(spotify, canSeek = false)
+        appPlays(deezer, speed = 1f, positionMs = 9_500)
+        playback.comesBackByItself = false
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the line is ready, in an app or the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $tidal", "trying $apple", "trying $deezer"), steps().filter { it.startsWith("trying") })
+        assertTrue("$spotify has the song open and can't move in it" in steps())
+        assertEquals(listOf<String?>(deezer), playback.seekedApps.toList())
+        // Opened, it wouldn't move either, so Allow wouldn't help.
+        assertFalse(practice!!.cantComeBack)
+    }
+
+    @Test
+    fun aSpotifyThatCantBeOpenedTakesNoneOfTheTriesOnAPhone() = aSpotifyThatCantBeOpenedTakesNoneOfTheTries(Phone.PIXEL)
+
+    @Test
+    fun aSpotifyThatCantBeOpenedTakesNoneOfTheTriesOnATv() = aSpotifyThatCantBeOpenedTakesNoneOfTheTries(Phone.TV)
+
+    @Test
+    fun aPreferredSpotifyLeftOutTakesNoneOfTheTriesAndIsOfferedToAllow() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
+        val (apple, deezer, tidal) = listOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL).map { it.packageName }
+        // Kept from TIDAL, which is tried without asking its service.
+        keep(line().copy(app = tidal))
+        // Spotify is the app songs open in, so the card would try it whatever its service says, but it would cover the card.
+        installed(spotify, tidal, apple, deezer)
+        appPlays(deezer, speed = 1f, positionMs = 9_500)
+        playback.comesBackByItself = false
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the line is ready, in an app or the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
+        // TIDAL and Apple Music don't get to the line; Deezer, the third app tried, does.
+        assertEquals(listOf("trying $tidal", "trying $apple", "trying $deezer"), steps().filter { it.startsWith("trying") })
+        assertEquals(listOf<String?>(deezer), playback.seekedApps.toList())
+        assertTrue(player.shown.isEmpty())
+        // Allowed to show over other apps, Spotify would be tried: the card says so.
+        assertTrue(practice!!.cantComeBack)
+        assertTrue(playback.opened.isEmpty())
+    }
+
+    @Test
+    fun withoutTheOverlayGoingBackToWhatSpotifyPlayedBeforeNeitherOpensItNorAsksAboutTheSong() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(line())
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards(songLoadMs = 300)
+        cards.start(null, before = Before(MusicMetadata("Demo", "Band"), 4_000, spotify))
+        waitForThePlayer("the player is on the line")
+        val before = lookups()
+        // Spotify no longer has the song, and opening it on its link would cover the screen for good.
+        cards.backToBefore()
+        waitFor("Spotify is left out") { "$spotify would cover the card" in steps() }
+        assertTrue(playback.opened.isEmpty())
+        assertEquals(before, lookups())
+    }
+
+    /** Every search answering, and finding nothing: YouTube Music's, Apple's and Deezer's. */
+    private fun noSearchFindsTheSong() {
+        sites.handler = { request ->
+            when (request.url.host) {
+                "music.youtube.com" -> FakeSpotify.html(request, "{}")
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
+                else -> FakeSpotify.html(request, "{}", code = 404)
+            }
+        }
+    }
+
+    @Test
+    fun thePlayersVideoIsLookedForOnceWhenYouTubeMusicFindsNone() {
+        noSearchFindsTheSong()
+        // TIDAL, the preferred app, is asked for the song by name, which looks nothing up, and doesn't get to the line.
+        keep(line().copy(lengthMs = 200_000))
+        installed(MusicService.TIDAL.packageName, preferred = Destination.Service(MusicService.TIDAL))
+        playback.access = true
+        // A song found nowhere is remembered for a while, as the app does.
+        cards(songLoadMs = 300, matcher = ExactMatcher(sites.client(), "AR", missingForMs = 60_000)).start(null, before = null)
+        waitFor("the card has no sound") { practice?.sound == LineSound.NONE }
+        // YouTube Music's song and video searches, then Apple's, in the phone's store and the US one, and Deezer's, for the song's
+        // other names and its length: once each. Searching again would find the same nothing.
+        assertEquals(listOf("api.deezer.com", "itunes.apple.com", "itunes.apple.com", "music.youtube.com", "music.youtube.com"), lookups().sorted())
+    }
+
+    @Test
+    fun aVideoSearchThatFailedIsAskedOnceMore() {
+        youTubeHasTheSong()
+        val found = sites.handler
+        val asked = AtomicLong()
+        // Its first answer is an error, as when the phone is offline for a moment.
+        sites.handler = { request -> if (request.url.host == "music.youtube.com" && asked.getAndIncrement() == 0L) FakeSpotify.html(request, "{}", code = 503) else found(request) }
+        keep(line())
+        installed(MusicService.TIDAL.packageName, preferred = Destination.Service(MusicService.TIDAL))
+        playback.access = true
+        cards(songLoadMs = 300).start(null, before = null)
+        waitForThePlayer("the player is on the line")
+        assertEquals("demo0000000", player.shown.single().videoId)
+        assertEquals(2L, asked.get())
     }
 }
 
