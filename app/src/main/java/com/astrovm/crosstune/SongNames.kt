@@ -150,27 +150,30 @@ internal object SongNames {
      * [name], in another script than the song's [titles], says it's another version of the song by [artist]. What
      * any of its names says in Latin letters counts in any script, as they're one recording's: "なごり雪 (ライブ)" is
      * "Nagoriyuki (Live)". A tag that says it's a version, "(TVバージョン)", "(Single ver.)" or "(Inst.)", is the
-     * song's own only when all else it says is the song's too: "Single" or "シングル" for "Fake Song (Single Version)".
+     * song's own only when all else it says is the song's too: "Single" or "シングル" for "Fake Song (Single Version)",
+     * and "スピードアップ", one word in katakana, for the two of "(Speed-Up Version)".
      */
     fun saysAnotherVersionOf(name: String, titles: Collection<String>, artist: String): Boolean {
         val said = titles.flatMap(::words).map { VERSION_SAID[it] ?: it }.toSet()
         val versions = composed(name).split(tagEdge).filter { tag -> words(tag).any(VERSION_SAID::containsKey) || VERSION_WRITTEN.keys.any(tag::contains) }
-        if (versions.any { !allSaid(it, said, titles.map(::normalize)) }) return true
+        // Words said together, as katakana runs them into one: "スピードアップ" is "speed up".
+        val heard = titles.map(::wordList).flatMap { all -> all.indices.flatMap { at -> (at + 1..minOf(all.size, at + SAID_TOGETHER)).map { all.subList(at, it).joinToString(" ") } } }
+        if (versions.any { !allSaid(it, said, heard, titles.map(::normalize)) }) return true
         if ((words(name) - said - words(artist) - versions.flatMap(::words).toSet()).any { it in VERSION_WORDS && (VERSION_SAID[it] ?: it) !in said }) return true
         return VERSION_MARKS.any { mark -> mark.foundIn(name) && titles.none(mark::foundIn) && !mark.foundIn(artist) && mark.means.none(said::contains) }
     }
 
     /**
      * Whether [tag], which says it's a version, says nothing the song's names don't: the version, as a word they
-     * [said], "ver" or "version" alike, or as one of them has it [written], and the rest, as a word they said, said in katakana, "シングル" for
-     * "single", or as it's written in one of them.
+     * [said], "ver" or "version" alike, or as one of them has it [written], and the rest, as a word they said, said in
+     * katakana as words they're [heard] with, "シングル" for "single", or as it's written in one of them.
      */
-    private fun allSaid(tag: String, said: Set<String>, written: List<String>): Boolean {
+    private fun allSaid(tag: String, said: Set<String>, heard: List<String>, written: List<String>): Boolean {
         val latin = words(tag).all { word -> (VERSION_SAID[word] ?: word) in said }
         val marked = VERSION_WRITTEN.filterKeys(tag::contains)
         if (!latin || marked.any { (mark, means) -> means !in said && written.none { normalize(mark) in it } }) return false
         val rest = marked.keys.fold(tag) { left, mark -> left.replace(mark, " ") }.split(notOwnLetters).filter { it.isNotEmpty() }
-        return rest.all { run -> written.any { normalize(run) in it } || said.any { soundsAlike(it, run, fewest = 2) } }
+        return rest.all { run -> written.any { normalize(run) in it } || heard.any { soundsAlike(it, run, fewest = 2) } }
     }
 
     /** NFKC and lowercase, so "ＴＶ" is "tv" and "ｳﾞｧｰｼﾞｮﾝ" "ヴァージョン", with its sound marks kept. */
@@ -183,6 +186,8 @@ internal object SongNames {
     private val notOwnLetters = Regex("""[^\p{L}]+|\p{IsLatin}+""")
 
     /** Words that say a name is a version, written short or not, and the word they mean. */
+    /** The most words a katakana run is heard as. */
+    private const val SAID_TOGETHER = 3
     private val VERSION_SAID = mapOf("ver" to "version", "version" to "version", "inst" to "instrumental", "instrumental" to "instrumental")
 
     /** The same as other scripts write them, which have no spaces to make them words of their own: "TVバージョン". */

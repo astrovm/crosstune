@@ -145,7 +145,17 @@ def sounds_alike(latin_text, loanword, fewest=3):
     return previous[-1] <= 1
 
 
-def all_said(tag, said, written):
+def heard_in(titles):
+    """SongNames.saysAnotherVersionOf's heard: up to 3 words said together, as katakana runs them into one."""
+    heard = []
+    for title in titles:
+        folded = "".join(c for c in unicodedata.normalize("NFD", unicodedata.normalize("NFKC", title)) if not unicodedata.combining(c))
+        words = [w for w in re.split(r"[^a-z0-9]+", folded.lower()) if w]
+        heard += [" ".join(words[at:end]) for at in range(len(words)) for end in range(at + 1, min(len(words), at + 3) + 1)]
+    return heard
+
+
+def all_said(tag, said, heard, written):
     """SongNames.allSaid: a tag that says it's a version says nothing the song's names don't."""
     if not all(VERSION_SAID.get(w, w) in said for w in latin_words(tag)):
         return False
@@ -156,7 +166,7 @@ def all_said(tag, said, written):
         tag = tag.replace(mark, " ")
     runs = re.findall(r"(?:(?!\d)(?!_)[^\W]|ー)+", tag)
     runs = ["".join(c for c in run if "LATIN" not in unicodedata.name(c, "")) for run in runs]
-    return all(any(normalize(run) in w for w in written) or any(sounds_alike(s, run, 2) for s in said) for run in runs if run)
+    return all(any(normalize(run) in w for w in written) or any(sounds_alike(s, run, 2) for s in heard) for run in runs if run)
 
 
 def says_another_version_of(name, titles, artist):
@@ -166,7 +176,7 @@ def says_another_version_of(name, titles, artist):
     written = [normalize(t) for t in titles]
     versions = [tag for tag in TAG_EDGE.split(unicodedata.normalize("NFKC", name).lower())
                 if latin_words(tag) & VERSION_SAID.keys() or any(mark in tag for mark in VERSION_WRITTEN)]
-    if any(not all_said(tag, said, written) for tag in versions):
+    if any(not all_said(tag, said, heard_in(titles), written) for tag in versions):
         return True
     own = said | latin_words(artist) | set().union(*(latin_words(tag) for tag in versions))
     if any(VERSION_SAID.get(w, w) not in said for w in (latin_words(name) - own) & VERSION_WORDS):

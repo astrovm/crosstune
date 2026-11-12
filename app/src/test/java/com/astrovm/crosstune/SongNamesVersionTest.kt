@@ -235,6 +235,11 @@ class SongNamesVersionTest {
         assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (シングル・バージョン)", single.take(1), "Fake Band"))
         assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (ｼﾝｸﾞﾙ･ﾊﾞｰｼﾞｮﾝ)", single.take(1), "Fake Band"))
         assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (シングル・バージョン)", listOf("Fake Song", "偽の歌 (シングル・バージョン)"), "Fake Band"))
+        // Katakana runs words into one: "スピードアップ" is "Speed-Up", up to three words said together.
+        assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (スピードアップバージョン)", listOf("Fake Song (Speed-Up Version)"), "Fake Band"))
+        assertTrue(SongNames.saysAnotherVersionOf("偽の歌 (スピードアップバージョン)", listOf("Fake Song"), "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (ダンスフロアリミックス・バージョン)", listOf("Fake Song (Dance Floor Remix Version)"), "Fake Band"))
+        assertTrue(SongNames.saysAnotherVersionOf("偽の歌 (ナイトダンスフロアリミックス・バージョン)", listOf("Fake Song (Night Dance Floor Remix Version)"), "Fake Band"))
         // "Xバージョン" is "X ver.": a version the names don't say is another, in any script.
         for (name in listOf("偽の歌 (TVバージョン)", "偽の歌 (英語バージョン)", "偽の歌 (TV Version)", "偽の歌 (Orchestra Version)", "봄날 (라이브 버전)", "偽の歌 (ライブ・ヴァージョン)")) {
             assertTrue(name, SongNames.saysAnotherVersionOf(name, single, "Fake Band"))

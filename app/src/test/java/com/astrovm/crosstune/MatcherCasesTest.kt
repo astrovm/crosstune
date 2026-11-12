@@ -61,6 +61,7 @@ class MatcherCasesTest {
         Case("3 tv size first", "song0", now = null, songs = listOf(row("偽の歌 (TV Size)"), row("別の歌", "Another Album"))),
         // 4. What the song's names say together: "Single" in English, "バージョン" in Japanese.
         Case("4 single ver", "song0", title = "Fake Song (Single Version)", japan = japanese("偽の歌 (シングル・バージョン)"), songs = listOf(row("偽の歌 (Single ver.)"))),
+        Case("4 speed-up in katakana", "song0", title = "Fake Song (Speed-Up Version)", songs = listOf(row("偽の歌（スピードアップバージョン）"))),
         // 6. Read alike, with widths folded and a long vowel as its vowel.
         Case("6 yuki", "song0", title = "Yuki", japan = japanese("ユーキ"), songs = listOf(row("勇気"))),
         Case("6 hanamizuki", "song0", title = "Hanamizuki", japan = japanese("ﾊﾅﾐｽﾞｷ"), songs = listOf(row("花水木"))),
