@@ -1918,6 +1918,9 @@ internal class MainViewModel(
 
     /** What was heard sung of the song shown, its words found with no timing, to time them by: this time, and the times before. */
     private var heardStretches: List<HeardStretch> = emptyList()
+
+    /** The [heardStretches] the lines shown were timed by: the timing of the last while heard is stopped when Crosstune goes out of sight. */
+    private var timedBy: List<HeardStretch> = emptyList()
     private var singingTries = 0
 
     /**
@@ -1995,6 +1998,7 @@ internal class MainViewModel(
         foundLines = emptyList()
         found = null
         heardStretches = emptyList()
+        timedBy = emptyList()
         unsung = null
         restored = null
         syncPoints = emptyList()
@@ -2083,7 +2087,7 @@ internal class MainViewModel(
         val key = RecordingKey.of(song)
         // Where lines were heard this time only isn't kept: next time the app's clock may be sure.
         val points = withGuess(syncPoints)
-        val lines = if (heardPoints.isEmpty() && points == syncPoints) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, points, pace))
+        val lines = if (heardPoints.isEmpty() && points == syncPoints) uiState.lyricLines else linesFrom(points)
         val words = KeptWords(
             uiState.lyrics, lines, uiState.lyricsSynced, found, foundLines, restored, points,
             // A translation that failed is asked for again.
@@ -2378,7 +2382,8 @@ internal class MainViewModel(
      * later as it goes on. Words that say they're timed for one as long as this keep its pace.
      */
     private fun learnPace(app: Following, shown: MusicMetadata, heard: Heard.Song, playerSpeed: Float) {
-        if (heard.clock == null || !sameSong(heard.metadata, shown)) return
+        // Words found with no timing are timed by ear, by the clock of what plays: there's no release they're timed for to pace.
+        if (heard.clock == null || !sameSong(heard.metadata, shown) || foundLines.isEmpty()) return
         if (found?.lengthMs != null && app.durationMs != null && found?.timedFor(app.durationMs) == true) return
         val speed = heard.speed / playerSpeed
         val heardPace = if (abs(speed - 1) >= MIN_SKEW) 1.0 / speed else 1.0
@@ -2501,6 +2506,8 @@ internal class MainViewModel(
         singingJob = viewModelScope.launch {
             // Shown from what was kept, what was heard before isn't loaded yet.
             if (heardStretches.isEmpty()) heardStretches = store?.load(song, words).orEmpty()
+            // What was heard last time, kept as its timing was stopped, is timed now: heard enough, it's never heard again.
+            if (heardStretches != timedBy) timeByEar(song)
             // A few whiles in a row with nothing sung heard, it's let be till the app's clock starts or jumps.
             while (!heardEnough(song) && singingTries < SINGING_TRIES) {
                 val heard = hearStretch(hearing, song, words) ?: return@launch
@@ -2553,10 +2560,19 @@ internal class MainViewModel(
     private fun untimedLengthMs(song: MusicMetadata) = appFollowing?.durationMs ?: song.lengthMs ?: found?.lengthMs
 
     /** [song]'s words, found with no timing, timed by the singing heard in [heardStretches], once any line's been heard. */
-    private fun timeByEar(song: MusicMetadata) {
-        val length = untimedLengthMs(song) ?: heardStretches.maxOfOrNull { it.toMs } ?: return
-        val lines = SungTiming.timed(uiState.lyrics.lines(), heardStretches, length).ifEmpty { return }
-        uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = true)
+    private suspend fun timeByEar(song: MusicMetadata) {
+        val heard = heardStretches
+        val words = uiState.lyrics
+        val length = untimedLengthMs(song) ?: heard.maxOfOrNull { it.toMs } ?: return
+        // A long song heard through twice takes a while to line up, so it's done away from the screen.
+        val lines = withContext(systemDispatcher) { SungTiming.timed(words.lines(), heard, length) }
+        // Timed words found meanwhile, or these written otherwise, as in their own script: this is out of date.
+        // Left, or heard again, the job doing this is stopped, so it never gets here.
+        if (foundLines.isNotEmpty() || uiState.lyrics != words) return
+        timedBy = heard
+        // Nothing heard is sure of any line now, so the lines lit before go dark too.
+        if (lines.isEmpty() && !uiState.lyricsTimedByEar) return
+        uiState = uiState.copy(lyricLines = lines, lyricsTimedByEar = lines.isNotEmpty())
         uiState = uiState.copy(following = inSong(appFollowing) ?: uiState.following)
     }
 
@@ -2789,8 +2805,15 @@ internal class MainViewModel(
     private val shownPoints get() = heardPoints.ifEmpty { syncPoints }
 
     private fun showPoints() {
-        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, shownPoints, pace)))
+        uiState = uiState.copy(lyricLines = linesFrom(shownPoints))
     }
+
+    /**
+     * The lines found, put in time by [points] and at the words' pace, as they show. Words found with no
+     * timing have no lines found: those shown were timed by ear, by the clock of what plays at the speed
+     * it plays, so no point or pace moves them, and they stay as they are.
+     */
+    private fun linesFrom(points: List<SyncPoint>) = if (foundLines.isEmpty()) uiState.lyricLines else shown(LyricsSync.adjust(foundLines, points, pace))
 
     /** Forgets where lines were heard this time, as the app's clock is sure now, or it stopped. */
     private fun forgetHeard() {
@@ -3532,7 +3555,7 @@ internal class MainViewModel(
         heardPoints = emptyList()
         // Kept for the words as found, which is how they're found next time.
         syncStore.save(song, foundLines, withGuess(points), wordsPace)
-        uiState = uiState.copy(lyricLines = shown(LyricsSync.adjust(foundLines, points, pace)), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
+        uiState = uiState.copy(lyricLines = linesFrom(points), lyricsSynced = points.isNotEmpty(), lyricsOffTake = false)
         keepInTime()
         // Lines kept to practise play from where they're heard now.
         timeSavedLines(song, again = true)

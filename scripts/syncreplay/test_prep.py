@@ -79,6 +79,113 @@ class WordsForTheRecordingTest(unittest.TestCase):
         self.assertEqual(self.found(cached=True, prepped=False), 0)
 
 
+class PartTest(unittest.TestCase):
+    """--part takes a part of the songs, fixed by each song's ID, so a change tuned on some is checked on the rest."""
+
+    songs = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
+    def test_each_song_is_in_one_part_by_its_id(self):
+        parts = [r.part(self.songs, r.part_arg(f'{k}/3')) for k in (1, 2, 3)]
+        self.assertEqual(parts, [['g', 'h'], ['a', 'c', 'd', 'e'], ['b', 'f']])
+        self.assertEqual(r.part(self.songs, r.part_arg('1/1')), self.songs)
+
+    def test_a_songs_part_stays_as_songs_are_added(self):
+        held = r.part(self.songs, r.part_arg('held'))
+        self.assertEqual(r.part(self.songs + ['i', 'j', 'k'], r.part_arg('held'))[:len(held)], held)
+
+    def test_the_held_out_songs_are_none_of_those_tuned_on(self):
+        held = r.part(self.songs, r.part_arg('held'))
+        tune = r.part(self.songs, r.part_arg('tune'))
+        self.assertEqual(held, ['g', 'h'])
+        self.assertEqual(sorted(held + tune), self.songs)
+        self.assertEqual(r.part(self.songs, r.part_arg('1/3')), held)
+
+    def test_with_no_part_every_song_is_taken(self):
+        self.assertEqual(r.part(['a', 'b'], None), ['a', 'b'])
+
+    def test_a_part_given_wrong_is_refused_plainly(self):
+        for which in ('0/3', '4/3', '1/0', 'x', '1/', '/3', '1/2/3', '-1/3', 'held/3'):
+            err = io.StringIO()
+            with self.subTest(which=which), patch('sys.argv', ['syncreplay.py', 'untimed', f'--part={which}']), \
+                    patch.object(r, 'untimed') as untimed, contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
+                r.main()
+            self.assertEqual(stop.exception.code, 2)
+            self.assertIn(f"argument --part: {which!r} is not held, tune or K/N", err.getvalue())
+            self.assertNotIn('Traceback', err.getvalue())
+            untimed.assert_not_called()
+
+    def test_untimed_replays_only_the_part_asked_for(self):
+        with tempfile.TemporaryDirectory() as directory:
+            heard = Path(directory) / 'heard.json'
+            heard.write_text(json.dumps({'0': [], '20000': []}))
+            given = []
+            with patch.object(r, 'prepped', return_value=self.songs), patch.object(r, 'heard_file', return_value=heard), \
+                    patch.object(r, 'untimed_input', side_effect=lambda song, *_: (given.append(song), (Path(directory) / f'{song}.tsv', []))[1]), \
+                    patch.object(r, 'untimed_classes', return_value=Path('classes')), patch.object(r, 'kotlin_jars', return_value=[Path('kotlin-stdlib-2.jar')]), \
+                    patch.object(r.subprocess, 'run') as run, patch.object(r, 'untimed_score') as score, \
+                    patch('sys.argv', ['syncreplay.py', 'untimed', '--nearest', '--part', 'held']):
+                r.main()
+        self.assertEqual(given, ['g', 'h'])
+        self.assertEqual(score.call_args.args[0], ['g', 'h'])
+        self.assertEqual(run.call_args.args[0][-2:], [f'{directory}/g.tsv', f'{directory}/h.tsv'])
+
+
+class UntimedScoreTest(unittest.TestCase):
+    """Each line scored against when it's sung: put near it, put off, put where nothing was heard, or shown wrong along the way."""
+
+    def test_each_line_is_counted_where_it_was_put(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            out = Path(directory)
+            # Lines 0 to 4 sung at 2, 5, 8, 11 and 50 s; the while heard is the first 20 s.
+            (out / 'a.truth.jsonl').write_text(''.join(json.dumps(dict(line=n, start=at)) + '\n' for n, at in enumerate((2, 5, 8, 11, 50))))
+            (out / 'a.language').write_text('en\n')
+            path = out / 'a.tsv'
+            # First put line 1 4 s late, then where it's sung; line 2 0.3 s off, line 3 2 s off, line 4 at 60 s, past what was heard.
+            Path(f'{path}.placed').write_text('R\t1\n1\t9000\nR\t2\n1\t5000\n2\t8300\n3\t13000\n4\t60000\n')
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                rows = r.untimed_score(['a'], {'a': (path, [0])})
+        # Lines 1 and 2 end within 1 s; 1 to 4 end put.
+        self.assertEqual(rows['a'], dict(heard=4, timed=3, on=2, close=2, off=2, far=1, unheard=1, wrong=3, right=[1, 2], put=[1, 2, 3, 4]))
+        self.assertIn(' off >3 s unheard wrong ', shown.getvalue())
+
+
+class AgainstMainTest(unittest.TestCase):
+    """Each run held to the lines main put within 1 s, run the same way: right on main and wrong or dark now."""
+
+    def run_as(self, **given):
+        return argparse.Namespace(**{**dict(start=0, work=4500, again=None, heard='', nearest=False, write_main=False, verbose=False), **given})
+
+    def test_a_run_is_kept_by_how_it_was_run(self):
+        self.assertEqual(r.untimed_key(self.run_as()), 'from 0 work 4500')
+        self.assertEqual(r.untimed_key(self.run_as(again=12000, heard='.other', nearest=True)), 'from 0 work 4500 again 12000 heard .other nearest True')
+
+    def test_lines_right_on_main_are_wrong_dark_or_still_right(self):
+        # Main had lines 1, 2 and 5 right; now 1 is right, 2 put off, 5 dark, and 7 right that main didn't have.
+        rows = dict(a=dict(right=[1, 7], put=[1, 2, 7]), b=dict(right=[0], put=[0]))
+        self.assertEqual(r.against_main(dict(a=[1, 2, 5]), rows), ([('a', 2)], [('a', 5)], [('a', 7)]))
+
+    def test_main_is_kept_then_held_to(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'UNTIMED_MAIN', Path(directory) / 'main.json'):
+            r.held_to_main(self.run_as(write_main=True), dict(a=dict(right=[1, 2], put=[1, 2])))
+            r.held_to_main(self.run_as(write_main=True, again=12000), dict(a=dict(right=[3], put=[3])))
+            self.assertEqual(json.loads(r.UNTIMED_MAIN.read_text()), {'from 0 work 4500': dict(a=[1, 2]), 'from 0 work 4500 again 12000': dict(a=[3])})
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                r.held_to_main(self.run_as(verbose=True), dict(a=dict(right=[2], put=[1, 2])))
+            self.assertEqual(shown.getvalue(), 'right on main, wrong now: 1  a:1\nright on main, dark now: 0\nnot right on main, right now: 0\n')
+            # Run some other way, nothing is kept to hold it to.
+            with contextlib.redirect_stdout(io.StringIO()) as shown:
+                r.held_to_main(self.run_as(work=3000), dict(a=dict(right=[], put=[1])))
+            self.assertEqual(shown.getvalue(), '')
+
+    def test_another_timing_takes_the_checkouts_place(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(r, 'OUT', Path(directory)):
+            other = Path(directory) / 'main.kt'
+            other.write_text('main')
+            sources = r.timing_copied(other, [Path('SungTiming.kt'), Path('SyncedLyrics.kt')])
+            self.assertEqual(sources, [Path(directory) / 'other-timing' / 'SungTiming.kt', Path('SyncedLyrics.kt')])
+            self.assertEqual(sources[0].read_text(), 'main')
+
+
 class SharedFolderTest(unittest.TestCase):
     """SYNCREPLAY_DIR keeps the inputs for every checkout, while what one checkout asks and gets stays its own."""
 
@@ -543,6 +650,17 @@ echo '[[["Every", 8.9], ["time", 9.2]], [["Every", 8.9]]]'
             self.assertEqual(r.words_heard(Path('vocals.wav'), 'en'), [[('every', 8.9)]])
 
 
+    def test_each_letter_of_a_word_in_unspaced_writing_is_sung_after_the_one_before(self):
+        # Whisper hears a line's last word and the next line's first as one: the next line starts two letters in.
+        model = Mock()
+        model.transcribe.return_value = ([SimpleNamespace(words=[SimpleNamespace(word='歩く朝の', start=10.0), SimpleNamespace(word=' Every', start=11.0)])], None)
+        env = {key: value for key, value in os.environ.items() if key != 'WHISPER_PYTHON'}
+        with patch.dict(os.environ, env, clear=True), patch.object(r, 'truth_model', return_value=model), patch.object(r, 'audio'):
+            heard = r.words_heard(Path('vocals.wav'), 'ja')
+        self.assertEqual(heard, [[('歩', 10.0), ('く', 10.28), ('朝', 10.56), ('の', 10.84), ('every', 11.0)]])
+        self.assertEqual(r.line_starts(heard[0], ['夜の海を歩く', '朝の光']), {1: 10.56})
+
+
 class SungLanguageTest(unittest.TestCase):
     """What's heard goes by the audio, unless the lyrics can't be in that language: Dynamite sounded Korean."""
     def told(self, lyrics, probabilities):
@@ -592,10 +710,10 @@ class EveryWritingTest(unittest.TestCase):
         heard = [('移', 5.0), ('り', 5.0), ('行', 5.5), ('く', 5.5), ('街', 6.0), ('心', 9.0), ('視', 9.5)]
         self.assertEqual({0: 5.0, 1: 9.0}, r.line_starts(heard, ['移り行く街', '心視']))
 
-    def test_hearing_gives_each_letter_the_time_of_its_word(self):
+    def test_hearing_gives_each_letter_a_time_a_letter_after_the_one_before(self):
         with patch.dict(os.environ, {'WHISPER_PYTHON': 'gpu'}), \
                 patch.object(r.subprocess, 'run', return_value=SimpleNamespace(stdout=json.dumps([[['移り', 5.0], ['行く', 6.0]]]))):
-            self.assertEqual([[('移', 5.0), ('り', 5.0), ('行', 6.0), ('く', 6.0)]], r.words_heard(Path('voice.wav'), 'ja'))
+            self.assertEqual([[('移', 5.0), ('り', 5.28), ('行', 6.0), ('く', 6.28)]], r.words_heard(Path('voice.wav'), 'ja'))
 
 
 class AgreedTest(unittest.TestCase):

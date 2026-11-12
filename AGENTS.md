@@ -17,6 +17,8 @@ python3 scripts/syncreplay/syncreplay.py run ID   # the lyrics timing replayed o
 ANDROID_SERIAL=SERIAL python3 scripts/syncreplay/syncreplay.py phone ID --seconds S   # the same on the phone over adb, timed from the dev app's own log; screenshots time lines up to 2 s off
 python3 scripts/syncreplay/syncreplay.py run ID --like-phone    # the replay set up as that phone check went, held to its lines
 python3 scripts/syncreplay/syncreplay.py untimed [--again MS] -v   # words with their times taken off, timed by the singing heard, line by line against when it's sung
+                                                                # and against untimed-main.json: lines main had right, wrong or dark now
+python3 scripts/syncreplay/syncreplay.py synthetic   # made-up lines heard a word at a time, each writing at each pace; SyntheticSingingTest holds them to a floor
 python3 scripts/notices.py check          # each licence text in Settings → About → Licenses against its source, fetched again
 node --test report/*.test.mjs             # the report Worker's tests
 python3 scripts/reports/reports.py triage --since ID   # the reports in D1, grouped; `pull` first, read-only, and they stay out of git

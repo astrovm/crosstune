@@ -90,7 +90,6 @@ import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.test.core.app.ApplicationProvider
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
@@ -112,9 +111,7 @@ import java.io.File
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.CoroutineContext
 
 /** Crosstune naming a song playing nearby itself: asking for the microphone, listening, and what it finds. */
 @RunWith(RobolectricTestRunner::class)
@@ -957,24 +954,6 @@ class ListeningTest {
     @Test
     fun aJapaneseSongKeptOfflineHasItsNameGoToUtaTenWithItsWordsShownInLatinLetters() {
         assertTrue(utaTenAsked(readings = false, romaji = false, wordsAs = WordsAs.LATIN, offline = true))
-    }
-
-    /** Holds what's sent away from the screen, once [held], until let go. */
-    private class Gate : CoroutineDispatcher() {
-        @Volatile
-        var held = false
-        val queued = LinkedBlockingQueue<Runnable>()
-
-        override fun isDispatchNeeded(context: CoroutineContext) = held
-
-        override fun dispatch(context: CoroutineContext, block: Runnable) {
-            if (held) queued += block else block.run()
-        }
-
-        fun letGo() {
-            held = false
-            generateSequence { queued.poll() }.forEach { it.run() }
-        }
     }
 
     /**
