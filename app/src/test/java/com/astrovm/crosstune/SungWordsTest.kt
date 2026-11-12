@@ -173,29 +173,6 @@ class SungWordsTest {
     }
 
     @Test
-    fun aWordHeardInUnspacedWritingIsSungALetterAtATime() {
-        // Timed word by word, three letters a word, sung at an even pace: each letter a syllable, as long as a few of ours.
-        val letterMs = SpokenWords.sungLetters("夜") * SungTiming.LETTER_MS
-        fun line(atMs: Long, vararg words: String) = LyricLine(atMs, words.joinToString(""), words.mapIndexed { at, word -> TimedWord(atMs + at * 3 * letterMs, word) })
-        val lines = listOf(line(1_000, "夜の海", "を歩く", "君と僕"), line(4_000, "朝の光", "が見え", "る空へ"), line(7_000, "花が咲", "く春風", "に乗る"))
-        // Each line heard as one word, half a second later than it's timed: its later words are later in it, not where it starts.
-        val sung = Sung(0, lines.map { HeardWord(it.text, it.timeMs + 500 + SungAlignment.HEARD_LATE_MS) })
-        assertEquals(500L, SungAlignment.shiftMs(sung, fromTheStart, lines))
-        assertEquals(mapOf(0 to 1_500L, 1 to 4_500L, 2 to 7_500L), SungAlignment.linesMs(sung, fromTheStart, lines, 500))
-    }
-
-    @Test
-    fun eachLetterOfAWordTimedInUnspacedWritingTellsWhereItsLineIsSung() {
-        // Timed word by word, a word a line, five letters each.
-        val lines = listOf("夜の海を歩", "朝の光が見", "花が咲く春").mapIndexed { at, word -> (1_000L + at * 3_000L).let { LyricLine(it, word, listOf(TimedWord(it, word))) } }
-        // Each heard half a second after it's timed, but the second line 800 ms after: sung on its own time.
-        val late = listOf(500L, 800L, 500L)
-        val sung = Sung(0, lines.mapIndexed { at, line -> HeardWord(line.text, line.timeMs + late[at] + SungAlignment.HEARD_LATE_MS) })
-        assertEquals(500L, SungAlignment.shiftMs(sung, fromTheStart, lines))
-        assertEquals(mapOf(0 to 1_500L, 1 to 4_800L, 2 to 7_500L), SungAlignment.linesMs(sung, fromTheStart, lines, 500))
-    }
-
-    @Test
     fun aLineOpeningWithSomethingNotSungIsTimedByItsFirstWordSung() {
         val written = song.map { it.copy(text = "♪ - " + it.text) }
         assertEquals(-400L, SungAlignment.shiftMs(heard(song, -400), fromTheStart, written))

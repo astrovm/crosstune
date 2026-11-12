@@ -285,7 +285,7 @@ SUNG_LETTER_S = 0.07
 
 def heard_pieces(word, start):
     """[word]'s pieces heard from [start] s, each with when it starts: a letter of unspaced writing a little after
-    the one before, as the app has them (SpokenWords.heardFrom). Whisper can hear a line's first letters inside
+    the one before, as the app has them for untimed words (SpokenWords.heardFrom). Whisper can hear a line's first letters inside
     the word before, and all at its start, the line would start early."""
     heard, before = [], 0
     for piece in pieces(word):

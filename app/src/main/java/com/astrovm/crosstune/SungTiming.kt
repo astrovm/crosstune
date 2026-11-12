@@ -24,10 +24,7 @@ internal object SpokenWords {
      * How many letters [piece] takes to sing, each about [SungTiming.LETTER_MS]: a letter of unspaced writing is a
      * whole syllable, or a word, and takes as long as [UNSPACED_LETTERS] of ours.
      */
-    fun sungLetters(piece: String): Int = if (isUnspaced(piece)) UNSPACED_LETTERS else piece.length
-
-    /** Whether [piece] is a letter of writing with no spaces between its words, as Japanese. */
-    fun isUnspaced(piece: String) = unspaced.matches(piece)
+    fun sungLetters(piece: String): Int = if (unspaced.matches(piece)) UNSPACED_LETTERS else piece.length
 
     /** Picked on the songs heard, as scripts/syncreplay/measurements.md has it: a Japanese letter, as whisper hears it, is near 300 ms. */
     private const val UNSPACED_LETTERS = 4

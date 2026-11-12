@@ -268,7 +268,7 @@ internal object SungAlignment {
      * moment of [sung], by the clock the words follow.
      */
     fun shiftMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>): Long? {
-        val heard = heardIn(sung, songAt)
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) } }
         if (heard.isEmpty()) return null
         return near(heard, lines)?.first ?: far(heard, lines)
     }
@@ -282,7 +282,7 @@ internal object SungAlignment {
      * told where it starts, stays [shiftMs] off.
      */
     fun linesMs(sung: Sung, songAt: (Long) -> Long, lines: List<LyricLine>, shiftMs: Long): Map<Int, Long> {
-        val heard = heardIn(sung, songAt).map { (piece, ms) -> piece to ms - HEARD_LATE_MS }
+        val heard = sung.words.flatMap { word -> pieces(word.text).map { it to songAt(sung.startedAtMs + word.atMs) - HEARD_LATE_MS } }
         if (heard.isEmpty()) return emptyMap()
         val from = heard.first().second - LINE_OFF_MS
         val to = heard.last().second + LINE_OFF_MS
@@ -301,9 +301,6 @@ internal object SungAlignment {
             if (abs(off) > LINE_OFF_MS) null else line to lines[line].timeMs + shiftMs + if (abs(off) >= OWN_LINE_MS) off else 0L
         }.toMap()
     }
-
-    /** The pieces of the words in [sung], each with where in the song it's heard, by [songAt]. */
-    private fun heardIn(sung: Sung, songAt: (Long) -> Long) = sung.words.flatMap { word -> SpokenWords.heardFrom(word.text, songAt(sung.startedAtMs + word.atMs)) }
 
     /** A distinct phrase supplies enough content without waiting for several sparse lines. */
     fun canPlaceAlone(line: LyricLine, lines: List<LyricLine>) = distinctLine(pieces(line.text), line, lines)
@@ -396,23 +393,19 @@ internal object SungAlignment {
     private class Word(val text: String, val ms: Long?, val guessMs: Long, val line: Int)
 
     /**
-     * A line's words, each with when it's sung: every one timed word by word, each letter of one written
-     * with no spaces a letter after the one before, as it's heard; or else its first, as the line starts
-     * with it. Its first that's sung, so a line opening with "♪" or "-" keeps its time. The rest are
-     * guessed by their letters, the line sung over most of the time until [nextMs].
+     * A line's words, each with when it's sung: every one timed word by word, or else its first, as
+     * the line starts with it. Its first that's sung, so a line opening with "♪" or "-" keeps its time.
+     * The rest are guessed by their letters, the line sung over most of the time until [nextMs].
      */
     private fun wordsOf(line: LyricLine, nextMs: Long?, index: Int): List<Word> {
-        val words = if (line.words.isNotEmpty()) {
-            // A word of ours after the first in a timed word, as "me" in "let me ", has no time of its own: it's guessed.
-            line.words.flatMap { word -> SpokenWords.heardFrom(word.text, word.timeMs).mapIndexed { at, (text, ms) -> text to ms.takeIf { at == 0 || SpokenWords.isUnspaced(text) } } }
-        } else {
-            pieces(line.text).mapIndexed { at, text -> text to line.timeMs.takeIf { at == 0 } }
+        val words = line.words.ifEmpty { listOf(TimedWord(line.timeMs, line.text)) }.flatMap { word ->
+            pieces(word.text).mapIndexed { at, text -> text to word.timeMs.takeIf { at == 0 } }
         }
-        val letters = words.sumOf { SpokenWords.sungLetters(it.first) }
+        val letters = words.sumOf { it.first.length }
         val sungFor = (nextMs ?: (line.timeMs + LAST_LINE_MS)) - line.timeMs
         var before = 0
         return words.map { (text, ms) ->
-            Word(text, ms, ms ?: (line.timeMs + sungFor * before * 4 / 5 / letters), index).also { before += SpokenWords.sungLetters(text) }
+            Word(text, ms, ms ?: (line.timeMs + sungFor * before * 4 / 5 / letters), index).also { before += text.length }
         }
     }
 
