@@ -5,9 +5,9 @@
 #
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest
 # of $HOME. Git comes from the image (eclipse-temurin:25-jdk plus Git), so whisper.cpp can read its
-# commit on Linux and on a Mac. Builds wait in line for a slot, first come first served, and say how many
-# are ahead: waiting is normal, not a hang. Each slot keeps its Gradle home, so a new worktree
-# downloads nothing again.
+# commit on Linux and on a Mac. Builds wait in line for memory, first come first served, and say how many
+# are ahead: waiting is normal, not a hang. Each build takes a slot, which keeps its Gradle home, so a
+# new worktree downloads nothing again.
 #
 # The first build to succeed keeps its downloads in seed/, which every later build reads, read-only,
 # through Gradle's GRADLE_RO_DEP_CACHE, so a slot starting empty downloads only what's new since. To
@@ -16,9 +16,11 @@
 #
 # GRADLE_BOX_MEMORY is each build's limit in GiB, 16 by default: :app:ci holds about 13 at its peak,
 # between Gradle, the Kotlin compiler and, from 12 GiB, two test processes side by side, and at 8 or 12
-# one of them gets killed. As many run at once as fit in three quarters of the RAM, and at least one.
-# GRADLE_BOX_SLOTS can lower that, never raise it: every checkout shares the machine, so one asking for
-# more slots than fit would run builds side by side that run it out of memory.
+# one of them gets killed. A few test classes (--tests) hold up to 6, so 7 is enough for them. Builds
+# run side by side while what they ask for, added up, fits in three quarters of the RAM, and one
+# always runs: three that ask for 7 run beside each other where one that asks for 16 runs alone. Each
+# gets the share of the CPUs that its memory is of that. GRADLE_BOX_SLOTS can lower how many run at
+# once, never raise it: every checkout shares the machine, so more than fit would run it out of memory.
 #
 # A machine out of memory stalls a build so long that a test times out and looks broken (Issue #852).
 # So a build waits to start while every task on the machine waited on memory for more than
@@ -34,7 +36,8 @@
 # not the Mac's. A box asking for more than is there gets what is there, and is told. Nothing here needs
 # GNU's tools or a newer bash than the Mac's own: locks are taken through python3, which is needed anyway.
 #
-# Idle slot homes are evicted oldest first above 10 GiB (GRADLE_BOX_CACHE_BYTES overrides it).
+# Idle slot homes are evicted oldest first above 40 GiB (GRADLE_BOX_CACHE_BYTES overrides it): a home
+# is about 6, and a build in a new one starts cold.
 # Running slots and the shared seed stay intact, even if they alone exceed the target.
 # A new seed is made only when the cache and its copy fit; its contents are then read-only.
 # An older seed or a lowered limit can still leave the cache over target.
@@ -113,11 +116,16 @@ else
         ((memory >= 1)) || memory=1
     fi
 fi
-fit=$((ram * 3 / 4 / memory))
-slots=${GRADLE_BOX_SLOTS:-$fit}
-((slots <= fit)) || slots=$fit
+# What every build together may ask for. One that asks for more than that still runs, alone.
+budget=$((ram * 3 / 4))
+((budget >= memory)) || budget=$memory
+# No more builds than fit at 1 GiB each, however small they ask.
+slots=${GRADLE_BOX_SLOTS:-$budget}
+((slots <= budget)) || slots=$budget
 ((slots >= 1)) || slots=1
-cpus=$((cores / slots))
+cpus=$((cores * memory / budget))
+# With the builds at once held to fewer than fit, each has the room of those that don't run.
+((cpus >= cores / slots)) || cpus=$((cores / slots))
 ((cpus >= 1)) || cpus=1
 # A fraction, like 0.5, is fine: podman takes it as a share of one CPU.
 if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpus" 'BEGIN { exit !(want > 0 && want < have) }'; then
@@ -125,22 +133,29 @@ if [[ -n ${GRADLE_BOX_CPUS:-} ]] && awk -v want="$GRADLE_BOX_CPUS" -v have="$cpu
 fi
 
 # A ticket's name sorts by when it asked and ends in who asked, so one left by a killed build can go.
+# In it is the memory it asked for. Written apart and moved in, so nobody reads it half written.
 mkdir -p "$state/queue"
 ticket=$state/queue/$(date +%s%N).$$
-touch "$ticket"
+echo "$memory" > "$state/ticket.$$"
+mv "$state/ticket.$$" "$ticket"
 trap 'rm -f "$ticket"' EXIT
 
+# How many asked before this build and aren't done, and the memory they asked for, added up. A ticket
+# with nothing in it is from a checkout whose script doesn't write it: that one asked for 16 or less.
 ahead_of_me() {
-    local other count=0
+    local other asked count=0 sum=0
     for other in "$state"/queue/*; do
         [[ $other == "$ticket" || $other > "$ticket" ]] && continue
         if kill -0 "${other##*.}" 2>/dev/null; then
+            asked=$(cat "$other" 2>/dev/null) || continue
+            [[ $asked =~ ^[0-9]+$ ]] || asked=16
             count=$((count + 1))
+            sum=$((sum + asked))
         else
             rm -f "$other"
         fi
     done
-    echo "$count"
+    echo "$count $sum"
 }
 
 pressure=${GRADLE_BOX_PRESSURE:-/proc/pressure/memory}
@@ -170,12 +185,14 @@ take_a_slot() {
 
 said=
 while :; do
-    ahead=$(ahead_of_me)
+    read -r ahead asked_ahead < <(ahead_of_me)
     lately=$(stalled avg10)
-    if ((ahead < slots && lately <= stall_limit)) && take_a_slot; then
+    # The first in line always fits, as nothing is ahead of it.
+    fits=$((ahead < slots && (ahead == 0 || asked_ahead + memory <= budget)))
+    if ((fits && lately <= stall_limit)) && take_a_slot; then
         break
     fi
-    if ((ahead >= slots)); then
+    if ((!fits)); then
         why="$ahead ahead of you"
     else
         why="the machine is out of memory, stalled $lately% of the last 10 s"
@@ -236,7 +253,7 @@ fi
 # Made apart and moved in whole, so no build reads half of it. A build holds this slot until it's done.
 keep_downloads() {
     [[ -d $home/caches/modules-2 && ! -e $seed ]] || return 0
-    local limit=${GRADLE_BOX_CACHE_BYTES:-10737418240} used downloads
+    local limit=${GRADLE_BOX_CACHE_BYTES:-42949672960} used downloads
     used=$(bytes "$state")
     downloads=$(bytes "$home/caches/modules-2")
     [[ ! -d $home/wrapper ]] || downloads=$((downloads + $(bytes "$home/wrapper")))
