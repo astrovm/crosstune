@@ -267,6 +267,80 @@ class GradleBoxTest(unittest.TestCase):
         self.assertIn("waiting, 1 ahead of you", output)
         self.assertTrue((self.dir / "started.second").exists())
 
+    def test_builds_run_side_by_side_while_what_they_ask_for_fits(self):
+        # 64 GiB of RAM leaves 48 for builds: two that ask for 16 fit, and a third that asks for 32 doesn't.
+        for run in ("first", "second", "third"):
+            self.hold(run)
+        first = self.start("first", "help", slots=None, GRADLE_BOX_MEMORY="16")
+        self.wait_for("started.first")
+        second = self.start("second", "help", slots=None, GRADLE_BOX_MEMORY="16")
+        self.wait_for("started.second")
+        third = self.start("third", "help", slots=None, GRADLE_BOX_MEMORY="32")
+        time.sleep(0.5)
+        self.assertFalse((self.dir / "started.third").exists())
+        self.release("first")
+        first.communicate(timeout=20)
+        self.wait_for("started.third")
+        self.release("second")
+        self.release("third")
+        second.communicate(timeout=20)
+        output, _ = third.communicate(timeout=20)
+        self.assertIn("waiting, 2 ahead of you", output)
+
+    def test_a_small_build_waits_behind_a_big_one_that_asked_first(self):
+        for run in ("first", "big", "small"):
+            self.hold(run)
+        first = self.start("first", "help", slots=None, GRADLE_BOX_MEMORY="32")
+        self.wait_for("started.first")
+        big = self.start("big", "help", slots=None, GRADLE_BOX_MEMORY="32")
+        time.sleep(0.3)
+        small = self.start("small", "help", slots=None, GRADLE_BOX_MEMORY="8")
+        time.sleep(0.5)
+        # It would fit beside the first, and then the big one would never get its turn.
+        self.assertFalse((self.dir / "started.small").exists())
+        self.assertFalse((self.dir / "started.big").exists())
+        self.release("first")
+        first.communicate(timeout=20)
+        self.wait_for("started.big")
+        self.wait_for("started.small")
+        self.release("big")
+        self.release("small")
+        big.communicate(timeout=20)
+        small.communicate(timeout=20)
+
+    def test_a_build_asking_for_more_than_the_machine_has_runs_alone(self):
+        box = self.start("a", "help", slots=None, GRADLE_BOX_MEMORY="100000")
+        box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0)
+        self.assertTrue((self.dir / "started.a").exists())
+
+    def test_a_build_gets_the_share_of_the_cpus_that_its_memory_is(self):
+        cores = os.cpu_count()
+        half = self.start("half", "help", slots=None, GRADLE_BOX_MEMORY="24")
+        half.communicate(timeout=20)
+        whole = self.start("whole", "help", slots=None, GRADLE_BOX_MEMORY="48")
+        whole.communicate(timeout=20)
+        alone = self.start("alone", "help", slots="1", GRADLE_BOX_MEMORY="24")
+        alone.communicate(timeout=20)
+        asked = [command.split() for command in self.asked()]
+        self.assertEqual([command[command.index("--cpus") + 1] for command in asked], [str(max(cores // 2, 1)), str(cores), str(cores)])
+
+    def test_a_ticket_from_an_older_script_counts_as_the_most_it_asks_for(self):
+        # An older checkout's script leaves its ticket empty. This one is held by the test itself.
+        queue = self.dir / "state" / "queue"
+        queue.mkdir(parents=True)
+        old = queue / f"1.{os.getpid()}"
+        old.touch()
+        fits = self.start("fits", "help", slots=None, GRADLE_BOX_MEMORY="32")
+        fits.communicate(timeout=20)
+        self.assertTrue((self.dir / "started.fits").exists())
+        waits = self.start("waits", "help", slots=None, GRADLE_BOX_MEMORY="33")
+        time.sleep(0.5)
+        self.assertFalse((self.dir / "started.waits").exists())
+        old.unlink()
+        waits.communicate(timeout=20)
+        self.assertTrue((self.dir / "started.waits").exists())
+
     def test_waits_to_start_while_the_machine_is_out_of_memory(self):
         self.stall(lately=40, total_s=0)
         box = self.start("a", "help")
