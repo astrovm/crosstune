@@ -620,6 +620,7 @@ class Golden(unittest.TestCase):
             ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "|omoide", "", "both"),
             ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "a|b|c", "", "both"),
             ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "", "思い=おもい", "both"),
+            ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "", "想い出=おもいで", "both"),
             ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "", "思い出=おもいて", "both"),
             ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "", "both"),
             ("#思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "", "", "both"),
@@ -633,6 +634,9 @@ class Golden(unittest.TestCase):
         ]:
             with self.assertRaises(SystemExit, msg=bad):
                 golden.check_fields(bad)
+        # Rows sort by every field, the dictionary last, so a remake writes the same file.
+        rows = [("甲", "甲", "", "こう", "甲=こう", "", "", "unidic"), ("甲", "甲", "", "こう", "甲=こう", "", "", "ipadic")]
+        self.assertEqual(rows[::-1], sorted(rows, key=golden.row_sort_key))
         self.assertTrue(golden.writable("思い出", "思=おも|い|出=で"))
         self.assertFalse(golden.writable("思=出", "思=おも|=|出=で"))
         self.assertFalse(golden.writable("思い出", "思=おも\n|い|出=で"))

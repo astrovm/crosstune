@@ -220,6 +220,8 @@ class Changes(unittest.TestCase):
         words = [["夢を見", "ゆめをみ", "", ""], ["を", None, "o", "wo"], ["見た", "けんた", "", ""], ["空", "そら", "", ""]]
         self.assertEqual({}, wholelines.right_words(LINE, [["夢を見た", "ゆめをみた"]], rights, words[:1]))
         self.assertEqual({}, wholelines.right_words(LINE, RIGHT, rights, words[1:]))
+        # A word that starts where a part does but ends inside one: what it reads is not the parts' to say.
+        self.assertEqual({}, wholelines.right_words(LINE, [["夢", "ゆめ"], ["を見", "をみ"], ["た", None]], rights, [["夢を", "ゆめ", "", ""]]))
         # A kanji read wrong locks no word over it.
         self.assertEqual({(2, 4): WORDS[2]}, wholelines.right_words(LINE, WRONG, wholelines.right_units(LINE, TRUTH, WRONG), WORDS))
 
