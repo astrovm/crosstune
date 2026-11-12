@@ -1907,11 +1907,23 @@ internal class MainViewModel(
 
     private var nextJob: Job? = null
 
-    /** A song with no words found, still to be heard for a voice: whether it's taken for an instrumental, and the whiles heard so far. */
-    private data class Unsung(val song: MusicMetadata, val likelyInstrumental: Boolean, val tries: Int = 0)
+    /**
+     * A song with no words shown, still to be heard for a voice: whether it's taken for an instrumental, and the whiles heard
+     * so far. Words found for it that LRCLIB's marks or its title say no one sings are [held], [final] or still to be timed better.
+     */
+    private data class Unsung(
+        val song: MusicMetadata,
+        val likelyInstrumental: Boolean,
+        val tries: Int = 0,
+        val held: LyricsFinder.Lyrics.Found? = null,
+        val final: Boolean = true
+    )
 
     private var unsung: Unsung? = null
     private var voiceJob: Job? = null
+
+    /** Shows held words if no listen settles them in the time one takes: see [HELD_MS]. */
+    private var heldJob: Job? = null
 
     /** Hearing the words sung, to line them up, or to time them; [singingTries] since the app's clock last started or jumped. */
     private var singingJob: Job? = null
@@ -1996,6 +2008,8 @@ internal class MainViewModel(
         found = null
         heardStretches = emptyList()
         unsung = null
+        voiceJob?.cancel()
+        heldJob?.cancel()
         restored = null
         syncPoints = emptyList()
         wordsPace = 1.0
@@ -2012,35 +2026,15 @@ internal class MainViewModel(
                 try {
                     // A lookup that failed says so, rather than claiming the song has no words. The words
                     // show as soon as they're found, and their timing may get better after.
-                    first = lookingAhead.remove(RecordingKey.of(song))?.await() ?: finder.firstLook(song)
-                    when (val answer = first.lyrics) {
-                        is LyricsFinder.Lyrics.Found -> {
-                            foundLines = answer.lines
-                            found = answer
-                            syncPoints = syncStore.load(song, answer.lines)
-                            wordsPace = syncStore.pace(song, answer.lines)
-                            uiState = uiState.copy(
-                                lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints, pace), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
-                                lyricsOffTake = timedForAnother(song)
-                            )
-                            uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
-                            // Words with no timing, heard sung before, are timed as they were heard.
-                            if (answer.lines.isEmpty()) {
-                                heardStretches = heardUntimed?.let { HeardSongs(it).load(song, answer.words) }.orEmpty()
-                                timeByEar(song)
-                            }
-                            followSavedLines(song)
-                            timeSavedLines(song)
-                            learn()
-                            chords()
-                            // Japanese in romaji or Korean in Latin letters is written back in its own script, so it
-                            // reads like any song in it.
-                            if (usesChatGpt()) romanizedScript(answer.words)?.let { writeInOwnScript(song, it) }
-                        }
+                    val look = lookingAhead.remove(RecordingKey.of(song))?.await() ?: finder.firstLook(song)
+                    first = look
+                    when (val answer = look.lyrics) {
+                        is LyricsFinder.Lyrics.Found -> if (answer.markedInstrumental) held(song, answer, look.final) else showWords(song, answer)
                         // No words were shown while looking, so there's none to clear.
                         LyricsFinder.Lyrics.None -> noWordsFound(song, likelyInstrumental = false)
                         // Having no words is what an instrumental is, not a problem.
                         LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyricsInstrumental = true)
+                        // Taken for an instrumental by its genre, which can be wrong: heard for a voice first.
                         LyricsFinder.Lyrics.LikelyInstrumental -> {
                             uiState = uiState.copy(lyricsInstrumental = true)
                             noWordsFound(song, likelyInstrumental = true)
@@ -2052,14 +2046,45 @@ internal class MainViewModel(
                 }
                 follow(song)
                 first.takeIf { !it.final }?.let { retime(song, it.lyrics) }
-                // Not timed even after looking further. A cover's words taken from the original are untimed as
-                // they should be, as it's sung in its own time.
-                if (found?.lines?.isEmpty() == true && found?.ofTheOriginal != true) problemFound(SongProblem.NO_TIMING)
+                reportUntimed()
             }
         }
         watchNext(song)
         // A song Crosstune just heard is still playing nearby, so it keeps listening, to stay in time with it.
         if (heardSong?.let { sameSong(it, song) } == true) listenAlong()
+    }
+
+    /** [answer], the words found for [song], shown. */
+    private suspend fun showWords(song: MusicMetadata, answer: LyricsFinder.Lyrics.Found) {
+        foundLines = answer.lines
+        found = answer
+        syncPoints = syncStore.load(song, answer.lines)
+        wordsPace = syncStore.pace(song, answer.lines)
+        uiState = uiState.copy(
+            lyrics = answer.words, lyricLines = LyricsSync.adjust(answer.lines, syncPoints, pace), lyricsSynced = syncPoints.isNotEmpty(), lyricsFailed = false,
+            lyricsInstrumental = false, lyricsOffTake = timedForAnother(song)
+        )
+        uiState = uiState.copy(learning = uiState.learning.fresh(Readings.displayScriptOf(wordLines())))
+        // Words with no timing, heard sung before, are timed as they were heard.
+        if (answer.lines.isEmpty()) {
+            heardStretches = heardUntimed?.let { HeardSongs(it).load(song, answer.words) }.orEmpty()
+            timeByEar(song)
+        }
+        followSavedLines(song)
+        timeSavedLines(song)
+        learn()
+        chords()
+        // Japanese in romaji or Korean in Latin letters is written back in its own script, so it
+        // reads like any song in it.
+        if (usesChatGpt()) romanizedScript(answer.words)?.let { writeInOwnScript(song, it) }
+    }
+
+    /**
+     * The words shown not timed even after looking further. A cover's words taken from the original are untimed as
+     * they should be, as it's sung in its own time.
+     */
+    private fun reportUntimed() {
+        if (found?.lines?.isEmpty() == true && found?.ofTheOriginal != true) problemFound(SongProblem.NO_TIMING)
     }
 
     /**
@@ -2145,13 +2170,18 @@ internal class MainViewModel(
      * of the song; kept as they are when they're put in time by hand meanwhile.
      */
     private suspend fun retime(song: MusicMetadata, found: LyricsFinder.Lyrics) {
+        // Words held while a voice is listened for aren't shown yet: they're timed once they are.
+        if (found !is LyricsFinder.Lyrics.Found || (found.markedInstrumental && found !== this.found)) return
         val better = lyricsFinder?.retimed(song, found) as? LyricsFinder.Lyrics.Found ?: return
-        if (found !is LyricsFinder.Lyrics.Found || better.lines == found.lines || uiState.lyricsFor?.let { sameSong(it, song) } != true || syncPoints.isNotEmpty() || handGap != null) return
+        if (better.lines == found.lines || !mayRetime(song)) return
         foundLines = better.lines
         this.found = better
         uiState = uiState.copy(lyricLines = better.lines, lyricsTimedByEar = false, lyricsOffTake = timedForAnother(song))
         followSavedLines(song)
     }
+
+    /** Whether [song]'s words may still be timed anew: they're still shown, and no one has put them in time by hand. */
+    private fun mayRetime(song: MusicMetadata) = uiState.lyricsFor?.let { sameSong(it, song) } == true && syncPoints.isEmpty() && handGap == null
 
     private fun sameSong(one: MusicMetadata, other: MusicMetadata) =
         SongNames.titleNames(one.title).any { title -> SongNames.titleNames(other.title).any { SongNames.same(title, it) } } && SongNames.sameArtist(one.artist, other.artist) &&
@@ -2583,6 +2613,66 @@ internal class MainViewModel(
     }
 
     /**
+     * Whether a listen for a voice in [song] can start: the microphone's allowed, Crosstune is in sight and not naming a
+     * song, and a music app on this phone plays it now. Asked of the apps, as the words come before the song's followed,
+     * while what's followed is still the song before. A song heard from another device, or in an app Crosstune can't
+     * see, can't be listened to.
+     */
+    private suspend fun listenCanStart(song: MusicMetadata): Boolean {
+        if (singing == null || !mayCalibrate()) return false
+        // Naming a song has the microphone, and out of sight, nothing's heard.
+        if (shazamLeads || nextPaused) return false
+        val source = playback?.takeIf { it.hasAccess() } ?: return false
+        val following = withTimeoutOrNull(APP_ASKED_MS) { source.follow(song).first() }
+        return following?.let { it.app != null && it.clock.playing } == true
+    }
+
+    /**
+     * [words] found for [song], [final] or still to be timed better, that LRCLIB's marks or its title say no one sings
+     * (Issue #861): hidden while a voice is listened for, and kept hidden only as [hidesHeldWords] says. Where no listen can
+     * start they show at once, and with nothing settled in the time a listen takes, they show then.
+     */
+    private suspend fun held(song: MusicMetadata, words: LyricsFinder.Lyrics.Found, final: Boolean) {
+        val waiting = Unsung(song, likelyInstrumental = true, held = words, final = final)
+        if (!listenCanStart(song)) {
+            settle(waiting, Listen.NOT_STARTED)
+            return
+        }
+        TimingLog.note("LRCLIB or the title says no one sings in it: a voice is listened for before its words show")
+        uiState = uiState.copy(lyricsInstrumental = true)
+        unsung = waiting
+        heldJob = viewModelScope.launch {
+            delay(HELD_MS)
+            unsung?.takeIf { it.held === words }?.let {
+                voiceJob?.cancel()
+                settleLate(it, Listen.TIMED_OUT)
+            }
+        }
+        hearVoice()
+    }
+
+    /** [heard]'s held words, by what the listen came to, [listen]: shown unless [hidesHeldWords] says. Whether they show. */
+    private suspend fun settle(heard: Unsung, listen: Listen): Boolean {
+        val words = heard.held ?: return false
+        unsung = null
+        TimingLog.note("held words, the listen: $listen")
+        if (hidesHeldWords(listen)) {
+            uiState = uiState.copy(lyricsInstrumental = true)
+            return false
+        }
+        showWords(heard.song, words)
+        return true
+    }
+
+    /** [settle], once the lookup's done: the words shown are timed better too, or said to be untimed. */
+    private suspend fun settleLate(heard: Unsung, listen: Listen) {
+        val words = heard.held ?: return
+        if (!settle(heard, listen)) return
+        if (!heard.final) retime(heard.song, words)
+        reportUntimed()
+    }
+
+    /**
      * Hears the song with no words found for a voice, a while at a time, [VOICE_TRIES] whiles apart
      * through it, as the speech model misses one in four. Heard sung, it has words no one has, which is
      * a problem found; heard nothing sung all along, it has none to find. Only while the music app on the
@@ -2598,15 +2688,36 @@ internal class MainViewModel(
                 if (heard.tries > 0) delay(VOICE_PAUSE_MS)
                 val sung = hearing.hear(null, null)
                 TimingLog.note("voice while ${heard.tries + 1}: ${if (sung == null) "nothing heard, model missing ${hearing.missesModel}, no sound ${hearing.heardNoSound}" else "sings ${sung.sings}"}")
+                // Stopped: heard again once it plays, or, for held words, shown if it isn't in time.
                 if (unsung !== heard || uiState.following?.clock?.playing != true) return@launch
-                // Without the speech model, or with no sound to hear, as from a phone turned all the way down, nothing can be heard, so it's as if it couldn't be.
-                val couldNotHear = sung == null && (hearing.missesModel || hearing.heardNoSound)
-                if (sung?.sings == true || couldNotHear) return@launch voiceHeard(heard, sung != null)
+                voiceIn(hearing, sung, held = heard.held != null)?.let { return@launch heardOut(heard, it) }
                 heard = heard.copy(tries = heard.tries + 1)
                 unsung = heard
             }
-            unsung = null
+            heardOut(heard, Listen.NO_VOICE)
         }
+    }
+
+    /**
+     * What a while heard, [sung], says of a voice in the song: null while it may still be music alone. Without the speech
+     * model, or with no sound to hear, as from a phone turned all the way down, nothing can be heard, so it's as if it
+     * couldn't be; for [held] words, so is any while heard with nothing in it, as only sound heard can say no one sings.
+     */
+    private fun voiceIn(hearing: SingingHearing, sung: Sung?, held: Boolean): Listen? = when {
+        sung?.sings == true -> Listen.VOICE
+        sung != null -> null
+        held || hearing.missesModel || hearing.heardNoSound -> Listen.FAILED
+        else -> null
+    }
+
+    /** The listen for a voice in [heard] came to [listen]: its held words settled, or its missing words a problem, as they always were. */
+    private suspend fun heardOut(heard: Unsung, listen: Listen) {
+        if (heard.held != null) {
+            heldJob?.cancel()
+            return settleLate(heard, listen)
+        }
+        unsung = null
+        if (listen != Listen.NO_VOICE) voiceHeard(heard, sung = listen == Listen.VOICE)
     }
 
     /** Whether [song], with no words found, may be heard for a voice now: shown, played by a music app on the phone, Crosstune in sight. */
@@ -2618,7 +2729,6 @@ internal class MainViewModel(
 
     /** [heard] was heard sung, or [sung] false, couldn't be heard at all: its missing words are a problem, as they always were. */
     private fun voiceHeard(heard: Unsung, sung: Boolean) {
-        unsung = null
         if (sung && heard.likelyInstrumental) uiState = uiState.copy(lyricsInstrumental = false)
         if (sung || !heard.likelyInstrumental) problemFound(SongProblem.NO_LYRICS)
     }
@@ -3594,6 +3704,9 @@ internal class MainViewModel(
 
     fun dismissLyrics() {
         heardSong = null
+        // Words held for a listen are closed with the rest: nothing shows them, or looks them up, once they're gone.
+        heldJob?.cancel()
+        unsung = null
         leaveWords()
         keepShown()
         lyricsJob?.cancel()
@@ -5076,6 +5189,15 @@ internal class MainViewModel(
 
         /** The pause between them, so they're heard across the song, a verse apart, rather than all in its intro. */
         const val VOICE_PAUSE_MS = 20_000L
+
+        /**
+         * How long words held for a listen wait for it to settle them before they show: the time one listen takes,
+         * [VOICE_TRIES] whiles heard [VOICE_PAUSE_MS] apart, and a while more for the speech model to hear the last.
+         */
+        const val HELD_MS = (VOICE_TRIES + 1) * SingingListener.SECONDS * 1_000L + (VOICE_TRIES - 1) * VOICE_PAUSE_MS
+
+        /** How long the music apps are asked whether one plays a song before a listen for a voice in it starts: they say at once. */
+        const val APP_ASKED_MS = 1_000L
 
         /** Times the singing is heard for a song, at most, while too few words heard match its words to tell. */
         const val SINGING_TRIES = 3
