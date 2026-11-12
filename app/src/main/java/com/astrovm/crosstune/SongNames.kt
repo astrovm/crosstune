@@ -89,18 +89,24 @@ internal object SongNames {
 
     /**
      * Letters and digits only, no marks, no case and no width: "Édition", "Edition" and "Ｅｄｉｔｉｏｎ" are one word, and
-     * "ｶﾗｵｹ" is "カラオケ".
+     * "ｶﾗｵｹ" is "カラオケ". Symbols stay no letters, so "Song™" is "Song".
      */
-    fun normalize(text: String): String = folded(text, Normalizer.Form.NFKD)
+    fun normalize(text: String): String = folded(widthsFolded(text))
 
     /**
      * [text] as what's kept for a song is found by: as [normalize], but with widths as written, as it was before
      * it folded them, so timing, lengths and reports kept under a name in full-width letters are still found.
      */
-    fun keyOf(text: String): String = folded(text, Normalizer.Form.NFD)
+    fun keyOf(text: String): String = folded(text)
 
-    private fun folded(text: String, form: Normalizer.Form): String =
-        Normalizer.normalize(text, form).replace(marks, "").lowercase(Locale.ROOT).replace(lettersAndDigits, "")
+    private fun folded(text: String): String =
+        Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT).replace(lettersAndDigits, "")
+
+    /** Full-width letters and half-width kana as their usual width, and nothing else: NFKC on all of it makes "™" "tm". */
+    private fun widthsFolded(text: String): String =
+        text.replace(otherWidth) { Normalizer.normalize(it.value, Normalizer.Form.NFKC) }
+
+    private val otherWidth = Regex("[\uff00-\uffef]+")
 
     /** "The" only counts as an article when it is a word of its own, so not in "Thelonious". */
     fun withoutArticle(name: String): String = name.replace(leadingArticle, "")
@@ -109,7 +115,7 @@ internal object SongNames {
     fun words(title: String): Set<String> = wordList(title).toSet()
 
     private fun wordList(title: String): List<String> =
-        Normalizer.normalize(title, Normalizer.Form.NFKD).replace(marks, "").lowercase(Locale.ROOT)
+        Normalizer.normalize(widthsFolded(title), Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
             .split(wordSplit).filter { it.isNotEmpty() }
 
     /**
@@ -131,54 +137,45 @@ internal object SongNames {
 
     /**
      * [name] says it's another version of [title] by [artist]: a cover, karaoke, live, a remix… unless
-     * the song's own name says so, "Bzrp Music Sessions" or "Little Mix".
+     * the song's own name says so, "Bzrp Music Sessions" or "Little Mix", in any script: "なごり雪 (ライブ)" is
+     * no other version of "Nagoriyuki (Live)". Nor is one on the song's own [album], "Tribute Selection".
      */
-    fun saysAnotherVersion(name: String, title: String, artist: String): Boolean {
-        val own = words(title) + words(artist)
+    fun saysAnotherVersion(name: String, title: String, artist: String, album: String = ""): Boolean {
+        val own = (words(title) + words(artist) + words(album)).flatMap { listOfNotNull(it, SHORT_FOR[it]) }.toSet()
         if ((words(name) - own).any { it in VERSION_WORDS }) return true
-        return VERSION_MARKS.any { it.foundIn(name) && !it.foundIn(title) && !it.foundIn(artist) }
+        return VERSION_MARKS.any { it.foundIn(name) && !it.foundIn(title) && !it.foundIn(artist) && it.means.none(own::contains) }
     }
 
     /**
-     * A mark, as another script writes it, "カラオケ" or "tvサイズ", found in a name where it's a word of its own: not
-     * inside a longer one in its script, as インスト is in インストール, or "tv size" in "ATV Sizes". Compared composed,
-     * so ライブ is never ライフ and one Hangul syllable never part of another, and with widths folded, "ＴＶサイズ".
-     * What's between its letters doesn't count, "オフ・ヴォーカル" or "TV-size". Chinese puts no space between its
-     * words, so a mark's Han letters are found next to any.
+     * A mark, as another script writes it, "カラオケ" or "tvサイズ", and the [means] it has in Latin letters. Japanese,
+     * Korean and Chinese put words together with no space, "カラオケバージョン" or "피아노커버", so a mark is found
+     * anywhere in a name, but for in a longer word that only holds it, as ドライブ holds ライブ: see [HOLD_A_MARK].
+     * One in Latin letters only is a word of its own, so "tv size" isn't in "ATV Sizes". Compared composed, so
+     * ライブ is never ライフ and one Hangul syllable never part of another, and with widths folded, "ＴＶサイズ".
+     * What's between its letters doesn't count, "オフ・ヴォーカル" or "TV-size".
      */
-    private class Mark(written: String) {
+    private class Mark(written: String, vararg val means: String) {
         private val letters = composed(written).filter(Char::isLetterOrDigit)
         private val pattern = Regex(letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*"""))
 
-        // Its edges are looked at on each name, not built into the pattern: marks are made once, as the app starts.
+        // Whether it's a word is looked at on each name, not as it's made: marks are made once, as the app starts.
         fun foundIn(name: String): Boolean {
-            val text = composed(name)
-            return pattern.findAll(text).any { !goesOn(letters.first(), text.getOrNull(it.range.first - 1)) && !goesOn(letters.last(), text.getOrNull(it.range.last + 1)) }
+            val text = composed(name).replace(HOLD_A_MARK, " ")
+            val aWord = letters.all { scriptOf(it) == Character.UnicodeScript.LATIN }
+            return pattern.findAll(text).any { !aWord || !goesOn(text.getOrNull(it.range.first - 1)) && !goesOn(text.getOrNull(it.range.last + 1)) }
         }
 
         companion object {
-            /** "ー", as in メドレー: NFKC makes the half-width one this too. */
-            private const val LONG_VOWEL = '\u30fc'
-
             private fun composed(text: String) = Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase(Locale.ROOT)
 
-            /**
-             * Whether [next], beside a mark's [edge] letter, is more of the same word, so the mark is inside a longer one.
-             * A mark over a letter, one NFKC can't put together with it, is part of that letter. Latin words go on in
-             * Latin letters and digits. Japanese has no spaces: a katakana word goes on in katakana, and a hiragana
-             * particle, like の, ends it. Chinese has no spaces either, and nothing tells where a word ends.
-             */
-            private fun goesOn(edge: Char, next: Char?): Boolean = next != null && (
-                next.category == CharCategory.NON_SPACING_MARK || when (val script = scriptOf(edge)) {
-                    Character.UnicodeScript.LATIN -> scriptOf(next) == script || next.isDigit()
-                    Character.UnicodeScript.HAN -> false
-                    else -> scriptOf(next) == script
-                }
-            )
+            /** Longer words that hold a mark and are another word: install, drive, library, discover, recover, coverage, accompanist. */
+            private val HOLD_A_MARK = Regex("インストール|ドライブ|ライブラリ|ディスカバー|リカバー|드라이브|라이브러리|디스커버|커버리지|반주자")
 
-            /** The long vowel mark is written with katakana, though Unicode puts it in every script. */
-            private fun scriptOf(letter: Char): Character.UnicodeScript =
-                if (letter == LONG_VOWEL) Character.UnicodeScript.KATAKANA else Character.UnicodeScript.of(letter.code)
+            /** Whether [next], beside a word in Latin letters, is more of it: a Latin letter, a digit, or a mark over the last letter. */
+            private fun goesOn(next: Char?): Boolean =
+                next != null && (scriptOf(next) == Character.UnicodeScript.LATIN || next.isDigit() || next.category == CharCategory.NON_SPACING_MARK)
+
+            private fun scriptOf(letter: Char): Character.UnicodeScript = Character.UnicodeScript.of(letter.code)
         }
     }
 
@@ -191,17 +188,25 @@ internal object SongNames {
         "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox"
     )
 
-    /** The same, as other scripts write them, each a word of its own in a title: see [Mark]. */
+    /** What a name writes short for the song's own word: "(シングルver.)" for "(Single Version)". */
+    private val SHORT_FOR = mapOf("version" to "ver", "instrumental" to "inst")
+
+    /** The same, as other scripts write them, with what they mean in Latin letters: see [Mark]. */
     private val VERSION_MARKS = listOf(
-        "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
-        "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방",
+        Mark("カラオケ", "karaoke"), Mark("ライブ", "live"), Mark("弾き語り"), Mark("歌ってみた", "cover"), Mark("演奏してみた", "cover"),
+        Mark("弾いてみた", "cover"), Mark("叩いてみた", "cover"), Mark("ピアノ", "piano"), Mark("ギター", "guitar"), Mark("カバー", "cover"),
+        Mark("メドレー", "medley"), Mark("練習", "practice"), Mark("オルゴール", "orgel", "musicbox"), Mark("アカペラ", "acapella", "cappella"),
+        Mark("アコースティック", "acoustic"), Mark("翻唱", "cover"), Mark("伴奏", "instrumental", "karaoke"), Mark("伴唱", "karaoke"),
+        Mark("卡拉ok", "karaoke"), Mark("커버", "cover"), Mark("라이브", "live"), Mark("노래방", "karaoke"),
         // Many songs in one: "(メドレー)" above, "(串烧)", "(메들리)".
-        "串烧", "串燒", "메들리",
+        Mark("串烧", "medley"), Mark("串燒", "medley"), Mark("메들리", "medley"),
         // Without the singing, or cut for TV: "(Off Vocal)", "(オフ・ヴォーカル)", "(TV Size)", "(インスト)", "(纯音乐)", "(반주)".
-        "offvocal", "tvsize", "オフボーカル", "オフヴォーカル", "インスト", "tvサイズ", "テレビサイズ", "纯音乐", "純音樂", "인스트", "반주",
+        Mark("offvocal", "instrumental", "karaoke"), Mark("tvsize"), Mark("オフボーカル", "instrumental", "karaoke"),
+        Mark("オフヴォーカル", "instrumental", "karaoke"), Mark("インスト", "inst", "instrumental"), Mark("tvサイズ"), Mark("テレビサイズ"),
+        Mark("纯音乐", "instrumental"), Mark("純音樂", "instrumental"), Mark("인스트", "inst", "instrumental"), Mark("반주", "instrumental", "karaoke"),
         // Remixed, or sung live: "(リミックス)", "(混音)", "(리믹스)", "(演唱会)".
-        "リミックス", "混音", "리믹스", "演唱会", "演唱會"
-    ).map(::Mark)
+        Mark("リミックス", "remix"), Mark("混音", "remix"), Mark("리믹스", "remix"), Mark("演唱会", "live", "concert"), Mark("演唱會", "live", "concert")
+    )
 
     /**
      * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,
@@ -229,7 +234,7 @@ internal object SongNames {
     private val SONGS_COUNTED = setOf("songs", "hits", "audios", "tracks", "canciones", "temas", "exitos", "musicas", "cancoes", "chansons", "titres", "lieder")
     private const val MIN_SONGS_COUNTED = 10
     private const val COUNTED_WITHIN = 3
-    private val MANY_SONGS_MARKS = listOf("メドレー", "串烧", "串燒", "메들리").map(::Mark)
+    private val MANY_SONGS_MARKS = listOf(Mark("メドレー"), Mark("串烧"), Mark("串燒"), Mark("메들리"))
 
     /** A whole show or album as one, in the languages its uploads are named in: "Full Concert", "(Recital Completo)". */
     private val wholeShow = Regex(
@@ -276,6 +281,18 @@ internal object SongNames {
         private val kanji: Transliterator? = runCatching { Transliterator.getInstance("Hant-Hans") }.getOrNull()
 
         fun write(name: String): String = kanji?.let { synchronized(it) { it.transliterate(name) } } ?: name
+    }
+
+    /**
+     * [one] and [other] are one name, written two ways: as Taiwan and China write it, 小幸運 and 小幸运, or in
+     * Japanese in kanji or in kana, 桜 and さくら, which read alike. Only names with kana are read, as reading
+     * takes a moment the first time.
+     */
+    fun writtenAlike(one: String, other: String): Boolean {
+        if (normalize(asChinaWrites(one)) == normalize(asChinaWrites(other))) return true
+        if ((one + other).none(Readings::isKana)) return false
+        val (first, second) = listOf(one, other).map { normalize(Readings.of(listOf(it), Script.JAPANESE).single().reading) }
+        return first == second
     }
 
     /**
