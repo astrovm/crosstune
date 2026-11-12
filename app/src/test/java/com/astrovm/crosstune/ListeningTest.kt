@@ -785,6 +785,34 @@ class ListeningTest {
         waitForDescription(string(R.string.keep_offline))
     }
 
+    @Test
+    fun aSongLrclibMarksInstrumentalKeptOfflineKeepsItsWordsAndTheirTranslation() {
+        // Review of PR #919: two of LRCLIB's copies marked instrumental and one with words, kept with Download. On main,
+        // its words, and what goes with them, are kept, and show offline.
+        MainActivity.connectionFactory = { FakeConnection() }
+        prefs().edit().putBoolean("lyrics_translation", true).commit()
+        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val marked = """{"trackName":"Demo","artistName":"Band","instrumental":true}"""
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, """[$marked,$marked,{"trackName":"Demo","artistName":"Band","syncedLyrics":"[00:00.00] Night sky\n[00:30.00] Stars"}]""")
+                else -> FakeSpotify.html(request, "{}")
+            }
+        }
+        allowMicrophone()
+        launch()
+        recognize()
+        waitForText("Demo")
+        click(string(R.string.keep_offline))
+        waitForDescription(string(R.string.kept_offline))
+        waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/lyrics.json").let { it.isFile && "Night sky" in it.readText() } }
+        assertTrue(fake.requestedUrls.any { it.startsWith(Translator.GOOGLE_URL) })
+        // Offline, with no app on the phone playing it to listen to, they show.
+        fake.handler = { request -> throw java.io.IOException("offline ${request.url.host}") }
+        click(string(R.string.lyrics_button))
+        waitForText("Night sky")
+    }
+
     /** Demo, as Spotify follows it, with its like showing whether it's [liked] there, or not saying. */
     private fun demoFollowed(liked: Boolean?) = Following(
         PlaybackClock(1_000, SystemClock.elapsedRealtime(), playing = true), "Spotify", canSeek = true,
@@ -2602,6 +2630,66 @@ class ListeningTest {
         waitForText("Demo one")
         waitUntil(TIMEOUT_MS) { hearing.listens == 2 }
         return phone
+    }
+
+    /** Hears music and no voice in whatever it's given, as an instrumental's: counts how often it's asked. */
+    private class NoVoice : SingingHearing {
+        @Volatile
+        var hears = 0
+
+        override val missesModel = false
+        override val heardNoSound = false
+
+        override suspend fun fetchModel() = true
+
+        override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung {
+            hears++
+            return Sung(0, listOf(HeardWord("[Music]", 0)))
+        }
+    }
+
+    @Test
+    fun wordsAMarkHoldsShowAtOnceForASongNoAppOnThePhonePlays() {
+        // Review of PR #919: named by Shazam as it plays on another device, or in an app Crosstune can't see, with two of
+        // LRCLIB's copies marked instrumental and one with timed words, or a title saying so. On main, the words show at once.
+        val marked = """{"trackName":"Demo","artistName":"Band","instrumental":true}"""
+        val cases = listOf(
+            Triple("another device", "Demo", FakePlayback().apply { access = true }),
+            // Without notification access, Android shows Crosstune no app's session, whatever plays.
+            Triple("app not seen", "Demo", FakePlayback().apply { access = false; playing.value = Following(PlaybackClock(2_000, SystemClock.elapsedRealtime()), "Music", canSeek = true) }),
+            Triple("title", "Demo (Instrumental)", FakePlayback().apply { access = true })
+        )
+        val realSinging = MainActivity.singingFactory
+        try {
+            for ((case, title, phone) in cases) {
+                controller?.destroyAndSettle()
+                File(app.cacheDir, "lyrics.json").delete()
+                File(app.cacheDir, "kept_words.json").delete()
+                val hearing = FakeHearing()
+                listeningAlong(hearing)
+                val copies = if (title == "Demo") "$marked,$marked," else ""
+                fake.handler = { request ->
+                    FakeSpotify.html(request, if (request.url.host == "lrclib.net") """[$copies{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]""" else "{}")
+                }
+                val singing = NoVoice()
+                MainActivity.singingFactory = { _, _ -> singing }
+                MainActivity.playbackFactory = { phone }
+                allowMicrophone()
+                launch()
+                composeRule.runOnIdle { controllerModel().listen(lyrics = true) }
+                waitUntil(TIMEOUT_MS) { hearing.listens == 1 }
+                hearing.song(title, 2.0)
+                try {
+                    waitForText("Demo one")
+                } catch (e: Throwable) {
+                    throw AssertionError(case, e)
+                }
+                assertFalse(case, described(string(R.string.lyrics_instrumental)))
+                assertEquals(case, 0, singing.hears)
+            }
+        } finally {
+            MainActivity.singingFactory = realSinging
+        }
     }
 
     /** Heard twice: the first answer opens the words, the second keeps them in time. */
