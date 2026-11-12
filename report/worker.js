@@ -98,13 +98,13 @@ const todayOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = dat
 const room = (kind) => `${heldOf(kind)} < ${SHARE_BYTES[kind]} AND ${todayOf(kind)} < ${SHARE_A_DAY[kind]}`;
 
 /**
- * Why a report of each kind is turned away, if it is: 'kept_full' or 'day_full' for its kind's share, or 'network'
- * when its network sent its day's, else null. Bound to the network's key and its number for the kind. One read
- * before anything is written, so a report turned away costs a refusal's write at most, and no count.
+ * Why a report of each kind is turned away for its kind's share, if it is: 'kept_full' or 'day_full', else null. One
+ * read before anything is written, so a report turned away costs a refusal's write at most, and no count. A
+ * network's day isn't read here: counting it (COUNT_NETWORK) is the one place that turns it away, so two reports at
+ * once can't both take its last one.
  */
 const CHECK = Object.fromEntries(KINDS.map((kind) => [kind,
-  `SELECT CASE WHEN ${heldOf(kind)} >= ${SHARE_BYTES[kind]} THEN 'kept_full' WHEN ${todayOf(kind)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' ` +
-  "WHEN coalesce((SELECT n FROM network_days WHERE key = ?1), 0) >= ?2 THEN 'network' END AS why",
+  `SELECT CASE WHEN ${heldOf(kind)} >= ${SHARE_BYTES[kind]} THEN 'kept_full' WHEN ${todayOf(kind)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' END AS why`,
 ]));
 
 /**
@@ -165,11 +165,11 @@ export default {
     const kind = kindOf(report.problem);
     const key = await networkDayKey(env.NETWORK_KEY, day, kind, networkOf(address));
     const most = NETWORK_A_DAY[kind];
-    const check = async () => (await env.DB.prepare(CHECK[kind]).bind(key, most).first())?.why;
+    const check = async () => (await env.DB.prepare(CHECK[kind]).first())?.why;
     const why = await check();
     if (why) return turnAway(env, kind, why);
     const counted = await env.DB.prepare(COUNT_NETWORK).bind(key, day, most).run();
-    // Another report from the network took its last one meanwhile.
+    // The network sent its day's, maybe with another report meanwhile.
     if (counted.meta.changes === 0) return turnAway(env, kind, "network");
     const { meta } = await env.DB.prepare(INSERT[kind]).bind(
       report.version, report.android, report.title, report.artist, report.app,

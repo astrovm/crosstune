@@ -20,15 +20,22 @@ function env({ allowed = true } = {}) {
     keys,
     NETWORK_KEY: "made-up-key",
     DB: {
-      prepare: (sql) => ({
-        bind: (...values) => ({
+      prepare: (sql) =>
+        statement((values) => ({
           run: async () => ((sql.startsWith("INSERT INTO reports ") ? saved : asked).push({ sql, values }), { meta: { changes: 1 } }),
           first: async () => (asked.push({ sql, values }), { why: null }),
-        }),
-      }),
+        })),
     },
     LIMIT: { limit: async ({ key }) => (keys.push(key), { success: allowed }) },
   };
+}
+
+/**
+ * A prepared statement as D1 gives it: it runs as it is, with no values, or bound to some. [runs] makes what runs it
+ * from the values.
+ */
+function statement(runs) {
+  return { ...runs([]), bind: (...values) => runs(values) };
 }
 
 /** A request, with what Cloudflare tells of its sender in [cf]. */
@@ -367,8 +374,8 @@ function realEnv({ slow = false } = {}) {
     statements,
     NETWORK_KEY: "made-up-key",
     DB: {
-      prepare: (sql) => ({
-        bind: (...values) => ({
+      prepare: (sql) =>
+        statement((values) => ({
           run: async () => {
             await away();
             statements.push({ sql, values });
@@ -383,8 +390,7 @@ function realEnv({ slow = false } = {}) {
             await away();
             return row;
           },
-        }),
-      }),
+        })),
     },
     LIMIT: { limit: async () => ({ success: true }) },
   };

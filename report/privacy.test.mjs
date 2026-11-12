@@ -40,8 +40,11 @@ const SAID = {
 /** The columns the Worker's insert names, as it sends them to D1. */
 async function columns() {
   let sql = "";
+  // A statement as D1 gives it: it runs as it is, or bound to values.
+  const runs = { run: async () => ({ meta: { changes: 1 } }), first: async () => ({ why: null }) };
+  const statement = { ...runs, bind: () => runs };
   const env = {
-    DB: { prepare: (text) => (text.startsWith("INSERT INTO reports (") && (sql = text), { bind: () => ({ run: async () => ({ meta: { changes: 1 } }), first: async () => ({ why: null }) }) }) },
+    DB: { prepare: (text) => (text.startsWith("INSERT INTO reports (") && (sql = text), statement) },
     LIMIT: { limit: async () => ({ success: true }) },
     NETWORK_KEY: "made-up-key",
   };
