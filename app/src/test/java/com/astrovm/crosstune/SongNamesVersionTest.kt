@@ -20,6 +20,15 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun aCoverTagMayHoldATagOfItsOwn() {
+        for (title in listOf("Song (Acoustic Cover (Live))", "Song (Cover [Acoustic])", "Song [Cover (Piano)]")) {
+            assertEquals(title, SongNames.Covered("Song", null), SongNames.coverOf(title))
+        }
+        // Whose song it is ends where that tag starts.
+        assertEquals(SongNames.Covered("Song", "Artist"), SongNames.coverOf("Song (In the Style of Artist (Live))"))
+    }
+
+    @Test
     fun aVersionSaidOtherwiseIsTheSameVersion() {
         val remix = "Twilight Bay City (Remix)"
         assertTrue(SongNames.sameVersion(remix, "Twilight Bay City (Remix)"))

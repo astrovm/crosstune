@@ -170,6 +170,12 @@ class ChordWikiTest {
     }
 
     @Test
+    fun aCreditMayNameSomeoneInBracketsOfTheirOwn() {
+        val hits = chordWikiHits("夜に駆ける （歌：YOASOBI（ヨアソビ） 作詞・作曲・編曲：Ayase） - ChordWiki\thttps://ja.chordwiki.org/wiki/yoasobi")
+        assertEquals("夜に駆ける （歌：YOASOBI（ヨアソビ） 作詞・作曲・編曲：Ayase）", chordWikiBest(hits, "夜に駆ける", "YOASOBI", "夜に駆ける")?.title)
+    }
+
+    @Test
     fun theBrowserReadsTheEditorFromBehindTheScreen() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         // Looked at through a deferred, so a lookup that never settles fails the test rather than hanging the run.

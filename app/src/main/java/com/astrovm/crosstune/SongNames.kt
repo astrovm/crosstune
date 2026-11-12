@@ -257,7 +257,7 @@ internal object SongNames {
      * Artist)". Null for a title that doesn't say so, which is the artist's own song.
      */
     fun coverOf(title: String): Covered? {
-        val tag = coverTags.firstNotNullOfOrNull { it.find(title) } ?: return null
+        val tag = coverTag.findAll(title).firstOrNull { coverWords.containsMatchIn(it.value) } ?: coverAfterDash.find(title) ?: return null
         val song = bareTitle(title.substring(0, tag.range.first)).ifEmpty { return null }
         return Covered(song, coverBy.find(tag.value)?.groupValues?.get(1)?.trim()?.ifEmpty { null })
     }
@@ -266,11 +266,14 @@ internal object SongNames {
     data class Covered(val title: String, val artist: String?)
 
     private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
-    private val coverTags = listOf(
-        Regex("""[(\[【][^(\[【)\]】]*(?:$COVER_WORDS)[^(\[【)\]】]*+[)\]】]""", RegexOption.IGNORE_CASE),
-        Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
-    )
-    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val coverWords = Regex("""(?:$COVER_WORDS)""", RegexOption.IGNORE_CASE)
+
+    /** A tag in brackets, which may hold one of its own, "(Acoustic Cover (Live))". Its words are looked for in it after. */
+    private val coverTag = Regex("""[(\[【](?:[^(\[【)\]】]++|[(\[【][^(\[【)\]】]*+[)\]】])*+[)\]】]""")
+    private val coverAfterDash = Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
+
+    /** Whose song it is, up to the end of the tag or the start of one inside it, "(In the Style of Artist (Live))". */
+    private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^(\[【)\]】]+)""", RegexOption.IGNORE_CASE)
 
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {

@@ -1017,6 +1017,8 @@ class ExactMatcherTest {
         // Someone else's of another length is another recording; the artist's own may be a longer video.
         assertNull(finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta", "Fan • 1K views • 4:30", videoId = "long0000000")))
         assertEquals("https://music.youtube.com/watch?v=own00000000", finds(youTubeMusicRow("終わらない歌 (Official Video)", "THE BLUE HEARTS Official • 1M views • 4:30", videoId = "own00000000")))
+        // What's in brackets may be in brackets of its own.
+        assertEquals("https://music.youtube.com/watch?v=nested00000", finds(youTubeMusicRow("The Blue Hearts - Owaranai Uta (An Endless Song (1987))", "Fan • 1K views • 3:04", videoId = "nested00000")))
         // Not naming the artist, or saying more than the song outside brackets, is no match.
         assertNull(finds(youTubeMusicRow("Owaranai Uta with lyrics", "Fan • 1K views • 3:04", videoId = "noartist000")))
         assertNull(finds(youTubeMusicRow("THE BLUE HEARTS - Owaranai Uta Guitar Lesson Part 2", "Fan • 1K views • 3:04", videoId = "lesson00000")))

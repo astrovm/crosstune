@@ -337,7 +337,8 @@ private fun chordWikiNames(title: String, one: String, other: String, more: List
 /** A page's name as listed, and without the credit ChordWiki hangs on it, as in "夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）". */
 private fun chordWikiTitles(title: String): List<String> = listOf(title, title.replace(CREDIT, ""))
 
-private val CREDIT = Regex("""$SPACES_START\s*+[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)[^（(）)]*+[）)]\s*+$""")
+/** The credit at the end, which may name someone with brackets of their own, "（歌：YOASOBI（ヨアソビ））". */
+private val CREDIT = Regex("""$SPACES_START\s*+[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)(?:[^（(）)]++|[（(][^（(）)]*+[）)])*+[）)]\s*+$""")
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
     val (text, href) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return null

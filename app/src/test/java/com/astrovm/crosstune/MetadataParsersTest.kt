@@ -197,6 +197,12 @@ class MetadataParsersTest {
         assertEquals(MusicMetadata("Song - Remastered 2011", "Band"), MetadataParsers.musicVideo("Song - Remastered 2011", "Band"))
         assertEquals(MusicMetadata("Song (feat. A)", "Band"), MetadataParsers.musicVideo("Song (feat. A)", "Band"))
         assertNull(MetadataParsers.musicVideo("(Official Video)", "Band"))
+        // A line break after the song's brackets, or in later ones, still leaves the song in the first.
+        assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」\nTV size", "Label"))
+        assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」「Idol\nEnglish」", "Label"))
+        // A tag may hold one of its own.
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Official Video (Remastered))", "Band"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song [Lyrics (English)]", "Band"))
         // An app writing "Artist - Song" with no artist leaves no one before the dash.
         assertNull(MetadataParsers.musicVideo(" - Day 3 in Tokyo", "Someone"))
     }
@@ -223,6 +229,16 @@ class MetadataParsersTest {
             assertEquals(title, MusicMetadata("River Road", "Band"), MetadataParsers.youtubeVideo(title, "Band"))
         }
         assertEquals(MusicMetadata("Music Video Killed the Radio Star", "Band"), MetadataParsers.youtubeVideo("Band - Music Video Killed the Radio Star HD", "Band"))
+    }
+
+    @Test
+    fun aVideoTagThatHoldsATagGoesWhole() {
+        for (title in listOf("Artist - Song (Official Video [4K])", "Artist - Song (Official Video (Remastered))", "Artist - Song [Lyrics (English)]", "Artist - Song ([Lyrics])")) {
+            assertEquals(title, MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
+        // One that only holds it keeps what it says of the song.
+        assertEquals(MusicMetadata("Song (Live at Wembley)", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live at Wembley [HD])", "Channel"))
+        assertEquals(MusicMetadata("Song (Live (2020))", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live (2020))", "Channel"))
     }
 
     @Test

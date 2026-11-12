@@ -998,8 +998,8 @@ internal class ExactMatcher(
         /** A year, as a video's title may give the song's: "1984". */
         private val YEAR = Regex("""(?:19|20)\d\d""")
 
-        /** What's in brackets, of any kind a title uses. */
-        private val BRACKETED = Regex("""[(\[（【「『［][^(\[（【「『［)\]）】」』］]*+[)\]）】」』］]""")
+        /** What's in brackets, of any kind a title uses, and brackets of its own inside: "(An Endless Song (1987))". */
+        private val BRACKETED = Regex("""[(\[（【「『［](?:[^(\[（【「『［)\]）】」』］]++|[(\[（【「『［][^(\[（【「『［)\]）】」』］]*+[)\]）】」』］])*+[)\]）】」』］]""")
 
         /** Apple Music stores that write names as they are in Japanese, Korean and Chinese. */
         private val NAMING_STORES = listOf("JP", "KR", "TW", "HK", "CN")
