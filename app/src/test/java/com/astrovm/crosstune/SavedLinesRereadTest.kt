@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -44,7 +45,7 @@ class SavedLinesRereadTest {
             "都会の夜と都会の朝",
             Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる"), Ruby("と"), Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("朝", "あさ")
         )
-        val again = line.rereadAs(now(line))
+        val again = line.rereadAs(now(line), Script.JAPANESE)
         assertEquals(listOf(Ruby("都会", "とかい"), Ruby("夜", "よる"), Ruby("都会", "まち", Reader.SUNG), Ruby("朝", "あさ")), again.read())
         assertEquals("とかいのよるとまちのあさ", again.reading)
         assertEquals("tokai no yoru to machi no asa", again.romanized)
@@ -55,7 +56,7 @@ class SavedLinesRereadTest {
         val line = kept("三本の花", Ruby("三", "さん", Reader.SUNG), Ruby("本", "もと", Reader.SUNG), Ruby("の"), Ruby("花", "はな"))
         // The dictionary reads 三本 as one word, さんぼん, now: it can't take one of the two, so both stay as they were put right.
         assertEquals(Ruby("三本", "さんぼん"), now(line).read().first())
-        val again = line.rereadAs(now(line))
+        val again = line.rereadAs(now(line), Script.JAPANESE)
         assertEquals(listOf(Ruby("三", "さん", Reader.SUNG), Ruby("本", "もと", Reader.SUNG), Ruby("花", "はな")), again.read())
         assertEquals("さんもとのはな", again.reading)
     }
@@ -64,7 +65,7 @@ class SavedLinesRereadTest {
     fun aKanjiPutRightAloneThatTheDictionaryNowReadsInOneWordWithAnotherKeepsItsReading() {
         // Only 本 was put right; 三本 is one word now, which can't take a reading for 本 alone, so the two stay as they were.
         val line = kept("三本の花", Ruby("三", "さん"), Ruby("本", "もと", Reader.SUNG), Ruby("の"), Ruby("花", "はな"))
-        val again = line.rereadAs(now(line))
+        val again = line.rereadAs(now(line), Script.JAPANESE)
         assertEquals(listOf(Ruby("三", "さん"), Ruby("本", "もと", Reader.SUNG), Ruby("花", "はな")), again.read())
         assertEquals("さんもとのはな", again.reading)
     }
@@ -72,7 +73,7 @@ class SavedLinesRereadTest {
     @Test
     fun whatsPutRightAtTheLinesStartAndEndStaysAndTheRestIsReadAgain() {
         val line = kept("都会の三本の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("三本", "さんほん"), Ruby("の"), Ruby("夜", "ばん", Reader.CHATGPT))
-        val again = line.rereadAs(now(line))
+        val again = line.rereadAs(now(line), Script.JAPANESE)
         assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("三本", "さんぼん"), Ruby("夜", "ばん", Reader.CHATGPT)), again.read())
         assertEquals("まちのさんぼんのばん", again.reading)
     }
@@ -80,7 +81,7 @@ class SavedLinesRereadTest {
     @Test
     fun theSameWordPutRightTwoWaysKeepsEachWhereItIs() {
         val line = kept("都会の都会", Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("の"), Ruby("都会", "まち", Reader.SUNG))
-        val again = line.rereadAs(now(line))
+        val again = line.rereadAs(now(line), Script.JAPANESE)
         assertEquals(listOf(Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("都会", "まち", Reader.SUNG)), again.read())
         assertEquals("みやこのまち", again.reading)
     }
@@ -89,7 +90,7 @@ class SavedLinesRereadTest {
     fun whatsPutRightInTheSongsWordsNowWinsOverWhatWasKept() {
         val line = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よる"))
         val now = line.copy(reading = "みやこのよる", ruby = listOf(Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("の"), Ruby("夜", "よる")), readWith = Readings.VERSION)
-        val again = line.rereadAs(now)
+        val again = line.rereadAs(now, Script.JAPANESE)
         assertEquals(listOf(Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("夜", "よる")), again.read())
         assertEquals("みやこのよる", again.reading)
     }
@@ -97,8 +98,149 @@ class SavedLinesRereadTest {
     @Test
     fun aReadingTheUserPutRightStaysWhereItIs() {
         val line = kept("夜の都会の夜", Ruby("夜", "よる"), Ruby("の"), Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よ", Reader.USER))
-        val again = line.rereadAs(now(line))
+        val again = line.rereadAs(now(line), Script.JAPANESE)
         assertEquals(listOf(Ruby("夜", "よる"), Ruby("都会", "とかい"), Ruby("夜", "よ", Reader.USER)), again.read())
+    }
+
+    @Test
+    fun aReadingTheUserPutRightWinsOverOneSungNow() {
+        val line = kept("都会の夜", Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よ", Reader.USER)).copy(readByHand = true)
+        val now = line.copy(reading = "まちのよる", ruby = listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よる", Reader.SUNG)), readWith = Readings.VERSION)
+        val again = line.rereadAs(now, Script.JAPANESE)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), again.read())
+        assertEquals("まちのよ", again.reading)
+    }
+
+    @Test
+    fun aLineTheWordsMovedToCarriesWhatWasPutRightInTheLineItWas() {
+        val was = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よ", Reader.USER)).copy(readByHand = true)
+        // Not read yet as it moved: the dictionary reads it first.
+        val moved = SavedLine("都会の夜に", reading = null, title = "Demo", artist = "Band")
+        val carried = moved.carrying(was, Script.JAPANESE)
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), carried.read())
+        assertEquals("まちのよに", carried.reading)
+        assertEquals(Readings.VERSION, carried.readWith)
+        assertTrue(carried.readByHand)
+    }
+
+    @Test
+    fun aLineReadByHandBeforeTheUsersReadingsWereMarkedCarriesAsTheUsersOnlyWhatTheDictionaryReadsOtherwise() {
+        val was = SavedLine("都会の夜", reading = "まちのよる", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), readByHand = true)
+        val carried = SavedLine("都会の夜に", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
+        // 夜 reads as the dictionary reads it today, so the user didn't put it right: it's read again as the rest is.
+        assertEquals(listOf(Ruby("都会", "まち", Reader.USER), Ruby("夜", "よる")), carried.read())
+        assertEquals("まちのよるに", carried.reading)
+        assertTrue(carried.readByHand)
+    }
+
+    @Test
+    fun ofTheSameWordTwiceOnlyTheOneTheUserPutRightCarriesTheirReading() {
+        val was = kept("夜と夜", Ruby("夜", "よる"), Ruby("と"), Ruby("夜", "よ", Reader.USER)).copy(readByHand = true)
+        val carried = SavedLine("青い夜と夜", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
+        val nights = carried.read().filter { it.text == "夜" }
+        // The first is the dictionary's, as it was; the second, the user's, where they put it right.
+        assertEquals(listOf(null, Reader.USER), nights.map { it.by })
+        assertEquals("よ", nights.last().reading)
+        assertNotEquals("よ", nights.first().reading)
+    }
+
+    @Test
+    fun whatWasPutRightMovesWithItsLettersOrWhereItsWrittenOnce() {
+        val night = Ruby("夜", "よ", Reader.USER)
+        val nights = Ruby("夜夜", "よよ", Reader.USER)
+        // Where its letter went, the first of the two now; where it's not anymore, nowhere.
+        assertEquals(listOf(night, Ruby("夜")), movedTo(listOf(night), "夜", "夜夜"))
+        assertEquals(listOf(night), movedTo(listOf(night), "夜", "夜"))
+        assertEquals(listOf(Ruby("雨")), movedTo(listOf(night), "夜", "雨"))
+        // Its letters go together, or it isn't laid at all.
+        assertEquals(listOf(nights), movedTo(listOf(nights), "夜夜", "夜夜"))
+        assertEquals(listOf(Ruby("夜")), movedTo(listOf(nights), "夜夜", "夜"))
+        // Of letters that can go either way, the earlier of the new line's takes it.
+        assertEquals(listOf(Ruby("雨", "あ", Reader.USER), Ruby("雨")), movedTo(listOf(Ruby("夜"), Ruby("雨", "あ", Reader.USER)), "夜雨", "雨雨"))
+        // The 夜 kept a first one, so the one put right goes where 夜 is written, once.
+        assertEquals(listOf(night), movedTo(listOf(Ruby("夜"), night), "夜夜", "夜"))
+        // 夜雨 took that 夜 already.
+        val both = Ruby("夜雨", "よあ", Reader.USER)
+        assertEquals(listOf(both), movedTo(listOf(both, night), "夜雨夜", "夜雨"))
+        assertEquals(listOf(night), movedTo(listOf(night, Ruby("夜", "よる", Reader.USER)), "夜夜", "夜"))
+        // Parts that don't write the line, as an older version may have kept, carry nothing.
+        assertEquals(listOf(Ruby("夜と")), movedTo(listOf(night), "夜と", "夜と"))
+        // A word found again where one moved has taken its second letter isn't laid over it, though its first is free.
+        val sky = Ruby("雨風雲", "あめかぜくも", Reader.USER)
+        assertEquals(
+            listOf(Ruby("空"), Ruby("夜"), sky),
+            movedTo(listOf(sky, Ruby("と"), Ruby("夜雨", "よさめ", Reader.USER)), "雨風雲と夜雨", "空夜雨風雲")
+        )
+    }
+
+    @Test
+    fun aWordPutRightWhoseLettersMovedApartCarriesWhereItsWrittenOnceInTheNewLine() {
+        // Swapped, 都会と都 lines up as 都と都 with the new line, so 都会's letters don't move together.
+        val was = kept("都会と都", Ruby("都会", "まち", Reader.USER), Ruby("と"), Ruby("都", "みやこ")).copy(readByHand = true)
+        val carried = SavedLine("都と都会", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
+        assertEquals(Ruby("都会", "まち", Reader.USER), carried.read().last())
+        // Written twice in the new line, it can't tell which one the user put right, so neither is.
+        val twice = SavedLine("都と都会と都会", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
+        assertTrue(twice.read().none { it.by == Reader.USER })
+    }
+
+    @Test
+    fun aChineseLineReadByHandCarriesTheUsersPinyinInPinyin() {
+        val was = SavedLine(
+            "我爱你!", reading = "wǒ āi nǐ!", title = "Demo", artist = "Band",
+            ruby = listOf(Ruby("我", "wǒ"), Ruby("爱", "āi"), Ruby("你", "nǐ"), Ruby("!")), readByHand = true
+        )
+        val carried = SavedLine("我爱你呀!", reading = null, title = "Demo", artist = "Band").carrying(was, Script.CHINESE)
+        assertEquals(listOf(Ruby("我", "wǒ"), Ruby("爱", "āi", Reader.USER), Ruby("你", "nǐ"), Ruby("呀", "ya")), carried.read())
+        assertEquals("wǒ āi nǐ ya!", carried.reading)
+        assertTrue(carried.readByHand)
+    }
+
+    @Test
+    fun aLinePutRightByHandBeforeTheUsersReadingsWereMarkedIsReadAgainButWhereTheUserPutItRight() {
+        val store = SavedLinesStore(prefs)
+        // As kept by 2.25.0: no mark on what the user put right, and nothing saying what read it.
+        val line = SavedLine("都会の夜", reading = "まちのよる", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "まち"), Ruby("の"), Ruby("夜", "よる")), readByHand = true)
+        store.addAll(listOf(line))
+        val sung = line.readBy(LineReading(listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よ", Reader.SUNG)), "とかいのよ", "tokai no yo"))
+        val again = store.reread(listOf(sung)).single()
+        assertEquals(listOf(Ruby("都会", "まち", Reader.USER), Ruby("夜", "よ", Reader.SUNG)), again.read())
+        assertEquals("まちのよ", again.reading)
+        assertEquals(Readings.VERSION, again.readWith)
+    }
+
+    @Test
+    fun whatTheWordsNowPutRightWinsOverWhatALineCarriesButTheUsers() {
+        val was = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よ", Reader.USER))
+        val moved = SavedLine(
+            "都会の夜に", reading = "みやこのよるに", title = "Demo", artist = "Band",
+            ruby = listOf(Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("の"), Ruby("夜", "よる", Reader.CHATGPT), Ruby("に")), readWith = Readings.VERSION
+        )
+        val carried = moved.carrying(was, Script.JAPANESE)
+        assertEquals(listOf(Ruby("都会", "みやこ", Reader.CHATGPT), Ruby("夜", "よ", Reader.USER)), carried.read())
+        assertEquals("みやこのよに", carried.reading)
+        // The line it was wasn't read by hand, so it isn't either.
+        assertFalse(carried.readByHand)
+    }
+
+    @Test
+    fun aLineWithNothingPutRightCarriesNothingAndOneReadByHandWithoutTheUsersMarkIsntSaidToBeAnyMore() {
+        val moved = SavedLine("都会の夜に", reading = "とかいのよるに", title = "Demo", artist = "Band", ruby = listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる"), Ruby("に")), readWith = Readings.VERSION)
+        assertEquals(moved, moved.carrying(kept("都会の夜", Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる")).copy(readByHand = true), Script.JAPANESE))
+        // Only UtaTen's reading goes with it: the line isn't read by hand any more.
+        val sung = moved.carrying(kept("都会の夜", Ruby("都会", "とかい", Reader.SUNG), Ruby("の"), Ruby("夜", "よる")).copy(readByHand = true), Script.JAPANESE)
+        assertFalse(sung.readByHand)
+    }
+
+    @Test
+    fun keptLinesCarryWhatWasPutRightOnlyWhereALineMovedAndNoneWhenNothingChanges() {
+        val was = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よる"))
+        val moved = SavedLine("都会の夜に", reading = null, title = "Demo", artist = "Band")
+        val other = SavedLine("花", reading = "はな", title = "Demo", artist = "Band", ruby = listOf(Ruby("花", "はな")), readWith = Readings.VERSION)
+        val kept = carried(listOf(moved, other), listOf(was to moved), Script.JAPANESE)
+        assertEquals("まちのよるに", kept?.first()?.reading)
+        assertEquals(other, kept?.last())
+        assertNull(carried(listOf(other), listOf(was to moved), Script.JAPANESE))
     }
 
     @Test
@@ -212,7 +354,7 @@ class SavedLinesRereadTest {
     fun aLineWhosePartsDontWriteItIsLeftAsItWas() {
         // Kept broken: its parts write another line than it is.
         val broken = kept("都会の夜", Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("朝", "あさ"))
-        assertEquals(broken, broken.rereadAs(now(broken)))
+        assertEquals(broken, broken.rereadAs(now(broken), Script.JAPANESE))
     }
 
     @Test
@@ -244,4 +386,4 @@ class SavedLinesRereadTest {
 }
 
 /** Puts how [lines] read on the same lines kept, as the app does once a song's words are read again; see [rereadAs]. */
-internal fun SavedLinesStore.reread(lines: List<SavedLine>): List<SavedLine> = checkNotNull(runBlocking { change(Dispatchers.Unconfined) { rereadAs(it, lines) } })
+internal fun SavedLinesStore.reread(lines: List<SavedLine>): List<SavedLine> = checkNotNull(runBlocking { change(Dispatchers.Unconfined) { rereadAs(it, lines, Script.JAPANESE) } })

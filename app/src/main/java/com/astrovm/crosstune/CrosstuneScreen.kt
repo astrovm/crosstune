@@ -1170,7 +1170,7 @@ private fun SongSearchSheet(
                     )
                 }
             } else {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Column {
                     // ChatGPT's picks come in a moment later, ahead of the others.
                     if (state.isAskingForSongs) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
                     // A mood, more than one song, makes a playlist of ChatGPT's picks.
@@ -2022,7 +2022,7 @@ private fun DestinationPicker(state: UiState, loadArtwork: suspend (String) -> I
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.picker_title)) },
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Column {
                 state.result?.let { result ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
                         CoverArt(result.artworkUrl, loadArtwork, size = 48.dp)

@@ -318,7 +318,7 @@
     <string name="report_failed">보내지 못했어요. 연결을 확인하고 다시 시도하세요.</string>
     <string name="reading_wrong">읽기가 틀렸어요</string>
     <string name="reading_right">올바른 읽기 (선택)</string>
-    <string name="reading_what_goes">단어, 표시된 읽기, 그 줄, 노래 제목, 앱과 Android 버전을 보내요. Crosstune 개발자만 읽어요.</string>
+    <string name="reading_what_goes">단어, 표시된 읽기와 그 출처, 그 줄과 문자, 입력한 읽기, 노래 제목과 아티스트, 가사 출처, 앱과 Android 버전을 보내요. Crosstune 개발자만 읽어요.</string>
     <string name="auto_report_offer">이런 문제를 자동으로 신고할까요?</string>
     <string name="auto_report_offer_words_off">이 노래의 가사가 어긋나 있었어요. 이런 경우를 자동으로 신고할까요?</string>
     <string name="auto_report_yes">예</string>
