@@ -26,8 +26,8 @@ def chord(name):
 # Each line: what comes before the chord on its line, and the words under it.
 LINES = [
     ("x" * 41, "あ" * 22),
-    ("x" * 10, "&#307;" * 20 + "あ"),
-    ("x" * 12, "&#1488;" * 20 + "あ"),
+    # A digit the stacks draw at another width, and that runs left to right, as Hebrew does not.
+    ("x" * 11, "&#1776;" * 20 + "あ"),
     ("xx", "ｶﾞあい"),
     ("xx", "ﾊﾟあい"),
     ("xxxx", "ｶﾞｶﾞあい"),
