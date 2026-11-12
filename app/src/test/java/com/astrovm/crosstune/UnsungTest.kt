@@ -476,6 +476,31 @@ class UnsungTest {
     }
 
     @Test
+    fun wordsAMarkHoldsStayClosedOnceTheLyricsAreClosed() {
+        // Review of PR #919: closed while a listen holds them, by back, down to the player, or a new link, nothing more is
+        // looked up for them, and they don't come back, as on main.
+        val closes = mapOf<String, (MainViewModel) -> Unit>("back" to { it.dismissLyrics() }, "player" to { it.lyricsToPlayer() }, "new link" to { it.clear() })
+        for ((way, close) in closes) {
+            controller?.destroyAndSettle()
+            freshSettings()
+            prefs().edit().putBoolean("lyrics_translation", true).commit()
+            for (kept in listOf("kept_words.json", "lyrics.json", "lookups.json")) File(app.cacheDir, kept).delete()
+            singing.reset()
+            singing.hang = true
+            markedOnLrclibWithWords()
+            openLyrics(shown = R.string.lyrics_instrumental)
+            close(model())
+            composeRule.waitForIdle()
+            val asked = fake.requestedUrls.size
+            passes(MainViewModel.HELD_MS)
+            assertEquals(way, emptyList<String>(), fake.requestedUrls.drop(asked))
+            assertEquals(way, "", model().uiState.lyrics)
+            assertEquals(way, null, model().uiState.lyricsFor)
+            assertFalse(way, showsWords())
+        }
+    }
+
+    @Test
     fun thePlayersLineShowsWordsAMarkHolds() {
         // Review of PR #919: the player opened on a song LRCLIB marks, with words found, has its line under it, as on main.
         MainActivity.lookAheadLyrics = true

@@ -3704,6 +3704,9 @@ internal class MainViewModel(
 
     fun dismissLyrics() {
         heardSong = null
+        // Words held for a listen are closed with the rest: nothing shows them, or looks them up, once they're gone.
+        heldJob?.cancel()
+        unsung = null
         leaveWords()
         keepShown()
         lyricsJob?.cancel()
