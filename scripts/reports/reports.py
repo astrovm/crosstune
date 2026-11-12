@@ -133,7 +133,16 @@ def pull(run=subprocess.run, sleep=time.sleep):
 # What a terminal acts on, hides or can't print: control characters (Cc), format characters such as zero-width ones,
 # tags and the marks that turn text around (Cf), line and paragraph separators (Zl, Zp), private ones (Co) and half a
 # surrogate pair (Cs). In a report they're data at most, so they're shown as their escapes.
-UNSEEN = frozenset(("Cc", "Cf", "Zl", "Zp", "Co", "Cs"))
+UNSEEN = frozenset(("Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn"))
+# Characters a terminal prints as nothing, or as a blank, though Unicode files them as marks or letters: the grapheme
+# joiner, the variation selectors, the Hangul fillers and the blank braille cell. A variation selector also follows a
+# real emoji ("\u2764\ufe0f"): the emoji stays, and only the selector after it is written out.
+BLANKS = frozenset((0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800, *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0)))
+
+
+def hidden(char):
+    """Whether a terminal acts on [char], hides it or can't print it."""
+    return unicodedata.category(char) in UNSEEN or ord(char) in BLANKS
 NAMED = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
 
 
@@ -149,7 +158,7 @@ def shown(value):
     """[value] safe to print, when it's text: each character that would act on the terminal, or on the lines around it, written as its escape."""
     if not isinstance(value, str):
         return value
-    return "".join(escaped(char) if unicodedata.category(char) in UNSEEN else char for char in value)
+    return "".join(escaped(char) if hidden(char) else char for char in value)
 
 
 def printable(row):
@@ -225,7 +234,7 @@ def wrong_reading(row):
 
 def plain(text):
     """[text] without what a terminal acts on, hides or can't print: a break or a tab is a space, the rest goes."""
-    kept = "".join(" " if char.isspace() else "" if unicodedata.category(char) in UNSEEN else char for char in text or "")
+    kept = "".join(" " if char.isspace() else "" if hidden(char) else char for char in text or "")
     return " ".join(kept.split())
 
 

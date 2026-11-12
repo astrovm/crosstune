@@ -227,7 +227,7 @@ class CheckTest(unittest.TestCase):
     def test_songs_for_songcheck_carry_no_character_a_terminal_acts_on(self):
         # SongCheck prints each song's title and artist as it goes, and rows already in D1 weren't cleaned.
         songs = reports.as_songs([row(7, title=f"Made\tUp{NASTY}", artist="Some\nBand\u200d\U0001f3b8")])
-        self.assertEqual(songs[0]["title"], "Made Upa[2J]0;titleb cde f ghijklm nop")
+        self.assertEqual(songs[0]["title"], "Made Upa[2J]0;titleb cde f ghijklm nopqrstuvwxyz")
         self.assertEqual(songs[0]["artist"], "Some Band\U0001f3b8")
         for song in songs:
             self.assertEqual([], unseen(song["title"] + song["artist"]))
@@ -329,12 +329,17 @@ class MainTest(unittest.TestCase):
 
 # Made up: what a stranger could write in a report to move the cursor, recolor or retitle the terminal, or turn text around.
 # Past the control characters: zero-width ones, a tag, a mark that turns text around, a private one and half a pair.
-NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg\u200bh\u200di\U000e0041j\u200ek\ue000l\ud800m\u2029n\u061co\ufeffp"
+NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg\u200bh\u200di\U000e0041j\u200ek\ue000l\ud800m\u2029n\u061co\ufeffp\u0378q\u034fr\ufe0fs\ufe00t\U000e0100u\u115fv\u1160w\u3164x\uffa0y\u2800z"
+
+
+# Characters that print as nothing, or as a blank, though Unicode files them as marks or letters: the grapheme joiner,
+# the variation selectors, the Hangul fillers and the blank braille cell. Each can hide in a title or pass for a space.
+BLANKS = {0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800, *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0)}
 
 
 def unseen(text):
     """The characters a terminal acts on, hides or can't print, apart from the line break the output is made of."""
-    return [c for c in text if c != "\n" and unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs")]
+    return [c for c in text if c != "\n" and (unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn") or ord(c) in BLANKS)]
 
 
 class ShownTest(unittest.TestCase):
@@ -342,8 +347,11 @@ class ShownTest(unittest.TestCase):
         self.assertEqual(
             reports.shown(NASTY),
             "a\\x1b[2J\\x1b]0;title\\x07b\\x00\\x7f\\x85\\x9bc\\u202ed\\u2066e\\u2069\\u2028f\\tg"
-            "\\u200bh\\u200di\\U000e0041j\\u200ek\\ue000l\\ud800m\\u2029n\\u061co\\ufeffp",
+            "\\u200bh\\u200di\\U000e0041j\\u200ek\\ue000l\\ud800m\\u2029n\\u061co\\ufeffp"
+            "\\u0378q\\u034fr\\ufe0fs\\ufe00t\\U000e0100u\\u115fv\\u1160w\\u3164x\\uffa0y\\u2800z",
         )
+        # An emoji keeps its picture: only its unseen style mark is written out, after it.
+        self.assertEqual(reports.shown("Love \u2764\ufe0f song \U0001f3b8"), "Love \u2764\\ufe0f song \U0001f3b8")
         self.assertEqual(reports.shown("line\nbreak\r"), "line\\nbreak\\r")
         self.assertEqual(reports.shown("Demo 花 أغنية"), "Demo 花 أغنية")
         # Every character of what was printed can be printed: half a pair would stop Python's print.
