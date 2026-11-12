@@ -4,6 +4,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -145,6 +146,60 @@ class GradleBoxTest(unittest.TestCase):
         self.assertEqual(box.returncode, 0, output)
         self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
         self.assertIn(f"-e SYNCREPLAY_DIR={kept}", self.asked()[0])
+
+    def box_that_runs(self):
+        """A podman that runs what the box is asked in its working folder, with a gradlew that says where it ran."""
+        podman = self.dir / "bin" / "podman"
+        podman.write_text(f"""#!{sys.executable}
+import os, subprocess, sys
+args = sys.argv[1:]
+if args[:1] != ["run"]:
+    sys.exit(0)
+with open(os.path.join(os.environ["FAKE_DIR"], "asked"), "a") as asked:
+    asked.write(" ".join(args) + "\\n")
+at = next(i for i, arg in enumerate(args) if arg.startswith("localhost/crosstune-gradle-box:"))
+command = args[at + 1:]
+# The script the box runs, with this gradlew for the checkout's own.
+for i, arg in enumerate(command):
+    if arg.endswith("each-checkout.sh"):
+        copy = os.path.join(os.environ["FAKE_DIR"], "each-checkout.sh")
+        with open(arg) as real, open(copy, "w") as fake:
+            fake.write(real.read().replace("./gradlew", os.environ["FAKE_GRADLEW"]))
+        command[i] = copy
+sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
+""")
+        gradlew = self.dir / "gradlew"
+        gradlew.write_text('#!/bin/sh\necho "$PWD $*" >> "$FAKE_DIR/ran"\n[ "$PWD" = "$FAKE_FAIL_IN" ] && exit 3\nexit 0\n')
+        gradlew.chmod(gradlew.stat().st_mode | stat.S_IXUSR)
+        return gradlew
+
+    def test_also_runs_gradle_in_each_other_checkout_in_the_same_box_and_fails_with_the_first_failure(self):
+        gradlew = self.box_that_runs()
+        others = [self.dir / "base", self.dir / "other"]
+        for other in others:
+            other.mkdir()
+        box = self.start("also", *(f"--also={other}" for other in others), ":app:songCheck", "-Pa=b c", FAKE_GRADLEW=str(gradlew))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        # One box, which sees each checkout, and Gradle in each in turn with the same arguments.
+        self.assertEqual(1, len(self.asked()))
+        for other in others:
+            self.assertIn(f"-v {other}:{other}", self.asked()[0])
+        ran = (self.dir / "ran").read_text().splitlines()
+        self.assertEqual([f"{where} --no-daemon :app:songCheck -Pa=b c" for where in (ROOT, *others)], ran)
+        # A failure in one still runs the rest, and is the exit code.
+        (self.dir / "ran").unlink()
+        box = self.start("also", *(f"--also={other}" for other in others), "help", FAKE_GRADLEW=str(gradlew), FAKE_FAIL_IN=str(others[0]))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(3, box.returncode, output)
+        self.assertEqual(3, len((self.dir / "ran").read_text().splitlines()))
+
+    def test_also_a_folder_that_is_not_there_stops_before_the_box(self):
+        box = self.start("missing", f"--also={self.dir / 'nowhere'}", "help")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(1, box.returncode, output)
+        self.assertIn("--also: no folder at", output)
+        self.assertEqual([], self.asked())
 
     def test_no_replay_folder_is_mounted_unless_chosen(self):
         box = self.start("plain", ":app:assembleDebug")
