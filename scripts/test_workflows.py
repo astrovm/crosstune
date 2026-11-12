@@ -17,7 +17,9 @@ KEEPS_TOKEN = {
 }
 
 JOB = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
-CHECKOUT = re.compile(r"^(\s*)- uses: actions/checkout@")
+# A checkout, as a step's first key ("- uses: …") or after its name ("- name: …", then "uses: …").
+CHECKOUT = re.compile(r"^(\s*)(- )?uses: actions/checkout@")
+STEP = re.compile(r"^(\s*)- ")
 
 
 def checkouts_with_token(text):
@@ -35,12 +37,19 @@ def checkouts_with_token(text):
         name = JOB.match(line)
         if in_jobs and name:
             job = name.group(1)
-        step = CHECKOUT.match(line)
-        if not step:
+        checkout = CHECKOUT.match(line)
+        if not checkout:
             continue
-        inside = len(step.group(1)) + 2
-        block = []
-        for after in lines[number:]:
+        # The step's own keys sit two past its dash, before and after the checkout's line.
+        inside = len(checkout.group(1)) + (2 if checkout.group(2) else 0)
+        start = number - 1
+        while not checkout.group(2) and start > 0:
+            step = STEP.match(lines[start])
+            if step and len(step.group(1)) + 2 == inside:
+                break
+            start -= 1
+        block = [lines[start].strip().removeprefix("- ")]
+        for after in lines[start + 1:]:
             if after.strip() and len(after) - len(after.lstrip()) < inside:
                 break
             block.append(after.strip())
@@ -85,8 +94,17 @@ class WorkflowsTest(unittest.TestCase):
             "      - uses: actions/checkout@abc # v1",
             "        with:",
             "          persist-credentials: true",
+            "  named:",
+            "    steps:",
+            "      - name: Check out",
+            "        uses: actions/checkout@abc # v1",
+            "      - name: Check out without the token",
+            "        with:",
+            "          persist-credentials: false",
+            "        uses: actions/checkout@abc # v1",
+            "      - run: true",
         ])
-        self.assertEqual([("plain", 6), ("other", 17)], checkouts_with_token(text))
+        self.assertEqual([("plain", 6), ("other", 17), ("named", 23)], checkouts_with_token(text))
 
 
 if __name__ == "__main__":
