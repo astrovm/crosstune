@@ -1,0 +1,64 @@
+name: J-Total widths on Windows
+
+# Measures J-Total's page as a reader on Windows sees it: Chromium and Edge with Windows' own fonts,
+# MS Gothic among them, in Japanese. The width tables come from this run (scripts/jtotal-widths).
+# Download the artifact and run `jtotal_widths.py generate DIR` on it.
+on:
+  workflow_dispatch:
+  # Until this workflow is on main, where a manual run needs it, a push to its pull request's branch runs it.
+  push:
+    branches: [fix/jtotal-widths-macos-830]
+    paths: [.github/workflows/jtotal-widths-windows.yml, scripts/jtotal-widths/**]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Japanese fonts
+        shell: pwsh
+        run: |
+          # MS Gothic and MS PGothic are both faces of msgothic.ttc, part of Windows' Japanese fonts.
+          if (-not (Test-Path C:\Windows\Fonts\msgothic.ttc)) {
+            Write-Output "msgothic.ttc is not on this runner: adding Windows' Japanese fonts"
+            Add-WindowsCapability -Online -Name "Language.Fonts.Jpan~~~und-JPAN~0.0.1.0"
+          }
+          Get-ChildItem C:\Windows\Fonts\msgothic.ttc, C:\Windows\Fonts\meiryo.ttc, C:\Windows\Fonts\YuGothR.ttc -ErrorAction SilentlyContinue | Format-Table Name, Length
+          if (-not (Test-Path C:\Windows\Fonts\msgothic.ttc)) { throw "msgothic.ttc is still missing" }
+      - name: Playwright
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.64.1 fonttools==4.68.0
+          python -m playwright install chromium
+      - name: Measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=windows
+          mkdir -p $out
+          w="python scripts/jtotal-widths/jtotal_widths.py"
+          edge="C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+          echo "Measured on Windows, GitHub's windows-latest runner, Chromium as Playwright ships it, browser language ja (run ${{ github.run_id }})" > $out/SOURCE.txt
+          $w measure $out/main.json --lang ja
+          $w measure $out/mono.json --mono --lang ja
+          $w trims $out/main-trims.json --lang ja
+          $w trims $out/mono-trims.json --mono --lang ja
+          # Edge, as most readers on Windows have it, on what a Shift_JIS page holds.
+          $w measure $out/edge-main.json --lang ja --cp932 --browser "$edge"
+          $w measure $out/edge-mono.json --mono --lang ja --cp932 --browser "$edge"
+          $w trims $out/edge-main-trims.json --lang ja --browser "$edge"
+          $w trims $out/edge-mono-trims.json --mono --lang ja --browser "$edge"
+          # MS PGothic in MS Gothic's place, and an English browser, for how much those would move.
+          $w measure $out/pgothic.json --lang ja --cp932 --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
+          $w trims $out/pgothic-trims.json --lang ja --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
+          $w measure $out/en-main.json --cp932
+          $w measure $out/en-mono.json --mono --cp932
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jtotal-widths-windows
+          path: windows/

@@ -34,6 +34,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
 import urllib.request
 from importlib import metadata
@@ -120,11 +121,174 @@ def font_faces(fonts):
     )
 
 
-def page_head(stack, fonts, lang=None):
+def page_head(stack, fonts, lang=None, charset="utf-8"):
     """The top of a page that draws `tt` as J-Total does: its font stack at 40px, one line a row."""
     tag = f' lang="{lang}"' if lang else ""
-    return (f'<!DOCTYPE html><html{tag}><head><meta charset="utf-8"><style>\n{font_faces(fonts)}'
+    return (f'<!DOCTYPE html><html{tag}><head><meta charset="{charset}"><style>\n{font_faces(fonts)}'
             'tt { font-family:' + stack + '; font-size:40px; line-height:1; white-space:pre; }\ndiv { margin:0; }\n</style></head><body>')
+
+
+def in_cp932(code):
+    """True for a letter a Shift_JIS page can hold without a numeric reference."""
+    try:
+        chr(code).encode("cp932")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def written(code, as_entity=()):
+    """`code` as J-Total's Shift_JIS page writes it: the letter itself, or a numeric reference for one it can't hold."""
+    return chr(code) if in_cp932(code) and code not in as_entity else f"&#{code};"
+
+
+def shift_jis_page(html):
+    """The page as J-Total serves it: Shift_JIS, untagged. Every letter it can't hold is already a reference."""
+    return html.encode("cp932")
+
+
+def probe_rows(codes, as_entity=()):
+    """One row for the base `ああ` and one for each code point between two of them."""
+    return '<div><tt data-base="1">ああ</tt></div>' + "".join(
+        f'<div><tt data-c="{c}">あ<span>{written(c, as_entity)}</span>あ</tt></div>' for c in codes
+    )
+
+
+# What a letter adds to a line: the width of `あXあ` less the width of `ああ`, in thousandths of a digit.
+# The letter's own box is not enough: a mark that Chromium draws as part of the letter before it, such as
+# U+FF9E after ｶ, has a box of no width but still moves the next letter on.
+PROBE_JS = """() => {
+  const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
+  const digit = probe.getBoundingClientRect().width;
+  const base = document.querySelector('tt[data-base]').getBoundingClientRect().width;
+  const out = {}, read = {};
+  for (const tt of document.querySelectorAll('tt[data-c]')) {
+    out[tt.dataset.c] = Math.round((tt.getBoundingClientRect().width - base) / digit * 1000);
+    read[tt.dataset.c] = tt.querySelector('span').textContent.codePointAt(0);
+  }
+  return {digit, out, read};
+}"""
+
+
+def platform_fonts(cdp, selector):
+    """The fonts the browser drew each node of `selector` with, in document order."""
+    root = cdp.send("DOM.getDocument", {"depth": 0})["root"]["nodeId"]
+    nodes = cdp.send("DOM.querySelectorAll", {"nodeId": root, "selector": selector})["nodeIds"]
+    return [sorted({f["familyName"] for f in cdp.send("CSS.getPlatformFontsForNode", {"nodeId": node})["fonts"]}) for node in nodes]
+
+
+def open_page(p, browser_name, lang):
+    browser = launch(p, browser_name, lang)
+    page = browser.new_page(viewport={"width": 1200, "height": 800}, locale=lang)
+    cdp = page.context.new_cdp_session(page) if browser_name != "webkit" else None
+    if cdp:
+        cdp.send("DOM.enable")
+        cdp.send("CSS.enable")
+    return browser, page, cdp
+
+
+def show(page, html, path):
+    path.write_bytes(shift_jis_page(html))
+    page.goto(path.as_uri())
+    page.evaluate("document.fonts.ready")
+    page.wait_for_timeout(100)
+
+
+def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None, codes=None):
+    """The width each letter adds to a line, in thousandths of a digit, and the fonts that drew it. Writes JSON to `out`."""
+    from playwright.sync_api import sync_playwright
+
+    head = page_head(stack, fonts, charset="shift_jis")
+    codes = spans_codes() if codes is None else codes
+    widths, used, misread = {}, {}, set()
+    began = time.monotonic()
+    with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
+        browser, page, cdp = open_page(p, browser_name, lang)
+        html = Path(tmp) / "widths.html"
+        digit = None
+
+        def batch_of(batch, as_entity=()):
+            nonlocal digit
+            show(page, head + probe_rows(batch, as_entity) + "</body></html>", html)
+            found = page.evaluate(PROBE_JS)
+            digit = found["digit"]
+            for c in batch:
+                if found["read"][str(c)] != c:
+                    misread.add(c)
+                    continue
+                widths[c] = found["out"][str(c)]
+            if cdp:
+                used.update((c, f) for c, f in zip(batch, platform_fonts(cdp, "tt[data-c] span")) if c in widths)
+
+        for start in range(0, len(codes), BATCH):
+            batch_of(codes[start:start + BATCH])
+            if start // BATCH % 20 == 0:
+                print(f"{start + BATCH} of {len(codes)} code points, {time.monotonic() - began:.0f} s", file=sys.stderr, flush=True)
+        # A letter the browser's Shift_JIS reads as another one is written as a reference instead, as a page would have to.
+        retry = sorted(misread)
+        misread.clear()
+        if retry:
+            batch_of(retry, as_entity=set(retry))
+        found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
+        found.append(f"Page Shift_JIS with no language; browser language {lang or 'as Playwright starts it'}")
+        found.append(f"One digit is {digit} CSS px at 40px. A width is what the letter adds between two hiragana.")
+        browser.close()
+    if misread:
+        raise SystemExit(f"read as other letters even as references: {sorted(misread)[:20]}")
+    nothing = [c for c in codes if unassigned(c)]
+    data = {"widths": {str(c): v for c, v in widths.items()}, "nothing": nothing, "environment": found,
+            "fonts": {str(c): f for c, f in used.items()}, "stack": stack}
+    Path(out).write_text(json.dumps(data), encoding="utf-8")
+    print(f"{out}: {len(widths)} code points, {time.monotonic() - began:.0f} s", file=sys.stderr)
+
+
+# Full-width brackets and stops, and what sits beside them in lyrics, for the trimming probe.
+PUNCTUATION = "、。，．・：；！？「」『』（）［］｛｝〈〉《》【】〔〕“”‘’\u3000"
+NEIGHBOURS = "あ字Ａa1 "
+
+
+def trim_rows(marks=PUNCTUATION, neighbours=NEIGHBOURS):
+    """Rows for each pair of marks, and each mark beside a letter, between two hiragana; and each mark at a line's start and end."""
+    letters = marks + neighbours
+    pairs = [(a, b) for a in letters for b in letters if a in marks or b in marks]
+    rows = '<div><tt data-base="1">ああ</tt></div><div><tt data-one="1">あ</tt></div>'
+    rows += "".join(f'<div><tt data-pair="{a}{b}">あ{a}{b}あ</tt></div>' for a, b in pairs)
+    rows += "".join(f'<div><tt data-first="{m}">{m}あ</tt></div>' for m in marks)
+    rows += "".join(f'<div><tt data-later="{m}">あ<br>{m}あ</tt></div>' for m in marks)
+    rows += "".join(f'<div><tt data-last="{m}">あ{m}</tt></div>' for m in marks)
+    return rows
+
+
+# Each pair is what the two marks add between two hiragana. `first` is a mark at the start of the first line,
+# `later` at the start of a line after a <br>, `last` at a line's end: each what it adds to `あ` there.
+TRIM_JS = """() => {
+  const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
+  const digit = probe.getBoundingClientRect().width;
+  const width = (e) => e.getBoundingClientRect().width;
+  const base = width(document.querySelector('tt[data-base]')), one = width(document.querySelector('tt[data-one]'));
+  const k = (v) => Math.round(v / digit * 1000);
+  const out = {pairs: {}, first: {}, later: {}, last: {}};
+  for (const tt of document.querySelectorAll('tt[data-pair]')) out.pairs[tt.dataset.pair] = k(width(tt) - base);
+  for (const tt of document.querySelectorAll('tt[data-first]')) out.first[tt.dataset.first] = k(width(tt) - one);
+  for (const tt of document.querySelectorAll('tt[data-later]')) { const r = tt.getClientRects(); out.later[tt.dataset.later] = k(r[r.length - 1].width - one); }
+  for (const tt of document.querySelectorAll('tt[data-last]')) out.last[tt.dataset.last] = k(width(tt) - one);
+  return out;
+}"""
+
+
+def trims(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=None):
+    """How wide full-width brackets and stops are beside each other and at a line's ends. Writes JSON to `out`."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
+        browser, page, cdp = open_page(p, browser_name, lang)
+        show(page, page_head(stack, fonts, charset="shift_jis") + trim_rows() + "</body></html>", Path(tmp) / "trims.html")
+        found = page.evaluate(TRIM_JS)
+        marks = dict(zip(PUNCTUATION, platform_fonts(cdp, "tt[data-last]"))) if cdp else {}
+        environment_found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
+        browser.close()
+    Path(out).write_text(json.dumps({**found, "fonts": marks, "environment": environment_found, "stack": stack}, ensure_ascii=False), encoding="utf-8")
+    print(f"{out}: {len(found['pairs'])} pairs", file=sys.stderr)
 
 
 def font_packages():
@@ -135,7 +299,31 @@ def font_packages():
     if shutil.which("sw_vers"):
         build = subprocess.check_output(["sw_vers", "-buildVersion"], text=True).strip()
         return [f"macOS {platform.mac_ver()[0]} ({build}) {platform.machine()}, its own fonts"]
+    if platform.system() == "Windows":
+        return [f"Windows {platform.version()} {platform.machine()}, its own fonts", *windows_fonts()]
     return [f"{platform.system()} {platform.release()}: no dpkg-query, so the font packages are not recorded"]
+
+
+# The Japanese fonts a Windows reader's browser can draw the page with, by file.
+WINDOWS_FONTS = ("msgothic.ttc", "meiryo.ttc", "YuGothR.ttc", "consola.ttf", "arial.ttf", "seguiemj.ttf")
+
+
+def windows_fonts(folder=Path("C:/Windows/Fonts")):
+    """Each font file of WINDOWS_FONTS, with each face it holds and that face's version, or that the file is missing."""
+    found = []
+    for name in WINDOWS_FONTS:
+        path = folder / name
+        if not path.exists():
+            found.append(f"{name}: not on this machine")
+            continue
+        try:
+            from fontTools.ttLib import TTCollection, TTFont
+        except ImportError:
+            found.append(f"{name}: present, SHA-256 {hashlib.sha256(path.read_bytes()).hexdigest()}")
+            continue
+        faces = TTCollection(str(path)).fonts if name.lower().endswith(".ttc") else [TTFont(str(path))]
+        found.append(f"{name}: " + "; ".join(f"{face['name'].getDebugName(4)} {face['name'].getDebugName(5)}" for face in faces))
+    return found
 
 
 def launch(p, browser, lang=None):
@@ -176,38 +364,6 @@ def aliases(config):
     return "Fontconfig aliases: " + "; ".join(f"{name} is {font}" for name, font in pairs)
 
 
-def measure(out, stack=STACK, fonts=Path("/fonts")):
-    """Inside the container: the width of every letter, in thousandths of a digit. Writes JSON to `out`."""
-    from playwright.sync_api import sync_playwright
-
-    head = page_head(stack, fonts)
-    codes = spans_codes()
-    widths = {}
-    with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
-        browser = launch(p, "chromium")
-        page = browser.new_page(viewport={"width": 1200, "height": 800})
-        html = Path(tmp) / "widths.html"
-        for start in range(0, len(codes), BATCH):
-            rows = "".join(f'<div><tt data-c="{c}">あ<s>{chr(c)}</s>あ</tt></div>' for c in codes[start:start + BATCH])
-            html.write_text(head + rows + "</body></html>", encoding="utf-8")
-            page.goto(html.as_uri())
-            page.evaluate("document.fonts.ready")
-            page.wait_for_timeout(300)
-            widths.update(page.evaluate("""() => {
-              const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
-              const digit = probe.getBoundingClientRect().width;
-              const out = {};
-              for (const tt of document.querySelectorAll('tt[data-c]')) {
-                out[tt.dataset.c] = Math.round(tt.querySelector('s').getBoundingClientRect().width / digit * 1000);
-              }
-              return out;
-            }"""))
-        found = environment(browser, "chromium", stack, fonts)
-        browser.close()
-    nothing = [c for c in codes if unassigned(c)]
-    Path(out).write_text(json.dumps({"widths": widths, "nothing": nothing, "environment": found}), encoding="utf-8")
-
-
 def cache():
     mnt = Path("/mnt/data/agent-cache")
     return (mnt if mnt.is_dir() else Path.home() / ".cache/agent-cache") / "crosstune-jtotal-widths"
@@ -241,35 +397,98 @@ def run_in_container(work, script):
     )
 
 
-def in_container(mono=False):
-    """Measures in the container and gives back the table text it makes."""
-    work = cache()
-    run_in_container(work, ["/script/jtotal_widths.py", "measure", "/work/raw.json", *(["--mono"] if mono else [])])
-    raw = json.loads((work / "raw.json").read_text(encoding="utf-8"))
+def default_fonts():
+    """J-Total's Inconsolata files: at /fonts in the container, downloaded once anywhere else."""
+    return Path("/fonts") if Path("/fonts").is_dir() else container_fonts()
+
+
+# The files a measuring run writes into its folder, and the stack each is for.
+RUNS = {"main": STACK, "mono": MONO_STACK}
+
+
+def in_container(work):
+    """Measures both stacks and the trimming in the table's container, into `work`."""
+    for name in RUNS:
+        mono = ["--mono"] if name == "mono" else []
+        run_in_container(work, ["/script/jtotal_widths.py", "measure", f"/work/{name}.json", *mono])
+        run_in_container(work, ["/script/jtotal_widths.py", "trims", f"/work/{name}-trims.json", *mono])
+
+
+def table_text(raw, source):
+    """The table from one measuring run: its header, then each run that isn't two columns."""
     widths = {int(c): w for c, w in raw["widths"].items()}
-    return "\n".join(header(raw["environment"]) + lines(runs(widths, set(raw["nothing"])))) + "\n"
+    return "\n".join(header([source, *raw["environment"]]) + lines(runs(widths, set(raw["nothing"])))) + "\n"
+
+
+def tables(directory):
+    """Both tables, as the measurement in `directory` makes them. Its SOURCE.txt says where it was measured."""
+    source = (directory / "SOURCE.txt").read_text(encoding="utf-8").strip()
+    return [(table, table_text(json.loads((directory / f"{name}.json").read_text(encoding="utf-8")), source))
+            for table, name in ((TABLE, "main"), (MONO_TABLE, "mono"))]
+
+
+def differences(a, b):
+    """Code points measured at another width in `b` than in `a`: (code, width in a, width in b)."""
+    wa, wb = a["widths"], b["widths"]
+    return [(int(c), wa[c], wb[c]) for c in sorted(wa, key=int) if c in wb and wa[c] != wb[c]]
+
+
+def diff_main(a_path, b_path, show):
+    a, b = (json.loads(Path(x).read_text(encoding="utf-8")) for x in (a_path, b_path))
+    found = differences(a, b)
+    shift_jis = [d for d in found if in_cp932(d[0])]
+    print(f"{len(found)} code points differ, {len(shift_jis)} of them in Windows-31J")
+    for code, x, y in (shift_jis + [d for d in found if not in_cp932(d[0])])[:show]:
+        fonts = lambda m: "/".join(m.get("fonts", {}).get(str(code), [])) or "?"
+        print(f"U+{code:04X} {chr(code)!r} {x / 1000:.3f} ({fonts(a)}) -> {y / 1000:.3f} ({fonts(b)})")
+    for kind in ("pairs", "first", "later", "last"):
+        ta, tb = (json.loads(Path(x).with_name(Path(x).stem + "-trims.json").read_text(encoding="utf-8")) if Path(x).with_name(Path(x).stem + "-trims.json").exists() else None for x in (a_path, b_path))
+        if ta is None or tb is None:
+            break
+        moved = [k for k in ta[kind] if k in tb[kind] and ta[kind][k] != tb[kind][k]]
+        print(f"{kind}: {len(moved)} of {len(ta[kind])} differ" + (": " + " ".join(f"{k!r} {ta[kind][k]}->{tb[kind][k]}" for k in moved[:show]) if moved else ""))
 
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=("generate", "check", "measure"))
-    parser.add_argument("out", nargs="?")
+    parser.add_argument("command", choices=("measure", "trims", "container", "generate", "check", "diff"))
+    parser.add_argument("paths", nargs="*")
     parser.add_argument("--mono", action="store_true")
+    parser.add_argument("--browser", default="chromium")
+    parser.add_argument("--lang")
+    parser.add_argument("--fonts", type=Path)
+    parser.add_argument("--show", type=int, default=50)
+    parser.add_argument("--stack", help="another font stack than the page's, such as one naming MS PGothic")
+    parser.add_argument("--cp932", action="store_true", help="only the letters a Shift_JIS page holds")
     args = parser.parse_args(argv)
+    stack = args.stack or (MONO_STACK if args.mono else STACK)
+    fonts = args.fonts or default_fonts()
     if args.command == "measure":
-        measure(args.out, MONO_STACK if args.mono else STACK)
+        codes = [c for c in spans_codes() if in_cp932(c)] if args.cp932 else None
+        measure(args.paths[0], stack, fonts, args.browser, args.lang, codes)
         return 0
-    tables = [(TABLE, in_container()), (MONO_TABLE, in_container(mono=True))]
+    if args.command == "trims":
+        trims(args.paths[0], stack, fonts, args.browser, args.lang)
+        return 0
+    if args.command == "container":
+        work = Path(args.paths[0]).resolve()
+        work.mkdir(parents=True, exist_ok=True)
+        in_container(work)
+        (work / "SOURCE.txt").write_text("Measured in the Containerfile's container\n", encoding="utf-8")
+        return 0
+    if args.command == "diff":
+        diff_main(args.paths[0], args.paths[1], args.show)
+        return 0
+    made = tables(Path(args.paths[0]))
     if args.command == "generate":
-        for table, text in tables:
-            table.parent.mkdir(parents=True, exist_ok=True)
+        for table, text in made:
             table.write_text(text, encoding="utf-8")
             print(f"{table.relative_to(REPO)}: {len(text.splitlines())} lines")
         return 0
-    if all(table.read_text(encoding="utf-8") == text for table, text in tables):
-        print("the table is what the browser measures")
+    if all(table.read_text(encoding="utf-8") == text for table, text in made):
+        print("the tables are what that measurement says")
         return 0
-    print("the table differs from the browser: run `generate` and look at the diff", file=sys.stderr)
+    print("the tables differ from that measurement: run `generate` and look at the diff", file=sys.stderr)
     return 1
 
 
