@@ -1,0 +1,3 @@
+# Licence texts are byte-for-byte copies of their sources, some with Windows line ends; their SHA-256
+# is checked, so git stores them as they are.
+app/src/main/resources/com/astrovm/crosstune/notices/*.txt -text

@@ -1,11 +1,15 @@
 package com.astrovm.crosstune
 
 import android.os.SystemClock
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
@@ -13,6 +17,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import com.astrovm.crosstune.ui.theme.CrosstuneTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -145,8 +151,21 @@ class FollowsTheSongTest {
 
     // The player.
 
+    /** The player, with [lines] timed by ear as [byEar] says, and the colors of a line sung and of one not. */
     private fun player(lines: List<LyricLine> = emptyList()) = show {
-        PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines)), ScreenActions())
+        sungInk = MaterialTheme.colorScheme.onSurface
+        waitingInk = MaterialTheme.colorScheme.onSurfaceVariant
+        PlayerScreen(UiState(canFollowApps = true, linesEarlyMs = 0, player = PlayerState(MusicMetadata("Song", "Band"), null, following = following, lines = lines, linesByEar = byEar)), ScreenActions())
+    }
+
+    private var sungInk = Color.Unspecified
+    private var waitingInk = Color.Unspecified
+
+    /** The color [text] is drawn in, as it's shown alone, once a line's faded in. */
+    private fun inkOf(text: String): Color {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNode(hasText(text), useUnmergedTree = true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single().layoutInput.style.color
     }
 
     @Test
@@ -207,6 +226,64 @@ class FollowsTheSongTest {
     }
 
     @Test
+    fun thePlayersPeekShowsTheFirstLineDimmedTillItsSung() {
+        following = pausedAt(0)
+        // Timed by a service, word by word, so each line says where its words end.
+        player(peekLines.map { it.copy(endMs = it.timeMs + 2_000) })
+        assertEquals(waitingInk, inkOf("One"))
+        playsFrom(1_000)
+        passes(FADE_MS)
+        assertEquals(sungInk, inkOf("One"))
+        // The last line is up through the outro, past where its words end, as it's lit in the words.
+        playsFrom(150_000)
+        passes(FADE_MS)
+        assertEquals(sungInk, inkOf("Three"))
+    }
+
+    @Test
+    fun thePlayersPeekGoesByTheLinesHeard() {
+        following = pausedAt(0)
+        byEar = true
+        // With a blank line after the first, which the peek leaves out.
+        player(heardLines.take(1) + LyricLine(LyricLine.NOT_HEARD, "") + heardLines.drop(1))
+        playsFrom(12_000)
+        passes(FADE_MS)
+        assertEquals(sungInk, inkOf(heardLines[0].text))
+        // Sung through, it's not up as if still sung: the line coming next in the words is, dimmed.
+        passes(1_000)
+        assertFalse(exists(heardLines[0].text))
+        assertEquals(waitingInk, inkOf(heardLines[1].text))
+        // Nothing changes till the next line heard, so the song's left alone meanwhile.
+        passesAskingRarely(16_000)
+        assertTrue(exists(heardLines[1].text))
+        passes(1_000)
+        assertEquals(sungInk, inkOf(heardLines[3].text))
+        assertFalse(exists(heardLines[1].text))
+        // Past the last line, sung through, nothing comes: it stays, dimmed.
+        passes(3_000)
+        assertEquals(waitingInk, inkOf(heardLines[3].text))
+    }
+
+    @Test
+    fun thePlayersPeekGoesByTheLinesHeardOnceTheyreSaidToBe() {
+        following = pausedAt(0)
+        player(heardLines)
+        playsFrom(13_200)
+        passes(FADE_MS)
+        // Taken for a service's, the line heard is up till the next.
+        assertEquals(sungInk, inkOf(heardLines[0].text))
+        // The same lines, said to be timed by ear, go by what's heard from then on.
+        byEar = true
+        passes(FADE_MS)
+        assertEquals(waitingInk, inkOf(heardLines[1].text))
+        playsFrom(32_000)
+        passes(FADE_MS)
+        assertEquals(sungInk, inkOf(heardLines[3].text))
+        passes(1_500)
+        assertEquals(waitingInk, inkOf(heardLines[3].text))
+    }
+
+    @Test
     fun thePlayersPeekShowsALineFromTheMomentItStarts() {
         following = pausedAt(20_000)
         player(peekLines)
@@ -230,12 +307,16 @@ class FollowsTheSongTest {
 
     private var lyricLines by mutableStateOf(lines)
 
+    /** Whether [lyricLines] are timed by the singing heard, the words found having no timing. */
+    private var byEar by mutableStateOf(false)
+
     private fun words(chords: ChordsState = ChordsState()) = show {
         LyricsScreen(
             UiState(
                 lyricsFor = MusicMetadata("River Road", "The Walkers"),
                 lyrics = lyricLines.joinToString("\n") { it.text },
                 lyricLines = lyricLines,
+                lyricsTimedByEar = byEar,
                 following = following,
                 canFollowApps = true,
                 chords = chords,
@@ -305,11 +386,99 @@ class FollowsTheSongTest {
         assertEquals("Walking ".length, litLetters(lines[0].text))
     }
 
+    // Words timed by the singing heard.
+
+    /** Timed by ear: the first and last lines heard, each lit till it's sung through, and the two between not heard. */
+    private val heardLines = listOf(
+        LyricLine(10_000, "Walking down the river road", endMs = 13_000),
+        LyricLine(LyricLine.NOT_HEARD, "Under the yellow moon"),
+        LyricLine(LyricLine.NOT_HEARD, "Every river finds the sea"),
+        LyricLine(30_000, "Singing to the morning light", endMs = 33_000)
+    )
+
+    /** The lines lit, by their words. */
+    private fun litLines(): List<String> = compose.onAllNodes(hasTestTag(LYRIC_LINE_TAG) and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        .fetchSemanticsNodes().map { node -> node.config[SemanticsProperties.Text].joinToString("") }
+
+    @Test
+    fun aLineHeardGoesDarkOnceSungThroughThoughTheNextLineHeardIsFarOn() {
+        lyricLines = heardLines
+        byEar = true
+        following = pausedAt(0)
+        words()
+        playsFrom(12_000)
+        assertEquals(listOf(heardLines[0].text), litLines())
+        // Sung through, it goes dark on time: what's sung till the next line heard isn't known.
+        passes(1_200)
+        assertEquals(emptyList<String>(), litLines())
+        // Nothing changes till then, so the song's left alone meanwhile.
+        passesAskingRarely(16_000)
+        assertEquals(emptyList<String>(), litLines())
+        passes(1_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+    }
+
+    @Test
+    fun theLastLineHeardGoesDarkOnceSungThrough() {
+        lyricLines = heardLines
+        byEar = true
+        following = pausedAt(0)
+        words()
+        playsFrom(32_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+        // What's sung after it, as an outro, isn't known.
+        passes(1_200)
+        assertEquals(emptyList<String>(), litLines())
+    }
+
+    @Test
+    fun aSongHeardWholeGoesDarkAfterItsLastLineToo() {
+        // Every line heard, the words are still timed by ear, and nothing says what's sung past the last.
+        lyricLines = listOf(heardLines[0].copy(endMs = null), heardLines[3])
+        byEar = true
+        following = pausedAt(0)
+        words()
+        playsFrom(32_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+        passes(1_200)
+        assertEquals(emptyList<String>(), litLines())
+    }
+
+    @Test
+    fun aLastLineTimedByItsWordsStaysLitThroughTheOutro() {
+        // Timed by a service word by word, so where it ends is known, the last line stays lit as it always did.
+        lyricLines = listOf(heardLines[0].copy(endMs = null), heardLines[3])
+        following = pausedAt(0)
+        words()
+        playsFrom(32_000)
+        passes(5_000)
+        assertEquals(listOf(heardLines[3].text), litLines())
+    }
+
+    @Test
+    fun theFloatingWordsShowTheSongOnceALineHeardIsSungThrough() {
+        following = pausedAt(0)
+        show {
+            FloatingLyrics(UiState(lyricsFor = MusicMetadata("River Road", "The Walkers"), lyricLines = heardLines, lyricsTimedByEar = true, following = following, linesEarlyMs = 0, nextLineAheadMs = 0), Modifier)
+        }
+        playsFrom(12_000)
+        assertTrue(exists(heardLines[0].text))
+        passes(1_200 + ROSE_MS)
+        assertFalse(exists(heardLines[0].text))
+        assertTrue(exists("River Road"))
+    }
+
     private companion object {
         /** About a frame on a 60 Hz screen. */
         const val FRAME_MS = 16L
 
         /** Ten frames, which a change takes at most to show here. */
         const val SETTLE_MS = 10 * FRAME_MS
+
+        /** Longer than a floating line takes to rise in, and the one before to go. */
+        const val ROSE_MS = 1_000L
+
+        /** Longer than the peek's line takes to fade in, and the one before to fade out. */
+        const val FADE_MS = 400L
     }
 }

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent / "devicelock.py"
-DEVICES = ("samsung", "crosstune-phone")
+DEVICES = ("samsung", "crosstune-phone", "crosstune-tv")
 
 
 def pid_alive(pid):
@@ -301,6 +301,16 @@ class DeviceLockTest(unittest.TestCase):
         self.assertTrue((self.cache / "crosstune-phone.lock").is_file())
         self.assertEqual(self.note("samsung")["who"], "ada")
         self.assertEqual(self.note("crosstune-phone")["who"], "bea")
+
+    def test_every_test_emulator_has_a_lock_of_its_own(self):
+        emulators = json.loads((SCRIPT.parent / "emulator" / "emulators.json").read_text())
+        self.assertIn("crosstune-tv", emulators)
+        for emulator in emulators:
+            self.taken(emulator, "ada", timeout=5)
+            self.assertEqual(self.note(emulator)["who"], "ada")
+        status = self.who()
+        for emulator in emulators:
+            self.assertIn(f"{emulator}: held by ada", status)
 
     def test_an_unknown_device_names_the_real_ones(self):
         result = self.invoke("take", "tablet", "--who", "ada", "--minutes", "1")

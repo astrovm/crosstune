@@ -42,10 +42,12 @@ crosstune_copy_tree("${PROJECT_ROOT}/third_party/projectm" "${PROJECTM_COPY}"
     vendor/hlslparser/src/GLSLGenerator.cpp src/libprojectM/MilkdropPreset/Waveform.hpp)
 crosstune_patch("${PROJECT_ROOT}/third_party/projectm/vendor/hlslparser/src/GLSLGenerator.cpp"
     "${PROJECTM_COPY}/vendor/hlslparser/src/GLSLGenerator.cpp"
-    "m_writer.Write(\",\", op);" "m_writer.Write(\",\");")
+    "m_writer.Write(\",\", op);" "m_writer.Write(\",\");"
+    "2026-11-09: a call to m_writer.Write no longer passes an argument its format doesn't use.")
 crosstune_patch("${PROJECT_ROOT}/third_party/projectm/src/libprojectM/MilkdropPreset/Waveform.hpp"
     "${PROJECTM_COPY}/src/libprojectM/MilkdropPreset/Waveform.hpp"
-    "    int m_samples{};         //!< Number of samples in the current waveform. Depends on the mode.\n" "")
+    "    int m_samples{};         //!< Number of samples in the current waveform. Depends on the mode.\n" ""
+    "2026-11-09: the unused m_samples field is gone.")
 # Optimized in the dev build too, as in the release: unoptimized, the visuals' thread took the dev app
 # 450 ms of CPU a second on lyrics, against 250 optimized (Issue #884), so how heavy they looked
 # there wasn't what anyone's phone does. Only projectM's directory gets it.
@@ -101,7 +103,8 @@ if(EXISTS "${PROJECT_ROOT}/third_party/whisper.cpp/CMakeLists.txt")
     # Its file with the fix to a size printed as a long, which is not what a size_t is on 32-bit phones.
     set(WHISPER_PATCHED "${CMAKE_BINARY_DIR}/patched/whisper.cpp/whisper.cpp")
     crosstune_patch("${PROJECT_ROOT}/third_party/whisper.cpp/src/whisper.cpp" "${WHISPER_PATCHED}"
-        "alignment heads masks size = %ld B" "alignment heads masks size = %zu B")
+        "alignment heads masks size = %ld B" "alignment heads masks size = %zu B"
+        "2026-11-09: the alignment heads masks size is printed with %zu, the format of a size_t.")
     get_target_property(WHISPER_SOURCES whisper SOURCES)
     list(TRANSFORM WHISPER_SOURCES REPLACE "^whisper\\.cpp$" "${WHISPER_PATCHED}")
     set_target_properties(whisper PROPERTIES SOURCES "${WHISPER_SOURCES}")

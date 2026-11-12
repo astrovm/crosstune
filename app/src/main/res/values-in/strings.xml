@@ -24,6 +24,9 @@
     <string name="settings_default_label">Aplikasi musik</string>
     <string name="setting_show_in_crosstune_first">Tampilkan di Crosstune dulu</string>
     <string name="settings_about_title">Tentang</string>
+    <string name="settings_licenses">Lisensi</string>
+    <string name="license_show">Tampilkan lisensi</string>
+    <string name="license_hide">Sembunyikan lisensi</string>
     <string name="settings_links_title">Buka link dari</string>
     <string name="rule_opens_in">Dibuka di %1$s</string>
     <string name="rule_default">Default (%1$s)</string>
