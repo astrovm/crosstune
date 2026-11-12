@@ -539,7 +539,11 @@ class MainViewModelTest {
         fake.handler = { request ->
             when (request.url.host) {
                 "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Hush","artistName":"Band","duration":60,"plainLyrics":"都会の夜"}]""")
-                "utaten.com" -> utaTen?.invoke(request) ?: FakeSpotify.html(request, "")
+                // UtaTen answers a moment after the dictionary's readings show, as it does on a phone, so a test waits for what it says.
+                "utaten.com" -> {
+                    Thread.sleep(UTATEN_MS)
+                    utaTen?.invoke(request) ?: FakeSpotify.html(request, "")
+                }
                 else -> FakeSpotify.html(request, "")
             }
         }
@@ -563,9 +567,9 @@ class MainViewModelTest {
     @Test
     fun wordsUtaTenCantBeAskedAboutAreLeftToBeReadAgain() {
         val model = readingsModel { throw java.io.IOException("offline") }
+        until("the readings left to be read again") { model.uiState.learning.readingsUnfinished }
         assertTrue(fake.requestedUrls.any { "utaten.com" in it })
         assertEquals(listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる")), model.uiState.learning.lines.single().parts)
-        assertTrue(model.uiState.learning.readingsUnfinished)
     }
 
     @Test
@@ -575,6 +579,7 @@ class MainViewModelTest {
             if (request.url.encodedPath == "/search") FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Hush</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
             else FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
         }
+        until("UtaTen's readings") { model.uiState.learning.lines.single().parts.first().by == Reader.SUNG }
         assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よる")), model.uiState.learning.lines.single().parts)
         assertFalse(model.uiState.learning.readingsUnfinished)
     }
@@ -2327,5 +2332,10 @@ class MainViewModelTest {
         until("done playing it") { !model.uiState.playingResult }
         assertTrue(playback.opened.isEmpty())
         assertTrue(playback.plays.isEmpty())
+    }
+
+    private companion object {
+        /** How long UtaTen takes to answer: a slow one, as a test machine with much else to do may be. */
+        const val UTATEN_MS = 200L
     }
 }

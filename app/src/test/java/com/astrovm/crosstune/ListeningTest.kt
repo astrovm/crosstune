@@ -4825,9 +4825,11 @@ class ListeningTest {
         ).commit()
         // Found again with a word more, and UtaTen has none for it now.
         wordsOf(null, "都会の夜に", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
-        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && SavedLinesStore(prefs()).load().single().text == "都会の夜に" }
+        // The marks are laid away from the screen, after the line takes its new words.
+        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && SavedLinesStore(prefs()).load().single().ruby.orEmpty().any { it.by == Reader.USER } }
         settle()
         val line = SavedLinesStore(prefs()).load().single()
+        assertEquals("都会の夜に", line.text)
         assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
         assertEquals("まちのよに", line.reading)
         assertTrue(line.readByHand)
@@ -4895,9 +4897,10 @@ class ListeningTest {
         assertFalse(readingShown("よる"))
         assertEquals(Reader.CHATGPT, controllerModel().uiState.learning.lines.single().parts.last().by)
         hold.countDown()
+        // UtaTen fails again once let go, so the words are left to be read again; ChatGPT's 夜 still shows.
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.learning.readingsUnfinished }
         settle()
         assertTrue(readingShown("よ"))
-        assertTrue(controllerModel().uiState.learning.readingsUnfinished)
     }
 
     @Test
@@ -4910,11 +4913,10 @@ class ListeningTest {
         val answers = openAi.reply
         openAi.reply = { body -> if ("You check the readings" in body.getString("instructions")) 500 to "" else answers(body) }
         wordsOf(null, "都会の夜", openAi = openAi, sites = { request -> if (request.url.host == "utaten.com") utaTenSingsMachi(request) else null })
-        waitUntil(TIMEOUT_MS) { readingShown("まち") }
-        settle()
+        // ChatGPT's answer comes after UtaTen's, so the words are left to be read again only then.
+        waitUntil(TIMEOUT_MS) { readingShown("まち") && controllerModel().uiState.learning.readingsUnfinished }
         // UtaTen's readings go into the line kept now, as ChatGPT may not answer for a while; the words wait for it.
         assertEquals("まちのよる", SavedLinesStore(prefs()).load().single().reading)
-        assertTrue(controllerModel().uiState.learning.readingsUnfinished)
     }
 
     @Test
