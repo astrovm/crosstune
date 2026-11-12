@@ -3,7 +3,7 @@
 // mistake. The IP address only counts reports against the limits: it isn't kept, and its network is
 // counted for the day under a key that can't be turned back into it (limits.sql).
 
-import { networkOf, senderKey } from "./sender.js";
+import { blockOf, networkOf, senderKey } from "./sender.js";
 
 /** More than a report with a long comment, every line put in time by hand and a minute of timing log needs. */
 const MAX_BYTES = 48 * 1024;
@@ -43,7 +43,7 @@ const KEEP_DAYS = 180;
  * one the app finds live ("found"), or a song's timing an earlier version kept ("kept"). Each kind has its own room,
  * so one can't use up another's.
  */
-function kindOf(problem) {
+export function kindOf(problem) {
   if (problem === KEPT_TIMING) return "kept";
   return PROBLEMS.has(problem) ? "found" : "user";
 }
@@ -52,25 +52,42 @@ function kindOf(problem) {
 const KEPT_TIMING = "kept_timing";
 
 /**
- * The most reports one network may send in a day (UTC), for each kind. People send about 7 a day in all, and the app
- * reports a song's problem once. One phone's first start of a new version can owe up to 200 kept timings: it sends
- * them at each start, 4 a minute, until one is turned away, and keeps the rest for the next start, so 30 a day sends
- * them in 7 days of use. A problem found live goes once and isn't kept when it's turned away, so the kept ones have
- * their own 30, and can't use the 20 found live or the person's own 10.
+ * The most reports one network (an IPv4 /24, an IPv6 /48) may send in a day (UTC), for each kind. People send about 7
+ * a day in all, and the app reports a song's problem once. One phone's first start of a new version can owe up to
+ * 200 kept timings: it sends them at each start, 4 a minute, until one is turned away, and keeps the rest for the
+ * next start, so 30 a day sends them in 7 days of use. A problem found live goes once and isn't kept when it's
+ * turned away, so the kept ones have their own 30, and can't use the 20 found live or the person's own 10.
  */
 const NETWORK_A_DAY = { user: 10, found: 20, kept: 30 };
 
-/**
- * The most reports kept from one day (UTC), whoever sent them: the last wall when many networks send at once. A
- * network's day is 40, so it takes 13 networks to fill one.
- */
-const MAX_A_DAY = 500;
+/** The most an IPv6 provider's /32 may send in a day, for each kind: three networks' worth, for a provider's many /48s. */
+const BLOCK_A_DAY = { user: 30, found: 60, kept: 90 };
 
 /**
- * The most reports the table holds. A report is at most [MAX_BYTES], about 52 KB once kept, so 9000 is under the
- * 500 MB a database may hold on Cloudflare's free plan. 180 days of people's reports, at 7 a day, is about 1300.
+ * The most a carrier (its autonomous system number) may send in a day, for each kind, however many networks it has.
+ * All of Crosstune's real reports, about 7 a day, could come through one carrier, with a phone's kept timings on
+ * top, so each is well over one phone's day. Each is under a third of the kind's share below, so it takes 3
+ * carriers to fill one.
  */
-const MAX_KEPT = 9000;
+const CARRIER_A_DAY = { user: 50, found: 50, kept: 70 };
+
+/**
+ * The most reports of each kind kept from one day (UTC), whoever sent them: the last wall when many networks send
+ * at once. Each kind has its own share, and a sender can claim any kind, so a flood fills one share and the others
+ * hold: what people send keeps its 150 whatever the app is said to find. Kept timings have the most, as a new
+ * version's backlog comes in a few days. 500 in all, about 70 times a real day.
+ */
+const SHARE_A_DAY = { user: 150, found: 150, kept: 200 };
+
+/**
+ * The most reports of each kind the table holds, so one kind's flood can't fill it for the others. A report is at
+ * most [MAX_BYTES], about 52 KB once kept, so 9000 in all is under the 500 MB a database may hold on Cloudflare's
+ * free plan. 180 days of people's reports, at 7 a day, is about 1300.
+ */
+const SHARE_KEPT = { user: 3000, found: 3000, kept: 3000 };
+
+/** The kinds, in the order the limits are named. */
+const KINDS = ["user", "found", "kept"];
 
 /** How many refusals for each reason a day are counted: past it, a refusal costs no write. */
 const MAX_REFUSALS = 1000;
@@ -83,34 +100,46 @@ const COLUMNS =
   "version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
   "lyric_line, word, reading_shown, reader, language, right_reading";
 
-/** How many reports the table holds, and how many came in today, as limits.sql's triggers keep them. */
-const KEPT = "coalesce((SELECT n FROM report_counts WHERE key = 'all'), 0)";
-const TODAY = "coalesce((SELECT n FROM report_counts WHERE key = date('now')), 0)";
+/** How many reports of [kind] the table holds, and how many came in today, as limits.sql's triggers keep them. */
+const heldOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = 'all:${kind}'), 0)`;
+const todayOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = date('now') || ':${kind}'), 0)`;
+const room = (kind) => `${heldOf(kind)} < ${SHARE_KEPT[kind]} AND ${todayOf(kind)} < ${SHARE_A_DAY[kind]}`;
+
+/** The day's limits, in the order CHECK reads them and a report is counted against them. */
+const DAY_LIMITS = [
+  { why: "network", of: (sender) => networkOf(sender.address), a_day: NETWORK_A_DAY },
+  { why: "block", of: (sender) => blockOf(sender.address), a_day: BLOCK_A_DAY },
+  { why: "carrier", of: (sender) => (sender.carrier ? `AS${sender.carrier}` : null), a_day: CARRIER_A_DAY },
+];
 
 /**
- * A report put in the table, unless that would take it past [MAX_KEPT], or today past [MAX_A_DAY]: one statement,
- * so two reports at once can't both take the last place. It reads two counts, one row each, never the reports.
+ * Why a report of each kind is turned away, if it is: 'kept_full' or 'day_full' for its kind's share, or the first
+ * day's limit its sender used up, else null. Bound to each limit's key and its number for the kind; a key that is
+ * null (no /32, no carrier) finds no row. One read before anything is written, so a report turned away costs a
+ * refusal's write at most, and no count.
  */
-const INSERT =
-  `INSERT INTO reports (${COLUMNS}) SELECT ${COLUMNS.split(",").map(() => "?").join(", ")} ` +
-  `WHERE ${KEPT} < ${MAX_KEPT} AND ${TODAY} < ${MAX_A_DAY}`;
+const CHECK = Object.fromEntries(KINDS.map((kind) => [kind,
+  `SELECT CASE WHEN ${heldOf(kind)} >= ${SHARE_KEPT[kind]} THEN 'kept_full' WHEN ${todayOf(kind)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' ` +
+  DAY_LIMITS.map((limit, i) => `WHEN coalesce((SELECT n FROM network_days WHERE key = ?${2 * i + 1}), 0) >= ?${2 * i + 2} THEN '${limit.why}' `).join("") +
+  "END AS why",
+]));
 
 /**
- * Which cap is reached, if one is: 'kept_full' or 'day_full', else null. Read before anything is written, so once
- * the day or the table is full a report costs a refusal's write at most, and no network's count.
+ * A report of each kind put in the table, unless that would take its kind past its share of the table or the day: one
+ * statement, so two reports at once can't both take the last place. It reads two counts, one row each, never the reports.
  */
-const FULL = `SELECT CASE WHEN ${KEPT} >= ${MAX_KEPT} THEN 'kept_full' WHEN ${TODAY} >= ${MAX_A_DAY} THEN 'day_full' END AS full`;
+const INSERT = Object.fromEntries(KINDS.map((kind) => [kind,
+  `INSERT INTO reports (${COLUMNS}) SELECT ${COLUMNS.split(",").map(() => "?").join(", ")} WHERE ${room(kind)}`,
+]));
 
-/** One more report from a network today, unless it sent its day's: then nothing changes. */
+/** One more report from a network, block or carrier today, unless it sent its day's: then nothing changes. */
 const COUNT_NETWORK = "INSERT INTO network_days (key, day, n) VALUES (?, ?, 1) ON CONFLICT (key) DO UPDATE SET n = n + 1 WHERE n < ?";
 
-/**
- * One more report turned away today, for the reason given, or, with none, for whichever cap is reached: the last
- * place can go to another report between FULL and the insert.
- */
-const REFUSE =
-  `INSERT INTO refusals (day, why, n) SELECT date('now'), coalesce(?, CASE WHEN ${KEPT} >= ${MAX_KEPT} THEN 'kept_full' ELSE 'day_full' END), 1 ` +
-  `WHERE true ON CONFLICT (day, why) DO UPDATE SET n = n + 1 WHERE n < ${MAX_REFUSALS}`;
+/** One more report turned away today, for the reason given, up to [MAX_REFUSALS]. */
+const REFUSE = `INSERT INTO refusals (day, why, n) VALUES (date('now'), ?, 1) ON CONFLICT (day, why) DO UPDATE SET n = n + 1 WHERE n < ${MAX_REFUSALS}`;
+
+/** A carrier as the old address passes it on: its number, or none. */
+const CARRIER = /^\d{1,10}$/;
 
 export default {
   async fetch(request, env) {
@@ -125,6 +154,9 @@ export default {
     // address, which it passes on too. From here they all come from Cloudflare's, and would count as one sender.
     const passedOn = await sameKey(request.headers.get("X-Crosstune-Passed-On"), env.FORWARD_KEY);
     const address = (passedOn ? request.headers.get("X-Crosstune-Sender") : null) ?? request.headers.get("CF-Connecting-IP");
+    // The sender's carrier, as Cloudflare tells it: for one passed on, as it told the old address.
+    const carrier = String((passedOn ? request.headers.get("X-Crosstune-Carrier") : request.cf?.asn) ?? "");
+    const sender = { address, carrier: CARRIER.test(carrier) ? carrier : null };
     if (!passedOn) {
       const { success } = await env.LIMIT.limit({ key: senderKey(address) });
       if (!success) return refused(429, "minute");
@@ -141,36 +173,37 @@ export default {
       await refuse(env, "no_key");
       return refused(503, "no_key");
     }
-    const full = (await env.DB.prepare(FULL).bind().first())?.full;
-    if (full) {
-      await refuse(env, full);
-      return refused(429, "full");
-    }
     const day = new Date().toISOString().slice(0, 10);
     const kind = kindOf(report.problem);
-    const network = await networkDayKey(env.NETWORK_KEY, day, kind, networkOf(address));
-    const counted = await env.DB.prepare(COUNT_NETWORK).bind(network, day, NETWORK_A_DAY[kind]).run();
-    if (counted.meta.changes === 0) {
-      await refuse(env, "network");
-      return refused(429, "network");
+    const limits = await Promise.all(DAY_LIMITS.map(async (limit) => {
+      const of = limit.of(sender);
+      return { ...limit, key: of === null ? null : await networkDayKey(env.NETWORK_KEY, day, kind, of), most: limit.a_day[kind] };
+    }));
+    const check = async () => (await env.DB.prepare(CHECK[kind]).bind(...limits.flatMap((it) => [it.key, it.most])).first())?.why;
+    const why = await check();
+    if (why) return turnAway(env, kind, why);
+    for (const limit of limits) {
+      if (limit.key === null) continue;
+      const counted = await env.DB.prepare(COUNT_NETWORK).bind(limit.key, day, limit.most).run();
+      // Another report took the last one meanwhile.
+      if (counted.meta.changes === 0) return turnAway(env, kind, limit.why);
     }
-    const { meta } = await env.DB.prepare(INSERT).bind(
+    const { meta } = await env.DB.prepare(INSERT[kind]).bind(
       report.version, report.android, report.title, report.artist, report.app,
       report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
       report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
       report.line, report.word, report.shown, report.reader, report.language, report.right
     ).run();
     if (meta.changes !== 0) return status(204);
-    // Full: the app keeps what it found for later.
-    await refuse(env, null);
-    return refused(429, "full");
+    // Full meanwhile: the app keeps what it found for later.
+    return turnAway(env, kind, (await check()) ?? "day_full");
   },
 
   // Once a day, the reports older than the policy allows go, and the counts no one asks anymore.
   async scheduled(controller, env) {
     await env.DB.prepare("DELETE FROM reports WHERE at < datetime('now', ?)").bind(`-${KEEP_DAYS} days`).run();
     await env.DB.prepare("DELETE FROM network_days WHERE day < date('now')").bind().run();
-    await env.DB.prepare("DELETE FROM report_counts WHERE key <> 'all' AND key < date('now', '-1 day')").bind().run();
+    await env.DB.prepare("DELETE FROM report_counts WHERE key NOT LIKE 'all:%' AND key < date('now', '-1 day')").bind().run();
     await env.DB.prepare("DELETE FROM refusals WHERE day < date('now', ?)").bind(`-${KEEP_DAYS} days`).run();
   },
 };
@@ -180,14 +213,23 @@ function status(code) {
 }
 
 /**
- * A report turned away, saying [why]: "minute", "network", "full" or "no_key". The app reads only the status and
+ * A report of [kind] turned away for [why] ("network", "block", "carrier", "day_full" or "kept_full"): counted, and
+ * answered with 429.
+ */
+async function turnAway(env, kind, why) {
+  await refuse(env, `${why}:${kind}`);
+  return refused(429, why.endsWith("_full") ? "full" : why);
+}
+
+/**
+ * A report turned away, saying [why]: "minute", "network", "block", "carrier", "full" or "no_key". The app reads only the status and
  * keeps what it found for later either way; the reason is for whoever looks at the answer.
  */
 function refused(code, why) {
   return new Response(null, { status: code, headers: { "X-Crosstune-Refused": why } });
 }
 
-/** Counts a report turned away today for [why], or for the cap reached when it's null, up to [MAX_REFUSALS]. */
+/** Counts a report turned away today for [why], up to [MAX_REFUSALS]. */
 async function refuse(env, why) {
   await env.DB.prepare(REFUSE).bind(why).run();
 }

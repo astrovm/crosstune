@@ -1,7 +1,7 @@
 // Run with: node --test "report/*.test.mjs"
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { networkOf, senderKey } from "./sender.js";
+import { blockOf, networkOf, senderKey } from "./sender.js";
 
 test("an IPv4 address counts whole", () => {
   assert.equal(senderKey("203.0.113.7"), "203.0.113.7");
@@ -60,4 +60,11 @@ test("a 6to4 address counts as the IPv4 network inside it", () => {
 test("what isn't an address is its own network", () => {
   for (const odd of ["", "not an address", "1::2::3", "300.1.2.3", "1.2.3"]) assert.equal(networkOf(odd), odd.trim().toLowerCase(), odd);
   assert.equal(networkOf(undefined), "");
+});
+
+test("an IPv6 address is in a wider block, its /32, which a provider is given; an IPv4 address isn't", () => {
+  for (const address of ["2001:db8::1", "2001:db8:ffff:1::1", "2001:DB8:A:B:C:D:E:F", "[2001:db8::1]"]) assert.equal(blockOf(address), "2001:db8::/32", address);
+  assert.equal(blockOf("2001:db9::1"), "2001:db9::/32");
+  // An IPv4 network is counted by its carrier instead, and so is a 6to4 address, which carries one.
+  for (const none of ["203.0.113.7", "::ffff:203.0.113.7", "2002:cb00:7107::1", "", "not an address", undefined]) assert.equal(blockOf(none), null, String(none));
 });

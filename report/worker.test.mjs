@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import * as all from "./worker.js";
-import worker, { networkDayKey, readReport, sameKey } from "./worker.js";
+import worker, { kindOf, networkDayKey, readReport, sameKey } from "./worker.js";
 
 /**
  * D1 and the rate limit, as a test needs them: the reports saved, every other statement asked, and whether the
@@ -23,7 +23,7 @@ function env({ allowed = true } = {}) {
       prepare: (sql) => ({
         bind: (...values) => ({
           run: async () => ((sql.startsWith("INSERT INTO reports ") ? saved : asked).push({ sql, values }), { meta: { changes: 1 } }),
-          first: async () => (asked.push({ sql, values }), { full: null }),
+          first: async () => (asked.push({ sql, values }), { why: null }),
         }),
       }),
     },
@@ -31,13 +31,15 @@ function env({ allowed = true } = {}) {
   };
 }
 
-function post(body, { path = "/reports", method = "POST", headers = {} } = {}) {
-  return new Request(`https://report.crosstune.cc${path}`, {
+/** A request, with what Cloudflare tells of its sender in [cf]: its carrier is [cf.asn]. */
+function post(body, { path = "/reports", method = "POST", headers = {}, cf = {} } = {}) {
+  const request = new Request(`https://report.crosstune.cc${path}`, {
     method,
     // What every version of the app sends, through OkHttp.
     headers: { "CF-Connecting-IP": "203.0.113.7", "Content-Type": "application/json; charset=utf-8", ...headers },
     body: method === "GET" ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
+  return Object.defineProperty(request, "cf", { value: cf });
 }
 
 const song = {
@@ -377,34 +379,54 @@ function realEnv() {
   };
 }
 
-/** [count] made-up reports put in the table as if they came in [ago] ("-1 days"), counted as the Worker's are. */
-function fill(e, count, ago = "+0 seconds") {
+/** [count] made-up reports about [problem] put in the table as if they came in [ago] ("-1 days"), counted as the Worker's are. */
+function fill(e, count, ago = "+0 seconds", problem = null) {
   e.db.prepare(
-    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?) INSERT INTO reports (version, at) SELECT 'made-up', datetime('now', ?) FROM n"
-  ).run(count, ago);
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?) INSERT INTO reports (version, at, problem) SELECT 'made-up', datetime('now', ?), ? FROM n"
+  ).run(count, ago, problem);
 }
 
+const today = () => new Date().toISOString().slice(0, 10);
+const yesterday = () => new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 const rows = (e) => Number(e.db.prepare("SELECT COUNT(*) AS n FROM reports").get().n);
 const counted = (e, key) => e.db.prepare("SELECT n FROM report_counts WHERE key = ?").get(key)?.n ?? 0;
 const refusals = (e) => Object.fromEntries(e.db.prepare("SELECT why, n FROM refusals").all().map((it) => [it.why, it.n]));
+const networkDays = (e) => Number(e.db.prepare("SELECT count(*) AS n FROM network_days").get().n);
 
-/** A report sent from [address], so each comes from a network of its own unless a test says otherwise. */
-const from = (address, body = song, headers = {}) => post(body, { headers: { "CF-Connecting-IP": address, ...headers } });
+/** A report sent from [address], on carrier [asn] when one is given, so each comes from a network of its own unless a test says otherwise. */
+const from = (address, body = song, headers = {}, asn = null) => post(body, { headers: { "CF-Connecting-IP": address, ...headers }, cf: asn === null ? {} : { asn } });
 let networks = 0;
 const anotherNetwork = () => `198.${51 + Math.floor(++networks / 250)}.${networks % 250}.1`;
 
-test("past 500 reports in a day, whoever sends them, nothing more is kept that day", async () => {
+const found = { version: "2.25.0", problem: "no_lyrics", song: { title: "Demo", artist: "Band" } };
+const keptTiming = { version: "2.25.0", problem: "kept_timing", song: { title: "Demo", artist: "Band" } };
+
+test("each kind has its own share of the day: 150 a person sends, 150 the app finds, 200 timings kept from before", async () => {
   const e = realEnv();
-  fill(e, 499);
-  assert.equal((await worker.fetch(from("2001:db8:1::1"), e)).status, 204);
-  const refused = await worker.fetch(from("2001:db8:2::1"), e);
+  fill(e, 149);
+  fill(e, 150, "+0 seconds", "no_lyrics");
+  fill(e, 199, "+0 seconds", "kept_timing");
+  assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 204);
+  const refused = await worker.fetch(from(anotherNetwork()), e);
   assert.equal(refused.status, 429);
   assert.equal(refused.headers.get("X-Crosstune-Refused"), "full");
   // Even one the old address counted and passed on.
   const passedOn = { ...e, FORWARD_KEY: "made-up-key" };
   assert.equal((await worker.fetch(from("203.0.113.7", song, { "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "192.0.2.1" }), passedOn)).status, 429);
+  // The app's finds are full too, and the timings kept from before have one place left.
+  assert.equal((await worker.fetch(from(anotherNetwork(), found), e)).status, 429);
+  assert.equal((await worker.fetch(from(anotherNetwork(), keptTiming), e)).status, 204);
+  assert.equal((await worker.fetch(from(anotherNetwork(), keptTiming), e)).status, 429);
   assert.equal(rows(e), 500);
-  assert.deepEqual(refusals(e), { day_full: 2 });
+  assert.deepEqual(refusals(e), { "day_full:user": 2, "day_full:found": 1, "day_full:kept": 1 });
+});
+
+test("a flood of what the app finds leaves the day's room for what people send", async () => {
+  const e = realEnv();
+  fill(e, 150, "+0 seconds", "no_lyrics");
+  fill(e, 200, "+0 seconds", "kept_timing");
+  assert.equal((await worker.fetch(from(anotherNetwork(), found), e)).status, 429);
+  for (let i = 0; i < 20; i++) assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 204);
 });
 
 test("reports from another day don't count against today's", async () => {
@@ -414,50 +436,85 @@ test("reports from another day don't count against today's", async () => {
   assert.equal(rows(e), 601);
 });
 
-test("the table never holds more than 9000 reports, and the daily clear-out makes room again", async () => {
+test("the table holds at most 3000 reports of each kind, and the daily clear-out makes room again", async () => {
   const e = realEnv();
-  fill(e, 4000, "-200 days");
-  fill(e, 4999, "-30 days");
+  fill(e, 1000, "-200 days");
+  fill(e, 1999, "-30 days");
   assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 204);
   assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 429);
-  assert.equal(rows(e), 9000);
-  assert.deepEqual(refusals(e), { kept_full: 1 });
+  assert.equal(rows(e), 3000);
+  assert.deepEqual(refusals(e), { "kept_full:user": 1 });
+  // The other kinds have their own.
+  assert.equal((await worker.fetch(from(anotherNetwork(), found), e)).status, 204);
   await worker.scheduled({}, e);
-  assert.equal(rows(e), 5000);
+  assert.equal(rows(e), 2001);
   assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 204);
 });
 
 test("reports deleted by hand make room at once: the counts are exact", async () => {
   const e = realEnv();
-  fill(e, 9000, "-30 days");
+  fill(e, 3000, "-30 days");
   assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 429);
-  // The newest are kept, so ids 1 to 9000 still span the table.
-  e.db.prepare("DELETE FROM reports WHERE id <= 8909").run();
+  // The newest are kept, so ids 1 to 3000 still span the table.
+  e.db.prepare("DELETE FROM reports WHERE id <= 2909").run();
   assert.equal(rows(e), 91);
   assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 204);
-  assert.equal(counted(e, "all"), 92);
-  // And the day's too: with that one, 500 came in today.
-  fill(e, 499);
+  assert.equal(counted(e, "all:user"), 92);
+  // And the day's too: with that one, 150 came in today.
+  fill(e, 149);
   assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 429);
   e.db.prepare("DELETE FROM reports WHERE id IN (SELECT id FROM reports ORDER BY id DESC LIMIT 1)").run();
   assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 204);
-  assert.equal(counted(e, new Date().toISOString().slice(0, 10)), 500);
+  assert.equal(counted(e, `${today()}:user`), 150);
+});
+
+test("a report's day or kind changed by hand moves its count", () => {
+  const e = realEnv();
+  fill(e, 2);
+  e.db.exec("UPDATE reports SET at = datetime('now', '-1 days') WHERE id = 1");
+  assert.equal(counted(e, `${today()}:user`), 1);
+  assert.equal(counted(e, `${yesterday()}:user`), 1);
+  e.db.exec("UPDATE reports SET problem = 'no_lyrics' WHERE id = 1");
+  assert.equal(counted(e, "all:user"), 1);
+  assert.equal(counted(e, "all:found"), 1);
+  assert.equal(counted(e, `${yesterday()}:user`), 0);
+  assert.equal(counted(e, `${yesterday()}:found`), 1);
+  // Another column changes no count.
+  e.db.exec("UPDATE reports SET title = 'Made Up' WHERE id = 2");
+  assert.deepEqual(e.db.prepare("SELECT key, n FROM report_counts WHERE n > 0 ORDER BY key").all().map((it) => `${it.key}=${it.n}`),
+    [`${yesterday()}:found=1`, `${today()}:user=1`, "all:found=1", "all:user=1"]);
+});
+
+test("the table's kinds are the Worker's, for every problem", () => {
+  const e = realEnv();
+  const problems = [null, "wrong_reading", "no_lyrics", "no_timing", "timed_by_hand", "sung_off", "no_chords", "kept_timing", "made_up"];
+  for (const problem of problems) {
+    const before = counted(e, `all:${kindOf(problem)}`);
+    fill(e, 1, "+0 seconds", problem);
+    assert.equal(counted(e, `all:${kindOf(problem)}`), before + 1, String(problem));
+  }
+  assert.deepEqual([...new Set(problems.map(kindOf))].sort(), ["found", "kept", "user"]);
 });
 
 test("limits.sql takes the counts from the table, and running it again changes nothing", () => {
   const e = realEnv();
   fill(e, 3, "-1 days");
-  fill(e, 2);
-  e.db.exec("DELETE FROM report_counts");
-  e.db.exec(readFileSync(new URL("./limits.sql", import.meta.url), "utf8"));
-  e.db.exec(readFileSync(new URL("./limits.sql", import.meta.url), "utf8"));
-  assert.equal(counted(e, "all"), 5);
-  assert.equal(counted(e, new Date().toISOString().slice(0, 10)), 2);
+  fill(e, 2, "+0 seconds", "no_lyrics");
+  e.db.exec("UPDATE report_counts SET n = 77");
+  e.db.exec("INSERT INTO report_counts (key, n) VALUES ('all:made-up', 5)");
+  const sql = readFileSync(new URL("./limits.sql", import.meta.url), "utf8");
+  e.db.exec(sql);
+  e.db.exec(sql);
+  assert.equal(counted(e, "all:user"), 3);
+  assert.equal(counted(e, "all:found"), 2);
+  assert.equal(counted(e, `${yesterday()}:user`), 3);
+  assert.equal(counted(e, `${today()}:found`), 2);
+  assert.equal(counted(e, "all:made-up"), 0);
   assert.equal(rows(e), 5);
+  // The counts are set over what's there, never deleted and made again, so no statement can meet a row it made.
+  assert.ok(!/DELETE FROM report_counts/i.test(sql));
+  assert.match(sql, /ON CONFLICT \(key\) DO UPDATE SET n = excluded\.n/);
 });
-
-const found = { version: "2.25.0", problem: "no_lyrics", song: { title: "Demo", artist: "Band" } };
-const keptTiming = { version: "2.25.0", problem: "kept_timing", song: { title: "Demo", artist: "Band" } };
 
 test("one network sends 10 reports a person sends a day, 20 the app finds and 30 timings kept from before", async () => {
   const e = realEnv();
@@ -478,7 +535,7 @@ test("one network sends 10 reports a person sends a day, 20 the app finds and 30
   assert.equal((await send("203.0.114.1")).status, 204);
   assert.equal((await send("2001:db8:b::1")).status, 204);
   assert.equal(rows(e), 72);
-  assert.deepEqual(refusals(e), { network: 4 });
+  assert.deepEqual(refusals(e), { "network:user": 2, "network:found": 1, "network:kept": 1 });
 });
 
 test("a phone sending the timings it kept from before leaves room for a problem it finds live", async () => {
@@ -493,15 +550,70 @@ test("a phone sending the timings it kept from before leaves room for a problem 
   assert.equal((await send(song)).status, 204);
 });
 
-test("a network is counted under a key that keeps no address and is another one each day", async () => {
+test("an IPv6 provider's /32 sends 30 reports a person sends a day, however many /48s it has", async () => {
   const e = realEnv();
-  await worker.fetch(from("203.0.113.7"), e);
+  let kept = 0;
+  for (let n = 0; n < 4; n++) for (let i = 0; i < 10; i++) if ((await worker.fetch(from(`2001:db8:${n}:${i}::1`), e)).status === 204) kept++;
+  assert.equal(kept, 30);
+  const refused = await worker.fetch(from("2001:db8:ff::1"), e);
+  assert.equal(refused.headers.get("X-Crosstune-Refused"), "block");
+  assert.equal((await worker.fetch(from("2001:db9::1"), e)).status, 204);
+  assert.equal((await worker.fetch(from("2001:db8:ff::1", found), e)).status, 204);
+});
+
+test("a carrier sends 50 reports a person sends a day, however many networks it has", async () => {
+  const e = realEnv();
+  let kept = 0;
+  for (let n = 0; n < 6; n++) {
+    const network = anotherNetwork();
+    for (let i = 0; i < 10; i++) if ((await worker.fetch(from(network, song, {}, 64500), e)).status === 204) kept++;
+  }
+  assert.equal(kept, 50);
+  assert.equal((await worker.fetch(from(anotherNetwork(), song, {}, 64500), e)).headers.get("X-Crosstune-Refused"), "carrier");
+  assert.equal((await worker.fetch(from(anotherNetwork(), song, {}, 64501), e)).status, 204);
+  assert.deepEqual(refusals(e), { "carrier:user": 11 });
+});
+
+/**
+ * Fills a kind's share of the day as someone with as many networks and carriers as they like would: a new network
+ * when one is turned away, a new carrier when its carrier is. How many of each it took.
+ */
+async function flood(e, body) {
+  let carrier = 64600;
+  let network = anotherNetwork();
+  const networksUsed = new Set();
+  const carriersUsed = new Set();
+  for (;;) {
+    const answer = await worker.fetch(from(network, body, {}, carrier), e);
+    if (answer.status === 204) {
+      networksUsed.add(network);
+      carriersUsed.add(carrier);
+      continue;
+    }
+    const why = answer.headers.get("X-Crosstune-Refused");
+    if (why === "full") return { networks: networksUsed.size, carriers: carriersUsed.size };
+    if (why === "carrier") carrier++;
+    network = anotherNetwork();
+  }
+}
+
+test("filling a kind's day takes 3 carriers and 15, 9 or 8 networks", async () => {
+  // At least the share over a carrier's day (150/50, 150/50, 200/70) and over a network's (150/10, 150/20, 200/30).
+  assert.deepEqual(await flood(realEnv(), song), { networks: 15, carriers: 3 });
+  assert.deepEqual(await flood(realEnv(), found), { networks: 9, carriers: 3 });
+  assert.deepEqual(await flood(realEnv(), keptTiming), { networks: 8, carriers: 3 });
+});
+
+test("a network is counted under keys that keep no address and are other ones each day", async () => {
+  const e = realEnv();
+  await worker.fetch(from("203.0.113.7", song, {}, 64500), e);
   await worker.fetch(from("2001:db8:a::1"), e);
+  // The IPv4 network and its carrier, the IPv6 network and its /32.
   const kept = e.db.prepare("SELECT key, day, n FROM network_days").all();
-  assert.equal(kept.length, 2);
+  assert.equal(kept.length, 4);
   for (const { key, day } of kept) {
     assert.match(key, /^[0-9a-f]{64}$/);
-    assert.equal(day, new Date().toISOString().slice(0, 10));
+    assert.equal(day, today());
   }
   const day = "2026-11-11";
   const key = await networkDayKey("made-up-key", day, "user", "203.0.113.0/24");
@@ -509,18 +621,24 @@ test("a network is counted under a key that keeps no address and is another one 
   assert.notEqual(await networkDayKey("another-made-up-key", day, "user", "203.0.113.0/24"), key);
   assert.notEqual(await networkDayKey("made-up-key", day, "found", "203.0.113.0/24"), key);
   assert.notEqual(await networkDayKey("made-up-key", day, "user", "203.0.114.0/24"), key);
-  assert.ok(!JSON.stringify(e.db.prepare("SELECT * FROM network_days").all()).includes("203.0.113"));
+  const stored = JSON.stringify(e.db.prepare("SELECT * FROM network_days").all());
+  for (const said of ["203.0.113", "2001:db8", "64500"]) assert.ok(!stored.includes(said), said);
 });
 
-test("a report passed on by the old address counts against its sender's network", async () => {
+test("a report passed on by the old address counts against its sender's network and carrier", async () => {
   const e = { ...realEnv(), FORWARD_KEY: "made-up-key" };
-  const passed = (sender) => worker.fetch(from("198.18.0.1", song, { "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": sender }), e);
+  // Where reports are kept now sees Cloudflare's own carrier for them.
+  const passed = (sender, carrier = "64500") => worker.fetch(from("198.18.0.1", song, { "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": sender, "X-Crosstune-Carrier": carrier }, 13335), e);
   for (let i = 0; i < 10; i++) assert.equal((await passed(`192.0.2.${i}`)).status, 204);
-  assert.equal((await passed("192.0.2.99")).status, 429);
-  assert.equal((await passed("192.0.3.1")).status, 204);
-  // A sender said by anyone else is not believed.
-  const lying = await worker.fetch(from("192.0.2.50", song, { "X-Crosstune-Sender": "192.0.9.9" }), e);
-  assert.equal(lying.status, 429);
+  assert.equal((await passed("192.0.2.99")).headers.get("X-Crosstune-Refused"), "network");
+  for (let n = 3; n < 7; n++) for (let i = 0; i < 10; i++) await passed(`192.0.${n}.${i}`);
+  assert.equal((await passed("192.0.9.1")).headers.get("X-Crosstune-Refused"), "carrier");
+  assert.equal((await passed("192.0.9.1", "64501")).status, 204);
+  // A sender or carrier said by anyone else is not believed.
+  const lying = await worker.fetch(from("192.0.2.50", song, { "X-Crosstune-Sender": "192.0.9.9", "X-Crosstune-Carrier": "64999" }, 64500), e);
+  assert.equal(lying.headers.get("X-Crosstune-Refused"), "network");
+  const odd = await worker.fetch(from("198.18.0.1", song, { "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "192.0.20.1", "X-Crosstune-Carrier": "not a number" }), e);
+  assert.equal(odd.status, 204);
 });
 
 test("without NETWORK_KEY nothing is kept, the log says why, and the refusal is counted", async (t) => {
@@ -539,11 +657,11 @@ test("without NETWORK_KEY nothing is kept, the log says why, and the refusal is 
 
 test("refusals are counted up to 1000 a day for each reason, then cost no write", async () => {
   const e = realEnv();
-  fill(e, 500);
-  e.db.exec("INSERT INTO refusals (day, why, n) VALUES (date('now'), 'day_full', 998)");
+  fill(e, 150);
+  e.db.exec("INSERT INTO refusals (day, why, n) VALUES (date('now'), 'day_full:user', 998)");
   // Each one is turned away: the first two are counted, and the rest change nothing.
   for (let i = 0; i < 5; i++) assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 429);
-  assert.deepEqual(refusals(e), { day_full: 1000 });
+  assert.deepEqual(refusals(e), { "day_full:user": 1000 });
 });
 
 /** Rows SQLite changed since the database was made, by the Worker's statements and the triggers they set off. */
@@ -551,41 +669,45 @@ const changed = (e) => Number(e.db.prepare("SELECT total_changes() AS n").get().
 
 test("once the day or the table is full, a report writes only its refusal, and no network's count", async () => {
   const e = realEnv();
-  fill(e, 500);
+  fill(e, 150);
   const before = changed(e);
-  for (let i = 0; i < 50; i++) assert.equal((await worker.fetch(from(anotherNetwork()), e)).status, 429);
-  assert.equal(e.db.prepare("SELECT count(*) AS n FROM network_days").get().n, 0);
-  assert.deepEqual(refusals(e), { day_full: 50 });
+  for (let i = 0; i < 50; i++) assert.equal((await worker.fetch(from(anotherNetwork(), song, {}, 64500), e)).status, 429);
+  assert.equal(networkDays(e), 0);
+  assert.deepEqual(refusals(e), { "day_full:user": 50 });
   assert.equal(changed(e) - before, 50);
   const full = realEnv();
-  fill(full, 9000, "-30 days");
+  fill(full, 3000, "-30 days");
   for (let i = 0; i < 50; i++) assert.equal((await worker.fetch(from(anotherNetwork()), full)).status, 429);
-  assert.equal(full.db.prepare("SELECT count(*) AS n FROM network_days").get().n, 0);
-  assert.deepEqual(refusals(full), { kept_full: 50 });
+  assert.equal(networkDays(full), 0);
+  assert.deepEqual(refusals(full), { "kept_full:user": 50 });
 });
 
-test("a flood from many networks writes the networks of the reports kept, and at most 1000 refusals", async () => {
+test("a flood from many networks writes the networks of the reports kept, and at most 1000 refusals a reason", async () => {
   const e = realEnv();
   const before = changed(e);
   for (let i = 0; i < 2000; i++) await worker.fetch(from(anotherNetwork()), e);
-  assert.equal(rows(e), 500);
-  assert.equal(e.db.prepare("SELECT count(*) AS n FROM network_days").get().n, 500);
-  assert.deepEqual(refusals(e), { day_full: 1000 });
+  assert.equal(rows(e), 150);
+  assert.equal(networkDays(e), 150);
+  assert.deepEqual(refusals(e), { "day_full:user": 1000 });
   // Each report kept: its network, itself and two counts. Each refusal past 1000 changes nothing.
-  assert.equal(changed(e) - before, 500 * 4 + 1000);
+  assert.equal(changed(e) - before, 150 * 4 + 1000);
 });
 
 test("the daily clear-out forgets past days' networks, old day counts and old refusals", async () => {
   const e = realEnv();
   await worker.fetch(from("203.0.113.7"), e);
+  fill(e, 1, "-1 days");
   e.db.exec("INSERT INTO network_days (key, day, n) VALUES ('old', date('now', '-1 days'), 3)");
-  e.db.exec("INSERT INTO report_counts (key, n) VALUES (date('now', '-2 days'), 4), (date('now', '-1 days'), 5)");
-  e.db.exec("INSERT INTO refusals (day, why, n) VALUES (date('now', '-181 days'), 'network', 1), (date('now', '-179 days'), 'network', 2)");
+  e.db.exec("INSERT INTO report_counts (key, n) VALUES (date('now', '-2 days') || ':user', 4)");
+  e.db.exec("INSERT INTO refusals (day, why, n) VALUES (date('now', '-181 days'), 'network:user', 1), (date('now', '-179 days'), 'network:user', 2)");
   await worker.scheduled({}, e);
-  assert.deepEqual(e.db.prepare("SELECT day FROM network_days").all().map((it) => it.day), [new Date().toISOString().slice(0, 10)]);
-  assert.deepEqual(e.db.prepare("SELECT key FROM report_counts ORDER BY key").all().map((it) => it.key).length, 3);
-  assert.equal(counted(e, "all"), 1);
-  assert.deepEqual(Object.values(refusals(e)), [2]);
+  assert.deepEqual(e.db.prepare("SELECT day FROM network_days").all().map((it) => it.day), [today()]);
+  // Today's and yesterday's counts stay, and what the table holds.
+  assert.deepEqual(e.db.prepare("SELECT key FROM report_counts ORDER BY key").all().map((it) => it.key), [`${yesterday()}:user`, `${today()}:user`, "all:user"]);
+  assert.equal(counted(e, "all:user"), 2);
+  // Rows by day, so one reason's two days can't pass for one.
+  const days = e.db.prepare("SELECT day, n FROM refusals ORDER BY day").all().map((it) => `${it.day}=${it.n}`);
+  assert.deepEqual(days, [`${new Date(Date.now() - 179 * 86400000).toISOString().slice(0, 10)}=2`]);
 });
 
 test("a kept report is kept whole in the real table, with what it says", async () => {
@@ -597,12 +719,15 @@ test("a kept report is kept whole in the real table, with what it says", async (
 
 test("every statement a report costs looks rows up, never reads the table through, kept or turned away", async () => {
   const e = realEnv();
-  fill(e, 499);
-  // Kept, then turned away for the day, then for the network.
-  for (let i = 0; i < 12; i++) await worker.fetch(from("203.0.113.7"), e);
-  // Reading the caps, counting the network, keeping the report, counting a refusal.
+  fill(e, 149);
+  // Kept, then turned away for the day, then for the network, with a carrier and a /32 counted too.
+  for (let i = 0; i < 12; i++) await worker.fetch(from("2001:db8::1", song, {}, 64500), e);
+  for (let i = 0; i < 12; i++) await worker.fetch(from("2001:db8::1", found, {}, 64500), e);
+  fill(e, 3000, "-30 days", "kept_timing");
+  await worker.fetch(from("2001:db8::1", keptTiming, {}, 64500), e);
+  // Reading the limits, counting the network, keeping the report, counting a refusal, for each kind.
   const asked = new Set(e.statements.map((it) => it.sql));
-  assert.equal(asked.size, 4);
+  assert.equal(asked.size, 7);
   for (const { sql, values } of e.statements) {
     const plan = e.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...values).map((it) => it.detail);
     // SCAN reads every row; SEARCH goes straight to the rows it wants.
