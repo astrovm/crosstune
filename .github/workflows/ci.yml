@@ -61,6 +61,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Check Play Store changelog and texts
         run: |
@@ -106,6 +108,7 @@ jobs:
           python3 -m unittest discover -s scripts/emulator -p "test_*.py"
           python3 -m unittest scripts/test_devicelock.py
           python3 -m unittest scripts/test_notices.py
+          python3 -m unittest scripts/test_workflows.py
           python3 -m unittest discover -s scripts/record -p "test_*.py"
           python3 -m unittest discover -s scripts/reports -p "test_*.py"
           python3 -m unittest discover -s scripts/jtotal-widths -p "test_*.py"
@@ -127,6 +130,8 @@ jobs:
         working-directory: extension
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -155,6 +160,8 @@ jobs:
     steps:
       # A shallow clone keeps the Git-derived version constant, so task outputs are reused across commits.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
@@ -187,6 +194,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # The pull request merged into main, and main before it, to see what it adds to detekt's baseline.
           fetch-depth: 2
 
@@ -252,6 +260,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           # projectM, which draws the MilkDrop visuals, is built from source.
           submodules: recursive
 

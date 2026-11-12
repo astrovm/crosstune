@@ -17,6 +17,9 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The token stays out of .git/config: the job opens J-Total's pages and runs code from outside.
+          persist-credentials: false
       - name: Japanese fonts
         shell: pwsh
         run: |
