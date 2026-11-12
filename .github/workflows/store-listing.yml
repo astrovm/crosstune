@@ -1,0 +1,117 @@
+name: Store listing
+
+# Sends the Google Play listing (name, descriptions, screenshots, banner) from fastlane/metadata/android,
+# so the store shows what the repository holds. See "Releasing" in CONTRIBUTING.md.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "fastlane/metadata/android/*/title.txt"
+      - "fastlane/metadata/android/*/short_description.txt"
+      - "fastlane/metadata/android/*/full_description.txt"
+      - "fastlane/metadata/android/*/images/**"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to read the listing from"
+        required: true
+        default: main
+        type: string
+      languages:
+        description: "Folders of fastlane/metadata/android to send, with spaces between"
+        required: true
+        default: en-US
+        type: string
+      check_only:
+        description: "Only ask Google Play whether it would take the listing"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# One at a time: Google Play takes one edit of an app at a time, and the last listing sent is the one it keeps.
+concurrency:
+  group: store-listing
+  cancel-in-progress: false
+
+env:
+  # Every checkout prints Git's hint to name the initial branch. This is what it asks for.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  listing:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    environment: release
+    permissions: {}
+    steps:
+      # Only the listing's words and pictures, so none of the repository's code is checked out where the Play key is.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+          sparse-checkout: fastlane/metadata/android
+          sparse-checkout-cone-mode: false
+
+      - name: Send the listing to Google Play
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          # A push sends the languages the store already has. More are added by hand, by name.
+          LANGUAGES: ${{ inputs.languages || 'en-US' }}
+          CHECK_ONLY: ${{ inputs.check_only || false }}
+          # The version below is pinned. Skip the update check, and send no usage metrics.
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_OPT_OUT_USAGE: "1"
+        run: |
+          if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "::notice::PLAY_SERVICE_ACCOUNT_JSON isn't set, so the listing wasn't sent to Google Play"
+            exit 0
+          fi
+          key="$RUNNER_TEMP/play.json"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$key"
+          # A copy with only what the listing shows, under the names Google Play has for the languages.
+          # The folders use F-Droid's names, and Play has no plain "es": the Spanish here is Latin America's.
+          listing="$RUNNER_TEMP/listing"
+          read -r -a languages <<< "$LANGUAGES"
+          for language in "${languages[@]}"; do
+            from="fastlane/metadata/android/$language"
+            if [[ ! "$language" =~ ^[A-Za-z0-9-]+$ || ! -f "$from/title.txt" ]]; then
+              echo "::error::No listing in fastlane/metadata/android/$language"
+              exit 1
+            fi
+            case "$language" in
+              es) play=es-419 ;;
+              *) play=$language ;;
+            esac
+            mkdir -p "$listing/$play"
+            cp "$from/title.txt" "$from/short_description.txt" "$from/full_description.txt" "$listing/$play/"
+            if [[ -d "$from/images" ]]; then
+              cp -r "$from/images" "$listing/$play/"
+            fi
+          done
+          # bundle exec is what stops the "start using a Gemfile" notice. The version stays 2.240.1.
+          gemfile="$RUNNER_TEMP/Gemfile"
+          cat > "$gemfile" << 'EOF'
+          source "https://rubygems.org"
+          gem "fastlane", "2.240.1"
+          EOF
+          if ! command -v bundle >/dev/null; then
+            sudo gem install bundler --no-document --silent
+          fi
+          bundle config set --global path "$RUNNER_TEMP/bundle"
+          BUNDLE_GEMFILE="$gemfile" bundle install
+          # sync_image_upload sends only the pictures that changed, and leaves the rest as they are.
+          BUNDLE_GEMFILE="$gemfile" bundle exec fastlane supply \
+            --package_name com.astrovm.crosstune \
+            --json_key "$key" \
+            --metadata_path "$listing" \
+            --skip_upload_apk true \
+            --skip_upload_aab true \
+            --skip_upload_changelogs true \
+            --sync_image_upload true \
+            --validate_only "$CHECK_ONLY"
