@@ -169,7 +169,7 @@ for i, arg in enumerate(command):
 sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
 """)
         gradlew = self.dir / "gradlew"
-        gradlew.write_text('#!/bin/sh\necho "$PWD $*" >> "$FAKE_DIR/ran"\n[ "$PWD" = "$FAKE_FAIL_IN" ] && exit 3\nexit 0\n')
+        gradlew.write_text('#!/bin/sh\necho "$PWD $*" >> "$FAKE_DIR/ran"\n[ "$PWD" = "$FAKE_FAIL_IN" ] && exit 3\n[ "$PWD" = "$FAKE_FAIL_TOO" ] && exit 5\nexit 0\n')
         gradlew.chmod(gradlew.stat().st_mode | stat.S_IXUSR)
         return gradlew
 
@@ -187,9 +187,9 @@ sys.exit(subprocess.call(command, cwd=args[args.index("-w") + 1]))
             self.assertIn(f"-v {other}:{other}", self.asked()[0])
         ran = (self.dir / "ran").read_text().splitlines()
         self.assertEqual([f"{where} --no-daemon :app:songCheck -Pa=b c" for where in (ROOT, *others)], ran)
-        # A failure in one still runs the rest, and is the exit code.
+        # A failure in one still runs the rest, and the first one is the exit code.
         (self.dir / "ran").unlink()
-        box = self.start("also", *(f"--also={other}" for other in others), "help", FAKE_GRADLEW=str(gradlew), FAKE_FAIL_IN=str(others[0]))
+        box = self.start("also", *(f"--also={other}" for other in others), "help", FAKE_GRADLEW=str(gradlew), FAKE_FAIL_IN=str(others[0]), FAKE_FAIL_TOO=str(others[1]))
         output, _ = box.communicate(timeout=20)
         self.assertEqual(3, box.returncode, output)
         self.assertEqual(3, len((self.dir / "ran").read_text().splitlines()))
