@@ -640,7 +640,7 @@ test("reports that race for the day's last place leave no network's count behind
 
 test("a phone sending the timings it kept from before leaves room for a problem it finds live", async () => {
   // v2.25.0 sends what it owes at each start, 4 a minute, until one is turned away; a problem found meanwhile goes
-  // at once, and from v2.26.0 is kept for a later start when it's turned away.
+  // at once, and only once (Issue #964).
   const e = realEnv();
   const send = (body) => worker.fetch(from("203.0.113.7", body), e);
   let sent = 0;
@@ -849,4 +849,29 @@ test("control characters and the marks that turn text around are never kept", as
   assert.deepEqual([word.word, word.shown, word.right, word.line], ["花", "か", null, "a b"]);
   // Cut to its longest after they're gone, so they take no room.
   assert.equal(readReport(JSON.stringify({ version: "2.25.0", comment: "\u001b".repeat(5000) + "x".repeat(2000) })).comment.length, 2000);
+});
+
+test("every 'not now' is a 429 or 503, and every report never taken a 400, 413 or 415: the app keeps or drops by that", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const later = [];
+  const never = [];
+  // The minute's limit, a network's day, a full day, a full table, and no secret.
+  later.push((await worker.fetch(from("203.0.113.7"), { ...realEnv(), LIMIT: { limit: async () => ({ success: false }) } })).status);
+  const e = realEnv();
+  for (let i = 0; i < 11; i++) await worker.fetch(from("203.0.113.7"), e);
+  later.push((await worker.fetch(from("203.0.113.8"), e)).status);
+  const day = realEnv();
+  fill(day, 500);
+  later.push((await worker.fetch(from(anotherNetwork()), day)).status);
+  const table = realEnv();
+  hold(table, "user", 50 * MB);
+  later.push((await worker.fetch(from(anotherNetwork()), table)).status);
+  later.push((await worker.fetch(from(anotherNetwork()), { ...realEnv(), NETWORK_KEY: undefined })).status);
+  // Not JSON, not a report, too big, not sent as JSON.
+  never.push((await worker.fetch(from(anotherNetwork(), "not json"), realEnv())).status);
+  never.push((await worker.fetch(from(anotherNetwork(), { song: {} }), realEnv())).status);
+  never.push((await worker.fetch(from(anotherNetwork(), { ...song, comment: "x".repeat(60 * 1024) }), realEnv())).status);
+  never.push((await worker.fetch(from(anotherNetwork(), song, { "Content-Type": "text/plain" }), realEnv())).status);
+  assert.deepEqual(later, [429, 429, 429, 429, 503]);
+  assert.deepEqual(never, [400, 400, 413, 415]);
 });
