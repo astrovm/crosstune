@@ -49,6 +49,8 @@ LINES = [
     ("abcde", "😀😀abc"),
     ("abcdef", "あ）　い"),
     ("abcdef", "あ）：い"),
+    ("ﾞ", "abcd"),
+    ("ﾟ", "abcd"),
 ]
 
 
