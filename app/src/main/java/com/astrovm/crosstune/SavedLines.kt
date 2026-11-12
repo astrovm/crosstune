@@ -91,9 +91,6 @@ internal data class SavedLine(
         return parts.placed().map { (at, part) -> if (part.reading != null && (at to part) !in dictionary) part.copy(by = Reader.USER) else part }
     }
 
-    /** Whether something was put right in it, or may have been, read by hand before that was marked. */
-    val putRight get() = readByHand || ruby.orEmpty().any { it.by != null }
-
     /** It read as [read] says, by this version's dictionary; with none, as nothing reads it. */
     fun readBy(read: LineReading?): SavedLine = copy(
         reading = read?.reading?.takeIf { it != text },
@@ -520,21 +517,27 @@ internal fun carried(kept: List<SavedLine>, moved: List<Pair<SavedLine, SavedLin
 /**
  * [kept], the parts of line [was], laid over line [now], the same words changed: each part put right where its letters
  * moved, as the two lines are lined up letter by letter, and every other letter of [now] alone. One whose letters don't
- * all move together goes where its text is in [now], when it's there once and nothing's there yet; otherwise nowhere.
+ * all move together goes where its text is in [now], when it's there once and no part's laid over it; otherwise nowhere.
+ * [now] alone when [kept] doesn't write [was].
  */
-private fun movedTo(kept: List<Ruby>, was: String, now: String): List<Ruby> {
+internal fun movedTo(kept: List<Ruby>, was: String, now: String): List<Ruby> {
     if (kept.joinToString("") { it.text } != was) return listOf(Ruby(now))
     val moves = lettersMoved(was, now)
     val laid = arrayOfNulls<Ruby>(now.length)
-    val left = mutableListOf<Ruby>()
+    val taken = BooleanArray(now.length)
+    fun lay(part: Ruby, at: Int) {
+        laid[at] = part
+        for (letter in part.text.indices) taken[at + letter] = true
+    }
+    val apart = mutableListOf<Ruby>()
     for ((at, part) in kept.placed().filter { (_, part) -> part.by != null && part.reading != null }) {
         val to = moves[at]
-        val together = to >= 0 && part.text.indices.all { moves[at + it] == to + it }
-        if (together) laid[to] = part else left += part
+        // Its first letter is where it moved to; the rest have to follow it.
+        if (to >= 0 && (1 until part.text.length).all { moves[at + it] == to + it }) lay(part, to) else apart += part
     }
-    for (part in left) {
-        val at = now.indexOf(part.text).takeIf { it >= 0 && now.indexOf(part.text, it + 1) < 0 } ?: continue
-        if (!covered(laid, at, part.text.length)) laid[at] = part
+    for (part in apart) {
+        val at = now.indexOf(part.text)
+        if (at >= 0 && at == now.lastIndexOf(part.text) && part.text.indices.none { taken[at + it] }) lay(part, at)
     }
     return buildList {
         var at = 0
@@ -545,10 +548,6 @@ private fun movedTo(kept: List<Ruby>, was: String, now: String): List<Ruby> {
         }
     }
 }
-
-/** Whether a letter from [at] to [length] past it is covered by a part [laid] already, or the stretch overlaps one. */
-private fun covered(laid: Array<Ruby?>, at: Int, length: Int): Boolean =
-    laid.indices.any { start -> laid[start]?.let { start < at + length && at < start + it.text.length } == true }
 
 /**
  * Where each letter of [was] is in [now], lined up as the most letters in the same order: -1 for one that's not there.

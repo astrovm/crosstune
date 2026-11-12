@@ -3749,10 +3749,8 @@ internal class MainViewModel(
         if (changes.isEmpty()) return
         uiState = uiState.copy(savedLines = savedLinesStore.replaceAll(changes))
         // What was put right in them goes with them, read away from the screen, as the dictionary may have to read them first.
-        val putRight = changes.filter { (saved, _) -> saved.putRight }
-        val script = uiState.learning.script ?: Readings.scriptOf(lines)
-        if (putRight.isEmpty() || script == null) return
-        viewModelScope.launch { savedLinesStore.change(systemDispatcher) { kept -> carried(kept, putRight, script) }?.let { uiState = uiState.copy(savedLines = it) } }
+        val script = uiState.learning.script ?: return
+        viewModelScope.launch { savedLinesStore.change(systemDispatcher) { kept -> carried(kept, changes, script) }?.let { uiState = uiState.copy(savedLines = it) } }
     }
 
     /** Lines of [song] kept are translated as its lines are now, e.g. into another language. */

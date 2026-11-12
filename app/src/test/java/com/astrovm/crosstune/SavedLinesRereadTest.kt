@@ -145,6 +145,40 @@ class SavedLinesRereadTest {
     }
 
     @Test
+    fun whatWasPutRightMovesWithItsLettersOrWhereItsWrittenOnce() {
+        val night = Ruby("夜", "よ", Reader.USER)
+        val nights = Ruby("夜夜", "よよ", Reader.USER)
+        // Where its letter went, the first of the two now; where it's not anymore, nowhere.
+        assertEquals(listOf(night, Ruby("夜")), movedTo(listOf(night), "夜", "夜夜"))
+        assertEquals(listOf(night), movedTo(listOf(night), "夜", "夜"))
+        assertEquals(listOf(Ruby("雨")), movedTo(listOf(night), "夜", "雨"))
+        // Its letters go together, or it isn't laid at all.
+        assertEquals(listOf(nights), movedTo(listOf(nights), "夜夜", "夜夜"))
+        assertEquals(listOf(Ruby("夜")), movedTo(listOf(nights), "夜夜", "夜"))
+        // Of letters that can go either way, the earlier of the new line's takes it.
+        assertEquals(listOf(Ruby("雨", "あ", Reader.USER), Ruby("雨")), movedTo(listOf(Ruby("夜"), Ruby("雨", "あ", Reader.USER)), "夜雨", "雨雨"))
+        // The 夜 kept a first one, so the one put right goes where 夜 is written, once.
+        assertEquals(listOf(night), movedTo(listOf(Ruby("夜"), night), "夜夜", "夜"))
+        // 夜雨 took that 夜 already.
+        val both = Ruby("夜雨", "よあ", Reader.USER)
+        assertEquals(listOf(both), movedTo(listOf(both, night), "夜雨夜", "夜雨"))
+        assertEquals(listOf(night), movedTo(listOf(night, Ruby("夜", "よる", Reader.USER)), "夜夜", "夜"))
+        // Parts that don't write the line, as an older version may have kept, carry nothing.
+        assertEquals(listOf(Ruby("夜と")), movedTo(listOf(night), "夜と", "夜と"))
+    }
+
+    @Test
+    fun aWordPutRightWhoseLettersMovedApartCarriesWhereItsWrittenOnceInTheNewLine() {
+        // Swapped, 都会と都 lines up as 都と都 with the new line, so 都会's letters don't move together.
+        val was = kept("都会と都", Ruby("都会", "まち", Reader.USER), Ruby("と"), Ruby("都", "みやこ")).copy(readByHand = true)
+        val carried = SavedLine("都と都会", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
+        assertEquals(Ruby("都会", "まち", Reader.USER), carried.read().last())
+        // Written twice in the new line, it can't tell which one the user put right, so neither is.
+        val twice = SavedLine("都と都会と都会", reading = null, title = "Demo", artist = "Band").carrying(was, Script.JAPANESE)
+        assertTrue(twice.read().none { it.by == Reader.USER })
+    }
+
+    @Test
     fun aChineseLineReadByHandCarriesTheUsersPinyinInPinyin() {
         val was = SavedLine(
             "我爱你!", reading = "wǒ āi nǐ!", title = "Demo", artist = "Band",
