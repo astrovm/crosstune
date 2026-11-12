@@ -253,4 +253,11 @@ class AutoReportsTest {
         preferences.edit().putString("auto_reports_found_today", "${now / ReportBox.DAY_MS}:many").commit()
         assertTrue(reports.mayFind())
     }
+
+    @Test
+    fun withoutAClockGivenTheDayIsTheWallClocks() {
+        val reports = AutoReports(preferences, session = 1)
+        repeat(AutoReports.FOUND_A_DAY) { reports.remember(song("Song $it"), SongProblem.NO_TIMING) }
+        assertFalse(AutoReports(preferences, session = 1, now = System::currentTimeMillis).mayFind())
+    }
 }

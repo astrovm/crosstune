@@ -22,6 +22,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import org.json.JSONObject
 import org.junit.After
@@ -41,6 +42,7 @@ import org.robolectric.shadows.ShadowToast
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Reporting a problem with a song's words, in one tap, to Crosstune's own box for reports. At
@@ -648,6 +650,61 @@ class LyricsReportTest {
         started()
         waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing"), problems())
+    }
+
+    /** Runs what it's given at once, but the next block after [holdNext], on a thread of its own, once it's let go. */
+    private class Holding : CoroutineDispatcher() {
+        @Volatile
+        private var next: CountDownLatch? = null
+        private val waiting = mutableListOf<Thread>()
+
+        /** Holds the next block given, until the latch it gives back is let go. */
+        fun holdNext(): CountDownLatch = CountDownLatch(1).also { next = it }
+
+        /** Waits for the blocks that were held to be done. */
+        fun done() = waiting.forEach { it.join(TIMEOUT_MS) }
+
+        override fun isDispatchNeeded(context: CoroutineContext): Boolean = next != null
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            val held = checkNotNull(next) { "Nothing is to be held" }
+            next = null
+            waiting += Thread { held.await(TIMEOUT_MS, TimeUnit.MILLISECONDS); block.run() }.apply { start() }
+        }
+    }
+
+    /** The report owed on words put in time by hand, as kept. */
+    private fun owedJson(): String = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]")).toString()
+
+    @Test
+    fun aReportOnWordsPutInTimeByHandStillBeingMadeGivesWayToALaterOne() {
+        val holding = Holding()
+        MainActivity.systemDispatcher = holding
+        openLyrics()
+        val first = holding.holdNext()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        waitUntil { owed() == 1 }
+        val later = owedJson()
+        // The one made for the first move gets done after the later one is kept: it doesn't take its place.
+        first.countDown()
+        holding.done()
+        composeRule.waitForIdle()
+        assertEquals(later, owedJson())
+    }
+
+    @Test
+    fun aReportOnWordsPutInTimeByHandStillBeingMadeIsntKeptOnceTheyreBackAsFound() {
+        val holding = Holding()
+        MainActivity.systemDispatcher = holding
+        openLyrics()
+        val first = holding.holdNext()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().resetSync() }
+        first.countDown()
+        holding.done()
+        composeRule.waitForIdle()
+        assertEquals(0, owed())
     }
 
     @Test

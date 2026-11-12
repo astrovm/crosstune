@@ -343,6 +343,21 @@ class ReportTest {
     }
 
     @Test
+    fun aReportAsBigAsTheBoxTakesKeepsEveryLineAndOneByteMoreLosesOne() {
+        val all = (0 until ReportBox.MAX_POINTS).map { HandTiming("空".repeat(300), it * 1000L, it * 1000L + (it % 7) * 100) }
+        fun report(count: Int, comment: String) = Report("2.30.0", MusicMetadata("Song", "Band"), comment = comment, timing = all.take(count))
+        // As many lines as fit, then a comment of ASCII letters, a byte each, to fill the report to the byte.
+        val count = (1..all.size).last { sentLines(report(it, "x")).size == it }
+        val fill = ReportBox.MAX_BYTES - report(count, "x").json().toByteArray().size + 1
+        val full = report(count, "x".repeat(fill))
+        assertEquals(ReportBox.MAX_BYTES, full.json().toByteArray().size)
+        assertEquals(count, sentLines(full).size)
+        val over = report(count, "x".repeat(fill + 1))
+        assertEquals(count - 1, sentLines(over).size)
+        assertTrue(over.json().toByteArray().size <= ReportBox.MAX_BYTES)
+    }
+
+    @Test
     fun everyTextAtItsLongestStillFitsWithoutTheLines() {
         // Four bytes a character, the most any takes, as what's escaped in two is never longer.
         fun longest(field: String) = "\uD83C\uDFB5".repeat(ReportBox.LIMITS.getValue(field))
@@ -356,6 +371,8 @@ class ReportTest {
         assertTrue(report.json().toByteArray().size <= ReportBox.MAX_BYTES)
         assertEquals(longest("log"), json.getJSONObject("song").getString("log"))
         assertEquals(longest("comment"), json.getString("comment"))
+        // And one line still fits beside them.
+        assertEquals(1, sentLines(report).size)
     }
 
     @Test
@@ -391,6 +408,8 @@ class ReportTest {
         // 3000 is 50 from where 2000 and 4000 put it, 2000 is 325 early, 1000 is 600 late: 3000 goes. Then 2000 is 400
         // from where 1000 and 4000 put it, and goes; then 1000. The last goes before the first.
         assertEquals(listOf(4, 0, 3, 2, 1), ReportBox.dropOrder(points))
+        // 2000 goes first, 200 off. Then 1000 is 466 off, from where 0 and 3000 put it, no longer 250, and 3000 only 267: 3000 goes.
+        assertEquals(listOf(2, 3, 1, 4, 0), ReportBox.dropOrder(listOf(0L to 100L, 1000L to 800L, 2000L to 2000L, 3000L to 3600L, 4000L to 4600L)))
         assertEquals(listOf(0, 1, 2, 3), ReportBox.telling(points, 4))
         assertEquals(listOf(1, 2, 3), ReportBox.telling(points, 3))
         assertEquals(listOf(1, 2), ReportBox.telling(points, 2))

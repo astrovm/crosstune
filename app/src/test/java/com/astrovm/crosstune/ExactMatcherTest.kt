@@ -512,6 +512,7 @@ class ExactMatcherTest {
         rows: List<Pair<String, String>>,
         lengthMs: Long? = 245_093,
         japan: String? = null,
+        korea: String? = null,
         videos: List<String> = emptyList(),
         deezerSeconds: Long? = null,
         shown: MutableList<List<String>> = mutableListOf(),
@@ -521,7 +522,7 @@ class ExactMatcherTest {
             songs = rows.mapIndexed { index, (name, details) -> youTubeMusicRow(name, details, videoId = "row${index}0000000") },
             videos = videos,
             apple = lengthMs?.let { mapOf("AR" to appleSong("A Cruel Angel's Thesis (Director's Edit Version)", "Yoko Takahashi", it)) }.orEmpty(),
-            elsewhere = japan?.let { mapOf("JP" to appleSong(it, "高橋洋子", lengthMs ?: 0)) }.orEmpty(),
+            elsewhere = listOfNotNull(japan?.let { "JP" to appleSong(it, "高橋洋子", lengthMs ?: 0) }, korea?.let { "KR" to appleSong(it, "Yoko Takahashi", lengthMs ?: 0) }).toMap(),
             deezer = deezerSeconds?.let { """[{"title":"A Cruel Angel's Thesis","artist":{"name":"Yoko Takahashi"},"duration":$it}]""" } ?: "[]"
         )
         ExactMatcher(fake.client(), "AR", pick = { _, songs, videos -> if (videos) null else picked.also { shown += songs } }).find(MusicService.YOUTUBE_MUSIC, angel)
@@ -544,6 +545,15 @@ class ExactMatcherTest {
         for (video in listOf(bothWays(latin = "Evangelion"), bothWays(own = "Opening"), bothWays(own = "魂のルフラン"))) {
             assertNull(video, findAngel(row, videos = listOf(video)))
         }
+        // A store's name with no letters names nothing, though every title has it.
+        assertNull(findAngel(row, korea = "…", videos = listOf(bothWays(latin = "Evangelion"))))
+    }
+
+    @Test
+    fun aLengthOfNothingFromDeezerIsNoLength() {
+        // So the song picked is taken, as with no length known, not turned down as far from it.
+        val row = listOf(named to "Yoko Takahashi • Zankoku na Tenshi no Thesis • 4:06")
+        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs = null, deezerSeconds = 0, picked = 0))
     }
 
     @Test
@@ -666,6 +676,10 @@ class ExactMatcherTest {
         shown.clear()
         assertNull(find(listOf("Fake Song", "Blue"), emptyList(), title = "群青", japan = null, shown = shown))
         assertEquals(listOf("Fake Song", "Blue"), shown.single().map { it.substringBefore(" | ") })
+        // Nor is one with a digit of another script, as Thai's two: only letters say a script.
+        shown.clear()
+        assertNull(find(listOf("Fake Song", "Blue \u0e52"), emptyList(), title = "群青", japan = null, shown = shown))
+        assertEquals(listOf("Fake Song", "Blue \u0e52"), shown.single().map { it.substringBefore(" | ") })
     }
 
     @Test

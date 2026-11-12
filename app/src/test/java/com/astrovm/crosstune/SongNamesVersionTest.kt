@@ -130,7 +130,13 @@ class SongNamesVersionTest {
     fun aMarkInAnotherScriptCountsOnlyAsAWordOfItsOwn() {
         fun other(name: String, title: String = "Fake Song", artist: String = "Fake Band") = SongNames.saysAnotherVersion(name, title, artist)
         // Inside a longer word in its script, a sound mark off, or widths apart, it's another word.
-        for (same in listOf("インストール", "Fake Song インストール", "ATV Sizes", "Fake Song ATV Sizes", "ライフ", "ライフ・イズ", "반주자", "커버리지", "라이브러리", "TV Sizes")) {
+        for (same in listOf(
+            "インストール", "Fake Song インストール", "ATV Sizes", "Fake Song ATV Sizes", "ライフ", "ライフ・イズ", "반주자", "커버리지", "라이브러리", "TV Sizes",
+            // A word before it, or a digit after it: "Discover" in katakana and in Hangul has "cover" in it.
+            "Fake Song ATV Size", "Fake Song TV Size2", "Fake Song ディスカバー", "Fake Song 디스커버",
+            // A hiragana word goes on in hiragana, and a mark over a letter makes it another letter.
+            "Fake Song 歌ってみたい", "Fake Song (TV Size\u0332)"
+        )) {
             assertFalse(same, other(same))
         }
         // As a word of its own, in brackets, with what's between its letters, or in full or half width, it says so.
@@ -139,7 +145,9 @@ class SongNamesVersionTest {
             "Fake Song ライブ版", "Fake Song (반주)", "Fake Song 라이브 버전", "Fake Song 翻唱版", "Fake Song 卡拉OK版", "Fake Song (ＴＶサイズ)",
             "Fake Song ｶﾗｵｹ", "Fake Song【カラオケ】", "Fake Song 메들리", "Fake Song 混音版", "Fake Song 串烧",
             // A hiragana particle ends a katakana word, as Japanese has no spaces.
-            "Fake Songのカラオケ", "Fake Song ライブを歌う"
+            "Fake Songのカラオケ", "Fake Song ライブを歌う",
+            // At either end of the name, or a Latin mark before a Han letter.
+            "カラオケ Fake Song", "Fake Song TV Size版"
         )) {
             assertTrue(said, other(said))
         }
