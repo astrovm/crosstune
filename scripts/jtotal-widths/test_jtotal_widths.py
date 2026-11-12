@@ -123,6 +123,32 @@ class TablesTest(unittest.TestCase):
         self.assertEqual(w.differences(a, b), [(307, 888, 1105)])
 
 
+class FontsTest(unittest.TestCase):
+    """Only the commands that draw need Inconsolata: the others run offline, as in CI."""
+
+    def test_commands_that_only_read_measurements_fetch_no_fonts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            measured = {"widths": {"307": 888}, "nothing": [], "environment": ["Chromium 1"]}
+            for name in ("main.json", "mono.json"):
+                (tmp / name).write_text(json.dumps(measured), encoding="utf-8")
+            (tmp / "SOURCE.txt").write_text("Measured on Windows\n", encoding="utf-8")
+            with mock.patch.object(w, "container_fonts", side_effect=AssertionError("fetched the fonts")), \
+                    mock.patch.object(w, "TABLE", tmp / "a.txt"), mock.patch.object(w, "MONO_TABLE", tmp / "b.txt"), \
+                    mock.patch.object(w, "REPO", tmp), mock.patch("builtins.print"):
+                self.assertEqual(w.main(["diff", str(tmp / "main.json"), str(tmp / "mono.json")]), 0)
+                self.assertEqual(w.main(["generate", str(tmp)]), 0)
+                self.assertEqual(w.main(["check", str(tmp)]), 0)
+
+    def test_measure_and_trims_draw_with_the_downloaded_fonts_unless_given_others(self):
+        for command, function in (("measure", "measure"), ("trims", "trims")):
+            with mock.patch.object(w, "default_fonts", return_value=Path("downloaded")), mock.patch.object(w, function) as drawn:
+                w.main([command, "out.json"])
+                self.assertEqual(drawn.call_args.args[2], Path("downloaded"))
+                w.main([command, "out.json", "--fonts", "mine"])
+                self.assertEqual(drawn.call_args.args[2], Path("mine"))
+
+
 class WindowsFontsTest(unittest.TestCase):
     def test_a_missing_font_file_is_said_to_be_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

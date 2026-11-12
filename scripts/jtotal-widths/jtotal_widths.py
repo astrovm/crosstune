@@ -517,13 +517,12 @@ def main(argv):
     parser.add_argument("--cp932", action="store_true", help="only the letters a Shift_JIS page holds")
     args = parser.parse_args(argv)
     stack = args.stack or (MONO_STACK if args.mono else STACK)
-    fonts = args.fonts or default_fonts()
     if args.command == "measure":
         codes = [c for c in spans_codes() if in_cp932(c)] if args.cp932 else None
-        measure(args.paths[0], stack, fonts, args.browser, args.lang, codes)
+        measure(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang, codes)
         return 0
     if args.command == "trims":
-        trims(args.paths[0], stack, fonts, args.browser, args.lang)
+        trims(args.paths[0], stack, args.fonts or default_fonts(), args.browser, args.lang)
         return 0
     if args.command == "container":
         work = Path(args.paths[0]).resolve()
