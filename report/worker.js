@@ -1,7 +1,8 @@
 // Takes the problems people report from Crosstune and keeps them private, in D1, to be read by
 // hand. Nothing here posts anywhere public: a comment, or a song, may say something personal by
-// mistake. The IP address only counts reports against the limits: it isn't kept, and its network is
-// counted for the day under a key that can't be turned back into it (limits.sql).
+// mistake. The IP address and the carrier only count reports against the limits: neither is kept. Each
+// network, IPv6 /32 and carrier is counted for the day under a key made with a secret, which can't be
+// traced back to it without the secret (limits.sql).
 
 import { blockOf, networkOf, senderKey } from "./sender.js";
 
@@ -248,7 +249,7 @@ export async function sameKey(given, key) {
 
 /**
  * The key a [network]'s reports of [kind] are counted under on [day]: an HMAC-SHA256 of all three with [secret]. It
- * can't be turned back into the network without the secret, and it is another one each day.
+ * can't be traced back to the network without the secret, and it is another one each day.
  */
 export async function networkDayKey(secret, day, kind, network) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
