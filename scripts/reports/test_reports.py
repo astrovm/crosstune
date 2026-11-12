@@ -1,6 +1,7 @@
 import json
 import sys
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -22,9 +23,17 @@ def d1_answer(rows, counted=None, success=True):
     ])
 
 
+def refusals_answer(refused, success=True):
+    """What `cf d1 query` prints for REFUSED."""
+    return json.dumps([{"results": refused, "success": success}])
+
+
+REFUSED = [{"day": "2026-11-11", "why": "network", "n": 120}, {"day": "2026-11-10", "why": "day_full", "n": 3}]
+
+
 class ReadTest(unittest.TestCase):
     def test_it_only_ever_asks_d1_to_read(self):
-        for statement in (reports.READ, reports.COUNT):
+        for statement in (reports.READ, reports.COUNT, reports.REFUSED):
             self.assertRegex(statement, r"^select\b[^;]*$")
 
     def test_the_config_is_read_past_its_comments(self):
@@ -48,6 +57,12 @@ class ReadTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=answer):
                 reports.whole_table(answer)
 
+    def test_the_refusals_are_the_rows_d1_gave(self):
+        self.assertEqual(reports.refusals_of(refusals_answer(REFUSED)), REFUSED)
+        for answer in (refusals_answer(REFUSED, success=False), d1_answer([row(1)]), '[{"success": true}]', "nothing"):
+            with self.assertRaises(ValueError, msg=answer):
+                reports.refusals_of(answer)
+
     def test_the_saved_reports_are_ignored_by_git(self):
         self.assertEqual(reports.OUT.relative_to(reports.ROOT).parts[0], "build")
         self.assertIn("build/", (reports.ROOT / ".gitignore").read_text().splitlines())
@@ -58,7 +73,8 @@ class PullTest(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.saved = Path(folder.name) / "reports.json"
-        for name, value in {"OUT": Path(folder.name), "SAVED": self.saved}.items():
+        self.refused = Path(folder.name) / "refusals.json"
+        for name, value in {"OUT": Path(folder.name), "SAVED": self.saved, "REFUSALS": self.refused}.items():
             patch = mock.patch.object(reports, name, value)
             patch.start()
             self.addCleanup(patch.stop)
@@ -67,16 +83,34 @@ class PullTest(unittest.TestCase):
         with mock.patch.dict(reports.os.environ, env or {}), mock.patch("builtins.print"):
             reports.pull(mock.Mock(return_value=answer), sleep=mock.Mock())
 
-    def test_pull_saves_the_rows_and_tells_cf_the_account(self):
-        run = mock.Mock(return_value=mock.Mock(returncode=0, stdout=d1_answer([row(1)])))
+    def test_pull_saves_the_rows_and_the_refusals_and_tells_cf_the_account(self):
+        run = mock.Mock(side_effect=[mock.Mock(returncode=0, stdout=d1_answer([row(1)])), mock.Mock(returncode=0, stdout=refusals_answer(REFUSED))])
         with mock.patch("builtins.print"):
             reports.pull(run, sleep=mock.Mock())
         self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
-        self.assertEqual([path.name for path in self.saved.parent.iterdir()], ["reports.json"])
-        command, kwargs = run.call_args
+        self.assertEqual(json.loads(self.refused.read_text()), REFUSED)
+        self.assertEqual(sorted(path.name for path in self.saved.parent.iterdir()), ["refusals.json", "reports.json"])
+        (command, kwargs), (refusals, _) = run.call_args_list
         self.assertEqual(command[0][3:5], ["d1", "query"])
         self.assertEqual(command[0][-1], f"{reports.COUNT}; {reports.READ}")
+        self.assertEqual(refusals[0][-1], reports.REFUSED)
         self.assertIn("CLOUDFLARE_ACCOUNT_ID", kwargs["env"])
+
+    def test_refusals_not_read_still_leave_the_reports_and_say_so(self):
+        # As before limits.sql is run on the live D1, which has no refusals table yet.
+        self.refused.write_text(json.dumps(REFUSED))
+        no_table = mock.Mock(returncode=1, stderr="no such table: refusals")
+        run, sleep = mock.Mock(side_effect=[mock.Mock(returncode=0, stdout=d1_answer([row(1)])), no_table, no_table, no_table]), mock.Mock()
+        with mock.patch("builtins.print") as said:
+            reports.pull(run, sleep)
+        self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
+        self.assertFalse(self.refused.exists())
+        self.assertIn("no such table: refusals", str(said.call_args_list))
+        # An answer of another shape is the same.
+        run = mock.Mock(side_effect=[mock.Mock(returncode=0, stdout=d1_answer([row(1)])), mock.Mock(returncode=0, stdout="nothing")])
+        with mock.patch("builtins.print"):
+            reports.pull(run, sleep)
+        self.assertFalse(self.refused.exists())
 
     def test_a_pull_leaves_out_where_lines_were_moved(self):
         self.pull(mock.Mock(returncode=0, stdout=d1_answer([{**row(1), "timing": "[]"}])))
@@ -89,6 +123,7 @@ class PullTest(unittest.TestCase):
 
     def test_a_failed_pull_stops_says_why_and_leaves_no_table(self):
         self.saved.write_text(json.dumps([row(1)]))
+        self.refused.write_text(json.dumps(REFUSED))
         with self.assertRaisesRegex(SystemExit, "login expired") as stopped:
             self.pull(mock.Mock(returncode=1, stderr="login expired"))
         self.assertIn("no reports were pulled", str(stopped.exception))
@@ -96,11 +131,11 @@ class PullTest(unittest.TestCase):
 
     def test_a_refusal_that_passes_is_asked_again_and_the_table_saved(self):
         refused = mock.Mock(returncode=1, stderr="Account is invalid or unauthorized [code: 7403]")
-        run, sleep = mock.Mock(side_effect=[refused, refused, mock.Mock(returncode=0, stdout=d1_answer([row(1)]))]), mock.Mock()
+        run, sleep = mock.Mock(side_effect=[refused, refused, mock.Mock(returncode=0, stdout=d1_answer([row(1)])), mock.Mock(returncode=0, stdout=refusals_answer([]))]), mock.Mock()
         with mock.patch("builtins.print"):
             reports.pull(run, sleep)
         self.assertEqual(json.loads(self.saved.read_text()), [row(1)])
-        self.assertEqual(run.call_count, 3)
+        self.assertEqual(run.call_count, 4)
         self.assertEqual([wait.args[0] for wait in sleep.call_args_list], list(reports.WAITS))
 
     def test_a_refusal_that_stays_is_asked_three_times_then_stops(self):
@@ -179,7 +214,7 @@ class TriageTest(unittest.TestCase):
         self.assertIn("2: Other | Some Band\n", text + "\n")
 
     def test_no_reports_is_said_plainly(self):
-        self.assertEqual(reports.triage([]), "0 reports")
+        self.assertEqual(reports.triage([], []), "0 reports\n0 turned away")
 
 
 class CheckTest(unittest.TestCase):
@@ -188,6 +223,16 @@ class CheckTest(unittest.TestCase):
             reports.as_songs([row(7, length_ms=1000), row(8, title=None)]),
             [{"id": "7", "title": "Made Up Song", "artist": "Some Band", "lengthMs": 1000, "problem": "no_lyrics"}],
         )
+
+    def test_songs_for_songcheck_carry_no_character_a_terminal_acts_on(self):
+        # SongCheck prints each song's title and artist as it goes, and rows already in D1 weren't cleaned.
+        songs = reports.as_songs([row(7, title=f"Made\tUp{NASTY}", artist="Some\nBand\u200d\U0001f3b8")])
+        self.assertEqual(songs[0]["title"], "Made Upa[2J]0;titleb cde f ghijklm nopqrstuvwxyz1234567890")
+        self.assertEqual(songs[0]["artist"], "Some Band\U0001f3b8")
+        for song in songs:
+            self.assertEqual([], unseen(song["title"] + song["artist"]))
+        # Nothing left is no song to look for.
+        self.assertEqual(reports.as_songs([row(8, title="\x1b\u200b")]), [])
 
     def test_what_the_finders_returned_in_few_words(self):
         self.assertEqual(reports.now_found({"lyrics": {"kind": "none"}}), "none")
@@ -210,12 +255,34 @@ class CheckTest(unittest.TestCase):
         self.assertIn("2 no_lyrics 1.0.0 | Made Up Song | Some Band -> not run", text)
 
 
+class RefusedTest(unittest.TestCase):
+    def test_triage_shows_the_reports_turned_away_by_day_and_why_newest_first(self):
+        days = [{"day": f"2026-10-{day:02}", "why": "network", "n": 1} for day in range(1, 21)]
+        text = reports.triage([row(1)], REFUSED + days)
+        lines = text.splitlines()
+        self.assertEqual(lines[1], "143 turned away")
+        self.assertEqual(lines[2], "  2026-11-11: network 120")
+        self.assertEqual(lines[3], "  2026-11-10: day_full 3")
+        self.assertEqual(lines[4], "  2026-10-20: network 1")
+        # Two weeks of days, and the rest in the count.
+        self.assertIn("2026-10-09", text)
+        self.assertNotIn("2026-10-08", text)
+
+    def test_two_reasons_on_one_day_share_its_line(self):
+        refused = [{"day": "2026-11-11", "why": "day_full", "n": 2}, {"day": "2026-11-11", "why": "network", "n": 5}]
+        self.assertIn("  2026-11-11: network 5, day_full 2", reports.triage([], refused))
+
+    def test_triage_says_when_none_were_turned_away_or_they_were_not_read(self):
+        self.assertEqual(reports.triage([], []).splitlines()[1], "0 turned away")
+        self.assertEqual(reports.triage([], None).splitlines()[1], "turned away: not read, pull again")
+
+
 class MainTest(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         out = Path(folder.name)
-        for name, value in {"OUT": out, "SAVED": out / "reports.json", "CHECK": out / "check"}.items():
+        for name, value in {"OUT": out, "SAVED": out / "reports.json", "REFUSALS": out / "refusals.json", "CHECK": out / "check"}.items():
             patch = mock.patch.object(reports, name, value)
             patch.start()
             self.addCleanup(patch.stop)
@@ -223,6 +290,13 @@ class MainTest(unittest.TestCase):
     def test_steps_other_than_pull_want_the_reports_pulled(self):
         with self.assertRaisesRegex(SystemExit, "run `pull` first"):
             reports.main(["triage"])
+
+    def test_triage_shows_the_refusals_pulled(self):
+        reports.SAVED.write_text(json.dumps([row(39)]))
+        reports.REFUSALS.write_text(json.dumps(REFUSED))
+        with mock.patch("builtins.print") as said:
+            reports.main(["triage"])
+        self.assertIn("123 turned away", said.call_args.args[0])
 
     def test_pull_is_a_step(self):
         with mock.patch.object(reports, "pull") as pull:
@@ -251,6 +325,99 @@ class MainTest(unittest.TestCase):
             reports.main(["check", "--since", "39"])
         self.assertFalse(old.exists())
         self.assertIn("-> not run", said.call_args_list[1].args[0])
+
+
+# Made up: what a stranger could write in a report to move the cursor, recolor or retitle the terminal, or turn text around.
+# Past the control characters: zero-width ones, a tag, a mark that turns text around, a private one and half a pair.
+NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg\u200bh\u200di\U000e0041j\u200ek\ue000l\ud800m\u2029n\u061co\ufeffp\u0378q\u034fr\ufe0fs\ufe00t\U000e0100u\u115fv\u1160w\u3164x\uffa0y\u2800z\u180b1\u180f2\u17b43\u17b54\U00016fe45\u180e6\ufff07\U0001bca08\U0001d1739\U000e0fff0"
+
+
+# Written out from Unicode 17.0.0's DerivedCoreProperties.txt (the same in 16.0.0), apart from reports.py's copy, so
+# a range left out there fails here: every Default_Ignorable_Code_Point, which a terminal may print as nothing.
+IGNORABLE = [
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
+    (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
+]
+# Blank too, though not ignorable: the blank braille cell and the Khitan filler.
+BLANK = {0x2800, 0x16FE4}
+# The isolates [shown] wraps a field with right-to-left letters in: its own, always one of each, in order.
+ISOLATES = "\u2068\u2069"
+
+
+def unseen(text):
+    """The characters a terminal acts on, hides or can't print, apart from the line break the output is made of and the isolates."""
+    def hidden(c):
+        code = ord(c)
+        return unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn") or code in BLANK or any(a <= code <= b for a, b in IGNORABLE)
+    return [c for c in text if c != "\n" and c not in ISOLATES and hidden(c)]
+
+
+def isolated(text):
+    """Whether every isolate in [text] opens before it closes, and each one opened is closed."""
+    depth = 0
+    for c in text:
+        depth += {"\u2068": 1, "\u2069": -1}.get(c, 0)
+        if depth < 0:
+            return False
+    return depth == 0
+
+
+class ShownTest(unittest.TestCase):
+    def test_control_characters_and_turning_marks_are_shown_escaped(self):
+        self.assertEqual(
+            reports.shown(NASTY),
+            "a\\x1b[2J\\x1b]0;title\\x07b\\x00\\x7f\\x85\\x9bc\\u202ed\\u2066e\\u2069\\u2028f\\tg"
+            "\\u200bh\\u200di\\U000e0041j\\u200ek\\ue000l\\ud800m\\u2029n\\u061co\\ufeffp"
+            "\\u0378q\\u034fr\\ufe0fs\\ufe00t\\U000e0100u\\u115fv\\u1160w\\u3164x\\uffa0y\\u2800z"
+            "\\u180b1\\u180f2\\u17b43\\u17b54\\U00016fe45\\u180e6\\ufff07\\U0001bca08\\U0001d1739\\U000e0fff0",
+        )
+        # An emoji keeps its picture: only its unseen style mark is written out, after it.
+        self.assertEqual(reports.shown("Love \u2764\ufe0f song \U0001f3b8"), "Love \u2764\\ufe0f song \U0001f3b8")
+        self.assertEqual(reports.shown("line\nbreak\r"), "line\\nbreak\\r")
+        self.assertEqual(reports.shown("Demo 花"), "Demo 花")
+        # Right-to-left letters stay readable, isolated, so a terminal that orders them can't move what's around them.
+        self.assertEqual(reports.shown("Demo أغنية 2"), "\u2068Demo أغنية 2\u2069")
+        self.assertEqual(reports.shown("שיר"), "\u2068שיר\u2069")
+        # Every ignorable character is escaped, whichever range it's in, and so are the blank ones.
+        for first, last in IGNORABLE:
+            for code in {first, (first + last) // 2, last}:
+                self.assertEqual([], unseen(reports.shown(chr(code))), hex(code))
+        for code in BLANK:
+            self.assertEqual([], unseen(reports.shown(chr(code))), hex(code))
+        # Every character of what was printed can be printed: half a pair would stop Python's print.
+        reports.shown(NASTY).encode("utf-8")
+        self.assertEqual(reports.shown(None), None)
+        self.assertEqual(reports.shown(7), 7)
+
+    def test_every_step_that_prints_prints_no_control_character(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder)
+            nasty = {
+                **row(39, problem="wrong_reading", title=NASTY, artist=NASTY, version=NASTY, android=NASTY, app=NASTY, comment=f"one\n  40: Fake | Song{NASTY}"),
+                "recording": NASTY, "word": NASTY, "reading_shown": NASTY, "right_reading": NASTY, "reader": NASTY, "language": NASTY, "lyric_line": NASTY,
+            }
+            (out / "reports.json").write_text(json.dumps([nasty, {**nasty, "id": 40, "problem": NASTY}]))
+            (out / "refusals.json").write_text(json.dumps([{"day": NASTY, "why": NASTY, "n": 1}]))
+            (out / "check" / "reports").mkdir(parents=True)
+            # What the finders found comes from other sites, so it's a stranger's text too.
+            found = {"lyrics": {"kind": "found", "source": NASTY, "lines": []}, "chords": {"kind": "found", "site": NASTY, "url": NASTY}}
+            (out / "check" / "reports" / "39.json").write_text(json.dumps(found))
+            (out / "check" / "reports" / "40.json").write_text(json.dumps({"lyrics": {"kind": NASTY}}))
+            with mock.patch.object(reports, "OUT", out), mock.patch.object(reports, "SAVED", out / "reports.json"), mock.patch.object(reports, "REFUSALS", out / "refusals.json"), mock.patch.object(reports, "CHECK", out / "check"):
+                with mock.patch("builtins.print") as said:
+                    reports.main(["triage"])
+                    reports.main(["check"])
+                    reports.main(["songs"])
+        printed = [str(arg) for call in said.call_args_list for arg in call.args]
+        self.assertEqual(len(printed), 3)
+        for text in printed:
+            self.assertEqual([], unseen(text), repr(text))
+            self.assertTrue(isolated(text), repr(text))
+        # A comment's lines stay in its own line, so it can't pass for a report of its own.
+        self.assertIn("    says: one\\n  40: Fake | Song", printed[0])
+        self.assertIn("\\x1b[2J", printed[0])
+        self.assertIn("found on a\\x1b[2J", printed[1])
 
 
 if __name__ == "__main__":

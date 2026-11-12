@@ -189,6 +189,26 @@ class FollowsTheSongTest {
         assertTrue(exists("0:01"))
     }
 
+    /** Where the player's slider is, in ms of the song. */
+    private fun slider(): Float = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo), useUnmergedTree = true)
+        .fetchSemanticsNodes().single().config[SemanticsProperties.ProgressBarRangeInfo].current
+
+    @Test
+    fun thePlayersSliderMovesOnOncePerSecondLikeItsClock() {
+        following = pausedAt(0)
+        player()
+        playsFrom(1_050)
+        assertEquals(1_000f, slider())
+        // Each frame of 3 s looked at: it moves on once a second, as the clock under it does, not
+        // each 100 ms, which composed the player's clock and slider again 10 times a second.
+        val seen = mutableListOf(slider())
+        repeat((3_000 / FRAME_MS).toInt()) {
+            passes(FRAME_MS)
+            slider().takeIf { it != seen.last() }?.let(seen::add)
+        }
+        assertEquals(listOf(1_000f, 2_000f, 3_000f, 4_000f), seen)
+    }
+
     private val peekLines = listOf(LyricLine(1_000, "One"), LyricLine(20_000, "Two"), LyricLine(40_000, "Three"))
 
     @Test

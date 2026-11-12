@@ -76,6 +76,19 @@ android {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
         }
+        // With -PperfBuild: the release build, minified and not debuggable, as "Crosstune Dev", to
+        // measure how smooth it is with scripts/perf/perf.py. A debug build runs most of its code in
+        // Android's interpreter, so its frames are slower than anyone's phone draws them.
+        if (providers.gradleProperty("perfBuild").isPresent) {
+            create("perf") {
+                initWith(getByName("release"))
+                applicationIdSuffix = ".dev"
+                versionNameSuffix = "-perf"
+                signingConfig = signingConfigs.getByName("debug")
+                isProfileable = true
+                matchingFallbacks += "release"
+            }
+        }
     }
 
     compileOptions {
@@ -126,6 +139,20 @@ baselineProfile {
     mergeIntoMain = true
     // Builds only use the committed profile. Generating one needs a device, which CI doesn't have.
     automaticGenerationDuringBuild = false
+}
+
+composeCompiler {
+    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
+}
+
+// The Compose compiler's reports, with -PcomposeReports: which classes it can't call stable, and which
+// composables it can't skip, so a screen composed again for nothing shows. Off by default. They land
+// in app/build/compose/, which git leaves out.
+if (providers.gradleProperty("composeReports").isPresent) {
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose/reports")
+        metricsDestination = layout.buildDirectory.dir("compose/metrics")
+    }
 }
 
 kover {

@@ -371,6 +371,28 @@ class ReadingsTest {
     }
 
     @Test
+    @Config(sdk = [29])
+    fun chineseReadOtherwiseIsWrittenOutFromAndroid10On() {
+        val parts = listOf(Ruby("我", "wǒ"), Ruby("爱", "āi", Reader.USER))
+        assertEquals("wǒ āi", Readings.readAs(parts, Script.CHINESE).romanized)
+    }
+
+    @Test
+    fun chineseReadOtherwiseInAPlaceIsWrittenOutAsALineIs() {
+        val parts = listOf(Ruby("a"), Ruby("我", "wǒ"), Ruby("爱", "āi", Reader.USER), Ruby("你", "nǐ"), Ruby("baby。"))
+        val line = Readings.readAs(parts, Script.CHINESE)
+        assertEquals(parts, line.parts)
+        // A space between syllables and next to letters, none before the stop, written as Android writes it.
+        assertEquals("a wǒ āi nǐ baby.", line.romanized)
+        assertEquals(line.romanized, line.reading)
+        // As the dictionary reads it, it's the dictionary's line.
+        val (read) = Readings.of(listOf("我爱你!"), Script.CHINESE)
+        assertEquals(read, Readings.readAs(read.parts, Script.CHINESE))
+        assertEquals("", Readings.readAs(emptyList(), Script.CHINESE).romanized)
+        assertEquals(Readings.of(listOf("한"), Script.KOREAN).single(), Readings.readAs(listOf(Ruby("한")), Script.KOREAN))
+    }
+
+    @Test
     fun bopomofoIsAlreadyAReadingThoughItsㄧIsWrittenAs一() {
         // Jay Chou's 晴天 writes a sound "ㄒ一", with 一 for the bopomofo ㄧ; elsewhere 一 is a word.
         val (line) = Readings.of(listOf("ㄒ一 一起 一ㄠˋ"), Script.CHINESE)
