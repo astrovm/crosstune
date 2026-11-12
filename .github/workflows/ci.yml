@@ -203,8 +203,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
+          # HEAD^1 is the base the pull request merges into. The lock is main's, so a pull request into another
+          # branch, one stacked on another pull request, is checked once it goes into main.
+          if [ "$BASE_REF" != main ]; then
+            echo "::error::This pull request goes into $BASE_REF. The golden readings are checked against main: point it at main."
+            exit 1
+          fi
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.body // ""' > "$RUNNER_TEMP/pr-body.md"
           checker=scripts/readingsaudit/check_golden.py
           # ls-tree fails when HEAD^1 is not there, which stops the step, and prints nothing when main has no checker yet.
@@ -223,7 +230,8 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           # The diff is taken first, so a git diff that fails stops the step instead of reading as no change.
-          diff=$(git diff HEAD^1 HEAD -- config/detekt/baseline.xml)
+          # --text, so a .gitattributes that calls the file binary can't hide what it adds.
+          diff=$(git diff --text HEAD^1 HEAD -- config/detekt/baseline.xml)
           # Only grep's "no match" (exit 1) means nothing was added. Any other failure stops the step.
           added=$(grep '^+.*<ID>' <<< "$diff") || [ $? = 1 ]
           if [ -n "$added" ]; then

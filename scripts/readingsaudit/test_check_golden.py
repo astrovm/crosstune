@@ -66,7 +66,9 @@ class Verdict(unittest.TestCase):
         problems = check_golden.verdict(True, True, set(), "", digest="0123abcd")
         self.assertEqual(1, len(problems))
         self.assertIn("readingsaudit.py lines", problems[0])
-        self.assertIn("golden: lines checked 0123abcd", problems[0])
+        # CI never prints the line to paste: the command does, once it has read the lines.
+        self.assertNotIn("0123abcd", problems[0])
+        self.assertNotIn("golden: lines checked", problems[0])
         # golden: none says no reading changes: the whole lines are what checks it.
         self.assertTrue(check_golden.verdict(True, False, set(), "golden: none", digest="0123abcd"))
         # A line for another pair of commits is for code that is no longer there.
@@ -187,6 +189,17 @@ class FakeDiff(unittest.TestCase):
             self.assertEqual((0, ""), self.run_check(repo))
             self.write(repo, CATALOG, '[versions]\nkuromoji = "0.9.1"\nother = "2.0"\n')
             commit(repo, "build: bump kuromoji")
+            self.assertEqual(1, self.run_check(repo)[0])
+
+    def test_a_gitattributes_that_calls_the_build_file_binary_hides_no_kuromoji_bump(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder)
+            self.write(repo, ".gitattributes", f"{READING_BUILD} -diff\n{CATALOG} -diff\n")
+            self.write(repo, READING_BUILD, 'implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.1")\nimplementation("other:lib:1.0")\n')
+            self.merge(repo, "build: bump kuromoji")
+            # git diff prints "Binary files differ" here, so a check that reads its lines sees no Kuromoji line.
+            self.assertIn("Binary files", subprocess.check_output(["git", "-C", str(repo), "diff", "HEAD^1", "HEAD", "--", READING_BUILD], text=True))
+            self.assertTrue(check_golden.dictionaries_changed(repo, "HEAD^1", "HEAD"))
             self.assertEqual(1, self.run_check(repo)[0])
 
     def test_the_whole_lines_line_holds_for_the_readings_it_read_on_both_sides(self):
@@ -358,7 +371,7 @@ class CiStep(unittest.TestCase):
         gh.write_text(f"#!/bin/sh\ncat '{temp / 'body.md'}'\n", encoding="utf-8")
         gh.chmod(0o755)
         env = {"PATH": f"{temp / 'bin'}:/usr/bin:/bin", "HOME": str(temp), "RUNNER_TEMP": str(temp), "GITHUB_WORKSPACE": str(repo),
-               "GITHUB_REPOSITORY": "owner/repo", "PR": "1", "GH_TOKEN": "fake", **more}
+               "GITHUB_REPOSITORY": "owner/repo", "PR": "1", "GH_TOKEN": "fake", "BASE_REF": "main", **more}
         return subprocess.run(["bash", "-e", "-c", ci_step(STEP)], cwd=repo, env=env, capture_output=True, text=True)
 
     def drop_a_row_and(self, change):
@@ -443,6 +456,17 @@ class CiStep(unittest.TestCase):
             done = self.run_step(repo, "golden: lock changed\n")
             self.assertEqual(1, done.returncode, done.stdout + done.stderr)
             self.assertIn("甲乙 こうおつ both 甲乙", done.stdout)
+
+    def test_a_pull_request_into_another_branch_than_main_fails(self):
+        with tempfile.TemporaryDirectory() as folder:
+            repo = self.repo(folder, [ROW])
+            (repo / GOLDEN_REL).write_text(golden_text(ROW, OTHER), encoding="utf-8")
+            self.merge(repo, "test: add a row")
+            self.assertEqual(0, self.run_step(repo).returncode)
+            # Stacked on another pull request: HEAD^1 is that branch, not main, so nothing is checked against main.
+            done = self.run_step(repo, BASE_REF="feature")
+            self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+            self.assertIn("goes into feature", done.stdout)
 
     def test_a_range_git_cannot_read_stops_the_step(self):
         with tempfile.TemporaryDirectory() as folder:

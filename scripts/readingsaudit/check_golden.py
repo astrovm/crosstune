@@ -102,7 +102,7 @@ def verdict(readings_changed, golden_changed, removed, body, lock_changed=(), di
         problems.append(
             "This changes how readings are made, and the rows hold only a few letters of each line.\n"
             "Read every audit line whole with main's code and this one: python3 scripts/readingsaudit/readingsaudit.py lines\n"
-            f"It prints a line for the pull request's body when no right reading changes: {LINES}{digest}"
+            "When nothing it reads right changes, it prints a line for the pull request's body. That line is your word that you ran it."
         )
     if lock_changed and not lock:
         problems.append(
@@ -126,10 +126,15 @@ def changes(repo, base, head):
     return out
 
 
+def kuromoji_lines(repo, commit):
+    """The build's Kuromoji lines at [commit], the dictionaries and their version, in the build file and the version catalog."""
+    return [line.strip() for path in READING_BUILDS for line in file_at(repo, commit, path).splitlines() if READING_BUILD_WORD in line]
+
+
 def dictionaries_changed(repo, base, head):
-    """Whether a Kuromoji line, the dictionaries and their version, changes in the build file or the version catalog."""
-    diff = git(repo, "diff", "-U0", base, head, "--", *READING_BUILDS)
-    return any(line[:1] in "+-" and not line.startswith(("+++", "---")) and READING_BUILD_WORD in line for line in diff.splitlines())
+    """Whether a Kuromoji line changes. The files are read whole and compared here, not with git diff, so no
+    .gitattributes can hide a change from it, as `-diff` does."""
+    return kuromoji_lines(repo, base) != kuromoji_lines(repo, head)
 
 
 def file_at(repo, commit, path):
@@ -155,7 +160,7 @@ def readings_digest(repo, base, head):
     made = []
     for commit in (base, head):
         made.append(git(repo, "ls-tree", commit, "--", *READING_SOURCES))
-        made += [line for path in READING_BUILDS for line in file_at(repo, commit, path).splitlines() if READING_BUILD_WORD in line]
+        made += kuromoji_lines(repo, commit)
     return hashlib.sha256("\n".join(made).encode()).hexdigest()[:16]
 
 
