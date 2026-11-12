@@ -203,7 +203,7 @@ class AutoReportsTest {
     @Test
     fun aReportTheBoxTurnedAwayIsNoLongerOwedNorTakenAsSent() {
         reports.owe(song("Song"), SongProblem.TIMED_BY_HAND, "{}")
-        reports.dropped(reports.owed().single())
+        reports.turnedAway(reports.owed().single())
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
         assertFalse(reports.reported(song("Song"), SongProblem.TIMED_BY_HAND))
     }

@@ -617,6 +617,26 @@ class LyricsReportTest {
     }
 
     @Test
+    fun aProblemFoundKeptOnThePhoneThatTheBoxTurnsAwayAtTheNextStartIsntSentAgainWhenFoundAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        reportsDown = true
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        waitUntil { problems() == listOf("no_timing") }
+        reportsDown = false
+        answerTo = { 400 }
+        opened.destroyAndSettle()
+        started()
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.NO_TIMING))
+        // The box turns it away as it always will, so finding it again sends nothing.
+        answerTo = { null }
+        openedAgain()
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+    }
+
+    @Test
     fun aProblemFoundThatTheBoxHasNoRoomForTodayOrThatAnotherAnswersIsKeptToo() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         lyricsAre(plain)
@@ -705,6 +725,28 @@ class LyricsReportTest {
         holding.done()
         composeRule.waitForIdle()
         assertEquals(0, owed())
+    }
+
+    @Test
+    fun aReportOnWordsPutInTimeByHandStillBeingMadeIsntKeptOnceTheyreLeftAndReported() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        answerTo = { 400 }
+        val holding = Holding()
+        MainActivity.systemDispatcher = holding
+        openLyrics()
+        val first = holding.holdNext()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        // The one made for the move gets done after the words were left and reported: it isn't kept to go again.
+        first.countDown()
+        holding.done()
+        composeRule.waitForIdle()
+        assertEquals(0, owed())
+        opened.destroyAndSettle()
+        started()
+        composeRule.waitForIdle()
+        assertEquals(listOf("timed_by_hand"), problems())
     }
 
     @Test

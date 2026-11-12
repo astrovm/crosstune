@@ -3380,7 +3380,11 @@ internal class MainViewModel(
      * an offer made for them goes.
      */
     private fun leaveWords() {
-        if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
+            // The report goes as they are now: one still being made for an earlier move isn't kept to go again.
+            owing?.cancel()
+            uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
     }
@@ -3424,7 +3428,7 @@ internal class MainViewModel(
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
                     if (delivery == Delivery.FAILED) break
                     // One the box turned away it always will, so it's dropped, and the rest go on.
-                    if (delivery == Delivery.SENT) autoReports.paid(owed) else autoReports.dropped(owed)
+                    if (delivery == Delivery.SENT) autoReports.paid(owed) else autoReports.turnedAway(owed)
                     // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
                     delay(reportPaceMs)
                 }

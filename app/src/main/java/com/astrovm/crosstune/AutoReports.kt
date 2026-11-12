@@ -80,8 +80,12 @@ internal class AutoReports(
      * it's found, as it would be the same. Words put in time by hand are only no longer owed, not taken as sent,
      * so when they're put in time again, that report still goes. Neither counts for the day: see [mayFind].
      */
-    fun turnedAway(song: MusicMetadata, problem: SongProblem) =
-        if (problem == SongProblem.TIMED_BY_HAND) forget(keyOf(song, problem)) else remember(keyOf(song, problem), went = false)
+    fun turnedAway(song: MusicMetadata, problem: SongProblem) = turnedAway(keyOf(song, problem))
+
+    /** The report [owed] turned away by the box, as it always will be: see the other [turnedAway]. */
+    fun turnedAway(owed: Owed) = turnedAway(owed.key)
+
+    private fun turnedAway(key: String) = if (key.startsWith(BY_HAND_START)) forget(key) else remember(key, went = false)
 
     /** [key] done with, as it [went] to the box, so it counts for the day, or was turned away. */
     private fun remember(key: String, went: Boolean = true) {
@@ -188,9 +192,6 @@ internal class AutoReports(
 
     /** The report [owed] went. */
     fun paid(owed: Owed) = remember(owed.key)
-
-    /** The report [owed] was turned away by the box, as it always will be: it's no longer owed, and isn't taken as sent. */
-    fun dropped(owed: Owed) = forget(owed.key)
 
 
     /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */

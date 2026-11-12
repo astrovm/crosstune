@@ -239,7 +239,10 @@ internal enum class Delivery {
             else -> FAILED
         }
 
-        /** What the box says of the report itself: not one it reads (400), too big (413), not JSON (415), or not one it takes (422). */
+        /**
+         * What the box says of the report itself: not one it reads (400), too big (413), not JSON (415), or not one it
+         * takes (422). The box in report/ never answers 422 now; it's kept refused, as that's what a 422 means, should it.
+         */
         private val REFUSALS = setOf(400, 413, 415, 422)
     }
 }
