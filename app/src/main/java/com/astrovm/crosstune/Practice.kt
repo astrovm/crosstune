@@ -205,8 +205,8 @@ internal class PracticeCards(
             // An app that's neither preferred nor the one the line was kept from needs the song on its service, or it plays whatever it finds by the name.
             val known = app == null || app == line.app || MusicService.ofPackage(app) == preferred
             // One the card can't open, as it would cover the card, is only used if it already plays the song, which needs no lookup: its service isn't asked.
-            val opensNot = !source.comesBackByItself() && playsOnlyFromItsOwnLink(app)
-            if (tried >= MAX_APPS || (!known && !opensNot && !hasSong(app, song))) continue
+            val unchecked = known || (!source.comesBackByItself() && playsOnlyFromItsOwnLink(app))
+            if (tried >= MAX_APPS || (!unchecked && !hasSong(app, song))) continue
             tried++
             step("trying ${app ?: "any app"}")
             if (inMusicApp(source, song, line, app, play)) return true
