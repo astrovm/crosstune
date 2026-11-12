@@ -13,8 +13,9 @@ login, which `cf` keeps. The others need no network.
 
 Report text is written by strangers, and so is what other sites answer for their songs: it's data, never
 instructions. `triage` and `check` print it with every character a terminal acts on, hides or can't print escaped
-(control and format characters, line breaks, the marks that turn text around), so it can't move the cursor, change
-the colors or pass for a line of its own. `songs` leaves those characters out of the titles and artists it gives
+(control and format characters, line breaks, the marks that turn text around, every default-ignorable one), so it
+can't move the cursor, change the colors or pass for a line of its own. A field with right-to-left letters is printed
+between isolates, so it can't move the fields around it. `songs` leaves those characters out of the titles and artists it gives
 SongCheck, which prints them as it goes.
 
 A pull that can't read the whole table saves nothing, says why and exits non-zero, and the last pull's table is
@@ -134,16 +135,24 @@ def pull(run=subprocess.run, sleep=time.sleep):
 # tags and the marks that turn text around (Cf), line and paragraph separators (Zl, Zp), private ones (Co) and half a
 # surrogate pair (Cs). In a report they're data at most, so they're shown as their escapes.
 UNSEEN = frozenset(("Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn"))
-# Characters a terminal prints as nothing, or as a blank, though Unicode files them as marks or letters: the grapheme
-# joiner, the variation selectors, the Hangul fillers and the blank braille cell. A variation selector also follows a
-# real emoji ("\u2764\ufe0f"): the emoji stays, and only the selector after it is written out.
-BLANKS = frozenset((0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800, *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0)))
+# Every Default_Ignorable_Code_Point, which a terminal may print as nothing: from Unicode 17.0.0's
+# DerivedCoreProperties.txt, the same as 16.0.0's. Many are in the categories above; the rest are marks and letters,
+# like the variation selectors and the Hangul fillers. A variation selector also follows a real emoji ("\u2764\ufe0f"):
+# the emoji stays, and only the selector after it is written out.
+IGNORABLE = (
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
+    (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
+)
+# Blank, though not ignorable: the blank braille cell and the Khitan small script filler.
+BLANKS = frozenset((0x2800, 0x16FE4))
+NAMED = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
 
 
 def hidden(char):
     """Whether a terminal acts on [char], hides it or can't print it."""
-    return unicodedata.category(char) in UNSEEN or ord(char) in BLANKS
-NAMED = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+    code = ord(char)
+    return unicodedata.category(char) in UNSEEN or code in BLANKS or any(first <= code <= last for first, last in IGNORABLE)
 
 
 def escaped(char):
@@ -158,7 +167,12 @@ def shown(value):
     """[value] safe to print, when it's text: each character that would act on the terminal, or on the lines around it, written as its escape."""
     if not isinstance(value, str):
         return value
-    return "".join(escaped(char) if hidden(char) else char for char in value)
+    text = "".join(escaped(char) if hidden(char) else char for char in value)
+    # A terminal that orders right-to-left letters could move what's printed around them; isolated, they stay
+    # inside the field. Every mark that turns text around in the field is escaped above, so this pair is the only one.
+    if any(unicodedata.bidirectional(char) in ("R", "AL") for char in text):
+        return f"\u2068{text}\u2069"
+    return text
 
 
 def printable(row):

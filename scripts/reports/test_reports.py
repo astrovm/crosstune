@@ -227,7 +227,7 @@ class CheckTest(unittest.TestCase):
     def test_songs_for_songcheck_carry_no_character_a_terminal_acts_on(self):
         # SongCheck prints each song's title and artist as it goes, and rows already in D1 weren't cleaned.
         songs = reports.as_songs([row(7, title=f"Made\tUp{NASTY}", artist="Some\nBand\u200d\U0001f3b8")])
-        self.assertEqual(songs[0]["title"], "Made Upa[2J]0;titleb cde f ghijklm nopqrstuvwxyz")
+        self.assertEqual(songs[0]["title"], "Made Upa[2J]0;titleb cde f ghijklm nopqrstuvwxyz1234567890")
         self.assertEqual(songs[0]["artist"], "Some Band\U0001f3b8")
         for song in songs:
             self.assertEqual([], unseen(song["title"] + song["artist"]))
@@ -329,17 +329,38 @@ class MainTest(unittest.TestCase):
 
 # Made up: what a stranger could write in a report to move the cursor, recolor or retitle the terminal, or turn text around.
 # Past the control characters: zero-width ones, a tag, a mark that turns text around, a private one and half a pair.
-NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg\u200bh\u200di\U000e0041j\u200ek\ue000l\ud800m\u2029n\u061co\ufeffp\u0378q\u034fr\ufe0fs\ufe00t\U000e0100u\u115fv\u1160w\u3164x\uffa0y\u2800z"
+NASTY = "a\x1b[2J\x1b]0;title\x07b\x00\x7f\x85\x9bc\u202ed\u2066e\u2069\u2028f\tg\u200bh\u200di\U000e0041j\u200ek\ue000l\ud800m\u2029n\u061co\ufeffp\u0378q\u034fr\ufe0fs\ufe00t\U000e0100u\u115fv\u1160w\u3164x\uffa0y\u2800z\u180b1\u180f2\u17b43\u17b54\U00016fe45\u180e6\ufff07\U0001bca08\U0001d1739\U000e0fff0"
 
 
-# Characters that print as nothing, or as a blank, though Unicode files them as marks or letters: the grapheme joiner,
-# the variation selectors, the Hangul fillers and the blank braille cell. Each can hide in a title or pass for a space.
-BLANKS = {0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800, *range(0xFE00, 0xFE10), *range(0xE0100, 0xE01F0)}
+# Written out from Unicode 17.0.0's DerivedCoreProperties.txt (the same in 16.0.0), apart from reports.py's copy, so
+# a range left out there fails here: every Default_Ignorable_Code_Point, which a terminal may print as nothing.
+IGNORABLE = [
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
+    (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F), (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
+]
+# Blank too, though not ignorable: the blank braille cell and the Khitan filler.
+BLANK = {0x2800, 0x16FE4}
+# The isolates [shown] wraps a field with right-to-left letters in: its own, always one of each, in order.
+ISOLATES = "\u2068\u2069"
 
 
 def unseen(text):
-    """The characters a terminal acts on, hides or can't print, apart from the line break the output is made of."""
-    return [c for c in text if c != "\n" and (unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn") or ord(c) in BLANKS)]
+    """The characters a terminal acts on, hides or can't print, apart from the line break the output is made of and the isolates."""
+    def hidden(c):
+        code = ord(c)
+        return unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn") or code in BLANK or any(a <= code <= b for a, b in IGNORABLE)
+    return [c for c in text if c != "\n" and c not in ISOLATES and hidden(c)]
+
+
+def isolated(text):
+    """Whether every isolate in [text] opens before it closes, and each one opened is closed."""
+    depth = 0
+    for c in text:
+        depth += {"\u2068": 1, "\u2069": -1}.get(c, 0)
+        if depth < 0:
+            return False
+    return depth == 0
 
 
 class ShownTest(unittest.TestCase):
@@ -348,12 +369,22 @@ class ShownTest(unittest.TestCase):
             reports.shown(NASTY),
             "a\\x1b[2J\\x1b]0;title\\x07b\\x00\\x7f\\x85\\x9bc\\u202ed\\u2066e\\u2069\\u2028f\\tg"
             "\\u200bh\\u200di\\U000e0041j\\u200ek\\ue000l\\ud800m\\u2029n\\u061co\\ufeffp"
-            "\\u0378q\\u034fr\\ufe0fs\\ufe00t\\U000e0100u\\u115fv\\u1160w\\u3164x\\uffa0y\\u2800z",
+            "\\u0378q\\u034fr\\ufe0fs\\ufe00t\\U000e0100u\\u115fv\\u1160w\\u3164x\\uffa0y\\u2800z"
+            "\\u180b1\\u180f2\\u17b43\\u17b54\\U00016fe45\\u180e6\\ufff07\\U0001bca08\\U0001d1739\\U000e0fff0",
         )
         # An emoji keeps its picture: only its unseen style mark is written out, after it.
         self.assertEqual(reports.shown("Love \u2764\ufe0f song \U0001f3b8"), "Love \u2764\\ufe0f song \U0001f3b8")
         self.assertEqual(reports.shown("line\nbreak\r"), "line\\nbreak\\r")
-        self.assertEqual(reports.shown("Demo 花 أغنية"), "Demo 花 أغنية")
+        self.assertEqual(reports.shown("Demo 花"), "Demo 花")
+        # Right-to-left letters stay readable, isolated, so a terminal that orders them can't move what's around them.
+        self.assertEqual(reports.shown("Demo أغنية 2"), "\u2068Demo أغنية 2\u2069")
+        self.assertEqual(reports.shown("שיר"), "\u2068שיר\u2069")
+        # Every ignorable character is escaped, whichever range it's in, and so are the blank ones.
+        for first, last in IGNORABLE:
+            for code in {first, (first + last) // 2, last}:
+                self.assertEqual([], unseen(reports.shown(chr(code))), hex(code))
+        for code in BLANK:
+            self.assertEqual([], unseen(reports.shown(chr(code))), hex(code))
         # Every character of what was printed can be printed: half a pair would stop Python's print.
         reports.shown(NASTY).encode("utf-8")
         self.assertEqual(reports.shown(None), None)
@@ -382,6 +413,7 @@ class ShownTest(unittest.TestCase):
         self.assertEqual(len(printed), 3)
         for text in printed:
             self.assertEqual([], unseen(text), repr(text))
+            self.assertTrue(isolated(text), repr(text))
         # A comment's lines stay in its own line, so it can't pass for a report of its own.
         self.assertIn("    says: one\\n  40: Fake | Song", printed[0])
         self.assertIn("\\x1b[2J", printed[0])
