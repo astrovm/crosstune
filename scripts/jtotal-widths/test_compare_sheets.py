@@ -148,12 +148,84 @@ class DrawSizeTest(unittest.TestCase):
     def test_a_sheet_drawn_larger_has_every_letter_at_that_size(self):
         self.assertIn("<style>FACES *{font-size:40px !important}</style></head>", c.sheet_html(self.RAW, "", "FACES", size=40))
 
+    def test_a_link_to_another_host_reads_as_a_web_address_and_not_as_a_shared_folder(self):
+        # In a file: page, //x5.shinobi.jp/a.gif is file://x5.shinobi.jp/a.gif: on Windows the share
+        # \\x5.shinobi.jp\a.gif, which the browser waits on. Against the site's address it's https, which the route stops.
+        raw = '<html><head><meta charset="x"></head><body><img src="//x5.shinobi.jp/a.gif"></body></html>'
+        self.assertTrue(c.sheet_html(raw, "", "", size=None).startswith('<html><head><base href="https://music.j-total.net/"><meta'))
+
+    def test_only_a_file_on_this_machine_loads(self):
+        self.assertEqual([c.local(u) for u in ("file:///C:/Users/a/Inconsolata.woff2", "file:///fonts/a.woff2",
+                                               "file://x5.shinobi.jp/a.gif", "https://music.j-total.net/a.css", "data:,a")],
+                         [True, True, False, False, False])
+
+    def test_a_sheet_that_fails_to_draw_is_named_and_the_others_still_are(self):
+        class Failed(Exception):
+            pass
+
+        def draw_one(item):
+            if item["file"] == "0001.html":
+                raise Failed("Timeout 30000ms exceeded.\nCall log: ...")
+            return {"lines": [item["file"]]}
+
+        items = [{"file": f"000{n}.html", "url": f"https://example.test/{n}.html"} for n in range(3)]
+        with unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+            pages, failed = c.draw_each(items, draw_one, Failed)
+        self.assertEqual([p["url"] for p in pages], ["https://example.test/0.html", "https://example.test/2.html"])
+        self.assertEqual(pages[0]["lines"], ["0000.html"])
+        self.assertEqual(failed, ["0001.html https://example.test/1.html: Timeout 30000ms exceeded."])
+        self.assertIn(failed[0], err.getvalue())
+
     def test_the_command_line_takes_the_size_and_the_scale(self):
         with unittest.mock.patch.object(c, "draw") as draw:
             c.main(["draw", "dir", "--size", "page", "--scale", "1.25", "--out", "x.json"])
             self.assertEqual((draw.call_args.kwargs["size"], draw.call_args.kwargs["scale"]), (None, 1.25))
             c.main(["draw", "dir"])
             self.assertEqual((draw.call_args.kwargs["size"], draw.call_args.kwargs["scale"]), (40, 4.0))
+
+
+class CrawlTest(unittest.TestCase):
+    """The crawl asks the site for one page at a time, and a page it doesn't get never ends the crawl."""
+
+    def crawl(self, answers, count):
+        """Crawls `count` addresses, each answered by the next of `answers`: bytes, or an error to raise."""
+        urls = [f"https://example.test/{n}.html" for n in range(count)]
+        answers, slept = iter(answers), []
+
+        def urlopen(request, timeout):
+            answer = next(answers)
+            if isinstance(answer, Exception):
+                raise answer
+            return io.BytesIO(answer)
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                unittest.mock.patch.object(c.urllib.request, "urlopen", urlopen), \
+                unittest.mock.patch.object(c.time, "sleep", slept.append), \
+                unittest.mock.patch.object(c.time, "monotonic", return_value=1000.0), \
+                unittest.mock.patch("sys.stderr", new_callable=io.StringIO) as err, \
+                unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
+            (Path(tmp) / "dat_st.css").write_text("", encoding="utf-8")
+            c.crawl(Path(tmp), urls, 1000)
+            fetched = [item["url"] for item in json.loads((Path(tmp) / "urls.json").read_text(encoding="utf-8"))]
+        return fetched, slept, err.getvalue()
+
+    def test_a_page_the_site_does_not_send_in_time_is_named_and_the_crawl_goes_on(self):
+        fetched, _, err = self.crawl([TimeoutError("timed out"), b"<html>"], 2)
+        self.assertEqual(fetched, ["https://example.test/1.html"])
+        self.assertIn("https://example.test/0.html: timed out", err)
+
+    def test_after_a_failure_the_crawl_waits_longer_and_after_five_in_a_row_it_stops(self):
+        refused = c.urllib.error.URLError("refused")
+        fetched, slept, err = self.crawl([b"a", refused, b"b", refused, refused, refused, refused, refused], 9)
+        self.assertEqual(fetched, ["https://example.test/0.html", "https://example.test/2.html"])
+        # None before the first page, then a page a second; twice that after a failure, and twice again for each one after it.
+        self.assertEqual(slept, [0.0, 1.1, 2.2, 1.1, 2.2, 4.4, 8.8, 17.6])
+        self.assertIn("5 failed in a row", err)
+
+    def test_an_address_that_is_not_a_sheet_is_skipped_at_the_usual_pace(self):
+        missing = c.urllib.error.HTTPError("https://example.test/0.html", 404, "Not Found", {}, None)
+        fetched, slept, _ = self.crawl([missing, missing, b"a"], 3)
+        self.assertEqual((fetched, slept), (["https://example.test/2.html"], [0.0, 1.1, 1.1]))
 
 
 class CompareTest(unittest.TestCase):

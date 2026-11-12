@@ -10,6 +10,8 @@
   python3 scripts/jtotal-widths/compare_sheets.py compare DIR TAG [--truth DRAWING.json] [--show N]
 
 `crawl` saves the pages in URLS.txt (one address a line) under DIR/sheets, one request a second at most.
+A page the site doesn't send is named and skipped; the wait doubles after each failure, and five in a
+row end the crawl, with what it has.
 Pages are another person's work, so DIR belongs in the agent cache and never in Git.
 `browser` draws every page in Chromium, in the container of the width table, with the page's own CSS.
 It reads where each chord link starts and where each letter of the line under it starts.
@@ -18,6 +20,8 @@ test that it puts in the app's test folder and takes out again. `--old` leaves o
 the page names and reads the page as Java's Shift_JIS, for a checkout from before the app did either.
 `draw` is what `browser` runs in the container. Run on another machine, it draws the pages with that
 machine's browser and fonts, such as a Mac's, and writes NAME.environment.txt beside the drawing.
+It loads files on this machine only, with the page's links read against J-Total's address, and a page
+that fails to draw is named in NAME.environment.txt while the others are still drawn.
 It draws every letter at 40px on a screen of 4 pixels to a CSS pixel, which places each most exactly.
 `--size page --scale 1.25` draws them as a reader sees them: at the page's own 15px, on a screen
 Windows scales by 125%.
@@ -240,21 +244,35 @@ def read_app(path):
 
 # The steps that run on the host.
 
+# The site gets one page at a time, at most one a second: a failure doubles the wait, and this many in a row end the crawl.
+PAUSE, LONGEST_PAUSE, FAILURES_IN_A_ROW = 1.1, 60.0, 5
+
+
 def crawl(directory, urls, limit):
+    """Fetches each sheet that isn't in `directory` yet. One the site doesn't send is named and skipped, and the rest
+    still come: a page is only kept once it's all here, so the next crawl asks for the missing ones again."""
     (directory / "sheets").mkdir(parents=True, exist_ok=True)
-    meta, last, missing = [], 0.0, 0
+    meta, last, missing, pause, in_a_row = [], None, 0, PAUSE, 0
     for number, url in enumerate(urls[:limit]):
         out = directory / "sheets" / f"{number:04}.html"
         if not out.exists():
-            time.sleep(max(0.0, 1.1 - (time.monotonic() - last)))
+            time.sleep(0.0 if last is None else max(0.0, pause - (time.monotonic() - last)))
             last = time.monotonic()
             request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; research crawler)"})
             try:
                 out.write_bytes(urllib.request.urlopen(request, timeout=35).read())
-            except urllib.error.HTTPError as error:
-                # A guessed address that isn't a sheet is skipped, not a reason to stop the crawl.
-                print(f"{url}: HTTP {error.code}", file=sys.stderr)
+                pause, in_a_row = PAUSE, 0
+            except OSError as error:
+                said = f"HTTP {error.code}" if isinstance(error, urllib.error.HTTPError) else getattr(error, "reason", error)
+                print(f"{url}: {said}", file=sys.stderr)
                 missing += 1
+                # A guessed address that isn't a sheet is a quick answer. Anything else, such as no answer in time or
+                # a refused connection, may be the site under strain: wait longer, and stop if it goes on.
+                if not (isinstance(error, urllib.error.HTTPError) and error.code < 500):
+                    pause, in_a_row = min(pause * 2, LONGEST_PAUSE), in_a_row + 1
+                    if in_a_row == FAILURES_IN_A_ROW:
+                        print(f"{in_a_row} failed in a row: the crawl stops here, with what it has", file=sys.stderr)
+                        break
                 continue
         meta.append({"file": out.name, "url": url})
     sheet = directory / "dat_st.css"
@@ -315,20 +333,45 @@ def app_run(directory, tag, old):
 
 # The step that runs in the container.
 
+# The sheet's own address, which its links read against. Loaded from a file, `//x5.shinobi.jp/a.gif` would be
+# file://x5.shinobi.jp/a.gif: on Windows the shared folder \\x5.shinobi.jp\a.gif, which the browser waits on, and which
+# could hand the machine's sign-in to that host. Against this it's an https address, and the route stops it.
+SITE = "https://music.j-total.net/"
+
+
 def sheet_html(raw, css, faces, size=40):
-    """The page as `draw` loads it: J-Total's stylesheet in it, no scripts, and Inconsolata from `faces`.
-    At `size` pixels a letter, or at the page's own size (15px) when `size` is None."""
+    """The page as `draw` loads it: J-Total's stylesheet in it, no scripts, links read against `SITE`, and
+    Inconsolata from `faces`. At `size` pixels a letter, or at the page's own size (15px) when `size` is None."""
     text = re.sub(r'<link href="/ssi_dat/dat_st.css[^>]*>', lambda _: "<style>" + css + "</style>", raw)
     text = re.sub(r"(?is)<script\b.*?</script[^>]*>", "", text)
+    text = re.sub(r"(?i)<head\b[^<>]*+>", lambda found: found[0] + f'<base href="{SITE}">', text, count=1)
     larger = "" if size is None else f" *{{font-size:{size}px !important}}"
     return text.replace("</head>", "<style>" + faces + larger + "</style></head>", 1)
+
+
+def local(url):
+    """Whether the drawing may load `url`: only a file on this machine, which is a file: address with no host."""
+    return url.startswith("file:///")
+
+
+def draw_each(items, draw_one, errors):
+    """Each sheet as `draw_one` draws it, with its address. One that fails with one of `errors` is named, on the
+    error output and in the list that comes back, and the others are still drawn."""
+    pages, failed = [], []
+    for item in items:
+        try:
+            pages.append({**draw_one(item), "url": item["url"]})
+        except errors as error:
+            failed.append(f"{item['file']} {item['url']}: {str(error).splitlines()[0]}")
+            print(f"Not drawn: {failed[-1]}", file=sys.stderr)
+    return pages, failed
 
 
 def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, out="browser.json", size=40, scale=4.0):
     """Draws every page in `browser_name` on this machine, with its fonts, and writes where the letters are to `out`.
     `size` and `scale` are the letters' size (None for the page's own) and the screen's pixels to a CSS pixel:
     40px at 4 places a letter most exactly, and a reader sees 15px at 1, 1.25 or 1.5."""
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import Error as PlaywrightError, sync_playwright
     from jtotal_widths import FONTS, environment, open_page
 
     css = (directory / "dat_st.css").read_bytes().decode(CHARSET, "replace")
@@ -336,28 +379,30 @@ def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, ou
         f'@font-face{{font-family:Inconsolata;src:url({(fonts / f"inconsolata-{n}.woff2").resolve().as_uri()});unicode-range:{s}}}'
         for n, (_, s) in FONTS.items()
     )
-    pages = []
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
         browser, page, _ = open_page(p, browser_name, lang, Path(tmp) / "profile", viewport=(1280, 900), scale=scale)
-        page.route("**/*", lambda r: r.continue_() if r.request.url.startswith("file:") else r.abort())
+        page.route("**/*", lambda r: r.continue_() if local(r.request.url) else r.abort())
         html = Path(tmp) / "sheet.html"
-        for item in json.loads((directory / "urls.json").read_text(encoding="utf-8")):
-            raw = (directory / "sheets" / item["file"]).read_bytes().decode(CHARSET, "replace")
-            if "<!--HPSTART-->" not in raw:
-                continue
-            text = sheet_html(raw, css, faces, size)
+
+        def draw_one(item):
+            text = sheet_html((directory / "sheets" / item["file"]).read_bytes().decode(CHARSET, "replace"), css, faces, size)
             # Served as J-Total serves it, in Shift_JIS. A letter the decoder could not read stays the replacement mark.
             html.write_bytes(text.encode(CHARSET, "xmlcharrefreplace"))
             page.goto(html.as_uri())
             page.evaluate("document.fonts.ready")
-            pages.append({**page.evaluate(JS), "url": item["url"]})
+            return page.evaluate(JS)
+
+        items = [item for item in json.loads((directory / "urls.json").read_text(encoding="utf-8"))
+                 if b"<!--HPSTART-->" in (directory / "sheets" / item["file"]).read_bytes()]
+        pages, failed = draw_each(items, draw_one, PlaywrightError)
         found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, "the page's own", fonts)
         browser.close()
     (directory / out).write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
     letters = "the page's own size" if size is None else f"{size}px"
     found += [f"Browser language {lang or 'as Playwright starts it'}", f"Letters at {letters}, {scale} screen pixels to a CSS pixel"]
+    found += [f"Not drawn: {line}" for line in failed]
     (directory / out).with_suffix(".environment.txt").write_text("\n".join(found) + "\n", encoding="utf-8")
-    print(f"{len(pages)} sheets drawn")
+    print(f"{len(pages)} sheets drawn" + (f", {len(failed)} not" if failed else ""))
 
 
 def drawn_lines(page):
