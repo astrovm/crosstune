@@ -198,6 +198,21 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun aMarkUnderTheNamePlayedIsFinalOverWordsUnderItsOtherNames() {
+        val named = MusicMetadata("Song Title - Other Name", "Band")
+        // LRCLIB's copies of the recording, under the very name it's played by, say no one sings in it:
+        // words under one of its halves are another song's.
+        netEaseMarks("Nothing") { title ->
+            when (title) {
+                named.title -> "[${instrumentalCopy(named.title)},${instrumentalCopy(named.title)}]"
+                "Other Name" -> "[${answer("Other Name", "Band", "Words under the other name")}]"
+                else -> "[]"
+            }
+        }
+        assertEquals(Lyrics.MarkedInstrumental, found(named))
+    }
+
+    @Test
     fun lrclibsMarkUnderOneOfTheTitlesNamesBeatsAnotherServicesMarkUnderAnother() {
         val named = MusicMetadata("Song Title - Other Name", "Band")
         // NetEase marks its first name pure music, which may be another recording's; LRCLIB's copies of
