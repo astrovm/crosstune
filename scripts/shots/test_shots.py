@@ -22,6 +22,10 @@ class ArgumentsTest(unittest.TestCase):
         args = shots.arguments(['zh-tw', 'ja', '--theme', 'light'])
         self.assertEqual((args.langs, args.theme), (['zh-tw', 'ja'], 'light'))
 
+    def test_the_box_is_off_unless_asked_for(self):
+        self.assertFalse(shots.arguments([]).box)
+        self.assertTrue(shots.arguments(["--box"]).box)
+
     def test_invalid_selection_is_rejected(self):
         for args in [['../outside'], ['en', '--theme', 'sepia']]:
             with self.subTest(args=args), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
