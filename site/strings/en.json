@@ -69,7 +69,7 @@
   "privacy_link": "Privacy policy",
   "language_label": "Language",
   "privacy_title": "Crosstune Privacy Policy",
-  "updated": "Last updated: November 11, 2026",
+  "updated": "Last updated: November 12, 2026",
   "short_h2": "In short",
   "short_items": [
     "No account, ads or analytics.",
@@ -123,7 +123,7 @@
     ],
     [
       "p",
-      "If you let lyrics follow the song playing in your music app, Android asks you to allow Crosstune's notification access. Crosstune uses it only to see which song your music apps say they're playing and how far into it they are, so the lyrics can follow along and a line you tap can move the song there. It never reads your notifications, and none of this leaves your phone. You can turn it off in Android's settings at any time. When you practice saved lines, Crosstune also asks your music app to play the song each line is from, at that line when the app can move there, and, when it can't, tries your other music apps that can. Crosstune remembers on the phone which apps could move to a line and kept playing, and sends nothing about it. When none can, as with Spotify's free plan, it plays the line in a small YouTube player on the card instead: YouTube is asked for the song's video and the time of the line, and sees your phone's address, as for any video. You aren't signed in there, and no audio is sent. Crosstune's player uses the same access to show the song and what plays next, and to pause, skip, shuffle, repeat or move it, press the app's own like, or pause it on a sleep timer, in your music app."
+      "If you let lyrics follow the song playing in your music app, Android asks you to allow Crosstune's notification access. Crosstune uses it only to see which song your music apps say they're playing and how far into it they are, so the lyrics can follow along and a line you tap can move the song there. It never reads your notifications, and none of this leaves your phone. You can turn it off in Android's settings at any time. When you practice saved lines, Crosstune also asks your music app to play the song each line is from, at that line when the app can move there, and, when it can't, tries your other music apps that can. It tries three apps at most. Before it tries an app that isn't the one you chose or the one the line was saved from, it sends the song's title and artist to that app's service, through the same search that opens a link, and skips the app if the song isn't there. To open Spotify on a song, its own link is found through ListenBrainz, as described above. YouTube Music's search gets the song's title and artist when YouTube Music is the app tried, and when the app tried can't be asked for a song by name, like Spotify without a link for it, since YouTube Music is asked to play the song then. When Crosstune can't show over other apps, opening Spotify would cover the card, so Spotify is used only if it already plays the song, and nothing about the song is sent for it. Crosstune remembers on the phone which apps could move to a line and kept playing, and sends nothing about it. When none can, as with Spotify's free plan, it plays the line in a small YouTube player on the card instead: YouTube is asked for the song's video and the time of the line, and sees your phone's address, as for any video. To find that video, the song's title and artist go to YouTube Music's search and, when it finds no video and the song's length is known, to YouTube's, for a video as long as the song. You aren't signed in there, and no audio is sent. Crosstune's player uses the same access to show the song and what plays next, and to pause, skip, shuffle, repeat or move it, press the app's own like, or pause it on a sleep timer, in your music app."
     ],
     [
       "p",
@@ -151,7 +151,7 @@
     ],
     [
       "p",
-      "While you're signed in, Crosstune sends OpenAI what each feature needs: a song's title, artist and lyrics to translate or explain them, correct Japanese readings, write lyrics found in Latin letters in Japanese or Korean, or pick words worth learning; a word and its line to look it up; the questions you ask about a line or a song; and a description you type, or a song, to find songs that match. OpenAI handles them under its own privacy policy, and they count toward your plan's usage."
+      "While you're signed in, Crosstune sends OpenAI what each feature needs: a song's title, artist and lyrics to translate or explain them, correct Japanese readings, write lyrics found in Latin letters in Japanese or Korean, or pick words worth learning; a word and its line to look it up; the questions you ask about a line or a song; and a description you type, or a song, to find songs that match. When a YouTube Music or YouTube search finds nothing named like the song, the song's title and artist and what the search found go to OpenAI too, so ChatGPT picks the one that's the song. OpenAI handles them under its own privacy policy, and they count toward your plan's usage."
     ],
     [
       "p",
