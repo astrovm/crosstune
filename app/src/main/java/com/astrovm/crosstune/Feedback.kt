@@ -315,8 +315,8 @@ internal object ReportBox {
         }
         (1 until inOrder.lastIndex).forEach(::weigh)
         val order = mutableListOf<Int>()
-        while (queue.isNotEmpty()) {
-            val (miss, at) = queue.poll()
+        while (true) {
+            val (miss, at) = queue.poll() ?: break
             if (gone[at] || miss != missed[at]) continue
             gone[at] = true
             order += inOrder[at]

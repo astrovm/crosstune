@@ -603,11 +603,9 @@ class ExactMatcherTest {
         // 4:06 is 246 s. Against Apple's milliseconds, YouTube Music's are from 0.7 s shorter to 1 s longer.
         val row = listOf("残酷な天使のテーゼ" to "Yoko Takahashi • 残酷な天使のテーゼ • 4:06")
         val videos = listOf(bothWays())
-        assertEquals(-700L..1_000L, ExactMatcher.RECORDING_OFF_MS)
         for (lengthMs in listOf(245_000L, 246_700L)) assertEquals("$lengthMs", "https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs, videos = videos))
         for (lengthMs in listOf(244_999L, 246_701L)) assertNull("$lengthMs", findAngel(row, lengthMs, videos = videos))
         // Against Deezer's whole seconds, a second either way, as each rounds its own way.
-        assertEquals(1_000L, ExactMatcher.SAME_SECONDS_MS)
         for (seconds in listOf(245L, 246L, 247L)) assertEquals("$seconds", "https://music.youtube.com/watch?v=row00000000", findAngel(row, lengthMs = null, videos = videos, deezerSeconds = seconds))
         for (seconds in listOf(244L, 248L)) assertNull("$seconds", findAngel(row, lengthMs = null, videos = videos, deezerSeconds = seconds))
     }

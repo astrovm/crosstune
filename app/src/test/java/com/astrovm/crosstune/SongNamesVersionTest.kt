@@ -137,7 +137,9 @@ class SongNamesVersionTest {
         for (said in listOf(
             "Fake Song (インスト)", "Fake Song (TV Size)", "Fake Song TV-size", "Fake Song (オフ・ヴォーカル)", "Fake Song (Off Vocal)",
             "Fake Song ライブ版", "Fake Song (반주)", "Fake Song 라이브 버전", "Fake Song 翻唱版", "Fake Song 卡拉OK版", "Fake Song (ＴＶサイズ)",
-            "Fake Song ｶﾗｵｹ", "Fake Song【カラオケ】", "Fake Song 메들리", "Fake Song 混音版"
+            "Fake Song ｶﾗｵｹ", "Fake Song【カラオケ】", "Fake Song 메들리", "Fake Song 混音版", "Fake Song 串烧",
+            // A hiragana particle ends a katakana word, as Japanese has no spaces.
+            "Fake Songのカラオケ", "Fake Song ライブを歌う"
         )) {
             assertTrue(said, other(said))
         }
@@ -147,6 +149,7 @@ class SongNamesVersionTest {
         assertTrue(SongNames.saysAnotherVersion("ライフ (ライブ)", "ライフ", "Fake Band"))
         // Many songs in one is a word of its own too: メドレー, and not inside a longer word.
         assertTrue(SongNames.manySongs(MusicMetadata("夏メドレー", "Fake Band")))
+        assertTrue(SongNames.manySongs(MusicMetadata("夏のメドレー", "Fake Band")))
         assertFalse(SongNames.manySongs(MusicMetadata("メドレーズ", "Fake Band")))
     }
 

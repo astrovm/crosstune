@@ -156,16 +156,24 @@ internal object SongNames {
         fun foundIn(name: String): Boolean = pattern.containsMatchIn(composed(name))
 
         companion object {
+            /** "ー", as in メドレー: NFKC makes the half-width one this too. */
+            private const val LONG_VOWEL = '\u30fc'
+
             private fun composed(text: String) = Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase(Locale.ROOT)
 
             /** What else [letter]'s word may be written in, so a mark that starts or ends with it is inside a longer one. */
-            private fun wordOf(letter: Char): String? = when (Character.UnicodeScript.of(letter.code)) {
+            private fun wordOf(letter: Char): String? = when (scriptOf(letter)) {
                 Character.UnicodeScript.LATIN, Character.UnicodeScript.COMMON -> """[\p{IsLatin}\p{N}]"""
-                // The long vowel mark and the sound marks are written with kana, though every script has them.
-                Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA -> """[\p{IsHiragana}\p{IsKatakana}\u30fc\uff70\u3099-\u309c]"""
+                // Japanese has no spaces: a katakana word runs on in katakana, and a hiragana particle, like の, ends it.
+                // The long vowel mark and the sound marks are written with kana, though Unicode puts them in every script.
+                Character.UnicodeScript.KATAKANA -> """[\p{IsKatakana}\u30fc\uff70\u3099-\u309c]"""
+                Character.UnicodeScript.HIRAGANA -> """[\p{IsHiragana}\u30fc\u3099-\u309c]"""
                 Character.UnicodeScript.HANGUL -> """\p{IsHangul}"""
                 else -> null
             }
+
+            private fun scriptOf(letter: Char): Character.UnicodeScript =
+                if (letter == LONG_VOWEL) Character.UnicodeScript.KATAKANA else Character.UnicodeScript.of(letter.code)
         }
     }
 
@@ -182,6 +190,8 @@ internal object SongNames {
     private val VERSION_MARKS = listOf(
         "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
         "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방",
+        // Many songs in one: "(メドレー)" above, "(串烧)", "(메들리)".
+        "串烧", "串燒", "메들리",
         // Without the singing, or cut for TV: "(Off Vocal)", "(オフ・ヴォーカル)", "(TV Size)", "(インスト)", "(纯音乐)", "(반주)".
         "offvocal", "tvsize", "オフボーカル", "オフヴォーカル", "インスト", "tvサイズ", "テレビサイズ", "纯音乐", "純音樂", "인스트", "반주",
         // Remixed, or sung live: "(リミックス)", "(混音)", "(리믹스)", "(演唱会)".
