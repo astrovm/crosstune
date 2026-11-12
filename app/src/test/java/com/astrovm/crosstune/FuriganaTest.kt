@@ -27,6 +27,18 @@ class FuriganaTest {
     }
 
     @Test
+    fun ofWaysAsGoodTheFirstTriedWins() {
+        // か is found twice either way: the first kanji reads the least.
+        assertEquals(listOf(Ruby("山", "か"), Ruby("か"), Ruby("山", "かや")), Furigana.over("山か山", "かかかや"))
+        // か isn't in the reading: one reading either way, and over the kanji alone it's the first tried.
+        assertEquals(listOf(Ruby("山", "や"), Ruby("か")), Furigana.over("山か", "や"))
+        // Too little reading for two kanji: one reading over them and the kana between.
+        assertEquals(listOf(Ruby("山か山", "や")), Furigana.over("山か山", "や"))
+        // Kana after the last kanji are read as written, never as a group of their own.
+        assertEquals(listOf(Ruby("山", "か"), Ruby("かか")), Furigana.over("山かか", "かか"))
+    }
+
+    @Test
     fun everyReadingIsLaidWhereTheOldWayLaidIt() {
         val random = Random(954)
         repeat(20_000) {

@@ -20,8 +20,9 @@ internal object Furigana {
             if (runs.isNotEmpty() && !Readings.isKana(c) && !Readings.isKana(runs.last().first())) runs[runs.lastIndex] += c else runs += c.toString()
             runs
         }
-        // Nothing to read it over: no kanji, or no reading, or too long a word to count its kana. The word stays as written.
-        val laid = (if (surface.length > MAX_LETTERS) null else Aligner(runs, kana).parts()) ?: return listOf(Ruby(surface))
+        // No reading, or too long a word to count its kana: the word stays as written. So it does with no way to lay the reading.
+        if (kana.isEmpty() || surface.length > MAX_LETTERS) return listOf(Ruby(surface))
+        val laid = Aligner(runs, kana).parts() ?: return listOf(Ruby(surface))
         return laid.fold(mutableListOf()) { parts, part ->
             if (part.reading == null && parts.lastOrNull()?.reading == null && parts.isNotEmpty()) parts[parts.lastIndex] = Ruby(parts.last().text + part.text) else parts += part
             parts
@@ -230,8 +231,9 @@ internal object Furigana {
             // A kanji group ending at a run from the next one on, and at a place from each on: where the best of them ends,
             // as the run it ends at and the place in the reading. Kept for the next run, and for the first with kanji after it.
             // Three rows each, used in turn: one for this run, one for the next and one for the first with kanji after it.
-            val runRows = Array(3) { IntArray(width + 1) { -1 } }
-            val endRows = Array(3) { IntArray(width + 1) { -1 } }
+            // Its reading ends after the kanji's starts, so a group's rows are kept from the second place on.
+            val runRows = Array(3) { IntArray(width) }
+            val endRows = Array(3) { IntArray(width) }
             var later = 0
             var kanjiRow = 0
             for (i in runs.indices.reversed()) {
@@ -241,7 +243,7 @@ internal object Furigana {
                 for (at in 0..size) {
                     found = NONE
                     if (isKana[i]) written(i, at)
-                    kanji(i, at, runRows[kanjiRow][at + 1], endRows[kanjiRow][at + 1])
+                    if (at < size) kanji(i, runRows[kanjiRow][at + 1], endRows[kanjiRow][at + 1])
                     best[i * width + at] = found
                     next[i * width + at] = foundNext
                 }
@@ -262,18 +264,18 @@ internal object Furigana {
 
         /**
          * The best ends of a kanji group ending at the [j]th run or later, for each place its reading may end from, as tried
-         * in order, into [groupRun] and [groupEnd], from [laterRun] and [laterEnd], the same for the run after it.
+         * in order, into [groupRun] and [groupEnd], from [laterRun] and [laterEnd], the same for the run after it, if any.
+         * Of ends as good, the first tried: the group ending soonest, its reading ending soonest.
          */
         private fun groups(j: Int, laterRun: IntArray, laterEnd: IntArray, groupRun: IntArray, groupEnd: IntArray) {
             val after = (j + 1) * width
-            var end = -1
-            for (at in size downTo 0) {
+            var end = size
+            for (at in size downTo 1) {
                 // This run, the reading ending here or, when that's better, later.
-                if (end < 0 || best[after + at] >= best[after + end]) end = at
-                val later = laterEnd[at]
-                val laterBetter = later >= 0 && best[after + end] < best[(laterRun[at] + 1) * width + later]
+                if (best[after + at] >= best[after + end]) end = at
+                val laterBetter = j != runs.lastIndex && best[after + end] < best[(laterRun[at] + 1) * width + laterEnd[at]]
                 groupRun[at] = if (laterBetter) laterRun[at] else j
-                groupEnd[at] = if (laterBetter) later else end
+                groupEnd[at] = if (laterBetter) laterEnd[at] else end
             }
         }
 
@@ -285,9 +287,9 @@ internal object Furigana {
             if (kanaBefore[i]) offer(i + 1, at, 0, false) else if (nextKanji[i] == runs.size) offer(runs.size, at, 0, false)
         }
 
-        /** A group containing kanji, from the [i]th run to the [last]th, read as far as [end] in the reading. */
-        private fun kanji(i: Int, at: Int, last: Int, end: Int) {
-            if (nextKanji[i] < runs.size && at < size) offer(last + 1, end, 0, true)
+        /** A group containing kanji, from the [i]th run to the [last]th, read from where it starts as far as [end] in the reading. */
+        private fun kanji(i: Int, last: Int, end: Int) {
+            if (nextKanji[i] < runs.size) offer(last + 1, end, 0, true)
         }
 
         /** A first part ending before the [run]th run and at [at] in the reading, finding [kept] kana, with a reading over it when [read]. */
