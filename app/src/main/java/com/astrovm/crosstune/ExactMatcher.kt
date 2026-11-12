@@ -880,7 +880,8 @@ internal class ExactMatcher(
      */
     private fun namedBothWays(row: Row, names: Names, known: Set<Character.UnicodeScript>, videos: List<Row>): Boolean {
         val latin = names.titles.filter { scriptsOf(it).isEmpty() }.map { SongNames.normalize(SongNames.bareTitle(it)) }.filter { it.isNotEmpty() }
-        val own = SongNames.titleNames(row.name).filter { (scriptsOf(it) - known).isNotEmpty() }.map { SongNames.normalize(SongNames.bareTitle(it)) }.filter { it.isNotEmpty() }
+        // A name with a letter in another script is never empty, as a Latin one with none is.
+        val own = SongNames.titleNames(row.name).filter { (scriptsOf(it) - known).isNotEmpty() }.map { SongNames.normalize(SongNames.bareTitle(it)) }
         return videos.any { video -> video.id != null && SongNames.normalize(video.name).let { said -> latin.any(said::contains) && own.any(said::contains) } }
     }
 

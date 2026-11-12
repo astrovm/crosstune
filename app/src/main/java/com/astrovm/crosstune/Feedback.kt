@@ -118,8 +118,8 @@ internal data class Report(
         // What the lines add around their own bytes: the field's name and brackets, and a comma between two.
         val around = usable.firstOrNull()?.let { jsonWith(listOf(it), log).toByteArray().size - bare - sizes.first() } ?: 0
         var sum = (gone until usable.size).sumOf { sizes[order[it]] }
-        fun bytes() = bare + if (gone < usable.size) around + sum + (usable.size - gone - 1) else 0
-        while (bytes() > ReportBox.MAX_BYTES) sum -= sizes[order[gone++]]
+        // With no lines this is one byte short, which never matters: the rest always fits, and one line too.
+        while (bare + around + sum + (usable.size - gone - 1) > ReportBox.MAX_BYTES) sum -= sizes[order[gone++]]
         val left = order.drop(gone).toSet()
         return jsonWith(usable.filterIndexed { index, _ -> index in left }, log)
     }
@@ -283,8 +283,8 @@ internal object ReportBox {
      */
     fun cut(text: String, field: String): String {
         val clean = text.replace(BREAK, if (field in LINES) "\n" else " ").replace('\t', ' ').replace(UNSEEN, "").trim { it in SPACES }
-        val max = LIMITS.getValue(field)
-        return if (clean.codePointCount(0, clean.length) <= max) clean else clean.substring(0, clean.offsetByCodePoints(0, max))
+        val max = minOf(LIMITS.getValue(field), clean.codePointCount(0, clean.length))
+        return clean.substring(0, clean.offsetByCodePoints(0, max))
     }
 
     /** Whether the box takes a line the words had at [timedMs] and that's heard at [heardMs]. */

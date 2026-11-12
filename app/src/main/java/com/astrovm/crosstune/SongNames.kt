@@ -148,12 +148,13 @@ internal object SongNames {
      */
     private class Mark(written: String) {
         private val letters = composed(written).filter(Char::isLetterOrDigit)
-        private val pattern = Regex(
-            (wordOf(letters.first())?.let { "(?<!$it)" } ?: "") + letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*""") +
-                (wordOf(letters.last())?.let { "(?!$it)" } ?: "")
-        )
+        private val pattern = Regex(letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*"""))
 
-        fun foundIn(name: String): Boolean = pattern.containsMatchIn(composed(name))
+        // Its edges are looked at on each name, not built into the pattern: marks are made once, as the app starts.
+        fun foundIn(name: String): Boolean {
+            val text = composed(name)
+            return pattern.findAll(text).any { !goesOn(letters.first(), text.getOrNull(it.range.first - 1)) && !goesOn(letters.last(), text.getOrNull(it.range.last + 1)) }
+        }
 
         companion object {
             /** "ー", as in メドレー: NFKC makes the half-width one this too. */
@@ -161,17 +162,21 @@ internal object SongNames {
 
             private fun composed(text: String) = Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase(Locale.ROOT)
 
-            /** What else [letter]'s word may be written in, so a mark that starts or ends with it is inside a longer one. */
-            private fun wordOf(letter: Char): String? = when (scriptOf(letter)) {
-                Character.UnicodeScript.LATIN, Character.UnicodeScript.COMMON -> """[\p{IsLatin}\p{N}]"""
-                // Japanese has no spaces: a katakana word runs on in katakana, and a hiragana particle, like の, ends it.
-                // The long vowel mark and the sound marks are written with kana, though Unicode puts them in every script.
-                Character.UnicodeScript.KATAKANA -> """[\p{IsKatakana}\u30fc\uff70\u3099-\u309c]"""
-                Character.UnicodeScript.HIRAGANA -> """[\p{IsHiragana}\u30fc\u3099-\u309c]"""
-                Character.UnicodeScript.HANGUL -> """\p{IsHangul}"""
-                else -> null
-            }
+            /**
+             * Whether [next], beside a mark's [edge] letter, is more of the same word, so the mark is inside a longer one.
+             * A mark over a letter, one NFKC can't put together with it, is part of that letter. Latin words go on in
+             * Latin letters and digits. Japanese has no spaces: a katakana word goes on in katakana, and a hiragana
+             * particle, like の, ends it. Chinese has no spaces either, and nothing tells where a word ends.
+             */
+            private fun goesOn(edge: Char, next: Char?): Boolean = next != null && (
+                next.category == CharCategory.NON_SPACING_MARK || when (val script = scriptOf(edge)) {
+                    Character.UnicodeScript.LATIN -> scriptOf(next) == script || next.isDigit()
+                    Character.UnicodeScript.HAN -> false
+                    else -> scriptOf(next) == script
+                }
+            )
 
+            /** The long vowel mark is written with katakana, though Unicode puts it in every script. */
             private fun scriptOf(letter: Char): Character.UnicodeScript =
                 if (letter == LONG_VOWEL) Character.UnicodeScript.KATAKANA else Character.UnicodeScript.of(letter.code)
         }
