@@ -4883,9 +4883,11 @@ internal class MainViewModel(
                 if (!unmetered || uiState.offlineUsedBytes >= uiState.offlineSpaceMb * BYTES_PER_MB) return
                 // Its words unreachable for a moment, the network's gone: it's tried again on the next one. Only its sung
                 // readings, it's kept without them for now and the next songs are fetched, and they're asked for on the next.
-                val fetched = withContext(Pinning(kept.id)) { fetchForOffline(song) }
-                if (fetched == Fetched.NOT) return
-                offline.saved(kept.id, song, unread = fetched == Fetched.UNREAD)
+                when (withContext(Pinning(kept.id)) { fetchForOffline(song) }) {
+                    Fetched.NOT -> return
+                    Fetched.UNREAD -> offline.saved(kept.id, song, unread = true)
+                    Fetched.ALL -> offline.saved(kept.id, song)
+                }
                 showKeptOffline(offline)
             }
         }

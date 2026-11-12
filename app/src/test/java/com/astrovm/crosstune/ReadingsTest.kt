@@ -371,6 +371,13 @@ class ReadingsTest {
     }
 
     @Test
+    @Config(sdk = [29])
+    fun chineseReadOtherwiseIsWrittenOutFromAndroid10On() {
+        val parts = listOf(Ruby("我", "wǒ"), Ruby("爱", "āi", Reader.USER))
+        assertEquals("wǒ āi", Readings.readAs(parts, Script.CHINESE).romanized)
+    }
+
+    @Test
     fun chineseReadOtherwiseInAPlaceIsWrittenOutAsALineIs() {
         val parts = listOf(Ruby("a"), Ruby("我", "wǒ"), Ruby("爱", "āi", Reader.USER), Ruby("你", "nǐ"), Ruby("baby。"))
         val line = Readings.readAs(parts, Script.CHINESE)

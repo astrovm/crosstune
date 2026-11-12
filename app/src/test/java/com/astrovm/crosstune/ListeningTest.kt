@@ -4848,6 +4848,22 @@ class ListeningTest {
     }
 
     @Test
+    fun aLineKeptCarriesWhatTheUserPutRightWhenItsWordsChangeWithReadingsOff() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよ","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よ","user"]],"byHand":true,"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        wordsOf(null, "都会の夜に")
+        // Nothing reads the words on screen, so the line's read by the dictionary away from it, with the user's 夜.
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.singleOrNull()?.ruby.orEmpty().any { it.by == Reader.USER } }
+        settle()
+        val line = SavedLinesStore(prefs()).load().single()
+        assertEquals("都会の夜に", line.text)
+        assertEquals(Ruby("夜", "よ", Reader.USER), line.ruby.orEmpty().last { it.reading != null })
+        assertEquals(listOf(line), controllerModel().uiState.savedLines)
+    }
+
+    @Test
     fun readingsReadAgainKeepWhatChatGptPutRightWhileUtaTenIsAskedAgain() {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
         val openAi = signedInWithChatGpt()
@@ -4882,6 +4898,39 @@ class ListeningTest {
         settle()
         assertTrue(readingShown("よ"))
         assertTrue(controllerModel().uiState.learning.readingsUnfinished)
+    }
+
+    @Test
+    fun aLineKeptIsReadAsItsSungWhenChatGptCantCheckTheWords() {
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよる","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よる"]],"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("You check the readings" in body.getString("instructions")) 500 to "" else answers(body) }
+        wordsOf(null, "都会の夜", openAi = openAi, sites = { request -> if (request.url.host == "utaten.com") utaTenSingsMachi(request) else null })
+        waitUntil(TIMEOUT_MS) { readingShown("まち") }
+        settle()
+        // UtaTen's readings go into the line kept now, as ChatGPT may not answer for a while; the words wait for it.
+        assertEquals("まちのよる", SavedLinesStore(prefs()).load().single().reading)
+        assertTrue(controllerModel().uiState.learning.readingsUnfinished)
+    }
+
+    @Test
+    fun aLineKeptIsReadAgainByTheDictionaryWhenNothingElseCanPutItRight() {
+        // Kept by an app that read 夜 wrong, before it marked which dictionary read a line.
+        prefs().edit().putBoolean("lyrics_readings", true).putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよ","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よ"]]}]"""
+        ).commit()
+        // UniDic is on the phone already, so the readings aren't left for it to read again.
+        TestUniDic.files.copyRecursively(File(app.noBackupFilesDir, "unidic/files"))
+        MainActivity.uniDicFactory = { _, client -> UniDic(client, File(app.noBackupFilesDir, "unidic"), mayFetch = { true }) }
+        wordsOf(null, "都会の夜", sites = { request -> if (request.url.host == "utaten.com") utaTenHasNone(request) else null })
+        // UtaTen hasn't the song, and there's no ChatGPT: the dictionary's readings are all there are.
+        waitUntil(TIMEOUT_MS) { SavedLinesStore(prefs()).load().single().reading == "とかいのよる" }
+        assertFalse(controllerModel().uiState.learning.readingsUnfinished)
     }
 
     @Test
