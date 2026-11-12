@@ -128,6 +128,9 @@ class SungTimingTest {
         assertEquals(mapOf(0 to 10_000L), SungTiming.linesMs(one, listOf(heard(9_000, heardSo)), 60_000))
         // Without the first word, the second says it.
         assertEquals(mapOf(0 to 12_000L), SungTiming.linesMs(one, listOf(heard(9_000, heardSo.drop(1))), 60_000))
+        // Any word can be the earliest: here "lantern" says 11.9 s, by its 10 letters before.
+        val middleEarliest = listOf(heardSo[1], "lantern" to 11_900L + late + 10 * SungTiming.LETTER_MS, heardSo[3])
+        assertEquals(mapOf(0 to 11_900L), SungTiming.linesMs(one, listOf(heard(9_000, middleEarliest)), 60_000))
         // Words closer together than their letters take are sung faster: here 12 letters in 640 ms, from "every" to
         // "down", so the 5 before "every" take 266 ms, not 350, and the line starts at 12.084 s.
         val fast = heardSo.drop(1).dropLast(1) + ("down" to 11_800L + late + 17 * SungTiming.LETTER_MS)
@@ -258,6 +261,12 @@ class SungTimingTest {
         assertEquals(mapOf(0 to 10_000L, 1 to between, 2 to 16_000L), timedWithVoiceAt(between))
         // Not before it starts, nor once the next line starts.
         assertEquals(mapOf(0 to 10_000L, 2 to 16_000L), timedWithVoiceAt(between - 1))
+        // A word of unspaced writing heard just before is sung a letter after another: its third letter is the voice.
+        val longWord = listOf("ああああ" to between - 2 * SpokenWords.sungLetters("あ") * SungTiming.LETTER_MS + SungTiming.HEARD_LATE_MS)
+        assertEquals(
+            mapOf(0 to 10_000L, 1 to between, 2 to 16_000L),
+            SungTiming.linesMs(three, listOf(heard(9_000, sungAt(10_000, three[0]), longWord, sungAt(16_000, three[2]))), 60_000)
+        )
         // Of two lines between, each needs its own voice.
         val four = listOf("Amber lanterns glow", "Yo", "Hey", "Silver rivers bend")
         val first = 10_000L + 6_000L * 17 / 22
