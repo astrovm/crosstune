@@ -265,8 +265,8 @@ internal object ReportBox {
     /** The texts the box keeps line breaks in: a comment and the timing log. Every other one is a single line. */
     private val LINES = setOf("comment", "log")
 
-    /** A line break, however it's written, as the box finds one. */
-    private val BREAK = Regex("""\r\n?|[\n\u2028\u2029]""")
+    /** A line break, however it's written, as the box finds one. ReportTest holds it to worker.js. */
+    val BREAK = Regex("""\r\n?|[\n\u2028\u2029]""")
 
     /**
      * What the box never keeps: control characters, and the marks that turn the direction of the text after them

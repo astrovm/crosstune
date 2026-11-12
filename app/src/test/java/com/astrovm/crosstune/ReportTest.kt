@@ -270,12 +270,12 @@ class ReportTest {
         assertTrue(box.contains("value >= 0 && value <= 24 * 60 * 60 * 1000"))
         assertTrue(box.contains("Math.abs(value) <= 24 * 60 * 60 * 1000"))
         assertEquals(24 * 60 * 60 * 1000L, ReportBox.DAY_MS)
-        // The characters it never keeps, when it says which: the app keeps none of them either, and no others.
-        Regex("""const UNSEEN = /\[([^\]]+)]/g""").find(box)?.let { found ->
-            val unseen = Regex("[${found.groupValues[1]}]")
-            val differ = (0..0xFFFF).map(::Char).filter { unseen.matches(it.toString()) != ReportBox.UNSEEN.matches(it.toString()) }
-            assertEquals(emptyList<Char>(), differ)
-        }
+        // The characters it never keeps, and what it takes for a line break: the app's are the same, and no others.
+        val unseen = Regex("[${boxPart(box, """const UNSEEN = /\[([^\]]+)]/g""")}]")
+        val breaks = Regex(boxPart(box, """const BREAK = /([^/]+)/g"""))
+        val chars = (0..0xFFFF).map { Char(it).toString() }
+        assertEquals(emptyList<String>(), chars.filter { unseen.matches(it) != ReportBox.UNSEEN.matches(it) })
+        assertEquals(emptyList<String>(), (chars + "\r\n").filter { breaks.matches(it) != ReportBox.BREAK.matches(it) })
     }
 
     @Test
