@@ -318,7 +318,7 @@
     <string name="report_failed">无法发送。请检查网络连接后重试。</string>
     <string name="reading_wrong">读音有误</string>
     <string name="reading_right">正确读音（可选）</string>
-    <string name="reading_what_goes">会发送这个词、显示的读音、所在的行、歌名，以及应用和 Android 版本。只有 Crosstune 的开发者会看到。</string>
+    <string name="reading_what_goes">会发送这个词、显示的读音及其来源、所在的行和文字、你输入的读音、歌名和歌手、歌词来源，以及应用和 Android 版本。只有 Crosstune 的开发者会看到。</string>
     <string name="auto_report_offer">自动报告这类问题？</string>
     <string name="auto_report_offer_words_off">这首歌的歌词不同步。自动报告这类问题？</string>
     <string name="auto_report_yes">好</string>

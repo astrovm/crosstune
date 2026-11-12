@@ -318,7 +318,7 @@
     <string name="report_failed">Échec de l\'envoi. Vérifiez votre connexion et réessayez.</string>
     <string name="reading_wrong">Lecture erronée</string>
     <string name="reading_right">Bonne lecture (facultatif)</string>
-    <string name="reading_what_goes">Envoie le mot, la lecture affichée, sa ligne, le nom du morceau et les versions de l\'app et d\'Android. Seul le développeur de Crosstune le lit.</string>
+    <string name="reading_what_goes">Envoie le mot, la lecture affichée et ce qui l\'a donnée, sa ligne et son écriture, la lecture que vous tapez, le titre et l\'artiste du morceau, la source des paroles et les versions de l\'app et d\'Android. Seul le développeur de Crosstune le lit.</string>
     <string name="auto_report_offer">Signaler automatiquement les problèmes comme celui-ci ?</string>
     <string name="auto_report_offer_words_off">Les paroles de ce morceau étaient décalées. Signaler automatiquement les cas comme celui-ci ?</string>
     <string name="auto_report_yes">Oui</string>

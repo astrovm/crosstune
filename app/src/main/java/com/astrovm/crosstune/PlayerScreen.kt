@@ -440,7 +440,7 @@ private fun PlayerMenu(ready: Boolean, actions: ScreenActions) {
 /** Where the song is, to drag elsewhere when the app lets it, with how long it is when the app says. */
 @Composable
 private fun PlayerProgress(following: Following, onSeek: (Long) -> Unit) {
-    val position = rememberPosition(following) ?: 0L
+    val position = rememberSecond(following) ?: 0L
     val duration = following.durationMs
     // Where it's dragged to, held there until the app says it moved, or a moment passes without it saying.
     var dragged by remember { mutableStateOf<Float?>(null) }

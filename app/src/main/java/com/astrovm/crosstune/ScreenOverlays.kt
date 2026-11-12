@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
@@ -129,7 +131,10 @@ private fun InOverlay(overlays: Overlays, opener: FocusRequester?, content: @Com
     }
 }
 
-/** An [AlertDialog], or on a TV its place in the screen, which gives the remote back to [opener], what opened it, once it's put away. */
+/**
+ * An [AlertDialog], or on a TV its place in the screen, which gives the remote back to [opener], what opened it, once it's put away.
+ * Its [text] scrolls, so its last line can be reached where a big font or a small screen leaves it no room.
+ */
 @Composable
 internal fun ScreenAlert(
     onDismissRequest: () -> Unit,
@@ -141,10 +146,11 @@ internal fun ScreenAlert(
     opener: FocusRequester? = null
 ) {
     val overlays = LocalOverlays.current
+    val scrolled: (@Composable () -> Unit)? = text?.let { { Column(Modifier.verticalScroll(rememberScrollState())) { it() } } }
     if (overlays == null) {
-        AlertDialog(onDismissRequest = onDismissRequest, confirmButton = confirmButton, dismissButton = dismissButton, icon = icon, title = title, text = text)
+        AlertDialog(onDismissRequest = onDismissRequest, confirmButton = confirmButton, dismissButton = dismissButton, icon = icon, title = title, text = scrolled)
     } else {
-        InOverlay(overlays, opener) { InlineAlert(onDismissRequest, confirmButton, dismissButton, icon, title, text) }
+        InOverlay(overlays, opener) { InlineAlert(onDismissRequest, confirmButton, dismissButton, icon, title, scrolled) }
     }
 }
 

@@ -319,7 +319,7 @@
     <string name="report_failed">Invio non riuscito. Controlla la connessione e riprova.</string>
     <string name="reading_wrong">Lettura errata</string>
     <string name="reading_right">Lettura corretta (facoltativa)</string>
-    <string name="reading_what_goes">Invia la parola, la lettura mostrata, la sua riga, il nome del brano e le versioni dell\'app e di Android. Lo legge solo lo sviluppatore di Crosstune.</string>
+    <string name="reading_what_goes">Invia la parola, la lettura mostrata e da dove viene, la sua riga e la scrittura, la lettura che scrivi, il titolo e l\'artista del brano, da dove viene il testo e le versioni dell\'app e di Android. Lo legge solo lo sviluppatore di Crosstune.</string>
     <string name="auto_report_offer">Segnalare automaticamente problemi come questo?</string>
     <string name="auto_report_offer_words_off">Il testo di questo brano era sfasato. Segnalare automaticamente casi come questo?</string>
     <string name="auto_report_yes">Sì</string>
