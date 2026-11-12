@@ -501,6 +501,25 @@ class UnsungTest {
     }
 
     @Test
+    fun aSongWithNoWordsOpenedFromItsPlayerWhilePausedIsHeardOnceItPlays() {
+        // Review of PR #919: a song that played, its words opened from its player while it's paused, has no words. It's
+        // listened to once it plays again, and not reported before, as on main.
+        singing.answers = listOf(music)
+        openLyrics()
+        model().lyricsToPlayer()
+        plays(false)
+        singing.reset()
+        singing.answers = listOf(voice)
+        model().playerLyrics()
+        waitUntil { shows(R.string.lyrics_none) && !model().findingWords }
+        assertEquals(emptyList<String>(), problems())
+        assertEquals(0, singing.hears)
+        plays()
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
     fun thePlayersLineShowsWordsAMarkHolds() {
         // Review of PR #919: the player opened on a song LRCLIB marks, with words found, has its line under it, as on main.
         MainActivity.lookAheadLyrics = true

@@ -2597,11 +2597,11 @@ internal class MainViewModel(
      * [likelyInstrumental] by its genre alone, a voice heard says it's sung after all. Not heard, as when
      * it plays elsewhere, it's reported as it always was.
      */
-    private suspend fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
+    private fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
         if (SongNames.manySongs(song)) return
         // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
         if (!likelyInstrumental && autoReports.allowed == false) return
-        val canHear = listenCanStart(song)
+        val canHear = singing != null && shownPlayed && mayCalibrate()
         // Noted, as a report of no words then says how it came to be one.
         TimingLog.note("no words, likely instrumental $likelyInstrumental, a voice ${if (canHear) "is listened for" else "can't be heard"}")
         if (canHear) {
