@@ -204,7 +204,9 @@ internal class PracticeCards(
         for (app in ranked(line)) {
             // An app that's neither preferred nor the one the line was kept from needs the song on its service, or it plays whatever it finds by the name.
             val known = app == null || app == line.app || MusicService.ofPackage(app) == preferred
-            if (tried >= MAX_APPS || (!known && !hasSong(app, song))) continue
+            // One the card can't open, as it would cover the card, is only used if it already plays the song, which needs no lookup: its service isn't asked.
+            val opensNot = !source.comesBackByItself() && playsOnlyFromItsOwnLink(app)
+            if (tried >= MAX_APPS || (!known && !opensNot && !hasSong(app, song))) continue
             tried++
             step("trying ${app ?: "any app"}")
             if (inMusicApp(source, song, line, app, play)) return true
@@ -503,11 +505,10 @@ internal class PracticeCards(
     private suspend fun openUntilItCanMove(source: PlaybackSource, song: MusicMetadata, app: String?, at: Long?, latest: () -> Following?, onStuck: (Following?) -> Unit, line: SavedLine?): Boolean {
         // Opened, an app covers the card, and without showing over other apps Crosstune can't come back, nor open the next app from behind it.
         val opens = source.comesBackByItself()
-        // This app plays only its own link, and opening it would cover the card. The link is not read first:
-        // the card leaves the app out either way, and the line plays on. The link is read after, so a later card that can open the app already has it.
+        // This app plays only its own link, and opening it would cover the card, so the card leaves it out and the line plays on.
+        // Its link isn't looked up either: a card asks a service about a song only for an app it's about to open, see Privacy in the README.
         if (!opens && playsOnlyFromItsOwnLink(app)) {
             leaveOut(app, line)
-            scope.launch { ownLinkOf(song, app) }
             return false
         }
         val ownLink = ownLinkOf(song, app)

@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -2151,7 +2152,7 @@ class PracticeCardsTest {
     private fun holdSpotifyLink() = holdHosts("listenbrainz.org", "spotify.com")
 
     @Test
-    fun withoutTheOverlayThePlayerStartsWhileASpotifyLookupTheLineDoesNotNeedIsStillWaiting() {
+    fun withoutTheOverlayThePlayerStartsAtOnceAndSpotifyIsNotAskedAboutTheSong() {
         val (gate, started) = holdSpotifyLink()
         keep(keptFromSpotify)
         installed(spotify, ytMusic)
@@ -2172,18 +2173,17 @@ class PracticeCardsTest {
             assertTrue(practice!!.cantComeBack)
             assertTrue(playback.opened.isEmpty())
             assertEquals(Shown("demo0000000", 10_000, 15_000 + MainViewModel.LINE_TAIL_MS, null, play = false), player.shown.single())
-            // The link is still read, so a later card that can open Spotify already has it. Dropping that read leaves this closed.
-            assertTrue(started.await(5, TimeUnit.SECONDS))
             cards.replay()
             waitFor("the line plays again") { player.shown.size >= 2 }
-            assertEquals(1, gate.count)
+            // Spotify's link isn't looked up for a card that leaves Spotify out: its title and artist go nowhere for it.
+            assertEquals(1, started.count)
         } finally {
             gate.countDown()
         }
     }
 
     @Test
-    fun withoutTheOverlayALineAlreadyPlayingInAnotherAppIsReadyWhileASpotifyLookupIsStillWaiting() {
+    fun withoutTheOverlayALineAlreadyPlayingInAnotherAppIsReadyAndSpotifyIsNotAskedAboutTheSong() {
         val (gate, started) = holdSpotifyLink()
         keep(keptFromSpotify)
         installed(spotify, morphe)
@@ -2201,7 +2201,7 @@ class PracticeCardsTest {
             assertTrue(player.shown.isEmpty())
             assertTrue(practice!!.cantComeBack)
             assertTrue(playback.opened.isEmpty())
-            assertTrue(started.await(5, TimeUnit.SECONDS))
+            assertEquals(1, started.count)
         } finally {
             gate.countDown()
         }
@@ -2338,6 +2338,89 @@ class PracticeCardsTest {
         tidalCards.start(null, before = Before(MusicMetadata("Before", "Band"), 4_000, null))
         waitFor("it's stopped") { playback.pausedApps.isNotEmpty() }
         return tidal to flow
+    }
+    /** Five music apps: Spotify, the one songs open in, and four others whose services a card could ask. */
+    private val five = listOf(spotify, MusicService.APPLE_MUSIC.packageName, MusicService.DEEZER.packageName, MusicService.TIDAL.packageName, MusicService.SOUNDCLOUD.packageName)
+
+    /** The host each lookup so far went to, in order. */
+    private fun lookups() = sites.requestedUrls.map { it.toHttpUrl().host }
+
+    @Test
+    fun aCardAsksTheServiceOfEachAppOnlyAsItGetsToItAndNoneOnceThreeWereTried() {
+        youTubeHasTheSong()
+        // Apple Music and Deezer have the song, so their apps are asked for it; Spotify's has nothing for it.
+        val before = sites.handler
+        sites.handler = { request ->
+            when (request.url.host) {
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[{"trackName":"Demo","artistName":"Band","trackViewUrl":"https://music.apple.com/us/song/demo/1"}]}""")
+                "api.deezer.com" -> FakeSpotify.html(request, """{"data":[{"title":"Demo","artist":{"name":"Band"},"link":"https://www.deezer.com/track/1"}]}""")
+                else -> before(request)
+            }
+        }
+        keep(line(), types = hearIt)
+        installed(*five.toTypedArray())
+        playback.access = true
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        // Three apps tried, in order, and asked of no service but their own: TIDAL's and SoundCloud's are never asked.
+        assertEquals(five.take(3), playback.followedApps.distinct())
+        assertEquals(
+            listOf(
+                // Spotify, through ListenBrainz, then YouTube Music, which is asked for the song as it has no Spotify link.
+                "labs.api.listenbrainz.org", "music.youtube.com",
+                "itunes.apple.com", "api.deezer.com",
+                // The small player's video.
+                "music.youtube.com"
+            ),
+            lookups()
+        )
+    }
+
+    @Test
+    fun anAppLeftOutHasItsLinkLookedUpOnlyOnceItCanBeOpened() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(keptFromSpotify.copy(text = "One"), keptFromSpotify.copy(text = "Two", startMs = 20_000, endMs = 25_000))
+        installed(*five.toTypedArray())
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards(songLoadMs = 300)
+        cards.start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        // Spotify would cover the card for good, so it isn't opened, and nothing is asked about its song.
+        assertTrue(practice!!.cantComeBack)
+        Thread.sleep(300)
+        val spotifyHosts = setOf("labs.api.listenbrainz.org", "open.spotify.com")
+        assertTrue(lookups().toString(), lookups().none { it in spotifyHosts })
+        // Allowed, the next card opens it, and only then looks its link up.
+        playback.comesBackByItself = true
+        turnInThePlayer(cards)
+        cards.grade(Grade.GOOD)
+        waitFor("Spotify opens") { playback.opened.isNotEmpty() }
+        assertEquals(spotify, playback.opened.single().first)
+        assertTrue(lookups().toString(), "labs.api.listenbrainz.org" in lookups())
+    }
+
+    @Test
+    fun aSpotifyTheCardCantOpenIsAskedNothingAndPlaysTheLineOnlyWhenItAlreadyPlaysTheSong() {
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(line("One"), line("Two", start = 20_000))
+        // Spotify is neither the app the user prefers nor the one the lines were kept from, and opening it would cover the card.
+        installed(spotify, preferred = Destination.Service(MusicService.APPLE_MUSIC))
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards()
+        cards.start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        assertTrue(practice!!.cantComeBack)
+        assertTrue(playback.opened.isEmpty())
+        // Already playing the song, it plays the next line, which needs no link either.
+        appPlays(spotify, speed = 1f, positionMs = 19_500)
+        turnInThePlayer(cards)
+        cards.grade(Grade.GOOD)
+        waitFor("Spotify plays the line") { playback.seekedApps.contains(spotify) }
+        assertEquals(listOf("music.youtube.com"), lookups().distinct())
     }
 }
 
