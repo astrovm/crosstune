@@ -1059,7 +1059,7 @@ internal class ExactMatcher(
          * How far YouTube Music's whole seconds are from Apple's milliseconds for one recording: on 65 songs on the
          * same release, 62 were from 0.635 s shorter to 1 s longer, and the other 3 were 3.7 s or more off.
          */
-        val RECORDING_OFF_MS = -700L..1_000L
+        private val RECORDING_OFF_MS = -700L..1_000L
 
         /** How far YouTube Music's whole seconds are from Deezer's for one recording: 35 of 46 within a second, inclusive. */
         const val SAME_SECONDS_MS = 1_000L
