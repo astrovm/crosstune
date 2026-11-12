@@ -70,8 +70,8 @@ def write(directory):
         (directory / "sheets" / file).write_bytes(page(stack).encode("cp932", "xmlcharrefreplace"))
         rows.append({"file": file, "url": f"invented:{name}"})
     (directory / "urls.json").write_text(json.dumps(rows, indent=1) + "\n", encoding="utf-8")
-    # The page's own stylesheet sets no font for `tt`: the style on the page does.
-    (directory / "dat_st.css").write_text("", encoding="utf-8")
+    # J-Total's stylesheet sets the body's size, which `tt` takes, and no font for `tt`: the style on the page does.
+    (directory / "dat_st.css").write_text("body { font-size: 15px; line-height: 1.618; font-family: sans-serif; }\n", encoding="utf-8")
 
 
 def placed(drawing):

@@ -21,7 +21,7 @@ class InventedTest(unittest.TestCase):
             self.assertIn("ｶﾞあい", page)
             # A letter Shift_JIS has no code for is an entity, as J-Total writes it.
             self.assertIn("&#1329;&#1329;&#1329;ab", page)
-            self.assertEqual((Path(tmp) / "dat_st.css").read_text(encoding="utf-8"), "")
+            self.assertEqual((Path(tmp) / "dat_st.css").read_text(encoding="utf-8"), "body { font-size: 15px; line-height: 1.618; font-family: sans-serif; }\n")
 
     def test_each_line_is_its_chord_over_its_words(self):
         self.assertIn("xx" + invented.chord("C") + "<br>\nｶﾞあい<br>\n", invented.page(invented.STACKS["main"]))

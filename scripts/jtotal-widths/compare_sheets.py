@@ -3,7 +3,7 @@
 
   python3 scripts/jtotal-widths/compare_sheets.py crawl DIR URLS.txt [--limit N]
   python3 scripts/jtotal-widths/compare_sheets.py browser DIR            # DIR/browser.json
-  python3 scripts/jtotal-widths/compare_sheets.py draw DIR --fonts FONTS [--browser B] [--lang ja] [--out NAME.json]
+  python3 scripts/jtotal-widths/compare_sheets.py draw DIR --fonts FONTS [--browser B] [--lang ja] [--out NAME.json] [--size PX|page] [--scale S]
   python3 scripts/jtotal-widths/compare_sheets.py moves A.json B.json    # chords that sit over another letter in B
   python3 scripts/jtotal-widths/compare_sheets.py app DIR TAG [--old]    # DIR/app-TAG.jsonl
   python3 scripts/jtotal-widths/compare_sheets.py positions DRAWING.json OUT.json   # the chords, with no words
@@ -18,6 +18,9 @@ test that it puts in the app's test folder and takes out again. `--old` leaves o
 the page names and reads the page as Java's Shift_JIS, for a checkout from before the app did either.
 `draw` is what `browser` runs in the container. Run on another machine, it draws the pages with that
 machine's browser and fonts, such as a Mac's, and writes NAME.environment.txt beside the drawing.
+It draws every letter at 40px on a screen of 4 pixels to a CSS pixel, which places each most exactly.
+`--size page --scale 1.25` draws them as a reader sees them: at the page's own 15px, on a screen
+Windows scales by 125%.
 `moves` puts two drawings side by side: how many chords sit over another letter, by how many columns,
 which code points before them are drawn at another width, and how many chords start where a letter
 starts in each. An author lines a chord up with a letter on their own screen, so the drawing that puts
@@ -312,8 +315,19 @@ def app_run(directory, tag, old):
 
 # The step that runs in the container.
 
-def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, out="browser.json"):
-    """Draws every page in `browser_name` on this machine, with its fonts, and writes where the letters are to `out`."""
+def sheet_html(raw, css, faces, size=40):
+    """The page as `draw` loads it: J-Total's stylesheet in it, no scripts, and Inconsolata from `faces`.
+    At `size` pixels a letter, or at the page's own size (15px) when `size` is None."""
+    text = re.sub(r'<link href="/ssi_dat/dat_st.css[^>]*>', lambda _: "<style>" + css + "</style>", raw)
+    text = re.sub(r"(?is)<script\b.*?</script[^>]*>", "", text)
+    larger = "" if size is None else f" *{{font-size:{size}px !important}}"
+    return text.replace("</head>", "<style>" + faces + larger + "</style></head>", 1)
+
+
+def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, out="browser.json", size=40, scale=4.0):
+    """Draws every page in `browser_name` on this machine, with its fonts, and writes where the letters are to `out`.
+    `size` and `scale` are the letters' size (None for the page's own) and the screen's pixels to a CSS pixel:
+    40px at 4 places a letter most exactly, and a reader sees 15px at 1, 1.25 or 1.5."""
     from playwright.sync_api import sync_playwright
     from jtotal_widths import FONTS, environment, open_page
 
@@ -324,16 +338,14 @@ def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, ou
     )
     pages = []
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
-        browser, page, _ = open_page(p, browser_name, lang, Path(tmp) / "profile", viewport=(1280, 900), scale=4)
+        browser, page, _ = open_page(p, browser_name, lang, Path(tmp) / "profile", viewport=(1280, 900), scale=scale)
         page.route("**/*", lambda r: r.continue_() if r.request.url.startswith("file:") else r.abort())
         html = Path(tmp) / "sheet.html"
         for item in json.loads((directory / "urls.json").read_text(encoding="utf-8")):
             raw = (directory / "sheets" / item["file"]).read_bytes().decode(CHARSET, "replace")
             if "<!--HPSTART-->" not in raw:
                 continue
-            text = re.sub(r'<link href="/ssi_dat/dat_st.css[^>]*>', lambda _: "<style>" + css + "</style>", raw)
-            text = re.sub(r"(?is)<script\b.*?</script[^>]*>", "", text)
-            text = text.replace("</head>", "<style>" + faces + " *{font-size:40px !important}</style></head>", 1)
+            text = sheet_html(raw, css, faces, size)
             # Served as J-Total serves it, in Shift_JIS. A letter the decoder could not read stays the replacement mark.
             html.write_bytes(text.encode(CHARSET, "xmlcharrefreplace"))
             page.goto(html.as_uri())
@@ -342,7 +354,9 @@ def draw(directory, fonts=Path("/fonts"), browser_name="chromium", lang=None, ou
         found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, "the page's own", fonts)
         browser.close()
     (directory / out).write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
-    (directory / out).with_suffix(".environment.txt").write_text("\n".join(found + [f"Browser language {lang or 'as Playwright starts it'}"]) + "\n", encoding="utf-8")
+    letters = "the page's own size" if size is None else f"{size}px"
+    found += [f"Browser language {lang or 'as Playwright starts it'}", f"Letters at {letters}, {scale} screen pixels to a CSS pixel"]
+    (directory / out).with_suffix(".environment.txt").write_text("\n".join(found) + "\n", encoding="utf-8")
     print(f"{len(pages)} sheets drawn")
 
 
@@ -447,6 +461,8 @@ def main(argv):
     parser.add_argument("--browser", default="chromium")
     parser.add_argument("--lang")
     parser.add_argument("--out", default="browser.json")
+    parser.add_argument("--size", default="40", help="draw: the letters' size in pixels, or `page` for the page's own")
+    parser.add_argument("--scale", type=float, default=4.0, help="draw: screen pixels to a CSS pixel, as Windows' display scale")
     parser.add_argument("--truth", type=Path, help="the drawing or positions to compare with, if not DIR/browser.json")
     args = parser.parse_args(argv)
     directory = args.directory.resolve()
@@ -455,7 +471,7 @@ def main(argv):
     elif args.command == "browser":
         browser_in_container(directory)
     elif args.command == "draw":
-        draw(directory, args.fonts, args.browser, args.lang, args.out)
+        draw(directory, args.fonts, args.browser, args.lang, args.out, size=None if args.size == "page" else int(args.size), scale=args.scale)
     elif args.command == "app":
         app_run(directory, args.extra, args.old)
     elif args.command == "moves":

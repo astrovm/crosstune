@@ -135,6 +135,27 @@ class PositionsTest(unittest.TestCase):
             self.assertIn("      1  chords on another letter", out.getvalue())
 
 
+class DrawSizeTest(unittest.TestCase):
+    RAW = '<html><head><link href="/ssi_dat/dat_st.css" rel="stylesheet"><script>x()</script></head><body>a</body></html>'
+
+    def test_a_sheet_drawn_at_its_own_size_keeps_the_page_s_font_size(self):
+        text = c.sheet_html(self.RAW, "tt{font-size:15px}", "FACES", size=None)
+        self.assertIn("<style>tt{font-size:15px}</style>", text)
+        self.assertIn("<style>FACES</style></head>", text)
+        self.assertNotIn("font-size:40px", text)
+        self.assertNotIn("<script", text)
+
+    def test_a_sheet_drawn_larger_has_every_letter_at_that_size(self):
+        self.assertIn("<style>FACES *{font-size:40px !important}</style></head>", c.sheet_html(self.RAW, "", "FACES", size=40))
+
+    def test_the_command_line_takes_the_size_and_the_scale(self):
+        with unittest.mock.patch.object(c, "draw") as draw:
+            c.main(["draw", "dir", "--size", "page", "--scale", "1.25", "--out", "x.json"])
+            self.assertEqual((draw.call_args.kwargs["size"], draw.call_args.kwargs["scale"]), (None, 1.25))
+            c.main(["draw", "dir"])
+            self.assertEqual((draw.call_args.kwargs["size"], draw.call_args.kwargs["scale"]), (40, 4.0))
+
+
 class CompareTest(unittest.TestCase):
     def test_the_totals_of_every_sheet(self):
         drawn = page(line(chords=[chord("C", 0)]), line(words("ab")))
