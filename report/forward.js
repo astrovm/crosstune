@@ -1,7 +1,7 @@
 // The old address, report.crosstune.4st.li, which the versions of Crosstune from before crosstune.cc
 // still send to. It keeps nothing: it counts a report against its sender's address, as the Worker did
 // here, and passes it on to report.crosstune.cc with the key that says it was counted, and the sender's
-// address and carrier, which the Worker there counts the day's limits by and doesn't keep.
+// address, which the Worker there counts the day's limit by and doesn't keep.
 
 import { senderKey } from "./sender.js";
 
@@ -27,8 +27,6 @@ export default {
         ...(type === null ? {} : { "Content-Type": type }),
         "X-Crosstune-Passed-On": env.FORWARD_KEY,
         "X-Crosstune-Sender": sender,
-        // The sender's carrier, its autonomous system number, as Cloudflare tells it here: there it would be Cloudflare's.
-        ...(request.cf?.asn ? { "X-Crosstune-Carrier": String(request.cf.asn) } : {}),
       },
       body: await request.text(),
     });

@@ -10,7 +10,7 @@
   "d1_databases": [{ "binding": "DB", "database_name": "crosstune-reports", "database_id": "32bacd15-c579-48a2-b33f-45386f78903f" }],
   // A few reports a minute from one address is plenty for people; more is someone flooding it.
   "ratelimits": [{ "name": "LIMIT", "namespace_id": "3921", "simple": { "limit": 5, "period": 60 } }],
-  // The secret each network's, /32's and carrier's count for the day is keyed with (limits.sql). Set it once with
+  // The secret each network's count for the day is keyed with (limits.sql). Set it once with
   // `npx wrangler secret put NETWORK_KEY`; a deploy without it stops here, and the Worker keeps nothing.
   "secrets": { "required": ["NETWORK_KEY"] },
   // Clears out reports past the days they're kept.

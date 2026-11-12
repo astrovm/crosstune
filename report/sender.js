@@ -1,5 +1,5 @@
-// Who a report is counted against: the sender, for how many one may send a minute, and the sender's network and
-// block, for how many they may send a day. Both Workers count by them.
+// Who a report is counted against: the sender, for how many one may send a minute, and the sender's network, for
+// how many it may send a day. Both Workers count by them.
 
 /**
  * The sender's [address] as the minute's limit counts it. An IPv4 address counts whole. An IPv6 address counts by
@@ -26,17 +26,6 @@ export function networkOf(address) {
   if (ipv4) return `${ipv4.slice(0, 3).join(".")}.0/24`;
   if (read.ipv6) return `${read.ipv6.slice(0, 3).map(hex).join(":")}::/48`;
   return read.text;
-}
-
-/**
- * The wider block of the sender at [address], as one more day's limit counts it: an IPv6 address by its /32, what
- * a provider is given, so a sender with a provider's addresses counts as one block of /48s. An IPv4 address, a 6to4
- * one, and what isn't an address have none: their carrier is counted instead.
- */
-export function blockOf(address) {
-  const read = addressOf(address);
-  if (!read.ipv6 || read.ipv6[0] === 0x2002) return null;
-  return `${read.ipv6.slice(0, 2).map(hex).join(":")}::/32`;
 }
 
 function hex(group) {

@@ -14,10 +14,10 @@ function setUp({ allowed = true, answer = 204 } = {}) {
   return { passed, keys, env: { FORWARD_KEY: "made-up-key", LIMIT: { limit: async ({ key }) => (keys.push(key), { success: allowed }) } } };
 }
 
-/** A report from [headers]'s sender, on the carrier Cloudflare names [asn], as Cloudflare puts it in request.cf. */
-function post(body, headers = {}, asn = 64500) {
+/** A report from [headers]'s sender, with what Cloudflare tells of it in request.cf: its carrier too. */
+function post(body, headers = {}) {
   const request = new Request("https://report.crosstune.4st.li/reports", { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.7", ...headers }, body });
-  return Object.defineProperty(request, "cf", { value: asn === null ? {} : { asn } });
+  return Object.defineProperty(request, "cf", { value: { asn: 64500, country: "AR" } });
 }
 
 test("a report is counted against its sender and passed on with the key and the sender, for its network's day", async () => {
@@ -29,7 +29,8 @@ test("a report is counted against its sender and passed on with the key and the 
   assert.equal(s.passed[0].url, "https://report.crosstune.cc/reports");
   assert.equal(s.passed[0].method, "POST");
   assert.equal(s.passed[0].body, '{"version":"2.23.0"}');
-  assert.deepEqual(s.passed[0].headers, { "Content-Type": "application/json", "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7", "X-Crosstune-Carrier": "64500" });
+  // Nothing else Cloudflare tells of the sender, like its carrier, goes on: the address is all the day's limit counts.
+  assert.deepEqual(s.passed[0].headers, { "Content-Type": "application/json", "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7" });
   // The sender's address goes in that header only, never in the report.
   assert.ok(!s.passed[0].body.includes("203.0.113.7"));
 });
@@ -69,10 +70,9 @@ test("an IPv6 sender is counted by its /64 here too", async () => {
 test("a report's type is passed on as it was sent, and none is made up, so the new address judges it", async () => {
   const s = setUp();
   await forward.fetch(post("{}", { "Content-Type": "text/plain" }), s.env);
-  // Cloudflare names no carrier for some addresses: none is made up.
-  await forward.fetch(Object.defineProperty(new Request("https://report.crosstune.4st.li/reports", { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.7" }, body: new TextEncoder().encode("{}") }), "cf", { value: {} }), s.env);
+  await forward.fetch(new Request("https://report.crosstune.4st.li/reports", { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.7" }, body: new TextEncoder().encode("{}") }), s.env);
   assert.deepEqual(s.passed.map((it) => it.headers), [
-    { "Content-Type": "text/plain", "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7", "X-Crosstune-Carrier": "64500" },
+    { "Content-Type": "text/plain", "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7" },
     { "X-Crosstune-Passed-On": "made-up-key", "X-Crosstune-Sender": "203.0.113.7" },
   ]);
 });
