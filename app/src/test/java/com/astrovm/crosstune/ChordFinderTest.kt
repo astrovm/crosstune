@@ -243,14 +243,14 @@ Singing to the morning light</div>"""
 
     @Test
     fun jTotalUsesTheFontStackFromThePage() {
-        // Both stacks draw a Windows-31J letter at one width. U+0133 is not one, so a page writes it as an
-        // entity, and each stack draws it from another font: 0.888 columns on the main stack, 1.105 on the
-        // monospace one. Drawn in Chromium with scripts/jtotal-widths/compare_sheets.py, the chord after
-        // ten columns lands on letter 11 with the main stack and on letter 9 with the monospace one.
+        // Both stacks draw a Windows-31J letter at one width. ۰ is not one, so a page writes it as an entity, and
+        // each stack draws it from another font on Windows: 1.144 columns on the main stack, 1.201 on the monospace
+        // one. Drawn there in Chromium, Edge and Chrome (scripts/jtotal-widths/invented.py), the chord after eleven
+        // columns lands on letter 10 with the main stack and on letter 9 with the monospace one.
         // The kana at the end makes the words Japanese, as J-Total is asked only for those.
-        val words = "ĳ".repeat(20) + "あ"
-        val sheet = jTotalSong("${"x".repeat(10)}$jTotalChord", "&#307;".repeat(20) + "あ")
-        for ((stack, letter) in listOf("'Inconsolata','MS Gothic','Hiragino Kaku Gothic','Monaco',sans-serif" to 11, "'Inconsolata', monospace" to 9)) {
+        val words = "\u06F0".repeat(20) + "あ"
+        val sheet = jTotalSong("${"x".repeat(11)}$jTotalChord", "&#1776;".repeat(20) + "あ")
+        for ((stack, letter) in listOf("'Inconsolata','MS Gothic','Hiragino Kaku Gothic','Monaco',sans-serif" to 10, "'Inconsolata', monospace" to 9)) {
             jTotal(mapOf("川の道" to jTotalResult("kawa/001", "川の道")), mapOf("/data/kawa/001.html" to "<style>tt { font-family: $stack; }</style>$sheet"))
             val found = chords(kawa, listOf(words)) as ChordFinder.Chords.Found
             assertEquals(words, found.sheet.lines.single().text)

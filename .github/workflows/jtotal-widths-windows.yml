@@ -92,7 +92,7 @@ jobs:
           c="python scripts/jtotal-widths/compare_sheets.py"
           fonts=$(python -c "import sys; sys.path.insert(0, 'scripts/jtotal-widths'); import jtotal_widths; print(jtotal_widths.container_fonts())")
           $c crawl "$sheets" scripts/jtotal-widths/sheets.txt
-          $c draw "$sheets" --fonts $fonts --lang ja
+          $c draw "$sheets" --fonts "$fonts" --lang ja
           $c positions "$sheets/browser.json" windows/positions.json
           cp "$sheets/browser.environment.txt" windows/positions.environment.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

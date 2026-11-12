@@ -203,16 +203,11 @@ internal object ChordSheets {
     }
 
     /**
-     * How wide [text] is in the font the page asks for, as Chromium draws it, in thousandths of a
-     * column ([JTotalWidths]). A letter takes the width of the font it is drawn from: Inconsolata's
-     * own at one column, the Japanese monospace font's at one or two, and any other from a proportional
-     * font, at whatever it measures. A full-width bracket or stop is two, then one where Chromium's
-     * default `text-spacing-trim: normal` kerns it. That follows the CSS Text 4 classes: a closing mark
-     * before a closing mark, a middle dot or an ideographic space, and an opening mark after those
-     * or after a closing mark. For Japanese, and on an untagged page, the full-width colon and
-     * semicolon are middle dots and the stops are closing marks. A right quote trims the closing
-     * mark before it and not the opening mark after it: Inconsolata draws that quote at one column.
-     * A letter outside the Basic Multilingual Plane is one letter, not two halves.
+     * How wide [text] is in the font the page asks for, as a Japanese reader's browser on Windows draws
+     * it, in thousandths of a column ([JTotalWidths]). A letter takes the width of the font it is drawn
+     * from: Inconsolata's own at one column, MS Gothic's at one or two, and any other from a proportional
+     * font, at whatever it measures. MS Gothic has no narrow forms, so the browser trims no full-width
+     * bracket or stop beside another. A letter outside the Basic Multilingual Plane is one letter, not two halves.
      */
     private fun columns(text: String, monospace: Boolean): Int {
         var total = 0
@@ -224,48 +219,7 @@ internal object ChordSheets {
         return total
     }
 
-    private fun widthAt(text: String, index: Int, monospace: Boolean): Int {
-        val width = JTotalWidths.of(text.codePointAt(index), monospace)
-        // Chromium trims only with a font that has the narrow forms. Both stacks draw Japanese in one that has
-        // them: MS Gothic on Windows, where the sheets are written, and Noto Sans Mono CJK JP in the container.
-        return if (width == 2 * JTotalWidths.COLUMN && trimmed(text, index)) JTotalWidths.COLUMN else width
-    }
-
-    /** A two-column bracket or stop that the browser draws at one because of the letter beside it. */
-    private fun trimmed(text: String, index: Int): Boolean {
-        val letter = text[index]
-        if (fullwidthClose(letter) && index + 1 < text.length && closesBefore(text[index + 1])) return true
-        return fullwidthOpen(letter) && index > 0 && opensAfter(text[index - 1])
-    }
-
-    private fun closesBefore(next: Char): Boolean {
-        if (next == '\u3000' || next in middleDots || next in rightQuotes) return true
-        return fullwidthClose(next) || Character.getType(next) == Character.END_PUNCTUATION.toInt()
-    }
-
-    private fun opensAfter(prev: Char): Boolean {
-        if (prev == '\u3000' || prev in middleDots || prev in leftQuotes) return true
-        return fullwidthClose(prev) || Character.getType(prev) == Character.START_PUNCTUATION.toInt()
-    }
-
-    /** Stops Chromium trims as closing punctuation. They are not Unicode category Pe. */
-    private fun fullwidthClose(letter: Char) = letter in "、。，．" || cjkBracket(letter, Character.END_PUNCTUATION.toInt())
-
-    private fun fullwidthOpen(letter: Char) = cjkBracket(letter, Character.START_PUNCTUATION.toInt())
-
-    private fun cjkBracket(letter: Char, type: Int): Boolean {
-        val block = Character.UnicodeBlock.of(letter)
-        val cjk = block == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION ||
-            block == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS
-        return cjk && Character.getType(letter) == type
-    }
-
-    /** Middle dots, plus the full-width colon and semicolon. Japanese, and Chromium on an untagged page, trim beside both. */
-    private val middleDots = setOf('\u00B7', '\u2027', '\u30FB', '\uFF1A', '\uFF1B')
-
-    private val leftQuotes = setOf('\u2018', '\u201C')
-
-    private val rightQuotes = setOf('\u2019', '\u201D')
+    private fun widthAt(text: String, index: Int, monospace: Boolean): Int = JTotalWidths.of(text.codePointAt(index), monospace)
 
     /**
      * The letter of [words] whose start is nearest [column], the later one when two are as near: a
