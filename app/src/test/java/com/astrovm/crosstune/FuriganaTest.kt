@@ -5,6 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.lang.management.ManagementFactory
 import kotlin.random.Random
 
 /**
@@ -55,6 +56,27 @@ class FuriganaTest {
         val ms = (System.nanoTime() - start) / 1_000_000
         assertTrue("$ms ms", ms < 1_000)
         assertEquals(word, parts.joinToString("") { it.text })
+    }
+
+    @Test
+    fun aVeryLongReadingInBracketsTakesLittleMemoryToLay() {
+        // 2,000 letters and 2,800 kana: laid with a part kept for each run and place, it made 2.7 GB and took 1.7 s.
+        val word = "飛び立つ空を見上げた".repeat(200)
+        val kana = "とびたつそらをみあげた".repeat(255).take(2_800)
+        val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+        val before = threads.currentThreadAllocatedBytes
+        val parts = Furigana.over(word, kana)
+        val made = (threads.currentThreadAllocatedBytes - before) / 1_000_000
+        assertTrue("$made MB", made < 200)
+        assertEquals(word, parts.joinToString("") { it.text })
+    }
+
+    @Test
+    fun aWordTooLongToCountItsKanaStaysAsWritten() {
+        val longest = "山".repeat(Furigana.MAX_LETTERS - 1) + "の"
+        assertEquals(listOf(Ruby("山".repeat(Furigana.MAX_LETTERS - 1), "やま"), Ruby("の")), Furigana.over(longest, "やまの"))
+        val longer = "山$longest"
+        assertEquals(listOf(Ruby(longer)), Furigana.over(longer, "やまの"))
     }
 
     /** A made-up word of [length] letters: kanji, and kana of every kind the reading treats apart. */
