@@ -194,7 +194,20 @@ class LyricsFinderTest {
                 else -> "[]"
             }
         }
-        assertEquals(Lyrics.Instrumental, found(MusicMetadata("Song (Piano Version) - Other Name", "Band")))
+        assertEquals(Lyrics.MarkedInstrumental, found(MusicMetadata("Song (Piano Version) - Other Name", "Band")))
+    }
+
+    @Test
+    fun lrclibsMarkUnderOneOfTheTitlesNamesBeatsAnotherServicesMarkUnderAnother() {
+        val named = MusicMetadata("Song Title - Other Name", "Band")
+        // NetEase marks its first name pure music, which may be another recording's; LRCLIB's copies of
+        // this one, under its second, are marked too. It's LRCLIB's mark, heard for a voice.
+        val lrclib = { title: String? -> if (title == "Other Name") "[${instrumentalCopy("Other Name")},${instrumentalCopy("Other Name")}]" else "[]" }
+        netEaseMarks("Song Title", lrclib = lrclib)
+        assertEquals(Lyrics.MarkedInstrumental, found(named))
+        // YouTube Music's words for its name, untimed, are the song's, sung elsewhere.
+        netEaseMarks("Song Title", videoWords = "Words someone else sings", lrclib = lrclib)
+        assertEquals(Lyrics.MarkedInstrumental, runBlocking { withYouTubeMusic().lyricsOf(named) })
     }
 
     @Test

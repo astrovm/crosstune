@@ -950,10 +950,10 @@ internal class LyricsFinder(
             val answer = underName(metadata.copy(title = title), timeoutMs)
             if (answer is Lyrics.MarkedInstrumental) {
                 // Marked under the name it's played by, it's final. Under another of its names, which a sung
-                // song may have too, words under the rest still win (Issue #861).
+                // song may have too, words under the rest still win (Issue #861). With none, it's still
+                // LRCLIB's mark, so a voice heard in it is reported, as under the name played.
                 if (title == metadata.title) return answer
                 marked = true
-                return@mapNotNull Lyrics.Instrumental
             }
             if (answer is Lyrics.Found) {
                 val native = romanizedScript(answer.words) == null
