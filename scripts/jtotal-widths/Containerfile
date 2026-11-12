@@ -1,8 +1,9 @@
-# What the widths are measured in: Chromium, with Noto standing where J-Total's page asks for MS Gothic
-# and Hiragino Kaku Gothic. This is the machine that shows the same widths Issue #775 measured.
-# The pages name no language, so a reader's browser in Japanese draws `monospace` in its Japanese
-# fixed-width font: MS Gothic on Windows. Noto Sans Mono CJK JP stands in for it too. Without that
-# alias fontconfig falls to WenQuanYi Zen Hei, which draws kana at 2.05 columns, not 2 (Issue #830).
+# A Linux machine to measure J-Total's widths on, to compare with Windows: the tables come from the
+# Windows workflow, not from here. Chromium, with Noto standing where J-Total's page asks for MS Gothic
+# and Hiragino Kaku Gothic. Its fonts are not Windows', so some letters measure another width here,
+# Greek and Cyrillic among them. The pages name no language, so a reader's browser in Japanese draws
+# `monospace` in its Japanese fixed-width font: MS Gothic on Windows. Noto Sans Mono CJK JP stands in
+# for it too. Without that alias fontconfig falls to WenQuanYi Zen Hei, which draws kana at 2.05 columns.
 # The image by digest and each font package by version, so a rebuild measures the same fonts.
 FROM mcr.microsoft.com/playwright/python:v1.64.1-noble@sha256:330d401ae23c905896a0c26c66c36fc971b621519e7b11b435a8328d7bf6e031
 RUN pip install --no-cache-dir playwright==1.64.1
