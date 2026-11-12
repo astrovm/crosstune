@@ -1,7 +1,9 @@
+import io
 import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -97,6 +99,33 @@ class ComparePageTest(unittest.TestCase):
     def test_app_lines_with_no_chords_are_not_chord_lines(self):
         counts, _ = c.compare_page(self.drawn(), [{"text": "abc", "chords": [[0, "C"], [2, "G"]]}, {"text": "more", "chords": []}])
         self.assertEqual(counts["app chord lines the browser does not draw"], 0)
+
+
+class PositionsTest(unittest.TestCase):
+    def drawn(self):
+        return page(line(chords=[chord("C", 0), chord("G", 40)]), line(words("abc")))
+
+    def test_positions_keep_the_chords_and_none_of_the_words(self):
+        found = c.positions([self.drawn()])
+        self.assertEqual(found[0]["lines"], [{"text": c.hidden("abc"), "chords": [[0, "C"], [2, "G"]]}])
+        self.assertNotIn("abc", json.dumps(found))
+        self.assertEqual((found[0]["url"], found[0]["font"], found[0]["hidden"]), (self.drawn()["url"], self.drawn()["font"], True))
+
+    def test_positions_compare_as_the_drawing_does(self):
+        hidden = c.positions([self.drawn()])[0]
+        for app in ([[0, "C"], [2, "G"]], [[0, "C"], [1, "G"]]):
+            got = [{"text": "abc", "chords": app}, {"text": "more", "chords": []}]
+            self.assertEqual(c.compare_page(hidden, got)[0], c.compare_page(self.drawn(), got)[0])
+
+    def test_the_command_line_writes_positions_and_compares_with_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "drawing.json").write_text(json.dumps([self.drawn()]), encoding="utf-8")
+            c.main(["positions", str(folder / "drawing.json"), str(folder / "positions.json")])
+            (folder / "app-x.jsonl").write_text(json.dumps({"url": self.drawn()["url"], "lines": [{"text": "abc", "chords": [[0, "C"], [1, "G"]]}]}) + "\n", encoding="utf-8")
+            with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
+                c.main(["compare", str(folder), "x", "--truth", str(folder / "positions.json")])
+            self.assertIn("      1  chords on another letter", out.getvalue())
 
 
 class CompareTest(unittest.TestCase):

@@ -1,29 +1,36 @@
 #!/usr/bin/env python3
-"""How wide each letter is on J-Total's page, measured in Chromium, as the table the app places chords with.
+"""How wide each letter is on J-Total's page, measured in a browser on Windows, as the tables the app places chords with.
 
-  python3 scripts/jtotal-widths/jtotal_widths.py generate    # measure in a container, rewrite the table
-  python3 scripts/jtotal-widths/jtotal_widths.py check       # measure again, and say where the table differs
+  gh workflow run jtotal-widths-windows.yml                  # measure on Windows, then download its artifact
+  python3 scripts/jtotal-widths/jtotal_widths.py generate DIR   # rewrite both tables from that artifact
+  python3 scripts/jtotal-widths/jtotal_widths.py check DIR      # say whether the tables are what DIR measured
+  python3 scripts/jtotal-widths/jtotal_widths.py container DIR  # measure the same in the Containerfile's container
+  python3 scripts/jtotal-widths/jtotal_widths.py diff A.json B.json   # where two measurements differ
 
-J-Total sets a sheet in `Inconsolata, MS Gothic, Hiragino Kaku Gothic, Monaco, sans-serif`. A letter
-Inconsolata has is one column, and one the Japanese monospace font has is one or two. Any other letter
-Chromium draws from a proportional font, so its width is not a whole number: U+0133 is 0.888 of a
-column and U+0132 is 1.470. `ChordSheets` counts chords over those widths, so it needs the real ones.
+Where the tables come from: the workflow .github/workflows/jtotal-widths-windows.yml, on GitHub's
+windows-latest runner, in Chromium as Playwright ships it, in Japanese, with Windows' own fonts (MS
+Gothic, Meiryo, Yu Gothic and the rest). Its first line, in SOURCE.txt, heads each table with the run.
+The sheets are written on Windows, and a Japanese reader's browser draws them there. The same run
+measures Edge and Chrome as installed, each with a Japanese profile, on what a Shift_JIS page holds, and
+they matched Chromium on every letter. The container gives other widths, as its fonts are not Windows'
+(Greek and Cyrillic, for one): it is kept to compare, not to make the tables.
 
-The page is measured with the page's own CSS and fonts: each letter is a span in `あXあ`, as lyrics are
-Japanese, and its width is divided by the width of a digit. The table lists, in thousandths of a column,
-every letter from U+0080 up (and emoji) that is not two columns, which is what the app assumes for
-the rest. It is the browser's answer in the container of the Containerfile: another machine's fonts
-give other widths for the scripts they draw differently, and the app can only follow one.
+J-Total sets a sheet in `Inconsolata, MS Gothic, Hiragino Kaku Gothic, Monaco, sans-serif`, or in
+`Inconsolata, monospace`. A letter Inconsolata has is one column, and one MS Gothic has is one or two.
+Any other letter the browser draws from a proportional font, so its width is not a whole number: ۰ is
+1.144 columns on the first stack and 1.201 on the second. `ChordSheets` counts chords over those widths.
 
-The table ends up in app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt, one run per
-line: `FIRST[-LAST] WIDTH`, code points in hex.
+Each letter is measured as what it adds to a line: the width of `あXあ` less that of `ああ`, divided by
+the width of a digit. A mark is measured after a letter it follows (`base_letter`): ﾞ draws over the ｶ
+before it, and still moves the line on by a column. The table lists, in thousandths of a column, every
+letter from U+0080 up (and emoji) that is not two columns, which is what the app assumes for the rest.
+`trims` measures whether the browser trims a full-width bracket or stop beside another: on Windows, in
+Japanese, it trims none, as MS Gothic has no narrow forms.
 
-The container stands in for Windows, where the sheets are written: MS Gothic draws Japanese on both
-stacks, as Windows' Japanese fixed-width font is MS Gothic too. The Containerfile sends both names to
-Noto Sans Mono CJK JP. macOS draws a different page, because the stack's "Hiragino Kaku Gothic" is not
-a macOS font name, and Monaco then draws marks such as U+203B at 1.201 columns (Issue #830).
-`contexts.py` measures any machine's browser against the table, and `compare_sheets.py moves` counts
-the chords that land on another letter.
+Not measured: a real Japanese desktop's own settings (the runner is a server image with the Japanese
+fonts added), Firefox, and macOS, which draws a different page as "Hiragino Kaku Gothic" is not a
+macOS font name (Issue #830). `contexts.py` measures any machine's browser against the tables, and
+`compare_sheets.py moves` counts the chords that land on another letter.
 """
 import argparse
 import hashlib

@@ -6,7 +6,8 @@
   python3 scripts/jtotal-widths/compare_sheets.py draw DIR --fonts FONTS [--browser B] [--lang ja] [--out NAME.json]
   python3 scripts/jtotal-widths/compare_sheets.py moves A.json B.json    # chords that sit over another letter in B
   python3 scripts/jtotal-widths/compare_sheets.py app DIR TAG [--old]    # DIR/app-TAG.jsonl
-  python3 scripts/jtotal-widths/compare_sheets.py compare DIR TAG [--show N]
+  python3 scripts/jtotal-widths/compare_sheets.py positions DRAWING.json OUT.json   # the chords, with no words
+  python3 scripts/jtotal-widths/compare_sheets.py compare DIR TAG [--truth DRAWING.json] [--show N]
 
 `crawl` saves the pages in URLS.txt (one address a line) under DIR/sheets, one request a second at most.
 Pages are another person's work, so DIR belongs in the agent cache and never in Git.
@@ -21,12 +22,15 @@ machine's browser and fonts, such as a Mac's, and writes NAME.environment.txt be
 which code points before them are drawn at another width, and how many chords start where a letter
 starts in each. An author lines a chord up with a letter on their own screen, so the drawing that puts
 more chords on a letter start is nearer to the one the sheets were written on.
-`compare` puts the two side by side: a chord is right when the app's letter is the one the browser's
+`positions` keeps only where a drawing puts each chord, with each line's words as a hash, so a drawing
+made elsewhere, such as on the Windows workflow's runner, can come back with none of the words.
+`compare` puts the two side by side, against DIR/browser.json or the drawing or positions in --truth: a chord is right when the app's letter is the one the browser's
 chord starts nearest to. Lines that the app and the browser read as other words or other chords
 are counted on their own, as nothing says which letter would be right there.
 """
 import argparse
 import difflib
+import hashlib
 import json
 import re
 import shutil
@@ -159,11 +163,22 @@ def key(line):
     return line["text"], tuple(c[1] for c in line["chords"])
 
 
+def hidden(text):
+    """A line's words as a hash: enough to match the app's line to it, and none of the words."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def positions(drawing):
+    """Each page's chord lines as `expected` gives them, with each line's words as `hidden` gives them."""
+    return [{"url": page["url"], "font": page["font"], "hidden": True,
+             "lines": [{**line, "text": hidden(line["text"])} for line in expected(page)]} for page in drawing]
+
+
 def compare_page(page, got):
     """Counts of one page: chords on the right letter, on another one, on lines that differ, and so on."""
     counts, wrong = Counter(), []
-    drawn = expected(page)
-    got = [line for line in got if line["chords"]]
+    drawn = page["lines"] if page.get("hidden") else expected(page)
+    got = [{**line, "text": hidden(line["text"])} if page.get("hidden") else line for line in got if line["chords"]]
     matcher = difflib.SequenceMatcher(None, [key(line) for line in drawn], [key(line) for line in got], autojunk=False)
     matched = set()
     for a, b, size in matcher.get_matching_blocks():
@@ -410,7 +425,7 @@ def moves_main(a_path, b_path, show):
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=("crawl", "browser", "draw", "app", "compare", "moves"))
+    parser.add_argument("command", choices=("crawl", "browser", "draw", "app", "compare", "moves", "positions"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("extra", nargs="?")
     parser.add_argument("--limit", type=int, default=1000)
@@ -420,6 +435,7 @@ def main(argv):
     parser.add_argument("--browser", default="chromium")
     parser.add_argument("--lang")
     parser.add_argument("--out", default="browser.json")
+    parser.add_argument("--truth", type=Path, help="the drawing or positions to compare with, if not DIR/browser.json")
     args = parser.parse_args(argv)
     directory = args.directory.resolve()
     if args.command == "crawl":
@@ -432,8 +448,11 @@ def main(argv):
         app_run(directory, args.extra, args.old)
     elif args.command == "moves":
         moves_main(directory, Path(args.extra), args.show)
+    elif args.command == "positions":
+        Path(args.extra).write_text(json.dumps(positions(json.loads(directory.read_text(encoding="utf-8")))), encoding="utf-8")
     else:
-        total, examples = compare(json.loads((directory / "browser.json").read_text(encoding="utf-8")), read_app(directory / f"app-{args.extra}.jsonl"))
+        truth = args.truth or directory / "browser.json"
+        total, examples = compare(json.loads(truth.read_text(encoding="utf-8")), read_app(directory / f"app-{args.extra}.jsonl"))
         for name, value in total.items():
             print(f"{value:7d}  {name}")
         for example in examples[:args.show]:

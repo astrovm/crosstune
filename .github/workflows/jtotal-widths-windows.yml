@@ -81,6 +81,20 @@ jobs:
           $d --out edge.json --browser "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
           $d --out chrome.json --browser "C:/Program Files/Google/Chrome/Application/chrome.exe"
           for b in chromium edge chrome; do echo "== $b"; python scripts/jtotal-widths/invented.py show windows/invented/$b.json; done
+      - name: Draw J-Total's sheets
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The sheets of scripts/jtotal-widths/sheets.txt, fetched one a second and drawn in Japanese. They are
+          # another person's work: they stay in the runner's temporary folder, and only where each chord is, with
+          # each line's words as a hash, goes in the artifact. `compare_sheets.py compare --truth` reads it.
+          sheets="$RUNNER_TEMP/sheets"
+          c="python scripts/jtotal-widths/compare_sheets.py"
+          fonts=$(python -c "import sys; sys.path.insert(0, 'scripts/jtotal-widths'); import jtotal_widths; print(jtotal_widths.container_fonts())")
+          $c crawl "$sheets" scripts/jtotal-widths/sheets.txt
+          $c draw "$sheets" --fonts $fonts --lang ja
+          $c positions "$sheets/browser.json" windows/positions.json
+          cp "$sheets/browser.environment.txt" windows/positions.environment.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jtotal-widths-windows
