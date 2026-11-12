@@ -629,10 +629,13 @@ internal fun sheet(text: String): Sheet {
  * sources as "([site](https://…))", which would show as they are.
  */
 internal fun plainText(text: String): String = text
-    .replace(Regex("""$SPACES_START\s*+\(\[[^\[\]]*+]\([^)\[\]]*+\)\)"""), "")
+    .replace(markdownSource, "")
     .replace(Regex("""\[([^\[\]]++)]\(https?://[^)\[\]]*+\)"""), "$1")
     .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
     .replace(Regex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
+
+/** A source ChatGPT adds after what it says, "([site](https://…))", with the spaces before it. */
+private val markdownSource = Regex("""$SPACES_START\s*+\(\[[^\[\]]*+]\([^)\[\]]*+\)\)""")
 
 /**
  * The strings of a JSON array finished so far in [text], an answer still being written: those

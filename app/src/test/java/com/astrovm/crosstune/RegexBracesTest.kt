@@ -2,21 +2,26 @@ package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.io.File
 
 /**
  * A brace in a pattern is escaped unless it's part of `{2,3}`, `\p{L}` or a `[...]` set. Java's regex takes
  * a lone `}` as the character, and Android's takes it for a syntax error: the app crashes on the phone where
- * every test here passes. So the patterns are read from the app's code instead.
+ * every test here passes. So the patterns are read from the app's code instead, built as the app builds them.
  */
 class RegexBracesTest {
     @Test
     fun noPatternInTheAppHasALoneBrace() {
-        val found = File("src/main/java").walk().filter { it.extension == "kt" }.flatMap { file ->
-            val source = file.readText()
-            literal.findAll(source).filter { loneBrace(it.groupValues[1]) }.map { "${file.name}:${source.take(it.range.first).count { char -> char == '\n' } + 1}" }
-        }.toList()
+        val found = AppPatterns.ofApp().found.filter { loneBrace(it.pattern.pattern()) }.map { "${it.where} ${it.pattern.pattern().take(80)}" }
         assertEquals(emptyList<String>(), found)
+    }
+
+    @Test
+    fun aBraceIsFoundInAnyLiteralAPatternIsBuiltFrom() {
+        // Joined with +, in a quoted string, and in a constant.
+        val source = "private const val CLOSE = \"\"\"x}\"\"\"\nval a = Regex(\"\"\"a\"\"\" + \"\"\"b}\"\"\")\n" +
+            "val b = Regex(\"c}\")\nval c = Regex(\"\"\"${'$'}CLOSE\"\"\")\nval d = Regex(\"\"\"d\\}\"\"\")\n"
+        val found = AppPatterns(listOf("Test.kt" to source)).found.filter { loneBrace(it.pattern.pattern()) }.map { it.holds }
+        assertEquals(listOf("a", "b", "c"), found)
     }
 
     @Test
@@ -27,8 +32,6 @@ class RegexBracesTest {
         assertEquals(lone, lone.filter(::loneBrace))
     }
 
-    /** A raw pattern handed straight to Regex, which is how the app writes them. */
-    private val literal = Regex("Regex\\(\\s*\"\"\"(.*?)\"\"\"", RegexOption.DOT_MATCHES_ALL)
     private val meant = Regex("""^(?:\{\d+(?:,\d*)?\}|\$\{\w+\})""")
 
     private fun loneBrace(pattern: String): Boolean {
