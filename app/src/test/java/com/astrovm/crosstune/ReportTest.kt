@@ -137,6 +137,26 @@ class ReportTest {
         assertFalse(sender.send(report))
     }
 
+    @Test
+    fun theBoxsAnswerSaysWhetherAReportMayGetThereAnotherTime() = runBlocking {
+        val fake = FakeSpotify()
+        var code = 204
+        fake.handler = { request -> FakeSpotify.html(request, "", code = code) }
+        val sender = ReportSender(fake.client(), "2.26.0", Dispatchers.Unconfined)
+        val answers = listOf(200, 204, 408, 429, 500, 503, 400, 404, 405, 413, 415).associateWith {
+            code = it
+            sender.deliver("{}")
+        }
+        // Not now: the box is down, or turned it away for today, from this network or from everyone. Never: it isn't a report the box reads.
+        val later = listOf(408, 429, 500, 503).associateWith { Delivery.LATER }
+        val never = listOf(400, 404, 405, 413, 415).associateWith { Delivery.REFUSED }
+        assertEquals(mapOf(200 to Delivery.SENT, 204 to Delivery.SENT) + later + never, answers)
+        // A redirect that wasn't followed is no answer from the box.
+        assertEquals(Delivery.LATER, Delivery.of(302))
+        fake.handler = { throw IOException("offline") }
+        assertEquals(Delivery.LATER, sender.deliver("{}"))
+    }
+
     private val marked = ReadingReport(
         "2.25.0", MusicMetadata("Made Up", "Some Band"), "lrclib", "空の花 again",
         Word("花", "か", "ka", by = listOf(Reader.IPADIC, Reader.UNIDIC)), listOf("か", "ka"), Script.JAPANESE, right = "  はな ", android = "17 (37)"
@@ -211,7 +231,7 @@ class ReportTest {
             }
             FakeSpotify.html(request, "").newBuilder().body(body).build()
         }
-        assertTrue(ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined).send("{}"))
+        assertEquals(Delivery.SENT, ReportSender(fake.client(), "2.12.0", Dispatchers.Unconfined).deliver("{}"))
         assertEquals(1, closed)
     }
 

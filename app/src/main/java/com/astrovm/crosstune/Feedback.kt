@@ -181,6 +181,31 @@ internal data class ReadingReport(
     }
 }
 
+/** How sending a report went. */
+internal enum class Delivery {
+    /** It got there. */
+    SENT,
+
+    /**
+     * It didn't get there, or the box turned it away for now: too many from this network or from everyone today, or the
+     * box is down. It may get there another time.
+     */
+    LATER,
+
+    /** The box will never take it as it is, as it isn't a report it reads: sending it again changes nothing. */
+    REFUSED;
+
+    companion object {
+        /** What the box's answer [code] says. 408 and 429 are "not now", like a server's own trouble (5xx). */
+        fun of(code: Int): Delivery = when (code) {
+            in 200..299 -> SENT
+            408, 429 -> LATER
+            in 400..499 -> REFUSED
+            else -> LATER
+        }
+    }
+}
+
 /**
  * Sends reports to Crosstune's own box for them, a Cloudflare Worker that keeps them private, to be
  * read by hand: never posted anywhere public, as what's said may be personal.
@@ -193,19 +218,17 @@ internal class ReportSender(
     private val url: String = URL
 ) {
     /** Whether [report] got there. */
-    suspend fun send(report: Report): Boolean = post(report.json())
+    suspend fun send(report: Report): Boolean = deliver(report.json()) == Delivery.SENT
 
     /** Whether [report], on a wrong reading, got there. */
-    suspend fun send(report: ReadingReport): Boolean = post(report.json())
+    suspend fun send(report: ReadingReport): Boolean = deliver(report.json()) == Delivery.SENT
 
-    /** Whether a report that was kept as its [json], what [Report.json] said, got there. */
-    suspend fun send(json: String): Boolean = post(json)
-
-    private suspend fun post(json: String): Boolean = withContext(ioDispatcher) {
+    /** How sending a report as its [json], what [Report.json] says, went. */
+    suspend fun deliver(json: String): Delivery = withContext(ioDispatcher) {
         try {
-            client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { it.isSuccessful }
+            client.newCall(Request.Builder().url(url).post(json.toRequestBody(JSON)).build()).execute().use { Delivery.of(it.code) }
         } catch (_: IOException) {
-            false
+            Delivery.LATER
         }
     }
 

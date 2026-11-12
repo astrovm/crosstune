@@ -62,6 +62,10 @@ class LyricsReportTest {
     @Volatile
     private var reportsDown = false
 
+    /** What the box for reports answers each report it's sent, by what it says, when not what [reportsDown] makes it. */
+    @Volatile
+    private var reportAnswer: ((String) -> Int)? = null
+
     /** Holds a report on its way until it's let through. */
     @Volatile
     private var reportsHeld: CountDownLatch? = null
@@ -88,7 +92,8 @@ class LyricsReportTest {
             when (request.url.host) {
                 "report.crosstune.cc" -> {
                     reportsHeld?.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                    FakeSpotify.html(request, "", code = if (reportsDown) 503 else 204)
+                    val body = okio.Buffer().also { request.body?.writeTo(it) }.readUtf8()
+                    FakeSpotify.html(request, "", code = reportAnswer?.invoke(body) ?: if (reportsDown) 503 else 204)
                 }
                 "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]""")
                 else -> FakeSpotify.html(request, """{"title":"Demo","author_name":"Band"}""")
@@ -575,22 +580,57 @@ class LyricsReportTest {
         assertEquals(1_000L, timing.getLong("heardMs") - timing.getLong("timedMs"))
     }
 
-    @Test
-    fun anAutomaticReportThatDidntGetThereGoesTheNextTimeOnly() {
-        prefs().edit().putBoolean("auto_reports", true).commit()
-        reportsDown = true
+    /** The app opened on words found with no timing, and closed: a problem it found and reports by itself. */
+    private fun foundNoTiming() {
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
         openLyrics { shown("Plain one") }
         waitUntil { problems() == listOf("no_timing") }
+        controller!!.destroyAndSettle()
+    }
+
+    @Test
+    fun aProblemFoundThatDidntGetThereIsKeptAndGoesAtTheNextStartWithoutTheSongAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        reportsDown = true
+        foundNoTiming()
+        assertEquals(1, owed())
         reportsDown = false
-        repeat(2) {
-            controller!!.destroyAndSettle()
-            File(app.cacheDir, "lyrics.json").delete()
-            File(app.cacheDir, "kept_words.json").delete()
-            openLyrics { shown("Plain one") }
-            settled()
-        }
+        started()
+        waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing", "no_timing"), problems())
+        // Sent, it's reported, so finding it again sends nothing.
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics { shown("Plain one") }
+        settled()
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+    }
+
+    @Test
+    fun aProblemFoundTheBoxTurnsAwayForTodayIsKeptToo() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        reportAnswer = { 429 }
+        foundNoTiming()
+        assertEquals(1, owed())
+        reportAnswer = null
+        started()
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+    }
+
+    @Test
+    fun aProblemFoundTheBoxWillNeverTakeIsDroppedAndNotSentAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        reportAnswer = { 400 }
+        foundNoTiming()
+        assertEquals(0, owed())
+        reportAnswer = null
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics { shown("Plain one") }
+        settled()
+        assertEquals(listOf("no_timing"), problems())
     }
 
     @Test
@@ -749,7 +789,7 @@ class LyricsReportTest {
     }
 
     /** [songs] put in time before, whose reports wait on the phone: made up, as what they say doesn't matter. */
-    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), """{"fake":"$it"}""") }
+    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), SongProblem.TIMED_BY_HAND, """{"fake":"$it"}""") }
 
     private fun sentFakes() = fake.requestedUrls.indices.filter { fake.requestedUrls[it] == ReportSender.URL }.map { fake.requestBodies[it] }
 
@@ -823,6 +863,17 @@ class LyricsReportTest {
         openLyrics()
         waitUntil { owed() == 0 }
         assertEquals(3, sentFakes().size)
+    }
+
+    @Test
+    fun anOwedReportTheBoxWillNeverTakeIsDroppedAndTheNextOneGoes() {
+        owedFor("Old one", "Old two")
+        reportAnswer = { body -> if ("Old one" in body) 400 else 204 }
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("""{"fake":"Old one"}""", """{"fake":"Old two"}"""), sentFakes())
     }
 
     @Test

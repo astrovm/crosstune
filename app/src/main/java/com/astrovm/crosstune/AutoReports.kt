@@ -80,18 +80,22 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
     }
 
     /**
-     * A report on [song]'s words put in time by hand, [json] as it'd be sent, kept on the phone whatever the
-     * user's answer is, until it's sent: the words are only left, and reported, a while after, the app may be
-     * killed before, and the answer may come later. An older one for the same song gives way; the latest
-     * [MAX_OWED] are kept. One that didn't get there waits for the next start.
+     * A report on [song]'s [problem], [json] as it'd be sent, kept on the phone until it's sent. Words put in time by
+     * hand are owed whatever the user's answer is: they're only left, and reported, a while after, the app may be
+     * killed before, and the answer may come later. A problem found is owed when its report didn't get there, or the
+     * box turned it away for now. An older one for the same song and problem gives way. The latest [MAX_OWED] of
+     * each, by hand and found, are kept, so the oldest go first. One that didn't get there waits for the next start.
      */
-    fun owe(song: MusicMetadata, json: String) {
-        val key = owedKey(song)
+    fun owe(song: MusicMetadata, problem: SongProblem, json: String) {
+        val key = keyOf(song, problem)
         keep(kept().filter { it.key != key } + Owed(key, json))
     }
 
     /** The key [song]'s timing report is owed under. */
     fun owedKey(song: MusicMetadata) = keyOf(song, SongProblem.TIMED_BY_HAND)
+
+    /** How the key of each timing report owed starts. */
+    private val owedKeyStart = "${SongProblem.TIMED_BY_HAND.key}\u0000"
 
     /** What's owed, unless it went by now. */
     fun owed(): List<Owed> = kept().filter { it.key !in sent() }
@@ -101,10 +105,13 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         (0 until list.length()).map { list.getJSONObject(it) }.map { Owed(it.getString("key"), it.getString("json")) }
     }.getOrDefault(emptyList())
 
-    /** The latest [MAX_OWED] put in time by hand are kept, and every one kept from an earlier version, of which there are only so many. */
+    /**
+     * The latest [MAX_OWED] put in time by hand are kept, the latest [MAX_OWED] problems found, and every one kept from
+     * an earlier version, of which there are only so many.
+     */
     private fun keep(owed: List<Owed>) {
-        val byHand = owed.filterNot { it.earlier }.takeLast(MAX_OWED).toSet()
-        val list = JSONArray(owed.filter { it.earlier || it in byHand }.map { JSONObject().put("key", it.key).put("json", it.json) })
+        val latest = owed.filterNot { it.earlier }.groupBy { it.key.startsWith(owedKeyStart) }.values.flatMap { it.takeLast(MAX_OWED) }.toSet()
+        val list = JSONArray(owed.filter { it.earlier || it in latest }.map { JSONObject().put("key", it.key).put("json", it.json) })
         preferences.edit().putString(KEY_OWED, list.toString()).commit()
     }
 
@@ -185,7 +192,7 @@ internal class AutoReports(private val preferences: SharedPreferences, private v
         /** The most points the box for reports takes in one. */
         private const val MAX_POINTS = 300
 
-        /** The reports owed that are kept: the latest songs put in time by hand. */
+        /** The reports owed that are kept of each: the latest songs put in time by hand, and the latest problems found. */
         const val MAX_OWED = 20
 
         /** The offer closed this many times is taken as a no. */
