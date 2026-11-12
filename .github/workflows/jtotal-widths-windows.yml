@@ -95,3 +95,5 @@ jobs:
         with:
           name: jtotal-widths-windows
           path: windows/
+          # The tables come out of it once; nothing needs it after that.
+          retention-days: 1

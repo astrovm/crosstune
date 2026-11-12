@@ -22,8 +22,9 @@ machine's browser and fonts, such as a Mac's, and writes NAME.environment.txt be
 which code points before them are drawn at another width, and how many chords start where a letter
 starts in each. An author lines a chord up with a letter on their own screen, so the drawing that puts
 more chords on a letter start is nearer to the one the sheets were written on.
-`positions` keeps only where a drawing puts each chord, with each line's words as a hash, so a drawing
-made elsewhere, such as on the Windows workflow's runner, can come back with none of the words.
+`positions` keeps only the letter each chord of a drawing is on, and for each line a hash of its words
+and chord names together, so a drawing made elsewhere, such as on the Windows workflow's runner, can
+come back with neither the words nor the chords.
 `compare` puts the two side by side, against DIR/browser.json or the drawing or positions in --truth: a chord is right when the app's letter is the one the browser's
 chord starts nearest to. Lines that the app and the browser read as other words or other chords
 are counted on their own, as nothing says which letter would be right there.
@@ -163,37 +164,48 @@ def key(line):
     return line["text"], tuple(c[1] for c in line["chords"])
 
 
-def hidden(text):
-    """A line's words as a hash: enough to match the app's line to it, and none of the words."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+def hidden(line):
+    """A line's words and chord names as one hash: enough to match the app's line to it, and neither of them."""
+    return hashlib.sha256(json.dumps(key(line), ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
 
 
 def positions(drawing):
-    """Each page's chord lines as `expected` gives them, with each line's words as `hidden` gives them."""
+    """Each page's chord lines as `expected` gives them, each as `hidden` and the letters its chords are on."""
     return [{"url": page["url"], "font": page["font"], "hidden": True,
-             "lines": [{**line, "text": hidden(line["text"])} for line in expected(page)]} for page in drawing]
+             "lines": [{"key": hidden(line), "at": [chord[0] for chord in line["chords"]]} for line in expected(page)]}
+            for page in drawing]
 
 
 def compare_page(page, got):
-    """Counts of one page: chords on the right letter, on another one, on lines that differ, and so on."""
+    """Counts of one page: chords on the right letter, on another one, on lines that differ, and so on.
+
+    `page` is a drawing, or `positions` of one: then each line is a hash, and the app's line is hashed to match it.
+    """
     counts, wrong = Counter(), []
-    drawn = page["lines"] if page.get("hidden") else expected(page)
-    got = [{**line, "text": hidden(line["text"])} if page.get("hidden") else line for line in got if line["chords"]]
-    matcher = difflib.SequenceMatcher(None, [key(line) for line in drawn], [key(line) for line in got], autojunk=False)
+    got = [line for line in got if line["chords"]]
+    if page.get("hidden"):
+        drawn_keys, drawn_letters = [line["key"] for line in page["lines"]], [line["at"] for line in page["lines"]]
+        got_keys = [hidden(line) for line in got]
+    else:
+        drawn = expected(page)
+        drawn_keys, drawn_letters = [key(line) for line in drawn], [[c[0] for c in line["chords"]] for line in drawn]
+        got_keys = [key(line) for line in got]
+    matcher = difflib.SequenceMatcher(None, drawn_keys, got_keys, autojunk=False)
     matched = set()
     for a, b, size in matcher.get_matching_blocks():
         for k in range(size):
             matched.add(a + k)
             counts["chord lines compared"] += 1
-            for browser, app in zip(drawn[a + k]["chords"], got[b + k]["chords"]):
+            app_line = got[b + k]
+            for browser, app in zip(drawn_letters[a + k], app_line["chords"]):
                 counts["chords compared"] += 1
-                if browser[0] != app[0]:
+                if browser != app[0]:
                     counts["chords on another letter"] += 1
-                    wrong.append((drawn[a + k]["text"], browser, app))
-    for k, line in enumerate(drawn):
+                    wrong.append((app_line["text"], [browser, app[1]], app))
+    for k, letters in enumerate(drawn_letters):
         if k not in matched:
             counts["chord lines the app reads as other words or chords"] += 1
-            counts["chords on those lines"] += len(line["chords"])
+            counts["chords on those lines"] += len(letters)
     counts["app chord lines the browser does not draw"] += len(got) - len(matched)
     return counts, wrong
 

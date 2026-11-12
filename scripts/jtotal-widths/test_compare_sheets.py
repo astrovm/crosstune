@@ -103,17 +103,24 @@ class ComparePageTest(unittest.TestCase):
 
 class PositionsTest(unittest.TestCase):
     def drawn(self):
-        return page(line(chords=[chord("C", 0), chord("G", 40)]), line(words("abc")))
+        return page(line(chords=[chord("Cmaj7", 0), chord("Gsus4", 40)]), line(words("abc")))
 
-    def test_positions_keep_the_chords_and_none_of_the_words(self):
+    def test_positions_keep_the_letters_and_neither_the_words_nor_the_chords(self):
         found = c.positions([self.drawn()])
-        self.assertEqual(found[0]["lines"], [{"text": c.hidden("abc"), "chords": [[0, "C"], [2, "G"]]}])
-        self.assertNotIn("abc", json.dumps(found))
+        self.assertEqual(found[0]["lines"], [{"key": c.hidden({"text": "abc", "chords": [[0, "Cmaj7"], [2, "Gsus4"]]}), "at": [0, 2]}])
+        text = json.dumps(found)
+        for secret in ("abc", "Cmaj7", "Gsus4"):
+            self.assertNotIn(secret, text)
         self.assertEqual((found[0]["url"], found[0]["font"], found[0]["hidden"]), (self.drawn()["url"], self.drawn()["font"], True))
+
+    def test_a_line_with_other_chords_is_another_line(self):
+        hidden = c.positions([self.drawn()])[0]
+        counts, _ = c.compare_page(hidden, [{"text": "abc", "chords": [[0, "Cmaj7"], [2, "G"]]}])
+        self.assertEqual((counts["chords compared"], counts["chord lines the app reads as other words or chords"]), (0, 1))
 
     def test_positions_compare_as_the_drawing_does(self):
         hidden = c.positions([self.drawn()])[0]
-        for app in ([[0, "C"], [2, "G"]], [[0, "C"], [1, "G"]]):
+        for app in ([[0, "Cmaj7"], [2, "Gsus4"]], [[0, "Cmaj7"], [1, "Gsus4"]]):
             got = [{"text": "abc", "chords": app}, {"text": "more", "chords": []}]
             self.assertEqual(c.compare_page(hidden, got)[0], c.compare_page(self.drawn(), got)[0])
 
@@ -122,7 +129,7 @@ class PositionsTest(unittest.TestCase):
             folder = Path(tmp)
             (folder / "drawing.json").write_text(json.dumps([self.drawn()]), encoding="utf-8")
             c.main(["positions", str(folder / "drawing.json"), str(folder / "positions.json")])
-            (folder / "app-x.jsonl").write_text(json.dumps({"url": self.drawn()["url"], "lines": [{"text": "abc", "chords": [[0, "C"], [1, "G"]]}]}) + "\n", encoding="utf-8")
+            (folder / "app-x.jsonl").write_text(json.dumps({"url": self.drawn()["url"], "lines": [{"text": "abc", "chords": [[0, "Cmaj7"], [1, "Gsus4"]]}]}) + "\n", encoding="utf-8")
             with unittest.mock.patch("sys.stdout", new=io.StringIO()) as out:
                 c.main(["compare", str(folder), "x", "--truth", str(folder / "positions.json")])
             self.assertIn("      1  chords on another letter", out.getvalue())
