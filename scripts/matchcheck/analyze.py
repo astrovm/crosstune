@@ -45,7 +45,10 @@ VERSION_MARKS = {
     "インスト": {"inst", "instrumental"}, "tvサイズ": set(), "テレビサイズ": set(),
     "纯音乐": {"instrumental"}, "純音樂": {"instrumental"}, "인스트": {"inst", "instrumental"}, "반주": {"instrumental", "karaoke"},
     "リミックス": {"remix"}, "混音": {"remix"}, "리믹스": {"remix"}, "演唱会": {"live", "concert"}, "演唱會": {"live", "concert"},
+    "オフヴォーカル": {"instrumental", "karaoke"}, "ライヴ": {"live"}, "カヴァー": {"cover"},
 }
+# SongNames.Mark.wordOfItsOwn: marks that count only with no katakana beside them, as "アライヴ" is "Alive".
+WORD_OF_ITS_OWN = {"ライヴ", "カヴァー"}
 # SongNames.Mark.HOLD_A_MARK: words that only hold a mark's letters, as "ドライブ" holds "ライブ", where a word starts.
 HOLD_A_MARK = re.compile("(?<![\u30a1-\u30fa\u30fc-\u30ff\u1100-\u11ff\u3130-\u318f\uac00-\ud7af])"
                          "(?:インストール|ドライブ|ライブラリ|ディスカバー|リカバー|드라이브|라이브러리|디스커버|커버리지|반주자)")
@@ -71,11 +74,20 @@ def words(text):
 
 
 def composed(text):
-    """SongNames.composed: NFKC and lowercase, with ヴ as ブ, as katakana writes a v either way: ライヴ is ライブ."""
-    text = unicodedata.normalize("NFKC", text).lower()
+    """SongNames.composed: NFKC and lowercase, with its sound marks kept."""
+    return unicodedata.normalize("NFKC", text).lower()
+
+
+def with_bu(word):
+    """SongNames.withBu: a katakana word with ヴ as ブ, as katakana writes a v either way: ライヴ is ライブ."""
     for vu, bu in (("ヴァ", "バ"), ("ヴィ", "ビ"), ("ヴェ", "ベ"), ("ヴォ", "ボ"), ("ヴ", "ブ")):
-        text = text.replace(vu, bu)
-    return text
+        word = word.replace(vu, bu)
+    return word
+
+
+def in_katakana(c):
+    """SongNames.Mark.inKatakana: a katakana letter or ー."""
+    return c is not None and ("\u30a1" <= c <= "\u30fa" or "\u30fc" <= c <= "\u30ff")
 
 
 def mark_found(mark, name):
@@ -91,7 +103,10 @@ def mark_found(mark, name):
     for m in re.finditer(pattern, text):
         before = text[m.start() - 1] if m.start() > 0 else None
         after = text[m.end()] if m.end() < len(text) else None
-        if not a_word or not goes_on(before) and not goes_on(after):
+        if a_word:
+            if not goes_on(before) and not goes_on(after):
+                return True
+        elif mark not in WORD_OF_ITS_OWN or not in_katakana(before) and not in_katakana(after):
             return True
     return False
 
@@ -106,7 +121,7 @@ def says_another_version(name, title, artist):
 # SongNames.tagEdge, VERSION_SAID and VERSION_WRITTEN: where a tag ends, and the words that say a name is a version.
 TAG_EDGE = re.compile(r"[()\[\]{}【】「」『』〈〉《》~〜|/_]|\s[-–]\s")
 VERSION_SAID = {"ver": "version", "version": "version", "inst": "instrumental", "instrumental": "instrumental"}
-VERSION_WRITTEN = {"バージョン": "version", "버전": "version"}
+VERSION_WRITTEN = {"バージョン": "version", "ヴァージョン": "version", "버전": "version"}
 # SongNames.KATAKANA_WORDS: words a version tag says in katakana, with ヴ as ブ, and the same words in Latin letters.
 KATAKANA_WORDS = {
     "シングル": "single", "アルバム": "album", "オリジナル": "original", "ラジオ": "radio", "エディット": "edit",
@@ -121,6 +136,12 @@ KATAKANA_WORDS = {
 }
 
 
+def version_like():
+    """SongNames.VERSION_LIKE: the words a tag that says only what version it is has."""
+    katakana = set().union(*(set(re.split(r"[^a-z0-9]+", means)) - {""} for means in KATAKANA_WORDS.values()))
+    return VERSION_WORDS | set(VERSION_SAID) | katakana | {"size"}
+
+
 def latin_words(text):
     """SongNames.words: the words in Latin letters and digits, widths folded and accents off."""
     folded = "".join(c for c in unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text)) if not unicodedata.combining(c))
@@ -132,6 +153,9 @@ def canon(word):
     return VERSION_SAID.get(word, word)
 
 
+VERSION_LIKE = version_like()
+
+
 def version_tags(name):
     """SongNames.versionTags: the parts of a name that say it's a version."""
     return [tag for tag in TAG_EDGE.split(composed(name)) if latin_words(tag) & VERSION_SAID.keys() or any(mark in tag for mark in VERSION_WRITTEN)]
@@ -141,7 +165,7 @@ def in_katakana_says(run, tagged):
     """SongNames.inKatakanaSays: the run is words in katakana, each one the song's own tags say."""
     cut = [True] + [False] * len(run)
     for end in range(1, len(run) + 1):
-        cut[end] = any(cut[start] and run[start:end] in KATAKANA_WORDS and all(canon(w) in tagged for w in latin_words(KATAKANA_WORDS[run[start:end]]))
+        cut[end] = any(cut[start] and with_bu(run[start:end]) in KATAKANA_WORDS and all(canon(w) in tagged for w in latin_words(KATAKANA_WORDS[with_bu(run[start:end])]))
                        for start in range(end))
     return cut[-1]
 
@@ -170,14 +194,20 @@ def all_said(tag, tagged, written):
     return all(any(normalize(run) in w for w in written) or in_katakana_says(run, tagged) for run in own_runs(tag))
 
 
+def own_versions(title):
+    """SongNames.ownVersions: the title's tags that say only what version it is, "(Live)", not what it's from."""
+    bare_one = bare_title(title)
+    tail = title[len(bare_one):] if title.startswith(bare_one) else ""
+    return [tag for tag in TAG_EDGE.split(tail) if latin_words(tag) and latin_words(tag) <= VERSION_LIKE]
+
+
 def says_another_version_of(name, titles, artist):
     """SongNames.saysAnotherVersionOf: what all the song's names say together is its own, and a version tag is only
     when all else it says is what the song's own tags say."""
     said = {canon(w) for t in titles for w in latin_words(t)}
     tagged = set()
     for t in titles:
-        bare_one = bare_title(t)
-        tagged |= latin_words(t[len(bare_one):] if t.startswith(bare_one) else t)
+        tagged |= set().union(*(latin_words(tag) for tag in own_versions(t)))
         tagged |= set().union(*(latin_words(tag) for tag in version_tags(t)))
     tagged = {canon(w) for w in tagged}
     written = [normalize(t) for t in titles]
@@ -189,6 +219,15 @@ def says_another_version_of(name, titles, artist):
         return True
     return any(mark_found(mark, name) and not any(mark_found(mark, t) for t in titles) and not mark_found(mark, artist) and not means & tagged
                for mark, means in VERSION_MARKS.items())
+
+
+# ExactMatcher.BRACKETED: what's in brackets, of any kind a title uses.
+BRACKETED = re.compile(r"[(\[（【「『［][^)\]）】」』］]*[)\]）】」』］]")
+
+
+def tags_of(name):
+    """ExactMatcher.tagsOf: what a name has in brackets, each as compared."""
+    return [normalize(m.group(0)) for m in BRACKETED.finditer(name)]
 
 
 def album_said(row, song):

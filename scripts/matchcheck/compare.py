@@ -8,8 +8,9 @@ for as the app does when no store names it in its own script, as analyze.py does
 
 1. main: the first result by the artist with a letter past ASCII, within 3 s of a known length, opens.
 2. now, with ChatGPT: the fits are within 3 s, by the artist, and say no other version (analyze.py).
-   The one fit a video names both ways opens. Otherwise main's row, then the fits, go first in ChatGPT's
-   pick ("pick"); main's row opens without asking when only its album kept it out.
+   The one fit a video names both ways opens, when it has no tag in brackets the song's name doesn't
+   have and names nothing else in Latin letters. Otherwise main's row, then the fits, go first in
+   ChatGPT's pick ("pick"); main's row opens without asking when only its album kept it out.
 3. now, without ChatGPT, or when it can't say in time: as 2, and also main's row, when it's in another
    script than Latin, its own name says no other version, and it doesn't name itself in Latin letters
    with no word of the song's name; and when all the candidates are one name, or the fits are, or only its
@@ -58,12 +59,12 @@ def now_rule(song, results, videos, lengths, chatgpt):
     as_main = opened[0] if opened and opened[0] in candidates and unsaid(opened[0]["name"]) else None
     other = list({r["id"]: r for r in fits}.values())
     named = [r for r in other if analyze.named_both_ways(song, r, videos)]
-    if len(named) == 1:
-        return "open", as_main if as_main and bare(as_main) == bare(named[0]) else named[0]
-    # Main's row first, unless its own name says it's another version: with no store name in another script, none is
-    # in a known script.
-    first = opened[:1] if opened and unsaid(opened[0]["name"]) else []
-    maybe = list({r["id"]: r for r in first + named + other}.values())
+    # Named both ways, with no tag the song's name doesn't have, and no name in Latin letters but the song's.
+    tags = set(analyze.tags_of(song["title"]))
+    if len(named) == 1 and set(analyze.tags_of(named[0]["name"])) <= tags and not analyze.names_another(song, named[0]):
+        return "open", named[0]
+    # Main's row always first, so picking the first is what main did.
+    maybe = list({r["id"]: r for r in opened[:1] + named + other}.values())
     alone, kind = None, None
     if as_main and not analyze.names_another(song, as_main):
         if as_main not in fits:
