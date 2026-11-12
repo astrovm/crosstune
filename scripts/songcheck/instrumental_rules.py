@@ -18,13 +18,15 @@ from pathlib import Path
 # As SongNames.saysInstrumental has it. Both are tested against app/src/test/resources/instrumental-titles.tsv.
 LETTER = r"[^\W_]"
 WORD = re.compile(
-    r"(?<!" + LETTER + r")(?<!" + LETTER + r"-)(?:instrumentale?|inst\.?|off[ -]?vocal|backing track|minus one|(?-i:MR)|인스트루멘탈|"
+    r"(?<!" + LETTER + r")(?<!" + LETTER + r"-)(?:instrumentale?|inst\.?|off[ -]?vocal|(?-i:MR)|인스트루멘탈|"
     r"(?:伴奏|オフボーカル|纯音乐|純音樂|純音楽)(?:版本?|バージョン)?)(?!" + LETTER + r")",
     re.I,
 )
 SHORT = re.compile(r"inst\.?|MR", re.I)
 VOICE = re.compile(r"(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b", re.I)
-PART_WORDS = {"with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie"}
+PART_WORDS = {"with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie", "live", "hall"}
+GUEST = re.compile(r"[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]", re.I)
+CHANNEL = re.compile(r"VEVO$|\s*-\s*Topic$")
 VERSION_WORDS = {"ver", "version", "versao"}
 BRACKET = re.compile(r"[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]")
 DASH = re.compile(r"(?:(?<=\s)[-–]\s?|[~〜])([^-–~〜]*)")
@@ -32,7 +34,7 @@ EAST_ASIAN = "[぀-ヿ㐀-䶿一-鿿가-힯]"
 OFF_VOCAL_AT_END = re.compile(
     r"(?:(?<=" + EAST_ASIAN + r")\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$", re.I
 )
-SING_ALONG = re.compile(r"karaoke|カラオケ|\bmade popular by\b", re.I)
+SING_ALONG = re.compile(r"karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b", re.I)
 COVER_WORDS = r"\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"
 COVER = [re.compile(r"[(\[【][^)\]】]*(?:" + COVER_WORDS + r")[^)\]】]*[)\]】]", re.I), re.compile(r"\s[-–]\s[^-–]*(?:" + COVER_WORDS + r").*$", re.I)]
 INSTRUMENTAL_GENRES = {"Instrumental", "インストゥルメンタル", "演奏曲", "Instrumentale"}
@@ -68,9 +70,10 @@ def says_instrumental(title, artist):
     name = unicodedata.normalize("NFKC", title)
     if SING_ALONG.search(name) or SING_ALONG.search(artist) or any(cover.search(name) for cover in COVER) or VOICE.search(name):
         return False
-    tags = [m.group(1) for m in BRACKET.finditer(name)]
-    tags += [m.group(1) for m in DASH.finditer(name) if not (artist and names_artist(name[: m.start()], artist))]
-    return any(only_instrumental(tag) for tag in tags) or bool(OFF_VOCAL_AT_END.search(name))
+    by = CHANNEL.sub("", artist)
+    tags = list(BRACKET.finditer(name))
+    tags += [m for m in DASH.finditer(name) if not (by and names_artist(name[: m.start()], by))]
+    return any(only_instrumental(m.group(1)) and not GUEST.search(name[m.start():]) for m in tags) or bool(OFF_VOCAL_AT_END.search(name))
 
 
 def copies(song):

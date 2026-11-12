@@ -132,7 +132,10 @@ class UnsungTest {
     }
 
     /** The song's words looked for while it plays, till it's said to have none, as [shown] says. */
-    private fun openLyrics(shown: Int = R.string.lyrics_none) {
+    private fun openLyrics(shown: Int = R.string.lyrics_none) = openLyrics { shows(shown) }
+
+    /** The song's words looked for while it plays, till [done]. */
+    private fun openLyrics(done: () -> Boolean) {
         plays()
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
@@ -140,7 +143,7 @@ class UnsungTest {
         val lyrics = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
         waitUntil { composeRule.onAllNodes(lyrics).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(lyrics)[0].performScrollTo().performClick()
-        waitUntil { shows(shown) && !model().findingWords }
+        waitUntil { done() && !model().findingWords }
     }
 
     /** Time passes, [ms] of it. */
@@ -329,13 +332,100 @@ class UnsungTest {
         assertFalse(shows(R.string.lyrics_instrumental))
     }
 
+    /** LRCLIB's copies of the song: two marked instrumental, and one with its words, timed. */
+    private fun markedOnLrclibWithWords() {
+        val copy = """{"trackName":"$title","artistName":"Band","instrumental":true}"""
+        lrclib = """[$copy,$copy,{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:01.00] Hold the light\n[00:10.00] Out in the rain"}]"""
+    }
+
+    private fun showsWords() = composeRule.onAllNodes(hasText("Hold the light", substring = true)).fetchSemanticsNodes().isNotEmpty()
+
     @Test
-    fun aSongWhoseTitleSaysNoOneSingsInItIsNotHeard() {
+    fun wordsFoundForASongLrclibMarksInstrumentalShowOnceSomeoneIsHeardSingingIt() {
+        // Marks can be wrong, and a sung song mustn't lose its words over them.
+        markedOnLrclibWithWords()
+        singing.answers = listOf(music, voice)
+        openLyrics(shown = R.string.lyrics_instrumental)
+        assertFalse(showsWords())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        waitUntil { showsWords() }
+        assertFalse(shows(R.string.lyrics_instrumental))
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun wordsFoundForASongLrclibMarksInstrumentalStayHiddenWhenNoOneIsHeard() {
+        markedOnLrclibWithWords()
+        singing.answers = listOf(music)
+        openLyrics(shown = R.string.lyrics_instrumental)
+        repeat(MainViewModel.VOICE_TRIES) { passes(MainViewModel.VOICE_PAUSE_MS) }
+        waitUntil { singing.hears == MainViewModel.VOICE_TRIES }
+        composeRule.waitForIdle()
+        assertTrue(shows(R.string.lyrics_instrumental))
+        assertFalse(showsWords())
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun wordsFoundForASongLrclibMarksInstrumentalShowWhereNoVoiceCanBeHeard() {
+        // Without the microphone, a mark alone can't say no one sings: the words show at once.
+        markedOnLrclibWithWords()
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        openLyrics(::showsWords)
+        assertEquals(0, singing.hears)
+        assertFalse(shows(R.string.lyrics_instrumental))
+        // Nor without the speech model, once that's known.
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        singing.missing = true
+        openLyrics(::showsWords)
+        assertEquals(1, singing.hears)
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun aSongWhoseTitleSaysNoOneSingsInItShowsItsWordsOnceSomeoneIsHeardSingingIt() {
+        // A title can say so wrongly too, "Song - Live at the Instrumental Hall".
         title = "Demo (Instrumental)"
-        singing.answers = listOf(voice)
+        lrclib = """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:01.00] Hold the light\n[00:10.00] Out in the rain"}]"""
+        singing.answers = listOf(music, voice)
+        openLyrics(shown = R.string.lyrics_instrumental)
+        assertFalse(showsWords())
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        waitUntil { showsWords() }
+        assertFalse(shows(R.string.lyrics_instrumental))
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun aSongWhoseTitleSaysNoOneSingsInItWithNoWordsAnywhereIsReportedOnceSomeoneIsHeard() {
+        title = "Demo (Instrumental)"
+        singing.answers = listOf(music, voice)
+        openLyrics(shown = R.string.lyrics_instrumental)
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertTrue(shows(R.string.lyrics_none))
+    }
+
+    @Test
+    fun aSongWhoseTitleSaysNoOneSingsInItIsAnInstrumentalWhereNoVoiceCanBeHeard() {
+        title = "Demo (Instrumental)"
+        lrclib = """[{"trackName":"$title","artistName":"Band","plainLyrics":"Hold the light"}]"""
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
         openLyrics(shown = R.string.lyrics_instrumental)
         passes(MainViewModel.VOICE_PAUSE_MS)
         assertEquals(0, singing.hears)
+        // Nor without the speech model.
+        controller!!.destroyAndSettle()
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        singing.missing = true
+        openLyrics(shown = R.string.lyrics_instrumental)
+        waitUntil { singing.hears == 1 }
+        passes(MainViewModel.VOICE_PAUSE_MS)
+        assertTrue(shows(R.string.lyrics_instrumental))
+        assertFalse(showsWords())
         assertEquals(emptyList<String>(), problems())
     }
 

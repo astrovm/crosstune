@@ -13,8 +13,6 @@ yes	Song（Instrumental）
 yes	Song （Ｉｎｓｔｒｕｍｅｎｔａｌ）
 yes	Song (Versión Instrumental)
 yes	Song (Instrumentale)
-yes	Song (Backing Track)
-yes	Song (Minus One)
 yes	Song (MR)
 yes	Song (Instrumental Piano)
 yes	Song - Piano Instrumental
@@ -70,3 +68,18 @@ no	Kiss Off Vocal
 no	Show Off Vocal
 no	Song (Show-Off Vocal Mix)
 yes	Song - Other Name - Piano Instrumental
+no	Song - Live at the Instrumental Hall
+no	Song (Instrumental Live)
+no	Band - Instrumental (Official Video)	BandVEVO
+no	Band - Instrumental	Band - Topic
+yes	Other Band - Instrumental (Official Video)	BandVEVO
+no	Song (Instrumental Mix) [feat. Singer]
+no	Song - Instrumental Mix [ft. Singer]
+no	Song (Instrumental + Lyrics)
+no	Song - Instrumental (Lyric Video)
+no	Song (Lyrics) [Instrumental]
+no	Song (Minus One)
+no	Song (Sing-Along Instrumental)
+no	Song (Singalong Instrumental)
+no	Song (Backing Track)
+yes	Into the Unknown (Band At The Disco Version/Instrumental)

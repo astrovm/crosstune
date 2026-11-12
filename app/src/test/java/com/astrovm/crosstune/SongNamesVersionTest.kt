@@ -33,6 +33,15 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun anAlbumOfInstrumentalsSaysSo() {
+        for (album in listOf("Album (Instrumentals)", "Album (Instrumental Version)", "Album - Instrumental", "Album (Off Vocal Ver.)", "专辑 (伴奏版)", "Ａｌｂｕｍ （Ｉｎｓｔｒｕｍｅｎｔａｌｓ）")) {
+            assertTrue(album, SongNames.albumOfInstrumentals(album))
+        }
+        // "Inst." and "MR" are short for other words too, and a word holding "instrumental" is another word.
+        for (album in listOf("Album", "", "Live at MIT Inst.", "Mr. Album", "Instrumentalists")) assertFalse(album, SongNames.albumOfInstrumentals(album))
+    }
+
+    @Test
     fun aVersionSaidOtherwiseIsTheSameVersion() {
         val remix = "Twilight Bay City (Remix)"
         assertTrue(SongNames.sameVersion(remix, "Twilight Bay City (Remix)"))

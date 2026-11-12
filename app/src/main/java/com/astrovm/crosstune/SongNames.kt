@@ -265,18 +265,29 @@ internal object SongNames {
     /**
      * Whether [title] says no one sings in the recording: "Song (Instrumental)", "Song - Inst.", "曲 (伴奏版)",
      * "曲 off vocal ver.". Not a karaoke track's or a cover's, which is sung along to, by its title or a karaoke label's name, nor one that says a voice
-     * is in it too, "Song (Vocal & Instrumental)". Nor a tag that names a part of it, "(with Instrumental Break)",
-     * or something else, "(Live at MIT Inst.)", nor a song of that name, "Band - Instrumental" by Band.
-     * Of 2,551 song names the iTunes Store gave, the 202 that say so are all instrumentals (Issue #861).
+     * is in it too, "Song (Vocal & Instrumental)", or names a singer after the tag, "Song (Instrumental Mix) [feat. Singer]". Nor a tag that names a
+     * part of it, "(with Instrumental Break)", or something else, "(Live at MIT Inst.)", "- Live at the Instrumental Hall", nor a song of that name,
+     * "Band - Instrumental" by Band, or by their channel, "BandVEVO".
+     * Of 2,551 song names the iTunes Store gave, all that say so are instrumentals (Issue #861).
      */
     fun saysInstrumental(title: String, artist: String): Boolean {
         // Written in full-width or half-width letters, "（Ｉｎｓｔ）" or "ｵﾌﾎﾞｰｶﾙ", it says the same.
         val name = Normalizer.normalize(title, Normalizer.Form.NFKC)
         if (listOf(name, artist).any(singAlong::containsMatchIn) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
-        // What follows "Artist - " is the song's name, not a tag.
-        val dashed = dashTag.findAll(name).filterNot { artist.isNotBlank() && sameArtist(name.substring(0, it.range.first), artist) }
-        return (bracketTag.findAll(name) + dashed).any { onlyInstrumental(it.groupValues[1]) } || offVocalAtEnd.containsMatchIn(name)
+        // What follows "Artist - " is the song's name, not a tag; a video's channel is named for the artist.
+        val by = artist.replace(channel, "")
+        val dashed = dashTag.findAll(name).filterNot { by.isNotBlank() && sameArtist(name.substring(0, it.range.first), by) }
+        // A guest named before the tag is the song's, "Song (feat. Guest) [Instrumental]"; after it, they sing in this mix.
+        return (bracketTag.findAll(name) + dashed).any { onlyInstrumental(it.groupValues[1]) && !guestCredit.containsMatchIn(name.substring(it.range.first)) } ||
+            offVocalAtEnd.containsMatchIn(name)
     }
+
+    /**
+     * Whether an [album]'s name says it's of instrumentals, "Album (Instrumentals)", "Album (Off Vocal Ver.)",
+     * "专辑 (伴奏版)": its recordings are named as the sung ones. Not by "Inst." or "MR", which are short for other words too.
+     */
+    fun albumOfInstrumentals(album: String): Boolean =
+        instrumentalWord.findAll(Normalizer.normalize(album, Normalizer.Form.NFKC).replace(instrumentals, "")).any { !shortForm.matches(it.value) }
 
     /** Whether a [tag], what's in brackets or after a dash, says the whole recording is an instrumental. */
     private fun onlyInstrumental(tag: String): Boolean {
@@ -302,17 +313,24 @@ internal object SongNames {
      * A word in Chinese or Japanese may say "version" after it, "伴奏版".
      */
     private val instrumentalWord = Regex(
-        """(?<![\p{L}\p{N}])(?<![\p{L}\p{N}]-)(?:instrumentale?|inst\.?|off[ -]?vocal|backing track|minus one|(?-i:MR)|인스트루멘탈|""" +
+        """(?<![\p{L}\p{N}])(?<![\p{L}\p{N}]-)(?:instrumentale?|inst\.?|off[ -]?vocal|(?-i:MR)|인스트루멘탈|""" +
             """(?:伴奏|オフボーカル|纯音乐|純音樂|純音楽)(?:版本?|バージョン)?)(?![\p{L}\p{N}])""",
         RegexOption.IGNORE_CASE
     )
     private val shortForm = Regex("""inst\.?|MR""", RegexOption.IGNORE_CASE)
+    private val instrumentals = Regex("""(?<=instrumental)s\b""", RegexOption.IGNORE_CASE)
 
     /** A voice in the recording, other than in "off vocal": "(Vocal Mix)", "(A Cappella & Instrumental)". */
     private val voiceIn = Regex("""(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b""", RegexOption.IGNORE_CASE)
 
-    /** What a tag naming a part of a song, or what it's from, says: "(with Instrumental Break)", "(From the film Instrumental)". */
-    private val PART_WORDS = setOf("with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie")
+    /**
+     * What a tag naming a part of a song, or what it's from, or where it was played, says: "(with Instrumental Break)", "(From the film
+     * Instrumental)", "- Live at the Instrumental Hall".
+     */
+    private val PART_WORDS = setOf("with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie", "live", "hall")
+
+    /** What YouTube adds to an artist's name for their channel: "BandVEVO", "Band - Topic". */
+    private val channel = Regex("""VEVO$|\s*-\s*Topic$""")
     private val SAYS_VERSION = setOf("ver", "version", "versao")
 
     /** What's in brackets, of any kind Chinese and Japanese titles use, once full-width ones are written as others. */
@@ -331,9 +349,10 @@ internal object SongNames {
     )
     /**
      * A track made to sing along to, as karaoke labels name theirs, "Song (Made Popular By Singer) [Instrumental Version]"
-     * by "Party Tyme Karaoke". Whether it shows the words of the song it plays is still to be decided (Issue #922).
+     * by "Party Tyme Karaoke", or one shown with the words, "(Instrumental + Lyrics)", or to sing over, "(Minus One)",
+     * "(Backing Track)". These show the words of the song they play, as before; whether they should is still to be decided (Issue #922).
      */
-    private val singAlong = Regex("""karaoke|カラオケ|\bmade popular by\b""", RegexOption.IGNORE_CASE)
+    private val singAlong = Regex("""karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b""", RegexOption.IGNORE_CASE)
 
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
