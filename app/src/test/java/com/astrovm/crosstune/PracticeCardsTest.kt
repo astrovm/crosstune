@@ -1155,7 +1155,8 @@ class PracticeCardsTest {
         installed(spotify, preferred = Destination.Alternative(Frontend.entries.first()))
         appPlays(spotify)
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        // Over at whichever comes first, so an app tried by mistake, which then plays the line, fails at once rather than when the wait runs out.
+        waitFor("the player is on the line, or an app is tried") { player.shown.isNotEmpty() || playback.followedApps.isNotEmpty() }
         assertTrue(playback.followedApps.isEmpty())
     }
 
@@ -1167,7 +1168,8 @@ class PracticeCardsTest {
         installed(MusicService.TIDAL.packageName)
         appPlays(MusicService.TIDAL.packageName)
         cards().start(null, before = null)
-        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        // Over at whichever comes first, so an app tried by mistake, which then plays the line, fails at once rather than when the wait runs out.
+        waitFor("the player is on the line, or an app is tried") { player.shown.isNotEmpty() || playback.followedApps.isNotEmpty() }
         assertTrue(playback.followedApps.isEmpty())
     }
 
