@@ -462,10 +462,11 @@ internal class PracticeCards(
         val song = MusicMetadata(line.title, line.artist)
         // The length kept with the line is the recording the words were timed on. This session's is only a stand-in.
         val expectedMs = line.lengthMs ?: lengths[line.title to line.artist]
-        val music = matcher.find(MusicService.YOUTUBE_MUSIC, song)
-        // Any other video is taken only when it's as long as the song, which has to be known to tell.
-        val link = music ?: expectedMs?.let { matcher.find(MusicService.YOUTUBE, song) }
-        val id = link?.toHttpUrlOrNull()?.queryParameter("v") ?: return null
+        // Asked once more only when the search failed, as offline or slow: one that found nothing would find the same again,
+        // and ask Apple, Deezer and ChatGPT the same again too.
+        val asked = matcher.lookFor(MusicService.YOUTUBE_MUSIC, song)
+        val found = if (asked == ExactMatcher.Match.Failed) matcher.lookFor(MusicService.YOUTUBE_MUSIC, song) else asked
+        val id = (found as? ExactMatcher.Match.Found)?.url?.toHttpUrlOrNull()?.queryParameter("v") ?: return null
         return id to expectedMs
     }
 

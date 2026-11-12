@@ -51,8 +51,10 @@ class PracticeCardsTest {
     /** What the phone has seen each music app do. */
     private val traits = AppTraitsStore(ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("practice-traits", Context.MODE_PRIVATE).also { it.edit().clear().commit() }) { wall }
 
-    private fun cards(source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player, now: () -> Long = { System.currentTimeMillis() }) =
-        PracticeCards(screen, scope, source, ExactMatcher(sites.client(), "AR"), store, traits, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
+    private fun cards(
+        source: PlaybackSource? = playback, songLoadMs: Long = MainViewModel.LOAD_SONG_MS, player: FakeLinePlayer? = this.player,
+        now: () -> Long = { System.currentTimeMillis() }, matcher: ExactMatcher = ExactMatcher(sites.client(), "AR")
+    ) = PracticeCards(screen, scope, source, matcher, store, traits, { 1_000_000L }, now, songLoadMs = songLoadMs, newPlayer = player?.let { made -> { made } })
 
     /** YouTube Music having the demo song, 3:20 long, as its video "demo0000000". */
     private fun youTubeHasTheSong() {
@@ -2501,6 +2503,49 @@ class PracticeCardsTest {
         waitFor("Spotify is left out") { "$spotify would cover the card" in steps() }
         assertTrue(playback.opened.isEmpty())
         assertEquals(before, lookups())
+    }
+
+    /** Every search answering, and finding nothing: YouTube Music's, Apple's and Deezer's. */
+    private fun noSearchFindsTheSong() {
+        sites.handler = { request ->
+            when (request.url.host) {
+                "music.youtube.com" -> FakeSpotify.html(request, "{}")
+                "itunes.apple.com" -> FakeSpotify.html(request, """{"results":[]}""")
+                "api.deezer.com" -> FakeSpotify.html(request, """{"data":[]}""")
+                else -> FakeSpotify.html(request, "{}", code = 404)
+            }
+        }
+    }
+
+    @Test
+    fun thePlayersVideoIsLookedForOnceWhenYouTubeMusicFindsNone() {
+        noSearchFindsTheSong()
+        // TIDAL, the preferred app, is asked for the song by name, which looks nothing up, and doesn't get to the line.
+        keep(line().copy(lengthMs = 200_000))
+        installed(MusicService.TIDAL.packageName, preferred = Destination.Service(MusicService.TIDAL))
+        playback.access = true
+        // A song found nowhere is remembered for a while, as the app does.
+        cards(songLoadMs = 300, matcher = ExactMatcher(sites.client(), "AR", missingForMs = 60_000)).start(null, before = null)
+        waitFor("the card has no sound") { practice?.sound == LineSound.NONE }
+        // YouTube Music's song and video searches, then Apple's, in the phone's store and the US one, and Deezer's, for the song's
+        // other names and its length: once each. Searching again would find the same nothing.
+        assertEquals(listOf("api.deezer.com", "itunes.apple.com", "itunes.apple.com", "music.youtube.com", "music.youtube.com"), lookups().sorted())
+    }
+
+    @Test
+    fun aVideoSearchThatFailedIsAskedOnceMore() {
+        youTubeHasTheSong()
+        val found = sites.handler
+        val asked = AtomicLong()
+        // Its first answer is an error, as when the phone is offline for a moment.
+        sites.handler = { request -> if (request.url.host == "music.youtube.com" && asked.getAndIncrement() == 0L) FakeSpotify.html(request, "{}", code = 503) else found(request) }
+        keep(line())
+        installed(MusicService.TIDAL.packageName, preferred = Destination.Service(MusicService.TIDAL))
+        playback.access = true
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        assertEquals("demo0000000", player.shown.single().videoId)
+        assertEquals(2L, asked.get())
     }
 }
 
