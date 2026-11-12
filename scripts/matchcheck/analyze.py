@@ -42,7 +42,7 @@ VERSION_MARKS = {
     "卡拉ok": {"karaoke"}, "커버": {"cover"}, "라이브": {"live"}, "노래방": {"karaoke"},
     "串烧": {"medley"}, "串燒": {"medley"}, "메들리": {"medley"},
     "offvocal": {"instrumental", "karaoke"}, "tvsize": set(), "オフボーカル": {"instrumental", "karaoke"},
-    "オフヴォーカル": {"instrumental", "karaoke"}, "インスト": {"inst", "instrumental"}, "tvサイズ": set(), "テレビサイズ": set(),
+    "インスト": {"inst", "instrumental"}, "tvサイズ": set(), "テレビサイズ": set(),
     "纯音乐": {"instrumental"}, "純音樂": {"instrumental"}, "인스트": {"inst", "instrumental"}, "반주": {"instrumental", "karaoke"},
     "リミックス": {"remix"}, "混音": {"remix"}, "리믹스": {"remix"}, "演唱会": {"live", "concert"}, "演唱會": {"live", "concert"},
 }
@@ -70,11 +70,19 @@ def words(text):
     return set(re.split(r"[^\w]+", unicodedata.normalize("NFKD", text).lower())) - {""}
 
 
+def composed(text):
+    """SongNames.composed: NFKC and lowercase, with ヴ as ブ, as katakana writes a v either way: ライヴ is ライブ."""
+    text = unicodedata.normalize("NFKC", text).lower()
+    for vu, bu in (("ヴァ", "バ"), ("ヴィ", "ビ"), ("ヴェ", "ベ"), ("ヴォ", "ボ"), ("ヴ", "ブ")):
+        text = text.replace(vu, bu)
+    return text
+
+
 def mark_found(mark, name):
     """SongNames.Mark.foundIn: the mark's letters in a row, anything but letters and digits between them; one in Latin
     letters only as a word of its own."""
-    text = HOLD_A_MARK.sub(" ", unicodedata.normalize("NFKC", name).lower())
-    letters = [c for c in unicodedata.normalize("NFKC", mark).lower() if c.isalnum()]
+    text = HOLD_A_MARK.sub(" ", composed(name))
+    letters = [c for c in composed(mark) if c.isalnum()]
     pattern = r"(?:[^\w]|_)*".join(re.escape(c) for c in letters)
     a_word = all("LATIN" in unicodedata.name(c, "") for c in letters)
 
@@ -98,7 +106,19 @@ def says_another_version(name, title, artist):
 # SongNames.tagEdge, VERSION_SAID and VERSION_WRITTEN: where a tag ends, and the words that say a name is a version.
 TAG_EDGE = re.compile(r"[()\[\]{}【】「」『』〈〉《》~〜|/_]|\s[-–]\s")
 VERSION_SAID = {"ver": "version", "version": "version", "inst": "instrumental", "instrumental": "instrumental"}
-VERSION_WRITTEN = {"バージョン": "version", "ヴァージョン": "version", "버전": "version"}
+VERSION_WRITTEN = {"バージョン": "version", "버전": "version"}
+# SongNames.KATAKANA_WORDS: words a version tag says in katakana, with ヴ as ブ, and the same words in Latin letters.
+KATAKANA_WORDS = {
+    "シングル": "single", "アルバム": "album", "オリジナル": "original", "ラジオ": "radio", "エディット": "edit",
+    "ショート": "short", "ロング": "long", "フル": "full", "スロー": "slow", "ライブ": "live", "リミックス": "remix",
+    "ミックス": "mix", "リマスター": "remaster", "リマスタード": "remastered", "モノラル": "mono", "モノ": "mono",
+    "ステレオ": "stereo", "アコースティック": "acoustic", "ピアノ": "piano", "ギター": "guitar", "オーケストラ": "orchestra",
+    "バンド": "band", "デモ": "demo", "インスト": "instrumental", "インストゥルメンタル": "instrumental", "カラオケ": "karaoke",
+    "スピードアップ": "speed up", "エクステンデッド": "extended", "イングリッシュ": "english", "ジャパニーズ": "japanese",
+    "ムービー": "movie", "テレビ": "tv", "ドラマ": "drama", "アニメ": "anime", "アカペラ": "acapella", "ボーカル": "vocal",
+    "オフ": "off", "カバー": "cover", "セルフ": "self", "スペシャル": "special", "ニュー": "new", "スタジオ": "studio",
+    "リレコーディング": "re recording", "ダンス": "dance", "アンプラグド": "unplugged",
+}
 
 
 def latin_words(text):
@@ -107,81 +127,67 @@ def latin_words(text):
     return set(re.split(r"[^a-z0-9]+", folded.lower())) - {""}
 
 
-# Readings.romaji, as far as SongNames.soundsAlike needs it: each katakana's sound, the small ones and ー after.
-KANA_SOUNDS = dict(zip(
-    "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポヴァィゥェォャュョッー",
-    "a i u e o ka ki ku ke ko sa shi su se so ta chi tsu te to na ni nu ne no ha hi fu he ho ma mi mu me mo ya yu yo ra ri ru re ro wa o n "
-    "ga gi gu ge go za ji zu ze zo da ji zu de do ba bi bu be bo pa pi pu pe po vu a i u e o ya yu yo _ _".split()))
+def canon(word):
+    """SongNames.canon: "ver" as "version", "inst" as "instrumental"."""
+    return VERSION_SAID.get(word, word)
 
 
-def consonants(text):
-    """SongNames.consonants: the consonants a name is said with, those that sound alike as one."""
-    said = "".join(c for c in text.lower() if "a" <= c <= "z")
-    for spelled, sound in ((r"th", "s"), (r"ph", "f"), (r"ck|qu?", "k"), (r"x", "ks"), (r"c(?=[eiy])", "s"), (r"c", "k"),
-                           (r"r(?![aeiouy])", ""), (r"l", "r"), (r"v", "b"), (r"z", "s"), (r"m(?=[bp])", "n")):
-        said = re.sub(spelled, sound, said)
-    kept = ""
-    for c in said:
-        if c not in "aeiouhwy" and not kept.endswith(c):
-            kept += c
-    return kept
+def version_tags(name):
+    """SongNames.versionTags: the parts of a name that say it's a version."""
+    return [tag for tag in TAG_EDGE.split(composed(name)) if latin_words(tag) & VERSION_SAID.keys() or any(mark in tag for mark in VERSION_WRITTEN)]
 
 
-def sounds_alike(latin_text, loanword, fewest=3):
-    """SongNames.soundsAlike: a name in katakana says one in Latin letters, by their consonants, one off from five on."""
-    if not all(c in KANA_SOUNDS or c.isspace() for c in loanword):
-        return False
-    said, written = consonants("".join(KANA_SOUNDS[c] for c in loanword if c in KANA_SOUNDS).replace("_", "")), consonants(latin_text)
-    if len(said) < fewest:
-        return False
-    if len(said) < 5:
-        return said == written
-    previous = list(range(len(written) + 1))
-    for i, a in enumerate(said):
-        row = [i + 1]
-        for j, b in enumerate(written):
-            row.append(min(previous[j + 1] + 1, row[j] + 1, previous[j] + (a != b)))
-        previous = row
-    return previous[-1] <= 1
+def in_katakana_says(run, tagged):
+    """SongNames.inKatakanaSays: the run is words in katakana, each one the song's own tags say."""
+    cut = [True] + [False] * len(run)
+    for end in range(1, len(run) + 1):
+        cut[end] = any(cut[start] and run[start:end] in KATAKANA_WORDS and all(canon(w) in tagged for w in latin_words(KATAKANA_WORDS[run[start:end]]))
+                       for start in range(end))
+    return cut[-1]
 
 
-def heard_in(titles):
-    """SongNames.saysAnotherVersionOf's heard: up to 3 words said together, as katakana runs them into one."""
-    heard = []
-    for title in titles:
-        folded = "".join(c for c in unicodedata.normalize("NFD", unicodedata.normalize("NFKC", title)) if not unicodedata.combining(c))
-        words = [w for w in re.split(r"[^a-z0-9]+", folded.lower()) if w]
-        heard += [" ".join(words[at:end]) for at in range(len(words)) for end in range(at + 1, min(len(words), at + 3) + 1)]
-    return heard
+def own_runs(text):
+    """SongNames.notOwnLetters split: each run of letters of a script but Latin."""
+    runs, run = [], ""
+    for c in text:
+        if c.isalpha() and "LATIN" not in unicodedata.name(c, ""):
+            run += c
+        else:
+            runs.append(run)
+            run = ""
+    return [r for r in runs + [run] if r]
 
 
-def all_said(tag, said, heard, written):
-    """SongNames.allSaid: a tag that says it's a version says nothing the song's names don't."""
-    if not all(VERSION_SAID.get(w, w) in said for w in latin_words(tag)):
+def all_said(tag, tagged, written):
+    """SongNames.allSaid: a tag that says it's a version says nothing the song's own tags don't, each katakana word exactly."""
+    if not all(canon(w) in tagged for w in latin_words(tag)):
         return False
     marked = {mark: means for mark, means in VERSION_WRITTEN.items() if mark in tag}
-    if any(means not in said and not any(normalize(mark) in w for w in written) for mark, means in marked.items()):
+    if any(means not in tagged and not any(normalize(mark) in w for w in written) for mark, means in marked.items()):
         return False
     for mark in marked:
         tag = tag.replace(mark, " ")
-    runs = re.findall(r"(?:(?!\d)(?!_)[^\W]|ー)+", tag)
-    runs = ["".join(c for c in run if "LATIN" not in unicodedata.name(c, "")) for run in runs]
-    return all(any(normalize(run) in w for w in written) or any(sounds_alike(s, run, 2) for s in heard) for run in runs if run)
+    return all(any(normalize(run) in w for w in written) or in_katakana_says(run, tagged) for run in own_runs(tag))
 
 
 def says_another_version_of(name, titles, artist):
     """SongNames.saysAnotherVersionOf: what all the song's names say together is its own, and a version tag is only
-    when all else it says is too."""
-    said = {VERSION_SAID.get(w, w) for t in titles for w in latin_words(t)}
+    when all else it says is what the song's own tags say."""
+    said = {canon(w) for t in titles for w in latin_words(t)}
+    tagged = set()
+    for t in titles:
+        bare_one = bare_title(t)
+        tagged |= latin_words(t[len(bare_one):] if t.startswith(bare_one) else t)
+        tagged |= set().union(*(latin_words(tag) for tag in version_tags(t)))
+    tagged = {canon(w) for w in tagged}
     written = [normalize(t) for t in titles]
-    versions = [tag for tag in TAG_EDGE.split(unicodedata.normalize("NFKC", name).lower())
-                if latin_words(tag) & VERSION_SAID.keys() or any(mark in tag for mark in VERSION_WRITTEN)]
-    if any(not all_said(tag, said, heard_in(titles), written) for tag in versions):
+    versions = version_tags(name)
+    if any(not all_said(tag, tagged, written) for tag in versions):
         return True
     own = said | latin_words(artist) | set().union(*(latin_words(tag) for tag in versions))
-    if any(VERSION_SAID.get(w, w) not in said for w in (latin_words(name) - own) & VERSION_WORDS):
+    if any(canon(w) not in said for w in (latin_words(name) - own) & VERSION_WORDS):
         return True
-    return any(mark_found(mark, name) and not any(mark_found(mark, t) for t in titles) and not mark_found(mark, artist) and not means & said
+    return any(mark_found(mark, name) and not any(mark_found(mark, t) for t in titles) and not mark_found(mark, artist) and not means & tagged
                for mark, means in VERSION_MARKS.items())
 
 

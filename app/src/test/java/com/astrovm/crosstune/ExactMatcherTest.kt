@@ -721,7 +721,7 @@ class ExactMatcherTest {
         // add the coroutine to the thread's name.
         val readOn = java.util.Collections.synchronizedList(mutableListOf<String>())
         val reader = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "reading") }
-        val read = { one: String, other: String -> readOn += Thread.currentThread().name.substringBefore(" @coroutine#"); SongNames.writtenAlike(one, other) }
+        val read = { one: String, other: String, longVowels: Boolean -> readOn += Thread.currentThread().name.substringBefore(" @coroutine#"); SongNames.writtenAlike(one, other, longVowels) }
         val found = try {
             runBlocking {
                 namesAndTabs(
@@ -767,15 +767,18 @@ class ExactMatcherTest {
             "残酷な天使のテーゼ (インスト)" to "Yoko Takahashi • 残酷な天使のテーゼ • 4:05",
             "残酷な天使のテーゼ (リミックス)" to "Yoko Takahashi • 残酷な天使のテーゼ • 4:05",
             "残酷的天使的命题 (纯音乐)" to "Yoko Takahashi • 残酷的天使的命题 • 4:05",
-            "잔혹한 천사의 테제 (반주)" to "Yoko Takahashi • 잔혹한 천사의 테제 • 4:05",
-            // Its album says so.
-            "残酷な天使のテーゼ" to "Yoko Takahashi • Karaoke Picks • 4:05"
+            "잔혹한 천사의 테제 (반주)" to "Yoko Takahashi • 잔혹한 천사의 테제 • 4:05"
         ).forEach { row ->
             val shown = mutableListOf<List<String>>()
             assertNull(row.first, findAngel(listOf(row), videos = listOf(bothWays(SongNames.bareTitle(row.first))), shown = shown))
             // Nor is it shown first to pick from.
             assertEquals(row.first, listOf("${row.first} | ${row.second}"), shown.single())
         }
+        // Only its album says so, which a compilation's says as often: it opens as main opened it, without asking.
+        val shown = mutableListOf<List<String>>()
+        val karaoke = "残酷な天使のテーゼ" to "Yoko Takahashi • Karaoke Picks • 4:05"
+        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(listOf(karaoke), videos = listOf(bothWays()), shown = shown, picked = NONE_PICKED))
+        assertEquals(emptyList<List<String>>(), shown)
     }
 
     @Test

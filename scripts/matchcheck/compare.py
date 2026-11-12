@@ -8,12 +8,12 @@ for as the app does when no store names it in its own script, as analyze.py does
 
 1. main: the first result by the artist with a letter past ASCII, within 3 s of a known length, opens.
 2. now, with ChatGPT: the fits are within 3 s, by the artist, and say no other version (analyze.py).
-   The one fit a video names both ways opens. Otherwise the fits go first in ChatGPT's pick ("pick").
-3. now, without ChatGPT, or when it can't say in time: as 2, and also the first fit, when all the
-   candidates (another version too) are one name; or, when a version was kept out, the first candidate,
-   as main had it, unless its own name says it's another version. Either only when it doesn't name
-   itself in Latin letters with no word of the song's name. Otherwise nothing opens, and the app offers
-   the link or a search.
+   The one fit a video names both ways opens. Otherwise main's row, then the fits, go first in ChatGPT's
+   pick ("pick"); main's row opens without asking when only its album kept it out.
+3. now, without ChatGPT, or when it can't say in time: as 2, and also main's row, when it's in another
+   script than Latin, its own name says no other version, and it doesn't name itself in Latin letters
+   with no word of the song's name; and when all the candidates are one name, or the fits are, or only its
+   album kept it out. Otherwise nothing opens, and the app offers the link or a search.
 
 "pick" is what ChatGPT answers, which this can't tell.
 """
@@ -31,33 +31,48 @@ MAIN_WINDOW_MS = 3_000
 NOW_WINDOW = analyze.window_ms("±3000 ms (now)")
 
 
+def opened_of(song, results, lengths):
+    """ExactMatcher.mainOpens: by the artist, as long, with a letter past ASCII; main opened the first."""
+    wanted = analyze.artists(song["artist"])
+    return [r for r in results if r["id"] and r["lengthMs"] is not None and any(c.isalpha() and ord(c) > 0x7f for c in r["name"]) and
+            any(abs(r["lengthMs"] - ms) <= MAIN_WINDOW_MS for ms, _ in lengths) and analyze.artists(r["details"][0]) & wanted]
+
+
 def main_rule(song, results, lengths):
     """ExactMatcher.isTheSongInAnotherScript on main: the first that fits opens."""
-    wanted = analyze.artists(song["artist"])
-    for r in results:
-        if r["id"] and r["lengthMs"] is not None and any(c.isalpha() and ord(c) > 0x7f for c in r["name"]) and \
-                any(abs(r["lengthMs"] - ms) <= MAIN_WINDOW_MS for ms, _ in lengths) and analyze.artists(r["details"][0]) & wanted:
-            return "open", r
-    return "nothing", None
+    opened = opened_of(song, results, lengths)
+    return ("open", opened[0]) if opened else ("nothing", None)
+
+
+def bare(row):
+    return analyze.normalize(analyze.bare_title(row["name"]))
 
 
 def now_rule(song, results, videos, lengths, chatgpt):
-    """ExactMatcher.inAnotherScript and picked, as now."""
-    candidates = analyze.candidates_of(song, results, lengths, NOW_WINDOW)
-    fits = analyze.fits_of(song, results, lengths, NOW_WINDOW)
-    named = [r for r in fits if analyze.named_both_ways(song, r, videos)]
+    """ExactMatcher.inAnotherScript, alone and picked, as now, with no store name in another script and no video that
+    names the song, which this doesn't model."""
+    opened = opened_of(song, results, lengths)
+    candidates = [r for r in opened if not analyze.latin(r["name"])]
+    unsaid = lambda name: not analyze.says_another_version_of(name, [song["title"]], song["artist"])  # noqa: E731
+    fits = [r for r in candidates if unsaid(" | ".join(filter(None, (r["name"], analyze.album_said(r, song)))))]
+    as_main = opened[0] if opened and opened[0] in candidates and unsaid(opened[0]["name"]) else None
+    other = list({r["id"]: r for r in fits}.values())
+    named = [r for r in other if analyze.named_both_ways(song, r, videos)]
     if len(named) == 1:
-        return "open", named[0]
-    maybe = named + [r for r in fits if r not in named]
-    # ExactMatcher.alone: the first that may be it, when all the candidates are one name; else, when a version was
-    # kept out, the first candidate, as main had it, unless its own name says it's another version.
-    alone = None
-    if len({analyze.normalize(analyze.bare_title(r["name"])) for r in candidates}) == 1 and maybe:
-        alone = maybe[0]
-    elif candidates and any(r["id"] not in {f["id"] for f in fits} for r in candidates) and \
-            not analyze.says_another_version_of(candidates[0]["name"], [song["title"]], song["artist"]):
-        alone = candidates[0]
-    if alone and not analyze.names_another(song, alone) and not chatgpt:
+        return "open", as_main if as_main and bare(as_main) == bare(named[0]) else named[0]
+    # Main's row first, unless its own name says it's another version: with no store name in another script, none is
+    # in a known script.
+    first = opened[:1] if opened and unsaid(opened[0]["name"]) else []
+    maybe = list({r["id"]: r for r in first + named + other}.values())
+    alone, kind = None, None
+    if as_main and not analyze.names_another(song, as_main):
+        if as_main not in fits:
+            alone, kind = as_main, "kept by album"
+        elif len({bare(r) for r in candidates}) == 1:
+            alone, kind = as_main, "one name"
+        elif len({bare(r) for r in fits}) == 1:
+            alone, kind = as_main, "one fit"
+    if alone and (kind == "kept by album" or not chatgpt):
         return "open", alone
     return ("pick", maybe[0]) if chatgpt and maybe else ("nothing", None)
 

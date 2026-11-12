@@ -76,8 +76,8 @@ internal class ExactMatcher(
     private val spotifyArtist: suspend (String) -> String? = { null },
     /** Where names are read, 桜 as さくら (see [SongNames.writtenAlike]): off the main thread, as the first read loads a dictionary. */
     private val readingDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Whether two names are one, written two ways: [SongNames.writtenAlike], which reads them. */
-    private val writtenAlike: (String, String) -> Boolean = SongNames::writtenAlike
+    /** Whether two names are one, written two ways, maybe with long vowels as one: [SongNames.writtenAlike], which reads them. */
+    private val writtenAlike: (String, String, Boolean) -> Boolean = SongNames::writtenAlike
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
@@ -693,14 +693,17 @@ internal class ExactMatcher(
         items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
         val inAnotherScript = withContext(readingDispatcher) { inAnotherScript(items.map(::row), names, videos.map(::row)) }
         inAnotherScript.song?.let { return Answer(watchUrl + it.id) }
-        // A video that names the song, but after the one song in another script that fits, as main had it: the
-        // artist's own song over someone's upload of it.
+        // A video that names the song, but after the one song in another script all of them are named, as main had
+        // it: the artist's own song over someone's upload of it. Where they're more names, the video is surer.
         val video = videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }
-        if (inAnotherScript.alone == null) video?.let { return Answer(watchUrl + it.id) }
-        // Last, the songs, then the videos, are picked from, each asked about apart: first the ones in
-        // another script that may be it, as nothing proved one is.
+        val alone = inAnotherScript.alone
+        if (alone?.kind != Lone.ONE_NAME) video?.let { return Answer(watchUrl + it.id) }
+        // Kept out by its album only, it's what main opened, without asking: see [Lone.KEPT_BY_ALBUM].
+        if (alone?.kind == Lone.KEPT_BY_ALBUM) return Answer(watchUrl + alone.row.id)
+        // Last, the songs, then the videos, are picked from, each asked about apart: first the one main opened,
+        // then the ones in another script that may be it, as nothing proved one is.
         val songs = (inAnotherScript.maybe + playable(items)).distinctBy { it.id }.take(PICK_FROM)
-        return Answer(null, ToPick(metadata, songs, playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs, inAnotherScript.alone, video))
+        return Answer(null, ToPick(metadata, songs, playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs, alone?.row, video))
     }
 
     /** The songs or videos among [items] that play. */
@@ -880,64 +883,104 @@ internal class ExactMatcher(
 
     /**
      * Of the song results in another script: the one that's the song, when something proves it, the ones that
-     * [maybe] are, and the one that opens without ChatGPT, [alone], when it doesn't name itself as another song: see
-     * [namesAnother] and [alone].
+     * [maybe] are, first the one main opened unless it's surely another, and the one that opens without ChatGPT,
+     * [alone]: see [alone].
      */
-    private class InAnotherScript(val song: Row?, val maybe: List<Row>, val alone: Row?)
+    private class InAnotherScript(val song: Row?, val maybe: List<Row>, val alone: Alone?)
+
+    /** The song result that opens when nothing else can say, as main opened it, and why: see [Lone]. */
+    private class Alone(val row: Row, val kind: Lone)
+
+    /** Why the first song result in another script opens with nothing to prove it, as main had it. */
+    private enum class Lone {
+        /** All those in another script are its name, another version of it too: "群青" on its single and its album. It goes before a video. */
+        ONE_NAME,
+
+        /** It's the one name that fits, but others are another version of another name: a video that names the song is surer. */
+        ONE_FIT,
+
+        /**
+         * Only its album says it's another version, and that says too little: "Live Best" is a compilation as often
+         * as a live album. It opens as main had it, unless a video names the song, without asking ChatGPT.
+         */
+        KEPT_BY_ALBUM
+    }
 
     /**
      * The song result named in a script the song's known names aren't ("残酷な天使のテーゼ - Zankoku na Tenshi no
      * Thesis" for "A Cruel Angel's Thesis"), which has no words to compare, as a name in Latin letters is compared by
-     * its words, so it's never here. Its artist is the song's, nothing
-     * in it or its album says it's another version, and it's within [SAME_SONG_LENGTH_MS] of a known recording
-     * of it. Being the one result that fits doesn't make it the song, as another of the artist's can be as long,
-     * so it's taken when a store names the song so, "残酷な天使のテーゼ (Director's Edit Version)" naming
-     * "残酷な天使のテーゼ", also written otherwise, 小幸运 for 小幸運 or 桜 for さくら (see [SongNames.writtenAlike]),
-     * or when it's the one a video names both ways (see [namedBothWays]). Otherwise those in another script
-     * [InAnotherScript.maybe] are it, to be picked from first. Accented letters are Latin ones too: "Canción Falsa"
-     * is compared by its words.
+     * its words, so it's never here. Its artist is the song's, nothing in it or its album says it's another version,
+     * and it's within [SAME_SONG_LENGTH_MS] of a known recording of it. Being the one result that fits doesn't make
+     * it the song, as another of the artist's can be as long, so it's taken when a store names the song so,
+     * "残酷な天使のテーゼ (Director's Edit Version)" naming "残酷な天使のテーゼ", also written otherwise, 小幸运 for
+     * 小幸運 or 桜 for さくら (see [SongNames.writtenAlike]), or when it's the one a video names both ways (see
+     * [namedBothWays]). Otherwise those in another script [InAnotherScript.maybe] are it, to be picked from first,
+     * one that reads as the name only with a long vowel folded, ノー for 脳, before the rest. Accented letters are
+     * Latin ones too: "Canción Falsa" is compared by its words.
      */
     private fun inAnotherScript(rows: List<Row>, names: Names, videos: List<Row>): InAnotherScript {
         val known = names.titles.flatMap(::scriptsOf).toSet()
         val wanted = names.artists.flatMap(SongNames::artists).toSet()
         val credited = names.artists.joinToString(" ")
         val albums = names.albums.map(SongNames::normalize).toSet()
-        // By the artist, as long, and with a letter in another script: what main opened the first of.
-        val candidates = rows.filter { row ->
-            val length = row.lengthMs
-            row.id != null && length != null && names.lengthsMs.any { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS } &&
-                SongNames.artists(row.details.first()).any(wanted::contains) && scriptsOf(row.name).isNotEmpty()
-        }
+        val opened = rows.filter { mainOpens(it, names, wanted) }
+        // Those with a letter in another script than Latin.
+        val candidates = opened.filter { scriptsOf(it.name).isNotEmpty() }
         // Its album says what it is too, "Karaoke Picks", but for the song's own album: "& Instrumental" isn't this song's.
         val fits = candidates.filter { row ->
             val album = row.details.getOrNull(1)?.takeIf { SongNames.normalize(it) !in albums }
             !SongNames.saysAnotherVersionOf(listOfNotNull(row.name, album).joinToString(" | "), names.titles, credited)
         }
+        // The first main opened, when it's this song or as likely as any: not another version by its own name.
+        val asMain = opened.firstOrNull()?.takeIf { it in candidates && !SongNames.saysAnotherVersionOf(it.name, names.titles, credited) }
         // Named as a store names it in that script, without what the store adds in brackets: a name that's Latin
         // without them, "Fake Song (ドラマ「偽物」主題歌)", has no other way to be written.
         val own = names.titles.map { SongNames.bareTitle(SongNames.withoutEditionTag(it)) }.filter { scriptsOf(it).isNotEmpty() }
-        fits.firstOrNull { row -> SongNames.titleNames(row.name).any { name -> own.any { writtenAlike(it, SongNames.bareTitle(name)) } } }
-            ?.let { return InAnotherScript(it, emptyList(), null) }
+        fun ownName(row: Row, longVowels: Boolean) = SongNames.titleNames(row.name).any { name -> own.any { writtenAlike(it, SongNames.bareTitle(name), longVowels) } }
         // In a script one of its known names is in, it's another song, as its words are another's.
         val inOther = candidates.filter { row -> (scriptsOf(row.name) - known).isNotEmpty() }
         val other = fits.filter { it in inOther }.distinctBy { it.id }
         val named = other.filter { namedBothWays(it, names, known, videos) }
-        val maybe = named + (other - named.toSet())
+        val proven = fits.firstOrNull { ownName(it, longVowels = false) } ?: named.singleOrNull()
+        // Proven by its name, the one main opened, named so too, is it as surely: "偽の歌" on "Live Best" as on "Budokan 1985".
+        proven?.let { return InAnotherScript(asMain?.takeIf { bare(it) == bare(proven) } ?: proven, emptyList(), null) }
+        // Read as its name only with a long vowel folded, it may be it, as in another script: ノー for 脳.
+        val read = fits.filter { ownName(it, longVowels = true) }
+        // What main opened goes first, so ChatGPT is never shown a likelier one first than main opened: unless its own
+        // name says it's another version, or it's in a known name's script and named otherwise, so another song.
+        val first = opened.firstOrNull()?.takeIf { row ->
+            !SongNames.saysAnotherVersionOf(row.name, names.titles, credited) && (row !in candidates || row in inOther || ownName(row, longVowels = true))
+        }
+        val maybe = (listOfNotNull(first) + read + named + other).distinctBy { it.id }
+        // Or named so, and kept out by its album only.
+        val lone = (read + inOther + listOfNotNull(asMain?.takeIf { ownName(it, longVowels = true) })).distinct()
         val said = names.titles.flatMap(SongNames::words).toSet()
-        return InAnotherScript(named.singleOrNull(), maybe, alone(candidates, inOther, fits, maybe, names.titles, credited)?.takeIf { !namesAnother(it, said) })
+        return InAnotherScript(null, maybe, alone(asMain?.takeIf { it in lone && !namesAnother(it, said) }, lone, fits))
     }
 
+    /** Whether main opened [row], the first that does: by the artist, as long, with a letter past basic Latin. */
+    private fun mainOpens(row: Row, names: Names, wanted: Set<String>): Boolean {
+        val length = row.lengthMs ?: return false
+        return row.id != null && names.lengthsMs.any { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS } &&
+            SongNames.artists(row.details.first()).any(wanted::contains) &&
+            row.name.any { it.isLetter() && Character.UnicodeBlock.of(it) != Character.UnicodeBlock.BASIC_LATIN }
+    }
+
+    /** [row]'s name without what it adds in brackets, as compared. */
+    private fun bare(row: Row) = SongNames.normalize(SongNames.bareTitle(row.name))
+
     /**
-     * The one song in another script that fits, as nothing else can say without ChatGPT: the first of those that [maybe]
-     * are, when all those [inOther] scripts are one name, another version of it too, as "群青" on its single and its
-     * album. A version kept out of the [fits], by its name or its album's, leaves fewer, which says less, so then it's the first of
-     * all the [candidates], as main had it, "偽の歌" on a compilation called "Live Best", unless its own name says
-     * it's another version, "偽の歌 (TV Size)".
+     * The first song result, as main opened it, [asMain], when nothing else can say: when all those in another
+     * script, or read as its name with a long vowel folded, [lone], are its name, another version too, as "群青" on its
+     * single and its album; when it's the one name of those that [fits], the rest other versions; or when only its
+     * album kept it out of them, as "偽の歌" on a compilation called "Live Best". Never one main didn't open: what's
+     * first by more names is no likelier it.
      */
-    private fun alone(candidates: List<Row>, inOther: List<Row>, fits: List<Row>, maybe: List<Row>, titles: Set<String>, credited: String): Row? {
-        if (inOther.distinctBy { SongNames.normalize(SongNames.bareTitle(it.name)) }.size == 1) maybe.firstOrNull()?.let { return it }
-        val first = candidates.firstOrNull()?.takeIf { it in inOther } ?: return null
-        return first.takeIf { inOther.any { it !in fits } && !SongNames.saysAnotherVersionOf(it.name, titles, credited) }
+    private fun alone(asMain: Row?, lone: List<Row>, fits: List<Row>): Alone? {
+        asMain ?: return null
+        if (asMain !in fits) return Alone(asMain, Lone.KEPT_BY_ALBUM)
+        if (lone.distinctBy(::bare).size == 1) return Alone(asMain, Lone.ONE_NAME)
+        return Alone(asMain, Lone.ONE_FIT).takeIf { fits.filter { it in lone }.distinctBy(::bare).size == 1 }
     }
 
     /**

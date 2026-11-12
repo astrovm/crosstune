@@ -52,9 +52,12 @@ def right_ids(song, results, videos):
     native = {analyze.bare(n["title"]) for n in song["native"]} | {analyze.normalize(n["title"]) for n in song["native"]}
     wanted = analyze.artists(song["artist"]) | {a for n in song["native"] for a in analyze.artists(n["artist"])}
 
+    def by_eye(row):
+        return (song["artist"], row["name"]) in analyze.RIGHT_BY_EYE
+
     def named(row):
         parts = analyze.title_names(row["name"]) + [p for p in QUOTED.split(row["name"]) if p.strip()]
-        return (song["artist"], row["name"]) in analyze.RIGHT_BY_EYE or any(
+        return any(
             analyze.bare(n) in native or analyze.normalize(n) in native or analyze.normalize(n) == analyze.normalize(song["title"])
             or analyze.bare(n) == analyze.bare(song["title"]) for n in parts)
 
@@ -64,7 +67,8 @@ def right_ids(song, results, videos):
         titles = [song["title"]] + list({n["store"]: n["title"] for n in reversed(song["native"])}.values())
         return analyze.says_another_version_of(row["name"], titles, song["artist"])
 
-    ids = {r["id"] for r in results if r["id"] and named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r)}
+    # Checked by eye, it's the song, whatever its name says: "(Directors Edit Version)" for "(Director's Edit Version)".
+    ids = {r["id"] for r in results if r["id"] and (by_eye(r) or named(r) and analyze.artists(r["details"][0]) & wanted and not says_another(r))}
     for v in videos:
         if not v["id"] or not named(v) or says_another(v):
             continue

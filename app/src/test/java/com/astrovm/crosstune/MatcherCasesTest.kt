@@ -1,5 +1,6 @@
 package com.astrovm.crosstune
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,12 +22,15 @@ class MatcherCasesTest {
 
     private val checked: (Case) -> String? = Case::now
 
+    /** Set on main, where [everyCellOfTheMatrixOpensNothingWrongThatMainDoesnt] writes what main opens, to be kept as [MAIN_MATRIX]. */
+    private val onMain = false
+
     /**
      * Fake Band's "Fake Song", 1:30, on "Fake Album", looked for on YouTube Music, where its search finds [songs]
      * and [videos], each "name | details". Apple has it, as long as [lengthMs], and names it [japan] in Japan's
      * store and [korea] in Korea's; with no [lengthMs], Deezer has it, [deezerSeconds] long. ChatGPT answers
-     * [picked]: null when it can't say, as without it. What opens is "song0" for the first song, "video1" for
-     * the second video, or null.
+     * [picked]: null when it can't say, as without it, or too late when [slow]. What opens is "song0" for the
+     * first song, "video1" for the second video, or null.
      */
     data class Case(
         val what: String,
@@ -41,7 +45,9 @@ class MatcherCasesTest {
         val korea: Pair<String, String>? = null,
         val songs: List<String> = emptyList(),
         val videos: List<String> = emptyList(),
-        val picked: Int? = null
+        val picked: Int? = null,
+        val slow: Boolean = false,
+        val chooses: ((List<String>) -> Int?)? = null
     )
 
     private fun row(name: String, album: String = "Fake Album", artist: String = "Fake Band", length: String = "1:30") = "$name | $artist • $album • $length"
@@ -49,6 +55,39 @@ class MatcherCasesTest {
     private fun video(name: String, length: String = "1:30", channel: String = "Fake Band") = "$name | $channel • 1M views • $length"
 
     private fun japanese(title: String) = title to "Fake Band"
+
+    // The fourth review, of 637db13e.
+    private val fourth = listOf(
+        // 1. All the rows one name, the first kept out by its album only: it opens, as main had it, not the live one.
+        Case("1 live best", "song0", songs = listOf(row("偽の歌", "Live Best"), row("偽の歌 (ライヴ)", "Another Album"))),
+        Case("1 live best slow", "song0", songs = listOf(row("偽の歌", "Live Best"), row("偽の歌 (ライヴ)", "Another Album")), picked = 1, slow = true),
+        Case("1 karaoke hits", "song0", songs = listOf(row("偽の歌", "Karaoke Hits"), row("偽の歌 (ライヴ)", "Another Album"))),
+        // 3. The row main opened is in Latin letters past ASCII: nothing in another script is "the first, as main had it".
+        Case("3 fake søng", "song0", now = null, songs = listOf(row("Fake Søng"), row("別の歌"), row("偽の歌 (Live)"))),
+        // 4. ライヴ, カヴァー: another version, where main opened it.
+        Case("4 ライヴ", "song0", now = null, songs = listOf(row("偽の歌 (ライヴ)"))),
+        Case("4 1999 ライヴ", "song0", now = null, title = "1999", songs = listOf(row("1999 (ライヴ)"))),
+        Case("4 カヴァー", "song0", now = null, songs = listOf(row("偽の歌 (カヴァー)"))),
+        // 5. The first kept out by its album only, with ChatGPT: it opens, as main, whatever ChatGPT would say.
+        Case("5 none", "song0", songs = listOf(row("偽の歌", "Live Best"), row("別の歌", "Another Album")), picked = NONE_PICKED),
+        Case("5 first shown", "song0", songs = listOf(row("偽の歌", "Live Best"), row("別の歌", "Another Album")), picked = 0),
+        // 7. Two names, one kept out: the artist's own video that names the song, not 別の歌.
+        Case("7 own video", "song0", now = "video0", songs = listOf(row("別の歌"), row("偽の歌 (Live)")), videos = listOf(video("Fake Song")))
+    ) +
+        // 2. A katakana version word near a word of the title, by chance: the first, as main had it, never the second.
+        listOf(
+            "Love Song" to "ライヴ", "Stay" to "ショート", "Sorry" to "スロー", "Wrong Way" to "ロング", "Remix Me" to "リミックス",
+            "Adam" to "デモ", "Free" to "フル", "Speed Up" to "スピードアップ"
+        ).map { (title, word) ->
+            Case("2 $word", "song0", title = "$title (Single Version)", songs = listOf(row("偽の歌", "Live Best"), row("偽の歌 (${word}バージョン)", "Another Album")))
+        } +
+        // 6. Read alike only with a long vowel folded: ChatGPT is asked, as d84db22d had it, and says none.
+        listOf("脳" to "ノー", "賞" to "ショー", "王" to "オー", "夕" to "ユー", "英" to "エー", "頬" to "ほう", "氷" to "こうり", "通り" to "とうり", "大きい" to "おうきい").flatMap { (kanji, kana) ->
+            listOf(
+                Case("6 $kanji $kana none", "song0", now = null, title = "Fake Song", japan = japanese(kanji), songs = listOf(row(kana)), picked = NONE_PICKED),
+                Case("6 $kanji $kana alone", "song0", title = "Fake Song", japan = japanese(kanji), songs = listOf(row(kana)))
+            )
+        }
 
     // The third review, of d84db22d: PR comment 6833825483.
     private val third = listOf(
@@ -149,7 +188,7 @@ class MatcherCasesTest {
 
     @Test
     fun everyInputTheReviewsTriedOpensWhatMainDidOrBetter() {
-        val cases = third + second + first + before
+        val cases = fourth + third + second + first + before
         val wrong = cases.map { it to find(it) }.filter { (case, found) -> found != checked(case) }
             .map { (case, found) -> "${case.what}: ${checked(case)}, not $found" }
         assertEquals(emptyList<String>(), wrong)
@@ -168,6 +207,84 @@ class MatcherCasesTest {
         for (name in listOf("Fake Song (インストール)", "Fake Song (ATV Sizes)", "Fake Song (ライフ)")) {
             assertEquals(name, false, SongNames.saysAnotherVersion(name, "Fake Song", "Fake Band"))
         }
+    }
+
+    /** A song looked for in the matrix: its [title], its name in Japan's store, the [version] it is, and its name in Japanese. */
+    private class Song(val key: String, val title: String, val japan: String?, val version: String, val base: String)
+
+    /** A row of the matrix: what it's named, on what album, and the version it is, [OTHER] for another song. */
+    private class Kind(val key: String, val name: String, val album: String, val version: String)
+
+    private val songsOfTheMatrix = listOf(
+        Song("plain", "Fake Song", null, "", "偽の歌"),
+        Song("japan", "Fake Song", "偽の歌", "", "偽の歌"),
+        Song("single", "Love Song (Single Version)", null, "single", "偽の歌"),
+        Song("speedup", "Fake Song (Speed-Up Version)", null, "speed up", "偽の歌"),
+        Song("brain", "Brain", "脳", "", "脳")
+    )
+
+    private fun kinds(song: Song): List<Kind> = listOf(
+        Kind("fit", song.base, "Fake Album", ""),
+        Kind("single", "${song.base} (シングル・バージョン)", "Fake Album", "single"),
+        Kind("best", song.base, "Live Best", ""),
+        Kind("budokan", song.base, "Live at Budokan", "live"),
+        Kind("live", "${song.base} (ライヴ)", "Another Album", "live"),
+        Kind("liveversion", "${song.base} (ライヴバージョン)", "Another Album", "live"),
+        Kind("short", "${song.base} (ショートバージョン)", "Another Album", "short"),
+        Kind("speedup", "${song.base} (スピードアップバージョン)", "Another Album", "speed up"),
+        Kind("tvsize", "${song.base} (TV Size)", "Another Album", "tv"),
+        Kind("other", "別の歌", "Another Album", OTHER),
+        // In Latin letters past ASCII, which main took for another script.
+        Kind("latin", "Fake Søng", "Fake Album", if (song.title == "Fake Song") "" else OTHER)
+    ) + listOfNotNull(Kind("homophone", "ノー", "Fake Album", OTHER).takeIf { song.japan == "脳" })
+
+    /** Whether a row of [kind] is [song]: the same version, or the plain one of its single. */
+    private fun isIt(kind: Kind, song: Song) = kind.version != OTHER && (kind.version == song.version || kind.version == "" && song.version == "single")
+
+    /**
+     * Every song of the matrix, with two rows, each of every kind, or one, with the artist's own video or none,
+     * and ChatGPT signed out (as when it can't say), picking the right row it's shown, picking the first, saying
+     * none, or too slow: nothing opens wrong where main opened nothing or the right one. What main opened is
+     * [MAIN_MATRIX], written by this test on main (see [onMain]).
+     */
+    @Test
+    fun everyCellOfTheMatrixOpensNothingWrongThatMainDoesnt() {
+        val opened = mutableListOf<String>()
+        val main = if (onMain) emptyMap() else requireNotNull(javaClass.getResource(MAIN_MATRIX)).readText().lines().filter { it.isNotBlank() }
+            .associate { line -> line.substringBefore("\t") to line.substringAfter("\t").split(" ") }
+        val worse = mutableListOf<String>()
+        val counts = sortedMapOf<String, Int>()
+        for (song in songsOfTheMatrix) {
+            val kinds = kinds(song)
+            for (first in kinds) for (second in kinds + null) for (withVideo in listOf(false, true)) {
+                val rows = listOfNotNull(first, second)
+                val video = song.title.takeIf { withVideo }
+                val right = rows.filter { isIt(it, song) }.map { row(it.name, it.album) } + listOfNotNull(video?.let { video(it) })
+                val case = Case("", null, title = song.title, japan = song.japan?.let(::japanese), songs = rows.map { row(it.name, it.album) }, videos = listOfNotNull(video?.let { video(it) }))
+                val modes = listOf(
+                    case, case.copy(chooses = { shown -> shown.indexOfFirst { it in right } }), case.copy(picked = 0),
+                    case.copy(picked = NONE_PICKED), case.copy(picked = 0, slow = true)
+                )
+                val key = listOf(song.key, first.key, second?.key ?: "-", if (withVideo) "video" else "-").joinToString(" ")
+                val found = modes.map { find(it) ?: "-" }
+                opened += "$key\t${found.joinToString(" ")}"
+                if (onMain) continue
+                val was = requireNotNull(main[key]) { key }
+                fun verdict(id: String) = when {
+                    id == "-" -> "nothing"
+                    id.startsWith("video") -> "right"
+                    isIt(rows[id.removePrefix("song").toInt()], song) -> "right"
+                    else -> "wrong"
+                }
+                found.zip(was).forEachIndexed { mode, (now, then) ->
+                    counts.merge("${MODES[mode]}: ${verdict(then)} -> ${verdict(now)}", 1, Int::plus)
+                    if (verdict(now) == "wrong" && verdict(then) != "wrong") worse += "$key ${MODES[mode]}: $now, main $then"
+                }
+            }
+        }
+        java.io.File(if (onMain) "build/matcher-matrix-main.tsv" else "build/matcher-matrix-now.tsv").writeText(opened.joinToString("\n", postfix = "\n"))
+        println("Main -> now, cells:\n" + counts.entries.joinToString("\n"))
+        assertEquals(emptyList<String>(), worse)
     }
 
     private fun find(case: Case): String? {
@@ -189,7 +306,11 @@ class MatcherCasesTest {
                 }
             }
         }
-        val matcher = ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> case.picked })
+        val pick: suspend (MusicMetadata, List<String>, Boolean) -> Int? = { _, rows, _ ->
+            if (case.slow) delay(LATE_MS)
+            case.chooses?.invoke(rows) ?: case.picked
+        }
+        val matcher = ExactMatcher(fake.client(), "AR", pick = pick, pickTimeoutMs = if (case.slow) SLOW_PICK_MS else PICK_MS)
         val url = runBlocking { matcher.find(MusicService.YOUTUBE_MUSIC, MusicMetadata(case.title, case.artist)) }
         return url?.substringAfter("v=")?.trimEnd('x')
     }
@@ -215,5 +336,11 @@ class MatcherCasesTest {
 
     private companion object {
         const val VIDEOS = "EgWKAQIQAWoKEAoQAxAEEAkQBQ=="
+        const val OTHER = "another song"
+        val MODES = listOf("signed out", "picks the right one", "picks the first", "says none", "too slow")
+        const val PICK_MS = 1_000L
+        const val SLOW_PICK_MS = 50L
+        const val MAIN_MATRIX = "/matcher-matrix-main.tsv"
+        const val LATE_MS = 60_000L
     }
 }
