@@ -2318,6 +2318,15 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun anExactRecordingsOwnTimedLyricsAreItsWordsWhateverLrclibMarks() {
+        // Timed for this very video, they're sung in it, so LRCLIB's marks hold nothing back. In capitals, the other
+        // copies are waited for, for their case, so their marks are seen.
+        everywhere("[${instrumentalCopy()},${instrumentalCopy()}]", youTubeMusicPage("OWN FIRST LINE" to 12_000, "OWN SECOND LINE" to 15_500))
+        val known = song.copy(url = "https://music.youtube.com/watch?v=abcdefghijk")
+        assertEquals("own first line\nown second line", (runBlocking { withYouTubeMusic().lyricsOf(known) } as? Lyrics.Found)?.words?.lowercase())
+    }
+
+    @Test
     fun anExactRecordingsOwnTimedLyricsAreShownWithoutWaitingForTheOthers() {
         everywhere("[$timedOnLrclib]", youTubeMusicPage("Own first" to 12_000, "Own second" to 15_500))
         val answers = fake.handler
@@ -2608,6 +2617,21 @@ class LyricsFinderTest {
         val again = runBlocking { LyricsFinder(fake.client(), "2.3.3", busyPauseMs = 0, cache = LookupCache(file, Dispatchers.Unconfined)).firstLook(remix) }
         assertEquals(LyricsFinder.FirstLook(better, final = true), again)
         file.delete()
+    }
+
+    @Test
+    fun wordsHeldBackForLrclibsMarksAreTimedAsShownWordsAre() {
+        val copies = arrayOf(
+            lasting(answer("Asphalt Lady", "Sugiyama Kiyotaka & Omega Tribe", "", synced = romaji), 309.0),
+            lasting(answer("ASPHALT LADY", "S.Kiyotaka & Omega Tribe", "", synced = shifted(romaji, 600)), 312.0)
+        )
+        remixTimedEarly(*copies, storeSeconds = 318.483)
+        val held = Lyrics.Found(SyncedLyrics.parse(early).joinToString("\n") { it.text }, SyncedLyrics.parse(early), source = LyricsFinder.LRCLIB)
+        // They show once a voice is heard, or where none can be, so they're timed as well as words shown at once.
+        val better = runBlocking { finder().retimed(remix, Lyrics.MarkedInstrumental(held)) }
+        val lines = (better as? Lyrics.MarkedInstrumental)?.words?.lines.orEmpty()
+        assertEquals(sungAt.size, lines.size)
+        lines.forEachIndexed { index, line -> assertTrue("${line.text} at ${line.timeMs}", abs(line.timeMs - sungAt[index]) <= 2_500) }
     }
 
     @Test
