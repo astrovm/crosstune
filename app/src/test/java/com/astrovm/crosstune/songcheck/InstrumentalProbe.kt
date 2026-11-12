@@ -73,19 +73,8 @@ class InstrumentalProbe {
             report.put("error", "lyrics: $e")
             null
         }
-        val titled = SongNames.saysInstrumental(metadata.title, metadata.artist)
-        report.put("saysInstrumental", titled)
+        report.put("saysInstrumental", SongNames.saysInstrumental(metadata.title, metadata.artist))
         report.put("lyrics", described(found))
-        // What a voice heard in it would show: its words looked up with its title not taken at its word.
-        if (titled) {
-            val heard = try {
-                lyrics.firstLook(metadata, trustTitle = false).let { first -> if (first.final) first.lyrics else lyrics.retimed(metadata, first.lyrics) }
-            } catch (e: Exception) {
-                report.put("error", "voice heard: $e")
-                null
-            }
-            report.put("afterVoice", described(heard))
-        }
         val answers = synchronized(heard) { heard.toList() }
         report.put("lrclib", JSONArray(answers.filter { it.first.host == "lrclib.net" }.map { (url, said) -> lrclibSearch(url, JSONObject(said).getString("body"), metadata.lengthMs) }))
         report.put("youtubeMusic", JSONArray(answers.filter { it.first.host == "music.youtube.com" }.map { (url, said) -> youTubeMusic(url, JSONObject(said)) }))
@@ -93,11 +82,11 @@ class InstrumentalProbe {
         return report
     }
 
-    /** What [found] says, without its words: for words held back by LRCLIB's marks, those too, as `heldBack`. */
+    /** What [found] says, without its words: for words LRCLIB's marks or the title say no one sings, `marked`. */
     private fun described(found: LyricsFinder.Lyrics?): JSONObject = when (found) {
         is LyricsFinder.Lyrics.Found -> JSONObject().put("kind", "found").put("source", found.source).put("lengthMs", found.lengthMs)
             .put("wordLines", found.words.lines().count { it.isNotBlank() }).put("timedLines", found.lines.count { it.text.isNotBlank() })
-        is LyricsFinder.Lyrics.MarkedInstrumental -> JSONObject().put("kind", "markedinstrumental").put("heldBack", found.words?.let(::described))
+            .put("marked", found.markedInstrumental)
         null -> JSONObject().put("kind", "error")
         else -> JSONObject().put("kind", found::class.simpleName.orEmpty().lowercase())
     }

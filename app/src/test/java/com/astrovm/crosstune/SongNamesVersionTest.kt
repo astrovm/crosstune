@@ -34,7 +34,9 @@ class SongNamesVersionTest {
 
     @Test
     fun anAlbumOfInstrumentalsSaysSo() {
-        for (album in listOf("Album (Instrumentals)", "Album (Instrumental Version)", "Album - Instrumental", "Album (Off Vocal Ver.)", "专辑 (伴奏版)", "Ａｌｂｕｍ （Ｉｎｓｔｒｕｍｅｎｔａｌｓ）")) {
+        for (album in listOf("Album (Instrumentals)", "Album (Instrumental Version)", "Album - Instrumental", "Album (Off Vocal Ver.)", "专辑 (伴奏版)", "Ａｌｂｕｍ （Ｉｎｓｔｒｕｍｅｎｔａｌｓ）",
+            // Review of PR #919: short forms as a whole tag, and tracks to sing over.
+            "Album (Inst.)", "Album (MR)", "Album (Karaoke Version)", "Album (Backing Tracks)")) {
             assertTrue(album, SongNames.albumOfInstrumentals(album))
         }
         // "Inst." and "MR" are short for other words too, and a word holding "instrumental" is another word.

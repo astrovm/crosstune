@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.yield
 import org.json.JSONObject
 import org.junit.After
@@ -49,6 +50,11 @@ class UnsungTest {
     private val playback = FakePlayback().apply { access = true }
     private val singing = Hearing()
     private val realSinging = MainActivity.singingFactory
+    private val realPhone = MainActivity.phoneFactory
+
+    /** What the phone is: a TV, or else what Android says. */
+    @Volatile
+    private var phone: Phone? = null
     private val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** The genre the store files the song under, or null when it doesn't list it. */
@@ -78,8 +84,8 @@ class UnsungTest {
         MainActivity.listenAlongPauseMs = 0
         MainActivity.quietPauseMs = 0
         MainActivity.singingFactory = { _, _ -> singing }
-        prefs().edit().clear().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
-            .putBoolean("play_right_away", false).putBoolean("visuals", false).putBoolean("auto_reports", true).commit()
+        MainActivity.phoneFactory = { phone ?: realPhone(it) }
+        freshSettings()
         File(app.cacheDir, "lookups.json").delete()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
@@ -88,7 +94,7 @@ class UnsungTest {
         fake.handler = { request ->
             when (request.url.host) {
                 "report.crosstune.cc" -> FakeSpotify.html(request, "", code = 204)
-                "lrclib.net" -> FakeSpotify.html(request, lrclib)
+                "lrclib.net" -> if (offline) throw java.io.IOException("offline") else FakeSpotify.html(request, lrclib)
                 "itunes.apple.com" -> FakeSpotify.html(request, genre?.let { """{"results":[{"trackId":7,"trackName":"$title","artistName":"Band","primaryGenreName":"$it","trackTimeMillis":200000}]}""" } ?: """{"results":[]}""")
                 else -> FakeSpotify.html(request, """{"title":"$title","author_name":"Band"}""")
             }
@@ -112,9 +118,16 @@ class UnsungTest {
         MainActivity.listenAlongPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.quietPauseMs = MainViewModel.LISTEN_ALONG_PAUSE_MS
         MainActivity.singingFactory = realSinging
+        MainActivity.phoneFactory = realPhone
     }
 
     private fun prefs() = app.getSharedPreferences(MainViewModel.PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    /** Set up, with nothing opened before. */
+    private fun freshSettings() {
+        prefs().edit().clear().putBoolean("setup_complete", true).putString("default_target", "YOUTUBE_MUSIC").putBoolean("links_in_crosstune", false)
+            .putBoolean("play_right_away", false).putBoolean("visuals", false).putBoolean("auto_reports", true).commit()
+    }
 
     private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
 
@@ -137,13 +150,7 @@ class UnsungTest {
     /** The song's words looked for while it plays, till [done]. */
     private fun openLyrics(done: () -> Boolean) {
         plays()
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
-        controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
-        composeRule.waitForIdle()
-        val lyrics = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
-        waitUntil { composeRule.onAllNodes(lyrics).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.onAllNodes(lyrics)[0].performScrollTo().performClick()
-        waitUntil { done() && !model().findingWords }
+        openAnywhere(done)
     }
 
     /** Time passes, [ms] of it. */
@@ -410,23 +417,164 @@ class UnsungTest {
     }
 
     @Test
-    fun aSongWhoseTitleSaysNoOneSingsInItIsAnInstrumentalWhereNoVoiceCanBeHeard() {
+    fun aSongWhoseTitleSaysNoOneSingsInItShowsItsWordsWhereNoVoiceCanBeHeard() {
         title = "Demo (Instrumental)"
         lrclib = """[{"trackName":"$title","artistName":"Band","plainLyrics":"Hold the light"}]"""
         shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
-        openLyrics(shown = R.string.lyrics_instrumental)
-        passes(MainViewModel.VOICE_PAUSE_MS)
+        openLyrics(::showsWords)
         assertEquals(0, singing.hears)
         // Nor without the speech model.
         controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
         singing.missing = true
+        openLyrics(::showsWords)
+        assertEquals(1, singing.hears)
+        assertFalse(shows(R.string.lyrics_instrumental))
+        // Shown untimed, they're reported so, as on main, and not as missing.
+        assertFalse("no_lyrics" in problems())
+    }
+
+    @Test
+    fun wordsHeldForAMarkShowWhenTheListenHearsNothing() {
+        // Review of PR #919: the model hears nothing, four times, with a model and sound. On main the words show at once.
+        markedOnLrclibWithWords()
+        singing.answers = listOf(null)
+        openLyrics(::showsWords)
+        assertEquals(1, singing.hears)
+        assertFalse(shows(R.string.lyrics_instrumental))
+        passes(MainViewModel.HELD_MS)
+        assertTrue(showsWords())
+        assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun wordsHeldForAMarkShowOnceAListenTakesLongerThanOneDoes() {
+        // Paused as it's heard, and not played again: no listen settles it, so the words show once one would have.
+        markedOnLrclibWithWords()
+        singing.answers = listOf(music)
+        singing.before = { playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true) }
         openLyrics(shown = R.string.lyrics_instrumental)
         waitUntil { singing.hears == 1 }
-        passes(MainViewModel.VOICE_PAUSE_MS)
-        assertTrue(shows(R.string.lyrics_instrumental))
+        passes(MainViewModel.HELD_MS - 1_000)
         assertFalse(showsWords())
+        passes(1_000)
+        waitUntil { showsWords() }
+        assertEquals(1, singing.hears)
+        // Nor does a listen that never ends hide them.
+        controller!!.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        singing.reset()
+        singing.hang = true
+        openLyrics(shown = R.string.lyrics_instrumental)
+        passes(MainViewModel.HELD_MS)
+        waitUntil { showsWords() }
+        assertFalse(shows(R.string.lyrics_instrumental))
         assertEquals(emptyList<String>(), problems())
+    }
+
+    @Test
+    fun thePlayersLineShowsWordsAMarkHolds() {
+        // Review of PR #919: the player opened on a song LRCLIB marks, with words found, has its line under it, as on main.
+        MainActivity.lookAheadLyrics = true
+        markedOnLrclibWithWords()
+        plays()
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
+        waitUntil { model().uiState.result?.title == title }
+        composeRule.runOnIdle { model().playResult() }
+        waitUntil { model().uiState.player?.lines?.isNotEmpty() == true }
+        assertEquals("Hold the light", model().uiState.player?.lines?.first()?.text)
+    }
+
+    /** How a listen for a voice ends, set up on the fake before the words open. */
+    private enum class Outcome(val setUp: UnsungTest.() -> Unit) {
+        VOICE({ singing.answers = listOf(music, voice) }),
+        NO_VOICE({ singing.answers = listOf(music) }),
+        NOTHING_HEARD({ singing.answers = listOf(null) }),
+        NO_MODEL({ singing.missing = true }),
+        NO_SOUND({ singing.noSound = true }),
+        NO_MICROPHONE({ shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO) }),
+        STOPPED({ singing.before = { playback.playing.value = Following(PlaybackClock(0, SystemClock.elapsedRealtime(), playing = false), "YouTube Music", canSeek = true) } }),
+        NEVER_ENDS({ singing.hang = true })
+    }
+
+    /** Where the song plays, set up before the words open. */
+    private enum class Place(val setUp: UnsungTest.() -> Unit) {
+        THIS_PHONE({ plays() }),
+        ANOTHER_DEVICE({ playback.playing.value = null }),
+        APP_NOT_SEEN({
+            plays()
+            playback.access = false
+        }),
+        OFFLINE({
+            plays()
+            offline = true
+        }),
+        TV({
+            plays()
+            phone = Phone.TV
+        })
+    }
+
+    /** Lyric services can't be reached, as offline, and the words come from what's kept. */
+    @Volatile
+    private var offline = false
+
+    @Test
+    fun onlyAListenThatHearsMusicAndNoVoiceHidesWordsAMarkHolds() {
+        // Review of PR #919: every way a listen ends, for both kinds of mark, wherever the song plays.
+        val marks = mapOf("lrclib" to { title = "Demo"; markedOnLrclibWithWords() }, "title" to { title = "Demo (Instrumental)"; lrclib = """[{"trackName":"$title","artistName":"Band","syncedLyrics":"[00:01.00] Hold the light\n[00:10.00] Out in the rain"}]""" })
+        for ((mark, marked) in marks) for (place in Place.entries) for (outcome in Outcome.entries) {
+            val case = "$mark $place $outcome"
+            controller?.destroyAndSettle()
+            // Nothing kept from the case before: the song's name, its words, what was shown.
+            freshSettings()
+            for (kept in listOf("kept_words.json", "lyrics.json", "lookups.json")) File(app.cacheDir, kept).delete()
+            shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+            singing.reset()
+            playback.access = true
+            phone = null
+            offline = false
+            marked()
+            // Offline, the words are the ones kept when they were found: found first, then the services go.
+            if (place == Place.OFFLINE) {
+                plays()
+                openAnywhere { showsWords() || shows(R.string.lyrics_instrumental) }
+                passes(MainViewModel.HELD_MS)
+                controller!!.destroyAndSettle()
+                File(app.cacheDir, "kept_words.json").delete()
+                singing.reset()
+            }
+            place.setUp(this)
+            outcome.setUp(this)
+            try {
+                openAnywhere { showsWords() || shows(R.string.lyrics_instrumental) }
+            } catch (e: Throwable) {
+                throw AssertionError("$case ${model().uiState} ${TimingLog.lastMinute()}", e)
+            }
+            repeat(MainViewModel.VOICE_TRIES) { passes(MainViewModel.VOICE_PAUSE_MS) }
+            passes(MainViewModel.HELD_MS)
+            val listened = place in setOf(Place.THIS_PHONE, Place.OFFLINE, Place.TV) && outcome != Outcome.NO_MICROPHONE
+            val hidden = listened && outcome == Outcome.NO_VOICE
+            assertEquals("$case ${TimingLog.lastMinute()}", !hidden, showsWords())
+            assertEquals(case, hidden, shows(R.string.lyrics_instrumental))
+            if (hidden) assertEquals(case, MainViewModel.VOICE_TRIES, singing.hears)
+            if (!listened) assertEquals(case, 0, singing.hears)
+        }
+    }
+
+    /** The song's words opened, wherever it plays, till [done]. */
+    private fun openAnywhere(done: () -> Boolean) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
+        controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
+        composeRule.waitForIdle()
+        val lyrics = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
+        waitUntil { composeRule.onAllNodes(lyrics).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onAllNodes(lyrics)[0].performScrollTo().performClick()
+        waitUntil { done() && !model().findingWords }
     }
 
     @Test
@@ -482,11 +630,26 @@ class UnsungTest {
 
         override val heardNoSound get() = noSound
 
+        /** Whether a while heard never ends. */
+        @Volatile
+        var hang = false
+
+        /** As it was before the words were first opened. */
+        fun reset() {
+            languages.clear()
+            answers = listOf(null)
+            before = {}
+            missing = false
+            noSound = false
+            hang = false
+        }
+
         override suspend fun fetchModel() = false
 
         override suspend fun hear(language: String?, first: (suspend (Sung) -> Boolean)?): Sung? {
             val heard = answers.getOrElse(languages.size) { answers.last() }
             languages += language
+            if (hang) awaitCancellation()
             before()
             // A while takes time to hear, in which what the music app says gets through.
             yield()

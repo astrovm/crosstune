@@ -501,7 +501,18 @@ internal class LyricsFinder(
          * timed. [lengthMs] is how long the recording they're timed for lasts, when the service says.
          */
         /** [source] is where the words came from, and their timing when it was borrowed, so a report can say. */
-        data class Found(val words: String, val lines: List<LyricLine> = emptyList(), val lengthMs: Long? = null, val source: String? = null) : Lyrics {
+        /**
+         * Words found for the song. [markedInstrumental] when LRCLIB's copies of the very recording, or its title, say no one
+         * sings in it, which can be wrong (Issue #861): they're kept, downloaded and timed as any, and hidden only once a
+         * listen hears sound in it and no voice.
+         */
+        data class Found(
+            val words: String,
+            val lines: List<LyricLine> = emptyList(),
+            val lengthMs: Long? = null,
+            val source: String? = null,
+            val markedInstrumental: Boolean = false
+        ) : Lyrics {
             /** Whether they're timed for a recording as long as [playingMs], or there's no telling they aren't. */
             fun timedFor(playingMs: Long?): Boolean {
                 val timedFor = lengthMs ?: return true
@@ -519,15 +530,8 @@ internal class LyricsFinder(
         data object Instrumental : Lyrics
 
         /**
-         * Most of LRCLIB's copies of this very recording say no one sings in it, so the [words] found for its name
-         * may be sung in another one (Issue #861). A copy can be marked wrongly, so they're only left out once
-         * no voice is heard in it.
-         */
-        data class MarkedInstrumental(val words: Found? = null) : Lyrics
-
-        /**
-         * No service has words, and the store files the song under a genre that has none: most likely an
-         * instrumental, though no service says so, and a singer in that genre may still sing it.
+         * No service has words, and the store files the song under a genre that has none, or LRCLIB's marks or the
+         * title say no one sings in it: most likely an instrumental, though a singer may still sing it.
          */
         data object LikelyInstrumental : Lyrics
 
@@ -545,22 +549,16 @@ internal class LyricsFinder(
     suspend fun lyricsOf(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): Lyrics =
         firstLook(metadata, timeoutMs).let { first -> if (first.final) first.lyrics else retimed(metadata, first.lyrics, timeoutMs) }
 
-    /**
-     * What [firstLook] found: words kept from before, which are [final], or else ones still to be [retimed]; an
-     * instrumental [byTitle] when its title says so, without looking.
-     */
-    data class FirstLook(val lyrics: Lyrics, val final: Boolean, val byTitle: Boolean = false)
+    /** What [firstLook] found: words kept from before, which are [final], or else ones still to be [retimed]. */
+    data class FirstLook(val lyrics: Lyrics, val final: Boolean)
 
     /**
      * [lyricsOf] in two steps, so the words can show as soon as they're found: first what's kept, or
-     * found, then [retimed], which may take a while longer. Its title, taken at its word unless [trustTitle]
-     * is false, as when a voice is heard in it, may say it's an instrumental.
+     * found, then [retimed], which may take a while longer.
      */
-    suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS, trustTitle: Boolean = true): FirstLook {
+    suspend fun firstLook(metadata: MusicMetadata, timeoutMs: Long = TIMEOUT_MS): FirstLook {
         // Only a song has words, and without an artist there's nothing to check an answer against.
         if (metadata.type != ItemType.TRACK || metadata.artist.isBlank() || metadata.title.isBlank()) return FirstLook(Lyrics.None, final = true)
-        // Its title says no one sings in it, so whatever words are kept for its name are another recording's.
-        if (trustTitle && SongNames.saysInstrumental(metadata.title, metadata.artist)) return FirstLook(Lyrics.Instrumental, final = true, byTitle = true)
         // Kept for this very recording, since its length is in the key, so even words timed for another take are the best found for it.
         cache?.get(cacheKey(metadata))?.let { kept -> fromCache(kept)?.let { (words, provisional) -> return FirstLook(asKept(words, metadata), final = !provisional) } }
         val lookup = Answers()
@@ -570,20 +568,31 @@ internal class LyricsFinder(
         return settled(metadata, found, own, lookup)
     }
 
-    /**
-     * [found], as the first look gives it: held back when LRCLIB marks the recording instrumental, or else
-     * kept, and final when they're the recording's own words.
-     */
+    /** [found], as the first look gives it: kept, and final when they're the recording's own words. */
     private suspend fun settled(metadata: MusicMetadata, found: Lyrics, own: Boolean, lookup: Answers): FirstLook {
-        // The recording's own words, timed for it, are still the words sung in it.
-        if (!own && lookup.marks(metadata.title)) return FirstLook(asJapanWrites(Lyrics.MarkedInstrumental(found as? Lyrics.Found)), final = false)
-        // Kept at once, so the song shown again soon needs no lookup; still to be timed better, unless
-        // they're the recording's own, which no copy found elsewhere times better.
+        val said = if (own) found else saidInstrumental(metadata, found, lookup)
+        // Kept at once, so the song shown again soon, or offline, needs no lookup; still to be timed better,
+        // unless they're the recording's own, which no copy found elsewhere times better.
         cache?.let { cache ->
-            toCache(found, provisional = !own)?.let { cache.put(cacheKey(metadata), it) }
+            toCache(said, provisional = !own)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
         }
-        return FirstLook(asJapanWrites(found), final = own)
+        return FirstLook(asJapanWrites(said), final = own)
+    }
+
+    /**
+     * [found], as LRCLIB's marks or the title say no one sings in the recording: its words marked so, or with none,
+     * likely an instrumental, which a voice heard says is sung after all. Not a cover's words, from the song it covers, nor a track's to sing along to, which
+     * show the song's words as they always did (Issue #922).
+     */
+    private fun saidInstrumental(metadata: MusicMetadata, found: Lyrics, lookup: Answers): Lyrics {
+        val said = lookup.marks(metadata.title) || SongNames.saysInstrumental(metadata.title, metadata.artist)
+        if (!said || SongNames.sungAlong(metadata.title, metadata.artist)) return found
+        return when {
+            found is Lyrics.Found -> if (found.ofTheOriginal) found else found.copy(markedInstrumental = true)
+            found == Lyrics.None || found == Lyrics.Instrumental -> Lyrics.LikelyInstrumental
+            else -> found
+        }
     }
 
     /**
@@ -600,9 +609,7 @@ internal class LyricsFinder(
      * all and there's one, and kept so.
      */
     suspend fun retimed(metadata: MusicMetadata, found: Lyrics, timeoutMs: Long = TIMEOUT_MS): Lyrics {
-        // Words LRCLIB's marks say may be another recording's aren't kept, so the next look hears for a voice again.
-        if (found is Lyrics.MarkedInstrumental) return asJapanWrites(Lyrics.MarkedInstrumental(found.words?.let { timedBetter(metadata, it, timeoutMs) }))
-        val answer = (found as? Lyrics.Found)?.let { timedBetter(metadata, it, timeoutMs) } ?: found
+        val answer = (found as? Lyrics.Found)?.let { words -> timedBetter(metadata, words, timeoutMs).copy(markedInstrumental = words.markedInstrumental) } ?: found
         cache?.let { cache ->
             toCache(answer)?.let { cache.put(cacheKey(metadata), it) }
             cache.save()
@@ -629,25 +636,19 @@ internal class LyricsFinder(
      * Words in Japanese as Japan writes them, as NetEase, a Chinese site, often has them written
      * China's way: see [Readings.asJapanWrites].
      */
-    private fun asJapanWrites(found: Lyrics): Lyrics = when (found) {
-        is Lyrics.Found -> asJapanWrites(found)
-        is Lyrics.MarkedInstrumental -> Lyrics.MarkedInstrumental(found.words?.let(::asJapanWrites))
-        else -> found
-    }
+    private fun asJapanWrites(found: Lyrics): Lyrics = (found as? Lyrics.Found)?.let(::asJapanWrites) ?: found
 
     private fun asJapanWrites(found: Lyrics.Found): Lyrics.Found {
         if (Readings.scriptOf(found.words.lines()) != Script.JAPANESE) return found
-        return Lyrics.Found(
-            found.words.lines().joinToString("\n", transform = Readings::asJapanWrites),
-            found.lines.map { line ->
+        return found.copy(
+            words = found.words.lines().joinToString("\n", transform = Readings::asJapanWrites),
+            lines = found.lines.map { line ->
                 // The comma left off a line is left off its last word.
                 val words = line.words.map { it.copy(text = Readings.inJapansKanji(it.text)) }.toMutableList()
                 val last = words.indexOfLast { it.text.isNotBlank() }
                 if (last >= 0) words[last] = words[last].copy(text = Readings.asJapanWrites(words[last].text))
                 line.copy(text = Readings.asJapanWrites(line.text), words = words)
-            },
-            found.lengthMs,
-            found.source
+            }
         )
     }
 
@@ -912,6 +913,7 @@ internal class LyricsFinder(
         JSONObject()
             .put("words", found.words)
             .apply { if (provisional) put("provisional", true) }
+            .apply { if (found.markedInstrumental) put("marked", true) }
             .apply { found.lengthMs?.let { put("length", it) } }
             .apply { found.source?.let { put("source", it) } }
             .put("lines", JSONArray().apply { found.lines.forEach { put(lineToCache(it)) } })
@@ -937,7 +939,8 @@ internal class LyricsFinder(
             val lines = json.getJSONArray("lines").let { list ->
                 (0 until list.length()).map { index -> lineFromCache(list.getJSONArray(index)) }
             }
-            Lyrics.Found(json.getString("words"), lines, json.optLong("length", -1L).takeIf { it > 0 }, json.optString("source").ifEmpty { null }) to json.optBoolean("provisional")
+            Lyrics.Found(json.getString("words"), lines, json.optLong("length", -1L).takeIf { it > 0 }, json.optString("source").ifEmpty { null }, json.optBoolean("marked")) to
+                json.optBoolean("provisional")
         } catch (_: JSONException) {
             null
         }

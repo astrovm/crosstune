@@ -25,7 +25,8 @@ WORD = re.compile(
 SHORT = re.compile(r"inst\.?|MR", re.I)
 VOICE = re.compile(r"(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b", re.I)
 PART_WORDS = {"with", "intro", "outro", "break", "interlude", "bridge", "from", "film", "movie", "live", "hall"}
-GUEST = re.compile(r"[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]", re.I)
+NOT_SAID = {"not", "non", "prod", "produced"}
+SINGER_AFTER = re.compile(r"(?:^|[\s(\[])(?:feat\.?|ft\.?|featuring|with|x|×)\s+\S", re.I)
 CHANNEL = re.compile(r"VEVO$|\s*-\s*Topic$")
 VERSION_WORDS = {"ver", "version", "versao"}
 BRACKET = re.compile(r"[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]")
@@ -60,7 +61,7 @@ def only_instrumental(tag):
     if not said:
         return False
     rest = words(tag[: said.start()] + tag[said.end():])
-    if rest & PART_WORDS:
+    if rest & (PART_WORDS | NOT_SAID):
         return False
     return not SHORT.fullmatch(said.group(0)) or rest <= VERSION_WORDS
 
@@ -73,7 +74,7 @@ def says_instrumental(title, artist):
     by = CHANNEL.sub("", artist)
     tags = list(BRACKET.finditer(name))
     tags += [m for m in DASH.finditer(name) if not (by and names_artist(name[: m.start()], by))]
-    return any(only_instrumental(m.group(1)) and not GUEST.search(name[m.start():]) for m in tags) or bool(OFF_VOCAL_AT_END.search(name))
+    return any(only_instrumental(m.group(1)) and not SINGER_AFTER.search(name[m.start():]) for m in tags) or bool(OFF_VOCAL_AT_END.search(name))
 
 
 def copies(song):
