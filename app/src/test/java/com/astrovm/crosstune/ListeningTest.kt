@@ -17,6 +17,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTouchInput
@@ -1178,31 +1179,42 @@ class ListeningTest {
     }
 
     @Test
-    fun aJapaneseSongWhoseSungReadingsCantBeReachedIsNotKeptUntilTheyCanBe() {
+    fun aSongWhoseSungReadingsCantBeReachedIsKeptWithTheRestOfItsAlbumAndTheyreAskedForOnTheNextNetwork() {
         prefs().edit().putBoolean("lyrics_readings", true).commit()
         MainActivity.connectionFactory = { FakeConnection() }
         val down = java.util.concurrent.atomic.AtomicBoolean(true)
-        MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
+        val embed = """<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"state":{"data":{"entity":{"trackList":[
+            {"title":"First Song","subtitle":"Band"},{"title":"Second Song","subtitle":"Band"}]}}}}}}</script>"""
+        // The Japanese song first, so its readings failing comes before the other's words are looked up.
+        val englishAsked = java.util.concurrent.atomic.AtomicBoolean(false)
         fake.handler = { request ->
+            val url = request.url.toString()
             when {
-                request.url.host != "utaten.com" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"都会の夜"}]""")
-                down.get() -> throw IOException("offline")
-                else -> utaTenSingsMachi(request)
+                request.url.host == "utaten.com" -> if (down.get()) throw IOException("offline") else utaTenSingsMachi(request)
+                request.url.host == "open.spotify.com" && request.url.encodedPath.startsWith("/embed/") -> FakeSpotify.html(request, embed)
+                request.url.host == "open.spotify.com" -> FakeSpotify.html(request, FakeSpotify.trackPage("Road Trip | Spotify", "album"))
+                "Second" in url -> FakeSpotify.html(request, """[{"trackName":"Second Song","artistName":"Band","plainLyrics":"Night sky"}]""").also { englishAsked.set(true) }
+                else -> FakeSpotify.html(request, """[{"trackName":"First Song","artistName":"Band","plainLyrics":"都会の夜"}]""")
             }
         }
-        allowMicrophone()
         launch()
-        recognize()
-        waitForText("Demo")
+        composeRule.onNode(hasSetTextAction()).performTextReplacement("https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy")
+        click(string(R.string.resolve_button))
+        waitForText("First Song")
         click(string(R.string.keep_offline))
-        waitUntil(TIMEOUT_MS) { utatenRequests() > 0 && described(string(R.string.keeping_offline)) }
-        settle()
-        assertFalse(described(string(R.string.kept_offline)))
-        // The next network it tries again, and keeps how its kanji are sung.
+        // Both kept: the English one's words too, after UtaTen failed for the Japanese one.
+        waitForDescription(string(R.string.kept_offline))
+        assertTrue(utatenRequests() > 0)
+        assertTrue(englishAsked.get())
+        val pinned = File(app.noBackupFilesDir, "kept/sung_readings.json")
+        assertFalse(pinned.isFile && "まち" in pinned.readText())
+        // Kept as still to be read, the Japanese one only.
+        val songs = File(app.noBackupFilesDir, "kept/songs.json")
+        assertEquals(1, org.json.JSONArray(songs.readText()).getJSONObject(0).getJSONArray("unread").length())
+        // The next network costing no data, they're asked for again, and kept.
         down.set(false)
         controllerModel().unmeteredChanged(true)
-        waitForDescription(string(R.string.kept_offline))
-        waitUntil(TIMEOUT_MS) { File(app.noBackupFilesDir, "kept/sung_readings.json").let { it.isFile && "まち" in it.readText() } }
+        waitUntil(TIMEOUT_MS) { pinned.isFile && "まち" in pinned.readText() && org.json.JSONArray(songs.readText()).getJSONObject(0).getJSONArray("unread").length() == 0 }
     }
 
     @Test
@@ -4818,6 +4830,57 @@ class ListeningTest {
         assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("夜", "よ", Reader.USER)), line.ruby.orEmpty().filter { it.reading != null })
         assertEquals("まちのよに", line.reading)
         assertTrue(line.readByHand)
+        // Practised as it's kept now.
+        assertEquals(listOf(line), controllerModel().uiState.savedLines)
+    }
+
+    @Test
+    fun aLineKeptWithNothingPutRightFollowsItsWordsWhenTheyChange() {
+        prefs().edit().putString(
+            "saved_lines",
+            """[{"text":"都会の夜","reading":"とかいのよる","title":"Demo","artist":"Band","ruby":[["都会","とかい"],["の",null],["夜","よる"]],"readWith":${Readings.VERSION}}]"""
+        ).commit()
+        wordsOf(null, "都会の夜に", sites = { request -> utaTenHasNone(request).takeIf { request.url.host == "utaten.com" } })
+        waitUntil(TIMEOUT_MS) { controllerModel().uiState.savedLines.singleOrNull()?.text == "都会の夜に" }
+        settle()
+        assertEquals(SavedLinesStore(prefs()).load(), controllerModel().uiState.savedLines)
+    }
+
+    @Test
+    fun readingsReadAgainKeepWhatChatGptPutRightWhileUtaTenIsAskedAgain() {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        val openAi = signedInWithChatGpt()
+        val answers = openAi.reply
+        openAi.reply = { body -> if ("You check the readings" in body.getString("instructions")) 200 to FakeOpenAi.stream("[{\"line\": 1, \"kanji\": \"夜\", \"reading\": \"よ\"}]") else answers(body) }
+        val held = java.util.concurrent.atomic.AtomicBoolean(false)
+        val asked = CountDownLatch(1)
+        val hold = CountDownLatch(1)
+        wordsOf(null, "都会の夜", openAi = openAi, sites = { request ->
+            when {
+                request.url.host != "utaten.com" -> null
+                held.get() -> {
+                    asked.countDown()
+                    hold.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    throw java.io.IOException("offline")
+                }
+                else -> throw java.io.IOException("offline")
+            }
+        })
+        // UtaTen couldn't be asked, so they're read again when they show again; ChatGPT put 夜 right meanwhile.
+        waitUntil(TIMEOUT_MS) { readingShown("よ") }
+        settle()
+        assertTrue(controllerModel().uiState.learning.readingsUnfinished)
+        closedAndOpenedAgain { held.set(true) }
+        assertTrue(asked.await(TIMEOUT_MS, TimeUnit.MILLISECONDS))
+        composeRule.waitForIdle()
+        // Read again, but what ChatGPT put right stays until it answers again.
+        assertTrue(readingShown("よ"))
+        assertFalse(readingShown("よる"))
+        assertEquals(Reader.CHATGPT, controllerModel().uiState.learning.lines.single().parts.last().by)
+        hold.countDown()
+        settle()
+        assertTrue(readingShown("よ"))
+        assertTrue(controllerModel().uiState.learning.readingsUnfinished)
     }
 
     @Test

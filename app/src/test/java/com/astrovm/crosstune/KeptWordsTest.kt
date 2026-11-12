@@ -73,6 +73,14 @@ class KeptWordsTest {
     }
 
     @Test
+    fun readingsKeptBeforeTheyCouldBeUnfinishedAreReadAgainOnce() {
+        val before = org.json.JSONObject(all.json()).apply { remove("readingsUnfinished") }.toString()
+        assertEquals(true, KeptWords.from(before)?.learning?.readingsUnfinished)
+        // Kept since, they're as they were left.
+        assertEquals(false, KeptWords.from(all.json())?.learning?.readingsUnfinished)
+    }
+
+    @Test
     fun wordsThatCantBeReadAreWorkedOutAgain() {
         assertNull(KeptWords.from("not json"))
         assertNull(KeptWords.from("{}"))

@@ -82,7 +82,8 @@ class MainViewModelTest {
         qobuzNumbers: QobuzNumbers? = null,
         playQueue: PlayQueue? = null,
         lookAhead: Boolean = true,
-        reminders: PracticeReminders? = null
+        reminders: PracticeReminders? = null,
+        sungReadings: SungReadings? = null
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -109,7 +110,8 @@ class MainViewModelTest {
             lookAhead = lookAhead,
             qobuzNumbers = qobuzNumbers,
             offline = offline,
-            reminders = reminders
+            reminders = reminders,
+            sungReadings = sungReadings
         ).also { made += it }
     }
 
@@ -289,11 +291,11 @@ class MainViewModelTest {
         Following(PlaybackClock(1_000, android.os.SystemClock.elapsedRealtime(), playing = playing), "Spotify", seek, app, canSkipNext = skipNext, canSkipPrevious = skipPrevious, shuffle = shuffle, repeat = repeat, like = like, upNext = upNext)
 
     /** A model whose music app plays [song], offered as playing now, with the player open on it when [open]. */
-    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null, listener: SongHearing = SongHearing { Heard.Nothing }, queueOrder: QueueOrder? = null, playQueue: PlayQueue? = null, lookAhead: Boolean = true): MainViewModel {
+    private fun playingModel(playback: FakePlayback, open: Boolean = true, sleepTimer: SleepTimer? = null, phone: Phone = Phone.OTHER, lyricsFinder: LyricsFinder? = null, keptOnDisk: LookupCache? = null, reports: ReportSender? = null, listener: SongHearing = SongHearing { Heard.Nothing }, queueOrder: QueueOrder? = null, playQueue: PlayQueue? = null, lookAhead: Boolean = true, sungReadings: SungReadings? = null): MainViewModel {
         playback.access = true
         playback.onThePhone = Heard.Song(song, null, app = "com.spotify")
         val ordered = queueOrder?.ordering(playback) ?: playback
-        val model = model(playback = playQueue?.skipping(ordered) ?: ordered, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports, listener = listener, queueOrder = queueOrder, playQueue = playQueue, lookAhead = lookAhead)
+        val model = model(playback = playQueue?.skipping(ordered) ?: ordered, sleepTimer = sleepTimer, phone = phone, lyricsFinder = lyricsFinder, keptOnDisk = keptOnDisk, reports = reports, listener = listener, queueOrder = queueOrder, playQueue = playQueue, lookAhead = lookAhead, sungReadings = sungReadings)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         if (open) {
@@ -526,6 +528,56 @@ class MainViewModelTest {
     }
 
     private fun lrclibAsked() = fake.requestedUrls.count { "lrclib.net" in it }
+
+    /**
+     * The Japanese words of [song] shown over its player with their readings, read by the dictionary on the phone alone, with
+     * no UniDic on its way; UtaTen answers as [utaTen] does, and there's none when that's null.
+     */
+    private fun readingsModel(utaTen: ((okhttp3.Request) -> okhttp3.Response)?): MainViewModel {
+        prefs().edit().putBoolean("lyrics_readings", true).commit()
+        Readings.uniDic = null
+        fake.handler = { request ->
+            when (request.url.host) {
+                "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Hush","artistName":"Band","duration":60,"plainLyrics":"都会の夜"}]""")
+                "utaten.com" -> utaTen?.invoke(request) ?: FakeSpotify.html(request, "")
+                else -> FakeSpotify.html(request, "")
+            }
+        }
+        val playback = FakePlayback().apply { playing.value = following() }
+        val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val model = playingModel(playback, lyricsFinder = finder, sungReadings = utaTen?.let { SungReadings(fake.client(), ioDispatcher = Dispatchers.Unconfined) })
+        model.playerLyrics()
+        until("read the words") { model.uiState.learning.lines.isNotEmpty() }
+        idle()
+        return model
+    }
+
+    @Test
+    fun wordsWithNothingToPutTheirReadingsRightAreDoneOnceRead() {
+        // No UtaTen, no ChatGPT, and no UniDic to wait for: nothing's left to read them again for.
+        val model = readingsModel(utaTen = null)
+        assertEquals(listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる")), model.uiState.learning.lines.single().parts)
+        assertFalse(model.uiState.learning.readingsUnfinished)
+    }
+
+    @Test
+    fun wordsUtaTenCantBeAskedAboutAreLeftToBeReadAgain() {
+        val model = readingsModel { throw java.io.IOException("offline") }
+        assertTrue(fake.requestedUrls.any { "utaten.com" in it })
+        assertEquals(listOf(Ruby("都会", "とかい"), Ruby("の"), Ruby("夜", "よる")), model.uiState.learning.lines.single().parts)
+        assertTrue(model.uiState.learning.readingsUnfinished)
+    }
+
+    @Test
+    fun wordsUtaTenSingsOtherwiseReadAsTheyreSungAndAreDone() {
+        val ruby = { kanji: String, kana: String -> """<span class="ruby"><span class="rb">$kanji</span><span class="rt">$kana</span></span>""" }
+        val model = readingsModel { request ->
+            if (request.url.encodedPath == "/search") FakeSpotify.html(request, """<p class="searchResult__title"><a href="/lyric/ab0001/">Hush</a></p></td><td class="searchResult__artist"><p><a href="/artist/1/">Band</a>""")
+            else FakeSpotify.html(request, """<div class="hiragana" >${ruby("都会", "まち")}の${ruby("夜", "よる")}<br /></div>""")
+        }
+        assertEquals(listOf(Ruby("都会", "まち", Reader.SUNG), Ruby("の"), Ruby("夜", "よる")), model.uiState.learning.lines.single().parts)
+        assertFalse(model.uiState.learning.readingsUnfinished)
+    }
 
     @Test
     fun aLateLyricsAnswerCannotReplaceTheNextSongsWords() = lateLyrics { model, playback ->

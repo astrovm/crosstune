@@ -1050,6 +1050,21 @@ internal object Readings {
     private fun isSaid(c: Char) = c in 'ぁ'..'ゟ' || c == 'ー'
 
     /**
+     * The line [parts] write, read as they say, in [script]: Japanese as [readAs] reads it; Chinese in pinyin, each part
+     * as its reading says, or as Android reads it where it has none; the rest, with no readings on their parts, as Android
+     * reads the line.
+     */
+    fun readAs(parts: List<Ruby>, script: Script): LineReading {
+        if (script == Script.JAPANESE) return readAs(parts)
+        val read = of(listOf(parts.joinToString("") { it.text }), script).single()
+        if (read.parts == parts || script != Script.CHINESE) return read.copy(parts = parts)
+        // Each reading in its place, in Latin letters already, so Android writes out the rest around it as it does a line.
+        val given = parts.joinToString("") { part -> part.reading?.let { " $it " } ?: part.text }
+        val said = of(listOf(given), script).single().romanized.ifEmpty { given }.split(" ").filter(String::isNotEmpty).joinToString(" ")
+        return LineReading(parts, said, said)
+    }
+
+    /**
      * The line [parts] write, in kana and romaji, with each kanji read as they say: split into words
      * as any line is, so the romaji is too, 頭ん中 as atama n naka, not the dictionary's reading
      * with the new one pasted over it, where it can't be found in a word, atama nchuu.
