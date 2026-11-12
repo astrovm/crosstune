@@ -32,8 +32,8 @@ internal data class MusicMetadata(
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
 internal object MetadataParsers {
     private val metaTagRegex = Regex("""<meta\s[^>]*>""", RegexOption.IGNORE_CASE)
-    private val titleTagRegex = Regex("""<title[^>]*>([^<]*)</title>""", RegexOption.IGNORE_CASE)
-    private val attributeRegex = Regex("""([A-Za-z:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+    private val titleTagRegex = Regex("""<title[^<>]*+>([^<]*+)</title>""", RegexOption.IGNORE_CASE)
+    private val attributeRegex = Regex("""(?<![A-Za-z:_-])([A-Za-z:_-]++)\s*+=\s*+(?:"([^"]*+)"|'([^']*+)')""")
     private val tidalSuffixRegex = Regex("""(^|\s)on TIDAL$""")
     private val entityRegex = Regex("""&(#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z]+);""")
     // https://developers.deezer.com/api/errors
@@ -45,26 +45,26 @@ internal object MetadataParsers {
     )
 
     /** Video titles often carry release noise such as "(Official Video)" or "[Lyrics]". */
-    private val bracketedSongRegex = Regex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
+    private val bracketedSongRegex = Regex("""^(?>(.*?)$SPACES_START\s*+[「『](?![」』]))([^」』]++)[」』].*""")
 
     private const val MUSIC_TAG_WORDS = """\b(?:official|oficial|officiel|offiziell\w*|ufficiale|oficjalny|resmi|videoclip|videoclipe|clipe|audio|lyrics?|letra|visuali[sz]er|mv|m/v)\b|клип|официальн|رسمي|كليب|公式|官方|歌詞|歌词|가사|뮤직비디오"""
-    private val musicTagRegex = Regex("""\s*[(\[][^)\]]*(?:$MUSIC_TAG_WORDS)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
-    private val videoNoiseRegex = Regex("""\s*[(\[][^)\]]*(?:$MUSIC_TAG_WORDS|\b(?:video|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|hd|hq|4k)\b)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
+    private val musicTagRegex = Regex("""$SPACES_START\s*+[(\[][^()\[\]]*(?:$MUSIC_TAG_WORDS)[^()\[\]]*+[)\]]""", RegexOption.IGNORE_CASE)
+    private val videoNoiseRegex = Regex("""$SPACES_START\s*+[(\[][^()\[\]]*(?:$MUSIC_TAG_WORDS|\b(?:video|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|hd|hq|4k)\b)[^()\[\]]*+[)\]]""", RegexOption.IGNORE_CASE)
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = Regex(
-        """\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video|animated\s+video|video\s*oficial|video\s*clip(?:\s+oficial)?|audio\s+oficial)\s*$""",
+        """$SPACES_START\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video|animated\s+video|video\s*oficial|video\s*clip(?:\s+oficial)?|audio\s+oficial)\s*$""",
         RegexOption.IGNORE_CASE
     )
 
     /** What a title may end on after its song: "- Lyrics |HD|", a bare "Lyrics", "HD" or "4K". */
     private val trailingQualityRegex = Regex(
-        """(?:(?:\s*[|\-–]\s*|\s+)lyrics?\s*(?:\|?\s*(?:hd|4k)\s*\|?)?|\s+(?:full\s+)?(?:hd|hq|4k))\s*$""",
+        """$SPACES_START(?:(?:\s*[|\-–]\s*|\s+)lyrics?\s*(?:\|?\s*(?:hd|4k)\s*\|?)?|\s+(?:full\s+)?(?:hd|hq|4k))\s*$""",
         RegexOption.IGNORE_CASE
     )
 
     /** A subtitles tag and what follows it, "Song // Sub Español + Lyrics // Video Oficial". */
-    private val subtitlesTagRegex = Regex("""\s*(?://|\|\|?)\s*sub\.?\s*(?:esp|español).*$""", RegexOption.IGNORE_CASE)
+    private val subtitlesTagRegex = Regex("""$SPACES_START\s*+(?://|\|\|?)\s*+sub\.?\s*+(?:esp|español).*$""", RegexOption.IGNORE_CASE)
 
     /** A track number before "Artist - Song" on an album upload, "07 - Song - Artist" but not "2814 - Song". */
     private val trackNumberRegex = Regex("""^\d{1,2}\s*-\s+(?=.*\s-\s)""")
@@ -72,7 +72,7 @@ internal object MetadataParsers {
     /** A zero-padded track number glued to the song, "06 Una señal". */
     private val paddedTrackRegex = Regex("""^0\d\s+""")
 
-    private val danglingDashRegex = Regex("""\s+[-–]\s*$""")
+    private val danglingDashRegex = Regex("""$SPACES_START\s++[-–]\s*+$""")
 
     /**
      * Spotify tracks describe themselves as "Artist · Album · Song · Year" and albums as
@@ -379,7 +379,7 @@ internal object MetadataParsers {
     /** A hyphen, or the en or em dash some apps write, as NewPipe does "Queen – Bohemian Rhapsody", each as wide. */
     private val dashes = listOf(" - ", " – ", " — ")
 
-    private val youtubeDataRegex = Regex("""var ytInitialData = (\{.*?\});</script>""", RegexOption.DOT_MATCHES_ALL)
+    private val youtubeDataRegex = Regex("""var ytInitialData = (\{(?:[^}v]++|\}(?!;</script>)|v(?!ar ytInitialData = ))*+\});</script>""")
 
     /**
      * A YouTube playlist page: its name, picture and, in the page's own data, its first videos, each
@@ -446,7 +446,7 @@ internal object MetadataParsers {
         return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image(), songs)
     }
 
-    private val appleDataRegex = Regex("""<script type="application/json" id="serialized-server-data">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+    private val appleDataRegex = Regex("""<script type="application/json" id="serialized-server-data">((?:[^<]++|<(?!/script>|script))*+)</script>""")
 
     /** Every song found anywhere in Apple Music's page data, in page order. */
     private fun appleSongs(value: Any?): List<MusicMetadata> = when (value) {
@@ -480,7 +480,7 @@ internal object MetadataParsers {
         }
     }
 
-    private val spotifyDataRegex = Regex("""<script id="__NEXT_DATA__" type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+    private val spotifyDataRegex = Regex("""<script id="__NEXT_DATA__" type="application/json">((?:[^<]++|<(?!/script>|script))*+)</script>""")
 
     /** Deezer API object; errors come back as {"error": {...}} with HTTP 200, see [deezerError]. */
     fun deezer(json: JSONObject, type: ItemType): MusicMetadata? {
@@ -576,7 +576,7 @@ internal object MetadataParsers {
         return splitBy(title, ", by ", type).copy(artworkUrl = tags.image(), tracks = tracks)
     }
 
-    private val bandcampDataRegex = Regex("""<script type="application/ld\+json"[^>]*>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+    private val bandcampDataRegex = Regex("""<script type="application/ld\+json"[^<>]*+>((?:[^<]++|<(?!/script>|script))*+)</script>""")
 
     /** A Bandcamp album page's structured data lists its songs, all by the album's artist. */
     private fun bandcampAlbumSongs(html: String): List<MusicMetadata> {

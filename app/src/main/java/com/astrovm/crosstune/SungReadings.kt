@@ -179,15 +179,18 @@ internal class SungReadings(
         const val ALIKE = 0.4
 
         private val searchRow = Regex(
-            """<p class="searchResult__title">\s*<a href="(/lyric/[A-Za-z0-9]+/)">.*?<td class="searchResult__artist">\s*<p>\s*<a [^>]*>(.*?)</a>""",
-            RegexOption.DOT_MATCHES_ALL
+            """<p class="searchResult__title">\s*+<a href="(/lyric/[A-Za-z0-9]++/)">(?:[^<]++|<(?!td class="searchResult__artist">|p class="searchResult__title">))*+""" +
+                """<td class="searchResult__artist">\s*+<p>\s*+<a [^<>]*+>((?:[^<]++|<(?!/a>|p class="searchResult__title">))*+)</a>"""
         )
-        private val words = Regex("""<div class="hiragana"\s*>(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
-        private val ruby = Regex("""<span class="ruby"><span class="rb">(.*?)</span><span class="rt">(.*?)</span></span>""", RegexOption.DOT_MATCHES_ALL)
+        private val words = Regex("""<div class="hiragana"\s*+>((?:[^<]++|<(?!/div>|div class="hiragana"))*+)</div>""")
+        private val ruby = Regex(
+            """<span class="ruby"><span class="rb">((?:[^<]++|<(?!/span><span class="rt">|span class="ruby">))*+)</span><span class="rt">""" +
+                """((?:[^<]++|<(?!/span></span>|span class="ruby">))*+)</span></span>"""
+        )
         private val exclaimed = Regex("[!?！？]")
         private val titleMark = Regex("[()（）\\[\\]～~〜「」『』]| - ")
         private val lineBreak = Regex("""<br\s*/?>""")
-        private val tag = Regex("""<[^>]+>""")
+        private val tag = Regex("""<[^<>]++>""")
 
         /** The words on a song's page, line by line, each in pieces, kanji with how they're sung. */
         fun linesOf(page: String): List<List<Ruby>> {

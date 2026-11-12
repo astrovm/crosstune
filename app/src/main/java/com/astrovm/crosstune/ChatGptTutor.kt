@@ -629,8 +629,8 @@ internal fun sheet(text: String): Sheet {
  * sources as "([site](https://…))", which would show as they are.
  */
 internal fun plainText(text: String): String = text
-    .replace(Regex("""\s*\(\[[^\]]*]\([^)]*\)\)"""), "")
-    .replace(Regex("""\[([^\]]+)]\(https?://[^)]*\)"""), "$1")
+    .replace(Regex("""$SPACES_START\s*+\(\[[^\[\]]*+]\([^)\[\]]*+\)\)"""), "")
+    .replace(Regex("""\[([^\[\]]++)]\(https?://[^)\[\]]*+\)"""), "$1")
     .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
     .replace(Regex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
 

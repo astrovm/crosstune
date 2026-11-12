@@ -561,7 +561,7 @@ internal class ExactMatcher(
     private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(tagRegex, " "), android.text.Html.FROM_HTML_MODE_LEGACY)
         .toString().replace(spacesRegex, " ").trim()
 
-    private val tagRegex = Regex("<[^>]+>")
+    private val tagRegex = Regex("<[^<>]++>")
     private val spacesRegex = Regex("\\s+")
 
     /** Whether [name] is one of [metadata]'s artists, e.g. the account an upload is on. */
@@ -951,8 +951,11 @@ internal class ExactMatcher(
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         /** One song in Qobuz's search: its title and "artist • album", and the numbers of the song and its album. */
-        private val qobuzItemRegex = Regex("""<div class="ListItem">.*?</li>""", RegexOption.DOT_MATCHES_ALL)
-        private val qobuzTitleRegex = Regex("""class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>""", RegexOption.DOT_MATCHES_ALL)
+        private val qobuzItemRegex = Regex("""<div class="ListItem">(?:[^<]++|<(?!/li>|div class="ListItem">))*+</li>""")
+        private val qobuzTitleRegex = Regex(
+            """class="ListItem__title"(?:[^<>c]|c(?!lass="ListItem__title"))*+>((?:[^<c]++|<(?!/a>)|c(?!lass="ListItem__title"))*+)</a>\s*+""" +
+                """<p class="ListItem__artists">((?:[^<]++|<(?!/p>|p class="ListItem__artists">))*+)</p>"""
+        )
         private val qobuzTrackRegex = Regex("""track&#x2F;(\d+)""")
         private val qobuzAlbumRegex = Regex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
 
@@ -996,7 +999,7 @@ internal class ExactMatcher(
         private val YEAR = Regex("""(?:19|20)\d\d""")
 
         /** What's in brackets, of any kind a title uses. */
-        private val BRACKETED = Regex("""[(\[（【「『［][^)\]）】」』］]*[)\]）】」』］]""")
+        private val BRACKETED = Regex("""[(\[（【「『［][^(\[（【「『［)\]）】」』］]*+[)\]）】」』］]""")
 
         /** Apple Music stores that write names as they are in Japanese, Korean and Chinese. */
         private val NAMING_STORES = listOf("JP", "KR", "TW", "HK", "CN")

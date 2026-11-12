@@ -474,7 +474,7 @@ internal object Readings {
      * kana too, 《不本意な現状》（いま）: the closing mark goes with the brackets, so it's kept where it is.
      */
     private val givenReading = Regex(
-        """([\p{IsHan}々]+)([》」』〉】]?[（(]([\p{IsHiragana}\p{IsKatakana}ー]+)[）)])""" +
+        """(?<![\p{IsHan}々])([\p{IsHan}々]++)([》」』〉】]?[（(]([\p{IsHiragana}\p{IsKatakana}ー]+)[）)])""" +
             """|(?<=[《「『〈【])([^《》「」『』〈〉【】（）()\s]*\p{IsHan}[^《》「」『』〈〉【】（）()\s]*)([》」』〉】][（(]([\p{IsHiragana}\p{IsKatakana}ー]+)[）)])"""
     )
 

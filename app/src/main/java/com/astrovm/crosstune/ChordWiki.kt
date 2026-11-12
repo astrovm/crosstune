@@ -337,7 +337,7 @@ private fun chordWikiNames(title: String, one: String, other: String, more: List
 /** A page's name as listed, and without the credit ChordWiki hangs on it, as in "夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）". */
 private fun chordWikiTitles(title: String): List<String> = listOf(title, title.replace(CREDIT, ""))
 
-private val CREDIT = Regex("""\s*[（(]\s*(?:歌|唄|作詞|作曲|編曲|原曲)[^）)]*[）)]\s*$""")
+private val CREDIT = Regex("""$SPACES_START\s*+[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)[^（(）)]*+[）)]\s*+$""")
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
     val (text, href) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return null
@@ -353,8 +353,8 @@ private fun chordWikiHit(text: String, href: String): ChordWikiHit? {
     return ChordWikiHit(title, text.substringAfter(" - ", "").trim(), link)
 }
 
-private val ANCHOR = Regex("""<a\b[^>]*\bhref="([^"]*)"[^>]*>(.*?)</a>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-private val ANCHOR_TAGS = Regex("<[^>]+>")
+private val ANCHOR = Regex("""<a\b[^<>]*\bhref="([^"<>]*+)"[^<>]*+>((?:[^<]++|<(?!/a>|a\b))*+)</a>""", RegexOption.IGNORE_CASE)
+private val ANCHOR_TAGS = Regex("<[^<>]++>")
 
 /** What ChordWiki's search says when no song matches. */
 private const val NO_MATCH = "一致するものは見つかりませんでした"

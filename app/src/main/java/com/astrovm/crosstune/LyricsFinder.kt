@@ -52,7 +52,7 @@ private val whitespace = Regex("""\s+""")
 private val closingFiller = Regex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)""", RegexOption.IGNORE_CASE)
 
 /** A note under a heading, not sung: wholly in brackets, "（Some Writer / Another）", or who it's by, "BY SOMEONE". */
-private val headingNote = Regex("""[（(\[].*[）)\]]|by\s+\S.*""", RegexOption.IGNORE_CASE)
+private val headingNote = Regex("""^(?:[（(\[].*[）)\]]|by\s+\S.*)""", RegexOption.IGNORE_CASE)
 
 /** A bracketed stretch, in any of the brackets lyrics are written with: "（repeat and fade）", "(x2)", "[fade out]", "【2x】". */
 private val bracketed = Regex("""[（(\[【][^（()）\[\]【】]*[）)\]】]""")
@@ -158,7 +158,7 @@ private val netEaseStudio = Regex("""^(?:(?:Recorded|Mixed|Mastered)\b[^:：]*\b
 private val sungPart = Regex("""^(?:male|female|both|all|verse|chorus|hook|bridge|rap|intro|outro|pre-?chorus|男|女|合)(?:\s*\d+)?$""", RegexOption.IGNORE_CASE)
 
 /** A line NetEase's contributors fill an intro or an outro with, not sung: the song's name, "♪Artist - Song", or a dash. */
-private val netEaseFiller = Regex("""♪.*\s[-–]\s.*|[-–—]+""")
+private val netEaseFiller = Regex("""^(?:♪.*\s[-–]\s.*|[-–—]+)""")
 
 /** A part's name, which some of NetEase's contributors head each part with: "[Verse 1]", "[Chorus: Drake]". */
 private val netEasePart = Regex("""\[(?:intro|verse|pre-?chorus|chorus|post-?chorus|hook|bridge|interlude|refrain|outro)\b[^\]]*\]""", RegexOption.IGNORE_CASE)
@@ -278,7 +278,7 @@ private fun isHeading(line: String, song: MusicMetadata): Boolean {
 private val headingWords = listOf("lyrics", "explicit", "featuring", "feat", "ft", "and", "the")
 
 /** A line that's only a guest's credit: "（feat. Dwele）", "ft. Someone". */
-private val guestCredit = Regex("""(?i)\s*[(（\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^)）\]]+[)）\]]?\s*""")
+private val guestCredit = Regex("""(?i)^\s*+[(（\[]?\s*+(?:feat\.?|ft\.?|featuring)\s[^)）\]]++[)）\]]?\s*+""")
 
 /** A web address, as a lyrics site's ad for itself: "{more ILLIT lyrics at lyricsify.com/u/KPopLRCFiles}". */
 private val webAddress = Regex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/""")
@@ -330,7 +330,7 @@ private fun List<LyricLine>.withoutOpeningMoments(): List<LyricLine> =
 private const val MOMENT_MS_A_WORD = 150L
 
 /** A character NetEase lost, as it writes it: "Don't锟斤拷锟斤拷look". */
-private val lostCharacters = Regex("""\s*(?:锟斤拷)+\s*""")
+private val lostCharacters = Regex("""$SPACES_START\s*+(?:锟斤拷)++\s*+""")
 
 /** UTF-8 read once as Windows-1252 or Latin-1: "Ã¢" for "â", "â€™" for "’". */
 private val misread = Regex("""[ÃÂâ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]""")
@@ -434,8 +434,6 @@ private const val GARBLED_MIN_HAN = 10
 /** Whether any of it is written in Latin letters. */
 internal fun String.hasLatin() = any { it in 'a'..'z' || it in 'A'..'Z' }
 
-/** A name in brackets after a name, what it's called in Chinese: " （夫·埃里克森）". */
-private val netEaseGloss = Regex("""\s*[（(][^）)]*[）)]""")
 
 /**
  * The lines up to the credits NetEase closes some songs with: at least two, with nothing sung after
@@ -1687,7 +1685,7 @@ internal class LyricsFinder(
         private const val GENIUS_FUZZY_LENGTH = 7
         private const val GENIUS_MAX_TITLE = 256
         private val GENIUS_LATIN_NAME = Regex("[a-z0-9]+")
-        private val GENIUS_ALTERNATE_TITLE = Regex("""([^()]+)\s*\(([^()]+)\)""")
+        private val GENIUS_ALTERNATE_TITLE = Regex("""^([^()]++)\(([^()]++)\)""")
         const val GENIUS_URL = "https://genius.com/"
         const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
 
@@ -1712,22 +1710,24 @@ internal class LyricsFinder(
         const val LETRAS = "letras"
         const val GENIUS = "genius"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-        val letrasWords = Regex("""<div class="lyric-content[^"]*">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        val letrasWords = Regex("""<div class="lyric-content[^"<>]*+">((?:[^<]++|<(?!/div>|div class="lyric-content))*+)</div>""")
 
         /** On a page with Letras's own translation beside the song, the song's words, after its name. */
-        val letrasOriginal = Regex("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", RegexOption.DOT_MATCHES_ALL)
+        val letrasOriginal = Regex(
+            """<div class="lyric-translation-left">\s*+(?:<strong>(?:[^<]++|<(?!/strong>|div class="lyric-translation-left">))*+</strong>)?((?:[^<]++|<(?!/div>|div class="lyric-translation-left">))*+)</div>"""
+        )
         private val letrasBox = Regex("""<div\b|</div>""")
         private val letrasAd = Regex("""<div id="pub_""")
-        private val geniusNotWords = Regex("""<div\b[^>]*data-exclude-from-selection="true"[^>]*>""")
-        private val geniusBox = Regex("""<div\b[^>]*data-lyrics-container="true"[^>]*>""")
-        private val geniusTag = Regex("""\[[^\]]*]""")
+        private val geniusNotWords = Regex("""<div\b[^<>]*data-exclude-from-selection="true"[^<>]*+>""")
+        private val geniusBox = Regex("""<div\b[^<>]*data-lyrics-container="true"[^<>]*+>""")
+        private val geniusTag = Regex("""^\[[^\]]*]""")
 
         /** Someone credited on an Apple Music song page, and their roles. */
         private val credit = Regex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
         private val writerRole = Regex("Songwriter|Composer|Lyricist")
         val letrasStanza = Regex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
         val letrasBreak = Regex("""<br\s*/?>""")
-        val letrasTag = Regex("""<[^>]+>""")
+        val letrasTag = Regex("""<[^<>]++>""")
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"

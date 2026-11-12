@@ -80,7 +80,7 @@ internal object ChordSheets {
     /** How long a line with nothing after it takes per letter, to time its chords. */
     private const val LETTER_MS = 150L
 
-    private val inline = Regex("""\[([^\]]*)]""")
+    private val inline = Regex("""\[([^\[\]]*+)]""")
 
     /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
     private val reading = Regex("""(?<=\p{IsHan})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
@@ -90,29 +90,66 @@ internal object ChordSheets {
     private val solfege = mapOf("DO" to "C", "RE" to "D", "MI" to "E", "FA" to "F", "SOL" to "G", "LA" to "A", "SI" to "B")
     private val jTotalLineEnd = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
 
+    /*
+     * The patterns that read a J-Total page take time in step with its length, whatever is on it. A part
+     * marked `*+` or `++` takes all it can and gives none back, and a tag ends at the next `<` or `>`, so a
+     * pattern that can't match gives up at once: a chord name with no `</a>`, or a `<` with no `>` after it,
+     * took seconds on 30,000 letters, and a long run of tags filled the stack.
+     */
+
+    /** A chord's name: spaces, then a letter, then anything up to the next tag. */
+    private const val CHORD_NAME = """\s*+[^<\s][^<]*+"""
+
+    /** The link a chord's name is in: `<a`, a `cd/` address, then its `>`. */
+    private const val CHORD_TAG = """<a (?=[^<>]*cd/)[^<>]*+>"""
+
     /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
-    private val jTotalChord = Regex("""<a [^>]*cd/[^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
+    private val jTotalChord = Regex("""$CHORD_TAG($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
 
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
-    private val splitChord = Regex("""^([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?""")
-    private val markup = Regex("""<[^>]+>""")
-    private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^>]+>""", RegexOption.IGNORE_CASE)
+    private val splitChord = Regex("""^($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
+    private val markup = Regex("""<[^<>]++>""")
+    private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^<>]++>""", RegexOption.IGNORE_CASE)
     private val sourceSpace = Regex("""[ \t\r\n]+""")
-    private val nameThenBreak = Regex("""(<a [^>]*cd/[^>]*>[^<]*[^<\s][^<]*)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
-    private val spacesAndTags = Regex("""(?: |<[^>]+>)+""")
-    private val oneSpaceOrTag = Regex(""" |<[^>]+>""")
-    private val commentedStyle = Regex("""<!--\s*<style\b[^>]*>.*?</style>\s*-->""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-    private val styleBlock = Regex("""<style\b[^>]*>(.*?)</style>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-    private val cssComment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
-    private val ttRule = Regex("""(?:^|[}\s>])tt\s*\{([^}]*)\}""", RegexOption.IGNORE_CASE)
+    private val nameThenBreak = Regex("""($CHORD_TAG$CHORD_NAME)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
+    private val spacesAndTags = Regex("""(?: |<[^<>]++>)++""")
+    private val oneSpaceOrTag = Regex(""" |<[^<>]++>""")
+
+    // A style block ends at its own </style>, and never runs on into the next <style>.
+    private val commentedStyle = Regex("""<!--\s*+<style\b[^<>]*+>(?:[^<]++|<(?!/?style\b))*+</style>\s*+-->""", RegexOption.IGNORE_CASE)
+    private val styleBlock = Regex("""<style\b[^<>]*+>((?:[^<]++|<(?!/?style\b))*+)</style>""", RegexOption.IGNORE_CASE)
+    private val ttRule = Regex("""(?:^|[}\s>])tt\s*+\{([^{}]*+)\}""", RegexOption.IGNORE_CASE)
     private val fontFamily = Regex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
 
     /** J-Total's last tt rule selects one of its two font stacks. */
     fun jTotalMonospace(page: String): Boolean {
-        val css = styleBlock.findAll(page.replace(commentedStyle, "")).joinToString("\n") { it.groupValues[1] }.replace(cssComment, "")
+        val css = withoutCssComments(styleBlock.findAll(page.replace(commentedStyle, "")).joinToString("\n") { it.groupValues[1] })
         val family = ttRule.findAll(css).mapNotNull { fontFamily.find(it.groupValues[1])?.groupValues?.get(1) }.lastOrNull()
         return family?.replace("'", "\"")?.replace(" ", "")?.equals("\"Inconsolata\",monospace", ignoreCase = true) == true
     }
+
+    /** [css] with each comment taken out, from where it opens to the first close after it. One that never closes stays, and so does the rest. */
+    private fun withoutCssComments(css: String): String {
+        val kept = StringBuilder()
+        var from = 0
+        while (true) {
+            val open = css.indexOf("/*", from)
+            val close = if (open < 0) -1 else css.indexOf("*/", open + 2)
+            if (close < 0) return kept.append(css, from, css.length).toString()
+            kept.append(css, from, open)
+            from = close + 2
+        }
+    }
+
+    /** The sheet in J-Total's page: from its first `<!--HPSTART-->` to the `<!--HPEND-->` after it, or null with either missing. */
+    fun jTotalSheet(page: String): String? {
+        val start = page.indexOf(HP_START).takeIf { it >= 0 }?.plus(HP_START.length) ?: return null
+        val end = page.indexOf(HP_END, start).takeIf { it >= 0 } ?: return null
+        return page.substring(start, end)
+    }
+
+    private const val HP_START = "<!--HPSTART-->"
+    private const val HP_END = "<!--HPEND-->"
 
     private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
@@ -158,11 +195,12 @@ internal object ChordSheets {
     /**
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
      * played on, each over its letter. Japanese takes two columns, and the Latin font the page names
-     * first takes one. A full-width bracket or stop is two as well, except where the browser draws
-     * it at one. A letter in neither font is as wide as the browser's fallback draws it, and a chord
-     * goes over the letter that starts nearest where it is. Only a <br> ends a line, and spaces count as
-     * a browser counts them, as its source wraps anywhere. Tags are not drawn: an empty link adds
-     * no column, and a link split by a <br> names the chord on the line its name is on.
+     * first takes one. A full-width bracket or stop is two as well, beside another or not: a Japanese
+     * reader's browser on Windows trims none. A letter in neither font is as wide as the browser's
+     * fallback draws it, and a chord goes over the letter that starts nearest where it is. Only a <br>
+     * ends a line, and spaces count as a browser counts them, as its source wraps anywhere. Tags are not
+     * drawn: an empty link adds no column, and a link split by a <br> names the chord on the line its
+     * name is on.
      */
     fun fromJTotal(sheet: String, monospace: Boolean = false): List<SheetLine> {
         // A chord link can end after the break that follows its name: the name is still on its line.
@@ -223,9 +261,9 @@ internal object ChordSheets {
 
     /**
      * The letter of [words] whose start is nearest [column], the later one when two are as near: a
-     * chord over the middle of a wide letter is read as the next. Widths use the whole line, so a
-     * bracket can see the punctuation beside it. Letters that start in the same place, as a mark with
-     * no width does, give the first. The end of the line is where a chord past the last letter goes.
+     * chord over the middle of a wide letter is read as the next. Each letter has its own width, whatever
+     * is beside it. Letters that start in the same place, as a mark with no width does, give the first.
+     * The end of the line is where a chord past the last letter goes.
      */
     private fun letterAt(words: String, column: Int, monospace: Boolean): Int {
         var best = 0
@@ -250,7 +288,7 @@ internal object ChordSheets {
     private val directiveName = Regex("""[a-z_][a-z0-9_]*""")
 
     /** The longest editor on an edit page; a page with none is the ChordPro text itself. */
-    private val textarea = Regex("""<textarea\b[^>]*>(.*?)</textarea>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val textarea = Regex("""<textarea\b[^<>]*+>((?:[^<]++|<(?!/textarea>|textarea\b))*+)</textarea>""", RegexOption.IGNORE_CASE)
 
     /** A chord token: a letter root, then only what a chord name uses, and not a whole word. */
     private val chordToken = Regex("""[A-G][0-9A-Za-z#/()+\-]*""")

@@ -146,7 +146,7 @@ internal object MusicLinks {
      * or lost. An id mixes letters and digits, while a long one-word title, e.g.
      * "Supercalifragilisticexpialidocious", is letters only.
      */
-    private val bareIdRegex = Regex("""(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{20,}""")
+    private val bareIdRegex = Regex("""(?<![A-Za-z0-9])(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{20,}""")
 
     /**
      * Whether [text] was meant as a link rather than as a song's name: it carries a scheme, or a

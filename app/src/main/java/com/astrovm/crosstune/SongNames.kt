@@ -15,7 +15,7 @@ import java.util.Locale
 internal object SongNames {
     private val leadingArticle = Regex("""^the\s+""", RegexOption.IGNORE_CASE)
     private val artistSeparator = Regex(
-        """\s*(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*""",
+        """$SPACES_START\s*+(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*+""",
         RegexOption.IGNORE_CASE
     )
     private val marks = Regex("""\p{M}+""")
@@ -23,7 +23,7 @@ internal object SongNames {
     private val wordSplit = Regex("""[^a-z0-9]+""")
 
     /** "Zion and Lennox" and "Zion & Lennox" are two names, whichever language says so. */
-    private val conjunction = Regex("""\s+(?:and|y|und|et)\s+""", RegexOption.IGNORE_CASE)
+    private val conjunction = Regex("""$SPACES_START\s++(?:and|y|und|et)\s++""", RegexOption.IGNORE_CASE)
 
     /** A guest credited in the title, as "(feat. Emel)", which some services leave out. */
     private val featuring = Regex(
@@ -32,7 +32,7 @@ internal object SongNames {
         RegexOption.IGNORE_CASE
     )
     /** What marks a title as a music video's, as K-pop does, which no store has it under. */
-    private val videoMark = Regex("""\s*[(\[]\s*M/V\s*[)\]]|\s+M/V\b""", RegexOption.IGNORE_CASE)
+    private val videoMark = Regex("""$SPACES_START(?:\s*+[(\[]\s*+M/V\s*+[)\]]|\s++M/V\b)""", RegexOption.IGNORE_CASE)
     private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
 
     /**
@@ -41,7 +41,7 @@ internal object SongNames {
      * "(電影《我的少女時代》主題曲)". "Live", "Acoustic" or "Remix" are other recordings, so they stay.
      */
     private val editionTag = Regex(
-        """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*|$IN_TAG*(?:$TIE_IN)$IN_TAG*)\s*[)\]]?$""",
+        """$SPACES_START(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*|$IN_TAG*(?:$TIE_IN)$IN_TAG*)\s*[)\]]?$""",
         RegexOption.IGNORE_CASE
     )
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
@@ -267,7 +267,7 @@ internal object SongNames {
 
     private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
     private val coverTags = listOf(
-        Regex("""[(\[【][^)\]】]*(?:$COVER_WORDS)[^)\]】]*[)\]】]""", RegexOption.IGNORE_CASE),
+        Regex("""[(\[【][^(\[【)\]】]*(?:$COVER_WORDS)[^(\[【)\]】]*+[)\]】]""", RegexOption.IGNORE_CASE),
         Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
     )
     private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
@@ -352,7 +352,7 @@ internal object SongNames {
     private const val FUZZY_SOUNDS = 5
 
     /** What a name adds at its end, in brackets or after a dash: "(2018 Remix)", "[Live]", " - Remastered". */
-    private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
+    private val trailingTag = Regex("""$SPACES_START(?:\s*[(\[][^()\[\]]*+[)\]]|\s+[-–]\s+[^-–]*+)$""")
 
     /** Two credits for one artist, near enough: "Randy" is in "Randy Nota Loca". */
     fun sameArtist(one: String, other: String): Boolean {

@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -463,6 +464,39 @@ class ChordSheetsTest {
     private fun at(sheet: String, monospace: Boolean) = ChordSheets.fromJTotal(sheet, monospace).single().chords.single().at
 
     @Test
+    fun jTotalCountsALetterAboveTheBasicPlaneBeforeAChordOnce() {
+        // 𠮷 is one letter of two columns, which Java holds as two halves. Counted as two letters, it would
+        // move the chord after it on by two more columns, to the end of the line.
+        for (monospace in listOf(false, true)) assertEquals(2, at("\uD842\uDFB7${jTotal("C")}<br>abcd", monospace))
+    }
+
+    @Test
+    fun jTotalPutsNoChordOnHalfOfALetterAboveTheBasicPlane() {
+        // Read as two letters, 𠮷's second half would start where a does, and take the chord over it.
+        for (monospace in listOf(false, true)) assertEquals(2, at("xx${jTotal("C")}<br>\uD842\uDFB7ab", monospace))
+    }
+
+    @Test
+    fun aChordLinkThatNeverClosesTakesNoLongerThanTheLineItIsOn() {
+        // Each pattern that reads a chord's name tried every way to split a long name before giving up, and
+        // each tag pattern looked from every < to the line's end: 30,000 letters took seconds. Each sheet
+        // below fails one of them.
+        val long = "x".repeat(30_000)
+        val link = """<a href="JavaScript:jump_1('../../../cd/C.html');">"""
+        for (sheet in listOf("$link$long", "$link$long<br>abcd", "$long<br>abcd", "$link $long", "<a cd/".repeat(5_000), "<".repeat(30_000), "<b".repeat(15_000))) {
+            val took = timed { ChordSheets.fromJTotal(sheet) }
+            assertTrue("${sheet.take(60)}... took $took ms", took < 500)
+        }
+    }
+
+    @Test
+    fun aLongRunOfLinksAndSpacesFitsOnTheStack() {
+        // Read one at a time, each link and space of a run took a step deeper into the stack: 20,000 of them
+        // overflowed it. The run is a line of nothing but links, so no line comes out of it.
+        assertEquals(listOf(SheetLine("abcd", emptyList())), ChordSheets.fromJTotal("${"<a> ".repeat(100_000)}<br>abcd"))
+    }
+
+    @Test
     fun jTotalDoesNotReadLinksToOtherVersionsAsChords() {
         val sheet = "<a href='song-e.html'>Easy version</a><br>${jTotal("C")}<br>abcd"
         assertEquals(
@@ -480,6 +514,38 @@ class ChordSheetsTest {
         assertEquals(true, ChordSheets.jTotalMonospace(normal + mono))
         assertEquals(false, ChordSheets.jTotalMonospace(mono + normal))
         assertEquals(false, ChordSheets.jTotalMonospace(normal + "<style>/* tt { font-family: 'Inconsolata', monospace; } */</style>"))
+        assertEquals(true, ChordSheets.jTotalMonospace(normal + "<STYLE>/* a */ tt { font-family: 'Inconsolata', monospace; } /* b */</STYLE>"))
+    }
+
+    @Test
+    fun jTotalsSheetIsFromItsFirstStartToTheEndAfterIt() {
+        assertEquals("ab", ChordSheets.jTotalSheet("x<!--HPSTART-->ab<!--HPEND-->c<!--HPSTART-->d<!--HPEND-->"))
+        assertEquals("", ChordSheets.jTotalSheet("<!--HPSTART--><!--HPEND-->"))
+        assertNull(ChordSheets.jTotalSheet("<!--HPEND--><!--HPSTART-->ab"))
+        assertNull(ChordSheets.jTotalSheet("ab<!--HPEND-->"))
+    }
+
+    @Test
+    fun aJTotalPageThatNeverClosesWhatItOpensTakesNoLongerThanItsLength() {
+        // Each of these opens a style, a comment or a rule and never closes it. Looked for from each opening
+        // to the page's end, they took up to two seconds.
+        val pages = listOf(
+            "<style>".repeat(5_000),
+            "<!--<style>".repeat(3_000),
+            "<style>${" tt{".repeat(7_500)}</style>",
+            "<style>${"/*x".repeat(6_666)}</style>",
+            "<!--HPSTART-->".repeat(3_000),
+        )
+        for (page in pages) {
+            val took = timed { ChordSheets.jTotalMonospace(page); ChordSheets.jTotalSheet(page) }
+            assertTrue("${page.take(40)}... took $took ms", took < 500)
+        }
+    }
+
+    private fun timed(work: () -> Unit): Long {
+        val began = System.nanoTime()
+        work()
+        return (System.nanoTime() - began) / 1_000_000
     }
 
     @Test

@@ -250,7 +250,7 @@ private fun pathSearchUrl(baseUrl: String): (String) -> String = { query ->
  */
 internal fun inOnePathSegment(query: String): String = query.replace(slashes, " ").trim()
 
-private val slashes = Regex("""\s*/\s*""")
+private val slashes = Regex("""$SPACES_START\s*+/\s*+""")
 
 /** Without a tag that names no other recording, which some services' names leave out, and then find nothing. */
 internal fun searchQuery(metadata: MusicMetadata): String =

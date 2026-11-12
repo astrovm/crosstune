@@ -24,13 +24,13 @@ import java.net.URLEncoder
 
 /** A song in U-FRET's results: whether it's the easier version, its number, title and artist. */
 private val uFretResult = Regex(
-    """c-list__item (normal|beginner)-chord">\s*<a href="/song\.php\?data=(\d+)".*?c-list__title">(.*?)</p>\s*<p class="c-list__artist">(.*?)</p>""",
-    RegexOption.DOT_MATCHES_ALL
+    """c-list__item (normal|beginner)-chord">\s*+<a href="/song\.php\?data=(\d++)"(?:[^c]++|c(?!-list__item |-list__title">))*+c-list__title">""" +
+        """((?:[^<c]++|<(?!/p>)|c(?!-list__item ))*+)</p>\s*+<p class="c-list__artist">((?:[^<c]++|<(?!/p>)|c(?!-list__item ))*+)</p>"""
 )
-private val tags = Regex("<[^>]*>[^<]*</[^>]*>|<[^>]*>")
-private val uFretSheet = Regex("""var ufret_chord_datas = (\[.*?]);""")
+private val tags = Regex("<[^<>]*+>[^<]*+</[^<>]*+>|<[^<>]*+>")
+private val uFretSheet = Regex("""var ufret_chord_datas = (\[(?:[^\]v\n]++|](?!;)|v(?!ar ufret_chord_datas = ))*+]);""")
 private val titleBreak = Regex(""" [-–—/] |／""")
-private val creditBracket = Regex("""\s*[(（].*$""")
+private val creditBracket = Regex("""$SPACES_START\s*[(（].*$""")
 private val ugData = Regex("""class="js-store" data-content="([^"]*)"""")
 
 /** In LaCuerda's results, an artist, or a song of theirs: its row, the kind of sheet each take is, and the takes best liked first. */
@@ -38,27 +38,26 @@ private val laCuerdaResult = Regex(
     """<a href="/([^/"]+)/">([^<]*)</a>|<li id='r(\d+)' lcd='([A-Z]*)-([^']*)'>\s*<a href="javascript:">([^<]*)</a>""",
     RegexOption.IGNORE_CASE
 )
-private val laCuerdaFiles = Regex("""var fns=\[([^\]]*)];""")
+private val laCuerdaFiles = Regex("""var fns=\[([^\[\]]*+)];""")
 private val laCuerdaLast = Regex("""var NMAX=(\d+);""")
-private val laCuerdaSheet = Regex("""<div id=t_body><pre>(.*?)</pre>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+private val laCuerdaSheet = Regex("""<div id=t_body><pre>((?:[^<]++|<(?!/pre>|div id=t_body><pre>))*+)</pre>""", RegexOption.IGNORE_CASE)
 private val laCuerdaChord = Regex("""<a>([^<]*)</a>""", RegexOption.IGNORE_CASE)
-private val markup = Regex("<[^>]*>")
+private val markup = Regex("<[^<>]*+>")
 
 /** Cifra Club's sheet of words and chords, its tabs written apart, its chords in bold, and the fret its capo is on. */
-private val cifraClubSheet = Regex("""<pre[^>]*data-chord-content="true"[^>]*>(.*?)</pre>""", RegexOption.DOT_MATCHES_ALL)
-private val cifraClubTabs = Regex("""<div class="tabs">.*?</div>""", RegexOption.DOT_MATCHES_ALL)
-private val cifraClubChord = Regex("""<b[^>]*>([^<]*)</b>""")
+private val cifraClubSheet = Regex("""<pre[^<>]*?data-chord-content="true"[^<>]*+>((?:[^<]++|<(?!/pre>|pre))*+)</pre>""")
+private val cifraClubTabs = Regex("""<div class="tabs">(?:[^<]++|<(?!/div>|div class="tabs">))*+</div>""")
+private val cifraClubChord = Regex("""<b[^<>]*+>([^<]*+)</b>""")
 private val cifraClubCapo = Regex("""\\"capo\\":(\d+)""")
 
 /** A song in J-Total's results: its page, its name, and who sings it. */
 private val jTotalResult = Regex(
-    """<a href="(?:https:)?//music\.j-total\.net/data/([^"]+\.html)" target=""><font size="3"><b>([^<]*)</b></font></a>.*?歌：([^/<]*)""",
-    RegexOption.DOT_MATCHES_ALL
+    """<a href="(?:https:)?//music\.j-total\.net/data/([^"]+\.html)" target=""><font size="3"><b>([^<]*+)</b></font></a>""" +
+        """(?:[^<歌]++|<(?!a href="(?:https:)?//music\.j-total\.net/data/)|歌(?!：))*+歌：([^/<]*+)"""
 )
 
 /** What J-Total adds to the name of its easier versions: "〜初心者向け簡単コードVer.〜". */
 private val jTotalVersion = Regex("""〜[^〜]*Ver\.〜""")
-private val jTotalSheet = Regex("""<!--HPSTART-->(.*?)<!--HPEND-->""", RegexOption.DOT_MATCHES_ALL)
 private val J_TOTAL_CHARSET = Charset.forName("Shift_JIS")
 
 /**
@@ -557,7 +556,7 @@ internal class ChordFinder(
     private suspend fun searchJTotal(song: MusicMetadata, names: List<String>, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(names, { name -> jTotalSheets(song, name) }, fits) { url ->
             val page = fetch(url, charset = J_TOTAL_PAGE_CHARSET) { code, _ -> code == 404 }
-            val sheet = jTotalSheet.firstGroup(page) ?: return@firstSheet null
+            val sheet = ChordSheets.jTotalSheet(page) ?: return@firstSheet null
             ChordSheet(ChordSheets.fromJTotal(unescape(sheet), ChordSheets.jTotalMonospace(page)), site = ChordSite.J_TOTAL, url = url)
         }
 
