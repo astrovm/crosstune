@@ -334,7 +334,7 @@ internal class MainViewModel(
 
     /**
      * Does all there is to fix, through Shizuku or root: stops the apps in the way, allows the
-     * links, the microphone, and lyrics following music apps. What it couldn't do is still there to fix by hand.
+     * links, the microphone, lyrics following music apps, and a late reminder's exact minute. What it couldn't do is still there to fix by hand.
      */
     fun setUpInOneTap() {
         val setup = oneTap ?: return
@@ -344,11 +344,12 @@ internal class MainViewModel(
         viewModelScope.launch {
             val worked = inOneTap(
                 setup, apps = state.blockingApps.orEmpty().map { it.packageName }, links = state.interceptsAnything,
-                follow = !state.canFollowApps, microphone = state.microphone != MicAccess.ALLOWED
+                follow = !state.canFollowApps, microphone = state.microphone != MicAccess.ALLOWED, exact = state.reminder.late
             )
             uiState = uiState.copy(settingUpInOneTap = false, oneTapFailed = !worked)
             refreshSystemState()
             refreshFollowing()
+            refreshReminder()
         }
     }
 
@@ -362,11 +363,20 @@ internal class MainViewModel(
         if (uiState.fixingInOneTap != null) return true
         uiState = uiState.copy(fixingInOneTap = fix)
         viewModelScope.launch {
-            val worked = inOneTap(setup, links = fix == OneTapFix.LINKS, follow = fix == OneTapFix.FOLLOW, floating = fix == OneTapFix.FLOAT)
-            val need = if (fix == OneTapFix.LINKS) Need.Links else if (fix == OneTapFix.FOLLOW) Need.Follow else Need.Float
+            val worked = inOneTap(
+                setup, links = fix == OneTapFix.LINKS, follow = fix == OneTapFix.FOLLOW, floating = fix == OneTapFix.FLOAT, exact = fix == OneTapFix.EXACT
+            )
+            val need = when (fix) {
+                OneTapFix.LINKS -> Need.Links
+                OneTapFix.FOLLOW -> Need.Follow
+                OneTapFix.FLOAT -> Need.Float
+                OneTapFix.EXACT -> Need.Exact
+            }
             uiState = uiState.copy(fixingInOneTap = null, fixes = if (worked) uiState.fixes else Fixes(list = uiState.fixes?.list == true, steps = listOf(need), failed = true))
             refreshSystemState()
             refreshFollowing()
+            // Allowed, the alarm is set again for the exact minute at once, and the problem goes.
+            refreshReminder()
             if (worked) then()
         }
         return true
@@ -378,9 +388,10 @@ internal class MainViewModel(
         links: Boolean,
         follow: Boolean,
         microphone: Boolean = false,
-        floating: Boolean = false
+        floating: Boolean = false,
+        exact: Boolean
     ): Boolean {
-        val worked = setup.setUp(apps = apps, links = links, follow = follow, microphone = microphone, floating = floating)
+        val worked = setup.setUp(apps = apps, links = links, follow = follow, microphone = microphone, floating = floating, exact = exact)
         // Android lets Crosstune follow music apps a moment after it's told to.
         var waits = 0
         while (worked && follow && playback?.hasAccess() != true && waits++ < FOLLOW_WAITS) delay(FOLLOW_WAIT_MS)

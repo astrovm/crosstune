@@ -291,8 +291,8 @@ private fun FixAll(state: UiState, actions: ScreenActions, left: List<Need>) {
             .padding(top = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // One tap can allow links, following and the microphone. It cannot allow alarms and reminders.
-        val oneTap = state.canSetUpInOneTap && !state.oneTapFailed && left.any { it != Need.Exact }
+        // One tap can allow links, following, the microphone and alarms and reminders.
+        val oneTap = state.canSetUpInOneTap && !state.oneTapFailed && left.isNotEmpty()
         val press = rememberPress()
         Button(
             onClick = if (oneTap) actions.onSetUpInOneTap else { { actions.onFixSteps(left) } },

@@ -598,7 +598,7 @@ internal data class NotFoundOffer(val song: MusicMetadata, val destination: Dest
 internal enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /** What's fixed in one tap after setup, from where it's needed: the links, following music apps, or floating lyrics. */
-internal enum class OneTapFix { LINKS, FOLLOW, FLOAT }
+internal enum class OneTapFix { LINKS, FOLLOW, FLOAT, EXACT }
 
 /** A report on the words: on its way, there, or not sent. */
 internal enum class ReportStatus { SENDING, SENT, FAILED }

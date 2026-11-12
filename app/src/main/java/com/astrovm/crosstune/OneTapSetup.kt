@@ -25,7 +25,7 @@ internal interface Shell {
 /**
  * Setup in one tap, through the first of [shells] that's ready, from Android 12, whose commands
  * these are: other apps stop opening the links, Crosstune opens its own, lyrics hear the music and
- * follow music apps, and float over other apps.
+ * follow music apps, float over other apps, and practice reminders go at their minute.
  */
 internal class OneTapSetup(private val context: Context, private val shells: List<Shell>) {
     private fun shell(): Shell? = shells.firstOrNull { it.ready() }.takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
@@ -46,16 +46,16 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
 
     /**
      * Stops [apps], by package, opening links; lets Crosstune open its [links]; and, when asked to,
-     * lets it [follow] music apps, use the [microphone], and show [floating] lyrics, with their
-     * notification. Each is tried, so one failing leaves the rest done; whether all worked.
+     * lets it [follow] music apps, use the [microphone], show [floating] lyrics, with their
+     * notification, and set [exact] alarms. Each is tried, so one failing leaves the rest done; whether all worked.
      */
-    suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean): Boolean {
+    suspend fun setUp(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean, exact: Boolean): Boolean {
         val shell = shell() ?: return false
         if (!shell.allowed()) return false
-        return commands(apps, links, follow, microphone, floating).map { shell.run(it) }.all { it }
+        return commands(apps, links, follow, microphone, floating, exact).map { shell.run(it) }.all { it }
     }
 
-    private fun commands(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean): List<List<String>> = buildList {
+    private fun commands(apps: List<String>, links: Boolean, follow: Boolean, microphone: Boolean, floating: Boolean, exact: Boolean): List<List<String>> = buildList {
         val user = (android.os.Process.myUid() / PER_USER_RANGE).toString()
         val own = context.packageName
         // Lyrics then hear music apps' own sound, cleanly, without Android asking to share the screen each time.
@@ -76,6 +76,8 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
             // Locked, floating lyrics unlock from their notification, which Android 13 asks about.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(listOf("pm", "grant", "--user", user, own, android.Manifest.permission.POST_NOTIFICATIONS))
         }
+        // Alarms and reminders, the switch in Android's settings, so a practice reminder isn't held up to an hour.
+        if (exact) add(listOf("appops", "set", "--user", user, own, EXACT_ALARM_OP, "allow"))
     }
 
     companion object {
@@ -86,5 +88,8 @@ internal class OneTapSetup(private val context: Context, private val shells: Lis
 
         /** What lets an app capture what others play without Android asking each time. */
         const val PROJECT_MEDIA_OP = "android:project_media"
+
+        /** What lets an app set an alarm for the exact minute: Android's alarms and reminders switch. */
+        const val EXACT_ALARM_OP = "SCHEDULE_EXACT_ALARM"
     }
 }
