@@ -23,7 +23,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from golden import FIELDS, GOLDEN_REL, READING_BUILD_WORD, READING_BUILDS, READING_SOURCES, readers_of
+from golden import (
+    FIELDS,
+    GOLDEN_REL,
+    READING_BUILD_WORD,
+    READING_BUILDS,
+    READING_SOURCES,
+    readers_of,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 NONE = "golden: none"

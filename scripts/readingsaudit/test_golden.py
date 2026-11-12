@@ -7,8 +7,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import golden  # noqa: E402
-import readingsaudit  # noqa: E402
+import golden
+import readingsaudit
 
 
 def audit_line(text, built, uni=None, truth=None):
@@ -28,7 +28,7 @@ def lexicon_reader(words, after=None):
     after = after or {}
 
     def read(stretch, dictionary):
-        known = words[dictionary] if dictionary in words else words
+        known = words.get(dictionary, words)
         parts, i = [], 0
         while i < len(stretch):
             n = next((n for n in range(len(stretch) - i, 0, -1) if stretch[i:i + n] in known), 0)
@@ -232,7 +232,7 @@ class Golden(unittest.TestCase):
             write_audit(folder, [audit_line("月曜日に", [["月", "げつ"], ["曜", "よう"], ["日", "び"], ["に", None]]), audit_line("その", [["その", None]])])
             dest = folder / "golden.tsv"
             app = stretch_reader(APP, {"月曜日", "曜日に"})
-            code, said, _fake = self.run_golden(folder, dest, app=app, locks=lambda stretch, word, *_rest: (f"{stretch}|x", ""))
+            _code, said, _fake = self.run_golden(folder, dest, app=app, locks=lambda stretch, word, *_rest: (f"{stretch}|x", ""))
             self.assertIn(["曜日", "日", "", "び", "日=び", "曜日|x", "", "both"], golden_rows(dest), said)
 
     def test_a_row_already_there_keeps_locking_its_reading(self):
@@ -515,10 +515,10 @@ class Golden(unittest.TestCase):
                 return [call.args[0] for call in said.call_args_list]
             # 今曜日 reads 日 otherwise: the short row misses it, in both dictionaries.
             self.assertEqual([
-                f"hole: {short}: 2 rows, 0 fail. Of 4 right readings, 2 read otherwise on some wider stretch than every row they have, "
-                "or have none. 0 read otherwise on their whole line, and 0 of those have no row that fails.",
-                f"hole: {stable}: 3 rows, 0 fail. Of 4 right readings, 0 read otherwise on some wider stretch than every row they have, "
-                "or have none. 0 read otherwise on their whole line, and 0 of those have no row that fails.",
+                (f"hole: {short}: 2 rows, 0 fail. Of 4 right readings, 2 read otherwise on some wider stretch than every row they have, "
+                 "or have none. 0 read otherwise on their whole line, and 0 of those have no row that fails."),
+                (f"hole: {stable}: 3 rows, 0 fail. Of 4 right readings, 0 read otherwise on some wider stretch than every row they have, "
+                 "or have none. 0 read otherwise on their whole line, and 0 of those have no row that fails."),
             ], measure({"今曜日"}))
             # A break on the whole line that 曜日 alone still reads right: only the stable row fails.
             said = measure({"今曜日", "今曜日だ", "曜日だ"})
@@ -605,9 +605,8 @@ class Golden(unittest.TestCase):
             self.assertIn("0 of 0 right readings locked (none)", said)
 
     def test_no_audit_stops(self):
-        with tempfile.TemporaryDirectory() as folder:
-            with self.assertRaises(SystemExit):
-                self.run_golden(Path(folder), Path(folder) / "golden.tsv")
+        with tempfile.TemporaryDirectory() as folder, self.assertRaises(SystemExit):
+            self.run_golden(Path(folder), Path(folder) / "golden.tsv")
 
     def test_a_row_is_eight_whole_fields_that_read_back_as_written(self):
         good = ("思い出", "思い出", "", "おもいで", "思=おも|い|出=で", "", "", "both")

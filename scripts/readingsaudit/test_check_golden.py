@@ -9,8 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import check_golden  # noqa: E402
-from golden import GOLDEN_REL, READING_BUILDS, READING_SOURCES  # noqa: E402
+import check_golden
+from golden import GOLDEN_REL, READING_BUILDS, READING_SOURCES
 
 HERE = Path(__file__).resolve().parent
 
@@ -376,7 +376,7 @@ class CiStep(unittest.TestCase):
         gh.chmod(0o755)
         env = {"PATH": f"{temp / 'bin'}:/usr/bin:/bin", "HOME": str(temp), "RUNNER_TEMP": str(temp), "GITHUB_WORKSPACE": str(repo),
                "GITHUB_REPOSITORY": "owner/repo", "PR": "1", "GH_TOKEN": "fake", "BASE_REF": "main", **more}
-        return subprocess.run(["bash", "-e", "-c", ci_step(STEP)], cwd=repo, env=env, capture_output=True, text=True)
+        return subprocess.run(["bash", "-e", "-c", ci_step(STEP)], cwd=repo, env=env, capture_output=True, text=True, check=False)
 
     def drop_a_row_and(self, change):
         """A pull request that drops a locked row, with [change] made to its own copy of the checker's files."""
@@ -403,24 +403,24 @@ class CiStep(unittest.TestCase):
         repo = self.drop_a_row_and(loosen)
         self.assert_caught(repo)
         # Its own checker passes it: that is what running main's prevents.
-        own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True)
+        own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True, check=False)
         self.assertEqual(0, own.returncode, own.stdout + own.stderr)
 
     def test_golden_code_that_exits_on_import_is_not_run(self):
         for name in ("golden.py", "readingsaudit.py"):
             with self.subTest(name):
-                def exit_early(scripts):
+                def exit_early(scripts, name=name):
                     code = scripts / name
                     code.write_text("import sys\nsys.exit(0)\n" + code.read_text(encoding="utf-8"), encoding="utf-8")
                 repo = self.drop_a_row_and(exit_early)
                 self.assert_caught(repo)
-                own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True)
+                own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True, check=False)
                 self.assertEqual(0, own.returncode, own.stdout + own.stderr)
 
     def test_python_code_the_pull_request_puts_on_pythonpath_is_not_run(self):
         # An earlier step can set PYTHONPATH for the job. Python runs a sitecustomize.py it finds there before the checker.
         repo = self.drop_a_row_and(lambda scripts: (scripts / "sitecustomize.py").write_text("import os\nos._exit(0)\n", encoding="utf-8"))
-        own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True,
+        own = subprocess.run([sys.executable, str(repo / check_golden.CHECKER), "--repo", str(repo)], capture_output=True, text=True, check=False,
                              env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(repo / check_golden.SCRIPTS)})
         self.assertEqual(0, own.returncode, own.stdout + own.stderr)
         done = self.run_step(repo, PYTHONPATH=str(repo / check_golden.SCRIPTS))

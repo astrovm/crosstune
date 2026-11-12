@@ -468,6 +468,26 @@ def reading_over(ours, line, start, end):
     return over[0][0], over[-1][1], "".join(s[2] for s in over)
 
 
+def their_reading(line, stretch, unit, others, option):
+    """UtaTen's reading over [stretch]: [option] for the kanji at [unit], the shortest of theirs for each of [others]
+    inside it, and the line's own letters between."""
+    (a, b), (start, end) = stretch, unit
+    text, i = "", a
+    while i < b:
+        if i == start:
+            text += option
+            i = end
+            continue
+        other = next((u for u in others if u[0] == i), None)
+        if other:
+            text += min(other[2], key=len)
+            i = other[1]
+        else:
+            text += line[i]
+            i += 1
+    return text
+
+
 def compare_line(line, parts, units):
     """Each of UtaTen's kanji in the line: (word as written, ours, theirs, right?), over the stretch both split alike."""
     ours = spans(parts)
@@ -483,22 +503,7 @@ def compare_line(line, parts, units):
         covered = {i for u in others for i in range(u[0], u[1])} | set(range(start, end))
         if any(is_han(line[i]) and i not in covered for i in range(a, b)):
             continue
-        def theirs(option):
-            text, i = "", a
-            while i < b:
-                if i == start:
-                    text += option
-                    i = end
-                    continue
-                other = next((u for u in others if u[0] == i), None)
-                if other:
-                    text += min(other[2], key=len)
-                    i = other[1]
-                else:
-                    text += line[i]
-                    i += 1
-            return text
-        wanted = [theirs(o) for o in options]
+        wanted = [their_reading(line, (a, b), (start, end), others, o) for o in options]
         right = any(norm(w) == norm(kana) for w in wanted)
         out.append((line[a:b], kana, max(wanted, key=len), right, (a, b)))
     return out

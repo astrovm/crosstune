@@ -10,10 +10,10 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import check_golden  # noqa: E402
-import golden  # noqa: E402
-import readingsaudit  # noqa: E402
-import wholelines  # noqa: E402
+import check_golden
+import golden
+import readingsaudit
+import wholelines
 
 LINE = "夢を見た"
 TRUTH = [["夢", "ゆめ"], ["を", None], ["見", "み"], ["た", None]]
