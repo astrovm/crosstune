@@ -88,23 +88,90 @@ def mark_found(mark, name):
     return False
 
 
-# SongNames.SHORT_FOR: what a name writes short for the song's own word.
-SHORT_FOR = {"version": "ver", "instrumental": "inst"}
-
-
-def only_said(name, short, said):
-    """SongNames.onlySaid: each tag in Latin letters with [short] in it says nothing but what the title [said]."""
-    folded = "".join(c for c in unicodedata.normalize("NFD", name) if not unicodedata.combining(c)).lower()
-    return all(short not in tag or tag <= said | {short} for tag in (words(t) for t in re.split(r"[^a-z0-9\s.'-]+", folded)))
-
-
-def says_another_version(name, title, artist, in_other_words=False):
-    """SongNames.saysAnotherVersion: what the title says in Latin letters, or short, counts only [in_other_words]."""
-    said = words(title) if in_other_words else set()
-    own = words(title) | words(artist) | {SHORT_FOR[w] for w in said if w in SHORT_FOR and only_said(name, SHORT_FOR[w], said)}
-    if (words(name) - own) & VERSION_WORDS:
+def says_another_version(name, title, artist):
+    """SongNames.saysAnotherVersion: a version word or mark the title and the artist don't have."""
+    if (words(name) - words(title) - words(artist)) & VERSION_WORDS:
         return True
-    return any(mark_found(mark, name) and not mark_found(mark, title) and not mark_found(mark, artist) and not means & said
+    return any(mark_found(mark, name) and not mark_found(mark, title) and not mark_found(mark, artist) for mark in VERSION_MARKS)
+
+
+# SongNames.tagEdge, VERSION_SAID and VERSION_WRITTEN: where a tag ends, and the words that say a name is a version.
+TAG_EDGE = re.compile(r"[()\[\]{}【】「」『』〈〉《》~〜|/_]|\s[-–]\s")
+VERSION_SAID = {"ver": "version", "version": "version", "inst": "instrumental", "instrumental": "instrumental"}
+VERSION_WRITTEN = {"バージョン": "version", "ヴァージョン": "version", "버전": "version"}
+
+
+def latin_words(text):
+    """SongNames.words: the words in Latin letters and digits, widths folded and accents off."""
+    folded = "".join(c for c in unicodedata.normalize("NFD", unicodedata.normalize("NFKC", text)) if not unicodedata.combining(c))
+    return set(re.split(r"[^a-z0-9]+", folded.lower())) - {""}
+
+
+# Readings.romaji, as far as SongNames.soundsAlike needs it: each katakana's sound, the small ones and ー after.
+KANA_SOUNDS = dict(zip(
+    "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポヴァィゥェォャュョッー",
+    "a i u e o ka ki ku ke ko sa shi su se so ta chi tsu te to na ni nu ne no ha hi fu he ho ma mi mu me mo ya yu yo ra ri ru re ro wa o n "
+    "ga gi gu ge go za ji zu ze zo da ji zu de do ba bi bu be bo pa pi pu pe po vu a i u e o ya yu yo _ _".split()))
+
+
+def consonants(text):
+    """SongNames.consonants: the consonants a name is said with, those that sound alike as one."""
+    said = "".join(c for c in text.lower() if "a" <= c <= "z")
+    for spelled, sound in ((r"th", "s"), (r"ph", "f"), (r"ck|qu?", "k"), (r"x", "ks"), (r"c(?=[eiy])", "s"), (r"c", "k"),
+                           (r"r(?![aeiouy])", ""), (r"l", "r"), (r"v", "b"), (r"z", "s"), (r"m(?=[bp])", "n")):
+        said = re.sub(spelled, sound, said)
+    kept = ""
+    for c in said:
+        if c not in "aeiouhwy" and not kept.endswith(c):
+            kept += c
+    return kept
+
+
+def sounds_alike(latin_text, loanword, fewest=3):
+    """SongNames.soundsAlike: a name in katakana says one in Latin letters, by their consonants, one off from five on."""
+    if not all(c in KANA_SOUNDS or c.isspace() for c in loanword):
+        return False
+    said, written = consonants("".join(KANA_SOUNDS[c] for c in loanword if c in KANA_SOUNDS).replace("_", "")), consonants(latin_text)
+    if len(said) < fewest:
+        return False
+    if len(said) < 5:
+        return said == written
+    previous = list(range(len(written) + 1))
+    for i, a in enumerate(said):
+        row = [i + 1]
+        for j, b in enumerate(written):
+            row.append(min(previous[j + 1] + 1, row[j] + 1, previous[j] + (a != b)))
+        previous = row
+    return previous[-1] <= 1
+
+
+def all_said(tag, said, written):
+    """SongNames.allSaid: a tag that says it's a version says nothing the song's names don't."""
+    if not all(VERSION_SAID.get(w, w) in said for w in latin_words(tag)):
+        return False
+    marked = {mark: means for mark, means in VERSION_WRITTEN.items() if mark in tag}
+    if any(means not in said and not any(normalize(mark) in w for w in written) for mark, means in marked.items()):
+        return False
+    for mark in marked:
+        tag = tag.replace(mark, " ")
+    runs = re.findall(r"(?:(?!\d)(?!_)[^\W]|ー)+", tag)
+    runs = ["".join(c for c in run if "LATIN" not in unicodedata.name(c, "")) for run in runs]
+    return all(any(normalize(run) in w for w in written) or any(sounds_alike(s, run, 2) for s in said) for run in runs if run)
+
+
+def says_another_version_of(name, titles, artist):
+    """SongNames.saysAnotherVersionOf: what all the song's names say together is its own, and a version tag is only
+    when all else it says is too."""
+    said = {VERSION_SAID.get(w, w) for t in titles for w in latin_words(t)}
+    written = [normalize(t) for t in titles]
+    versions = [tag for tag in TAG_EDGE.split(unicodedata.normalize("NFKC", name).lower())
+                if latin_words(tag) & VERSION_SAID.keys() or any(mark in tag for mark in VERSION_WRITTEN)]
+    if any(not all_said(tag, said, written) for tag in versions):
+        return True
+    own = said | latin_words(artist) | set().union(*(latin_words(tag) for tag in versions))
+    if any(VERSION_SAID.get(w, w) not in said for w in (latin_words(name) - own) & VERSION_WORDS):
+        return True
+    return any(mark_found(mark, name) and not any(mark_found(mark, t) for t in titles) and not mark_found(mark, artist) and not means & said
                for mark, means in VERSION_MARKS.items())
 
 
@@ -181,12 +248,16 @@ def window_ms(name):
     }[name]
 
 
+def candidates_of(song, results, lengths, inside):
+    """ExactMatcher.inAnotherScript's candidates: by the artist, as long, with a letter in another script."""
+    return [r for r in results if r["id"] and r["lengthMs"] is not None and not latin(r["name"]) and
+            any(inside(r["lengthMs"] - ms, whole) for ms, whole in lengths) and artists(r["details"][0]) & artists(song["artist"])]
+
+
 def fits_of(song, results, lengths, inside):
-    """The results the rule finds fit, as it checks them knowing only the song's Latin names and its US album."""
-    fits = [r for r in results if r["id"] and r["lengthMs"] is not None and not latin(r["name"]) and
-            any(inside(r["lengthMs"] - ms, whole) for ms, whole in lengths) and
-            artists(r["details"][0]) & artists(song["artist"]) and
-            not says_another_version(f"{r['name']} {album_said(r, song)}", song["title"], song["artist"], in_other_words=True)]
+    """The candidates that say no other version, as the rule checks them knowing only the song's Latin names and its US album."""
+    fits = [r for r in candidates_of(song, results, lengths, inside)
+            if not says_another_version_of(" | ".join(filter(None, (r["name"], album_said(r, song)))), [song["title"]], song["artist"])]
     return list({r["id"]: r for r in fits}.values())
 
 

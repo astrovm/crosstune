@@ -672,6 +672,27 @@ class ExactMatcherTest {
     }
 
     @Test
+    fun theOneSongInAnotherScriptGoesBeforeAVideoThatNamesTheSongAsOnMain() {
+        fun find(songs: List<String>, picked: Int?) = runBlocking {
+            namesAndTabs(
+                songs = songs.map { youTubeMusicRow(it, "Fake Band • Fake Album • 1:30", videoId = "row00000000") },
+                videos = listOf(youTubeMusicRow("Fake Song", "Fake Band • 1M views • 1:30", videoId = "video000000")),
+                apple = mapOf("AR" to appleSong("Fake Song", "Fake Band", 90_000))
+            )
+            ExactMatcher(fake.client(), "AR", pick = { _, _, _ -> picked }).find(MusicService.YOUTUBE_MUSIC, MusicMetadata("Fake Song", "Fake Band"))
+        }
+        val row = "https://music.youtube.com/watch?v=row00000000"
+        val video = "https://music.youtube.com/watch?v=video000000"
+        // The artist's own song, as main opened it, when ChatGPT can't say or picks it; when it says it isn't, the video is.
+        assertEquals(row, find(listOf("偽の歌"), null))
+        assertEquals(row, find(listOf("偽の歌"), 0))
+        assertEquals(video, find(listOf("偽の歌"), NONE_PICKED))
+        // With no song in another script that fits, the video opens before ChatGPT is asked.
+        assertEquals(video, find(emptyList(), 0))
+        assertEquals(video, find(listOf("偽の歌", "別の歌"), null))
+    }
+
+    @Test
     fun aVideoSayingVerIsAnotherVersionAsOnMain() {
         assertEquals("https://music.youtube.com/watch?v=video000000", findVideo("Fake Song (Single Version)", "Fake Song"))
         for (tag in listOf("TV", "English", "Short", "Dance", "Live")) {
@@ -695,23 +716,26 @@ class ExactMatcherTest {
     }
 
     @Test
-    fun aNameIsReadOffTheThreadThatAsks() {
-        val dispatched = java.util.concurrent.atomic.AtomicInteger()
-        val reading = object : kotlinx.coroutines.CoroutineDispatcher() {
-            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
-                dispatched.incrementAndGet()
-                kotlinx.coroutines.Dispatchers.Default.dispatch(context, block)
+    fun aNameIsReadOnTheThreadForReading() {
+        // Where each name is really read, as the first read loads a dictionary: never on the thread that asks. Debug runs
+        // add the coroutine to the thread's name.
+        val readOn = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val reader = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "reading") }
+        val read = { one: String, other: String -> readOn += Thread.currentThread().name.substringBefore(" @coroutine#"); SongNames.writtenAlike(one, other) }
+        val found = try {
+            runBlocking {
+                namesAndTabs(
+                    songs = listOf(youTubeMusicRow("桜", "Fake Band • 桜 • 4:26", videoId = "row00000000")),
+                    deezer = """[{"title":"さくら","artist":{"name":"Fake Band"},"duration":266}]"""
+                )
+                ExactMatcher(fake.client(), "AR", readingDispatcher = reader.asCoroutineDispatcher(), writtenAlike = read)
+                    .find(MusicService.YOUTUBE_MUSIC, MusicMetadata("さくら", "Fake Band"))
             }
-        }
-        val found = runBlocking {
-            namesAndTabs(
-                songs = listOf(youTubeMusicRow("桜", "Fake Band • 桜 • 4:26", videoId = "row00000000")),
-                deezer = """[{"title":"さくら","artist":{"name":"Fake Band"},"duration":266}]"""
-            )
-            ExactMatcher(fake.client(), "AR", readingDispatcher = reading).find(MusicService.YOUTUBE_MUSIC, MusicMetadata("さくら", "Fake Band"))
+        } finally {
+            reader.shutdown()
         }
         assertEquals("https://music.youtube.com/watch?v=row00000000", found)
-        assertTrue(dispatched.get() > 0)
+        assertEquals(setOf("reading"), readOn.toSet())
     }
 
     @Test

@@ -187,7 +187,7 @@ class SongNamesVersionTest {
     @Test
     fun aMarkTheSongsOwnNameSaysInOtherWordsIsNoOtherVersion() {
         // "Nagoriyuki (Live)" is live, so "なごり雪 (ライブ)" is no other version of it, for a song in another script.
-        fun other(name: String, title: String) = SongNames.saysAnotherVersion(name, title, "Fake Band", inOtherWords = true)
+        fun other(name: String, title: String) = SongNames.saysAnotherVersionOf(name, listOf(title), "Fake Band")
         assertFalse(other("なごり雪 (ライブ)", "Nagoriyuki (Live)"))
         assertFalse(other("白銀の子守唄 (アコースティックギター)", "Shirogane No Komoriuta Acoustic Guitar Version"))
         // What it says in other words is another version still, and only the title says what the song is.
@@ -195,7 +195,7 @@ class SongNamesVersionTest {
         assertTrue(other("絶体絶命 MOMOE YAMAGUCHI TRIBUTE SELECTION", "Zettai Zetsumei"))
         assertTrue(other("なごり雪 (Instrumental)", "Nagoriyuki"))
         assertTrue(other("なごり雪 (ライブ)", "Nagoriyuki"))
-        assertTrue(SongNames.saysAnotherVersion("なごり雪 (ライブ)", "Nagoriyuki", "Fake Band Live", inOtherWords = true))
+        assertTrue(SongNames.saysAnotherVersionOf("なごり雪 (ライブ)", listOf("Nagoriyuki"), "Fake Band Live"))
         // Elsewhere a name says what it says, as main had it: "曲 (ライブ)" is another version of "Live Forever".
         assertTrue(SongNames.saysAnotherVersion("曲 (ライブ)", "Live Forever", "Fake Band"))
         assertTrue(mainSays("曲 (ライブ)", "Live Forever"))
@@ -205,7 +205,7 @@ class SongNamesVersionTest {
     @Test
     fun aShortWordForWhatTheSongsOwnNameSaysIsNoOtherVersion() {
         // "ver." for the song's "Version", and "Inst." for its "Instrumental", as main opened a song in another script.
-        fun other(name: String, title: String) = SongNames.saysAnotherVersion(name, title, "Fake Band", inOtherWords = true)
+        fun other(name: String, title: String) = SongNames.saysAnotherVersionOf(name, listOf(title), "Fake Band")
         assertFalse(other("真夜中のドア (シングルver.)", "Fake Door (Single Version)"))
         assertFalse(other("子守唄_Acoustic Guitar Ver.", "Fake Lullaby Acoustic Guitar Version"))
         assertFalse(other("子守唄 (Inst.)", "Fake Lullaby (Instrumental)"))
@@ -228,7 +228,40 @@ class SongNamesVersionTest {
     }
 
     @Test
+    fun whatAllTheSongsNamesSayTogetherIsItsOwn() {
+        // "Single" in English and "シングル" in Japanese: "(Single ver.)" is the song's own version.
+        val single = listOf("Fake Song (Single Version)", "偽の歌 (シングル・バージョン)")
+        assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (Single ver.)", single, "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (シングル・バージョン)", single.take(1), "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (ｼﾝｸﾞﾙ･ﾊﾞｰｼﾞｮﾝ)", single.take(1), "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersionOf("偽の歌 (シングル・バージョン)", listOf("Fake Song", "偽の歌 (シングル・バージョン)"), "Fake Band"))
+        // "Xバージョン" is "X ver.": a version the names don't say is another, in any script.
+        for (name in listOf("偽の歌 (TVバージョン)", "偽の歌 (英語バージョン)", "偽の歌 (TV Version)", "偽の歌 (Orchestra Version)", "봄날 (라이브 버전)", "偽の歌 (ライブ・ヴァージョン)")) {
+            assertTrue(name, SongNames.saysAnotherVersionOf(name, single, "Fake Band"))
+        }
+        // Nor a version none of them says, whatever else it says.
+        assertTrue(SongNames.saysAnotherVersionOf("偽の歌 (バージョン)", listOf("Fake Song"), "Fake Band"))
+        assertTrue(SongNames.saysAnotherVersionOf("偽の歌 (Single ver.)", listOf("Fake Song (Single)"), "Fake Band"))
+        // "ver" and "version" are one word, whichever the song's names and the name say.
+        assertFalse(SongNames.saysAnotherVersionOf("スパークル (movie ver.)", listOf("Sparkle - Movie Ver."), "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersionOf("スパークル (Movie Version)", listOf("Sparkle - Movie Ver."), "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersionOf("スパークル ver", listOf("Sparkle Ver"), "Fake Band"))
+        assertTrue(SongNames.saysAnotherVersionOf("スパークル (original ver.)", listOf("Sparkle - Movie Ver."), "Fake Band"))
+        // Its album is a tag of its own.
+        assertTrue(SongNames.saysAnotherVersionOf("偽の歌 | Instrumental Works", single, "Fake Band"))
+        assertFalse(SongNames.saysAnotherVersionOf("偽の歌 | Fake Works", single, "Fake Band"))
+    }
+
+    @Test
     fun aNameInKanaIsOneInKanjiThatReadsTheSameWithItsSoundMarks() {
+        // Half-width kana are kana, and a long vowel is one however it's written: ー, the same vowel, う after o, い after e.
+        assertTrue(SongNames.writtenAlike("ﾊﾅﾐｽﾞｷ", "花水木"))
+        assertTrue(SongNames.writtenAlike("ユーキ", "勇気"))
+        assertTrue(SongNames.writtenAlike("トーキョー", "東京"))
+        assertTrue(SongNames.writtenAlike("センセー", "先生"))
+        assertTrue(SongNames.writtenAlike("カーサン", "母さん"))
+        assertFalse(SongNames.writtenAlike("ユキ", "勇気"))
+        assertFalse(SongNames.writtenAlike("トキョ", "東京"))
         assertTrue(SongNames.writtenAlike("さくら", "桜"))
         assertTrue(SongNames.writtenAlike("桜", "サクラ"))
         // A sound mark makes another word: ばら isn't 原 (はら), nor きんか 銀河 (ぎんが), nor かっこう 学校 (がっこう).

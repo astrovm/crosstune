@@ -146,11 +146,30 @@ class GradleBoxTest(unittest.TestCase):
         self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
         self.assertIn(f"-e SYNCREPLAY_DIR={kept}", self.asked()[0])
 
+    def test_a_chosen_matcher_replay_folder_is_mounted_and_named_with_its_label(self):
+        kept = self.dir / "matchcheck"
+        kept.mkdir()
+        box = self.start("matchcheck", ":app:testDebugUnitTest", MATCHCHECK_DIR=str(kept), MATCHCHECK_LABEL="main")
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn(f"-v {kept}:{kept}", self.asked()[0])
+        self.assertIn(f"-e MATCHCHECK_DIR={kept}", self.asked()[0])
+        self.assertIn("-e MATCHCHECK_LABEL=main", self.asked()[0])
+
+    def test_a_matcher_replay_with_no_label_is_head(self):
+        kept = self.dir / "matchcheck"
+        kept.mkdir()
+        box = self.start("matchcheck", ":app:testDebugUnitTest", MATCHCHECK_DIR=str(kept))
+        output, _ = box.communicate(timeout=20)
+        self.assertEqual(box.returncode, 0, output)
+        self.assertIn("-e MATCHCHECK_LABEL=head", self.asked()[0])
+
     def test_no_replay_folder_is_mounted_unless_chosen(self):
         box = self.start("plain", ":app:assembleDebug")
         output, _ = box.communicate(timeout=20)
         self.assertEqual(box.returncode, 0, output)
         self.assertNotIn("SYNCREPLAY_DIR", self.asked()[0])
+        self.assertNotIn("MATCHCHECK", self.asked()[0])
 
     def test_runs_gradle_in_the_container_with_only_what_it_needs(self):
         box = self.start("a", ":app:assembleDebug", "--stacktrace")

@@ -9,9 +9,11 @@ for as the app does when no store names it in its own script, as analyze.py does
 1. main: the first result by the artist with a letter past ASCII, within 3 s of a known length, opens.
 2. now, with ChatGPT: the fits are within 3 s, by the artist, and say no other version (analyze.py).
    The one fit a video names both ways opens. Otherwise the fits go first in ChatGPT's pick ("pick").
-3. now, without ChatGPT, or when it can't say in time: as 2, and also the fits, when all are one name,
-   open the first of them, unless it names itself in Latin letters with no word of the song's name.
-   Otherwise nothing opens, and the app offers the link or a search.
+3. now, without ChatGPT, or when it can't say in time: as 2, and also the first fit, when all the
+   candidates (another version too) are one name; or, when a version was kept out, the first candidate,
+   as main had it, unless its own name says it's another version. Either only when it doesn't name
+   itself in Latin letters with no word of the song's name. Otherwise nothing opens, and the app offers
+   the link or a search.
 
 "pick" is what ChatGPT answers, which this can't tell.
 """
@@ -41,16 +43,23 @@ def main_rule(song, results, lengths):
 
 def now_rule(song, results, videos, lengths, chatgpt):
     """ExactMatcher.inAnotherScript and picked, as now."""
+    candidates = analyze.candidates_of(song, results, lengths, NOW_WINDOW)
     fits = analyze.fits_of(song, results, lengths, NOW_WINDOW)
-    if not fits:
-        return "nothing", None
     named = [r for r in fits if analyze.named_both_ways(song, r, videos)]
     if len(named) == 1:
         return "open", named[0]
     maybe = named + [r for r in fits if r not in named]
-    if len({analyze.normalize(analyze.bare_title(r["name"])) for r in maybe}) == 1 and not analyze.names_another(song, maybe[0]) and not chatgpt:
-        return "open", maybe[0]
-    return ("pick", maybe[0]) if chatgpt else ("nothing", None)
+    # ExactMatcher.alone: the first that may be it, when all the candidates are one name; else, when a version was
+    # kept out, the first candidate, as main had it, unless its own name says it's another version.
+    alone = None
+    if len({analyze.normalize(analyze.bare_title(r["name"])) for r in candidates}) == 1 and maybe:
+        alone = maybe[0]
+    elif candidates and any(r["id"] not in {f["id"] for f in fits} for r in candidates) and \
+            not analyze.says_another_version_of(candidates[0]["name"], [song["title"]], song["artist"]):
+        alone = candidates[0]
+    if alone and not analyze.names_another(song, alone) and not chatgpt:
+        return "open", alone
+    return ("pick", maybe[0]) if chatgpt and maybe else ("nothing", None)
 
 
 def outcome(kind, row, right):
