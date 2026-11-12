@@ -69,7 +69,7 @@ Both tables come from Windows. The workflow [`jtotal-widths-windows.yml`](.githu
 
 What the run measures:
 
-- Each letter's width as what it adds to a line of kana, in Chromium, for both stacks.
+- Each letter's width, in Chromium, for both stacks: what ten of it add to a line, each between two kana, divided by ten. A mark goes after a letter of its own script, as it is written. A width below nothing is no width.
 - Edge and Chrome as installed, each with a Japanese profile, on what a Shift_JIS page holds. They matched Chromium on every letter.
 - Whether a full-width bracket or stop is trimmed beside another, at a line's start or at its end. In Japanese, none is, on either stack. Only an English browser on the monospace stack trims, as it draws Japanese in Yu Gothic.
 - MS PGothic in MS Gothic's place, and an English browser, for how much those would move.

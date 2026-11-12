@@ -71,17 +71,48 @@ class ProbeTest(unittest.TestCase):
     def test_the_page_is_shift_jis_as_j_totals_is(self):
         self.assertEqual(w.shift_jis_page("あ&#307;"), "あ&#307;".encode("cp932"))
 
-    def test_each_letter_is_measured_between_two_base_letters_against_the_two_alone(self):
+    def test_each_letter_is_measured_ten_times_between_base_letters_against_eleven_of_them_alone(self):
         rows = w.probe_rows([0xFF9E, 0x133, 0x301])
         for base in ("ｶ", "あ", "a"):
-            self.assertIn(f'<tt data-base="{base}">{base}{base}</tt>', rows)
-        self.assertIn('<tt data-c="65438" data-b="ｶ">ｶ<span>ﾞ</span>ｶ</tt>', rows)
-        self.assertIn('<tt data-c="307" data-b="あ">あ<span>&#307;</span>あ</tt>', rows)
-        self.assertIn('<tt data-c="769" data-b="a">a<span>&#769;</span>a</tt>', rows)
+            self.assertIn(f'<tt data-base="{base}">{base * 11}</tt>', rows)
+        self.assertIn('<tt data-c="65438" data-b="ｶ">ｶ<span>ﾞ</span>ｶ' + "ﾞｶ" * 9 + "</tt>", rows)
+        self.assertIn('<tt data-c="307" data-b="あ">あ<span>&#307;</span>あ' + "&#307;あ" * 9 + "</tt>", rows)
+        self.assertIn('<tt data-c="769" data-b="a">a<span>&#769;</span>a' + "&#769;a" * 9 + "</tt>", rows)
+
+    def test_a_width_is_a_tenth_of_what_ten_of_the_letter_add(self):
+        self.assertIn("(tt.getBoundingClientRect().width - base[tt.dataset.b]) / REPEATS / digit * 1000", w.PROBE_JS)
+        self.assertEqual(w.REPEATS, 10)
 
     def test_a_mark_is_measured_after_a_letter_it_is_written_after(self):
         self.assertEqual([w.base_letter(c) for c in (0xFF9E, 0xFF9F, 0x3099, 0x309A, 0x301, 0x20DD, 0x3042, 0x203B)],
                          ["ｶ", "ｶ", "か", "か", "a", "a", "あ", "あ"])
+
+    def test_a_mark_of_a_script_is_measured_after_a_consonant_of_that_script(self):
+        marks = {
+            0x093F: "क",  # DEVANAGARI VOWEL SIGN I, spacing, drawn before the consonant
+            0x0941: "क",  # DEVANAGARI VOWEL SIGN U
+            0x0BCD: "க",  # TAMIL SIGN VIRAMA
+            0x0E48: "ก",  # THAI CHARACTER MAI EK
+            0x064E: "ب",  # ARABIC FATHA, after BEH, as Arabic has no KA
+            0x05B8: "א",  # HEBREW POINT QAMATS
+            0x0F71: "ཀ",  # TIBETAN VOWEL SIGN AA
+            0x1CD0: "क",  # VEDIC TONE KARSHANA, written in Devanagari
+            0x302A: "あ",  # IDEOGRAPHIC LEVEL TONE MARK, written after a kanji
+            0xFE0F: "a",  # VARIATION SELECTOR-16, of no script
+        }
+        self.assertEqual({c: w.base_letter(c) for c in marks}, marks)
+
+    def test_a_base_shift_jis_cannot_hold_is_a_reference_too(self):
+        rows = w.probe_rows([0x93F])
+        self.assertIn('<tt data-base="&#2325;">' + "&#2325;" * 11 + "</tt>", rows)
+        self.assertIn('<tt data-c="2367" data-b="&#2325;">&#2325;<span>&#2367;</span>&#2325;', rows)
+        w.shift_jis_page(rows)
+
+    def test_every_mark_s_base_is_a_letter_and_not_a_mark(self):
+        import unicodedata
+        for code in range(0x80, 0x30000):
+            if unicodedata.category(chr(code)) in ("Mn", "Mc", "Me"):
+                self.assertTrue(unicodedata.category(w.base_letter(code)).startswith("L"), f"U+{code:04X}")
 
     def test_the_trim_probe_pairs_marks_and_puts_each_at_both_ends_of_a_line(self):
         rows = w.trim_rows(marks="」「", neighbours="あ")
@@ -116,6 +147,14 @@ class TablesTest(unittest.TestCase):
                 (tmp / "out" / "a.txt").write_text("", encoding="utf-8")
                 with mock.patch("sys.stderr"):
                     self.assertEqual(w.main(["check", str(tmp)]), 1)
+
+    def test_no_letter_takes_the_line_back(self):
+        text = w.table_text(self.measurement({0x0B82: -112, 0x0B83: 1000}), "Measured on Windows")
+        self.assertTrue(text.endswith("B82 0\nB83 1000\n"), text)
+
+    def test_a_measured_fraction_of_a_thousandth_rounds_in_the_table(self):
+        text = w.table_text(self.measurement({0x6F0: 1143.6, 0x6F1: 1143.4}), "Measured on Windows")
+        self.assertTrue(text.endswith("6F0 1144\n6F1 1143\n"), text)
 
     def test_differences_are_the_code_points_measured_at_another_width(self):
         a = {"widths": {"307": 888, "12354": 2000, "65438": 0}}

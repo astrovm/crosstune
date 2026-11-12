@@ -20,9 +20,10 @@ J-Total sets a sheet in `Inconsolata, MS Gothic, Hiragino Kaku Gothic, Monaco, s
 Any other letter the browser draws from a proportional font, so its width is not a whole number: ۰ is
 1.144 columns on the first stack and 1.201 on the second. `ChordSheets` counts chords over those widths.
 
-Each letter is measured as what it adds to a line: the width of `あXあ` less that of `ああ`, divided by
-the width of a digit. A mark is measured after a letter it follows (`base_letter`): ﾞ draws over the ｶ
-before it, and still moves the line on by a column. The table lists, in thousandths of a column, every
+Each letter is measured as what it adds to a line: the width of `あXあXあ...あ`, ten of it, less that of
+eleven `あ`, divided by ten and by the width of a digit. A mark is measured after a letter it follows
+(`base_letter`), of its own script where it has one: ﾞ draws over the ｶ before it, and still moves the
+line on by a column. A width below nothing is no width in the table. The table lists, in thousandths of a column, every
 letter from U+0080 up (and emoji) that is not two columns, which is what the app assumes for the rest.
 `trims` measures whether the browser trims a full-width bracket or stop beside another: on Windows, in
 Japanese, it trims none, as MS Gothic has no narrow forms.
@@ -33,6 +34,7 @@ macOS font name (Issue #830). `contexts.py` measures any machine's browser again
 `compare_sheets.py moves` counts the chords that land on another letter.
 """
 import argparse
+import functools
 import hashlib
 import json
 import platform
@@ -154,42 +156,85 @@ def shift_jis_page(html):
     return html.encode("cp932")
 
 
+# A mark whose name starts with another word than its script's letters do.
+MARK_SCRIPTS = {"VEDIC": "DEVANAGARI"}
+# The consonants a script's marks are measured after, where it has one: Indic and Southeast Asian
+# scripts have a KA, and Arabic a BEH.
+CONSONANTS = (("LETTER", "KA"), ("LETTER", "BEH"))
+
+
+@functools.lru_cache(maxsize=None)
+def script_letters():
+    """For each script, named by the first word of its letters' names, the letter its marks are measured
+    after: its KA or BEH if it has one, else its first letter."""
+    found = {}
+    for code in range(0x80, 0x110000):
+        letter = chr(code)
+        if not unicodedata.category(letter).startswith("L"):
+            continue
+        words = tuple(unicodedata.name(letter, "").split(" "))
+        if len(words) < 3 or words[1] not in ("LETTER", "CHARACTER"):
+            continue
+        if words[0] not in found or words[1:] in CONSONANTS:
+            found[words[0]] = letter
+    return found
+
+
 def base_letter(code):
-    """The letter `code` is measured after. A mark joins the letter before it, and Chromium draws the two in
-    one font: after あ, a Latin accent pulls あ itself into another font. So a mark is measured after a
-    letter it is written after: ﾞ and ﾟ after ｶ, the kana sound marks after か, any other mark after a.
-    Every other letter is measured after あ, as lyrics are Japanese."""
+    """The letter `code` is measured after. A mark joins the letter before it, and the browser draws the two
+    as one: after あ, a Latin accent pulls あ itself into another font, and a Devanagari vowel sign after a
+    letter of another script gets a dotted circle of its own. So a mark is measured after a letter it is
+    written after: ﾞ and ﾟ after ｶ, the kana sound marks after か, a mark of a script after a consonant of
+    it, and any other mark after a, or after あ if it is a wide one. Every other letter is measured after あ,
+    as lyrics are Japanese."""
     if code in (0xFF9E, 0xFF9F):
         return "ｶ"
     if code in (0x3099, 0x309A):
         return "か"
-    return "a" if unicodedata.category(chr(code)) in ("Mn", "Me") else "あ"
+    letter = chr(code)
+    if unicodedata.category(letter) not in ("Mn", "Mc", "Me"):
+        return "あ"
+    script = unicodedata.name(letter, "").split(" ")[0]
+    found = script_letters().get(MARK_SCRIPTS.get(script, script))
+    if found:
+        return found
+    return "あ" if unicodedata.east_asian_width(letter) == "W" else "a"
+
+
+# How many of a letter one row holds. One row is drawn to a 64th of a pixel, so ten of a letter measure
+# it to a tenth of that: a line of 200 letters then drifts less than a hundredth of a column.
+REPEATS = 10
+
+
+def probe_row(code, as_entity=()):
+    """`code` ten times, each between two of its base letters, as `あXあXあ...あ`. The first is in a span,
+    for the fonts that drew it and for the letter the browser read."""
+    b, letter = written(ord(base_letter(code))), written(code, as_entity)
+    return f'<div><tt data-c="{code}" data-b="{b}">{b}<span>{letter}</span>{b}' + f"{letter}{b}" * (REPEATS - 1) + "</tt></div>"
 
 
 def probe_rows(codes, as_entity=()):
-    """One row for each base pair, such as `ああ`, and one for each code point between its two base letters."""
-    bases = sorted({base_letter(c) for c in codes})
-    return "".join(f'<div><tt data-base="{b}">{b}{b}</tt></div>' for b in bases) + "".join(
-        f'<div><tt data-c="{c}" data-b="{base_letter(c)}">{base_letter(c)}<span>{written(c, as_entity)}</span>{base_letter(c)}</tt></div>'
-        for c in codes
-    )
+    """One row of eleven base letters for each base, such as `あ` × 11, and one `probe_row` for each code point."""
+    bases = sorted({written(ord(base_letter(c))) for c in codes})
+    return "".join(f'<div><tt data-base="{b}">{b * (REPEATS + 1)}</tt></div>' for b in bases) + "".join(probe_row(c, as_entity) for c in codes)
 
 
-# What a letter adds to a line: the width of `あXあ` less the width of `ああ`, in thousandths of a digit.
-# The letter's own box is not enough: a mark that Chromium draws as part of the letter before it, such as
-# U+FF9E after ｶ, has a box of no width but still moves the next letter on.
+# What a letter adds to a line: the width of `あXあ...あ` less that of eleven `あ`, divided by ten, in
+# thousandths of a digit to a hundredth. The letter's own box is not enough: a mark that Chromium draws as
+# part of the letter before it, such as U+FF9E after ｶ, has a box of no width but still moves the next letter on.
 PROBE_JS = """() => {
+  const REPEATS = %d;
   const probe = document.createElement('tt'); probe.textContent = '0'; document.body.appendChild(probe);
   const digit = probe.getBoundingClientRect().width;
   const base = {};
   for (const tt of document.querySelectorAll('tt[data-base]')) base[tt.dataset.base] = tt.getBoundingClientRect().width;
   const out = {}, read = {};
   for (const tt of document.querySelectorAll('tt[data-c]')) {
-    out[tt.dataset.c] = Math.round((tt.getBoundingClientRect().width - base[tt.dataset.b]) / digit * 1000);
+    out[tt.dataset.c] = Math.round((tt.getBoundingClientRect().width - base[tt.dataset.b]) / REPEATS / digit * 1000 * 100) / 100;
     read[tt.dataset.c] = tt.querySelector('span').textContent.codePointAt(0);
   }
   return {digit, out, read};
-}"""
+}""" % REPEATS
 
 
 def platform_fonts(cdp, selector):
@@ -286,7 +331,7 @@ def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lan
             batch_of(retry, as_entity=set(retry))
         found = environment(browser, browser_name if "/" not in browser_name else Path(browser_name).stem, stack, fonts)
         found.append(f"Page Shift_JIS with no language; browser language {lang or 'as Playwright starts it'}")
-        found.append(f"One digit is {digit} CSS px at 40px. A width is what the letter adds between two of its base letters (base_letter).")
+        found.append(f"One digit is {digit} CSS px at 40px. A width is a tenth of what ten of the letter add, each between two of its base letters (base_letter).")
         browser.close()
     if misread:
         raise SystemExit(f"read as other letters even as references: {sorted(misread)[:20]}")
@@ -471,7 +516,9 @@ def in_container(work):
 
 def table_text(raw, source):
     """The table from one measuring run: its header, then each run that isn't two columns."""
-    widths = {int(c): w for c, w in raw["widths"].items()}
+    # Measured to a hundredth of a thousandth, and kept in whole thousandths. A mark that kerns into the
+    # letter before it measures below nothing: the app counts it as no width, as no letter takes the line back.
+    widths = {int(c): max(0, round(w)) for c, w in raw["widths"].items()}
     return "\n".join(header([source, *raw["environment"]]) + lines(runs(widths, set(raw["nothing"])))) + "\n"
 
 
