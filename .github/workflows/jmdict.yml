@@ -1,0 +1,129 @@
+name: JMdict
+
+# The app's jmdict-readings.txt and old-kana.txt are made from JMdict. The EDRDG licence (section 4)
+# asks for a way to update that data regularly from its newest version. Each month this fetches the
+# newest jmdict-eng of jmdict-simplified, remakes both files with readingsaudit.py, and opens one pull
+# request when they changed, or brings the open one up to date. The release fails when a file's JMdict
+# is older than readingsaudit.py's MAX_AGE_DAYS.
+#
+# A pull request that changes this workflow or the scripts it runs remakes the files the same way,
+# and shows what changed, but opens nothing.
+on:
+  schedule:
+    - cron: "41 4 3 * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: A jmdict-simplified release tag (empty for the newest)
+        required: false
+  pull_request:
+    paths:
+      - .github/workflows/jmdict.yml
+      - scripts/readingsaudit/**
+      - app/src/test/java/com/astrovm/crosstune/songcheck/JmdictReadings.kt
+
+permissions:
+  contents: read
+
+# Every checkout prints Git's hint to name the initial branch. This is what it asks for.
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+  # The one pull request's branch.
+  BRANCH: jmdict/remake
+  TABLES: app/src/main/resources/com/astrovm/crosstune
+
+concurrency:
+  group: jmdict-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The build's code runs here, with a token that can only read.
+  remake:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.fetch.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the scripts
+        run: |
+          python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
+          bash scripts/readingsaudit/propose.test.sh
+          shellcheck scripts/readingsaudit/*.sh
+
+      # Taken by its release's tag, and kept only with the size and SHA-256 the release gives.
+      - name: Fetch JMdict
+        id: fetch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READINGSAUDIT_DIR: ${{ runner.temp }}/jmdict
+          TAG: ${{ inputs.tag }}
+        run: |
+          args=()
+          if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
+          # It writes tag= to GITHUB_OUTPUT, once the tag has the form of jmdict-simplified's.
+          python3 scripts/readingsaudit/readingsaudit.py fetch "${args[@]}"
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          # Main's runs of CI save the caches; this one only reads them.
+          cache-read-only: true
+
+      # The same commands as by hand, with Gradle run plainly, as CI runs it, instead of in the build box.
+      - name: Remake the word lists
+        env:
+          READINGSAUDIT_DIR: ${{ runner.temp }}/jmdict
+        run: |
+          python3 scripts/readingsaudit/readingsaudit.py table --gradle "./gradlew --build-cache --configuration-cache"
+          python3 scripts/readingsaudit/readingsaudit.py oldkana
+          # The headers the script writes are the ones its tests ask for.
+          python3 -m unittest discover -s scripts/readingsaudit -p "test_*.py"
+          git diff --stat -- "$TABLES"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jmdict-tables
+          path: |
+            ${{ env.TABLES }}/jmdict-readings.txt
+            ${{ env.TABLES }}/old-kana.txt
+          retention-days: 14
+          if-no-files-found: error
+
+  # Only what remake made is committed here. Nothing from the build runs where the token can write.
+  propose:
+    needs: remake
+    if: github.event_name != 'pull_request' && github.repository == 'astrovm/crosstune'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          # The branch's commits since main, to tell the workflow's own from a person's.
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jmdict-tables
+          path: ${{ env.TABLES }}
+
+      # remake has run propose.test.sh.
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.remake.outputs.tag }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/readingsaudit/propose.sh
