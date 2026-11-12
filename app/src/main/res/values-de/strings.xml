@@ -318,7 +318,7 @@
     <string name="report_failed">Senden fehlgeschlagen. Prüfe deine Verbindung und versuche es noch mal.</string>
     <string name="reading_wrong">Falsche Lesung</string>
     <string name="reading_right">Richtige Lesung (optional)</string>
-    <string name="reading_what_goes">Sendet das Wort, die angezeigte Lesung, seine Zeile, den Namen des Songs und die Versionen von App und Android. Nur der Entwickler von Crosstune liest es.</string>
+    <string name="reading_what_goes">Sendet das Wort, die angezeigte Lesung und woher sie kommt, seine Zeile und Schrift, die Lesung, die du eingibst, Titel und Künstler des Songs, woher der Text stammt, und die Versionen von App und Android. Nur der Entwickler von Crosstune liest es.</string>
     <string name="auto_report_offer">Probleme wie dieses automatisch melden?</string>
     <string name="auto_report_offer_words_off">Der Text dieses Songs war versetzt. Solche Fälle automatisch melden?</string>
     <string name="auto_report_yes">Ja</string>
