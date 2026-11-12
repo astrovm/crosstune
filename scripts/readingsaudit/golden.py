@@ -29,6 +29,8 @@ READING_SOURCES = (
 READING_BUILDS = ("app/build.gradle.kts", "gradle/libs.versions.toml")
 READING_BUILD_WORD = "kuromoji"
 GOLDEN_COUNT = "# rows: "
+# The line that names the audit the file was made from, and how many readings the code reads right on it.
+AUDIT = "# audit: "
 # The letters of the line each row holds on each side of its stable stretch, where the line has them. A rule that reads a
 # word by the text next to its stretch fails a row too: the fewest that catch every break measured in PR #931.
 CONTEXT = 3
@@ -154,10 +156,13 @@ def read_golden(path):
 
 
 def write_golden(path, rows):
+    """[rows] in [path], sorted, under the header. The line that names the audit the file was made from stays as it is:
+    `readingsaudit.py lines` writes it."""
     for row in rows:
         check_fields(row)
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines = GOLDEN_HEADER + [f"{GOLDEN_COUNT}{len(rows)}"] + ["\t".join(row) for row in sorted(rows, key=row_sort_key)]
+    audit_line = [line for line in path.read_text(encoding="utf-8").split("\n") if line.startswith(AUDIT)] if path.exists() else []
+    lines = GOLDEN_HEADER + audit_line + [f"{GOLDEN_COUNT}{len(rows)}"] + ["\t".join(row) for row in sorted(rows, key=row_sort_key)]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

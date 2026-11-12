@@ -9,7 +9,7 @@
   python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
   python3 scripts/readingsaudit/readingsaudit.py golden    # lock every reading right today into readings-golden.tsv, through gradle-box; a row already there stays
   python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA   # and drop the lock on WORD read as KANA, when that change is on purpose
-  python3 scripts/readingsaudit/readingsaudit.py lines     # every audit line read whole by origin/main's code and HEAD's; a right reading that changes fails it. Before merging a readings change
+  python3 scripts/readingsaudit/readingsaudit.py lines     # every audit line read whole by origin/main's code and HEAD's, as the app shows it; anything right that changes fails it. Before merging a readings change
   python3 scripts/readingsaudit/readingsaudit.py hole      # how many right readings the golden file guards on every wider stretch of their line, and how many a break on the whole line slips past; --golden FILE, again for more
   python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
   python3 scripts/readingsaudit/readingsaudit.py fetch     # put the newest jmdict-eng in the folder as jmdict.json; --tag TAG for another
@@ -211,12 +211,15 @@ def table(folder, gradle=None):
 GRADLE_BOX = ("scripts/gradle-box/gradle-box.sh", "--max-workers=2")
 
 
-def songcheck(folder, test, gradle=None, root=ROOT):
+def songcheck(folder, test, gradle=None, root=ROOT, also=()):
     """Runs one songcheck test class through Gradle, gradle-box unless [gradle] says otherwise, on the audit folder, in
-    the checkout at [root]: gradle-box builds the checkout its script is in. Its exit code."""
+    the checkout at [root]: gradle-box builds the checkout its script is in. Then in each checkout of [also] too, in
+    the same gradle-box run, so it waits in line once. Its exit code."""
     # gradle-box mounts SONGCHECK_DIR, so the words stay out of the checkout.
     env = {**os.environ, "SONGCHECK_DIR": str(folder)}
-    gradle = shlex.split(gradle) if gradle else [str(Path(root) / GRADLE_BOX[0]), *GRADLE_BOX[1:]]
+    if gradle and also:
+        raise SystemExit("Only gradle-box reads more than one checkout in one run: leave out --gradle")
+    gradle = shlex.split(gradle) if gradle else [str(Path(root) / GRADLE_BOX[0]), *(f"--also={Path(tree).resolve()}" for tree in also), *GRADLE_BOX[1:]]
     command = ["nice", "-n", "10", *gradle, ":app:songCheck", f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
     return subprocess.call(command, env=env, cwd=root)
 
@@ -674,6 +677,8 @@ def main(argv=None):
     parser.add_argument("--accept", action="append", nargs=2, default=[], metavar=("WORD", "KANA"),
                         help="golden, lines: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
     parser.add_argument("--base", default="origin/main", help="lines: the commit to read the lines with first")
+    parser.add_argument("--accept-romaji", action="store_true", help="lines: the romaji of lines read right changes, on purpose")
+    parser.add_argument("--new-audit", action="store_true", help="lines: the audit folder is new, on purpose: name it in the golden file")
     parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
     parser.add_argument("--width", type=int, help="golden: the letters of context each row holds on each side of its stable stretch")
     parser.add_argument("--union-share", type=float, help="golden: the most of a song's lines the rows may spell together, from 0 to 1")
@@ -696,7 +701,7 @@ def main(argv=None):
     elif args.step == "lines":
         # wholelines.py reads this module's audit too.
         import wholelines
-        sys.exit(wholelines.lines(folder, args.accept, args.base))
+        sys.exit(wholelines.lines(folder, args.accept, args.base, new_audit=args.new_audit, accept_romaji=args.accept_romaji))
     elif args.step in ("golden", "hole"):
         # golden.py reads this module's audit, so it is loaded only here.
         import golden

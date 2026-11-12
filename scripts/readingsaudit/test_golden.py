@@ -195,6 +195,19 @@ class Golden(unittest.TestCase):
             self.assertNotIn(["曜日", "日", "", "び", "日=び", "both"], rows)
             self.assertIn("golden: 3 rows, 2 new", said)
 
+    def test_the_line_that_names_the_audit_stays_as_it_is(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            write_audit(folder, [audit_line("月曜日に", [["月", "げつ"], ["曜", "よう"], ["日", "び"], ["に", None]])])
+            dest = folder / "golden.tsv"
+            named = "# audit: 1 lines, 3 right readings, sha256 0123456789abcdef"
+            golden.write_golden(dest, [("月曜日", "日", "", "び", "日=び", "both")])
+            dest.write_text(dest.read_text(encoding="utf-8").replace(golden.GOLDEN_COUNT, f"{named}\n{golden.GOLDEN_COUNT}"), encoding="utf-8")
+            self.assertEqual(0, self.run_golden(folder, dest)[0])
+            lines = dest.read_text(encoding="utf-8").split("\n")
+            self.assertEqual([named], [line for line in lines if line.startswith(golden.AUDIT)])
+            self.assertTrue(lines[lines.index(named) + 1].startswith(golden.GOLDEN_COUNT))
+
     def test_a_row_that_locks_one_dictionary_joins_the_other_when_both_read_so(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
