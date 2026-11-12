@@ -44,16 +44,20 @@ internal object MetadataParsers {
         "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " "
     )
 
-    /** The artist, and the song in the first 「」 or 『』 after them: "YOASOBI「アイドル」". What follows is anything, a line break too. */
-    private val bracketedSongRegex = Regex("""^(?>(.*?)$SPACES_START\s*+[「『](?![」』]))([^」』]++)[」』].*""", RegexOption.DOT_MATCHES_ALL)
+    /**
+     * The artist on the first line, and the song in the first 「」 or 『』 after them: "YOASOBI「アイドル」". What follows
+     * is anything, a line break too. "Vlog" on a line of its own is no artist, so "Vlog\nYOASOBI「アイドル」" is no song.
+     */
+    private val bracketedSongRegex = Regex("""^(?>(.*?)$SPACES_START\s*+[「『](?![」』]))([^」』]++)[」』](?s:.*)""")
 
     /** Video titles often carry release noise such as "(Official Video)" or "[Lyrics]". */
     private const val MUSIC_TAG_WORDS = """\b(?:official|oficial|officiel|offiziell\w*|ufficiale|oficjalny|resmi|videoclip|videoclipe|clipe|audio|lyrics?|letra|visuali[sz]er|mv|m/v)\b|клип|официальн|رسمي|كليب|公式|官方|歌詞|歌词|가사|뮤직비디오"""
     private val musicTagWords = Regex("""(?:$MUSIC_TAG_WORDS)""", RegexOption.IGNORE_CASE)
     private val videoNoiseWords = Regex("""$MUSIC_TAG_WORDS|\b(?:video|subtitulado|sub\.?\s*esp\w*|sub\.?\s+español|hd|hq|4k)\b""", RegexOption.IGNORE_CASE)
 
-    /** A tag in brackets, which may hold one of its own, "(Official Video [4K])". Its words are looked for in it after. */
-    private val bracketTag = Regex("""[(\[](?:[^()\[\]]++|[(\[][^()\[\]]*+[)\]])*+[)\]]""")
+    /** The brackets of a tag, "(Official Video [4K])", which [bracketTags] reads. Its words are looked for in it after. */
+    private const val TAG_OPENS = "(["
+    private const val TAG_CLOSES = ")]"
 
     /** The same said without brackets at the end, "Song Official Music Video", maybe after a "|" or a dash. */
     private val trailingVideoNoiseRegex = Regex(
@@ -201,12 +205,13 @@ internal object MetadataParsers {
      * alone doesn't say it.
      */
     fun musicVideo(title: String, channel: String, byDash: Boolean = true): MusicMetadata? {
+        if (title.length > LONGEST_TITLE) return null
         spotifyPageSplitAtItsDash(title, channel)?.let { return it }
         spotifyPage(title)?.let { return it }
         val song = youtubeVideo(title, channel) ?: return null
         val says = channel.endsWith(" - Topic") || channel.endsWith("VEVO") || musicVideoSign.containsMatchIn(title) ||
             bracketedSongRegex.matches(title) || (byDash && artistSeparator(title) > 0) ||
-            bracketTag.findAll(title).any { musicTagWords.containsMatchIn(it.value) } || trailingVideoNoiseRegex.containsMatchIn(title)
+            bracketTags(title, TAG_OPENS, TAG_CLOSES).any { musicTagWords.containsMatchIn(title.substring(it)) } || trailingVideoNoiseRegex.containsMatchIn(title)
         return song.takeIf { says }
     }
 
@@ -308,22 +313,23 @@ internal object MetadataParsers {
     private fun withoutVideoNoise(text: String): String {
         val kept = StringBuilder()
         var from = 0
-        for (tag in bracketTag.findAll(text)) {
-            kept.append(text, from, tag.range.first)
-            val inside = tag.value.substring(1, tag.value.length - 1)
-            val left = if (videoNoiseWords.containsMatchIn(inside.replace(bracketTag, " "))) "" else withoutVideoNoise(inside)
+        for (tag in bracketTags(text, TAG_OPENS, TAG_CLOSES)) {
+            kept.append(text, from, tag.first)
+            val inside = text.substring(tag.first + 1, tag.last)
+            val left = if (videoNoiseWords.containsMatchIn(replacingBracketTags(inside, TAG_OPENS, TAG_CLOSES, " "))) "" else withoutVideoNoise(inside)
             if (left.isBlank() && left != inside) {
                 while (kept.isNotEmpty() && kept.last().isWhitespace()) kept.setLength(kept.length - 1)
             } else {
-                kept.append(tag.value.first()).append(left).append(tag.value.last())
+                kept.append(text[tag.first]).append(left).append(text[tag.last])
             }
-            from = tag.range.last + 1
+            from = tag.last + 1
         }
         return kept.append(text, from, text.length).toString()
     }
 
     /** A song from a video's title and channel, which often put "Artist - Song" in the title. */
     fun youtubeVideo(title: String, channel: String): MusicMetadata? {
+        if (title.length > LONGEST_TITLE) return null
         var rawTitle = withoutVideoNoise(title.replace(subtitlesTagRegex, "")).trim()
         // Removing one suffix can expose another: "Song Official Video HD" or "Song HD (Lyrics)".
         do {

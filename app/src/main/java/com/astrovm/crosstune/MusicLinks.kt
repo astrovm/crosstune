@@ -102,6 +102,8 @@ internal object MusicLinks {
         val start = text.indexOf(NOW_PLAYING_SEARCH)
         if (start < 0) return null
         val song = text.substring(0, start).trim()
+        // A song and its artist, so two titles long at most: a wording is matched whole, from each place it may split.
+        if (song.length > 2 * LONGEST_TITLE) return null
         val search = text.substring(start).trim()
         return nowPlayingPatterns.firstNotNullOfOrNull { (shared, searched) ->
             val groups = shared.regex.matchEntire(song)?.groupValues ?: return@firstNotNullOfOrNull null

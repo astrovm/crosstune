@@ -335,10 +335,22 @@ private fun chordWikiNames(title: String, one: String, other: String, more: List
     chordWikiTitles(title).any { name -> SongNames.same(name, one) || SongNames.same(name, other) || more.any { SongNames.same(name, it) } }
 
 /** A page's name as listed, and without the credit ChordWiki hangs on it, as in "夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）". */
-private fun chordWikiTitles(title: String): List<String> = listOf(title, title.replace(CREDIT, ""))
+private fun chordWikiTitles(title: String): List<String> = listOf(title, withoutCredit(title))
 
-/** The credit at the end, which may name someone with brackets of their own, "（歌：YOASOBI（ヨアソビ））". */
-private val CREDIT = Regex("""$SPACES_START\s*+[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)(?:[^（(）)]++|[（(][^（(）)]*+[）)])*+[）)]\s*+$""")
+/**
+ * [title] without the credit in its last tag, which may name someone with brackets of their own, "（歌：YOASOBI（ヨアソビ））".
+ * Where a bracket doesn't close, the tag is read as [bracketTags] reads it, and the credit may start inside it.
+ */
+private fun withoutCredit(title: String): String {
+    val tag = bracketTags(title, CREDIT_OPENS, CREDIT_CLOSES).lastOrNull()?.takeIf { title.substring(it.last + 1).isBlank() } ?: return title
+    val credit = CREDIT.find(title, tag.first)?.range?.first?.takeIf { it < tag.last } ?: return title
+    if (credit != tag.first && bracketsInOrder(title, CREDIT_OPENS, CREDIT_CLOSES)) return title
+    return title.substring(0, credit).trimEnd()
+}
+
+private const val CREDIT_OPENS = "（("
+private const val CREDIT_CLOSES = "）)"
+private val CREDIT = Regex("""[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)""")
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
     val (text, href) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return null

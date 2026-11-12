@@ -25,10 +25,13 @@ internal object SongNames {
     /** "Zion and Lennox" and "Zion & Lennox" are two names, whichever language says so. */
     private val conjunction = Regex("""$SPACES_START\s++(?:and|y|und|et)\s++""", RegexOption.IGNORE_CASE)
 
-    /** A guest credited in the title, as "(feat. Emel)", which some services leave out. */
+    /**
+     * A guest credited in the title, as "(feat. Emel)", which some services leave out. Or written out, as a video's
+     * title has it, "Despacito ft. Daddy Yankee", though not "6 ft. Under", up to the spaces before the next tag or the end.
+     */
     private val featuring = Regex(
-        // Or written out, as a video's title has it, "Despacito ft. Daddy Yankee", though not "6 ft. Under".
-        """\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]|(?<!\d)\s+(?:feat\.?|ft\.?|featuring)\s+[^()\[\]]*?(?=\s*[(\[]|$)""",
+        """$SPACES_START(?:\s*+[(\[]\s*+(?:feat|ft|featuring)\b[^()\[\]]*+[)\]]|(?<!\d)\s++(?:feat\.?|ft\.?|featuring)\s++""" +
+            """(?:[^()\[\]\s]++|\s++(?=[^()\[\]\s]))*+(?:(?=\s*+[(\[])|\s*?$))""",
         RegexOption.IGNORE_CASE
     )
     /** What marks a title as a music video's, as K-pop does, which no store has it under. */
@@ -107,6 +110,7 @@ internal object SongNames {
      * (Live; 2013 Remaster)" and "Song - Stereo MC's Remix" are other recordings, so they keep their tags.
      */
     fun withoutEditionTag(title: String): String {
+        if (title.length > LONGEST_TITLE) return title
         var stripped = title
         // "Song - 2012 Remaster (Mono)" has two, and a title that's only a tag is left as it is.
         while (true) {
@@ -257,10 +261,16 @@ internal object SongNames {
      * Artist)". Null for a title that doesn't say so, which is the artist's own song.
      */
     fun coverOf(title: String): Covered? {
-        val tag = coverTag.findAll(title).firstOrNull { coverWords.containsMatchIn(it.value) } ?: coverAfterDash.find(title) ?: return null
-        val song = bareTitle(title.substring(0, tag.range.first)).ifEmpty { return null }
-        return Covered(song, coverBy.find(tag.value)?.groupValues?.get(1)?.trim()?.ifEmpty { null })
+        if (title.length > LONGEST_TITLE) return null
+        val tag = bracketTags(title, COVER_OPENS, COVER_CLOSES).firstOrNull { coverWords.containsMatchIn(title.substring(it)) }
+            ?: coverAfterDash(title) ?: return null
+        val song = bareTitle(title.substring(0, tag.first)).ifEmpty { return null }
+        return Covered(song, coverBy.find(title.substring(tag))?.groupValues?.get(1)?.trim()?.ifEmpty { null })
     }
+
+    /** "Song - Acoustic Cover": it ends the title, so it's on its last line, and only that line is read. */
+    private fun coverAfterDash(title: String): IntRange? =
+        coverAfterDash.find(title, (title.lastIndexOf('\n', title.length - 2) - 2).coerceAtLeast(0))?.range
 
     /** A cover's song: its [title], and its [artist] when the cover's title names them. */
     data class Covered(val title: String, val artist: String?)
@@ -268,9 +278,9 @@ internal object SongNames {
     private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
     private val coverWords = Regex("""(?:$COVER_WORDS)""", RegexOption.IGNORE_CASE)
 
-    /** A tag in brackets, which may hold one of its own, "(Acoustic Cover (Live))". Its words are looked for in it after. */
-    private val coverTag = Regex("""[(\[【](?:[^(\[【)\]】]++|[(\[【][^(\[【)\]】]*+[)\]】])*+[)\]】]""")
-    private val coverAfterDash = Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
+    private const val COVER_OPENS = "([【"
+    private const val COVER_CLOSES = ")]】"
+    private val coverAfterDash = Regex("""\s[-–]\s[^-–\n]*(?:$COVER_WORDS)[^\n]*+$""", RegexOption.IGNORE_CASE)
 
     /** Whose song it is, up to the end of the tag or the start of one inside it, "(In the Style of Artist (Live))". */
     private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^(\[【)\]】]+)""", RegexOption.IGNORE_CASE)
@@ -278,6 +288,7 @@ internal object SongNames {
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
         var bare = title.trim()
+        if (bare.length > LONGEST_TITLE) return bare
         while (true) {
             val shorter = bare.replace(trailingTag, "").trim()
             if (shorter == bare || shorter.isEmpty()) return bare

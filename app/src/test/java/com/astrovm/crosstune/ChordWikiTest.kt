@@ -173,6 +173,9 @@ class ChordWikiTest {
     fun aCreditMayNameSomeoneInBracketsOfTheirOwn() {
         val hits = chordWikiHits("夜に駆ける （歌：YOASOBI（ヨアソビ） 作詞・作曲・編曲：Ayase） - ChordWiki\thttps://ja.chordwiki.org/wiki/yoasobi")
         assertEquals("夜に駆ける （歌：YOASOBI（ヨアソビ） 作詞・作曲・編曲：Ayase）", chordWikiBest(hits, "夜に駆ける", "YOASOBI", "夜に駆ける")?.title)
+        // One that never closes the name's bracket.
+        val unclosed = chordWikiHits("夜に駆ける （歌：YOASOBI（ヨアソビ 作詞・作曲・編曲：Ayase） - ChordWiki\thttps://ja.chordwiki.org/wiki/unclosed")
+        assertEquals("夜に駆ける （歌：YOASOBI（ヨアソビ 作詞・作曲・編曲：Ayase）", chordWikiBest(unclosed, "夜に駆ける", "YOASOBI", "夜に駆ける")?.title)
     }
 
     @Test

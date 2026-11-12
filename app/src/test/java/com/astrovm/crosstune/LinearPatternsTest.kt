@@ -45,6 +45,10 @@ class LinearPatternsTest {
         "MetadataParsers.kt" to "^(.+)(?: [-–‑] |: )",
         // One word of a short list, between lookarounds of one letter each.
         "Translator.kt" to "\$spoken",
+        // A Spotify page's wording as above, with no title before it: from the start only, and a title is a line long.
+        "MetadataParsers.kt" to "wording.pattern.removePrefix",
+        // Now Playing's wording, its two "(.+)" matched whole, on a line of a share no longer than two titles.
+        "MusicLinks.kt" to ".toRegex()",
     )
 
     @Test
@@ -68,19 +72,24 @@ class LinearPatternsTest {
         val source = "private const val TAG = \"\"\"<b>\"\"\"\nprivate const val END = \"</b>\"\n" +
             "val a = Regex(\"\"\"${'$'}TAG(x)\"\"\" + \"\"\"${'$'}{END}\\s\"\"\", RegexOption.IGNORE_CASE)\n" +
             "val b = Regex(\"a\\\\d\\${'$'}\")\nval c = Regex(\"\"\"${'$'}{'${'$'}'}\"\"\")\n" +
-            "val d = Regex(\"\"\"\"q\":\"(\\w)\"\"\"\").find(x)\nval e = Regex(\"\"\"^(.+)\"\"\" + words + \"\"\"${'$'}\"\"\")\n"
+            "val d = Regex(\"\"\"\"q\":\"(\\w)\"\"\"\").find(x)\nval e = Regex(\"\"\"^(.+)\"\"\" + words + \"\"\"${'$'}\"\"\")\n" +
+            "val f = words.joinToString(\"|\").toRegex()\nval g = Regex(words.first(), RegexOption.IGNORE_CASE)\n"
         val read = AppPatterns(listOf("Test.kt" to source))
         assertEquals(listOf("<b>(x)</b>\\s", "a\\d$", "$", "\"q\":\"(\\w)\""), read.found.map { it.pattern.pattern() })
         assertEquals(listOf(true, false, false, false), read.found.map { it.pattern.flags() and Pattern.CASE_INSENSITIVE != 0 })
         assertEquals(listOf("a", "b", "c", "d"), read.found.map { it.holds })
-        assertEquals(listOf("Test.kt:7 Regex(\"\"\"^(.+)\"\"\""), read.unread)
+        assertEquals(
+            listOf("Test.kt:7 val e = Regex(\"\"\"^(.+)\"\"\" + words + \"\"\"${'$'}\"\"\")", "Test.kt:8 val f = words.joinToString(\"|\").toRegex()", "Test.kt:9 val g = Regex(words.first(), RegexOption.IGNORE_CASE)"),
+            read.unread.sorted()
+        )
     }
 
     /** Text that makes a pattern try each place and look on to the end: runs of one thing, and of how the pattern starts. */
     private fun hostileTexts(pattern: String): List<String> {
         val start = plainStart(pattern)
         val starts = if (start.isEmpty()) emptyList() else listOf(start.repeat(LENGTH / start.length + 1), start + "x".repeat(LENGTH), start + " ".repeat(LENGTH))
-        return RUNS.map { it.repeat(LENGTH / it.length) } + starts
+        // Each run on its own, and then something that isn't a space nor ends the text, so a pattern reads on past it.
+        return RUNS.flatMap { listOf(it.repeat(LENGTH / it.length), it.repeat(LENGTH / it.length) + ")") } + starts
     }
 
     /**

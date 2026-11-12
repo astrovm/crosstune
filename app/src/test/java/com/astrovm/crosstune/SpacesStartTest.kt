@@ -32,9 +32,11 @@ class SpacesStartTest {
             fun passed(text: String) = text.replace(gap, transform = { "-" })
             fun next(text: String) = gap.find(text)?.next()
             fun handed(text: String) = listOf(gap)
+            fun held(text: String, fixer: (MatchResult) -> CharSequence) = gap.replace(text, fixer)
+            fun said() = "gap.findAll(text)" + ${"\"\"\""}gap.find(text, 2)${"\"\"\""} + '"'
         """.trimIndent()
         val found = searchedAgain(AppPatterns(listOf("Test.kt" to source)))
-        assertEquals(listOf(7, 8, 9, 10, 11, 12, 13), found.map { it.substringAfter("Test.kt:").substringBefore(' ').toInt() })
+        assertEquals(listOf(7, 8, 9, 10, 11, 12, 13, 14), found.map { it.substringAfter("Test.kt:").substringBefore(' ').toInt() })
     }
 
     /** Each use of a pattern with `\G` that isn't a search from the start, by where it is, or a pattern no value holds. */
@@ -45,7 +47,7 @@ class SpacesStartTest {
         val own = app.files.filter { it.first == file }
         val sources = if (own.any { (_, source) -> Regex("""private (?:val|var) $name\b""").containsMatchIn(source) }) own else app.files
         sources.flatMap { (other, source) ->
-            val code = withoutComments(source)
+            val code = withoutStrings(withoutComments(source))
             Regex("""\b$name\b""").findAll(code).filterNot { use -> fromTheStart(code, use.range.first, use.range.last + 1) }
                 .map { use -> "$other:${code.take(use.range.first).count { it == '\n' } + 1} ${code.substring(use.range.first).lineSequence().first().trim()}" }
                 .toList()
@@ -94,9 +96,18 @@ class SpacesStartTest {
         return given.map { it.trim().toString() } to ""
     }
 
-    /** A replacement that is text, not a block or a function, and no block after the call. */
-    private fun plain(replacement: String, rest: String) =
-        !replacement.startsWith("{") && "::" !in replacement && "->" !in replacement && "transform" !in replacement && !block.matchesAt(rest, 0)
+    /**
+     * A replacement written as text in the call, and no block after it. A value may hold a function as well as
+     * text, and a String's replace takes either, so a replacement that isn't written out is read as a function.
+     */
+    private fun plain(replacement: String, rest: String) = replacement.startsWith("\"") && !block.matchesAt(rest, 0)
+
+    /** The code with what's in each string put as spaces, as a name in one, "a featuring guest", is no use of it. */
+    private fun withoutStrings(code: String) = literal.replace(code) { found ->
+        val quotes = if (found.value.startsWith("\"\"\"")) 3 else 1
+        val text = found.value
+        if (text.startsWith("'")) text else text.take(quotes) + text.substring(quotes, text.length - quotes).replace(notALineBreak, " ") + text.takeLast(quotes)
+    }
 
     private fun withoutComments(source: String) = source.lines().joinToString("\n") { line ->
         if (line.trimStart().startsWith("*") || line.trimStart().startsWith("/*") || line.trimStart().startsWith("//")) "" else line
@@ -109,5 +120,8 @@ class SpacesStartTest {
         val next = Regex("""\s*\??\.\s*next\(""")
         val block = Regex("""\s*\{""")
         val argumentTo = Regex("""\.(replace|split)\(\s*$""")
+        /** A letter in quotes, which may be a quote, or a raw string, or a quoted one. */
+        val literal = Regex("""'(?:\\.|[^'\\])'|""" + "\"\"\"(?:[^\"]|\"(?!\"\"))*+\"*\"\"\"" + """|"(?:[^"\\\n]|\\.)*+"""")
+        val notALineBreak = Regex("""[^\n]""")
     }
 }

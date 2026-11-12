@@ -24,6 +24,8 @@ class SongNamesVersionTest {
         for (title in listOf("Song (Acoustic Cover (Live))", "Song (Cover [Acoustic])", "Song [Cover (Piano)]")) {
             assertEquals(title, SongNames.Covered("Song", null), SongNames.coverOf(title))
         }
+        // A bracket that never closes is read from the first one to the first close, as it always was.
+        for (title in listOf("Song (Acoustic Cover (Live)", "Song (Cover()")) assertEquals(title, SongNames.Covered("Song", null), SongNames.coverOf(title))
         // Whose song it is ends where that tag starts.
         assertEquals(SongNames.Covered("Song", "Artist"), SongNames.coverOf("Song (In the Style of Artist (Live))"))
     }

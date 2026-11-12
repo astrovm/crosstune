@@ -12,7 +12,10 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
     /** A pattern: [where] it is, "File.kt:12", the value that [holds] it, if one does, and the pattern as built. */
     data class Found(val where: String, val holds: String?, val pattern: Pattern)
 
-    /** Each `Regex(` that starts with a literal and isn't read whole, or a template in one no constant fills. */
+    /**
+     * Each pattern that isn't read whole, by where it is and its line: a `Regex(` of literals that isn't, one built
+     * from a value, or a `.toRegex()`. And a template in one that no constant fills.
+     */
     val unread = mutableListOf<String>()
 
     val found: List<Found> = constants(files.map { it.second }).let { known ->
@@ -26,8 +29,11 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
 
     private fun patternsIn(name: String, source: String, known: Map<String, String>): List<Found> {
         fun where(at: Int) = "$name:${source.take(at).count { it == '\n' } + 1}"
+        fun line(at: Int) = source.substring(source.lastIndexOf('\n', at - 1) + 1).lineSequence().first().trim()
         val read = call.findAll(source).map { it.range.first }.toSet()
-        opening.findAll(source).filter { it.range.first !in read }.forEach { unread += "${where(it.range.first)} ${it.value.take(60)}" }
+        built.findAll(source).filter { it.range.first !in read }.map { it.range.first }
+            .filterNot { line(it).startsWith("*") || line(it).startsWith("//") }
+            .forEach { unread += "${where(it)} ${line(it)}" }
         return call.findAll(source).map { found ->
             val where = where(found.range.first)
             val text = literals.findAll(found.groupValues[1]).joinToString("") { literalText(it.value) }
@@ -73,8 +79,8 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         private val literals = Regex("$RAW|$QUOTED")
         /** `Regex(` and the literals it's built from, joined with `+`, then its options. */
         private val call = Regex("""\bRegex\(\s*((?:$RAW|$QUOTED)(?:\s*\+\s*(?:$RAW|$QUOTED))*+)\s*(,\s*(?:RegexOption\.\w+|setOf\([^()]*\)))?\s*\)""")
-        /** Any `Regex(` that starts with a literal, read or not. */
-        private val opening = Regex("""\bRegex\(\s*(?:$RAW|$QUOTED)""")
+        /** Any `Regex(`, read or not, and a `.toRegex(`. */
+        private val built = Regex("""\bRegex\(|\.toRegex\(""")
         private val constant = Regex("""\bconst val (\w+)\s*=\s*($RAW|$QUOTED)""")
         private val template = Regex("""\$\{'\$'\}|\$\{(\w+)\}|\$(\w+)""")
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")

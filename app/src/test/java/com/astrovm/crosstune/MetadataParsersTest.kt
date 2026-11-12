@@ -200,6 +200,8 @@ class MetadataParsersTest {
         // A line break after the song's brackets, or in later ones, still leaves the song in the first.
         assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」\nTV size", "Label"))
         assertEquals(MusicMetadata("アイドル", "YOASOBI"), MetadataParsers.musicVideo("YOASOBI「アイドル」「Idol\nEnglish」", "Label"))
+        // Before them, a line break ends what can be the artist: this is a vlog's title, not a song's.
+        assertNull(MetadataParsers.musicVideo("Vlog\nYOASOBI「アイドル」", "Label"))
         // A tag may hold one of its own.
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Official Video (Remastered))", "Band"))
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song [Lyrics (English)]", "Band"))
@@ -239,6 +241,11 @@ class MetadataParsersTest {
         // One that only holds it keeps what it says of the song.
         assertEquals(MusicMetadata("Song (Live at Wembley)", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live at Wembley [HD])", "Channel"))
         assertEquals(MusicMetadata("Song (Live (2020))", "Artist"), MetadataParsers.youtubeVideo("Artist - Song (Live (2020))", "Channel"))
+        // A bracket that never closes, or one too many, is read from the first one to the first close, as it always was.
+        for (title in listOf("Artist - Song (Lyrics()", "Artist - Song ((Lyrics)", "Artist - Song (Official Video :( )")) {
+            assertEquals(title, MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Song (Lyrics()", "Band"))
     }
 
     @Test
