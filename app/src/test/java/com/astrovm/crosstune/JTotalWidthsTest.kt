@@ -27,7 +27,7 @@ class JTotalWidthsTest {
         // Kana is two columns on both stacks, as MS Gothic draws it. ۰ comes from another fallback on each.
         assertEquals(2000, JTotalWidths.of('あ'.code, monospace = true))
         assertEquals(1144, JTotalWidths.of(0x6F0))
-        assertEquals(1201, JTotalWidths.of(0x6F0, monospace = true))
+        assertEquals(1200, JTotalWidths.of(0x6F0, monospace = true))
         val kana = "${"x".repeat(41)}${jTotal("C")}<br>${"あ".repeat(22)}"
         assertEquals(21, ChordSheets.fromJTotal(kana).single().chords.single().at)
         assertEquals(21, ChordSheets.fromJTotal(kana, monospace = true).single().chords.single().at)

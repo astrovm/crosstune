@@ -244,7 +244,7 @@ Singing to the morning light</div>"""
     @Test
     fun jTotalUsesTheFontStackFromThePage() {
         // Both stacks draw a Windows-31J letter at one width. ۰ is not one, so a page writes it as an entity, and
-        // each stack draws it from another font on Windows: 1.144 columns on the main stack, 1.201 on the monospace
+        // each stack draws it from another font on Windows: 1.144 columns on the main stack, 1.200 on the monospace
         // one. Drawn there in Chromium, Edge and Chrome (scripts/jtotal-widths/invented.py), the chord after eleven
         // columns lands on letter 10 with the main stack and on letter 9 with the monospace one.
         // The kana at the end makes the words Japanese, as J-Total is asked only for those.

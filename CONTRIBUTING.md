@@ -71,7 +71,7 @@ The website at [crosstune.cc](https://crosstune.cc) is built from [`site/`](site
 
 ## Chord sheet widths
 
-Chords from J-Total sit over the letter they sit over on J-Total's page, as a Japanese reader's browser on Windows draws it. Some letters are not whole columns there: ۰ is 1.144 columns on the main font stack and 1.201 on the monospace one. `ChordSheets` uses the widths in [`jtotal-widths.txt`](app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt) and [`jtotal-widths-mono.txt`](app/src/main/resources/com/astrovm/crosstune/jtotal-widths-mono.txt), one for each stack.
+Chords from J-Total sit over the letter they sit over on J-Total's page, as a Japanese reader's browser on Windows draws it. Some letters are not whole columns there: ۰ is 1.144 columns on the main font stack and 1.200 on the monospace one. `ChordSheets` uses the widths in [`jtotal-widths.txt`](app/src/main/resources/com/astrovm/crosstune/jtotal-widths.txt) and [`jtotal-widths-mono.txt`](app/src/main/resources/com/astrovm/crosstune/jtotal-widths-mono.txt), one for each stack.
 
 Both tables come from Windows. The workflow [`jtotal-widths-windows.yml`](.github/workflows/jtotal-widths-windows.yml) measures them on GitHub's `windows-latest` runner, in Chromium in Japanese, with Windows' own fonts. Run it with `gh workflow run jtotal-widths-windows.yml`, download its artifact, and run `python3 scripts/jtotal-widths/jtotal_widths.py generate DIR` on it. `check DIR` says whether the tables are what DIR measured. Each table's header names the run, the browser and the font versions.
 

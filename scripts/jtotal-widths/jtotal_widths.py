@@ -18,7 +18,7 @@ they matched Chromium on every letter. The container gives other widths, as its 
 J-Total sets a sheet in `Inconsolata, MS Gothic, Hiragino Kaku Gothic, Monaco, sans-serif`, or in
 `Inconsolata, monospace`. A letter Inconsolata has is one column, and one MS Gothic has is one or two.
 Any other letter the browser draws from a proportional font, so its width is not a whole number: ۰ is
-1.144 columns on the first stack and 1.201 on the second. `ChordSheets` counts chords over those widths.
+1.144 columns on the first stack and 1.200 on the second. `ChordSheets` counts chords over those widths.
 
 Each letter is measured as what it adds to a line: the width of `あXあXあ...あ`, ten of it, less that of
 eleven `あ`, divided by ten and by the width of a digit. A mark is measured after a letter it follows
