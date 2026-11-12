@@ -2347,10 +2347,8 @@ class PracticeCardsTest {
     /** The host each lookup so far went to, in order. */
     private fun lookups() = sites.requestedUrls.map { it.toHttpUrl().host }
 
-    @Test
-    fun aCardAsksTheServiceOfEachAppOnlyAsItGetsToItAndNoneOnceThreeWereTried() {
-        youTubeHasTheSong()
-        // Apple Music and Deezer have the song, so their apps are asked for it; Spotify's has nothing for it.
+    /** Apple Music's and Deezer's stores having the song, so a card tries their apps; Spotify's has nothing for it. */
+    private fun appleAndDeezerHaveTheSong() {
         val before = sites.handler
         sites.handler = { request ->
             when (request.url.host) {
@@ -2359,6 +2357,12 @@ class PracticeCardsTest {
                 else -> before(request)
             }
         }
+    }
+
+    @Test
+    fun aCardAsksTheServiceOfEachAppOnlyAsItGetsToItAndNoneOnceThreeWereTried() {
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
         keep(line(), types = hearIt)
         installed(*five.toTypedArray())
         playback.access = true
@@ -2415,7 +2419,8 @@ class PracticeCardsTest {
         val cards = cards()
         cards.start(null, before = null)
         waitFor("the player is on the line") { player.shown.isNotEmpty() }
-        assertTrue(practice!!.cantComeBack)
+        // Not known to have the song, it isn't offered to Allow: it may not have it at all.
+        assertFalse(practice!!.cantComeBack)
         assertTrue(playback.opened.isEmpty())
         // Already playing the song, it plays the next line, which needs no link either.
         appPlays(spotify, speed = 1f, positionMs = 19_500)
@@ -2423,6 +2428,79 @@ class PracticeCardsTest {
         cards.grade(Grade.GOOD)
         waitFor("Spotify plays the line") { playback.seekedApps.contains(spotify) }
         assertEquals(listOf("music.youtube.com"), lookups().distinct())
+    }
+
+    /**
+     * TIDAL preferred, with Spotify, Apple Music and Deezer, and Deezer already playing the song. Crosstune can't show over other
+     * apps, as on a TV, and ListenBrainz doesn't know the song. Spotify, which would cover the card, doesn't play it: it's left out
+     * without a lookup and takes none of the three tries, so Deezer, the third app tried, plays the line, as it did before.
+     */
+    private fun aSpotifyThatCantBeOpenedTakesNoneOfTheTries(phone: Phone) {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        screen.value = screen.value.copy(phone = phone)
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
+        keep(line())
+        val (apple, deezer, tidal) = listOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL).map { it.packageName }
+        installed(spotify, apple, deezer, tidal, preferred = Destination.Service(MusicService.TIDAL))
+        appPlays(deezer, speed = 1f, positionMs = 9_500)
+        playback.comesBackByItself = false
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the line is ready, in an app or the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
+        assertEquals(listOf("trying $tidal", "trying $apple", "trying $deezer"), steps().filter { it.startsWith("trying") })
+        assertEquals(listOf<String?>(deezer), playback.seekedApps.toList())
+        assertTrue(player.shown.isEmpty())
+        // It may not have the song at all, so the card doesn't offer to Allow it, and nothing about the song is sent for it.
+        assertFalse(practice!!.cantComeBack)
+        assertTrue(lookups().toString(), lookups().none { it in setOf("labs.api.listenbrainz.org", "open.spotify.com") })
+    }
+
+    @Test
+    fun aSpotifyThatCantBeOpenedTakesNoneOfTheTriesOnAPhone() = aSpotifyThatCantBeOpenedTakesNoneOfTheTries(Phone.PIXEL)
+
+    @Test
+    fun aSpotifyThatCantBeOpenedTakesNoneOfTheTriesOnATv() = aSpotifyThatCantBeOpenedTakesNoneOfTheTries(Phone.TV)
+
+    @Test
+    fun aPreferredSpotifyLeftOutTakesNoneOfTheTriesAndIsOfferedToAllow() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        youTubeHasTheSong()
+        appleAndDeezerHaveTheSong()
+        val (apple, deezer, tidal) = listOf(MusicService.APPLE_MUSIC, MusicService.DEEZER, MusicService.TIDAL).map { it.packageName }
+        // Kept from TIDAL, which is tried without asking its service.
+        keep(line().copy(app = tidal))
+        // Spotify is the app songs open in, so the card would try it whatever its service says, but it would cover the card.
+        installed(spotify, tidal, apple, deezer)
+        appPlays(deezer, speed = 1f, positionMs = 9_500)
+        playback.comesBackByItself = false
+        cards(songLoadMs = 300).start(null, before = null)
+        waitFor("the line is ready, in an app or the player") { practice?.sound == LineSound.PLAYED || player.shown.isNotEmpty() }
+        // TIDAL and Apple Music don't get to the line; Deezer, the third app tried, does.
+        assertEquals(listOf("trying $tidal", "trying $apple", "trying $deezer"), steps().filter { it.startsWith("trying") })
+        assertEquals(listOf<String?>(deezer), playback.seekedApps.toList())
+        assertTrue(player.shown.isEmpty())
+        // Allowed to show over other apps, Spotify would be tried: the card says so.
+        assertTrue(practice!!.cantComeBack)
+        assertTrue(playback.opened.isEmpty())
+    }
+
+    @Test
+    fun withoutTheOverlayGoingBackToWhatSpotifyPlayedBeforeNeitherOpensItNorAsksAboutTheSong() {
+        ShadowLog.setLoggable(CHAIN_LOG, Log.DEBUG)
+        spotifyHasTheSong()
+        youTubeHasTheSong()
+        keep(line())
+        playback.access = true
+        playback.comesBackByItself = false
+        val cards = cards(songLoadMs = 300)
+        cards.start(null, before = Before(MusicMetadata("Demo", "Band"), 4_000, spotify))
+        waitFor("the player is on the line") { player.shown.isNotEmpty() }
+        val before = lookups()
+        // Spotify no longer has the song, and opening it on its link would cover the screen for good.
+        cards.backToBefore()
+        waitFor("Spotify is left out") { "$spotify would cover the card" in steps() }
+        assertTrue(playback.opened.isEmpty())
+        assertEquals(before, lookups())
     }
 }
 
