@@ -37,7 +37,7 @@ class WholeLines {
         val job = JSONObject(File(dir, "lines-job.json").readText())
         // Each checkout writes its own answer, as both run with the same job: the job names the file for each.
         // Gradle runs the test in the app's folder, so the checkout is the folder above it.
-        val checkout = checkNotNull(File(System.getProperty("user.dir")).canonicalFile.parentFile) { "the app's folder has no parent" }.path
+        val checkout = checkNotNull(File(checkNotNull(System.getProperty("user.dir"))).canonicalFile.parentFile) { "the app's folder has no parent" }.path
         val name = job.getJSONObject("answers").optString(checkout).ifEmpty { error("lines-job.json names no answer for $checkout") }
         val entries = job.getJSONArray("lines").let { array -> (0 until array.length()).map(array::getJSONObject) }
         val songs = job.getJSONArray("songs").let { array -> (0 until array.length()).map { strings(array.getJSONArray(it)) } }
