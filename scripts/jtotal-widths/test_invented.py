@@ -19,6 +19,8 @@ class InventedTest(unittest.TestCase):
             page = (Path(tmp) / "sheets" / "0001.html").read_bytes().decode("cp932")
             self.assertIn("tt { font-family: 'Inconsolata', monospace; }", page)
             self.assertIn("ｶﾞあい", page)
+            # A letter Shift_JIS has no code for is an entity, as J-Total writes it.
+            self.assertIn("&#1329;&#1329;&#1329;ab", page)
             self.assertEqual((Path(tmp) / "dat_st.css").read_text(encoding="utf-8"), "")
 
     def test_each_line_is_its_chord_over_its_words(self):

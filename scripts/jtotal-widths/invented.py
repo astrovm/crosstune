@@ -39,6 +39,16 @@ LINES = [
     ("x" * 6, "αβγδεあ"),
     ("x" * 6, "жизньあ"),
     ("xxxx", "№≒あい"),
+    ("x" * 6, "≒≒≒≒あ"),
+    ("abcd", "ԱԱԱab"),
+    ("abcd", "აააააab"),
+    ("abcd", "Ĳĳŉﾠab"),
+    ("abcd", "αααααb"),
+    ("abcdefghij", "аааааааааb"),
+    ("abcdefghij", "가가가가가bc"),
+    ("abcde", "😀😀abc"),
+    ("abcdef", "あ）　い"),
+    ("abcdef", "あ）：い"),
 ]
 
 
@@ -54,7 +64,8 @@ def write(directory):
     rows = []
     for number, (name, stack) in enumerate(STACKS.items()):
         file = f"{number:04}.html"
-        (directory / "sheets" / file).write_bytes(page(stack).encode("cp932"))
+        # A letter Shift_JIS can't hold is written as an entity, as J-Total writes it.
+        (directory / "sheets" / file).write_bytes(page(stack).encode("cp932", "xmlcharrefreplace"))
         rows.append({"file": file, "url": f"invented:{name}"})
     (directory / "urls.json").write_text(json.dumps(rows, indent=1) + "\n", encoding="utf-8")
     # The page's own stylesheet sets no font for `tt`: the style on the page does.
