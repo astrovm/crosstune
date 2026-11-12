@@ -864,7 +864,7 @@ internal class ExactMatcher(
         if (names.titles.none { titleIn(it, row.name) }) return false
         if (names.titles.all { title -> SongNames.saysAnotherVersion(row.name, title, names.artists.joinToString(" ")) }) return false
         val said = names.titles.flatMap { SongNames.words(SongNames.withoutEditionTag(it)) } + names.artists.flatMap(SongNames::words)
-        val outside = replacingBracketTags(row.name, BRACKET_OPENS, BRACKET_CLOSES, " ")
+        val outside = outsideBrackets(row.name)
         val rest = SongNames.words(outside) - said.toSet() - VIDEO_TAGS
         if (rest.any { !YEAR.matches(it) }) return false
         // Nor anything in another script, which has no words to tell apart: "桜の雨" isn't "桜". Named
@@ -998,9 +998,6 @@ internal class ExactMatcher(
         /** A year, as a video's title may give the song's: "1984". */
         private val YEAR = Regex("""(?:19|20)\d\d""")
 
-        /** The brackets of any kind a title uses, which may hold brackets of their own: "(An Endless Song (1987))". */
-        private const val BRACKET_OPENS = "([（【「『［"
-        private const val BRACKET_CLOSES = ")]）】」』］"
 
         /** Apple Music stores that write names as they are in Japanese, Korean and Chinese. */
         private val NAMING_STORES = listOf("JP", "KR", "TW", "HK", "CN")
@@ -1047,3 +1044,6 @@ internal fun canBeMissing(target: MusicService, item: MusicMetadata): Boolean =
  * artist's own page or a verified account counts, and ListenBrainz doesn't know every Spotify song.
  */
 private val partlyKnown = setOf(MusicService.BANDCAMP, MusicService.SOUNDCLOUD, MusicService.AUDIOMACK, MusicService.SPOTIFY)
+
+/** [name] with what's in brackets put as a space, of any kind a title uses: "Song (An Endless Song (1987))" is "Song  ". */
+internal fun outsideBrackets(name: String) = replacingBracketTags(name, "([（【「『［", ")]）】」』］", " ")

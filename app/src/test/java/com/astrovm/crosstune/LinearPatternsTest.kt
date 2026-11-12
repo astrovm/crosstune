@@ -41,14 +41,11 @@ class LinearPatternsTest {
      * with why each takes no more time than its text.
      */
     private val builtAtRunTime = listOf(
-        // A Spotify page's title, from its start only: one place to try, and a title is a line long.
-        "MetadataParsers.kt" to "^(.+)(?: [-–‑] |: )",
         // One word of a short list, between lookarounds of one letter each.
         "Translator.kt" to "\$spoken",
-        // A Spotify page's wording as above, with no title before it: from the start only, and a title is a line long.
-        "MetadataParsers.kt" to "wording.pattern.removePrefix",
-        // Now Playing's wording, its two "(.+)" matched whole, on a line of a share no longer than two titles.
-        "MusicLinks.kt" to ".toRegex()",
+        // A Spotify page's wording, before and after the artist, as plain letters: matched at one place each.
+        "MetadataParsers.kt" to "Regex(Regex.escape(wording.substringBefore",
+        "MetadataParsers.kt" to "Regex(Regex.escape(wording.substringAfter",
     )
 
     @Test

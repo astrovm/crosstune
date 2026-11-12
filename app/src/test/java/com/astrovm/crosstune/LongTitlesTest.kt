@@ -1,7 +1,6 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -26,14 +25,17 @@ class LongTitlesTest {
             "Song " + " ft. A".repeat(LENGTH / 6) + ")",
             "Song " + "(((Live)))".repeat(LENGTH / 10),
             "Song " + "(".repeat(LENGTH / 2) + ")".repeat(LENGTH / 2),
-        )
+            // The review's slowest: a player's title of dashes, and guests that each end where the next starts.
+            " - ".repeat(LENGTH / 3) + "\n",
+            " ft. a  ".repeat(LENGTH / 8) + ")",
+        ) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(LENGTH / piece.length) + ending } }
         // Once, so the first call's start-up isn't timed.
         read("Artist - Song (Official Video)")
         val slow = titles.mapNotNull { title ->
             val began = System.nanoTime()
             read(title)
             val millis = (System.nanoTime() - began) / 1_000_000
-            "${title.take(20).replace("\n", "\\n")}… ${millis}ms".takeIf { millis > LIMIT_MS }
+            "${title.take(20).replace("\n", "\\n")}…${title.takeLast(2).replace("\n", "\\n")} ${millis}ms".takeIf { millis > LIMIT_MS }
         }
         assertEquals(emptyList<String>(), slow)
     }
@@ -49,32 +51,45 @@ class LongTitlesTest {
     }
 
     @Test
-    fun aTitleTooLongToBeOneIsNoSong() {
-        fun titled(length: Int) = "S".repeat(length - " (Acoustic Cover)".length) + " (Acoustic Cover)"
-        val long = titled(LONGEST_TITLE + 1)
-        assertNull(MetadataParsers.youtubeVideo(long, "Channel"))
-        assertNull(MetadataParsers.musicVideo(long, "Channel"))
-        assertNull(SongNames.coverOf(long))
-        assertEquals(long, SongNames.withoutEditionTag(long))
-        assertEquals(long, SongNames.bareTitle(long))
-        // One letter shorter is read.
-        val title = titled(LONGEST_TITLE)
-        val song = title.substringBefore(" (")
+    fun aLongTitleIsReadAsAShortOne() {
+        val title = "S".repeat(LENGTH) + " (Acoustic Cover)"
+        val song = "S".repeat(LENGTH)
         assertEquals(MusicMetadata(title, "Channel"), MetadataParsers.youtubeVideo(title, "Channel"))
+        assertEquals(null, MetadataParsers.musicVideo(title, "Channel"))
+        assertEquals(MusicMetadata(title, ""), MetadataParsers.playerSong(title, ""))
         assertEquals(song, SongNames.coverOf(title)?.title)
         assertEquals(song, SongNames.bareTitle(title))
+        assertEquals(title, SongNames.withoutEditionTag(title))
     }
 
     private fun read(title: String) {
         MetadataParsers.youtubeVideo(title, "Channel")
         MetadataParsers.musicVideo(title, "Channel")
+        MetadataParsers.playerSong(title, "")
+        MetadataParsers.bracketedSong(title)
         SongNames.coverOf(title)
         SongNames.bareTitle(title)
         SongNames.withoutEditionTag(title)
+        SongNames.withoutFeaturing(title)
+        chordWikiTitles(title)
+        outsideBrackets(title)
     }
 
     private companion object {
         const val LENGTH = 20_000
         const val LIMIT_MS = 300L
+
+        /** What a title is made of where the readers look for a tag, each repeated to [LENGTH]. */
+        val PIECES = listOf(
+            " ", "\n", "\r\n", "\t", "-", " - ", " – ", "|", " | ", "//", ":", "(", ")", "[", "]", "（", "）", "【", "】", "「", "」",
+            "『", "』", "( ", "[ ", "( )", "x ", "a by ", " ft. a ", " ft. a  ", " feat. ", "(feat. a", "2  ft. a", " M/V",
+            " (M/V", " Cover", " - Cover", "\nCover", " cover of a", " in the style of a (", " Lyrics", " HD", " Official Video",
+            " Video", " (Live)", "(Live) ", " - Live", " Remastered", " - Remastered 2012", " (Remastered", "Remix ", "「a」",
+            "a「", "（歌：", "（歌：a）", "(歌", " sub esp", "|| sub español ", " - Song, Lyrics, and Music Video by ", "song by ",
+            " | Spotify", " by ", "\u3000", "\u0085",
+        )
+
+        /** How each of [PIECES]' titles ends: as it is, on a bracket, a line break, or a word. */
+        val ENDINGS = listOf("", ")", "]", "」", "\n", "\r\n", "\u0085", " x", " - Topic", " | Spotify")
     }
 }

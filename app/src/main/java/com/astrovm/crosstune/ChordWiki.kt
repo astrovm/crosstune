@@ -335,17 +335,24 @@ private fun chordWikiNames(title: String, one: String, other: String, more: List
     chordWikiTitles(title).any { name -> SongNames.same(name, one) || SongNames.same(name, other) || more.any { SongNames.same(name, it) } }
 
 /** A page's name as listed, and without the credit ChordWiki hangs on it, as in "夜に駆ける （歌：YOASOBI 作詞・作曲・編曲：Ayase）". */
-private fun chordWikiTitles(title: String): List<String> = listOf(title, withoutCredit(title))
+internal fun chordWikiTitles(title: String): List<String> = listOf(title, withoutCredit(title))
 
 /**
- * [title] without the credit in its last tag, which may name someone with brackets of their own, "（歌：YOASOBI（ヨアソビ））".
- * Where a bracket doesn't close, the tag is read as [bracketTags] reads it, and the credit may start inside it.
+ * [title] without the credit in its last tag, and the spaces around it, which may name someone with brackets of their
+ * own, "（歌：YOASOBI（ヨアソビ））". Where a bracket doesn't close in order, the credit runs from a bracket after the one
+ * that closes before the last, to the last, as main read it.
  */
 private fun withoutCredit(title: String): String {
-    val tag = bracketTags(title, CREDIT_OPENS, CREDIT_CLOSES).lastOrNull()?.takeIf { title.substring(it.last + 1).isBlank() } ?: return title
-    val credit = CREDIT.find(title, tag.first)?.range?.first?.takeIf { it < tag.last } ?: return title
-    if (credit != tag.first && bracketsInOrder(title, CREDIT_OPENS, CREDIT_CLOSES)) return title
-    return title.substring(0, credit).trimEnd()
+    val close = title.indexOfLast { it in CREDIT_CLOSES }.takeIf { it >= 0 } ?: return title
+    // Only spaces may follow, and a line break the end of the line leaves.
+    val end = spacesEnd(title, close + 1).takeIf { it == title.length || it == title.length - 1 && isLineBreak(title[it]) } ?: return title
+    val credit = if (bracketsInOrder(title, CREDIT_OPENS, CREDIT_CLOSES)) {
+        bracketTags(title, CREDIT_OPENS, CREDIT_CLOSES).last().first.takeIf { CREDIT.matchesAt(title, it) }
+    } else {
+        val after = title.lastIndexOfAny(CREDIT_CLOSES.toCharArray(), close - 1)
+        (after + 1 until close).firstOrNull { title[it] in CREDIT_OPENS && CREDIT.matchesAt(title, it) }
+    } ?: return title
+    return title.substring(0, spacesStart(title, credit)) + title.substring(end)
 }
 
 private const val CREDIT_OPENS = "（("

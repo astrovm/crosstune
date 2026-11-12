@@ -7,15 +7,73 @@ package com.astrovm.crosstune
  */
 internal const val SPACES_START = """(?:(?<!\s)|\G)"""
 
-/** A title past this many letters is no title, but a page or a text that went wrong, and isn't read for a song. */
-internal const val LONGEST_TITLE = 500
+/** A space as a pattern's `\s` reads it: a space, a tab, a line break, a vertical tab or a form feed. Not U+3000. */
+internal fun isPatternSpace(char: Char) = char == ' ' || char in '\t'..'\r'
+
+/** A letter that ends a line, which a pattern's `.` never reads. */
+internal fun isLineBreak(char: Char) = char == '\n' || char == '\r' || char == '\u0085' || char == '\u2028' || char == '\u2029'
+
+/** Where the run of [isPatternSpace] spaces that ends at [at] starts, [from] at the earliest. */
+internal fun spacesStart(text: CharSequence, at: Int, from: Int = 0): Int {
+    var start = at
+    while (start > from && isPatternSpace(text[start - 1])) start--
+    return start
+}
+
+/** Where the run of [isPatternSpace] spaces from [at] ends. */
+internal fun spacesEnd(text: CharSequence, at: Int): Int {
+    var end = at
+    while (end < text.length && isPatternSpace(text[end])) end++
+    return end
+}
 
 /**
- * The tags in brackets in [text], brackets and all, [opens] and [closes] being the brackets, each of which closes any
- * other. Where every bracket closes in order, a tag holds the ones inside it, "(Acoustic Cover (Live [2019]))". Where
- * one doesn't, a tag runs from the first bracket that opens after the last tag to the next that closes, so "Song
- * (Lyrics()" has "(Lyrics()" and "Song (Official Video :( )" has "(Official Video :( )". Read in code, as a pattern can
- * only hold so many brackets in brackets.
+ * A text cut short: [text] up to [end], then [after], what followed a tag cut off its end, as the line break that ended
+ * it. Read as one text without copying it, so a loop that cuts tags off a long title's end one at a time reads near
+ * that end only.
+ */
+internal class Kept(private val text: String, val end: Int, val after: String) : CharSequence {
+    override val length get() = end + after.length
+    override fun get(index: Int) = if (index < end) text[index] else after[index - end]
+    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = when {
+        startIndex >= end -> after.substring(startIndex - end, endIndex - end)
+        endIndex <= end -> text.substring(startIndex, endIndex)
+        else -> text.substring(startIndex, end) + after.substring(0, endIndex - end)
+    }
+    override fun toString() = text.substring(0, end) + after
+
+    /** Without [range], which is near the end. */
+    fun without(range: IntRange): Kept = minOf(range.first, end).let { cut -> Kept(text, cut, "${subSequence(cut, range.first)}${subSequence(range.last + 1, length)}") }
+
+    /** Without the spaces it ends with, as [String.trim] takes them, and those it starts with once all but [after] is cut. */
+    fun trimmed(): Kept {
+        val rest = after.trimEnd()
+        var cut = end
+        if (rest.isEmpty()) while (cut > 0 && text[cut - 1].isWhitespace()) cut--
+        return Kept(text, cut, if (cut == 0) rest.trimStart() else rest)
+    }
+}
+
+/**
+ * Where a pattern's `$` first matches in [text], from [from] on: before the one line break that ends it, if one
+ * does ("\r\n" being one), or else at its end.
+ */
+internal fun lineEnd(text: CharSequence, from: Int = 0): Int = (text.length - finalLineBreak(text)).takeIf { it >= from } ?: text.length
+
+/** How long the line break that ends [text] is: "\r\n" is one, of two chars. */
+private fun finalLineBreak(text: CharSequence): Int = when {
+    text.endsWith("\r\n") -> 2
+    text.isNotEmpty() && isLineBreak(text.last()) -> 1
+    else -> 0
+}
+
+/**
+ * The tags in brackets in [text], brackets and all, [opens] and [closes] being the brackets, in pairs. Where every
+ * bracket closes in order, each with its own kind, a tag holds the ones inside it, "(Acoustic Cover (Live [2019]))".
+ * Where one doesn't, each closes any other, as main read them: a tag runs from the first bracket that opens after the
+ * last tag to the next that closes, so "Song (Lyrics()" has "(Lyrics()", "Song (Official Video :( )" has "(Official
+ * Video :( )" and "Song [Video :(] (feat. X) :)" has "[Video :(]". Read in code, as a pattern can only hold so many
+ * brackets in brackets.
  */
 internal fun bracketTags(text: String, opens: String, closes: String): List<IntRange> {
     val inOrder = bracketsInOrder(text, opens, closes)
@@ -37,13 +95,19 @@ internal fun bracketTags(text: String, opens: String, closes: String): List<IntR
     return tags
 }
 
-/** Whether each bracket in [text] closes, in order. */
+/** Whether each bracket in [text] closes, in order, with the bracket of its own kind: [closes] pairs with [opens]. */
 internal fun bracketsInOrder(text: String, opens: String, closes: String): Boolean {
-    var depth = 0
+    val open = StringBuilder()
     for (char in text) {
-        if (char in opens) depth++ else if (char in closes && --depth < 0) return false
+        val kind = opens.indexOf(char)
+        if (kind >= 0) {
+            open.append(closes[kind])
+        } else if (char in closes) {
+            if (open.isEmpty() || open.last() != char) return false
+            open.setLength(open.length - 1)
+        }
     }
-    return depth == 0
+    return open.isEmpty()
 }
 
 /** [text] with each of its [bracketTags] put as [by]. */

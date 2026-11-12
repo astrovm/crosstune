@@ -102,13 +102,11 @@ internal object MusicLinks {
         val start = text.indexOf(NOW_PLAYING_SEARCH)
         if (start < 0) return null
         val song = text.substring(0, start).trim()
-        // A song and its artist, so two titles long at most: a wording is matched whole, from each place it may split.
-        if (song.length > 2 * LONGEST_TITLE) return null
         val search = text.substring(start).trim()
         return nowPlayingPatterns.firstNotNullOfOrNull { (shared, searched) ->
-            val groups = shared.regex.matchEntire(song)?.groupValues ?: return@firstNotNullOfOrNull null
-            val title = groups[shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
-            val artist = groups[3 - shared.titleGroup].takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
+            val (first, second) = shared.split(song) ?: return@firstNotNullOfOrNull null
+            val title = (if (shared.titleFirst) first else second).takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
+            val artist = (if (shared.titleFirst) second else first).takeIf { it.isNotBlank() } ?: return@firstNotNullOfOrNull null
             if (search != nowPlayingSearch(searched.fill(title, artist))) return@firstNotNullOfOrNull null
             recognizedSong(MusicMetadata(title, artist))
         }
@@ -116,8 +114,23 @@ internal object MusicLinks {
 
     /** One of Now Playing's wordings, "%1$s" being the title and "%2$s" the artist. */
     private class SongPattern(val text: String) {
-        val titleGroup = if (text.indexOf("%1\$s") < text.indexOf("%2\$s")) 1 else 2
-        val regex = text.split("%1\$s", "%2\$s").joinToString("(.+)") { Regex.escape(it) }.toRegex()
+        val titleFirst = text.indexOf("%1\$s") < text.indexOf("%2\$s")
+        private val words = text.split("%1\$s", "%2\$s")
+
+        /**
+         * The two names in [song], first and second, as the pattern `Before(.+)Between(.+)After` matched whole reads
+         * them: the first runs to the last "Between" that leaves the second a letter, and neither holds a line break.
+         * In code, as that pattern tried each "Between" to the end of the text, and took time squared on a long one.
+         */
+        fun split(song: String): Pair<String, String>? {
+            val (before, between, after) = words
+            val secondEnd = song.length - after.length
+            if (secondEnd - before.length < between.length + 2 || !song.startsWith(before) || !song.endsWith(after)) return null
+            if (song.substring(before.length, secondEnd).any(::isLineBreak)) return null
+            val at = song.lastIndexOf(between, secondEnd - between.length - 1).takeIf { it > before.length } ?: return null
+            return song.substring(before.length, at) to song.substring(at + between.length, secondEnd)
+        }
+
         fun fill(title: String, artist: String) = text.replace("%1\$s", title).replace("%2\$s", artist)
     }
 
