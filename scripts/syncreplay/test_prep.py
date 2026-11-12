@@ -106,7 +106,7 @@ class PartTest(unittest.TestCase):
     def test_a_part_given_wrong_is_refused_plainly(self):
         for which in ('0/3', '4/3', '1/0', 'x', '1/', '/3', '1/2/3', '-1/3', 'held/3'):
             err = io.StringIO()
-            with self.subTest(which=which), patch('sys.argv', ['syncreplay.py', 'untimed', '--part', which]), \
+            with self.subTest(which=which), patch('sys.argv', ['syncreplay.py', 'untimed', f'--part={which}']), \
                     patch.object(r, 'untimed') as untimed, contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as stop:
                 r.main()
             self.assertEqual(stop.exception.code, 2)
