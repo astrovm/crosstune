@@ -192,14 +192,46 @@ def platform_fonts(cdp, selector):
     return [sorted({f["familyName"] for f in cdp.send("CSS.getPlatformFontsForNode", {"nodeId": node})["fonts"]}) for node in nodes]
 
 
-def open_page(p, browser_name, lang):
-    browser = launch(p, browser_name, lang)
-    page = browser.new_page(viewport={"width": 1200, "height": 800}, locale=lang)
-    cdp = page.context.new_cdp_session(page) if browser_name != "webkit" else None
+class Opened:
+    """A browser opened for measuring: its version, and how to close it."""
+
+    def __init__(self, version, close):
+        self.version = version
+        self.close = close
+
+
+def japanese_profile(folder, lang):
+    """A profile whose browser speaks `lang`. Chrome and Edge on Windows take their language from the
+    profile's `intl.app_locale`, not from --lang, and it picks the fonts a generic family draws with."""
+    folder = Path(folder)
+    (folder / "Default").mkdir(parents=True, exist_ok=True)
+    (folder / "Local State").write_text(json.dumps({"intl": {"app_locale": lang}}), encoding="utf-8")
+    (folder / "Default" / "Preferences").write_text(json.dumps({"intl": {"accept_languages": lang, "selected_languages": lang}}), encoding="utf-8")
+    return folder
+
+
+def open_page(p, browser_name, lang, profile=None):
+    """A page to measure on. An installed browser with a language gets a profile in that language, in `profile`."""
+    if lang and profile is not None and Path(browser_name).exists():
+        context = p.chromium.launch_persistent_context(str(japanese_profile(profile, lang)), executable_path=browser_name,
+                                                       headless=True, args=[f"--lang={lang}"], locale=lang, viewport={"width": 1200, "height": 800})
+        page = context.pages[0] if context.pages else context.new_page()
+        cdp = context.new_cdp_session(page)
+        version = cdp.send("Browser.getVersion")["product"].split("/")[-1]
+        opened = Opened(version, context.close)
+    else:
+        browser = launch(p, browser_name, lang)
+        page = browser.new_page(viewport={"width": 1200, "height": 800}, locale=lang)
+        cdp = page.context.new_cdp_session(page) if browser_name != "webkit" else None
+        opened = Opened(browser.version, browser.close)
     if cdp:
         cdp.send("DOM.enable")
         cdp.send("CSS.enable")
-    return browser, page, cdp
+    if lang:
+        found = page.evaluate("navigator.language")
+        if not found.startswith(lang):
+            raise SystemExit(f"{browser_name} speaks {found}, not {lang}")
+    return opened, page, cdp
 
 
 def show(page, html, path):
@@ -218,7 +250,7 @@ def measure(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lan
     widths, used, misread = {}, {}, set()
     began = time.monotonic()
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
-        browser, page, cdp = open_page(p, browser_name, lang)
+        browser, page, cdp = open_page(p, browser_name, lang, Path(tmp) / "profile")
         html = Path(tmp) / "widths.html"
         digit = None
 
@@ -296,7 +328,7 @@ def trims(out, stack=STACK, fonts=Path("/fonts"), browser_name="chromium", lang=
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p, tempfile.TemporaryDirectory() as tmp:
-        browser, page, cdp = open_page(p, browser_name, lang)
+        browser, page, cdp = open_page(p, browser_name, lang, Path(tmp) / "profile")
         show(page, page_head(stack, fonts, charset="shift_jis") + trim_rows() + "</body></html>", Path(tmp) / "trims.html")
         found = page.evaluate(TRIM_JS)
         marks = dict(zip(PUNCTUATION, platform_fonts(cdp, "tt[data-last]"))) if cdp else {}

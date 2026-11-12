@@ -29,6 +29,11 @@ jobs:
             Write-Output "msgothic.ttc is not on this runner: adding Windows' Japanese fonts"
             Add-WindowsCapability -Online -Name "Language.Fonts.Jpan~~~und-JPAN~0.0.1.0"
           }
+          # A Japanese PC also has Meiryo, which a Japanese browser draws sans-serif with. This server image may not.
+          if (-not (Test-Path C:\Windows\Fonts\meiryo.ttc)) {
+            Get-WindowsCapability -Online -Name "Language.Fonts.Jpan*" | Format-Table Name, State
+            try { Add-WindowsCapability -Online -Name "Language.Fonts.Jpan~~~und-JPAN~0.0.1.0" -ErrorAction Stop | Out-Null } catch { Write-Output "Windows' Japanese supplemental fonts could not be added: $_" }
+          }
           Get-ChildItem C:\Windows\Fonts\msgothic.ttc, C:\Windows\Fonts\meiryo.ttc, C:\Windows\Fonts\YuGothR.ttc -ErrorAction SilentlyContinue | Format-Table Name, Length
           if (-not (Test-Path C:\Windows\Fonts\msgothic.ttc)) { throw "msgothic.ttc is still missing" }
       - name: Playwright
@@ -48,16 +53,22 @@ jobs:
           $w measure $out/mono.json --mono --lang ja
           $w trims $out/main-trims.json --lang ja
           $w trims $out/mono-trims.json --mono --lang ja
-          # Edge, as most readers on Windows have it, on what a Shift_JIS page holds.
-          $w measure $out/edge-main.json --lang ja --cp932 --browser "$edge"
-          $w measure $out/edge-mono.json --mono --lang ja --cp932 --browser "$edge"
-          $w trims $out/edge-main-trims.json --lang ja --browser "$edge"
-          $w trims $out/edge-mono-trims.json --mono --lang ja --browser "$edge"
+          # Edge and Chrome as installed, each with a Japanese profile, on what a Shift_JIS page holds.
+          chrome="C:/Program Files/Google/Chrome/Application/chrome.exe"
+          for b in edge chrome; do
+            path=$([ $b = edge ] && echo "$edge" || echo "$chrome")
+            $w measure $out/$b-main.json --lang ja --cp932 --browser "$path"
+            $w measure $out/$b-mono.json --mono --lang ja --cp932 --browser "$path"
+            $w trims $out/$b-main-trims.json --lang ja --browser "$path"
+            $w trims $out/$b-mono-trims.json --mono --lang ja --browser "$path"
+          done
           # MS PGothic in MS Gothic's place, and an English browser, for how much those would move.
           $w measure $out/pgothic.json --lang ja --cp932 --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
           $w trims $out/pgothic-trims.json --lang ja --stack '"Inconsolata","MS PGothic","Hiragino Kaku Gothic","Monaco",sans-serif'
           $w measure $out/en-main.json --cp932
           $w measure $out/en-mono.json --mono --cp932
+          $w trims $out/en-main-trims.json
+          $w trims $out/en-mono-trims.json --mono
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jtotal-widths-windows
