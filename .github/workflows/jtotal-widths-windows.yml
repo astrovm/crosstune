@@ -5,10 +5,6 @@ name: J-Total widths on Windows
 # Download the artifact and run `jtotal_widths.py generate DIR` on it.
 on:
   workflow_dispatch:
-  # Until this workflow is on main, where a manual run needs it, a push to its pull request's branch runs it.
-  push:
-    branches: [fix/jtotal-widths-macos-830]
-    paths: [.github/workflows/jtotal-widths-windows.yml, scripts/jtotal-widths/**]
 
 permissions:
   contents: read

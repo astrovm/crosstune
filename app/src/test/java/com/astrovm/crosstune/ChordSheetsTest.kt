@@ -597,8 +597,9 @@ class ChordSheetsTest {
     @Test
     fun jTotalsWideLettersStartRightPastLatinAndOnEitherSideOfHalfWidthKana() {
         // What comes before the chord is what's measured; words in Latin letters say how many columns it took.
-        // Ā is one column: Inconsolata has it. The last half-width kana letter is one; the voice marks are none, covered above.
-        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 1, '\uFF60' to 2, '\uFF61' to 1, '\uFF9D' to 1, '\uFFA0' to 2)
+        // Ā is one column: Inconsolata has it. The last half-width kana letter is one, and so are the sound marks, covered
+        // above. On Windows, Malgun Gothic draws the half-width Hangul filler at one column too.
+        val columnsOf = listOf('\u00FF' to 1, '\u0100' to 1, '\uFF60' to 2, '\uFF61' to 1, '\uFF9D' to 1, '\uFFA0' to 1)
         for ((letter, columns) in columnsOf) {
             assertEquals(
                 "U+%04X".format(letter.code),
