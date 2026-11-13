@@ -206,10 +206,10 @@ internal object SongNames {
     /**
      * Whether [half] of a name, apart by " - ", says only that it's another version than the [other] half: "曲 - Live"
      * is a live one, though "Live Forever" is "曲" in Japan, where "なごり雪 (ライブ) - Nagoriyuki (Live)" says one version
-     * twice. "From "Live Forever"" says more: what it's from.
+     * twice. "From "Live Forever"" says more: what it's from. Only Latin words and numbers are [words], so "曲" says nothing more.
      */
     fun onlyAnotherVersion(half: String, other: String): Boolean =
-        saysAnotherVersionOf(half, listOf(other), "") && words(half).all { word -> canon(word) in VERSION_LIKE || word.all(Char::isDigit) || word.none { it in 'a'..'z' } }
+        saysAnotherVersionOf(half, listOf(other), "") && words(half).all { word -> canon(word) in VERSION_LIKE || word.all(Char::isDigit) }
 
     /** "ver" as "version", "inst" as "instrumental": one word, written short or not. */
     private fun canon(word: String) = VERSION_SAID[word] ?: word
