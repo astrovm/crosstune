@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import org.json.JSONObject
@@ -196,6 +197,7 @@ class LyricsReportTest {
     /** What the box for reports was sent, as the app that is started anew finds it. */
     private fun startedAnew() {
         opened.destroyAndSettle()
+        AutoReports.processEnded()
         // Another process, which isn't the one that asked.
         prefs().edit().putLong("auto_reports_asked_in", -7L).commit()
     }
@@ -709,11 +711,12 @@ class LyricsReportTest {
         openLyrics { shown("Plain one") }
         waitUntil { ReportSender.URL in fake.requestedUrls }
         // On its way: what's on the phone now is what an app ended now starts with. The report is there, and the day's
-        // places are all left, as one on its way holds its place only in the app sending it.
+        // places are all left, as one on its way holds its place only in the app sending it. Another screen of the
+        // app, in the same process, doesn't take it again meanwhile.
         val kept = AutoReports(prefs()).owed()
         assertEquals(listOf("no_timing"), kept.map { JSONObject(it.json).optString("problem") })
         assertEquals(0, foundToday())
-        assertTrue(AutoReports(prefs()).take(kept.single()) != null)
+        assertNull(AutoReports(prefs()).take(kept.single()))
         // The one held ends as if the app was ended: it never gets there. Closing waits for it to end.
         val sends = AtomicInteger()
         answerTo = { if (sends.getAndIncrement() == 0) 503 else null }
@@ -724,6 +727,48 @@ class LyricsReportTest {
         waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing", "no_timing"), problems())
         assertEquals(1, foundToday())
+        // Sent again as the same report, so a box that got it the first time keeps it once.
+        assertEquals(1, sentReports().map { it.getString("id") }.toSet().size)
+    }
+
+    @Test
+    fun aProblemFoundIsOnThePhoneBeforeItsReportIsMadeSoClosingTheAppMeanwhileStillSendsItAtTheNextStart() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        // What's playing isn't said yet, so the report waits to say which app played it.
+        playback.said = CompletableDeferred()
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        waitUntil { owed() == 1 }
+        assertFalse(ReportSender.URL in fake.requestedUrls)
+        opened.destroyAndSettle()
+        assertEquals(1, owed())
+        playback.said = null
+        started()
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("no_timing"), problems())
+    }
+
+    @Test
+    fun twoScreensOfTheAppStartedTogetherSendEachReportOwedOnce() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        val reports = AutoReports(prefs())
+        listOf("One", "Two", "Three").forEach { reports.owe(MusicMetadata(it, "Band"), SongProblem.NO_LYRICS, """{"version":"1","problem":"no_lyrics"}""") }
+        val held = CountDownLatch(1).also { reportsHeld = it }
+        started()
+        val first = opened
+        try {
+            waitUntil { ReportSender.URL in fake.requestedUrls }
+            // One opened from a share starts beside it, in the same process, while the first report is on its way.
+            started()
+            held.countDown()
+            waitUntil { owed() == 0 }
+        } finally {
+            first.destroyAndSettle()
+        }
+        opened.destroyAndSettle()
+        assertEquals(listOf("no_lyrics", "no_lyrics", "no_lyrics"), problems())
+        assertEquals(3, sentReports().map { it.getString("id") }.toSet().size)
     }
 
     @Test
@@ -737,8 +782,10 @@ class LyricsReportTest {
         // Closed, which ends all the app was doing, while the box is still taking it. The box takes it only once
         // closing has called the screen's work off, so the send has to see itself through to be let go.
         val work = checkNotNull(model().viewModelScope.coroutineContext[Job])
-        thread {
-            while (!work.isCancelled) Thread.sleep(POLL_MS)
+        // A daemon with a deadline, so a test that fails leaves nothing behind.
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        thread(isDaemon = true) {
+            while (!work.isCancelled && System.currentTimeMillis() < deadline) Thread.sleep(POLL_MS)
             held.countDown()
         }
         opened.destroyAndSettle()
@@ -956,7 +1003,10 @@ class LyricsReportTest {
     /** [songs] put in time before, whose reports wait on the phone: made up, as what they say doesn't matter. */
     private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), SongProblem.TIMED_BY_HAND, """{"fake":"$it"}""") }
 
-    private fun sentFakes() = fake.requestedUrls.indices.filter { fake.requestedUrls[it] == ReportSender.URL }.map { fake.requestBodies[it] }
+    private fun sentFakes() = fake.requestedUrls.indices.filter { fake.requestedUrls[it] == ReportSender.URL }.map { at ->
+        // Each goes with the id it was kept with, which says nothing else.
+        JSONObject(fake.requestBodies[at]).also { assertTrue(it.has(AutoReports.ID)) }.apply { remove(AutoReports.ID) }.toString()
+    }
 
     @Test
     fun noTimingReportIsOwedForWordsPutBackAsTheyWere() {
@@ -1157,7 +1207,7 @@ class LyricsReportTest {
         // Nothing it didn't keep is made up.
         assertEquals(setOf("timedMs", "heardMs"), point.keys().asSequence().toSet())
         assertEquals(setOf("title", "artist", "recording", "lengthMs", "sung", "timing"), song.keys().asSequence().toSet())
-        assertEquals(setOf("version", "android", "problem", "song"), sent.keys().asSequence().toSet())
+        assertEquals(setOf("version", "android", "problem", "song", AutoReports.ID), sent.keys().asSequence().toSet())
         // A song kept with no recording or length says neither, and wasn't heard sung.
         val named = keptSent()[1].getJSONObject("song")
         assertEquals(setOf("title", "artist", "sung", "timing"), named.keys().asSequence().toSet())

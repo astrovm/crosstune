@@ -2,8 +2,12 @@ package com.astrovm.crosstune
 
 import android.content.SharedPreferences
 import android.os.Process
+import androidx.annotation.VisibleForTesting
+import kotlinx.coroutines.sync.Mutex
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
+import java.util.WeakHashMap
 
 /** A problem Crosstune finds with a song by itself, as its reports name it. */
 internal enum class SongProblem(
@@ -38,6 +42,18 @@ internal class AutoReports(
     private val now: () -> Long = System::currentTimeMillis
 ) {
 
+    /** What every [AutoReports] on these preferences in this process shares: see [Shared]. */
+    private val shared = sharedFor(preferences)
+
+    /**
+     * [block] run while no other [AutoReports] on these preferences, in any thread, reads and writes the reports kept:
+     * two screens of the app open at once, as one opened from a share is, never take one report or one place twice.
+     */
+    private inline fun <T> locked(block: () -> T): T = synchronized(shared, block)
+
+    /** Held while the reports owed go, by whichever screen sends them, so a start and a yes close together don't send one twice. */
+    val sending: Mutex get() = shared.sending
+
     /** Yes or no, or null while the user hasn't said. */
     var allowed: Boolean?
         get() = if (preferences.contains(KEY_ALLOWED)) preferences.getBoolean(KEY_ALLOWED, false) else null
@@ -60,7 +76,7 @@ internal class AutoReports(
      * The offer closed, as not now: counted, and the [MAX_CLOSES]th one is a no, for good. The user can
      * still turn them on in Settings, which this never overrides once it's there.
      */
-    fun closed() {
+    fun closed() = locked {
         val closes = preferences.getInt(KEY_CLOSES, 0) + 1
         preferences.edit().putInt(KEY_CLOSES, closes).apply()
         if (closes >= MAX_CLOSES) allowed = false
@@ -73,39 +89,36 @@ internal class AutoReports(
     fun reported(song: MusicMetadata, problem: SongProblem): Boolean = keyOf(song, problem) in sent()
 
     /** [song]'s [problem] reported, so it isn't again; only the latest are remembered. */
-    fun remember(song: MusicMetadata, problem: SongProblem) = remember(keyOf(song, problem))
+    fun remember(song: MusicMetadata, problem: SongProblem) = locked { remember(keyOf(song, problem)) }
 
     /**
-     * The report under [key] turned away by the box, as it always will be: a problem found isn't sent again each time
-     * it's found, as it would be the same. Words put in time by hand are only no longer owed, not taken as sent, so
-     * when they're put in time again, that report still goes.
+     * [owed] turned away by the box, as it always will be: a problem found isn't sent again each time it's found, as
+     * it would be the same. Words put in time by hand are only no longer owed as they were, not taken as sent, so
+     * when they're put in time again, that report still goes, and one made meanwhile stays owed.
      */
-    private fun turnedAway(key: String) = if (key.startsWith(BY_HAND_START)) forget(key) else remember(key)
+    private fun turnedAway(owed: Owed) = if (owed.key.startsWith(BY_HAND_START)) keep(kept() - owed) else remember(owed.key)
 
     /** [key] done with, as it went to the box or was turned away. */
     private fun remember(key: String) {
         val list = (sent() - key) + key
         // Written at once, so one that went isn't sent again if the app is ended right after.
         preferences.edit().putString(KEY_SENT, JSONArray(list.takeLast(MAX_SENT)).toString()).commit()
-        // Reported, it isn't owed.
-        forget(key)
+        // Reported, it isn't owed: keeping drops it.
+        keep(kept())
     }
-
-    /** Reports on their way now, by key, and whether each counts for the day. Kept in memory: an app ended on the way takes none of the day's places. */
-    private val going = mutableMapOf<String, Boolean>()
 
     /**
      * [owed] taken to go now, in one step with the checks: still owed, not on its way already, and for a problem found,
      * a place left of today's [FOUND_A_DAY], counting those on their way. Null where it can't go now: one past the
      * day's share waits for a later day. How it went is told with [went], always.
      */
-    @Synchronized
-    fun take(owed: Owed): Going? {
+    fun take(owed: Owed): Going? = locked {
+        val going = shared.going
         if (!owes(owed) || owed.key in going) return null
         val counts = !owed.earlier
         if (counts && foundToday() + going.values.count { it } >= FOUND_A_DAY) return null
         going[owed.key] = counts
-        return Going(owed)
+        Going(owed)
     }
 
     /**
@@ -113,16 +126,17 @@ internal class AutoReports(
      * takes its place of the day; one it turned away is never sent again as it is; one that didn't get there stays
      * owed, and takes no place.
      */
-    @Synchronized
     fun went(going: Going, delivery: Delivery?) {
-        val counts = this.going.remove(going.owed.key) ?: return
-        when (delivery) {
-            Delivery.SENT -> {
-                if (counts) preferences.edit().putString(KEY_FOUND_TODAY, "${today()}:${foundToday() + 1}").commit()
-                paid(going.owed)
+        locked {
+            val counts = shared.going.remove(going.owed.key) ?: return
+            when (delivery) {
+                Delivery.SENT -> {
+                    if (counts) preferences.edit().putString(KEY_FOUND_TODAY, "${today()}:${foundToday() + 1}").commit()
+                    remember(going.owed.key)
+                }
+                Delivery.REFUSED -> turnedAway(going.owed)
+                Delivery.FAILED, null -> Unit
             }
-            Delivery.REFUSED -> turnedAway(going.owed.key)
-            Delivery.FAILED, null -> Unit
         }
     }
 
@@ -140,13 +154,17 @@ internal class AutoReports(
      * A report on [song]'s [problem], [json] as it'd be sent, kept on the phone until it's sent. Words put in time by
      * hand are owed whatever the user's answer is: they're only left, and reported, a while after, the app may be
      * killed before, and the answer may come later. A problem found is owed when its report didn't get there, or
-     * had to wait for a later day. An older one for the same song and problem gives way. The latest [MAX_OWED] of
-     * each, by hand and found, are kept, so the oldest go first. Each waits for the next start.
+     * had to wait for a later day. An older one for the same song and problem gives way, and leaves it its [ID]: the
+     * box keeps one report for it, whichever got there, so one it got and couldn't say so isn't kept twice. The
+     * latest [MAX_OWED] of each, by hand and found, are kept, so the oldest go first. Each waits for the next start.
      */
-    fun owe(song: MusicMetadata, problem: SongProblem, json: String): Owed {
-        val owed = Owed(keyOf(song, problem), json)
-        keep(kept().filter { it.key != owed.key } + owed)
-        return owed
+    fun owe(song: MusicMetadata, problem: SongProblem, json: String): Owed = locked {
+        val key = keyOf(song, problem)
+        val kept = kept()
+        val id = kept.firstOrNull { it.key == key }?.id ?: UUID.randomUUID().toString()
+        val owed = Owed(key, JSONObject(json).put(ID, id).toString())
+        keep(kept.filter { it.key != key } + owed)
+        owed
     }
 
     /** The key [song]'s timing report is owed under. */
@@ -162,9 +180,12 @@ internal class AutoReports(
 
     /**
      * The latest [MAX_OWED] put in time by hand are kept, the latest [MAX_OWED] problems found, and every one kept from
-     * an earlier version, of which there are only so many.
+     * an earlier version, of which there are only so many. One that went already, as words timed again after their
+     * report went are, is never sent again, so it takes no room.
      */
-    private fun keep(owed: List<Owed>) {
+    private fun keep(all: List<Owed>) {
+        val sent = sent().toSet()
+        val owed = all.filter { it.key !in sent }
         val latest = owed.filterNot { it.earlier }.groupBy { it.key.startsWith(BY_HAND_START) }.values.flatMap { it.takeLast(MAX_OWED) }.toSet()
         val list = JSONArray(owed.filter { it.earlier || it in latest }.map { JSONObject().put("key", it.key).put("json", it.json) })
         preferences.edit().putString(KEY_OWED, list.toString()).commit()
@@ -178,17 +199,19 @@ internal class AutoReports(
      * ([SungStore]). Read from what this version found, never after, so nothing timed from now on is taken for it.
      */
     fun keepEarlier(version: String, android: String) {
-        if (preferences.getBoolean(KEY_EARLIER_READ, false)) return
-        val sung = preferences.getString(KEY_SUNG, null)?.split('\n')?.toSet().orEmpty()
-        val songs = runCatching { JSONObject(preferences.getString(KEY_SYNC, null) ?: "{}") }.getOrDefault(JSONObject())
-        val sent = sent()
-        val earlier = songs.keys().asSequence().mapNotNull { key ->
-            val owed = earlierReport(key, songs.optJSONObject(key) ?: return@mapNotNull null, sung, version, android) ?: return@mapNotNull null
-            // A song whose timing went already, by hand in this version, or kept, isn't sent again.
-            owed.takeIf { it.key !in sent && "${SongProblem.TIMED_BY_HAND.key}\u0000${key.split('\u0000').take(2).joinToString("\u0000")}" !in sent }
-        }.toList()
-        keep(kept() + earlier)
-        preferences.edit().putBoolean(KEY_EARLIER_READ, true).commit()
+        locked {
+            if (preferences.getBoolean(KEY_EARLIER_READ, false)) return
+            val sung = preferences.getString(KEY_SUNG, null)?.split('\n')?.toSet().orEmpty()
+            val songs = runCatching { JSONObject(preferences.getString(KEY_SYNC, null) ?: "{}") }.getOrDefault(JSONObject())
+            val sent = sent()
+            val earlier = songs.keys().asSequence().mapNotNull { key ->
+                val owed = earlierReport(key, songs.optJSONObject(key) ?: return@mapNotNull null, sung, version, android) ?: return@mapNotNull null
+                // A song whose timing went already, by hand in this version, or kept, isn't sent again.
+                owed.takeIf { it.key !in sent && "${SongProblem.TIMED_BY_HAND.key}\u0000${key.split('\u0000').take(2).joinToString("\u0000")}" !in sent }
+            }.toList()
+            keep(kept() + earlier)
+            preferences.edit().putBoolean(KEY_EARLIER_READ, true).commit()
+        }
     }
 
     private fun earlierReport(key: String, saved: JSONObject, sung: Set<String>, version: String, android: String): Owed? {
@@ -210,28 +233,55 @@ internal class AutoReports(
             .put("timing", JSONArray(points.map { JSONObject().put("timedMs", it.optLong(0)).put("heardMs", it.optLong(1)) }))
         recording?.let { song.put("recording", ReportBox.cut(it, "recording")) }
         length?.let { song.put("lengthMs", it.toLong()) }
-        val json = JSONObject().put("version", version).put("android", android).put("problem", EARLIER).put("song", song)
+        val json = JSONObject().put("version", version).put("android", android).put("problem", EARLIER).put("song", song).put(ID, UUID.randomUUID().toString())
         return Owed("$EARLIER\u0000$key", json.toString())
     }
 
     /** Nothing owed for [song]: the words were put back as they were. */
-    fun owedNothing(song: MusicMetadata) = forget(owedKey(song))
+    fun owedNothing(song: MusicMetadata) = locked { keep(kept().filter { it.key != owedKey(song) }) }
 
-    private fun forget(key: String) = keep(kept().filter { it.key != key })
-
-    /** The report [owed] went. */
-    fun paid(owed: Owed) = remember(owed.key)
 
     /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */
     fun owes(owed: Owed): Boolean = owed in owed()
 
-    /** A report kept to be sent, under the [key] of the song and problem it's for. */
+    /** A report kept to be sent, under the [key] of the song and problem it's for, as [json], which is what's sent. */
     data class Owed(val key: String, val json: String) {
         /** Kept from an earlier version, rather than put in time by hand in this one. */
         val earlier: Boolean get() = key.startsWith(EARLIER_START)
+
+        /** The report's own [ID], or null for one an older version kept without it. */
+        val id: String? get() = JSONObject(json).optString(ID).ifEmpty { null }
+    }
+
+    /**
+     * What the reports kept need held in one place, whichever screen of the app sends them: the reports on their way,
+     * by key, and whether each counts for the day, kept in memory, so an app ended on the way takes none of the day's
+     * places; and the lock owed reports go under.
+     */
+    private class Shared {
+        val going = mutableMapOf<String, Boolean>()
+        val sending = Mutex()
     }
 
     companion object {
+        /**
+         * Each [Shared], by the preferences it's for: Android gives every screen one object for one file. Let go of
+         * with them, so a test's are gone with its app.
+         */
+        private val everyShared = WeakHashMap<SharedPreferences, Shared>()
+
+        private fun sharedFor(preferences: SharedPreferences): Shared = synchronized(everyShared) { everyShared.getOrPut(preferences, ::Shared) }
+
+        /** As if the app's process ended: what was held in memory is gone, and what's on the phone stays. */
+        @VisibleForTesting
+        fun processEnded() = synchronized(everyShared) { everyShared.clear() }
+
+        /**
+         * What a kept report carries as its own: a random UUID, made for it alone and never again, nothing about the
+         * phone. The box keeps one report for each, so one sent again, as it got there but the answer didn't, isn't kept twice.
+         */
+        const val ID = "id"
+
         private const val KEY_ALLOWED = "auto_reports"
         private const val KEY_SENT = "auto_reports_sent"
         private const val KEY_ASKED_IN = "auto_reports_asked_in"

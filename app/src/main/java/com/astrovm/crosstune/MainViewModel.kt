@@ -39,7 +39,6 @@ import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal sealed interface Effect {
@@ -3477,12 +3476,14 @@ internal class MainViewModel(
         val sender = reports ?: return
         if (autoReports.reported(song, problem)) return
         val report = reportOn(sender, song, problem = problem)
+        // On the phone at once, as it is so far, so nothing that ends the work below loses it: it goes at the next start.
+        autoReports.owe(song, problem, report.json())
         viewModelScope.launch {
             // Found before it's followed, or before following it said anything, as a song with no words always is.
             val playing = if (report.app == null) playback?.takeIf { it.hasAccess() }?.follow(song)?.first() else null
             val player = report.player?.let { it.copy(appPackage = it.appPackage ?: playing?.appPackage, speed = it.speed ?: playing?.clock?.speed) }
             val json = withContext(systemDispatcher) { report.copy(app = report.app ?: playing?.app, player = player).json() }
-            // Kept on the phone first, so it isn't lost if the app is ended on the way, then sent from there.
+            // In place of the one kept above, with its id, then sent from there.
             deliver(sender, autoReports.owe(song, problem, json))
         }
     }
@@ -3529,9 +3530,6 @@ internal class MainViewModel(
         autoReports.owe(song, SongProblem.TIMED_BY_HAND, reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).json())
     }
 
-    /** Held while reports owed go, so a start and a yes close together don't send one twice. */
-    private val owedGoing = Mutex()
-
     /**
      * Each report owed goes, once a song, and is dropped when it got there or the box turned it away; one that
      * didn't get there waits for the next time, and a problem found past the day's share for a later day.
@@ -3541,7 +3539,7 @@ internal class MainViewModel(
         val sender = reports ?: return
         if (autoReports.allowed != true) return
         viewModelScope.launch {
-            owedGoing.withLock {
+            autoReports.sending.withLock {
                 val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
                 for (owed in autoReports.owed().filter { it.key != inFront }) {
                     // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.

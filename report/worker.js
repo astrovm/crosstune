@@ -30,6 +30,13 @@ const READER = /^[a-z_]+(\+[a-z_]+)*$/;
 /** The script a word was read in, as the app names it: "japanese". */
 const LANGUAGE = /^[a-z_]+$/;
 
+/**
+ * A report's own id, as the app makes it for a report it keeps to send: a random UUID, nothing about the phone. A report
+ * sent again, as the box got it but the app never heard so, has the same one, and is kept once. A report without
+ * one, as a person's own and old apps send, is kept each time it comes.
+ */
+const REPORT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 /** What Android allows a package to be named: dotted words of letters, digits and underscores. */
 const PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/;
 
@@ -90,7 +97,7 @@ const JSON_TYPE = /^application\/json\s*(;\s*charset=utf-8\s*)?$/i;
 /** The columns a report fills, in the order its values are bound. */
 const COLUMNS =
   "version, android, title, artist, app, timed, synced, sung, length_ms, source, timing, comment, problem, app_package, speed, lead_ms, early_ms, timing_log, recording, " +
-  "lyric_line, word, reading_shown, reader, language, right_reading";
+  "lyric_line, word, reading_shown, reader, language, right_reading, report_id";
 
 /** How many values a report binds: when it came in, then each column. */
 const VALUES = 1 + COLUMNS.split(",").length;
@@ -102,26 +109,29 @@ const VALUES = 1 + COLUMNS.split(",").length;
 const heldOf = (kind) => `coalesce((SELECT n FROM report_counts WHERE key = 'bytes:${kind}'), 0)`;
 const dayOf = (kind, day) => `coalesce((SELECT n FROM report_counts WHERE key = ?${day} || ':${kind}'), 0)`;
 const sentOf = (key) => `coalesce((SELECT n FROM network_days WHERE key = ?${key}), 0)`;
+/** Whether the table has the report with the id bound at [id]: never for one without, as NULL equals nothing. */
+const storedOf = (id) => `EXISTS (SELECT 1 FROM reports WHERE report_id = ?${id})`;
 
 /**
  * Why a report of each kind is turned away, if it is: 'kept_full' or 'day_full' for its kind's share, 'network' when
- * its network sent its day's, else null. Bound to the day, the network's key and its number for the kind. Read once
+ * its network sent its day's, else null; or 'stored' when the table has it already, which is answered as kept, as
+ * it was. Bound to the day, the network's key, its number for the kind and the report's id. Read once
  * before anything is written, so a report turned away costs a refusal's write at most, and no count; and again in the
  * batch that keeps a report, to say why it wasn't kept.
  */
 const CHECK = Object.fromEntries(KINDS.map((kind) => [kind,
-  `SELECT CASE WHEN ${heldOf(kind)} >= ${SHARE_BYTES[kind]} THEN 'kept_full' WHEN ${dayOf(kind, 1)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' ` +
+  `SELECT CASE WHEN ${storedOf(4)} THEN 'stored' WHEN ${heldOf(kind)} >= ${SHARE_BYTES[kind]} THEN 'kept_full' WHEN ${dayOf(kind, 1)} >= ${SHARE_A_DAY[kind]} THEN 'day_full' ` +
   `WHEN ${sentOf(2)} >= ?3 THEN 'network' END AS why`,
 ]));
 
 /**
- * A report of each kind put in the table, with when it came in, unless that would take its kind past its share of
- * the table or the day, or its network past its day's. It turns away exactly what CHECK names, so a report not kept
- * always has a reason.
+ * A report of each kind put in the table, with when it came in, unless the table has it already (its id is the last
+ * value), or that would take its kind past its share of the table or the day, or its network past its day's. It
+ * leaves out exactly what CHECK names, so a report not kept always has a reason.
  */
 const INSERT = Object.fromEntries(KINDS.map((kind) => [kind,
   `INSERT INTO reports (at, ${COLUMNS}) SELECT ${Array.from({ length: VALUES }, (_, i) => `?${i + 1}`).join(", ")} ` +
-  `WHERE ${heldOf(kind)} < ${SHARE_BYTES[kind]} AND ${dayOf(kind, VALUES + 1)} < ${SHARE_A_DAY[kind]} AND ${sentOf(VALUES + 2)} < ?${VALUES + 3}`,
+  `WHERE NOT ${storedOf(VALUES)} AND ${heldOf(kind)} < ${SHARE_BYTES[kind]} AND ${dayOf(kind, VALUES + 1)} < ${SHARE_A_DAY[kind]} AND ${sentOf(VALUES + 2)} < ?${VALUES + 3}`,
 ]));
 
 /**
@@ -177,7 +187,7 @@ export default {
     const kind = kindOf(report.problem);
     const key = await networkDayKey(env.NETWORK_KEY, day, kind, networkOf(address));
     const most = NETWORK_A_DAY[kind];
-    const check = () => env.DB.prepare(CHECK[kind]).bind(day, key, most);
+    const check = () => env.DB.prepare(CHECK[kind]).bind(day, key, most, report.id);
     const why = (await check().first())?.why;
     if (why) return turnAway(env, day, kind, why);
     // Reports in flight at once can all read room above. The batch is one transaction: the report goes in only if
@@ -187,7 +197,7 @@ export default {
         at, report.version, report.android, report.title, report.artist, report.app,
         report.timed, report.synced, report.sung, report.lengthMs, report.source, report.timing, report.comment, report.problem,
         report.appPackage, report.speed, report.leadMs, report.earlyMs, report.timingLog, report.recording,
-        report.line, report.word, report.shown, report.reader, report.language, report.right,
+        report.line, report.word, report.shown, report.reader, report.language, report.right, report.id,
         day, key, most
       ),
       env.DB.prepare(COUNT_NETWORK).bind(key, day),
@@ -218,8 +228,12 @@ function status(code) {
   return new Response(null, { status: code });
 }
 
-/** A report of [kind] turned away on [day] for [why] ("network", "day_full" or "kept_full"): counted, and answered with 429. */
+/**
+ * A report of [kind] turned away on [day] for [why] ("network", "day_full" or "kept_full"): counted, and answered with
+ * 429. One the table has already ("stored") is answered as kept, as it was, and counted nowhere.
+ */
 async function turnAway(env, day, kind, why) {
+  if (why === "stored") return status(204);
   await refuse(env, day, `${why}:${kind}`);
   return refused(429, why.endsWith("_full") ? "full" : why);
 }
@@ -293,6 +307,7 @@ export function readReport(text) {
     title: null, artist: null, app: null, timed: null, synced: null, sung: null, lengthMs: null, source: null, timing: null,
     appPackage: null, speed: null, leadMs: null, earlyMs: null, timingLog: null, recording: null,
     line: null, word: null, shown: null, reader: null, language: null, right: null,
+    id: typeof json.id === "string" && REPORT_ID.test(json.id) ? json.id : null,
   };
   if (report.problem === WRONG_READING && !readingOf(json.reading, song, report)) return null;
   if (song) {

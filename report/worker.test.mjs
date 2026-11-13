@@ -7,7 +7,7 @@ import * as all from "./worker.js";
 import worker, { kindOf, networkDayKey, readReport, sameKey } from "./worker.js";
 
 /** How many values the Worker binds to a report before its limits: when it came in, then each column. */
-const REPORT_VALUES = 26;
+const REPORT_VALUES = 27;
 
 /**
  * D1 and the rate limit, as a test needs them: the reports saved, with the values of their columns, when they came
@@ -98,8 +98,9 @@ test("a report is kept, with only what a report has", async () => {
     "2.12.0", "15 (35)", "Demo", "Band", "YouTube Music", 1, 1, 0, 220937, "letras, timed by lrclib",
     JSON.stringify([{ line: "Take me I'm yours", timedMs: 34210, heardMs: 32900 }]), "The chorus comes late", null,
     // An app from before reports about timing sends none of what they add, nor a recording, and it's no wrong reading.
+    // A person's own report carries no id.
     null, null, null, null, null, null,
-    null, null, null, null, null, null,
+    null, null, null, null, null, null, null,
   ]);
   // The address only counts against the limit.
   assert.deepEqual(e.keys, ["203.0.113.7"]);
@@ -119,13 +120,13 @@ test("an insert binds one value for each column it names", async () => {
   assert.equal(e.saved[0].bound.length, REPORT_VALUES + 3);
   assert.equal(columns[0], "at");
   assert.equal(columns[19], "recording");
-  assert.deepEqual(columns.slice(20), ["lyric_line", "word", "reading_shown", "reader", "language", "right_reading"]);
+  assert.deepEqual(columns.slice(20), ["lyric_line", "word", "reading_shown", "reader", "language", "right_reading", "report_id"]);
 });
 
 test("a report about the app, with no song, is kept too", async () => {
   const e = env();
   assert.equal((await worker.fetch(post({ version: "2.12.0", comment: "Hi" }), e)).status, 204);
-  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", ...Array(13).fill(null)]);
+  assert.deepEqual(e.saved[0].values, ["2.12.0", null, null, null, null, null, null, null, null, null, null, "Hi", ...Array(14).fill(null)]);
 });
 
 test("anything else is turned away, and nothing kept", async () => {
@@ -243,9 +244,9 @@ test("a report about timing keeps the app followed, its speed, the lead and the 
   assert.deepEqual(e.saved[0].values.slice(12), [
     "timed_by_hand", "org.kde.kdeconnect_tp", 1, -1450, 400,
     "1000 said 5000 at 1000 playing true speed 1.0, kept 5000 at 1000\n2000 lines in time 50590>52000", null,
-    null, null, null, null, null, null,
+    null, null, null, null, null, null, null,
   ]);
-  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, recording, lyric_line, word, reading_shown, reader, language, right_reading\) SELECT (\?\d+, ){25}\?26 WHERE /);
+  assert.match(e.saved[0].sql, /app_package, speed, lead_ms, early_ms, timing_log, recording, lyric_line, word, reading_shown, reader, language, right_reading, report_id\) SELECT (\?\d+, ){26}\?27 WHERE /);
 });
 
 test("what timing adds that isn't what it should be is left out, and the rest is kept", () => {
@@ -293,7 +294,7 @@ test("a reading marked wrong keeps the line, the word, the reading shown, what r
   assert.deepEqual(values.slice(0, 4), ["2.25.0", "17 (37)", "Demo", "Band"]);
   assert.equal(values[9], "lrclib");
   assert.equal(values[12], "wrong_reading");
-  assert.deepEqual(values.slice(19), ["空の花 again", "花", "か / ka", "ipadic+unidic", "japanese", "はな"]);
+  assert.deepEqual(values.slice(19), ["空の花 again", "花", "か / ka", "ipadic+unidic", "japanese", "はな", null]);
 });
 
 test("a reading marked wrong needs a song, a word and the reading shown; the right one may be left out", async () => {
@@ -957,4 +958,86 @@ test("every 'not now' is a 429 or 503, and every report never taken a 400, 413 o
   never.push((await worker.fetch(from(anotherNetwork(), song, { "Content-Type": "text/plain" }), realEnv())).status);
   assert.deepEqual(later, [429, 429, 429, 429, 503]);
   assert.deepEqual(never, [400, 400, 413, 415]);
+});
+
+const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+const withId = (body, id = ID) => ({ ...body, id });
+
+test("a report sent again with its id is kept once, answered as kept, and counted once", async () => {
+  const e = realEnv();
+  for (let i = 0; i < 3; i++) assert.equal((await worker.fetch(from("203.0.113.1", withId(found)), e)).status, 204, `send ${i}`);
+  assert.equal(rows(e), 1);
+  assert.equal(e.db.prepare("SELECT report_id FROM reports").get().report_id, ID);
+  assert.equal(counted(e, `${today()}:found`), 1);
+  assert.equal(Number(e.db.prepare("SELECT n FROM network_days").get().n), 1);
+  assert.deepEqual(refusals(e), {});
+  // Another id, or none, is another report.
+  assert.equal((await worker.fetch(from("203.0.113.1", withId(found, "1b4e28ba-2fa1-41d2-883f-0016d3cca427")), e)).status, 204);
+  assert.equal((await worker.fetch(from("203.0.113.1", found), e)).status, 204);
+  assert.equal((await worker.fetch(from("203.0.113.1", found), e)).status, 204);
+  assert.equal(rows(e), 4);
+  assert.deepEqual(counts(e), recounted(e));
+});
+
+test("a report the table has is answered as kept even when its kind, its day or its network is full", async () => {
+  const e = realEnv();
+  assert.equal((await worker.fetch(from("203.0.113.1", withId(song)), e)).status, 204);
+  for (let i = 0; i < 9; i++) assert.equal((await worker.fetch(from("203.0.113.1"), e)).status, 204);
+  assert.equal((await worker.fetch(from("203.0.113.1"), e)).status, 429);
+  hold(e, "user", 50 * MB);
+  fill(e, 500);
+  assert.equal((await worker.fetch(from("203.0.113.1", withId(song)), e)).status, 204);
+  assert.equal(Number(e.db.prepare("SELECT count(*) AS n FROM reports WHERE report_id = ?").get(ID).n), 1);
+  assert.deepEqual(refusals(e), { "network:user": 1 });
+});
+
+test("the same report sent twice at once is kept once", async () => {
+  const e = realEnv({ slow: true });
+  const answers = await Promise.all([0, 1, 2].map(() => worker.fetch(from(anotherNetwork(), withId(found)), e)));
+  assert.deepEqual(answers.map((it) => it.status), [204, 204, 204]);
+  assert.equal(rows(e), 1);
+  assert.equal(networkDays(e), 1);
+  assert.deepEqual(counts(e), recounted(e));
+});
+
+test("only an id as the app makes it is kept, and anything else is a report without one", () => {
+  assert.equal(readReport(JSON.stringify(withId(found))).id, ID);
+  for (const id of [ID.toUpperCase(), `${ID}0`, ` ${ID}`, "not an id", 7, null, {}, [ID]]) {
+    assert.equal(readReport(JSON.stringify(withId(found, id))).id, null, String(id));
+  }
+  assert.equal(readReport(JSON.stringify(found)).id, null);
+});
+
+test("the ids take no more room than they're counted for, so the shares still fit in D1's 500 MB", () => {
+  const e = realEnv();
+  fill(e, 20000, "+0 seconds", "no_lyrics", 400);
+  e.db.exec("UPDATE reports SET report_id = lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) || '-a' || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6)))");
+  e.db.exec("VACUUM");
+  const pages = Number(e.db.prepare("PRAGMA page_count").get().page_count) * Number(e.db.prepare("PRAGMA page_size").get().page_size);
+  const ratio = pages / bytes(e, "found");
+  assert.ok(ratio > 0.9 && ratio < 1.1, `${ratio}`);
+  assert.deepEqual(counts(e), recounted(e));
+});
+
+test("migrations/0001_report_id.sql, then limits.sql, takes a table from before ids to one that keeps each once", async () => {
+  // The table and its triggers as they were before the column.
+  const before = (text) => text.replace(/,\n(\s*--[^\n]*\n)*\s*report_id TEXT\n\);/, "\n);").replace(/\n(--[^\n]*\n)*CREATE UNIQUE INDEX[^\n]*\n/, "\n");
+  const schema = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
+  const limits = readFileSync(new URL("./limits.sql", import.meta.url), "utf8");
+  const oldLimits = limits.replace(/ \+ 2 \* coalesce\(length\(CAST\((NEW\.|OLD\.)?report_id AS BLOB\)\), 0\)/g, "");
+  assert.ok(!before(schema).includes("report_id") && !oldLimits.includes("report_id"));
+  const e = realEnv();
+  e.db.exec("DROP TABLE reports; DROP TABLE report_counts;");
+  e.db.exec(before(schema));
+  e.db.exec(oldLimits);
+  fill(e, 3, "+0 seconds", "no_lyrics", 100);
+  e.db.exec(readFileSync(new URL("./migrations/0001_report_id.sql", import.meta.url), "utf8"));
+  e.db.exec(limits);
+  assert.equal(rows(e), 3);
+  for (let i = 0; i < 2; i++) assert.equal((await worker.fetch(from("203.0.113.1", withId(found)), e)).status, 204);
+  assert.equal(rows(e), 4);
+  assert.deepEqual(counts(e), recounted(e));
+  // Run again, limits.sql changes nothing.
+  e.db.exec(limits);
+  assert.deepEqual(counts(e), recounted(e));
 });
