@@ -343,7 +343,7 @@ internal fun chordWikiTitles(title: String): List<String> = listOf(title, withou
  * that closes before the last, to the last, as main read it.
  */
 private fun withoutCredit(title: String): String {
-    val close = title.indexOfLast { it in CREDIT_CLOSES }.takeIf { it >= 0 } ?: return title
+    val close = title.indexOfLast { it in CREDIT_CLOSES }.takeIf { it != -1 } ?: return title
     // Only spaces may follow, and a line break the end of the line leaves.
     val end = spacesEnd(title, close + 1).takeIf { it == title.length || it == title.length - 1 && isLineBreak(title[it]) } ?: return title
     val credit = if (bracketsInOrder(title, CREDIT_OPENS, CREDIT_CLOSES)) {

@@ -15,6 +15,13 @@ class KeptTest {
         assertEquals("Song", kept.subSequence(0, 4))
         assertEquals("\n", kept.subSequence(11, 12))
         assertEquals("Live)\n", kept.subSequence(6, 12))
+        assertEquals("", kept.subSequence(11, 11))
+        assertEquals(")", kept.subSequence(10, 11))
+        // As a pattern reads it, by what any text has.
+        val text: CharSequence = kept
+        assertEquals(12, text.length)
+        assertEquals('S', text[0])
+        assertEquals("Song (Live)\n", Regex(".+\n").find(text)?.value)
     }
 
     @Test

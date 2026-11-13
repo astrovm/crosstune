@@ -47,6 +47,8 @@ class LongTitlesTest {
             "(feat. a (M/V".repeat(length / 15) + "))".repeat(length / 15),
             "(feat. a".repeat(length / 18) + ")".repeat(length / 18) + " x".repeat(length / 4) + " - Remastered".repeat(length / 52),
             "Song ft. a" + " - Remaster)".repeat(length / 12),
+            // The same with no tag: where the last look for one started holds, as no cut takes a letter after it.
+            "(feat. a".repeat(length / 18) + ")".repeat(length / 18) + " x".repeat(length / 4),
         ) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(length / piece.length) + ending } }
     }
 

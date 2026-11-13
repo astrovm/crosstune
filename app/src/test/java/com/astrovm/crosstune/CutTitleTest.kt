@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
@@ -13,7 +15,7 @@ class CutTitleTest {
     @Test
     fun aTitleIsCutAsMainCutIt() {
         val random = Random(SEED)
-        repeat(TITLES) {
+        repeat(Fuzz.count(TITLES, FEW)) {
             val title = buildString { repeat(random.nextInt(1, MAX_PIECES)) { append(PIECES[random.nextInt(PIECES.size)]) } }
             assertEquals(title, MainLoop.withoutFeaturing(title), SongNames.withoutFeaturing(title))
             assertEquals(title, MainLoop.withoutEditionTag(title), SongNames.withoutEditionTag(title))
@@ -28,11 +30,66 @@ class CutTitleTest {
             // A digit at the start, a line break a guest ends before, a tag of two dashes, one that ends on another
             // recording, a dash at the start and one at the end.
             "2  ft. a", "x ft. \u0085", "x - - Remastered", "Song - Remastered Live", "- Remastered", "Song -",
+            // The first digit and the last, and a tag with words of one letter, spaced like a dash.
+            "0  ft. a", "9  ft. a", "Song - Remastered x y z", "Song – Remastered x y z",
+            // A guest that ends before the line break at the end, of either kind, and one that's no line break.
+            "x ft. a\r\n", "x ft. a\n", "x ft. a\r", "x ft. a\u0085", "x ft. a\u2028", "x ft. a\n\r", "x ft. a\r\r\n",
+            // A guest whose bracket opens more than ten letters before the one in it, a guest after a digit at the
+            // start that a tag follows, and dashes with a space before them only, which a tag holds.
+            "(feat. a b c d e f g h(feat. b))", "[feat. a b c d e f g h(feat. b)]", "0  ft. a (Live)", "9  ft. a (Live)", "Song - Remastered -a -b",
+            "Song - Remastered a- b c- d", "(feat. a b c d e f g h(feat. b)) x", "Song (feat. a b c d e f g h(feat. b))", "Song [feat. a b c d e f g h(feat. b)]",
         )
         ) {
+            assertEquals(title, MainLoop.withoutFeaturing(title), SongNames.withoutFeaturing(title))
             assertEquals(title, MainLoop.withoutEditionTag(title), SongNames.withoutEditionTag(title))
         }
     }
+
+    @Test
+    fun aTitleTwiceAsLongTakesTwiceTheSteps() {
+        // Not timed, but counted: the same each run, and quick, so mutation testing runs it before the slow tests.
+        for ((name, shape) in SHAPES) {
+            val short = steps(shape(LENGTH))
+            val long = steps(shape(2 * LENGTH))
+            // Each letter is looked at once at least, and twice the letters take about twice the steps, not four times.
+            assertTrue("$name: $short steps", short >= LENGTH)
+            assertTrue("$name: $short steps, then $long", long <= 3 * short)
+        }
+    }
+
+    @Test
+    fun afterACutItReadsAgainOnlyFromNearItToTheSpacesBeforeIt() {
+        val title = "one two three four five six seven eight nine ten"
+        val cut = CutTitle(title)
+        cut.cut(title.indexOf("six"), title.indexOf("seven"))
+        val read = mutableListOf<Int>()
+        cut.cutEach(0) { at, _ -> read += at; null }
+        // From ten letters before the cut, spaces aside, to the space before it, which reads on to "seven" as the
+        // first look did from the space before "six". A word after a space is read from the space, not its first letter.
+        assertEquals("e our ive ", read.joinToString("") { "${title[it]}" })
+        assertEquals(listOf(12, 13, 15, 16, 17, 18, 20, 21, 22, 23), read)
+    }
+
+    @Test
+    fun afterCutsFarApartItReadsAgainNearEach() {
+        val title = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen"
+        val cut = CutTitle(title)
+        cut.cut(title.indexOf("six"), title.indexOf("seven"))
+        cut.cut(title.indexOf("fourteen"), title.indexOf("fifteen"))
+        val read = mutableListOf<Int>()
+        cut.cutEach(0) { at, _ -> read += at; null }
+        // Near each, as near one: the second is read again whole, not only from where the first was left.
+        assertEquals("e our ive e hirteen ", read.joinToString("") { "${title[it]}" })
+        assertEquals((12..23) - setOf(14, 19) + (61..71) - setOf(63), read)
+    }
+
+    @Test
+    fun aCutOfNoLettersIsRefused() {
+        // It would leave cutEach cutting none from the same place without end.
+        assertThrows(IllegalStateException::class.java) { CutTitle("ab").cut(1, 1) }
+    }
+
+    private fun steps(title: String) = CutTitle(title).also { SongNames.withoutEditionTag(it) }.steps
 
     /** Main's loop, with main's patterns, which read the whole title again on each pass. */
     private object MainLoop {
@@ -66,13 +123,29 @@ class CutTitleTest {
     }
 
     private companion object {
+        const val LENGTH = 2_000
+
+        /** The titles [LongTitlesTest] times for the loop that cuts guests, marks and tags, about as long as asked. */
+        val SHAPES = listOf<Pair<String, (Int) -> String>>(
+            "guests in guests" to { n -> "(feat. a".repeat(n / 9) + ")".repeat(n / 9) },
+            "marks in marks" to { n -> "(M/V".repeat(n / 5) + ")".repeat(n / 5) },
+            "guests and marks" to { n -> "(feat. a (M/V".repeat(n / 15) + "))".repeat(n / 15) },
+            "guests, then words" to { n -> "(feat. a".repeat(n / 18) + ")".repeat(n / 18) + " x".repeat(n / 4) },
+            "guests, words, tags" to { n -> "(feat. a".repeat(n / 18) + ")".repeat(n / 18) + " x".repeat(n / 4) + " - Remastered".repeat(n / 52) },
+            "a guest, then tags" to { n -> "Song ft. a" + " - Remaster)".repeat(n / 12) },
+            "tags" to { n -> " - Remastered 2012".repeat(n / 18) },
+            "guests written out" to { n -> " ft. a  ".repeat(n / 8) + ")" },
+            "guests after digits" to { n -> "2  ft. a".repeat(n / 8) },
+        )
+
         const val SEED = 933
         const val TITLES = 200_000
+        const val FEW = 2_000
         const val MAX_PIECES = 14
 
         /** Brackets, spaces, line breaks, dashes, digits, and guests, marks and tags whole and in parts that a cut can join. */
         val PIECES = listOf(
-            "(", ")", "[", "]", " ", "  ", "\t", "\n", "\r\n", "\u0085", " ", "-", " - ", " – ", "2", "a", "x", ".",
+            "(", ")", "[", "]", " ", "  ", "\t", "\n", "\r\n", "\u0085", "\u2028", "-", " - ", " – ", "2", "a", "x", ".",
             "feat", "ft", "featuring", "f", "eat", "t.", "eat.", "feat. ", " ft. ", "M/V", "m/v", "M", "/V", "M/",
             "(feat. a)", " ft. a", "(M/V)", " M/V", "( M/V )", "Remastered", "Remaster", "ed", "Live", "Mono", "Album Version",
             "Original", "OST", "ı", "İ", "K",

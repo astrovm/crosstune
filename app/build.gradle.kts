@@ -473,8 +473,12 @@ pitest {
     providers.gradleProperty("mutateTests").orNull?.let { targetTests.set(it.split(",")) }
     providers.gradleProperty("mutateLines").orNull?.let { features.set(listOf("+CHANGED(file[$it])")) }
     // The store's screenshots aren't tests of what the app does, and take long to draw; the song check asks real services;
-    // the notices check reads the build, not the app.
-    excludedTestClasses.set(listOf("com.astrovm.crosstune.shots.*", "com.astrovm.crosstune.songcheck.*", "com.astrovm.crosstune.notices.*"))
+    // the notices check reads the build, not the app. LongTitlesTest times titles of thousands of letters, which a
+    // change can make slow without being wrong, and takes a minute: each change it covers would wait for it. The steps
+    // CutTitleTest counts catch a reading that's no longer in step with a title's length.
+    excludedTestClasses.set(
+        listOf("com.astrovm.crosstune.shots.*", "com.astrovm.crosstune.songcheck.*", "com.astrovm.crosstune.notices.*", "com.astrovm.crosstune.LongTitlesTest"),
+    )
     threads.set(2)
     // A fresh test process takes some seconds to start Robolectric, more than PIT allows a test by default.
     timeoutConstInMillis.set(30_000)
@@ -485,7 +489,8 @@ pitest {
     // Each mutant's classes are loaded again, and their adapters and stubs fill the JIT's small code
     // heap for them long before the Java heap fills, which PIT reports as a MEMORY_ERROR. One code
     // cache, unsplit, gives them the room.
-    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
+    // The fuzz tests read a few titles there, not thousands (Fuzz.kt).
+    jvmArgs.set(robolectricJvmArgs + listOf("-Dcrosstune.mutationTesting=true", "-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
 }
 
 // After the plugin's own setup, which gives the tests only what they compile against.

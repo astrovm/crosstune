@@ -10,6 +10,9 @@ internal const val SPACES_START = """(?:(?<!\s)|\G)"""
 /** A space as a pattern's `\s` reads it: a space, a tab, a line break, a vertical tab or a form feed. Not U+3000. */
 internal fun isPatternSpace(char: Char) = char == ' ' || char in '\t'..'\r'
 
+/** Whether the letter at [at] in [text] is between spaces, as a dash in `\s[-–]\s` is: false for -1, for none. */
+internal fun isBetweenSpaces(text: String, at: Int) = text.getOrNull(at - 1)?.let(::isPatternSpace) == true && text.getOrNull(at + 1)?.let(::isPatternSpace) == true
+
 /** A letter that ends a line, which a pattern's `.` never reads. */
 internal fun isLineBreak(char: Char) = char == '\n' || char == '\r' || char == '\u0085' || char == '\u2028' || char == '\u2029'
 
@@ -32,14 +35,12 @@ internal fun spacesEnd(text: CharSequence, at: Int): Int {
  * it. Read as one text without copying it, so a loop that cuts tags off a long title's end one at a time reads near
  * that end only.
  */
-internal class Kept(private val text: String, val end: Int, val after: String) : CharSequence {
+internal class Kept(private val text: String, val end: Int, private val after: String) : CharSequence {
     override val length get() = end + after.length
     override fun get(index: Int) = if (index < end) text[index] else after[index - end]
-    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = when {
-        startIndex >= end -> after.substring(startIndex - end, endIndex - end)
-        endIndex <= end -> text.substring(startIndex, endIndex)
-        else -> text.substring(startIndex, end) + after.substring(0, endIndex - end)
-    }
+    // What's asked of the title, then what's asked of what follows it: either may be none.
+    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+        text.substring(minOf(startIndex, end), minOf(endIndex, end)) + after.substring(maxOf(startIndex - end, 0), maxOf(endIndex - end, 0))
     override fun toString() = text.substring(0, end) + after
 
     /** Without [range], which is near the end. */
@@ -97,9 +98,9 @@ internal fun bracketTags(text: String, opens: String, closes: String): List<IntR
 
 /**
  * Whether a pattern that ignores case reads [char] as one of a to z: those, and the letters whose other case is one,
- * the Kelvin sign as "k", "ſ" as "s", "ı" and "İ" as "i".
+ * "ſ" as "s" and "ı" as "i", then "İ" and the Kelvin sign, whose upper case is their own, as "i" and "k".
  */
-internal fun isLatinLetterIgnoringCase(char: Char) = char.lowercaseChar() in 'a'..'z' || char.uppercaseChar() in 'A'..'Z'
+internal fun isLatinLetterIgnoringCase(char: Char) = char.uppercaseChar() in 'A'..'Z' || char.lowercaseChar() in "ik"
 
 /** Whether each bracket in [text] closes, in order, with the bracket of its own kind: [closes] pairs with [opens]. */
 internal fun bracketsInOrder(text: String, opens: String, closes: String): Boolean {

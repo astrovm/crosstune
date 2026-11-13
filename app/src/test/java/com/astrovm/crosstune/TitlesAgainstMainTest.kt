@@ -13,13 +13,15 @@ import java.util.zip.GZIPInputStream
 class TitlesAgainstMainTest {
     @Test
     fun noTitleReadsWorseThanOnMain() {
-        val lines = GZIPInputStream(File(BASELINE).inputStream()).bufferedReader().readLines()
+        val count = Fuzz.count(TitleFuzz.COUNT, FEW)
+        // The heading, the titles read, and one more while some are left out.
+        val lines = GZIPInputStream(File(BASELINE).inputStream()).bufferedReader().useLines { it.take(count + 2).toList() }
         assertEquals(true, lines.first().startsWith("# "))
-        assertEquals(TitleFuzz.COUNT, lines.size - 1)
+        assertEquals(if (count < TitleFuzz.COUNT) count + 2 else count + 1, lines.size)
         val worse = mutableListOf<String>()
         val better = sortedMapOf<String, Int>()
         val differences = StringBuilder()
-        TitleFuzz.titles().zip(lines.drop(1).asSequence()).forEach { (title, line) ->
+        TitleFuzz.titles().take(count).zip(lines.drop(1).asSequence()).forEach { (title, line) ->
             val parts = line.split(TitleFuzz.VARIANT)
             val variants = TitleFuzz.variants(title)
             assertEquals(title.text, variants.map { it.first }, parts.drop(1).chunked(2).map { it.first() })
@@ -104,6 +106,7 @@ class TitlesAgainstMainTest {
     private companion object {
         const val BASELINE = "src/test/titlefuzz/main.tsv.gz"
         const val SHOWN = 40
+        const val FEW = 1_000
         val SONGS = setOf("musicVideo", "youtubeVideo", "playerSong")
 
         /** Whether [text] has a tag in a tag, by the brackets [opens] starts, and each of those brackets closes in order, with its own kind. */

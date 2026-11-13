@@ -129,13 +129,13 @@ internal object ChordSheets {
     }
 
     /** [css] with each comment taken out, from where it opens to the first close after it. One that never closes stays, and so does the rest. */
-    private fun withoutCssComments(css: String): String {
+    internal fun withoutCssComments(css: String): String {
         val kept = StringBuilder()
         var from = 0
         while (true) {
             val open = css.indexOf("/*", from)
             val close = if (open < 0) -1 else css.indexOf("*/", open + 2)
-            if (close < 0) return kept.append(css, from, css.length).toString()
+            if (close == -1) return kept.append(css, from, css.length).toString()
             kept.append(css, from, open)
             from = close + 2
         }
@@ -144,7 +144,7 @@ internal object ChordSheets {
     /** The sheet in J-Total's page: from its first `<!--HPSTART-->` to the `<!--HPEND-->` after it, or null with either missing. */
     fun jTotalSheet(page: String): String? {
         val start = page.indexOf(HP_START).takeIf { it >= 0 }?.plus(HP_START.length) ?: return null
-        val end = page.indexOf(HP_END, start).takeIf { it >= 0 } ?: return null
+        val end = page.indexOf(HP_END, start).takeIf { it != -1 } ?: return null
         return page.substring(start, end)
     }
 

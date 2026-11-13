@@ -127,26 +127,24 @@ internal object MetadataParsers {
     private val paddedTrackRegex = Regex("""^0\d\s+""")
 
     /**
-     * What a title may end on after its song, looked for in this order, again until it ends on none: see
-     * [withoutTrailingNoise]. A pattern is looked for from as many letters before the end as it reads, not counting
-     * spaces: "|Lyrics|HD|" and "|OfficialMusicVisualizer", and a line break after.
+     * What a title may end on after its song, as [trailingQualityRegex] finds it: see [withoutTrailingNoise]. It and
+     * [trailingVideoNoise] are looked for from as many letters before the end as they read, not counting spaces:
+     * "|Lyrics|HD|" and "|OfficialMusicVisualizer", and a line break after.
      */
-    private val trailingNoise: List<(CharSequence) -> IntRange?> by lazy {
-        listOf(
-            { text -> if (endsOnAWord(text)) trailingQualityRegex.find(text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS))?.range else null },
-            { text -> if (endsOnAWord(text)) trailingVideoNoiseRegex.find(text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS))?.range else null },
-            ::danglingDash,
-        )
-    }
+    private fun trailingQuality(text: CharSequence) =
+        if (endsOnAWord(text)) trailingQualityRegex.find(text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS))?.range else null
+
+    /** A video's noise a title may end on, "Official Video", as [trailingVideoNoiseRegex] finds it. */
+    private fun trailingVideoNoise(text: CharSequence) =
+        if (endsOnAWord(text)) trailingVideoNoiseRegex.find(text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS))?.range else null
 
     /**
-     * Whether [text] ends on a letter, a digit or a bar, but for spaces and a line break, as all of [trailingNoise]'s
-     * patterns end: "Lyrics", "HD |", "Video". A run of dashes is cut one at a time, and isn't read by them each time.
+     * Whether [text] ends on a letter or a bar, but for spaces and a line break, as [trailingQualityRegex] and
+     * [trailingVideoNoiseRegex] end: "Lyrics", "4K", "HD |", "Video". A run of dashes is cut one at a time, and isn't
+     * read by them each time.
      */
-    private fun endsOnAWord(text: CharSequence): Boolean {
-        val last = spacesStart(text, lineEnd(text)) - 1
-        return last >= 0 && text[last].let { isLatinLetterIgnoringCase(it) || it in '0'..'9' || it == '|' }
-    }
+    internal fun endsOnAWord(text: CharSequence): Boolean =
+        text.getOrNull(spacesStart(text, lineEnd(text)) - 1)?.let { isLatinLetterIgnoringCase(it) || it == '|' } == true
     private const val QUALITY_LETTERS = 12
     private const val VIDEO_NOISE_LETTERS = 25
 
@@ -292,7 +290,7 @@ internal object MetadataParsers {
      * being the artist: "Song - Song, Lyrics, and Music Video by Artist | Spotify". A browser playing
      * the page names what it plays by that title.
      */
-    private val spotifyPageWordings = listOf(
+    internal val spotifyPageWordings = listOf(
         "Song, Lyrics, and Music Video by %s", "song and lyrics by %s",
         "Song, Lyrics und Musikvideo von %s", "Musik und Lyrics von %s",
         "canción, letra y vídeo musical de %s", "letra y música de %s",
@@ -314,17 +312,17 @@ internal object MetadataParsers {
      * it, ignoring case: a line, the song, a dash or a colon, then the wording with the artist in it. The pattern tried
      * each place for the song's end, and took time squared on a long title.
      */
-    private class SpotifyWording(wording: String) {
+    internal class SpotifyWording(val wording: String) {
         private val before = Regex(Regex.escape(wording.substringBefore("%s")), RegexOption.IGNORE_CASE)
         private val beforeLength = wording.substringBefore("%s").length
-        private val after = Regex(Regex.escape(wording.substringAfter("%s") + " | Spotify"), RegexOption.IGNORE_CASE)
+        private val after = Regex(Regex.escape(wording.substringAfter("%s") + " | Spotify") + """\z""", RegexOption.IGNORE_CASE)
         private val afterLength = wording.substringAfter("%s").length + " | Spotify".length
 
         /** The song and the artist of a whole page's title. The song is all before the last dash or colon the wording follows, as a song's name may have one too. */
         fun songAndArtist(title: String): Pair<String, String>? {
             val line = line(title) ?: return null
             val artistEnd = line.length - afterLength
-            for (songEnd in artistEnd - beforeLength - 2 downTo 1) {
+            for (songEnd in artistEnd downTo 1) {
                 val separator = when {
                     line[songEnd] == ':' && line[songEnd + 1] == ' ' -> 2
                     line[songEnd] == ' ' && line[songEnd + 1] in "-–‑" && line[songEnd + 2] == ' ' -> 3
@@ -347,7 +345,7 @@ internal object MetadataParsers {
 
         /** [title] when it's one line, matched whole, that ends with what the wording says after the artist. */
         private fun line(title: String): String? =
-            title.takeIf { it.length > afterLength && it.none(::isLineBreak) && after.matchesAt(it, it.length - afterLength) }
+            title.takeIf { it.none(::isLineBreak) && after.find(it, maxOf(0, it.length - afterLength)) != null }
     }
 
     private val spotifyPageSeparators = listOf(" - ", " – ", " ‑ ")
@@ -430,14 +428,14 @@ internal object MetadataParsers {
 
     /** [text] without the spaces it ends with, as a pattern's `\s` reads them. */
     private fun dropEndSpaces(text: StringBuilder) {
-        while (text.isNotEmpty() && isPatternSpace(text.last())) text.setLength(text.length - 1)
+        text.setLength(spacesStart(text, text.length))
     }
 
     /**
      * [title] without a subtitles tag and what follows it, as [subtitlesTagRegex] finds it. Only the last line may follow
      * it, so it's looked for from a few letters before that line.
      */
-    private fun withoutSubtitlesTag(title: String): String {
+    internal fun withoutSubtitlesTag(title: String): String {
         var from = lineEnd(title)
         while (from > 0 && !isLineBreak(title[from - 1])) from--
         val found = subtitlesTagRegex.find(title, beforeLetters(title, from, SUBTITLES_LETTERS)) ?: return title
@@ -445,7 +443,7 @@ internal object MetadataParsers {
     }
 
     /** Where [text] is [letters] letters before [end], not counting spaces: a pattern that reads no more of them from where it starts starts after there. */
-    private fun beforeLetters(text: CharSequence, end: Int, letters: Int): Int {
+    internal fun beforeLetters(text: CharSequence, end: Int, letters: Int): Int {
         var at = end
         var counted = 0
         while (at > 0 && counted < letters) {
@@ -456,16 +454,20 @@ internal object MetadataParsers {
     }
 
     /**
-     * [text] without what it ends on after the song, again until it ends on none of [trailingNoise]: "Song Official
-     * Video HD" is "Song". Each pass reads near the end only, so a long title is read in time in step with it.
+     * [text] without what it ends on after the song, [trailingQuality], [trailingVideoNoise] and [danglingDash] in this
+     * order, again until it ends on none: "Song Official Video HD" is "Song". Each pass reads near the end only, so a long title is read in time in step with it.
      */
-    private fun withoutTrailingNoise(text: String): String {
+    internal fun withoutTrailingNoise(text: String): String {
         var kept = Kept(text, text.length, "")
         while (true) {
             val before = kept
-            for (noise in trailingNoise) kept = noise(kept)?.let(kept::without) ?: kept
+            kept = trailingQuality(kept)?.let(kept::without) ?: kept
+            kept = trailingVideoNoise(kept)?.let(kept::without) ?: kept
+            kept = danglingDash(kept)?.let(kept::without) ?: kept
             kept = kept.trimmed()
-            if (kept.end == before.end && kept.after == before.after) return kept.toString()
+            // Each cut starts before the end and runs to the line break that may follow it, which it keeps, as trimming
+            // does once all else after the end is gone: a pass that keeps the end has cut nothing.
+            if (kept.end == before.end) return kept.toString()
         }
     }
 
@@ -475,7 +477,7 @@ internal object MetadataParsers {
      */
     private fun danglingDash(text: CharSequence): IntRange? {
         val dash = spacesStart(text, lineEnd(text)) - 1
-        if (dash < 1 || text[dash] !in DASHES) return null
+        if (text.getOrNull(dash)?.let { it in DASHES } != true) return null
         val start = spacesStart(text, dash)
         return if (start < dash) start until spacesEnd(text, dash + 1) else null
     }

@@ -28,6 +28,10 @@ internal class CutTitle(private val title: String) {
     private var landing = -1
     private var landedAfter = -1
 
+    /** How many times a table was looked in: the steps reading it took, so a test can tell they're in step with its length. */
+    var steps = 0L
+        private set
+
     /** How many cuts have been made. */
     val cuts get() = cutFirst.size
 
@@ -54,7 +58,10 @@ internal class CutTitle(private val title: String) {
     /** The first bracket from [place] on, or [end]. */
     fun nextBracket(place: Int) = table(BRACKETS_AFTER).from(place)
 
-    private fun table(kind: Int): Skips = tables[kind] ?: Skips(IntArray(end + 1) { skip(kind, it) }, backward = kind >= BACKWARD).also { tables[kind] = it }
+    private fun table(kind: Int): Skips {
+        steps++
+        return tables[kind] ?: Skips(IntArray(end + 1) { skip(kind, it) }, backward = kind >= BACKWARD).also { tables[kind] = it }
+    }
 
     /** Where table [kind] leads from [index] at first: to it, if it stops at its letter, or else to the next. */
     private fun skip(kind: Int, index: Int): Int {
@@ -75,8 +82,8 @@ internal class CutTitle(private val title: String) {
         return at
     }
 
-    /** Whether [place] holds [letter], in either case: a word that starts with no other can't be read from there. */
-    fun startsWith(place: Int, letter: Char) = title.getOrNull(place)?.equals(letter, ignoreCase = true) == true
+    /** The letter at [place] in lower case, or null past the end: a word that starts with another can't be read from there. */
+    fun lowerAt(place: Int) = title.getOrNull(place)?.lowercaseChar()
 
     /** Up to [count] letters from [place] on. */
     fun letters(place: Int, count: Int): String {
@@ -135,6 +142,8 @@ internal class CutTitle(private val title: String) {
     /** Cuts the letters from [from] up to [to], of which there's at least one. */
     fun cut(from: Int, to: Int) {
         var at = next(from)
+        // A cut of none would leave [cutEach] reading from the same place, cutting none, without end.
+        check(at < to) { "No letters to cut from $from to $to" }
         cutFirst += at
         var bracket: Char? = null
         var last = at
@@ -173,11 +182,13 @@ internal class CutTitle(private val title: String) {
         var looking = false
         while (true) {
             if (!looking) {
+                // On from where the next window starts, or from here if it started before: here is where the last
+                // stopped, past where it could change what's found, so it's read again only as far as the next goes.
                 if (window == windows.size) break
                 at = maxOf(at, windows[window].first)
+                until = windows[window++].second
                 looking = true
             }
-            while (window < windows.size && windows[window].first <= at) until = maxOf(until, windows[window++].second)
             if (at == end) break
             val word = spacesEnd(at)
             val matchEnd = endAt(at, word)
@@ -194,14 +205,15 @@ internal class CutTitle(private val title: String) {
     }
 
     /** Whether [at] comes after a digit: if it starts a run of spaces, the next place in it reads otherwise. */
-    private fun afterDigit(at: Int) = title.getOrNull(letterBefore(at)) in '0'..'9'
+    fun afterDigit(at: Int) = title.getOrNull(letterBefore(at)) in '0'..'9'
 
     /** Where to look again, from a place to the last place that the cuts since [since] could change what's found from. */
     private fun windowsSince(since: Int): List<Pair<Int, Int>> {
         val windows = mutableListOf<Pair<Int, Int>>()
         for (cut in since until cuts) {
-            val left = previous(cutFirst[cut] - 1)
-            val right = next(cutLast[cut] + 1)
+            // The first and the last letter it took are cut, so they're skipped too.
+            val left = previous(cutFirst[cut])
+            val right = next(cutLast[cut])
             var near = right
             repeat(NEAR) { near = wordBefore(near - 1) }
             windows += next(near + 1) to right

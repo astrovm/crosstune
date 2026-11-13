@@ -113,8 +113,8 @@ internal object MusicLinks {
     }
 
     /** One of Now Playing's wordings, "%1$s" being the title and "%2$s" the artist. */
-    private class SongPattern(val text: String) {
-        val titleFirst = text.indexOf("%1\$s") < text.indexOf("%2\$s")
+    internal class SongPattern(private val text: String) {
+        val titleFirst = "%1\$s" in text.substringBefore("%2\$s")
         private val words = text.split("%1\$s", "%2\$s")
 
         /**
@@ -125,8 +125,9 @@ internal object MusicLinks {
         fun split(song: String): Pair<String, String>? {
             val (before, between, after) = words
             val secondEnd = song.length - after.length
-            if (secondEnd - before.length < between.length + 2 || !song.startsWith(before) || !song.endsWith(after)) return null
-            if (song.substring(before.length, secondEnd).any(::isLineBreak)) return null
+            if (!song.startsWith(before) || !song.endsWith(after)) return null
+            // Where the words before and after overlap, there's nothing between them, and no "Between" is found in it.
+            if (song.substring(before.length, maxOf(before.length, secondEnd)).any(::isLineBreak)) return null
             val at = song.lastIndexOf(between, secondEnd - between.length - 1).takeIf { it > before.length } ?: return null
             return song.substring(before.length, at) to song.substring(at + between.length, secondEnd)
         }

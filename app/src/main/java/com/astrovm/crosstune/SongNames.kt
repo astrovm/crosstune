@@ -41,7 +41,7 @@ internal object SongNames {
     private fun guestInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val start = title.spacesEnd(open + 1)
-        if (!title.startsWith(start, GUEST_WORDS_START)) return null
+        if (title.lowerAt(start) != GUEST_WORDS_START) return null
         val word = featuringWord.matchAt(title.letters(start, LONGEST_WORD), 0) ?: return null
         val close = title.nextBracket(title.after(start, word.value.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
@@ -49,7 +49,7 @@ internal object SongNames {
 
     /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or null. */
     private fun guestWrittenOut(title: CutTitle, at: Int, word: Int): Int? {
-        if (title.letterBefore(at).let { it >= 0 && title[it] in '0'..'9' } || !title.startsWith(word, GUEST_WORDS_START)) return null
+        if (title.afterDigit(at) || title.lowerAt(word) != GUEST_WORDS_START) return null
         val said = featuringSaid.matchAt(title.letters(word, LONGEST_WORD), 0) ?: return null
         val guest = title.spacesEnd(title.after(word, said.value.length - 1))
         val bracket = title.nextBracket(guest)
@@ -75,17 +75,18 @@ internal object SongNames {
      * \s+M/V\b` read it.
      */
     private fun markEnd(title: CutTitle, at: Int, mark: Int): Int? = markInBrackets(title, mark)
-        ?: if (mark > at && title.startsWith(mark, VIDEO_MARK[0]) && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
+        ?: if (mark > at && title.lowerAt(mark) == VIDEO_MARK_START && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
 
     private fun markInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val mark = title.spacesEnd(open + 1)
-        if (!title.startsWith(mark, VIDEO_MARK[0]) || !title.letters(mark, VIDEO_MARK.length).equals(VIDEO_MARK, ignoreCase = true)) return null
+        if (title.lowerAt(mark) != VIDEO_MARK_START || !title.letters(mark, VIDEO_MARK.length).equals(VIDEO_MARK, ignoreCase = true)) return null
         val close = title.spacesEnd(title.after(mark, VIDEO_MARK.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
     }
 
     private const val VIDEO_MARK = "M/V"
+    private const val VIDEO_MARK_START = 'm'
     private val videoMarkAt = Regex("""M/V\b""", RegexOption.IGNORE_CASE)
 
     private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
@@ -123,15 +124,15 @@ internal object SongNames {
         val start = title.spacesStart(maxOf(at, first))
         val (end, places) = title.lettersFrom(start)
         val tag = editionTag.find(end)?.range?.let { places[it.first]..places[it.last] }
-        return TagLook(start, title.cuts, tag)
+        return TagLook(start, tag)
     }
 
     /**
      * What [editionTagIn] found, looking from [start]: none, if it's still looked at, as a tag found is cut or says it's
-     * another recording. That holds until a cut after the first [cuts] takes a letter from [start] on, as all it read but
-     * where the spaces before [start] begin is from there on, and those say only where a tag would start, not if there's one.
+     * another recording. That holds until a cut takes a letter from [start] on, as all it read but where the spaces before
+     * [start] begin is from there on, and those say only where a tag would start, not if there's one.
      */
-    private class TagLook(val start: Int, val cuts: Int, val tag: IntRange?)
+    private class TagLook(val start: Int, val tag: IntRange?)
 
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
 
@@ -195,11 +196,15 @@ internal object SongNames {
      * "Song - Remastered 2012", "Song (2003 Remaster)" and "Song (feat. A)" are the song itself; "Song
      * (Live; 2013 Remaster)" and "Song - Stereo MC's Remix" are other recordings, so they keep their tags.
      */
-    fun withoutEditionTag(title: String): String {
-        val cut = CutTitle(title)
+    fun withoutEditionTag(title: String): String = withoutEditionTag(CutTitle(title))
+
+    /** [withoutEditionTag] on [cut], which counts the steps it takes. */
+    internal fun withoutEditionTag(cut: CutTitle): String {
         var guestsSince = CutTitle.ALL
         var marksSince = CutTitle.ALL
         var look: TagLook? = null
+        // How many cuts there were when [look] was last found to hold.
+        var lookedAt = 0
         // "Song - 2012 Remaster (Mono)" has two, and a title that's only a tag is left as it is.
         while (true) {
             val pass = cut.cuts
@@ -208,7 +213,8 @@ internal object SongNames {
             val marks = cut.cuts
             cut.cutEach(marksSince) { at, mark -> markEnd(cut, at, mark) }
             marksSince = marks
-            val tag = look?.takeUnless { cut.cutSince(it.cuts, it.start) }?.let { TagLook(it.start, cut.cuts, it.tag) } ?: editionTagIn(cut)
+            val tag = look?.takeUnless { cut.cutSince(lookedAt, it.start) } ?: editionTagIn(cut)
+            lookedAt = cut.cuts
             look = tag
             val range = tag.tag
             if (range != null && words(cut.letters(range)).any { it in OTHER_RECORDING }) return cut.toString()
@@ -372,15 +378,13 @@ internal object SongNames {
         val end = lineEnd(title)
         var lineStart = end
         while (lineStart > 0 && !isLineBreak(title[lineStart - 1])) lineStart--
-        var dash = (lineStart - 1 downTo 0).firstOrNull { title[it] in DASHES } ?: -1
-        var read = lineStart
+        // Words on the last line end before its line break, if any: what's after [end] is that line break alone.
+        val marks = TrailingMarks(title)
         var words = coverWords.find(title, lineStart)
-        while (words != null && words.range.first < end) {
-            while (read < words.range.first) {
-                if (title[read] in DASHES) dash = read
-                read++
-            }
-            if (dash in 1 until words.range.first - 1 && isPatternSpace(title[dash - 1]) && isPatternSpace(title[dash + 1])) return dash - 1 until end
+        while (words != null) {
+            // The space after the dash comes before the words, which start with a letter.
+            val dash = marks.dashBefore(words.range.first)
+            if (isBetweenSpaces(title, dash)) return dash - 1 until end
             words = words.next()
         }
         return null
@@ -511,9 +515,9 @@ internal object SongNames {
         var end = beforeLineBreak(text, text.length)
         var lineBreak = text.substring(end)
         while (true) {
-            val (start, takesLineBreak) = marks.tagStart(end, lineBreak.isNotEmpty()) ?: break
+            val (start, afterDash) = marks.tagStart(end) ?: break
             // A tag that runs to the very end takes the spaces before it, and leaves the line break before those, if any.
-            val toTheEnd = takesLineBreak || lineBreak.isEmpty()
+            val toTheEnd = afterDash || lineBreak.isEmpty()
             if (!toTheEnd) {
                 end = start
                 continue
@@ -538,7 +542,7 @@ internal object SongNames {
     /**
      * Where a [bareTitle]'s last tag starts, as the pattern `(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$` found it in
      * the text up to a place: a tag in brackets ends right before it, or before the line break that ends it, and a part
-     * after a dash runs from the last dash to the very end. With whether it takes that line break.
+     * after a dash runs from the last dash to the very end, line break and all. With whether it's after a dash.
      */
     private class TrailingMarks(private val text: String) {
         private val lastBracket = IntArray(text.length + 1)
@@ -557,15 +561,17 @@ internal object SongNames {
             lastDash[text.length] = dash
         }
 
-        fun tagStart(end: Int, lineBreak: Boolean): Pair<Int, Boolean>? {
-            val close = end - 1
-            val open = if (close >= 0 && text[close] in TAG_CLOSES) lastBracket[close] else -1
+        /** The last dash before [place], or -1. */
+        fun dashBefore(place: Int) = lastDash[place]
+
+        fun tagStart(end: Int): Pair<Int, Boolean>? {
+            val open = if (end > 0 && text[end - 1] in TAG_CLOSES) lastBracket[end - 1] else -1
             val inBrackets = if (open >= 0 && text[open] in TAG_OPENS) spacesStart(text, open) else Int.MAX_VALUE
             val dash = lastDash[end]
-            val spaced = dash in 1 until end - 1 && isPatternSpace(text[dash - 1]) && isPatternSpace(text[dash + 1])
-            val afterDash = if (spaced) spacesStart(text, dash) else Int.MAX_VALUE
+            // The space after the dash is in the text up to [end], not one a tag in brackets after it had.
+            val afterDash = if (dash < end - 1 && isBetweenSpaces(text, dash)) spacesStart(text, dash) else Int.MAX_VALUE
             return when {
-                afterDash < inBrackets -> afterDash to lineBreak
+                afterDash < inBrackets -> afterDash to true
                 inBrackets < Int.MAX_VALUE -> inBrackets to false
                 else -> null
             }
@@ -622,7 +628,7 @@ internal object SongNames {
     /** Whether [one] becomes [other] with one letter changed, added or taken away at most: [distance] at most 1, in time in step with them. */
     internal fun oneEditApart(one: String, other: String): Boolean {
         if (kotlin.math.abs(one.length - other.length) > 1) return false
-        val (shorter, longer) = if (one.length <= other.length) one to other else other to one
+        val (shorter, longer) = listOf(one, other).sortedBy { it.length }
         val same = shorter.indices.firstOrNull { shorter[it] != longer[it] } ?: return true
         return if (shorter.length == longer.length) shorter.regionMatches(same + 1, longer, same + 1, shorter.length - same - 1)
         else shorter.regionMatches(same, longer, same + 1, shorter.length - same)
