@@ -315,12 +315,14 @@ class MainViewModelTest {
 
     private val station = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2", "https://example.com/logo.png")
 
-    /** Hears [answers] in turn, the last one from then on, and keeps whether each time it was let use the microphone. */
+    /** Hears [answers] in turn, the last one from then on, and keeps whether each time it was let use the microphone, and only while the phone plays out loud. */
     private class EarsOnThePhone(vararg val answers: Heard) : SongHearing {
         val asked = mutableListOf<Boolean>()
+        val whileAloud = mutableListOf<Boolean>()
         override suspend fun listen(): Heard = Heard.Nothing
-        override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
+        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
             asked += byMicrophone
+            this.whileAloud += whileAloud
             return answers[minOf(asked.size, answers.size) - 1]
         }
     }
@@ -377,6 +379,8 @@ class MainViewModelTest {
         radioModel(allowed).playingBarInSight(true)
         idle()
         assertEquals(listOf(true), allowed.asked)
+        // Headphones plugged in midway, it stops: see SongListenerTest.
+        assertEquals(listOf(true), allowed.whileAloud)
         // Never asked for: only the phone's own sound, when it shares it.
         val notAllowed = EarsOnThePhone(Heard.Failed(AppError.MICROPHONE))
         val model = radioModel(notAllowed, mayCalibrate = false)
@@ -464,7 +468,7 @@ class MainViewModelTest {
     }
 
     /** Listens until it's stopped, and keeps each time it was, and whether it was let use the microphone. */
-    private class LongEars(val closingMs: Long = 0) : SongHearing {
+    private class LongEars(val closingMs: Long) : SongHearing {
         val asked = mutableListOf<Boolean>()
         var stopped = 0
         /** Whether the last listen by ear had closed the microphone when one was asked for by hand. */
@@ -474,7 +478,7 @@ class MainViewModelTest {
             closedFirst = !open
             return Heard.Nothing
         }
-        override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
+        override suspend fun listenToPlaying(byMicrophone: Boolean, whileAloud: Boolean): Heard {
             asked += byMicrophone
             open = true
             try {
@@ -486,24 +490,6 @@ class MainViewModelTest {
                 open = false
             }
         }
-    }
-
-    @Test
-    fun theMicrophoneStopsOnceThePhoneNoLongerPlaysAloud() {
-        val playback = FakePlayback()
-        val ears = LongEars()
-        radioModel(ears, playback).playingBarInSight(true)
-        idle()
-        assertEquals(listOf(true), ears.asked)
-        pass(5 * MainViewModel.ALOUD_CHECK_MS)
-        assertEquals(0, ears.stopped)
-        // Headphones plugged in midway: the microphone would hear nothing from then on.
-        playback.aloud = false
-        pass(MainViewModel.ALOUD_CHECK_MS)
-        assertEquals(1, ears.stopped)
-        // Tried again in a while, by the phone's own sound alone.
-        pass(MainViewModel.BY_EAR_RETRY_MS)
-        assertEquals(listOf(true, false), ears.asked)
     }
 
     @Test

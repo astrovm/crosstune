@@ -18,7 +18,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -43,7 +42,6 @@ import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.withLock
 
 internal sealed interface Effect {
@@ -1080,7 +1078,7 @@ internal class MainViewModel(
         while (true) {
             delay(nextByEarAtMs - now())
             val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud()
-            val heard = if (byMicrophone) listenAloud(source) else listener.listenToPlaying(byMicrophone = false)
+            val heard = listener.listenToPlaying(byMicrophone, whileAloud = true)
             val wait = when (heard) {
                 is Heard.Song -> {
                     quietByEar = 0
@@ -1098,19 +1096,6 @@ internal class MainViewModel(
             // After the song's words were looked for, which takes a while.
             nextByEarAtMs = now() + wait
         }
-    }
-
-    /**
-     * Listens by microphone while the phone plays aloud, and stops once it doesn't, as when headphones
-     * are plugged in or the sound is muted midway: null then, a failure like any other.
-     */
-    private suspend fun listenAloud(source: PlaybackSource): Heard? = coroutineScope {
-        val listening = async { listener.listenToPlaying(byMicrophone = true) }
-        val quiet = async {
-            while (source.playsAloud()) delay(ALOUD_CHECK_MS)
-            null
-        }
-        select { listening.onAwait { it }; quiet.onAwait { it } }.also { coroutineContext.cancelChildren() }
     }
 
     /** How long until the song [heard] should be over, and the next one playing, or a while when its length isn't known. */
@@ -5398,9 +5383,6 @@ internal class MainViewModel(
         /** The soonest and the latest naming by ear listens again after a song: the end of a song may be misheard, and a long one may be skipped. */
         const val BY_EAR_SOONEST_MS = 20_000L
         const val BY_EAR_LATEST_MS = 360_000L
-
-        /** How often a listen by microphone checks the phone still plays aloud. */
-        const val ALOUD_CHECK_MS = 1_000L
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L
