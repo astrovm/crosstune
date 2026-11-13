@@ -219,7 +219,7 @@ internal object Readings {
     }
 
     /** A kanji and the katakana written right after it. */
-    private val katakanaAfterKanji = Regex("""[\p{IsHan}々][\p{IsKatakana}&&[^ー・]]+""")
+    private val katakanaAfterKanji = phoneRegex("""[\p{sc=Han}々][\p{sc=Katakana}&&[^ー・]]+""")
 
     /**
      * Words in old kana the dictionary splits (云 and ふ, け and ふ) or reads as written (いふ, 云ふ read うん), read as the
@@ -473,9 +473,9 @@ internal object Readings {
      * come after the mark that closes them, 《殺意》（しょうどう）, and be for all a pair of marks hold,
      * kana too, 《不本意な現状》（いま）: the closing mark goes with the brackets, so it's kept where it is.
      */
-    private val givenReading = Regex(
-        """(?<![\p{IsHan}々])([\p{IsHan}々]++)([》」』〉】]?[（(]([\p{IsHiragana}\p{IsKatakana}ー]+)[）)])""" +
-            """|(?<=[《「『〈【])([^《》「」『』〈〉【】（）()\s]*\p{IsHan}[^《》「」『』〈〉【】（）()\s]*)([》」』〉】][（(]([\p{IsHiragana}\p{IsKatakana}ー]+)[）)])"""
+    private val givenReading = phoneRegex(
+        """(?<![\p{sc=Han}々])([\p{sc=Han}々]++)([》」』〉】]?[（(]([\p{sc=Hiragana}\p{sc=Katakana}ー]+)[）)])""" +
+            """|(?<=[《「『〈【])([^《》「」『』〈〉【】（）()\s]*\p{sc=Han}[^《》「」『』〈〉【】（）()\s]*)([》」』〉】][（(]([\p{sc=Hiragana}\p{sc=Katakana}ー]+)[）)])"""
     )
 
     /** What a reading is given for, its brackets and its kana, from either way it's written. */
@@ -604,7 +604,7 @@ internal object Readings {
         .chunked(2).associate { it[0] to it[1] }
 
     /** The dictionary draws out おう as おー, but not えい, as in せんせい, said せんせー. */
-    private fun drawnOutE(kana: String) = kana.replace(Regex("([えけげせぜてでねへべぺめれ])い"), "$1ー")
+    private fun drawnOutE(kana: String) = kana.replace(phoneRegex("([えけげせぜてでねへべぺめれ])い"), "$1ー")
 
     /**
      * A word as the dictionary splits a line, with how it reads and what part of speech it is, and
@@ -1121,7 +1121,7 @@ internal object Readings {
     private fun inLine(at: Int, given: List<Given>) = at + given.filter { it.end <= at }.sumOf { it.brackets.length }
 
     /** A kanji's [kana] as it's said, せんせい as せんせー and しょう as しょー: drawn out, as romaji shows it. */
-    private fun longVowels(kana: String) = drawnOutE(kana).replace(Regex("([おこごそぞとどのほぼぽもよろょ])う"), "$1ー")
+    private fun longVowels(kana: String) = drawnOutE(kana).replace(phoneRegex("([おこごそぞとどのほぼぽもよろょ])う"), "$1ー")
 
     /**
      * The words of a line in kana, as romaji spaces them: a verb with its endings is one word, e.g.
@@ -1132,7 +1132,7 @@ internal object Readings {
 
     /** The line [pieces] make in romaji, as it's said or [typed], with a space at most between words. */
     private fun romanizedLine(pieces: List<Piece>, typed: Boolean) =
-        romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(Regex("""\s+"""), " ").trim()
+        romajiWords(pieces) { if (typed) it.typed else it.said }.joinToString(" ") { romaji(it, typed) }.replace(phoneRegex("""\s+"""), " ").trim()
 
     /** [pieces] in words, as [romajiWords] spaces them. */
     private fun grouped(pieces: List<Piece>): List<List<Piece>> {
@@ -1449,9 +1449,9 @@ internal object Readings {
             // ड़ is typed d, as in "Ud Chala"; ऋ is ri, as in "kripa".
             word = word.replace("ṛ", "d").replace("r\u0325", "ri")
         }
-        return word.replace(Regex("ch?")) { if (it.value == "ch") "chh" else "ch" }
+        return word.replace(phoneRegex("ch?")) { if (it.value == "ch") "chh" else "ch" }
             .replace("ś", "sh").replace("ṣ", "sh")
-            .replace(Regex("ṁ(?=[pbm])"), "m").replace("ṁ", "n").replace("m\u0310", "n")
+            .replace(phoneRegex("ṁ(?=[pbm])"), "m").replace("ṁ", "n").replace("m\u0310", "n")
     }
 
     private fun latinized(line: String): LineReading = latin(line).let { LineReading(listOf(Ruby(line)), it, it) }
@@ -1649,7 +1649,7 @@ internal object Readings {
         return CLOSED[sound] ?: sound
     }
 
-    private val HANGUL_WORD = Regex("[가-힣]+")
+    private val HANGUL_WORD = phoneRegex("[가-힣]+")
 
     /** Russian's letters, with Ukrainian's and Belarusian's own, as they're written in English. */
     private val CYRILLIC = mapOf(
@@ -1672,20 +1672,20 @@ internal object Readings {
     private const val CONSONANT = "(?:[kgcjṭḍtdpbṛ]h|[kgġṅcjñṭḍṇtdnpbmyrlvśṣshṛqzf])"
 
     /** A last consonant's own a, after another vowel. */
-    private val FINAL_A = Regex("(?<=$VOWEL[^aāiīuūeēoō]{1,6})a$")
+    private val FINAL_A = phoneRegex("(?<=$VOWEL[^aāiīuūeēoō]{1,6})a$")
 
     /** A consonant's own a between a vowel's consonant and a consonant with a vowel of its own. */
-    private val MEDIAL_A = Regex("(?<=${VOWEL}ṁ?$CONSONANT)a(?=$CONSONANT$VOWEL)")
+    private val MEDIAL_A = phoneRegex("(?<=${VOWEL}ṁ?$CONSONANT)a(?=$CONSONANT$VOWEL)")
 
     /** Digits a word in Hangul goes on from, 1년, but not ones in English, MP3를, or the end of a time or a decimal, 11:11, 3.5배. */
-    private val NUMBER_IN_A_WORD = Regex("""(?<![A-Za-z0-9:.,])(?:0|[1-9][0-9]{0,15})(?=[가-힣])""")
+    private val NUMBER_IN_A_WORD = phoneRegex("""(?<![A-Za-z0-9:.,])(?:0|[1-9][0-9]{0,15})(?=[가-힣])""")
 
     /** What's counted in Korean's own numbers rather than those from Chinese: hours, years of age, people, things. */
     private val COUNTED_IN_KOREAN = listOf("시", "살", "명", "개", "마리", "잔", "병", "사람", "가지", "곡", "송이", "걸음")
     private val KOREAN_TENS = listOf("", "열", "스물", "서른", "마흔", "쉰", "예순", "일흔", "여든", "아흔")
     private val KOREAN_ONES = listOf("", "한", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉")
     private const val SINO_DIGITS = "영일이삼사오육칠팔구"
-    private val SIX_AFTER = Regex("(?<=.)(?:육|여(?=[섯덟]))")
+    private val SIX_AFTER = phoneRegex("(?<=.)(?:육|여(?=[섯덟]))")
     private const val CONSONANTS = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ"
     private val STARTS = CONSONANTS.toList().zip(listOf("g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h")).toMap()
     private val VOWELS = listOf("a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi", "yu", "eu", "ui", "i")

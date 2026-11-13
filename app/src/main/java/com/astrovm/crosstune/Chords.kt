@@ -80,15 +80,15 @@ internal object ChordSheets {
     /** How long a line with nothing after it takes per letter, to time its chords. */
     private const val LETTER_MS = 150L
 
-    private val inline = Regex("""\[([^\[\]]*+)]""")
+    private val inline = phoneRegex("""\[([^\[\]]*+)]""")
 
     /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
-    private val reading = Regex("""(?<=\p{IsHan})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
-    private val ugChord = Regex("""\[ch]([^\[]*)\[/ch]""")
-    private val ugTab = Regex("""\[/?tab]""")
-    private val section = Regex("""^\s*\[[^\]]*]\s*$""")
+    private val reading = phoneRegex("""(?<=\p{sc=Han})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
+    private val ugChord = phoneRegex("""\[ch]([^\[]*)\[/ch]""")
+    private val ugTab = phoneRegex("""\[/?tab]""")
+    private val section = phoneRegex("""^\s*\[[^\]]*]\s*$""")
     private val solfege = mapOf("DO" to "C", "RE" to "D", "MI" to "E", "FA" to "F", "SOL" to "G", "LA" to "A", "SI" to "B")
-    private val jTotalLineEnd = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
+    private val jTotalLineEnd = phoneRegex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
 
     /*
      * The patterns that read a J-Total page take time in step with its length, whatever is on it. A part
@@ -104,22 +104,22 @@ internal object ChordSheets {
     private const val CHORD_TAG = """<a (?=[^<>]*cd/)[^<>]*+>"""
 
     /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
-    private val jTotalChord = Regex("""$CHORD_TAG($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
+    private val jTotalChord = phoneRegex("""$CHORD_TAG($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
 
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
-    private val splitChord = Regex("""^($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
-    private val markup = Regex("""<[^<>]++>""")
-    private val nonAnchorMarkup = Regex("""<(?!/?a(?:\s|>))/?[^<>]++>""", RegexOption.IGNORE_CASE)
-    private val sourceSpace = Regex("""[ \t\r\n]+""")
-    private val nameThenBreak = Regex("""($CHORD_TAG$CHORD_NAME)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
-    private val spacesAndTags = Regex("""(?: |<[^<>]++>)++""")
-    private val oneSpaceOrTag = Regex(""" |<[^<>]++>""")
+    private val splitChord = phoneRegex("""^($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
+    private val markup = phoneRegex("""<[^<>]++>""")
+    private val nonAnchorMarkup = phoneRegex("""<(?!/?a(?:\s|>))/?[^<>]++>""", RegexOption.IGNORE_CASE)
+    private val sourceSpace = phoneRegex("""[ \t\r\n]+""")
+    private val nameThenBreak = phoneRegex("""($CHORD_TAG$CHORD_NAME)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
+    private val spacesAndTags = phoneRegex("""(?: |<[^<>]++>)++""")
+    private val oneSpaceOrTag = phoneRegex(""" |<[^<>]++>""")
 
     // A style block ends at its own </style>, and never runs on into the next <style>.
-    private val commentedStyle = Regex("""<!--\s*+<style\b[^<>]*+>(?:[^<]++|<(?!/?style\b))*+</style>\s*+-->""", RegexOption.IGNORE_CASE)
-    private val styleBlock = Regex("""<style\b[^<>]*+>((?:[^<]++|<(?!/?style\b))*+)</style>""", RegexOption.IGNORE_CASE)
-    private val ttRule = Regex("""(?:^|[}\s>])tt\s*+\{([^{}]*+)\}""", RegexOption.IGNORE_CASE)
-    private val fontFamily = Regex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
+    private val commentedStyle = phoneRegex("""<!--\s*+<style\b[^<>]*+>(?:[^<]++|<(?!/?style\b))*+</style>\s*+-->""", RegexOption.IGNORE_CASE)
+    private val styleBlock = phoneRegex("""<style\b[^<>]*+>((?:[^<]++|<(?!/?style\b))*+)</style>""", RegexOption.IGNORE_CASE)
+    private val ttRule = phoneRegex("""(?:^|[}\s>])tt\s*+\{([^{}]*+)\}""", RegexOption.IGNORE_CASE)
+    private val fontFamily = phoneRegex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
 
     /** J-Total's last tt rule selects one of its two font stacks. */
     fun jTotalMonospace(page: String): Boolean {
@@ -151,7 +151,7 @@ internal object ChordSheets {
     private const val HP_START = "<!--HPSTART-->"
     private const val HP_END = "<!--HPEND-->"
 
-    private val solfegeChord = Regex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
+    private val solfegeChord = phoneRegex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
     /** U-FRET's sheet: each line its words with each chord in brackets where it's played, "[Am]五月[Em]雨". */
     fun fromUFret(lines: JSONArray): List<SheetLine> = (0 until lines.length()).map { index ->
@@ -285,24 +285,24 @@ internal object ChordSheets {
     }
 
     /** A ChordPro directive name, as `{title:…}` and `{start_of_tab}` write it. */
-    private val directiveName = Regex("""[a-z_][a-z0-9_]*""")
+    private val directiveName = phoneRegex("""[a-z_][a-z0-9_]*""")
 
     /** The longest editor on an edit page; a page with none is the ChordPro text itself. */
-    private val textarea = Regex("""<textarea\b[^<>]*+>((?:[^<]++|<(?!/textarea>|textarea\b))*+)</textarea>""", RegexOption.IGNORE_CASE)
+    private val textarea = phoneRegex("""<textarea\b[^<>]*+>((?:[^<]++|<(?!/textarea>|textarea\b))*+)</textarea>""", RegexOption.IGNORE_CASE)
 
     /** A chord token: a letter root, then only what a chord name uses, and not a whole word. */
-    private val chordToken = Regex("""[A-G][0-9A-Za-z#/()+\-]*""")
-    private val letterRun = Regex("""[A-Za-z]{4,}""")
-    private val chordWord = Regex("""maj|min|sus|add|dim|aug""")
+    private val chordToken = phoneRegex("""[A-G][0-9A-Za-z#/()+\-]*""")
+    private val letterRun = phoneRegex("""[A-Za-z]{4,}""")
+    private val chordWord = phoneRegex("""maj|min|sus|add|dim|aug""")
 
     /** `(4/4)` at the start of a line, which is not sung and not part of where a chord sits. */
-    private val timeSignature = Regex("""^\(\d+/\d+\)""")
+    private val timeSignature = phoneRegex("""^\(\d+/\d+\)""")
 
     /**
      * Who sings it, after 歌 and a colon (half or full width). The credit that follows (作詞, 作曲,
      * 編曲, 歌詞) is not their name. A subtitle with no such mark is the name itself.
      */
-    private val sungBy = Regex("""歌[:：][\s　]*(.+?)(?=[\s　]*(?:作詞|作曲|編曲|歌詞)|$)""")
+    private val sungBy = phoneRegex("""歌[:：][\s　]*(.+?)(?=[\s　]*(?:作詞|作曲|編曲|歌詞)|$)""")
 
     /** Title, singer and capo read so far, and whether a tab or grid is open. */
     private data class ChordWikiHead(
@@ -396,7 +396,7 @@ internal object ChordSheets {
 
     /** The fret [value] names, when it's a guitar fret; words and a number past the neck are not. */
     private fun chordWikiCapo(value: String): Int? {
-        val number = Regex("""\d+""").find(value)?.value?.toIntOrNull() ?: return null
+        val number = phoneRegex("""\d+""").find(value)?.value?.toIntOrNull() ?: return null
         return number.takeIf { it <= 24 }
     }
 

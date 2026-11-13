@@ -675,7 +675,7 @@ internal class MainViewModel(
             // does. NOT_FOUND reads as a link that went missing, and would sit over the songs of
             // the next search, so any error from before is cleared with it.
             // Signed in, a description, more than a name, is asked of ChatGPT too.
-            val describes = usesChatGpt() && words.split(Regex("\\s+")).size >= DESCRIPTION_WORDS
+            val describes = usesChatGpt() && words.split(phoneRegex("\\s+")).size >= DESCRIPTION_WORDS
             uiState = uiState.copy(
                 isSearchingSongs = false,
                 isAskingForSongs = describes,

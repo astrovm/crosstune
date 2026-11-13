@@ -34,8 +34,9 @@ class ReadAsMainReadTest {
         val wordings = MetadataParsers.spotifyPageWordings.map { MetadataParsers.SpotifyWording(it.wording) }
         assertTrue(wordings.any { it.wording == "song and lyrics by %s" })
         for (wording in wordings) {
-            val song = Regex("""^(.+)(?: [-–‑] |: )""" + wording.wording.split("%s").joinToString("(.+)") { Regex.escape(it) } + """ \| Spotify$""", RegexOption.IGNORE_CASE)
-            val alone = Regex(song.pattern.removePrefix("^(.+)(?: [-–‑] |: )"), RegexOption.IGNORE_CASE)
+            val songAlone = wording.wording.split("%s").joinToString("(.+)") { Regex.escape(it) } + """ \| Spotify$"""
+            val song = phoneRegex("""^(.+)(?: [-–‑] |: )$songAlone""", RegexOption.IGNORE_CASE)
+            val alone = phoneRegex(songAlone, RegexOption.IGNORE_CASE)
             val (before, after) = wording.wording.split("%s")
             texts("a", " ", ":", ": ", " - ", " – ", " ‑ ", "-", "\n", "x", before, after, " | Spotify", count = SHORT).forEach { text ->
                 for (title in listOf(text, text + after + " | Spotify", text + before + "b" + after + " | Spotify", "a - " + before + text + after + " | Spotify")) {
@@ -50,7 +51,7 @@ class ReadAsMainReadTest {
     fun aSharedSongIsSplitAsMainSplitIt() {
         for (pattern in listOf("%1\$s by %2\$s", "%2\$s - %1\$s", "Listen to %1\$s, by %2\$s!", "%1\$s%2\$s", "♪ %1\$s / %2\$s")) {
             val words = pattern.split("%1\$s", "%2\$s")
-            val regex = words.joinToString("(.+)") { Regex.escape(it) }.toRegex()
+            val regex = phoneRegex(words.joinToString("(.+)") { Regex.escape(it) })
             val split = MusicLinks.SongPattern(pattern)
             assertEquals(pattern, pattern != "%2\$s - %1\$s", split.titleFirst)
             texts("a", " ", "by", " by ", "-", " - ", "\n", "!", ",", "/", " / ", "♪ ", "Listen to ", count = SHORT).forEach { text ->
@@ -63,7 +64,7 @@ class ReadAsMainReadTest {
 
     @Test
     fun aChordWikiCreditIsCutAsMainCutIt() {
-        val credit = Regex("""\s*[（(]\s*(?:歌|唄|作詞|作曲|編曲|原曲)[^）)]*[）)]\s*$""")
+        val credit = phoneRegex("""\s*[（(]\s*(?:歌|唄|作詞|作曲|編曲|原曲)[^）)]*[）)]\s*$""")
         texts("（", "）", "(", ")", "歌：", "作詞", "x", " ", "\u3000", "\n", "\r\n", "\u0085", "A").forEach { title ->
             // A credit with brackets in it that close in order is read whole, as main didn't (TitlesAgainstMainTest).
             if (bracketsInOrder(title, "（(", "）)") && nested(title)) return@forEach
@@ -73,8 +74,8 @@ class ReadAsMainReadTest {
 
     @Test
     fun cssCommentsAndASheetAreReadAsMainReadThem() {
-        val comment = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
-        val sheet = Regex("""<!--HPSTART-->(.*?)<!--HPEND-->""", RegexOption.DOT_MATCHES_ALL)
+        val comment = phoneRegex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+        val sheet = phoneRegex("""<!--HPSTART-->(.*?)<!--HPEND-->""", RegexOption.DOT_MATCHES_ALL)
         texts("/*", "*/", "/", "*", "a", "\n", "/**/", "<!--HPSTART-->", "<!--HPEND-->", "<!--", "-->").forEach { text ->
             assertEquals(text, text.replace(comment, ""), ChordSheets.withoutCssComments(text))
             assertEquals(text, sheet.find(text)?.groupValues?.get(1), ChordSheets.jTotalSheet(text))
@@ -85,7 +86,7 @@ class ReadAsMainReadTest {
     fun noiseIsLookedForOnlyInATitleThatEndsAsItsPatternsEnd() {
         // Main's patterns end on a letter or a bar, then spaces, then a line break, if any, that ends the text. Each
         // letter there is read as a pattern reads it in PatternLettersTest; here, the edges and those case folds to ASCII.
-        val endsOnAWord = Regex("""[a-z|]\s*$""", RegexOption.IGNORE_CASE)
+        val endsOnAWord = phoneRegex("""[a-z|]\s*$""", RegexOption.IGNORE_CASE)
         for (last in "aAzZ|09-@[`{ \n\u212A\u017F\u0130\u0131\u0085\u3000") {
             for (text in listOf("", " ", "\n", " \r\n", "\u0085", " \u2028", "-").map { "x$last$it" }) {
                 assertEquals(text, endsOnAWord.containsMatchIn(text), MetadataParsers.endsOnAWord(text))
@@ -102,7 +103,7 @@ class ReadAsMainReadTest {
             val text = buildString { repeat(random.nextInt(0, MAX_PIECES)) { append(" ab\n\u3000\u0085"[random.nextInt(6)]) } }
             val end = random.nextInt(0, text.length + 1)
             val letters = random.nextInt(1, 5)
-            val start = Regex("""\S(?:\s*\S){${letters - 1}}\s*\z""").find(text.substring(0, end))?.range?.first ?: 0
+            val start = phoneRegex("""\S(?:\s*\S){${letters - 1}}\s*\z""").find(text.substring(0, end))?.range?.first ?: 0
             assertEquals("$text to $end, $letters", start, MetadataParsers.beforeLetters(text, end, letters))
         }
     }
@@ -125,13 +126,13 @@ class ReadAsMainReadTest {
 
     /** Main's patterns. */
     private object Main {
-        val subtitlesTag = Regex("""\s*(?://|\|\|?)\s*sub\.?\s*(?:esp|español).*$""", RegexOption.IGNORE_CASE)
-        private val trailingVideoNoise = Regex(
+        val subtitlesTag = phoneRegex("""\s*(?://|\|\|?)\s*sub\.?\s*(?:esp|español).*$""", RegexOption.IGNORE_CASE)
+        private val trailingVideoNoise = phoneRegex(
             """\s*(?:[|\-–]\s*)?\b(?:official\s+(?:music\s+|lyric\s+)?(?:video|audio|visuali[sz]er)|lyric\s+video|music\s+video|animated\s+video|video\s*oficial|video\s*clip(?:\s+oficial)?|audio\s+oficial)\s*$""",
             RegexOption.IGNORE_CASE
         )
-        private val trailingQuality = Regex("""(?:(?:\s*[|\-–]\s*|\s+)lyrics?\s*(?:\|?\s*(?:hd|4k)\s*\|?)?|\s+(?:full\s+)?(?:hd|hq|4k))\s*$""", RegexOption.IGNORE_CASE)
-        private val danglingDash = Regex("""\s+[-–]\s*$""")
+        private val trailingQuality = phoneRegex("""(?:(?:\s*[|\-–]\s*|\s+)lyrics?\s*(?:\|?\s*(?:hd|4k)\s*\|?)?|\s+(?:full\s+)?(?:hd|hq|4k))\s*$""", RegexOption.IGNORE_CASE)
+        private val danglingDash = phoneRegex("""\s+[-–]\s*$""")
 
         fun withoutTrailingNoise(title: String): String {
             var raw = title

@@ -16,7 +16,8 @@ class TitlesAgainstMainTest {
         val count = Fuzz.count(TitleFuzz.COUNT, FEW)
         // The heading, the titles read, and one more while some are left out.
         val lines = GZIPInputStream(File(BASELINE).inputStream()).bufferedReader().useLines { it.take(count + 2).toList() }
-        assertEquals(true, lines.first().startsWith("# "))
+        // Main read them on a phone's engine, ICU, as the app reads titles: the JVM reads spaces and case otherwise.
+        assertEquals(lines.first(), true, lines.first().startsWith("# ") && ", Android " in lines.first())
         assertEquals(if (count < TitleFuzz.COUNT) count + 2 else count + 1, lines.size)
         val worse = mutableListOf<String>()
         val better = sortedMapOf<String, Int>()
@@ -84,7 +85,9 @@ class TitlesAgainstMainTest {
         assertEquals(listOf("blank" to "A「」『x』"), variants("A「」「 」『x』"))
         assertEquals(listOf("blank" to "A\n 『x』"), variants("A\n「 」 『x』"))
         // Not a song with something in it, nor one main didn't reach.
-        listOf("「『」」", "『 「』」", "「x『 」", "A\u0085「 」", "A\nB「 」").forEach { assertEquals(emptyList<Pair<String, String>>(), variants(it)) }
+        // A phone's "\s" reads U+0085 as a space, so main reached a song after it.
+        assertEquals(listOf("blank" to "A\u0085"), variants("A\u0085「 」"))
+        listOf("「『」」", "『 「』」", "「x『 」", "A\nB「 」").forEach { assertEquals(emptyList<Pair<String, String>>(), variants(it)) }
     }
 
     /** Main's readings of a title, [whole], and of the title cut at each of its lines, as [TitleFuzz.cuts] makes them. */
@@ -122,17 +125,56 @@ class TitlesAgainstMainTest {
          */
         fun readAsOn(reading: Reading, main: Readings, field: String = reading.field): Boolean {
             val here = reading.here(field)
-            if (here == main.whole(field) || field in TitleFuzz.SONG_FIELDS && here in main.cut(field)) return true
-            if (field != "musicVideo") return false
+            if (here == main.whole(field)) return true
+            if (field in TitleFuzz.SONG_FIELDS && here in main.cut(field)) return onACut(field, here)
+            // As music only where a line follows the song, which main read as music on the title or a cut one.
+            if (field != "musicVideo" || main.cuts.isEmpty()) return false
             val song = reading.here("youtubeVideo")
-            return here == song && (song == main.whole("youtubeVideo") || song in main.cut("youtubeVideo")) &&
+            return here == song && (song == main.whole("youtubeVideo") || song in main.cut("youtubeVideo") && onACut("youtubeVideo", song)) &&
                 (main.whole(field) != null || main.cut(field).any { it != null } || main.cut("bracketedSong").any { it != null })
         }
+
+        /**
+         * Whether [reading] of [field], as main read the title cut at a line, is read so here: none, or a song with a
+         * letter or a digit in it. Main named none in "「|」\nQ", and its song alone on a line says nothing.
+         */
+        private fun onACut(field: String, reading: String?): Boolean {
+            val song = if (field == "bracketedSong") reading?.substringAfter(TitleFuzz.PART) else song(reading)
+            return reading == null || song.orEmpty().any(Char::isLetterOrDigit)
+        }
+
+        /** [text] without each 「」 or 『』 that has only spaces in it, as a reading keeps none, trimmed. */
+        fun withoutBlankPairs(text: String): String {
+            var kept = text
+            while (true) {
+                val blank = BLANK_PAIR.find(kept) ?: return kept.trim()
+                kept = kept.removeRange(blank.range)
+            }
+        }
+
+        /** A 「」 or 『』 with only spaces in it, as `isBlank` reads them. */
+        private val BLANK_PAIR = Regex("""[「『][\s\p{Zs}\x{1C}-\x{1F}\x{2028}\x{2029}]*[」』]""")
 
         val BETTER = listOf(
             Better("lines after the song's 」", setOf("musicVideo", "youtubeVideo", "playerSong", "bracketedSong")) { readAsOn(it, it.main) },
             // "A「 」『x』" names "x", as main named it with no blank 「 」; main named a song with no name.
             Better("a blank 「 」 names no song", SONGS + "bracketedSong") { reading -> reading.variant(TitleFuzz.BLANK)?.let { readAsOn(reading, it) } == true },
+            // "「|」 Q" is no song in 「」, and "Band - Song 『[HD] 』" is "Song" by "Band": main named a song with no letter
+            // or digit, "|", or one with no name once it cut "[HD]", where the brackets left blank go wherever the title
+            // is cut down. Here no song is read in those brackets: the title is read as one with no song in them. Where
+            // main's player read none, it was for that song.
+            Better("a song has a letter or a digit", SONGS + "bracketedSong") { reading ->
+                val main = reading.main()?.let { if (reading.field == "bracketedSong") it.substringAfter(TitleFuzz.PART) else song(it) }
+                val bracketed = reading.main("bracketedSong")?.substringAfter(TitleFuzz.PART)
+                val here = reading.here()
+                (main ?: bracketed)?.none(Char::isLetterOrDigit) == true && if (reading.field == "bracketedSong") here == null else song(here) != main
+            },
+            // "「 」\rLove\n「 」" is "Love": main kept a blank 「 」 that only a trim or a cut brought to the song's line.
+            Better("a blank 「 」 after a cut goes", SONGS) { reading ->
+                val here = reading.here()?.split(TitleFuzz.PART)
+                val main = reading.main()?.split(TitleFuzz.PART)
+                here != null && main != null && here != main && here.map(String::trim) == main.map(::withoutBlankPairs)
+            },
             // "Song (Live [2019])" is one tag, read as main read "Song (Live 2019)"; main read "(Live [2019]" as one and ")" as part of the name.
             Better("nested tags read whole", SONGS + "bracketedSong") { it.flatAsMain("([") },
             Better("nested tags read whole", setOf("coverOf")) { it.flatAsMain("([【") },

@@ -1017,7 +1017,7 @@ private fun cutLicenseLine(line: String): List<String> {
     var rest = line
     while (rest.length > most) {
         val window = rest.substring(0, most + 1)
-        val sentence = Regex("[.;:!?] ").findAll(window).lastOrNull()?.let { it.range.first + 1 }?.takeIf { it >= most / 3 }
+        val sentence = phoneRegex("[.;:!?] ").findAll(window).lastOrNull()?.let { it.range.first + 1 }?.takeIf { it >= most / 3 }
         val cut = sentence ?: window.lastIndexOf(' ').takeIf { it > 0 } ?: most
         pieces += rest.substring(0, cut).trimEnd()
         rest = rest.substring(cut).trimStart()
@@ -1030,7 +1030,7 @@ private fun cutLicenseLine(line: String): List<String> {
  * them for a page as wide as a terminal; a line starting a list item stays a line of its own.
  */
 internal fun licenseParagraphs(text: String): List<String> =
-    text.split(Regex("\n\\s*\n")).map { paragraph ->
+    text.split(phoneRegex("\n\\s*\n")).map { paragraph ->
         paragraph.lines().map(String::trim).filter(String::isNotEmpty).fold("") { joined, line ->
             when {
                 joined.isEmpty() -> line
@@ -1041,7 +1041,7 @@ internal fun licenseParagraphs(text: String): List<String> =
     }.filter(String::isNotEmpty)
 
 /** A line that starts an item of a list: "* Name", "- Name", "1. Definitions", "(a) You must". */
-private val LIST_ITEM = Regex("^([*•-]|\\(?([0-9]{1,3}|[a-z])[.)])\\s")
+private val LIST_ITEM = phoneRegex("^([*•-]|\\(?([0-9]{1,3}|[a-z])[.)])\\s")
 
 /** The page of advanced settings. */
 private const val ADVANCED_PAGE = "advanced"

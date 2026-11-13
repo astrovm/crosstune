@@ -178,19 +178,19 @@ internal class SungReadings(
         /** How alike two lines have to be, from 0 to 1, for one's readings to be the other's. */
         const val ALIKE = 0.4
 
-        private val searchRow = Regex(
+        private val searchRow = phoneRegex(
             """<p class="searchResult__title">\s*+<a href="(/lyric/[A-Za-z0-9]++/)">(?:[^<]++|<(?!td class="searchResult__artist">|p class="searchResult__title">))*+""" +
                 """<td class="searchResult__artist">\s*+<p>\s*+<a [^<>]*+>((?:[^<]++|<(?!/a>|p class="searchResult__title">))*+)</a>"""
         )
-        private val words = Regex("""<div class="hiragana"\s*+>((?:[^<]++|<(?!/div>|div class="hiragana"))*+)</div>""")
-        private val ruby = Regex(
+        private val words = phoneRegex("""<div class="hiragana"\s*+>((?:[^<]++|<(?!/div>|div class="hiragana"))*+)</div>""")
+        private val ruby = phoneRegex(
             """<span class="ruby"><span class="rb">((?:[^<]++|<(?!/span><span class="rt">|span class="ruby">))*+)</span><span class="rt">""" +
                 """((?:[^<]++|<(?!/span></span>|span class="ruby">))*+)</span></span>"""
         )
-        private val exclaimed = Regex("[!?！？]")
-        private val titleMark = Regex("[()（）\\[\\]～~〜「」『』]| - ")
-        private val lineBreak = Regex("""<br\s*/?>""")
-        private val tag = Regex("""<[^<>]++>""")
+        private val exclaimed = phoneRegex("[!?！？]")
+        private val titleMark = phoneRegex("[()（）\\[\\]～~〜「」『』]| - ")
+        private val lineBreak = phoneRegex("""<br\s*/?>""")
+        private val tag = phoneRegex("""<[^<>]++>""")
 
         /** The words on a song's page, line by line, each in pieces, kanji with how they're sung. */
         fun linesOf(page: String): List<List<Ruby>> {

@@ -44,8 +44,15 @@ class LinearPatternsTest {
         // One word of a short list, between lookarounds of one letter each.
         "Translator.kt" to "\$spoken",
         // A Spotify page's wording, before and after the artist, as plain letters: matched at one place each.
-        "MetadataParsers.kt" to "Regex(Regex.escape(wording.substringBefore",
-        "MetadataParsers.kt" to "Regex(Regex.escape(wording.substringAfter",
+        "MetadataParsers.kt" to "phoneRegex(Regex.escape(wording.substringBefore",
+        "MetadataParsers.kt" to "phoneRegex(Regex.escape(wording.substringAfter",
+        // Where each pattern is built, from what the line above it gives it, once in its name and once where it's called.
+        "PhoneRegex.kt" to "phoneRegex(pattern, options.toSet(), ICU)",
+        "PhoneRegex.kt" to "phoneRegex(pattern, options.toSet(), ICU)",
+        "PhoneRegex.kt" to "fun phoneRegex(pattern: String, options: Set<RegexOption>, onIcu: Boolean)",
+        // The pattern as it is on a phone, and written out for the JVM: each a pattern above, so timed there.
+        "PhoneRegex.kt" to "Regex(IcuPattern(pattern, options).written)",
+        "PhoneRegex.kt" to "Regex(IcuPattern(pattern, options).written)",
     )
 
     @Test

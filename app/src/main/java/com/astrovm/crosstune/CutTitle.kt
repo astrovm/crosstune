@@ -82,8 +82,8 @@ internal class CutTitle(private val title: String) {
         return at
     }
 
-    /** The letter at [place] in lower case, or null past the end: a word that starts with another can't be read from there. */
-    fun lowerAt(place: Int) = title.getOrNull(place)?.lowercaseChar()
+    /** Whether a pattern that ignores case reads the letter at [place] as [letter], as [readsAs] says: false past the end. */
+    fun readsAt(place: Int, letter: Char) = title.getOrNull(place)?.let { readsAs(it, letter) } == true
 
     /** Up to [count] letters from [place] on. */
     fun letters(place: Int, count: Int): String {
@@ -204,8 +204,16 @@ internal class CutTitle(private val title: String) {
         }
     }
 
-    /** Whether [at] comes after a digit: if it starts a run of spaces, the next place in it reads otherwise. */
-    fun afterDigit(at: Int) = title.getOrNull(letterBefore(at)) in '0'..'9'
+    /**
+     * Whether [at] comes after a digit, as [isPatternDigit] says: if it starts a run of spaces, the next place in it reads
+     * otherwise. One out of the basic plane is two letters, the second of which is before [at].
+     */
+    fun afterDigit(at: Int): Boolean {
+        val before = letterBefore(at)
+        val last = title.getOrNull(before) ?: return false
+        val first = title.getOrNull(before - 1)
+        return isPatternDigit(if (last.isLowSurrogate() && first != null && first.isHighSurrogate()) Character.toCodePoint(first, last) else last.code)
+    }
 
     /** Where to look again, from a place to the last place that the cuts since [since] could change what's found from. */
     private fun windowsSince(since: Int): List<Pair<Int, Int>> {

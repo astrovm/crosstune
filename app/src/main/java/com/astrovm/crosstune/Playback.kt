@@ -934,7 +934,7 @@ internal const val LEFT_BEHIND_MS = 10 * 60_000L
  * The size in a cover's link, as YouTube Music's say how big to draw it: the 60 pixels it gives other
  * apps blur at a row's size, so a bigger one of the same cover is asked for.
  */
-private val SIZED_COVER = Regex("=w\\d+-h\\d+")
+private val SIZED_COVER = phoneRegex("=w\\d+-h\\d+")
 private const val QUEUED_COVER_PX = 180
 
 /** How far behind where it was playing on to an app may say it is, and still be believed to be there instead. */

@@ -23,41 +23,41 @@ import java.nio.charset.Charset
 import java.net.URLEncoder
 
 /** A song in U-FRET's results: whether it's the easier version, its number, title and artist. */
-private val uFretResult = Regex(
+private val uFretResult = phoneRegex(
     """c-list__item (normal|beginner)-chord">\s*+<a href="/song\.php\?data=(\d++)"(?:[^c]++|c(?!-list__item |-list__title">))*+c-list__title">""" +
         """((?:[^<c]++|<(?!/p>)|c(?!-list__item ))*+)</p>\s*+<p class="c-list__artist">((?:[^<c]++|<(?!/p>)|c(?!-list__item ))*+)</p>"""
 )
-private val tags = Regex("<[^<>]*+>[^<]*+</[^<>]*+>|<[^<>]*+>")
-private val uFretSheet = Regex("""var ufret_chord_datas = (\[(?:[^\]v\n]++|](?!;)|v(?!ar ufret_chord_datas = ))*+]);""")
-private val titleBreak = Regex(""" [-–—/] |／""")
-private val creditBracket = Regex("""$SPACES_START\s*[(（].*$""")
-private val ugData = Regex("""class="js-store" data-content="([^"]*)"""")
+private val tags = phoneRegex("<[^<>]*+>[^<]*+</[^<>]*+>|<[^<>]*+>")
+private val uFretSheet = phoneRegex("""var ufret_chord_datas = (\[(?:[^\]v\n]++|](?!;)|v(?!ar ufret_chord_datas = ))*+]);""")
+private val titleBreak = phoneRegex(""" [-–—/] |／""")
+private val creditBracket = phoneRegex("""$SPACES_START\s*[(（].*$""")
+private val ugData = phoneRegex("""class="js-store" data-content="([^"]*)"""")
 
 /** In LaCuerda's results, an artist, or a song of theirs: its row, the kind of sheet each take is, and the takes best liked first. */
-private val laCuerdaResult = Regex(
+private val laCuerdaResult = phoneRegex(
     """<a href="/([^/"]+)/">([^<]*)</a>|<li id='r(\d+)' lcd='([A-Z]*)-([^']*)'>\s*<a href="javascript:">([^<]*)</a>""",
     RegexOption.IGNORE_CASE
 )
-private val laCuerdaFiles = Regex("""var fns=\[([^\[\]]*+)];""")
-private val laCuerdaLast = Regex("""var NMAX=(\d+);""")
-private val laCuerdaSheet = Regex("""<div id=t_body><pre>((?:[^<]++|<(?!/pre>|div id=t_body><pre>))*+)</pre>""", RegexOption.IGNORE_CASE)
-private val laCuerdaChord = Regex("""<a>([^<]*)</a>""", RegexOption.IGNORE_CASE)
-private val markup = Regex("<[^<>]*+>")
+private val laCuerdaFiles = phoneRegex("""var fns=\[([^\[\]]*+)];""")
+private val laCuerdaLast = phoneRegex("""var NMAX=(\d+);""")
+private val laCuerdaSheet = phoneRegex("""<div id=t_body><pre>((?:[^<]++|<(?!/pre>|div id=t_body><pre>))*+)</pre>""", RegexOption.IGNORE_CASE)
+private val laCuerdaChord = phoneRegex("""<a>([^<]*)</a>""", RegexOption.IGNORE_CASE)
+private val markup = phoneRegex("<[^<>]*+>")
 
 /** Cifra Club's sheet of words and chords, its tabs written apart, its chords in bold, and the fret its capo is on. */
-private val cifraClubSheet = Regex("""<pre[^<>]*?data-chord-content="true"[^<>]*+>((?:[^<]++|<(?!/pre>|pre))*+)</pre>""")
-private val cifraClubTabs = Regex("""<div class="tabs">(?:[^<]++|<(?!/div>|div class="tabs">))*+</div>""")
-private val cifraClubChord = Regex("""<b[^<>]*+>([^<]*+)</b>""")
-private val cifraClubCapo = Regex("""\\"capo\\":(\d+)""")
+private val cifraClubSheet = phoneRegex("""<pre[^<>]*?data-chord-content="true"[^<>]*+>((?:[^<]++|<(?!/pre>|pre))*+)</pre>""")
+private val cifraClubTabs = phoneRegex("""<div class="tabs">(?:[^<]++|<(?!/div>|div class="tabs">))*+</div>""")
+private val cifraClubChord = phoneRegex("""<b[^<>]*+>([^<]*+)</b>""")
+private val cifraClubCapo = phoneRegex("""\\"capo\\":(\d+)""")
 
 /** A song in J-Total's results: its page, its name, and who sings it. */
-private val jTotalResult = Regex(
+private val jTotalResult = phoneRegex(
     """<a href="(?:https:)?//music\.j-total\.net/data/([^"]+\.html)" target=""><font size="3"><b>([^<]*+)</b></font></a>""" +
         """(?:[^<歌]++|<(?!a href="(?:https:)?//music\.j-total\.net/data/)|歌(?!：))*+歌：([^/<]*+)"""
 )
 
 /** What J-Total adds to the name of its easier versions: "〜初心者向け簡単コードVer.〜". */
-private val jTotalVersion = Regex("""〜[^〜]*Ver\.〜""")
+private val jTotalVersion = phoneRegex("""〜[^〜]*Ver\.〜""")
 private val J_TOTAL_CHARSET = Charset.forName("Shift_JIS")
 
 /**
@@ -785,9 +785,9 @@ internal class ChordFinder(
         /** Chord names named in one dropped-sheet line. The rest are counted, not listed. */
         private const val DROPPED_LOG = 24
 
-        private val titleWords = Regex("""[\p{L}\p{N}]+""")
+        private val titleWords = phoneRegex("""[\p{L}\p{N}]+""")
 
-        val entity = Regex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
+        val entity = phoneRegex("""&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);""")
         /** The entities pages use most, and one read otherwise than HTML says: a hidden hyphen is no letter of the word. */
         val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ", "shy" to "")
 

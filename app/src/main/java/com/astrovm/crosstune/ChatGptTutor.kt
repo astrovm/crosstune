@@ -566,9 +566,9 @@ internal const val TRANSLATION_VERSION = 2
  * a line of em or en dashes, in Spanish.
  */
 internal fun explanationParts(text: String): List<String> {
-    val parts = plainText(text).split(Regex("""\n[ \t]*(?:-{3,}|[—–―]+)[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
+    val parts = plainText(text).split(phoneRegex("""\n[ \t]*(?:-{3,}|[—–―]+)[ \t]*(?:\n|$)""")).map { it.trim().trimEnd('-').trim() }
     if (parts.size > 1) return parts
-    return parts.single().split(Regex("""\n[ \t]*\n\s*""")).map { it.trim() }
+    return parts.single().split(phoneRegex("""\n[ \t]*\n\s*""")).map { it.trim() }
 }
 
 /**
@@ -587,8 +587,8 @@ internal data class Sheet(
     val known: List<Pair<String, String>>
 )
 
-private val FACT = Regex("""^([^:.,()·]{1,30}): (.+)$""")
-private val KNOWN = Regex("""^(.+) · (\d{4}\S*)$""")
+private val FACT = phoneRegex("""^([^:.,()·]{1,30}): (.+)$""")
+private val KNOWN = phoneRegex("""^(.+) · (\d{4}\S*)$""")
 private const val QUOTE_MARKS = "\"“«„「『‘'"
 
 /** [text] sorted into a [Sheet]; while it's still being written, what's come so far. */
@@ -599,7 +599,7 @@ internal fun sheet(text: String): Sheet {
     var mood = emptyList<String>()
     var quote: String? = null
     var means: String? = null
-    val lines = plainText(text).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.matches(Regex("""-{3,}|[—–―]+""")) }
+    val lines = plainText(text).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.matches(phoneRegex("""-{3,}|[—–―]+""")) }
     var at = 0
     while (at < lines.size) {
         val line = lines[at++]
@@ -630,12 +630,12 @@ internal fun sheet(text: String): Sheet {
  */
 internal fun plainText(text: String): String = text
     .replace(markdownSource, "")
-    .replace(Regex("""\[([^\[\]]++)]\(https?://[^)\[\]]*+\)"""), "$1")
-    .replace(Regex("""\*\*(.+?)\*\*"""), "$1")
-    .replace(Regex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
+    .replace(phoneRegex("""\[([^\[\]]++)]\(https?://[^)\[\]]*+\)"""), "$1")
+    .replace(phoneRegex("""\*\*(.+?)\*\*"""), "$1")
+    .replace(phoneRegex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
 
 /** A source ChatGPT adds after what it says, "([site](https://…))", with the spaces before it. */
-private val markdownSource = Regex("""$SPACES_START\s*+\(\[[^\[\]]*+]\([^)\[\]]*+\)\)""")
+private val markdownSource = phoneRegex("""$SPACES_START\s*+\(\[[^\[\]]*+]\([^)\[\]]*+\)\)""")
 
 /**
  * The strings of a JSON array finished so far in [text], an answer still being written: those

@@ -1,6 +1,6 @@
 package com.astrovm.crosstune
 
-private val lyricWord = Regex("""[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*""")
+private val lyricWord = phoneRegex("""[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*""")
 
 /** More of a copy's words than this with a capital is title case. German's nouns stay well under it. */
 private const val TITLE_CASE_SHARE = 0.4

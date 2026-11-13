@@ -110,7 +110,7 @@ internal class SongSearcher(
             .addQueryParameter("limit", "$LIMIT")
             .build()
         val results = fetchJson(url.toString()).optJSONArray("data") ?: return emptyList()
-        val typed = query.split(Regex("\\s+")).map(SongNames::normalize).filter { it.isNotEmpty() }
+        val typed = query.split(phoneRegex("\\s+")).map(SongNames::normalize).filter { it.isNotEmpty() }
         return (0 until results.length()).mapNotNull { index ->
             val song = results.optJSONObject(index) ?: return@mapNotNull null
             val title = MetadataParsers.deezerTitle(song).trim()
@@ -178,10 +178,10 @@ internal class SongSearcher(
         const val LIMIT = 20
 
         /** The singer named in the title, with no brackets around the phrase. */
-        private val originalCredit = Regex("""originally\s+(?:performed\s+)?by|原曲歌手""", RegexOption.IGNORE_CASE)
+        private val originalCredit = phoneRegex("""originally\s+(?:performed\s+)?by|原曲歌手""", RegexOption.IGNORE_CASE)
 
         /** A karaoke key change, "+3Key" or "Key-1". */
-        private val keyChange = Regex("""[+-]\d+\s*key\b|\bkey\s*[+-]\d+""", RegexOption.IGNORE_CASE)
+        private val keyChange = phoneRegex("""[+-]\d+\s*key\b|\bkey\s*[+-]\d+""", RegexOption.IGNORE_CASE)
 
         /**
          * What a row says when it is not that singer's recording, in the scripts those

@@ -13,17 +13,17 @@ import java.util.Locale
  * anyway, and when they are close enough to be worth taking.
  */
 internal object SongNames {
-    private val leadingArticle = Regex("""^the\s+""", RegexOption.IGNORE_CASE)
-    private val artistSeparator = Regex(
+    private val leadingArticle = phoneRegex("""^the\s+""", RegexOption.IGNORE_CASE)
+    private val artistSeparator = phoneRegex(
         """$SPACES_START\s*+(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*+""",
         RegexOption.IGNORE_CASE
     )
-    private val marks = Regex("""\p{M}+""")
-    private val lettersAndDigits = Regex("""[^\p{L}\p{N}]+""")
-    private val wordSplit = Regex("""[^a-z0-9]+""")
+    private val marks = phoneRegex("""\p{M}+""")
+    private val lettersAndDigits = phoneRegex("""[^\p{L}\p{N}]+""")
+    private val wordSplit = phoneRegex("""[^a-z0-9]+""")
 
     /** "Zion and Lennox" and "Zion & Lennox" are two names, whichever language says so. */
-    private val conjunction = Regex("""$SPACES_START\s++(?:and|y|und|et)\s++""", RegexOption.IGNORE_CASE)
+    private val conjunction = phoneRegex("""$SPACES_START\s++(?:and|y|und|et)\s++""", RegexOption.IGNORE_CASE)
 
     /**
      * [title] without the guests it credits, as "(feat. Emel)", which some services leave out. Or written out, as a
@@ -41,7 +41,7 @@ internal object SongNames {
     private fun guestInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val start = title.spacesEnd(open + 1)
-        if (title.lowerAt(start) != GUEST_WORDS_START) return null
+        if (!title.readsAt(start, GUEST_WORDS_START)) return null
         val word = featuringWord.matchAt(title.letters(start, LONGEST_WORD), 0) ?: return null
         val close = title.nextBracket(title.after(start, word.value.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
@@ -49,7 +49,7 @@ internal object SongNames {
 
     /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or null. */
     private fun guestWrittenOut(title: CutTitle, at: Int, word: Int): Int? {
-        if (title.afterDigit(at) || title.lowerAt(word) != GUEST_WORDS_START) return null
+        if (title.afterDigit(at) || !title.readsAt(word, GUEST_WORDS_START)) return null
         val said = featuringSaid.matchAt(title.letters(word, LONGEST_WORD), 0) ?: return null
         val guest = title.spacesEnd(title.after(word, said.value.length - 1))
         val bracket = title.nextBracket(guest)
@@ -60,8 +60,8 @@ internal object SongNames {
         }
     }
 
-    private val featuringWord = Regex("""(?:feat|ft|featuring)\b""", RegexOption.IGNORE_CASE)
-    private val featuringSaid = Regex("""(?:feat\.?|ft\.?|featuring)\s""", RegexOption.IGNORE_CASE)
+    private val featuringWord = phoneRegex("""(?:feat|ft|featuring)\b""", RegexOption.IGNORE_CASE)
+    private val featuringSaid = phoneRegex("""(?:feat\.?|ft\.?|featuring)\s""", RegexOption.IGNORE_CASE)
 
     /** The most letters [featuringWord] and [featuringSaid] read: "featuring" and the one after it. */
     private const val LONGEST_WORD = 10
@@ -75,28 +75,29 @@ internal object SongNames {
      * \s+M/V\b` read it.
      */
     private fun markEnd(title: CutTitle, at: Int, mark: Int): Int? = markInBrackets(title, mark)
-        ?: if (mark > at && title.lowerAt(mark) == VIDEO_MARK_START && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
+        ?: if (mark > at && title.readsAt(mark, VIDEO_MARK_START) && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
 
     private fun markInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val mark = title.spacesEnd(open + 1)
-        if (title.lowerAt(mark) != VIDEO_MARK_START || !title.letters(mark, VIDEO_MARK.length).equals(VIDEO_MARK, ignoreCase = true)) return null
+        val letters = title.letters(mark, VIDEO_MARK.length)
+        if (letters.length < VIDEO_MARK.length || !letters.indices.all { readsAs(letters[it], VIDEO_MARK[it]) }) return null
         val close = title.spacesEnd(title.after(mark, VIDEO_MARK.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
     }
 
-    private const val VIDEO_MARK = "M/V"
+    private const val VIDEO_MARK = "m/v"
     private const val VIDEO_MARK_START = 'm'
-    private val videoMarkAt = Regex("""M/V\b""", RegexOption.IGNORE_CASE)
+    private val videoMarkAt = phoneRegex("""M/V\b""", RegexOption.IGNORE_CASE)
 
-    private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
+    private val guestCredit = phoneRegex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
 
     /**
      * A trailing tag that names no other recording: "Remastered 2012" and "Mono" anywhere in
      * it, a whole "Album Version" or "Original", or what film or show it's the song of,
      * "(電影《我的少女時代》主題曲)". "Live", "Acoustic" or "Remix" are other recordings, so they stay.
      */
-    private val editionTag = Regex(
+    private val editionTag = phoneRegex(
         """(?<!\s)(?:\s++[-–]\s++|\s*+[(\[]\s*+)(?=$IN_TAG*+\s*+[)\]]?$)""" +
             """(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*+|$IN_TAG*(?:$TIE_IN)$IN_TAG*+)\s*+[)\]]?$""",
         RegexOption.IGNORE_CASE
@@ -281,7 +282,7 @@ internal object SongNames {
     private val MANY_SONGS_MARKS = listOf("メドレー", "串烧", "串燒", "메들리").map(::normalize)
 
     /** A whole show or album as one, in the languages its uploads are named in: "Full Concert", "(Recital Completo)". */
-    private val wholeShow = Regex(
+    private val wholeShow = phoneRegex(
         """(?<![\p{L}\p{N}])(?:(?:full|complete|whole|entire)\s+(?:concert|show|album|live\s+show|set)|""" +
             """(?:concierto|recital|show|[áa]lbum|disco|concerto|konzert|concert)\s+(?:completo|completa|entero|inteiro|integral|komplett|complet|intero))(?![\p{L}\p{N}])""",
         RegexOption.IGNORE_CASE
@@ -438,33 +439,33 @@ internal object SongNames {
     data class Covered(val title: String, val artist: String?)
 
     private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
-    private val coverWords = Regex("""(?:$COVER_WORDS)""", RegexOption.IGNORE_CASE)
+    private val coverWords = phoneRegex("""(?:$COVER_WORDS)""", RegexOption.IGNORE_CASE)
 
     private const val COVER_OPENS = "([【"
     private const val COVER_CLOSES = ")]】"
     private const val DASHES = "-–"
 
     /** Whose song it is, up to the end of the tag. */
-    private val coverBy = Regex("""(?:$COVER_BY)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val coverBy = phoneRegex("""(?:$COVER_BY)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
 
     /** The same, up to the start of a tag inside it too, "(In the Style of Artist (Live))". */
-    private val coverByOwnName = Regex("""(?:$COVER_BY)\s+([^(\[【)\]】]+)""", RegexOption.IGNORE_CASE)
+    private val coverByOwnName = phoneRegex("""(?:$COVER_BY)\s+([^(\[【)\]】]+)""", RegexOption.IGNORE_CASE)
     private const val COVER_BY = """in the style of|originally (?:performed )?by|made famous by|cover of"""
 
     /**
      * A word saying no one sings, not inside another word, nor the end of one joined by a hyphen, "Show-Off Vocal".
      * A word in Chinese or Japanese may say "version" after it, "伴奏版".
      */
-    private val instrumentalWord = Regex(
+    private val instrumentalWord = phoneRegex(
         """(?<![\p{L}\p{N}])(?<![\p{L}\p{N}]-)(?:instrumentale?|inst\.?|off[ -]?vocal|(?-i:MR)|인스트루멘탈|""" +
             """(?:伴奏|オフボーカル|纯音乐|純音樂|純音楽)(?:版本?|バージョン)?)(?![\p{L}\p{N}])""",
         RegexOption.IGNORE_CASE
     )
-    private val shortForm = Regex("""inst\.?|MR""", RegexOption.IGNORE_CASE)
-    private val instrumentals = Regex("""(?<=instrumental)s\b""", RegexOption.IGNORE_CASE)
+    private val shortForm = phoneRegex("""inst\.?|MR""", RegexOption.IGNORE_CASE)
+    private val instrumentals = phoneRegex("""(?<=instrumental)s\b""", RegexOption.IGNORE_CASE)
 
     /** A voice in the recording, other than in "off vocal": "(Vocal Mix)", "(A Cappella & Instrumental)". */
-    private val voiceIn = Regex("""(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b""", RegexOption.IGNORE_CASE)
+    private val voiceIn = phoneRegex("""(?<!off )(?<!off-)\bvocals?\b|\ba[ -]?capp?ella\b""", RegexOption.IGNORE_CASE)
 
     /**
      * What a tag naming a part of a song, or what it's from, or where it was played, says: "(with Instrumental Break)", "(From the film
@@ -476,26 +477,26 @@ internal object SongNames {
     private val NOT_SAID = setOf("not", "non", "prod", "produced")
 
     /** A singer named after a tag, in brackets or not: "[feat. Singer]", "ft. Singer", "with Singer", "x Singer". */
-    private val singerAfter = Regex("""(?:^|[\s(\[])(?:feat\.?|ft\.?|featuring|with|x|×)\s+\S""", RegexOption.IGNORE_CASE)
+    private val singerAfter = phoneRegex("""(?:^|[\s(\[])(?:feat\.?|ft\.?|featuring|with|x|×)\s+\S""", RegexOption.IGNORE_CASE)
 
     /** An album of tracks to sing over, "(Karaoke Version)", "(Backing Tracks)", "(Minus One)". */
-    private val accompaniment = Regex("""karaoke|カラオケ|\bbacking tracks?\b|\bminus ones?\b""", RegexOption.IGNORE_CASE)
+    private val accompaniment = phoneRegex("""karaoke|カラオケ|\bbacking tracks?\b|\bminus ones?\b""", RegexOption.IGNORE_CASE)
 
     /** What YouTube adds to an artist's name for their channel: "BandVEVO", "Band - Topic". */
-    private val channel = Regex("""VEVO$|$SPACES_START\s*+-\s*+Topic$""")
+    private val channel = phoneRegex("""VEVO$|$SPACES_START\s*+-\s*+Topic$""")
     private val SAYS_VERSION = setOf("ver", "version", "versao")
 
     /** What's in brackets, of any kind Chinese and Japanese titles use, once full-width ones are written as others. */
-    private val bracketTag = Regex("""[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]""")
+    private val bracketTag = phoneRegex("""[(\[【「〔]([^()\[\]【】「」〔〕]*)[)\]】」〕]""")
 
     /** What follows a dash, or a tilde, which a Japanese title may put right after its name: "曲〜伴奏〜". */
-    private val dashTag = Regex("""(?:(?<=\s)[-–]\s?|[~〜])([^-–~〜]*)""")
+    private val dashTag = phoneRegex("""(?:(?<=\s)[-–]\s?|[~〜])([^-–~〜]*)""")
 
     /**
      * "Off vocal" ending the title with nothing around it, after a name in Chinese, Japanese or Korean, "曲 Off Vocal",
      * or with "ver." after it, "Song off vocal ver.": "Kiss Off Vocal" may be the song "Kiss Off" sung.
      */
-    private val offVocalAtEnd = Regex(
+    private val offVocalAtEnd = phoneRegex(
         """(?:(?<=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af])\s*off[ -]?vocal(?:\s+ver(?:sion|\.)?)?|\soff[ -]?vocal\s+ver(?:sion|\.)?)\s*$""",
         RegexOption.IGNORE_CASE
     )
@@ -504,7 +505,7 @@ internal object SongNames {
      * by "Party Tyme Karaoke", or one shown with the words, "(Instrumental + Lyrics)", or to sing over, "(Minus One)",
      * "(Backing Track)". These show the words of the song they play, as before; whether they should is still to be decided (Issue #922).
      */
-    private val singAlong = Regex("""karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b""", RegexOption.IGNORE_CASE)
+    private val singAlong = phoneRegex("""karaoke|カラオケ|\bmade popular by\b|\blyrics?\b|\bsing[- ]?along\b|\bminus one\b|\bbacking track\b""", RegexOption.IGNORE_CASE)
 
     /** The name without what it adds in brackets or after a dash: "Song (2018 Remix) (2024 Remaster)" is "Song". */
     fun bareTitle(title: String): String {
@@ -515,7 +516,7 @@ internal object SongNames {
         var end = beforeLineBreak(text, text.length)
         var lineBreak = text.substring(end)
         while (true) {
-            val (start, afterDash) = marks.tagStart(end) ?: break
+            val (start, afterDash) = marks.tagStart(end, lineBreak) ?: break
             // A tag that runs to the very end takes the spaces before it, and leaves the line break before those, if any.
             val toTheEnd = afterDash || lineBreak.isEmpty()
             if (!toTheEnd) {
@@ -564,12 +565,16 @@ internal object SongNames {
         /** The last dash before [place], or -1. */
         fun dashBefore(place: Int) = lastDash[place]
 
-        fun tagStart(end: Int): Pair<Int, Boolean>? {
+        /** In the text up to [end], then [lineBreak]: what's left once tags that ended before that line break went. */
+        fun tagStart(end: Int, lineBreak: String): Pair<Int, Boolean>? {
             val open = if (end > 0 && text[end - 1] in TAG_CLOSES) lastBracket[end - 1] else -1
             val inBrackets = if (open >= 0 && text[open] in TAG_OPENS) spacesStart(text, open) else Int.MAX_VALUE
             val dash = lastDash[end]
-            // The space after the dash is in the text up to [end], not one a tag in brackets after it had.
-            val afterDash = if (dash < end - 1 && isBetweenSpaces(text, dash)) spacesStart(text, dash) else Int.MAX_VALUE
+            // The space after the dash is in the text up to [end], not one a tag in brackets after it had, or it's the
+            // line break: on a phone `\s` reads U+0085 as a space, which trimming leaves.
+            val after = if (dash < end - 1) text.getOrNull(dash + 1) else lineBreak.firstOrNull()
+            val spaced = dash > 0 && isPatternSpace(text[dash - 1]) && after?.let(::isPatternSpace) == true
+            val afterDash = if (spaced) spacesStart(text, dash) else Int.MAX_VALUE
             return when {
                 afterDash < inBrackets -> afterDash to true
                 inBrackets < Int.MAX_VALUE -> inBrackets to false
@@ -649,9 +654,9 @@ internal object SongNames {
 
     /** Spellings of one sound, in order: "ch" before "c", and an r that ends a sound before l is read as r. */
     private val sounds = listOf(
-        Regex("th") to "s", Regex("ph") to "f", Regex("ck|qu?") to "k",
-        Regex("x") to "ks", Regex("c(?=[eiy])") to "s", Regex("c") to "k", Regex("r(?![aeiouy])") to "",
-        Regex("l") to "r", Regex("v") to "b", Regex("z") to "s", Regex("m(?=[bp])") to "n"
+        phoneRegex("th") to "s", phoneRegex("ph") to "f", phoneRegex("ck|qu?") to "k",
+        phoneRegex("x") to "ks", phoneRegex("c(?=[eiy])") to "s", phoneRegex("c") to "k", phoneRegex("r(?![aeiouy])") to "",
+        phoneRegex("l") to "r", phoneRegex("v") to "b", phoneRegex("z") to "s", phoneRegex("m(?=[bp])") to "n"
     )
 
     /** Fewer consonants than this say too little to tell names apart; under [FUZZY_SOUNDS], all must agree. */

@@ -24,7 +24,9 @@ class BareTitleTest {
     @Test
     fun aTagEndsBeforeALineBreakThatIsNoSpace() {
         // U+0085 ends a line for "$" but isn't a space that trimming takes: a part after a dash takes it, brackets don't.
+        // On a phone "\s" reads it as a space, so it's the space after a dash too.
         for (title in listOf("Song - Live\u0085", "Song (Live)\u0085", "Song - Live (x)\u0085", "Song\u3000 (Live)", "Song -\u0085", "a - b - c\u0085",
+            "a\n-\u0085", "Song (x) -\u0085", "Song - (x)\u0085", "-\u0085", "Song -\u2028",
             // A dash right before a tag in brackets has the tag's space after it, not one of its own.
             "Song - (a-b)\u0085", "Song - [a-b] (x)\u0085", "-a - b",
         )) {
@@ -41,10 +43,10 @@ class BareTitleTest {
 
     /** Main's patterns and the loops around them. */
     private object Main {
-        private val trailingTag = Regex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
+        private val trailingTag = phoneRegex("""(?:\s*[(\[][^()\[\]]*[)\]]|\s+[-–]\s+[^-–]*)$""")
         private const val COVER_WORDS = """\bcover(?:ed)?\b|\bin the style of\b|\boriginally (?:performed )?by\b|\bmade famous by\b|カバー|歌ってみた|翻唱|커버"""
-        private val coverAfterDash = Regex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
-        private val coverBy = Regex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
+        private val coverAfterDash = phoneRegex("""\s[-–]\s[^-–]*(?:$COVER_WORDS).*$""", RegexOption.IGNORE_CASE)
+        private val coverBy = phoneRegex("""(?:in the style of|originally (?:performed )?by|made famous by|cover of)\s+([^)\]】]+)""", RegexOption.IGNORE_CASE)
 
         fun bareTitle(title: String): String {
             var bare = title.trim()

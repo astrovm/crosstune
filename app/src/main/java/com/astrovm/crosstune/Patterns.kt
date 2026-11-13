@@ -7,14 +7,29 @@ package com.astrovm.crosstune
  */
 internal const val SPACES_START = """(?:(?<!\s)|\G)"""
 
-/** A space as a pattern's `\s` reads it: a space, a tab, a line break, a vertical tab or a form feed. Not U+3000. */
-internal fun isPatternSpace(char: Char) = char == ' ' || char in '\t'..'\r'
+/**
+ * A space as a pattern's `\s` reads it on a phone, by [PHONE_SPACE]: a space, a tab, a line break, a vertical tab, a form
+ * feed, U+3000, a no-break space and Unicode's others. All are in the basic plane.
+ */
+internal fun isPatternSpace(char: Char) = char.code in PATTERN_SPACES
+private val PATTERN_SPACES = CodeRuns(PHONE_SPACE)
 
 /** Whether the letter at [at] in [text] is between spaces, as a dash in `\s[-–]\s` is: false for -1, for none. */
 internal fun isBetweenSpaces(text: String, at: Int) = text.getOrNull(at - 1)?.let(::isPatternSpace) == true && text.getOrNull(at + 1)?.let(::isPatternSpace) == true
 
-/** A letter that ends a line, which a pattern's `.` never reads. */
-internal fun isLineBreak(char: Char) = char == '\n' || char == '\r' || char == '\u0085' || char == '\u2028' || char == '\u2029'
+/** A letter that ends a line on a phone, by [PHONE_LINE_BREAK], which a pattern's `.` never reads: a vertical tab and a form feed too. */
+internal fun isLineBreak(char: Char) = char.code in LINE_BREAKS
+private val LINE_BREAKS = CodeRuns(PHONE_LINE_BREAK)
+
+/** A digit as a pattern's `\d` reads it on a phone, by [PHONE_DIGIT]: any of Unicode's, "２" and "٢" too. */
+internal fun isPatternDigit(code: Int) = code in DIGITS
+private val DIGITS = CodeRuns(PHONE_DIGIT)
+
+/**
+ * Whether a pattern that ignores case reads [char], in a word, as [letter], which is folded already: "F" as "f", the
+ * Kelvin sign as "k", but "ﬀ" as "ff" and so not as "f" alone.
+ */
+internal fun readsAs(char: Char, letter: Char) = !CaseFolds.foldsLonger(char.code) && CaseFolds.simple(char.code) == letter.code
 
 /** Where the run of [isPatternSpace] spaces that ends at [at] starts, [from] at the earliest. */
 internal fun spacesStart(text: CharSequence, at: Int, from: Int = 0): Int {
@@ -57,7 +72,7 @@ internal class Kept(private val text: String, val end: Int, private val after: S
 
 /**
  * Where a pattern's `$` first matches in [text], from [from] on: before the one line break that ends it, if one
- * does ("\r\n" being one), or else at its end.
+ * does ("\r\n" being one, and [isLineBreak] the others), or else at its end.
  */
 internal fun lineEnd(text: CharSequence, from: Int = 0): Int = (text.length - finalLineBreak(text)).takeIf { it >= from } ?: text.length
 
@@ -97,10 +112,11 @@ internal fun bracketTags(text: String, opens: String, closes: String): List<IntR
 }
 
 /**
- * Whether a pattern that ignores case reads [char] as one of a to z: those, and the letters whose other case is one,
- * "ſ" as "s" and "ı" as "i", then "İ" and the Kelvin sign, whose upper case is their own, as "i" and "k".
+ * Whether a pattern that ignores case reads [char] as one of a to z on a phone, by [PHONE_LATIN_IGNORING_CASE]: those,
+ * "ſ" as "s" and the Kelvin sign as "k". Not "ı" or "İ", which ICU folds to no "i".
  */
-internal fun isLatinLetterIgnoringCase(char: Char) = char.uppercaseChar() in 'A'..'Z' || char.lowercaseChar() in "ik"
+internal fun isLatinLetterIgnoringCase(char: Char) = char.code in LATIN_IGNORING_CASE
+private val LATIN_IGNORING_CASE = CodeRuns(PHONE_LATIN_IGNORING_CASE)
 
 /** Whether each bracket in [text] closes, in order, with the bracket of its own kind: [closes] pairs with [opens]. */
 internal fun bracketsInOrder(text: String, opens: String, closes: String): Boolean {

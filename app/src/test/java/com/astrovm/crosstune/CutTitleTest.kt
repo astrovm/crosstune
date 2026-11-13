@@ -93,15 +93,15 @@ class CutTitleTest {
 
     /** Main's loop, with main's patterns, which read the whole title again on each pass. */
     private object MainLoop {
-        private val featuring = Regex(
+        private val featuring = phoneRegex(
             """\s*[(\[]\s*(?:feat|ft|featuring)\b[^()\[\]]*[)\]]|(?<!\d)\s+(?:feat\.?|ft\.?|featuring)\s+[^()\[\]]*?(?=\s*[(\[]|$)""",
             RegexOption.IGNORE_CASE
         )
-        private val videoMark = Regex("""\s*[(\[]\s*M/V\s*[)\]]|\s+M/V\b""", RegexOption.IGNORE_CASE)
+        private val videoMark = phoneRegex("""\s*[(\[]\s*M/V\s*[)\]]|\s+M/V\b""", RegexOption.IGNORE_CASE)
         private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
         private const val TIE_IN = """主[題题][曲歌]|挿入歌|插曲|片[頭头尾]曲|\bOST\b|\btheme\s+song\b"""
         private const val IN_TAG = """(?:(?!\s[-–]\s)[^()\[\]])"""
-        private val editionTag = Regex(
+        private val editionTag = phoneRegex(
             """(?:\s+[-–]\s+|\s*[(\[])\s*(?:$EDITION_WORDS|$IN_TAG*\b(?:remaster(?:ed|iz(?:ed|ado|ada))?|mono|stereo)\b$IN_TAG*|$IN_TAG*(?:$TIE_IN)$IN_TAG*)\s*[)\]]?$""",
             RegexOption.IGNORE_CASE
         )

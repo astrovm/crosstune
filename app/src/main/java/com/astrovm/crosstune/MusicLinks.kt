@@ -42,16 +42,16 @@ internal object MusicLinks {
     private val frontendSites = Frontend.SOURCES.flatMap { it.sites }.toSet()
 
     /** Stops at quotes, angle brackets and CJK brackets, which share text often wraps links in. */
-    private val urlRegex = Regex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
-    private val spotifyIdRegex = Regex("""^[A-Za-z0-9]{22}$""")
-    private val youtubeIdRegex = Regex("""^[A-Za-z0-9_-]{11}$""")
+    private val urlRegex = phoneRegex("""https?://[^\s"'<>「」『』（）【】]+""", RegexOption.IGNORE_CASE)
+    private val spotifyIdRegex = phoneRegex("""^[A-Za-z0-9]{22}$""")
+    private val youtubeIdRegex = phoneRegex("""^[A-Za-z0-9_-]{11}$""")
     /** Playlist IDs, e.g. PL… for user playlists or OLAK5uy_… for albums on YouTube Music. */
-    private val youtubeListRegex = Regex("""^[A-Za-z0-9_-]{12,}$""")
-    private val numericIdRegex = Regex("""^\d+$""")
-    private val googleHostRegex = Regex("""(www\.)?google\.[a-z]{2,3}(\.[a-z]{2})?""")
-    private val tidalIdRegex = Regex("""^[A-Za-z0-9-]+$""")
+    private val youtubeListRegex = phoneRegex("""^[A-Za-z0-9_-]{12,}$""")
+    private val numericIdRegex = phoneRegex("""^\d+$""")
+    private val googleHostRegex = phoneRegex("""(www\.)?google\.[a-z]{2,3}(\.[a-z]{2})?""")
+    private val tidalIdRegex = phoneRegex("""^[A-Za-z0-9-]+$""")
     private val spotifyUrlInPageRegex =
-        Regex("""https://open\.spotify\.com/(?:intl-[A-Za-z-]+/)?(track|album|artist|playlist)/([A-Za-z0-9]{22})""")
+        phoneRegex("""https://open\.spotify\.com/(?:intl-[A-Za-z-]+/)?(track|album|artist|playlist)/([A-Za-z0-9]{22})""")
 
     private val shortLinkHosts = setOf(
         "spotify.link", "link.deezer.com", "deezer.page.link", "dzr.page.link", "on.soundcloud.com",
@@ -151,7 +151,7 @@ internal object MusicLinks {
      * A scheme with its "//", or one of the few that go without, e.g. "spotify:" or "mailto:". A colon
      * alone is no scheme: "Re:make" and "Re:Zero" are songs.
      */
-    private val schemeRegex = Regex(
+    private val schemeRegex = phoneRegex(
         """^(?:[a-z][a-z0-9+.-]*://|(?:spotify|mailto|tel|sms|geo|data|intent|market|javascript|about|file):)""",
         RegexOption.IGNORE_CASE
     )
@@ -162,7 +162,7 @@ internal object MusicLinks {
      * or lost. An id mixes letters and digits, while a long one-word title, e.g.
      * "Supercalifragilisticexpialidocious", is letters only.
      */
-    private val bareIdRegex = Regex("""(?<![A-Za-z0-9])(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{20,}""")
+    private val bareIdRegex = phoneRegex("""(?<![A-Za-z0-9])(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{20,}""")
 
     /**
      * Whether [text] was meant as a link rather than as a song's name: it carries a scheme, or a

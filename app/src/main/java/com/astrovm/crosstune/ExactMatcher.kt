@@ -561,8 +561,8 @@ internal class ExactMatcher(
     private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(tagRegex, " "), android.text.Html.FROM_HTML_MODE_LEGACY)
         .toString().replace(spacesRegex, " ").trim()
 
-    private val tagRegex = Regex("<[^<>]++>")
-    private val spacesRegex = Regex("\\s+")
+    private val tagRegex = phoneRegex("<[^<>]++>")
+    private val spacesRegex = phoneRegex("\\s+")
 
     /** Whether [name] is one of [metadata]'s artists, e.g. the account an upload is on. */
     private fun sameArtist(metadata: MusicMetadata, name: String): Boolean {
@@ -951,13 +951,13 @@ internal class ExactMatcher(
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         /** One song in Qobuz's search: its title and "artist • album", and the numbers of the song and its album. */
-        private val qobuzItemRegex = Regex("""<div class="ListItem">(?:[^<]++|<(?!/li>|div class="ListItem">))*+</li>""")
-        private val qobuzTitleRegex = Regex(
+        private val qobuzItemRegex = phoneRegex("""<div class="ListItem">(?:[^<]++|<(?!/li>|div class="ListItem">))*+</li>""")
+        private val qobuzTitleRegex = phoneRegex(
             """class="ListItem__title"(?:[^<>c]|c(?!lass="ListItem__title"))*+>((?:[^<c]++|<(?!/a>)|c(?!lass="ListItem__title"))*+)</a>\s*+""" +
                 """<p class="ListItem__artists">((?:[^<]++|<(?!/p>|p class="ListItem__artists">))*+)</p>"""
         )
-        private val qobuzTrackRegex = Regex("""track&#x2F;(\d+)""")
-        private val qobuzAlbumRegex = Regex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
+        private val qobuzTrackRegex = phoneRegex("""track&#x2F;(\d+)""")
+        private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
 
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
@@ -996,7 +996,7 @@ internal class ExactMatcher(
         private val VIDEO_TAG_MARKS = listOf("歌詞付き", "歌詞付", "歌詞", "公式", "字幕", "高音質", "日本語", "中日羅", "가사").map(SongNames::normalize)
 
         /** A year, as a video's title may give the song's: "1984". */
-        private val YEAR = Regex("""(?:19|20)\d\d""")
+        private val YEAR = phoneRegex("""(?:19|20)\d\d""")
 
 
         /** Apple Music stores that write names as they are in Japanese, Korean and Chinese. */

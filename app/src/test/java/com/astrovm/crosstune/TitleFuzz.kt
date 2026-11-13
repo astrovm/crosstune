@@ -7,8 +7,10 @@ import java.util.Random
  * and stores add, every kind of bracket, emoticons, other scripts and marks, and the spaces, tabs, line breaks and
  * dashes between them. Some are made the way a title ends, a song and the tags after it, each after a dash, a bar or
  * in brackets, as the readers cut them off one at a time. Some have letters that a pattern that ignores case reads
- * as others, "K" (the Kelvin sign) as "k", "ſ" as "s", "ı" and "İ" as "i". Each is read by every function that reads titles, through [TitleProbes], and what each gives
- * is put on one line, so that one checkout's readings can be compared with another's.
+ * as others, "K" (the Kelvin sign) as "k", "ſ" as "s", "ﬃ" as "ffi", and "ı" and "İ", which a phone doesn't read as "i".
+ * Some have the spaces, line ends and digits that a phone's ICU reads as such and the JVM doesn't. Each is read by
+ * every function that reads titles, through [TitleProbes], and what each gives is put on one line, so that one
+ * checkout's readings can be compared with another's.
  *
  * `scripts/titlefuzz/baseline.py` makes main's readings with this file; [TitlesAgainstMainTest] compares them.
  * Change what this file makes, and the baseline is made again.
@@ -28,9 +30,40 @@ internal object TitleFuzz {
     )
 
     fun titles(): Sequence<Title> = sequence {
+        yieldAll(FIXED)
         val random = Random(SEED)
-        repeat(COUNT) { yield(if (random.nextInt(5) < 2) ending(random) else title(random)) }
+        repeat(COUNT - FIXED.size) { yield(if (random.nextInt(5) < 2) ending(random) else title(random)) }
     }
+
+    /**
+     * Titles first, as reviews found them: where a phone's ICU reads a space, a line end, a digit or a letter ignoring
+     * case otherwise than the JVM, and songs in 「」 and 『』 with no name.
+     */
+    val FIXED = listOf(
+        Title("アイドル\u3000feat. X", "Channel", "Artist"), Title("Song（歌：A）\u3000", "Channel", "Artist"),
+        Title("Song\u00A0feat. X", "Channel", "Artist"), Title("Song - Live\u000B", "Channel", "Artist"),
+        Title("Song (Live)\u000C", "Channel", "Artist"), Title("Song (Lyrıcs)", "Channel", "Artist"),
+        Title("Song ft. X (Lİve)", "Channel", "Artist"), Title("Song ٢  ft. X", "Channel", "Artist"),
+        Title("Song\u2007-\u2007Remastered", "Channel", "Artist"), Title("Song (Oﬃcial Video)", "Channel", "Artist"),
+        Title("Song (Remaﬆered)", "Channel", "Artist"), Title("Song -\u0085", "Channel", "Artist"),
+        Title("「|」 Q", "Artist - Topic", "Artist"), Title(" 『\u3000 』", "Channel", "Artist"),
+        Title("Band - Song 『[HD] 』", "Channel", "Artist"),
+    ) + listOf(
+        // TitlesReadAsMainTest's, read by main on a phone.
+        "Artist「 」", "Artist『　』", "Artist「 」 Band「Song」", "「x『 」", "「『」」", "A「」「 」『x』", "A「x", "A\n「 」『x』", "A\nB「 」『x』",
+        "/ \n 「 」 \n in the style of Q", "Song - Acoustic\nCover", "Song - Acoustic Cover\r\n", "Song - Acoustic Cover\nLive",
+        "Song ft. X - Remastered 2011)", "Song feat. X - Remastered)", "Song ft. X - 2011 Remaster]", "Song featuring X - Single Version)",
+        "Song ft. X - Remastered 2011)\n", "Song ft. X - Remastered (Live)", "Song 4\u212A", "Song - Lyric\u017F", "Song Lyr\u0131cs",
+        "Song Lyr\u0130cs", "Song H\u0131", "Artist - Song | Lyrics |HD|\u0085", "Artist - Song -\u0085", "Artist - Song | Lyrics |HD|\u2028",
+        "Artist - Song | Lyrics |HD|\u2029", "Artist - Song | Lyrics |HD|\r\n", "Artist - Song 4K\u2028", "Artist - Song | Lyrics |HD|\u0085x",
+        "Song 2  ft. X", "Song 2\t ft. X", "Song 2\n ft. X", "6 ft. Under", "Artist - Song （］「『[］)Live - 」/", "Artist - Song (Live [2019])",
+        "Artist - Song [Official Video :(] (feat. X) :)", "夜に駆ける\u3000（歌：YOASOBI）", "夜に駆ける （歌：YOASOBI）\u0085", "Song (A) （歌：B (C）",
+        "Song - song and lyrics by Artist | Spotify", "Song - song and lyrics by Artist | Spotify\u0085", "Song - song and lyrics by Artist『x』 | Spotify",
+        "Song - song and lyrics by Artist『x』 | Spotify\nmore",
+    ).map { Title(it, "Channel", "") } + listOf(
+        Title("song and lyrics by Artist | Spotify", "", "Song"), Title("song and lyrics by \nArtist | Spotify", "", "Song"),
+        Title("Song - song and lyrics by Artist | Spotify", "", ""), Title("Song - song and lyrics by Artist | Spotify\u0085", "", ""),
+    )
 
     /** What each of [FIELDS] gives for [title]: null when it gives nothing. */
     fun readings(title: Title): List<String?> = listOf(
@@ -133,7 +166,7 @@ internal object TitleFuzz {
         }
         return kept.takeIf { it != text }
     }
-    private val mainSong = Regex("""^.*?\s*([「『][^」』]+[」』])""")
+    private val mainSong = phoneRegex("""^.*?\s*([「『][^」』]+[」』])""")
 
     /** Where a baseline's line goes on with the readings of one of the title's [cuts]. No title has it. */
     const val CUT = '\u001E'
@@ -157,7 +190,8 @@ internal object TitleFuzz {
         return (close + 1 until text.length).filter { text[it] in LINE_BREAKS && text[it - 1] !in LINE_BREAKS }.map { title.copy(text = text.substring(0, it)) }
     }
 
-    private const val LINE_BREAKS = "\n\r\u0085\u2028\u2029"
+    /** What ends a line on a phone, where ICU's `.` stops at a vertical tab and a form feed too. */
+    private const val LINE_BREAKS = "\n\r\u000B\u000C\u0085\u2028\u2029"
 
     /** [readings] as a line: each as itself, or as where it is in the title, which most are. */
     fun line(title: Title, readings: List<String?>): String = readings.joinToString("\t") { reading ->
@@ -242,10 +276,15 @@ internal object TitleFuzz {
         return Title(folded(random, text), pick(random, CHANNELS), pick(random, ARTISTS))
     }
 
-    /** [text], where it's one of a few titles, with some of the letters a pattern that ignores case reads as others. */
+    /**
+     * [text], where it's one of a few titles, with some of the letters a pattern that ignores case reads as others,
+     * and some letters as the one letter ICU reads them as: "ﬃ" for "ffi", "ß" for "ss".
+     */
     private fun folded(random: Random, text: CharSequence): String {
         if (random.nextInt(FOLDED) != 0) return text.toString()
-        return text.map { char -> FOLDS[char]?.takeIf { random.nextBoolean() }?.let { pick(random, it) } ?: char.toString() }.joinToString("")
+        var folded = text.map { char -> FOLDS[char]?.takeIf { random.nextBoolean() }?.let { pick(random, it) } ?: char.toString() }.joinToString("")
+        for ((letters, ligature) in LIGATURES) if (random.nextBoolean()) folded = folded.replace(letters, ligature)
+        return folded
     }
 
     private fun pick(random: Random, from: List<String>) = from[random.nextInt(from.size)]
@@ -258,9 +297,13 @@ internal object TitleFuzz {
         'k' to listOf("\u212A"), 'K' to listOf("\u212A"), 's' to listOf("\u017F"), 'S' to listOf("\u017F"),
         'i' to listOf("\u0131", "\u0130"), 'I' to listOf("\u0131", "\u0130"),
     )
+    /** Letters ICU reads ignoring case as the one letter each folds to. */
+    private val LIGATURES = listOf("ffi" to "ﬃ", "ff" to "ﬀ", "fi" to "ﬁ", "st" to "ﬆ", "ss" to "ß", "SS" to "ẞ")
     private val TAG_PAIRS = listOf("()", "[]", "（）", "【】").map { it[0] to it[1] }
     private val LEADS = listOf(
         " ", " ", " - ", " - ", " – ", "-", "  ", "2  ", "2 ", "\t", "\n", "\r\n", "\u0085", "\u2028", " | ", "|", " (", "[", " \u3000", " // ",
+        // Spaces, line ends and digits that ICU reads as such and the JVM doesn't.
+        "\u00A0", "\u3000", "\u2007", "\u202F", "\u000B", "\u000C", "٢  ", "２ ", " \u00A0- ",
     )
     private val ENDS = listOf(
         "ft. X", "feat. X", "featuring X", "Feat X", "FT. X", "ft X", "feat.", "Remastered 2011", "2011 Remaster", "Remaster", "Mono",
@@ -268,7 +311,10 @@ internal object TitleFuzz {
         "HQ", "Official Video", "Official Audio", "Official Music Video", "MV", "M/V", "Audio", "Lyric Video", "Visualizer", "sub español",
         "Sub Esp", ")", "]", "|", "|HD|", "】", "）", "Cover", "Acoustic Cover", "cover of Q", "Topic", "Video", "Song", "x",
     )
-    private val ENDINGS = listOf("", "", "", ")", "]", "|", " |", "\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029", " ", "\t", " \u0085")
+    private val ENDINGS = listOf(
+        "", "", "", ")", "]", "|", " |", "\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029", " ", "\t", " \u0085",
+        "\u000B", "\u000C", "\u3000", "\u00A0", " \u000B", "\u000C\n",
+    )
     private val PAIRS = listOf("()", "[]", "{}", "（）", "【】", "「」", "『』", "〈〉", "［］").map { it[0] to it[1] }
     private val WORDS = listOf("Song", "Artist", "Love", "2", "1987", "Song 2", "x", "Q", "YOASOBI", "アイドル", "夜に駆ける", "Band", "Remix")
     private val TAGS = listOf(
@@ -285,7 +331,11 @@ internal object TitleFuzz {
         "(", ")", "[", "]", "{", "}", "（", "）", "【", "】", "「", "」", "『", "』", "〈", "〉", "［", "］",
         ":(", ":)", ";)", ":-(", "(:", "):", "XD", "<3", "!", "?", "\"", "'", "...", "#1", "@",
     )
-    private val SCRIPTS = listOf("أغنية", "حب", "שיר", "אהבה", "\u200F", "\u200E", "🎵", "😀", "👍🏽", "Ünïcödé", "Ђорђе", "노래", "\u3000", "\u00A0")
+    private val SCRIPTS = listOf(
+        "أغنية", "حب", "שיר", "אהבה", "\u200F", "\u200E", "🎵", "😀", "👍🏽", "Ünïcödé", "Ђорђе", "노래", "\u3000", "\u00A0",
+        // Marks and joiners a phone's "\b" looks past, digits that ICU's "\d" reads, and spaces that its "\s" does.
+        "Cafe\u0301", "\u0301", "a\u200Db", "\u200D", "١٩٨٧", "２０１１", "\u1680", "\u205F", "\u2007", "\u202F",
+    )
     private val SEPARATORS = listOf(" - ", " – ", " ‑ ", "-", " | ", "|", " / ", "/", "//", " // ", ": ", ".", ",", " & ", " x ", " y ", " + ")
     private val SPOTIFY = listOf(
         " | Spotify", "Song, Lyrics, and Music Video by Artist", "song and lyrics by Artist", "Artistの曲、歌詞、ミュージックビデオ",
@@ -294,6 +344,7 @@ internal object TitleFuzz {
     private val POOLS = listOf(WORDS, WORDS, TAGS, TAGS, MARKS, SCRIPTS, SEPARATORS, SPOTIFY)
     private val BETWEEN = listOf(
         " ", " ", " ", " ", "", "", "  ", "\t", "\n", "\r\n", " - ", "   ", "\n\n", " \u3000", "\r", "\u0085", "\u2028", "\u2029",
+        "\u00A0", "\u2007", "\u202F", "\u205F", "\u1680", "\u000B", "\u000C", " \u000B ",
     )
     private val CHANNELS = listOf("Channel", "Artist - Topic", "ArtistVEVO", "", "Artist", "Q")
     private val ARTISTS = listOf("", "Artist", "Unknown", "Various Artists", "example.com", "Q")

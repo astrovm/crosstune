@@ -4,7 +4,7 @@ import java.io.File
 import java.util.regex.Pattern
 
 /**
- * The app's patterns, read from its code as the app builds them: each `Regex(` of literals, raw or quoted and
+ * The app's patterns, read from its code as the app builds them: each `phoneRegex(` or `Regex(` of literals, raw or quoted and
  * joined with `+`, with the constants and templates in them filled in, and its options. The tests that look at
  * every pattern read them here, so what one of them reads, the others read too.
  */
@@ -77,10 +77,10 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         private const val QUOTED = "\"(?:[^\"\\\\\\n]|\\\\.)*+\""
         private const val HOLDER_REACH = 200
         private val literals = Regex("$RAW|$QUOTED")
-        /** `Regex(` and the literals it's built from, joined with `+`, then its options. */
-        private val call = Regex("""\bRegex\(\s*((?:$RAW|$QUOTED)(?:\s*\+\s*(?:$RAW|$QUOTED))*+)\s*(,\s*(?:RegexOption\.\w+|setOf\([^()]*\)))?\s*\)""")
-        /** Any `Regex(`, read or not, and a `.toRegex(`. */
-        private val built = Regex("""\bRegex\(|\.toRegex\(""")
+        /** `phoneRegex(` or `Regex(` and the literals it's built from, joined with `+`, then its options. */
+        private val call = Regex("""\b(?:phoneRegex|Regex)\(\s*((?:$RAW|$QUOTED)(?:\s*\+\s*(?:$RAW|$QUOTED))*+)\s*(,\s*(?:RegexOption\.\w+(?:\s*,\s*RegexOption\.\w+)*+|setOf\([^()]*\)))?\s*\)""")
+        /** Any `phoneRegex(` or `Regex(`, read or not, and a `.toRegex(`. */
+        private val built = Regex("""\b(?:phoneRegex|Regex)\(|\.toRegex\(""")
         private val constant = Regex("""\bconst val (\w+)\s*=\s*($RAW|$QUOTED)""")
         private val template = Regex("""\$\{'\$'\}|\$\{(\w+)\}|\$(\w+)""")
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")

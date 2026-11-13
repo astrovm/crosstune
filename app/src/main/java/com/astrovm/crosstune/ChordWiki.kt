@@ -347,17 +347,24 @@ private fun withoutCredit(title: String): String {
     // Only spaces may follow, and a line break the end of the line leaves.
     val end = spacesEnd(title, close + 1).takeIf { it == title.length || it == title.length - 1 && isLineBreak(title[it]) } ?: return title
     val credit = if (bracketsInOrder(title, CREDIT_OPENS, CREDIT_CLOSES)) {
-        bracketTags(title, CREDIT_OPENS, CREDIT_CLOSES).last().first.takeIf { CREDIT.matchesAt(title, it) }
+        bracketTags(title, CREDIT_OPENS, CREDIT_CLOSES).last().first.takeIf { creditAt(title, it) }
     } else {
         val after = title.lastIndexOfAny(CREDIT_CLOSES.toCharArray(), close - 1)
-        (after + 1 until close).firstOrNull { title[it] in CREDIT_OPENS && CREDIT.matchesAt(title, it) }
+        (after + 1 until close).firstOrNull { creditAt(title, it) }
     } ?: return title
     return title.substring(0, spacesStart(title, credit)) + title.substring(end)
 }
 
 private const val CREDIT_OPENS = "（("
 private const val CREDIT_CLOSES = "）)"
-private val CREDIT = Regex("""[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)""")
+
+/**
+ * Whether a credit starts at [at], as `[（(]\s*+(?:歌|唄|作詞|作曲|編曲|原曲)` read it: a bracket, spaces, and who did
+ * what. Read in code: on a phone a pattern copies the whole title before each look, so a look at each bracket of a
+ * long title took time squared.
+ */
+private fun creditAt(title: String, at: Int) = title[at] in CREDIT_OPENS && CREDIT_WORDS.any { title.startsWith(it, spacesEnd(title, at + 1)) }
+private val CREDIT_WORDS = listOf("歌", "唄", "作詞", "作曲", "編曲", "原曲")
 
 private fun chordWikiHitLine(line: String): ChordWikiHit? {
     val (text, href) = line.split('\t', limit = 2).takeIf { it.size == 2 } ?: return null
@@ -373,8 +380,8 @@ private fun chordWikiHit(text: String, href: String): ChordWikiHit? {
     return ChordWikiHit(title, text.substringAfter(" - ", "").trim(), link)
 }
 
-private val ANCHOR = Regex("""<a\b[^<>]*\bhref="([^"<>]*+)"[^<>]*+>((?:[^<]++|<(?!/a>|a\b))*+)</a>""", RegexOption.IGNORE_CASE)
-private val ANCHOR_TAGS = Regex("<[^<>]++>")
+private val ANCHOR = phoneRegex("""<a\b[^<>]*\bhref="([^"<>]*+)"[^<>]*+>((?:[^<]++|<(?!/a>|a\b))*+)</a>""", RegexOption.IGNORE_CASE)
+private val ANCHOR_TAGS = phoneRegex("<[^<>]++>")
 
 /** What ChordWiki's search says when no song matches. */
 private const val NO_MATCH = "一致するものは見つかりませんでした"

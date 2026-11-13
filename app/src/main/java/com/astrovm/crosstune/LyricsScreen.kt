@@ -2357,7 +2357,7 @@ private const val READING_GAP = 0.05f
  * Japanese and Chinese wrap anywhere, a single character (Korean, spaced, wraps by word), keeping the marks that can't start a
  * line, like 。 or ー or small kana, with the one before.
  */
-private val WORDS = Regex("""[\p{IsLatin}\p{IsHangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
+private val WORDS = phoneRegex("""[\p{sc=Latin}\p{sc=Hangul}\p{N}'’.,!?:;&()\-]+\s*|\S[ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ・、。，．！？」』）〕】]*\s*|\s+""")
 
 /**
  * One line, open to study: what helps read it, its words to tap for their meaning and, signed in, examples, and what can be

@@ -89,7 +89,13 @@ class LongTitlesTest {
 
     private companion object {
         const val LENGTH = 20_000
-        const val LIMIT_MS = 300L
+        /**
+         * Here the patterns are written out in what a phone's ICU reads, which the JVM reads two to three times slower
+         * than they were: 374 ms for the slowest title, " HD" again and again. On an emulator, as on a phone, the same
+         * title takes 148 ms at half the length, where main took 3,597 ms. `scripts/titlefuzz/baseline.py --long` times
+         * them there, where a look with a pattern costs the title's length.
+         */
+        const val LIMIT_MS = 600L
 
         /** What a title is made of where the readers look for a tag, each repeated to [LENGTH]. */
         val PIECES = listOf(

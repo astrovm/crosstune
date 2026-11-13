@@ -25,7 +25,8 @@ class TitlesReadAsMainTest {
         assertEquals("Artist Band" to "Song", MetadataParsers.bracketedSong("Artist「 」 Band「Song」"))
         // A blank one main didn't read the song in stays: it read the song before it, or none past its first line.
         assertEquals("" to "x『 ", MetadataParsers.bracketedSong("「x『 」"))
-        assertEquals("" to "『", MetadataParsers.bracketedSong("「『」」"))
+        // One with no letter or digit is no song.
+        assertNull(MetadataParsers.bracketedSong("「『」」"))
         assertEquals("A「」" to "x", MetadataParsers.bracketedSong("A「」「 」『x』"))
         assertNull(MetadataParsers.bracketedSong("A「x"))
         // Past the first line, one after only spaces is read, as main's pattern reached it; one after a word isn't.
@@ -46,21 +47,23 @@ class TitlesReadAsMainTest {
 
     @Test
     fun aLetterThatIsOneOfAToZIgnoringCaseIsALetter() {
-        // The Kelvin sign is "k", "ſ" is "s", "ı" and "İ" are "i", to a pattern that ignores case, as main's did.
-        for (title in listOf("Song 4\u212A", "Song - Lyric\u017F", "Song Lyr\u0131cs", "Song Lyr\u0130cs")) {
+        // The Kelvin sign is "k" and "ſ" is "s" to a pattern that ignores case, as main's were on a phone.
+        for (title in listOf("Song 4\u212A", "Song - Lyric\u017F")) {
             assertEquals(title, MusicMetadata("Song", "Channel"), MetadataParsers.youtubeVideo(title, "Channel"))
         }
-        assertEquals(MusicMetadata("Song H\u0131", "Channel"), MetadataParsers.youtubeVideo("Song H\u0131", "Channel"))
+        // ICU folds "ı" and "İ" to no "i", so these are no tags.
+        for (title in listOf("Song Lyr\u0131cs", "Song Lyr\u0130cs", "Song H\u0131")) {
+            assertEquals(title, MusicMetadata(title, "Channel"), MetadataParsers.youtubeVideo(title, "Channel"))
+        }
     }
 
     @Test
     fun aTitleEndsBeforeTheLineBreakAPatternEndsBefore() {
-        // "\u0085" ends a line to a pattern's end, and isn't a space to trim; the others are both.
-        assertEquals(MusicMetadata("Song\u0085", "Artist"), MetadataParsers.youtubeVideo("Artist - Song | Lyrics |HD|\u0085", "Channel"))
-        assertEquals(MusicMetadata("Song\u0085", "Artist"), MetadataParsers.youtubeVideo("Artist - Song -\u0085", "Channel"))
-        for (end in listOf("\u2028", "\u2029", "\r\n")) {
+        // Each ends a line to a pattern's end. "\u0085" isn't a space to trim, but on a phone it's one to "\s".
+        for (end in listOf("\u0085", "\u2028", "\u2029", "\r\n")) {
             assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song | Lyrics |HD|$end", "Channel"))
         }
+        assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song -\u0085", "Channel"))
         assertEquals(MusicMetadata("Song", "Artist"), MetadataParsers.youtubeVideo("Artist - Song 4K\u2028", "Channel"))
         // Not one with more after it.
         assertEquals(MusicMetadata("Song | Lyrics |HD|\u0085x", "Artist"), MetadataParsers.youtubeVideo("Artist - Song | Lyrics |HD|\u0085x", "Channel"))
@@ -91,10 +94,9 @@ class TitlesReadAsMainTest {
 
     @Test
     fun aCreditIsCutWithTheSpacesAPatternReads() {
-        // A full-width space isn't one, as main had it.
-        assertEquals(listOf("夜に駆ける　（歌：YOASOBI）", "夜に駆ける　"), chordWikiTitles("夜に駆ける　（歌：YOASOBI）"))
-        // A line break that ends the title stays, after the credit.
-        assertEquals(listOf("夜に駆ける （歌：YOASOBI）\u0085", "夜に駆ける\u0085"), chordWikiTitles("夜に駆ける （歌：YOASOBI）\u0085"))
+        // A full-width space is one on a phone, as is "\u0085" at the end.
+        assertEquals(listOf("夜に駆ける　（歌：YOASOBI）", "夜に駆ける"), chordWikiTitles("夜に駆ける　（歌：YOASOBI）"))
+        assertEquals(listOf("夜に駆ける （歌：YOASOBI）\u0085", "夜に駆ける"), chordWikiTitles("夜に駆ける （歌：YOASOBI）\u0085"))
         // A credit in a bracket that closes on another kind runs from the first bracket after the close before it.
         assertEquals(listOf("Song (A) （歌：B (C）", "Song (A)"), chordWikiTitles("Song (A) （歌：B (C）"))
     }
@@ -127,6 +129,36 @@ class TitlesReadAsMainTest {
             assertEquals(title, MusicMetadata("x", "Song - song and lyrics by Artist"), MetadataParsers.playerSong(title, ""))
             assertEquals(title, MusicMetadata("x", "Song - song and lyrics by Artist"), MetadataParsers.youtubeVideo(title, "Channel"))
         }
+    }
+
+    @Test
+    fun aTitleReadsAsMainReadItOnAPhone() {
+        // The eighth review's titles, where a phone's ICU reads otherwise than the JVM. Each is what main gave on one.
+        assertEquals("アイドル", SongNames.withoutFeaturing("アイドル\u3000feat. X"))
+        assertEquals("Song", SongNames.withoutFeaturing("Song\u00A0feat. X"))
+        assertEquals("Song (Lİve)", SongNames.withoutFeaturing("Song ft. X (Lİve)"))
+        assertEquals("Song ٢ ", SongNames.withoutFeaturing("Song ٢  ft. X"))
+        assertEquals(listOf("Song（歌：A）\u3000", "Song"), chordWikiTitles("Song（歌：A）\u3000"))
+        assertEquals(MusicMetadata("Live", "Song"), MetadataParsers.youtubeVideo("Song - Live\u000B", "Channel"))
+        assertEquals(MusicMetadata("Song (Live)", "Channel"), MetadataParsers.youtubeVideo("Song (Live)\u000C", "Channel"))
+        assertEquals(MusicMetadata("Song (Lyrıcs)", "Channel"), MetadataParsers.youtubeVideo("Song (Lyrıcs)", "Channel"))
+        assertEquals("Song ft. X", SongNames.bareTitle("Song ft. X (Lİve)"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song\u2007-\u2007Remastered"))
+        assertEquals("Song", SongNames.withoutEditionTag("Song (Remaﬆered)"))
+        assertEquals(MusicMetadata("Song", "Channel"), MetadataParsers.musicVideo("Song (Oﬃcial Video)", "Channel"))
+        assertEquals(MusicMetadata("Song", "Channel"), MetadataParsers.youtubeVideo("Song -\u0085", "Channel"))
+    }
+
+    @Test
+    fun aSongInBracketsHasALetterOrADigit() {
+        // Main read "|" and blanks as the song; none is one.
+        assertEquals(MusicMetadata("「|」 Q", "Artist"), MetadataParsers.youtubeVideo("「|」 Q", "Artist - Topic"))
+        assertEquals(MusicMetadata("「|」 Q", "Artist"), MetadataParsers.musicVideo("「|」 Q", "Artist - Topic"))
+        assertNull(MetadataParsers.musicVideo(" 『\u3000 』", "Channel"))
+        assertNull(MetadataParsers.youtubeVideo(" 『\u3000 』", "Channel"))
+        // A blank pair left after the noise is cut goes too.
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song 『[HD] 』", "Channel"))
+        assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Band - Song 『[HD] 』", "Channel"))
     }
 
     private companion object {

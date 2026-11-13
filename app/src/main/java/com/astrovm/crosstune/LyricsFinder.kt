@@ -40,31 +40,31 @@ internal const val SAME_RECORDING_LENGTH_MS = 3_000L
  * A credit line: who wrote, composed, arranged, produced or published it, in Chinese, Japanese or English: "SP：…".
  * A Chinese label of two characters or more needs no colon: "编曲 Someone".
  */
-private val netEaseCredit = Regex(
+private val netEaseCredit = phoneRegex(
     """^\s*(?:(?:作词|作詞|作曲|编曲|編曲|制作人|製作人)\s+\S|(?:作词|作詞|作曲|编曲|編曲|制作人|製作人|词|詞|曲|Lyricist|Lyrics|Composer|Arranger|Producer|OP|SP)\s*[:：])""",
     RegexOption.IGNORE_CASE
 )
 
 /** What parts a title's words. */
-private val whitespace = Regex("""\s+""")
+private val whitespace = phoneRegex("""\s+""")
 
 /** What a contributor ends a song with, not sung: "END", "THE END", "music...". */
-private val closingFiller = Regex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)""", RegexOption.IGNORE_CASE)
+private val closingFiller = phoneRegex("""(?:the\s+)?end\.?|music\s*(?:\.{2,}|…)""", RegexOption.IGNORE_CASE)
 
 /** A note under a heading, not sung: wholly in brackets, "（Some Writer / Another）", or who it's by, "BY SOMEONE". */
-private val headingNote = Regex("""^(?:[（(\[].*[）)\]]|by\s+\S.*)""", RegexOption.IGNORE_CASE)
+private val headingNote = phoneRegex("""^(?:[（(\[].*[）)\]]|by\s+\S.*)""", RegexOption.IGNORE_CASE)
 
 /** A bracketed stretch, in any of the brackets lyrics are written with: "（repeat and fade）", "(x2)", "[fade out]", "【2x】". */
-private val bracketed = Regex("""[（(\[【][^（()）\[\]【】]*[）)\]】]""")
+private val bracketed = phoneRegex("""[（(\[【][^（()）\[\]【】]*[）)\]】]""")
 
 /** What a note on how a song is played says besides its direction: "repeat and fade", "fade out", "repeat chorus 2 times". */
 private val noteFiller = setOf("and", "to", "in", "out", "the", "then", "till", "until", "chorus", "verse", "bridge", "intro", "outro", "last", "final", "times")
 
 /** What makes a note a direction to the band: repeating, fading or a count, "x2", "2x", "×4". */
-private val noteDirection = Regex("""repeat(?:s|ed|ing)?|fad(?:e|es|ed|ing)|x\d+|\d+x""")
+private val noteDirection = phoneRegex("""repeat(?:s|ed|ing)?|fad(?:e|es|ed|ing)|x\d+|\d+x""")
 
 /** A count alone, "x2" or "2x", which no one sings. */
-private val noteCount = Regex("""x\d+|\d+x""")
+private val noteCount = phoneRegex("""x\d+|\d+x""")
 
 /**
  * Whether what's in a bracket is a note on how the song is played, not sung: only words of such a
@@ -73,7 +73,7 @@ private val noteCount = Regex("""x\d+|\d+x""")
  */
 private fun isPerformanceNote(inside: String): Boolean {
     val words = Normalizer.normalize(inside, Normalizer.Form.NFKC).lowercase().replace('×', 'x')
-        .split(Regex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
+        .split(phoneRegex("""[^\p{L}\p{N}]+""")).filter { it.isNotEmpty() }.toSet()
     val counted = "times" in words && words.any { word -> word.all(Char::isDigit) }
     val onlyNote = words.all { it in noteFiller || noteDirection.matches(it) || it.all(Char::isDigit) }
     return onlyNote && (counted || words.any(noteDirection::matches)) && (words.size >= 2 || noteCount.matches(words.first()))
@@ -143,25 +143,25 @@ private fun endBeforeNote(line: LyricLine, cutWords: List<TimedWord>): Long? {
 }
 
 /** A year, as after the artist under a heading: "The Band（1972）". */
-private val year = Regex("""(?:19|20)\d\d""")
+private val year = phoneRegex("""(?:19|20)\d\d""")
 
 /** A credit NetEase opens some songs with, a short label and who: "Producers: …", "Writers：…", "母帯工程師：…". */
-private val netEaseOpeningCredit = Regex("""^([^:：]{1,40}?)\s*[:：]\s*\S""")
+private val netEaseOpeningCredit = phoneRegex("""^([^:：]{1,40}?)\s*[:：]\s*\S""")
 
 /** A credit NetEase closes some songs with, a part and who played it: "Bass Guitar : John Deacon", "贝斯：Someone". */
-private val netEaseClosingCredit = Regex("""^([^:：]{1,60})\s*[:：]\s*\S""")
+private val netEaseClosingCredit = phoneRegex("""^([^:：]{1,60})\s*[:：]\s*\S""")
 
 /** Where it was made, or who published it, which can come among those credits: "Recorded at Rockfield Studio, …". */
-private val netEaseStudio = Regex("""^(?:(?:Recorded|Mixed|Mastered)\b[^:：]*\bat|Published by)\b""", RegexOption.IGNORE_CASE)
+private val netEaseStudio = phoneRegex("""^(?:(?:Recorded|Mixed|Mastered)\b[^:：]*\bat|Published by)\b""", RegexOption.IGNORE_CASE)
 
 /** Who sings a line, in a duet's words, rather than who played on it: "Male : …", "Chorus : …". */
-private val sungPart = Regex("""^(?:male|female|both|all|verse|chorus|hook|bridge|rap|intro|outro|pre-?chorus|男|女|合)(?:\s*\d+)?$""", RegexOption.IGNORE_CASE)
+private val sungPart = phoneRegex("""^(?:male|female|both|all|verse|chorus|hook|bridge|rap|intro|outro|pre-?chorus|男|女|合)(?:\s*\d+)?$""", RegexOption.IGNORE_CASE)
 
 /** A line NetEase's contributors fill an intro or an outro with, not sung: the song's name, "♪Artist - Song", or a dash. */
-private val netEaseFiller = Regex("""^(?:♪.*\s[-–]\s.*|[-–—]+)""")
+private val netEaseFiller = phoneRegex("""^(?:♪.*\s[-–]\s.*|[-–—]+)""")
 
 /** A part's name, which some of NetEase's contributors head each part with: "[Verse 1]", "[Chorus: Drake]". */
-private val netEasePart = Regex("""\[(?:intro|verse|pre-?chorus|chorus|post-?chorus|hook|bridge|interlude|refrain|outro)\b[^\]]*\]""", RegexOption.IGNORE_CASE)
+private val netEasePart = phoneRegex("""\[(?:intro|verse|pre-?chorus|chorus|post-?chorus|hook|bridge|interlude|refrain|outro)\b[^\]]*\]""", RegexOption.IGNORE_CASE)
 
 /**
  * The lines without what NetEase's contributors fill a song's quiet parts with: a note in 【】, which
@@ -278,13 +278,13 @@ private fun isHeading(line: String, song: MusicMetadata): Boolean {
 private val headingWords = listOf("lyrics", "explicit", "featuring", "feat", "ft", "and", "the")
 
 /** A line that's only a guest's credit: "（feat. Dwele）", "ft. Someone". */
-private val guestCredit = Regex("""(?i)^\s*+[(（\[]?\s*+(?:feat\.?|ft\.?|featuring)\s[^)）\]]++[)）\]]?\s*+""")
+private val guestCredit = phoneRegex("""(?i)^\s*+[(（\[]?\s*+(?:feat\.?|ft\.?|featuring)\s[^)）\]]++[)）\]]?\s*+""")
 
 /** A web address, as a lyrics site's ad for itself: "{more ILLIT lyrics at lyricsify.com/u/KPopLRCFiles}". */
-private val webAddress = Regex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/""")
+private val webAddress = phoneRegex("""(?i)https?://|www\.|\b[a-z0-9-]+\.[a-z]{2,6}/""")
 
 /** A line of the header some LRCLIB answers open with: "Artist: …", "Album: …", "Title: …". */
-private val namesHeader = Regex("""(?:artist|album|title)\s*:.*""", RegexOption.IGNORE_CASE)
+private val namesHeader = phoneRegex("""(?:artist|album|title)\s*:.*""", RegexOption.IGNORE_CASE)
 
 /** Brackets a lyrics line uses, in matching pairs: (), [], （）, 【】. */
 private const val INSTRUMENTAL_OPEN = "([（【"
@@ -316,7 +316,7 @@ private fun withoutNamesHeader(words: String): String {
 }
 
 /** An apostrophe ending a word, before a space or the line's end, not one escaped: "friend' and". */
-private val apostropheForComma = Regex("""(?<=\p{L})'(?=\s|$)""")
+private val apostropheForComma = phoneRegex("""(?<=\p{L})'(?=\s|$)""")
 
 /**
  * The lines without those NetEase opens a song with that pass in a moment, quicker than anything is
@@ -330,10 +330,10 @@ private fun List<LyricLine>.withoutOpeningMoments(): List<LyricLine> =
 private const val MOMENT_MS_A_WORD = 150L
 
 /** A character NetEase lost, as it writes it: "Don't锟斤拷锟斤拷look". */
-private val lostCharacters = Regex("""$SPACES_START\s*+(?:锟斤拷)++\s*+""")
+private val lostCharacters = phoneRegex("""$SPACES_START\s*+(?:锟斤拷)++\s*+""")
 
 /** UTF-8 read once as Windows-1252 or Latin-1: "Ã¢" for "â", "â€™" for "’". */
-private val misread = Regex("""[ÃÂâ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]""")
+private val misread = phoneRegex("""[ÃÂâ][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]""")
 
 /**
  * [line] as it was meant to read, where a site broke it in a way that can be undone: an apostrophe
@@ -380,7 +380,7 @@ internal fun inSentenceCase(line: String): String {
 private fun capitalWord(word: String) = word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
 
 private fun capitalLetters(line: String): Set<Int> =
-    Regex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } && pair.any { it.value.count(Char::isLetter) > 1 } }
+    phoneRegex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } && pair.any { it.value.count(Char::isLetter) > 1 } }
         .flatten().flatMap { it.range }.toSet()
 
 private fun capitalLine(line: String) = capitalLetters(line).isNotEmpty()
@@ -1492,7 +1492,7 @@ internal class LyricsFinder(
         // The first box opens with the song's name and "Lyrics", and maybe how the page calls it.
         val opening = lines.firstOrNull()?.takeIf { it.startsWith(title) && " Lyrics" in it }
         val words = lines.drop(if (opening != null) 1 else 0).filterNot { geniusTag.matches(it) }
-            .joinToString("\n").replace(Regex("""\n{3,}"""), "\n\n").trim()
+            .joinToString("\n").replace(phoneRegex("""\n{3,}"""), "\n\n").trim()
         return words.ifEmpty { null }
     }
 
@@ -1772,11 +1772,11 @@ internal class LyricsFinder(
          * A movement index at the start of a title or after a colon: "1. Allegro", "Op. 3: IV. Allegro".
          * The period keeps a pronoun, "I Want You", and a work number, "Op. 3", from being read as one.
          */
-        private val MOVEMENT_INDEX = Regex("""(^|:\s*)(\d{1,2}|[IVXLCDM]{1,7})\.(?=\s)""", RegexOption.IGNORE_CASE)
+        private val MOVEMENT_INDEX = phoneRegex("""(^|:\s*)(\d{1,2}|[IVXLCDM]{1,7})\.(?=\s)""", RegexOption.IGNORE_CASE)
         private const val GENIUS_FUZZY_LENGTH = 7
         private const val GENIUS_MAX_TITLE = 256
-        private val GENIUS_LATIN_NAME = Regex("[a-z0-9]+")
-        private val GENIUS_ALTERNATE_TITLE = Regex("""^([^()]++)\(([^()]++)\)""")
+        private val GENIUS_LATIN_NAME = phoneRegex("[a-z0-9]+")
+        private val GENIUS_ALTERNATE_TITLE = phoneRegex("""^([^()]++)\(([^()]++)\)""")
         const val GENIUS_URL = "https://genius.com/"
         const val GENIUS_SEARCH_URL = "https://genius.com/api/search/multi"
 
@@ -1801,24 +1801,24 @@ internal class LyricsFinder(
         const val LETRAS = "letras"
         const val GENIUS = "genius"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-        val letrasWords = Regex("""<div class="lyric-content[^"<>]*+">((?:[^<]++|<(?!/div>|div class="lyric-content))*+)</div>""")
+        val letrasWords = phoneRegex("""<div class="lyric-content[^"<>]*+">((?:[^<]++|<(?!/div>|div class="lyric-content))*+)</div>""")
 
         /** On a page with Letras's own translation beside the song, the song's words, after its name. */
-        val letrasOriginal = Regex(
+        val letrasOriginal = phoneRegex(
             """<div class="lyric-translation-left">\s*+(?:<strong>(?:[^<]++|<(?!/strong>|div class="lyric-translation-left">))*+</strong>)?((?:[^<]++|<(?!/div>|div class="lyric-translation-left">))*+)</div>"""
         )
-        private val letrasBox = Regex("""<div\b|</div>""")
-        private val letrasAd = Regex("""<div id="pub_""")
-        private val geniusNotWords = Regex("""<div\b[^<>]*data-exclude-from-selection="true"[^<>]*+>""")
-        private val geniusBox = Regex("""<div\b[^<>]*data-lyrics-container="true"[^<>]*+>""")
-        private val geniusTag = Regex("""^\[[^\]]*]""")
+        private val letrasBox = phoneRegex("""<div\b|</div>""")
+        private val letrasAd = phoneRegex("""<div id="pub_""")
+        private val geniusNotWords = phoneRegex("""<div\b[^<>]*data-exclude-from-selection="true"[^<>]*+>""")
+        private val geniusBox = phoneRegex("""<div\b[^<>]*data-lyrics-container="true"[^<>]*+>""")
+        private val geniusTag = phoneRegex("""^\[[^\]]*]""")
 
         /** Someone credited on an Apple Music song page, and their roles. */
-        private val credit = Regex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
-        private val writerRole = Regex("Songwriter|Composer|Lyricist")
-        val letrasStanza = Regex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
-        val letrasBreak = Regex("""<br\s*/?>""")
-        val letrasTag = Regex("""<[^<>]++>""")
+        private val credit = phoneRegex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
+        private val writerRole = phoneRegex("Songwriter|Composer|Lyricist")
+        val letrasStanza = phoneRegex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
+        val letrasBreak = phoneRegex("""<br\s*/?>""")
+        val letrasTag = phoneRegex("""<[^<>]++>""")
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"
@@ -1928,7 +1928,7 @@ internal class LyricsFinder(
 
 
 /** The page YouTube Music shows a song's words on, by its id. */
-private val lyricsPage = Regex(""""browseId":"(MPLY[^"]+)"""")
+private val lyricsPage = phoneRegex(""""browseId":"(MPLY[^"]+)"""")
 
 /** How well words are timed: well, so they follow the song; badly; or not at all. */
 private const val WELL_TIMED = 2
@@ -1956,7 +1956,7 @@ private fun String.hasHangul() = any { it in '\uAC00'..'\uD7A3' }
 private fun String.isIn(script: Script) = if (script == Script.KOREAN) hasHangul() else hasJapanese()
 
 /** A word that could be Japanese in Latin letters: syllables like "ka", "shi", "tsu", "n", and doubled consonants. */
-private val romajiWord = Regex("""^(?:(?:ch|sh|ts|[kgsztdnhbpmyrwfj])?y?[aiueo]|n(?![aiueoy])|([kstpgdbc])(?=\1))+$""")
+private val romajiWord = phoneRegex("""^(?:(?:ch|sh|ts|[kgsztdnhbpmyrwfj])?y?[aiueo]|n(?![aiueoy])|([kstpgdbc])(?=\1))+$""")
 
 /** Little words Japanese can't do without, which English rarely uses. */
 private val romajiParticles = setOf("ni", "wa", "ga", "wo", "de", "mo", "kara", "made", "yo", "ne", "dake", "kimi", "boku", "watashi", "anata")
@@ -1967,7 +1967,7 @@ private val romajiParticles = setOf("ni", "wa", "ga", "wo", "de", "mo", "kara", 
  */
 internal fun isRomaji(words: String): Boolean {
     if (words.hasJapanese()) return false
-    val all = words.lowercase().split(Regex("[^a-z']+")).filter { it.isNotEmpty() }
+    val all = words.lowercase().split(phoneRegex("[^a-z']+")).filter { it.isNotEmpty() }
     if (all.isEmpty()) return false
     val japanese = all.count { romajiWord.matches(it) }
     return japanese * 20 >= all.size * 9 && all.count { it in romajiParticles } >= 3
@@ -1975,7 +1975,7 @@ internal fun isRomaji(words: String): Boolean {
 
 /** A word that could be Korean in Latin letters: syllables like "geu", "saek", "ttae", "jeong". */
 private val romanizedKoreanWord =
-    Regex("""^(?:(?:kk|tt|pp|ss|jj|ch|[gkndtrlmbpsjh])?(?:yae|yeo|wae|ae|ya|eo|ye|wa|oe|yo|wo|we|wi|yu|eu|ui|[aeoui])(?:ng|[knltmpgbds])?)+$""")
+    phoneRegex("""^(?:(?:kk|tt|pp|ss|jj|ch|[gkndtrlmbpsjh])?(?:yae|yeo|wae|ae|ya|eo|ye|wa|oe|yo|wo|we|wi|yu|eu|ui|[aeoui])(?:ng|[knltmpgbds])?)+$""")
 
 /** Little words Korean songs can't do without, which other languages rarely use. */
 private val koreanLittleWords = setOf(
@@ -1990,7 +1990,7 @@ private val koreanLittleWords = setOf(
  */
 internal fun isRomanizedKorean(words: String): Boolean {
     if (words.hasHangul() || words.hasJapanese()) return false
-    val all = words.lowercase().split(Regex("[^a-z']+")).filter { it.isNotEmpty() }
+    val all = words.lowercase().split(phoneRegex("[^a-z']+")).filter { it.isNotEmpty() }
     if (all.isEmpty()) return false
     val korean = all.count { romanizedKoreanWord.matches(it) }
     return korean * 20 >= all.size * 9 && all.count { it in koreanLittleWords } >= 3
