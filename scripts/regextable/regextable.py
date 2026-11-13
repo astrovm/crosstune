@@ -20,7 +20,9 @@ refuses a serial that isn't an emulator.
 `patterns` runs each of the app's patterns over the fuzz titles with PatternsProbe, on the emulator and on this
 machine's JVM. It keeps the emulator's digests as app/src/test/regextable/patterns-android-API.tsv, which
 PatternsOnThePhoneTest holds the JVM's written-out patterns to, and lists each pattern the JVM reads otherwise than
-the phone, marked "touched" where its text isn't one of REF's (origin/main by default).
+the phone, marked "touched" where its text isn't one of REF's (origin/main by default). Run it on the newest Android
+and on Android 8 (API 26) both: the test fails while either table lacks a pattern of the app's or has one it no
+longer has, and while Android 8 finds otherwise than the newest with a pattern it doesn't say how the app handles.
 
 It needs adb, d8 in $ANDROID_HOME/build-tools, and the Gradle box. It can't start the emulator: use
 scripts/emulator/emulator.py start.
