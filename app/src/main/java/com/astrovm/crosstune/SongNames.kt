@@ -423,11 +423,11 @@ internal object SongNames {
      */
     internal class ArtistBefore(private val name: String, by: String) {
         private val theirs = artists(by).toList()
-        private val longest = theirs.maxOfOrNull { it.length } ?: 0
+        private val longest = theirs.map(String::length).maxOrNull() ?: 0
 
         /** Once a name ended by a separator or a conjunction is theirs, it's before each later dash too. */
         private var settled = theirs.isEmpty()
-        private val whole = Letters(leadingArticle.find(name)?.range?.last?.plus(1) ?: 0)
+        private val whole = Letters(leadingArticle.find(name)?.value?.length ?: 0)
         private val separators = artistSeparator.matchesIn(name).iterator()
         private var separator = separators.nextOrNull()
         private var piece = Piece(0)
@@ -435,8 +435,9 @@ internal object SongNames {
         /** Whether what's before [dash], the next dash asked of, is by them. */
         fun isTheirs(dash: Int): Boolean {
             var ended = separator
-            while (!settled && ended != null && ended.range.last < dash) {
-                settled = partsAreTheirs(name.substring(piece.start, ended.range.first).trim())
+            // A separator that ends where the dash starts ends a name before it too: "A, B x - Song".
+            while (!settled && ended != null && ended.range.last + 1 <= dash) {
+                settled = partsAreTheirs(piece.text.trim())
                 separator = separators.nextOrNull()
                 piece = Piece(ended.range.last + 1)
                 ended = separator
@@ -447,13 +448,17 @@ internal object SongNames {
         }
 
         /** Whether a name between separators, or one of the names a conjunction joins in it, is theirs, as [artists] splits it. */
-        private fun partsAreTheirs(piece: String) = piece.isNotEmpty() && piece.split(conjunction).any(::nameIsTheirs)
+        private fun partsAreTheirs(piece: String) = piece.split(conjunction).any(::nameIsTheirs)
 
-        private fun nameIsTheirs(part: String) = normalize(part.replace(leadingArticle, "")).let { it.isNotEmpty() && isOneOf(it, theirs) }
+        /** Whether [part] is a name of theirs; an empty one is none of theirs, as [isOneOf] says, which [artists] leaves none of. */
+        private fun nameIsTheirs(part: String) = isOneOf(normalize(part.replace(leadingArticle, "")), theirs)
 
         /** The name from the last separator on, as [artistNames] trims it, and the names a conjunction joins in it. */
-        private inner class Piece(val start: Int) {
+        private inner class Piece(start: Int) {
             private val end = separator?.range?.first ?: name.length
+
+            /** The name up to the next separator, read whole once that's before a dash. */
+            val text = name.substring(start, end)
             private val trimmed = (start until end).firstOrNull { !name[it].isWhitespace() } ?: end
             private val joins = conjunction.matchesIn(name.substring(trimmed, end)).iterator()
             private var join = joins.nextOrNull()
@@ -463,7 +468,6 @@ internal object SongNames {
             fun isTheirs(dash: Int): Boolean {
                 var until = dash
                 while (until > trimmed && name[until - 1].isWhitespace()) until--
-                if (until <= trimmed) return false
                 var next = join
                 while (!settled && next != null && trimmed + next.range.last < until) {
                     settled = nameIsTheirs(name.substring(partStart, trimmed + next.range.first))
@@ -473,20 +477,14 @@ internal object SongNames {
                     join = next
                 }
                 if (settled) return true
-                // A conjunction that ends past the trimmed name joins there too if its word and a space are in it: then the last name is empty.
-                if (next != null && trimmed + next.range.first < until && wordEnd(trimmed + next.range.last + 1) < until) {
+                // A conjunction that ends past the trimmed name joins there too if its word and a space are in it: then the last name is
+                // empty. The trimmed name ends in a space of its only after the word, as nothing but spaces is before the dash after it.
+                if (next != null && next.range.contains(until - 1 - trimmed) && isPatternSpace(name[until - 1])) {
                     return nameIsTheirs(name.substring(partStart, trimmed + next.range.first))
                 }
                 part.readTo(dash)
                 val article = leadingArticle.containsMatchIn(name.substring(partStart, minOf(until, partStart + ARTICLE.length + 1)))
                 return part.areTheirs(if (article) normalize(name.substring(partStart, partStart + ARTICLE.length)).length else 0)
-            }
-
-            /** Where the word of a conjunction ending at [end] ends, before the spaces after it. */
-            private fun wordEnd(end: Int): Int {
-                var at = end
-                while (isPatternSpace(name[at - 1])) at--
-                return at
             }
         }
 
@@ -498,21 +496,24 @@ internal object SongNames {
             private val lookFrom = IntArray(theirs.size)
             private val found = BooleanArray(theirs.size)
 
+            /** On to [dash], which is never before the dash read to last, as dashes are asked of in order. */
             fun readTo(dash: Int) {
-                if (dash <= read) return
                 letters.append(normalize(name.substring(read, dash)))
                 read = dash
             }
 
-            /** Whether these letters but the first [drop], which an article took, are a name of theirs, as [isOneOf] says. */
+            /**
+             * Whether these letters but the first [drop], which an article took, are a name of theirs, as [isOneOf] says. An article
+             * is seen once a letter is after it, so the drop changes only from none to its, and before that the letters are at most
+             * its own, too few to hold a name: none is found yet to forget.
+             */
             fun areTheirs(drop: Int): Boolean {
                 if (drop != this.drop) {
                     this.drop = drop
                     lookFrom.fill(drop)
-                    found.fill(false)
                 }
                 val length = letters.length - drop
-                if (length <= longest) return length > 0 && isOneOf(letters.substring(drop), theirs)
+                if (length <= longest) return isOneOf(letters.substring(drop), theirs)
                 // Longer than each of theirs, they are theirs only with one of theirs in them, which stays as they go on.
                 return theirs.indices.any(::holds)
             }
@@ -521,7 +522,8 @@ internal object SongNames {
                 val wanted = theirs[index]
                 if (!found[index] && wanted.length >= MIN_PARTIAL_ARTIST) {
                     found[index] = letters.indexOf(wanted, lookFrom[index]) >= 0
-                    lookFrom[index] = maxOf(drop, letters.length - wanted.length + 1)
+                    // On, from where one of theirs could start and end past what's been looked at.
+                    lookFrom[index] = maxOf(drop, letters.length - wanted.length)
                 }
                 return found[index]
             }

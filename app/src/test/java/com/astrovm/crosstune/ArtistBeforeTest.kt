@@ -31,6 +31,26 @@ class ArtistBeforeTest {
     }
 
     @Test
+    fun aConjunctionEndingInASpaceOnlyPatternsSeeIsReadAsSameArtistReadsIt() {
+        // A next line (U+0085) is a space to a pattern and not to trimming: "A and<NEL>" is "A" and an empty name, a dash later.
+        val names = listOf(
+            "A and\u0085 - x" to "A", "B, A and\u0085 - x" to "A", "A and - x" to "A", "A\u0085 - x and y" to "A",
+            "B, C x - y" to "C", "B & A & - x" to "A", "D ~,B" to "Q", "B, C - x, Abcde - y" to "Abcde",
+            // One of theirs read on across a dash: "qqqqqqban" and then "dx".
+            "Qqqqqq Ban - dx - y" to "Bandx",
+        )
+        val seen = names.flatMap { (name, by) ->
+            val before = SongNames.ArtistBefore(name, by)
+            DASH.matchesIn(name).map { dash ->
+                val theirs = SongNames.sameArtist(name.substring(0, dash.range.first), by)
+                assertEquals("${name.escaped()} by $by at ${dash.range.first}", theirs, before.isTheirs(dash.range.first))
+                theirs
+            }
+        }
+        assertEquals(setOf(true, false), seen.toSet())
+    }
+
+    @Test
     fun aDashAfterTheArtistStartsTheSongsName() {
         assertFalse(SongNames.saysInstrumental("Band - Instrumental", "Band"))
         assertFalse(SongNames.saysInstrumental("The Band and A - Instrumental", "A"))
