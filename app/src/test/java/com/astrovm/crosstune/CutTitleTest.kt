@@ -38,6 +38,8 @@ class CutTitleTest {
             // start that a tag follows, and dashes with a space before them only, which a tag holds.
             "(feat. a b c d e f g h(feat. b))", "[feat. a b c d e f g h(feat. b)]", "0  ft. a (Live)", "9  ft. a (Live)", "Song - Remastered -a -b",
             "Song - Remastered a- b c- d", "(feat. a b c d e f g h(feat. b)) x", "Song (feat. a b c d e f g h(feat. b))", "Song [feat. a b c d e f g h(feat. b)]",
+            // A digit out of the basic plane, two letters, before a guest, a letter that isn't one, and each half alone.
+            "Song \uD835\uDFD7 ft. a", "Song \uD835\uDFD7  ft. a", "Song \uD83D\uDE00 ft. a", "Song \uDFD7 ft. a", "Song \uD835 ft. a", "\uDFD7\uD835 ft. a",
         )
         ) {
             assertEquals(title, MainLoop.withoutFeaturing(title), SongNames.withoutFeaturing(title))

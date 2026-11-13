@@ -180,18 +180,18 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
         if (!pattern.startsWith("?", at)) return "(${closed(flags)}" to null
         LOOKS.firstOrNull { pattern.startsWith(it, at) }?.let { look ->
             at += look.length
-            return "($look${closed(flags)}" to null
+            return "($look${if (look in BEHIND) behind(closed(flags)) else closed(flags)}" to null
         }
         var set = flags
         var on = true
         at++
         while (at < pattern.length && pattern[at] != ')' && pattern[at] != ':') {
-            when (pattern[at++]) {
+            when (val flag = pattern[at++]) {
                 '-' -> on = false
                 'i' -> set = set.copy(ignoreCase = on)
                 's' -> set = set.copy(dotAll = on)
                 'm' -> set = set.copy(lines = on)
-                else -> throw IllegalArgumentException("The flag at ${at - 1} in $pattern isn't written out")
+                else -> throw IllegalArgumentException("The flag $flag in $pattern isn't written out")
             }
         }
         require(at < pattern.length) { "A ( that doesn't close in $pattern" }
@@ -300,12 +300,9 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
     /** One part of a class read into [letters] or [sets]: a letter, a run, a set or a part both hold. False at its ]. */
     private fun classPart(ignoreCase: Boolean, negated: Boolean, letters: BitSet, sets: StringBuilder): Boolean {
         require(at < pattern.length) { "A [ that doesn't close in $pattern" }
-        if (pattern.startsWith("&&[", at)) {
-            sets.append("&&").append(bothHold(ignoreCase || negated))
-            return true
-        }
-        require(pattern[at] != '[' && !pattern.startsWith("&&", at)) { "A class in a class in $pattern isn't written out" }
         when {
+            pattern.startsWith("&&[", at) -> sets.append("&&").append(bothHold(ignoreCase || negated))
+            pattern[at] == '[' || pattern.startsWith("&&", at) -> throw IllegalArgumentException("A class in a class in $pattern isn't written out")
             pattern[at] == ']' -> return false
             pattern[at] == '\\' && pattern.getOrNull(at + 1)?.let { it in SETS || it in "pP" } == true -> {
                 at++
@@ -348,6 +345,27 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
 
 /** How a group that isn't only flags starts, after its (: no group, ahead, behind, or kept. */
 private val LOOKS = listOf("?:", "?=", "?!", "?>", "?<=", "?<!")
+
+private val BEHIND = listOf("?<=", "?<!")
+
+/**
+ * A look behind, to and with its ), as [closed] wrote it, made room for on the JVM. The JVM steps back as many chars
+ * as the look reads letters, but a letter past U+FFFF, "𝟗", is two chars, which ICU steps over whole. A copy behind a
+ * [^\s\S] never matches, so it reads nothing, but it lets the JVM step back twice as far. Its groups keep no number,
+ * so those after it keep theirs.
+ */
+private fun behind(closed: String): String {
+    val body = closed.dropLast(1)
+    return "$body(?:[^\\s\\S]${unnumbered(body)})?)"
+}
+
+/** [written] with no numbered group: each letter in it is written as \x{...}, so a ( with no ? after it starts one. */
+private fun unnumbered(written: String) = buildString {
+    for ((at, char) in written.withIndex()) {
+        append(char)
+        if (char == '(' && written.getOrNull(at + 1) != '?') append("?:")
+    }
+}
 
 /** [codes] written as letters ICU reads one after another: ignoring case, each as each case of it, and runs as one word. */
 private fun letters(codes: IntArray, ignoreCase: Boolean): String = when {
@@ -449,10 +467,12 @@ private class PhoneSet(private val table: BitSet, private val jvm: String) {
 /** What the JVM's [set] holds, by Unicode, read over every code point. */
 private fun jvmCodes(set: String): BitSet = synchronized(JVM_SETS) { JVM_SETS.getOrPut(set) { jvmCodesNow(set) } }
 
-private fun jvmCodesNow(set: String): BitSet {
+/** What the JVM's [set] holds, read over every code point now. Each set is read once, so the text is made for it alone. */
+internal fun jvmCodesNow(set: String): BitSet {
     val codes = BitSet()
-    val matcher = Pattern.compile("(?U)$set").matcher(EVERY_LETTER)
-    while (matcher.find()) codes.set(EVERY_LETTER.codePointAt(matcher.start()))
+    val every = everyLetter()
+    val matcher = Pattern.compile("(?U)$set").matcher(every)
+    while (matcher.find()) codes.set(every.codePointAt(matcher.start()))
     // Half a surrogate pair is read alone.
     for (half in Char.MIN_SURROGATE..Char.MAX_SURROGATE) if (matcher.reset(half.toString()).matches()) codes.set(half.code)
     return codes
@@ -461,8 +481,8 @@ private fun jvmCodesNow(set: String): BitSet {
 private val JVM_SETS = mutableMapOf<String, BitSet>()
 
 /** Each code point but the halves of surrogate pairs, in order. */
-private val EVERY_LETTER: String by lazy {
-    buildString { for (code in 0..Character.MAX_CODE_POINT) if (code !in Char.MIN_SURROGATE.code..Char.MAX_SURROGATE.code) appendCodePoint(code) }
+private fun everyLetter() = buildString {
+    for (code in 0..Character.MAX_CODE_POINT) if (code !in Char.MIN_SURROGATE.code..Char.MAX_SURROGATE.code) appendCodePoint(code)
 }
 
 private val LINE_BREAKS = CodeRuns(PHONE_LINE_BREAK)
