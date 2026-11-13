@@ -2571,6 +2571,22 @@ class ListeningTest {
     }
 
     @Test
+    fun aGapMovedByHandAloneIsReportedAsTheWordsAreLeftWhenReportsAreAllowed() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        val (phone, _) = videoLinedUpByShazam()
+        composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }
+        click(string(R.string.lyrics_sync))
+        waitForText(string(R.string.lyrics_sync_hint))
+        composeRule.onNodeWithText("Demo two").performClick()
+        waitUntil(TIMEOUT_MS) { ShazamGapStore(prefs()).load(52_000, "longer") != null }
+        fun timedByHand() = fake.requestedUrls.indices.count { fake.requestedUrls[it] == ReportSender.URL && "timed_by_hand" in fake.requestBodies[it] }
+        assertEquals(0, timedByHand())
+        // No line was put in time, only Shazam's gap moved: that's words put in time by hand all the same.
+        composeRule.runOnIdle { controllerModel().dismissLyrics() }
+        waitUntil(TIMEOUT_MS) { timedByHand() == 1 }
+    }
+
+    @Test
     fun aGapMovedByTheArrowsOffersToReportByItselfAndTheOfferStaysOnceTheBarGoes() {
         val (phone, _) = videoLinedUpByShazam()
         composeRule.runOnIdle { phone.playing.value = phone.playing.value!!.copy(clock = PlaybackClock(20_000, SystemClock.elapsedRealtime())) }

@@ -40,7 +40,6 @@ import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal sealed interface Effect {
@@ -192,7 +191,7 @@ internal class MainViewModel(
     private val leadStore = LeadStore(preferences)
     private val gapStore = ShazamGapStore(preferences)
     private val sungStore = SungStore(preferences)
-    private val autoReports = AutoReports(preferences)
+    private val autoReports = AutoReports(preferences, now = wallClock)
 
     /** The timed words as found, before the lines put in time by hand, [syncPoints], move them. */
     private var foundLines: List<LyricLine> = emptyList()
@@ -2095,6 +2094,8 @@ internal class MainViewModel(
         } else {
             lyricsJob = viewModelScope.launch {
                 var first: LyricsFinder.FirstLook? = null
+                // No words found, and whether it's taken for an instrumental: worked out once that shows, as it may wait on the app.
+                var noWords: Boolean? = null
                 uiState = uiState.copy(
                     lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
                     canFollowApps = playback?.hasAccess() == true
@@ -2107,19 +2108,20 @@ internal class MainViewModel(
                     when (val answer = look.lyrics) {
                         is LyricsFinder.Lyrics.Found -> if (answer.markedInstrumental) held(song, answer, look.final) else showWords(song, answer)
                         // No words were shown while looking, so there's none to clear.
-                        LyricsFinder.Lyrics.None -> noWordsFound(song, likelyInstrumental = false)
+                        LyricsFinder.Lyrics.None -> noWords = false
                         // Having no words is what an instrumental is, not a problem.
                         LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyricsInstrumental = true)
                         // Taken for an instrumental by its genre, which can be wrong: heard for a voice first.
                         LyricsFinder.Lyrics.LikelyInstrumental -> {
                             uiState = uiState.copy(lyricsInstrumental = true)
-                            noWordsFound(song, likelyInstrumental = true)
+                            noWords = true
                         }
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {
                     if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
                 }
+                noWords?.let { noWordsFound(song, likelyInstrumental = it) }
                 follow(song)
                 first.takeIf { !it.final }?.let { retime(song, it.lyrics) }
                 reportUntimed()
@@ -2673,11 +2675,12 @@ internal class MainViewModel(
      * [likelyInstrumental] by its genre alone, a voice heard says it's sung after all. Not heard, as when
      * it plays elsewhere, it's reported as it always was.
      */
-    private fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
+    private suspend fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
         if (SongNames.manySongs(song)) return
         // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
         if (!likelyInstrumental && autoReports.allowed == false) return
-        val canHear = singing != null && shownPlayed && mayCalibrate()
+        // The app is asked, as no words may come back before following it has said it plays the song.
+        val canHear = singing != null && mayCalibrate() && (shownPlayed || appPlays(song))
         // Noted, as a report of no words then says how it came to be one.
         TimingLog.note("no words, likely instrumental $likelyInstrumental, a voice ${if (canHear) "is listened for" else "can't be heard"}")
         if (canHear) {
@@ -2698,6 +2701,14 @@ internal class MainViewModel(
         if (singing == null || !mayCalibrate()) return false
         // Naming a song has the microphone, and out of sight, nothing's heard.
         if (shazamLeads || nextPaused) return false
+        return appPlays(song)
+    }
+
+    /**
+     * Whether a music app on this phone plays [song] now, as the apps say when asked: one that doesn't say in
+     * [APP_ASKED_MS], or a song heard from another device, isn't.
+     */
+    private suspend fun appPlays(song: MusicMetadata): Boolean {
         val source = playback?.takeIf { it.hasAccess() } ?: return false
         val following = withTimeoutOrNull(APP_ASKED_MS) { source.follow(song).first() }
         return following?.let { it.app != null && it.clock.playing } == true
@@ -3484,7 +3495,7 @@ internal class MainViewModel(
         val report = reportOn(sender, uiState.lyricsFor, comment)
         uiState = uiState.copy(report = ReportStatus.SENDING)
         viewModelScope.launch {
-            val sent = sender.send(report)
+            val sent = sender.send(report) == Delivery.SENT
             uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
@@ -3501,7 +3512,7 @@ internal class MainViewModel(
         val report = ReadingReport(sender.version, song, found?.source, line, word, word.shown(uiState.learning.romajiTyped), script, right)
         uiState = uiState.copy(report = ReportStatus.SENDING)
         viewModelScope.launch {
-            val sent = sender.send(report)
+            val sent = sender.send(report) == Delivery.SENT
             uiState = uiState.copy(report = if (sent) ReportStatus.SENT else ReportStatus.FAILED)
         }
     }
@@ -3543,13 +3554,34 @@ internal class MainViewModel(
     private fun reportProblem(song: MusicMetadata, problem: SongProblem) {
         val sender = reports ?: return
         if (autoReports.reported(song, problem)) return
-        val report = reportOn(sender, song, problem = problem)
+        val report = reportOn(sender, song, problem = problem).copy(id = autoReports.idFor(song, problem))
+        // On the phone at once, as it is so far, so nothing that ends the work below loses it: it goes at the next start.
+        autoReports.owe(song, problem, report.json())
         viewModelScope.launch {
             // Found before it's followed, or before following it said anything, as a song with no words always is.
             val playing = if (report.app == null) playback?.takeIf { it.hasAccess() }?.follow(song)?.first() else null
             val player = report.player?.let { it.copy(appPackage = it.appPackage ?: playing?.appPackage, speed = it.speed ?: playing?.clock?.speed) }
-            // One that didn't get there goes the next time it's found.
-            if (sender.send(report.copy(app = report.app ?: playing?.app, player = player))) autoReports.remember(song, problem)
+            val json = withContext(systemDispatcher) { report.copy(app = report.app ?: playing?.app, player = player).json() }
+            // In place of the one kept above, with its id, then sent from there.
+            deliver(sender, autoReports.owe(song, problem, json))
+        }
+    }
+
+    /**
+     * [owed], kept on the phone, goes now, and how it went is null where it didn't go: past the day's share, it waits
+     * for a later day, and one gone another way, or on its way already, isn't sent twice. Once on its way, it's seen
+     * through, whatever cancels the rest: a report the box got is never kept to go again, and one that didn't go
+     * takes no place of the day.
+     */
+    private suspend fun deliver(sender: ReportSender, owed: AutoReports.Owed): Delivery? {
+        val going = autoReports.take(owed) ?: return null
+        return withContext(NonCancellable) {
+            var delivery: Delivery? = null
+            try {
+                sender.send(owed.json).also { delivery = it }
+            } finally {
+                autoReports.went(going, delivery)
+            }
         }
     }
 
@@ -3558,7 +3590,9 @@ internal class MainViewModel(
      * an offer made for them goes.
      */
     private fun leaveWords() {
-        if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        if (timedByHand && (syncPoints.isNotEmpty() || handGap != null) && autoReports.allowed == true) {
+            uiState.lyricsFor?.let { reportProblem(it, SongProblem.TIMED_BY_HAND) }
+        }
         timedByHand = false
         uiState = uiState.copy(reportOfferFor = emptySet())
     }
@@ -3572,28 +3606,26 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val sender = reports ?: return
         if (!timedByHand) return
-        autoReports.owe(song, reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).json())
+        val report = reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).copy(id = autoReports.idFor(song, SongProblem.TIMED_BY_HAND))
+        autoReports.owe(song, SongProblem.TIMED_BY_HAND, report.json())
     }
 
-    /** Held while reports owed go, so a start and a yes close together don't send one twice. */
-    private val owedGoing = Mutex()
-
     /**
-     * Each report owed goes, once a song, and is dropped when it got there; one that didn't waits for the next
-     * time. Words still in front of the user are left out: they may be put in time some more, and go once they're left.
+     * Each report owed goes, once a song, and is dropped when it got there or the box turned it away; one that
+     * didn't get there waits for the next time, and a problem found past the day's share for a later day.
+     * Words still in front of the user are left out: they may be put in time some more, and go once they're left.
      */
     private fun sendOwed() {
         val sender = reports ?: return
         if (autoReports.allowed != true) return
         viewModelScope.launch {
-            owedGoing.withLock {
+            autoReports.sending.withLock {
                 val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
                 for (owed in autoReports.owed().filter { it.key != inFront }) {
-                    // Gone another way meanwhile, as the words it's for were left.
-                    if (!autoReports.owes(owed)) continue
+                    // Past the day's share, or gone another way meanwhile, as the words it's for were left: it's skipped.
+                    val delivery = deliver(sender, owed) ?: continue
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
-                    if (!sender.send(owed.json)) break
-                    autoReports.paid(owed)
+                    if (delivery == Delivery.FAILED) break
                     // Paced under the box's 5 a minute from one phone, with room left for what's found meanwhile.
                     delay(reportPaceMs)
                 }
