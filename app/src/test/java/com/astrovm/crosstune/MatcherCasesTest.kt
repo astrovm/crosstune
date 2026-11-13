@@ -109,6 +109,8 @@ class MatcherCasesTest {
         Case("live album", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌", "Live at Budokan"))),
         Case("live in name", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌ライブ"))),
         Case("not as close", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌", length = "1:31"))),
+        Case("not as close though shorter", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌", length = "1:28"))),
+        Case("closer though longer", "song0", now = "song1", songs = listOf(row("偽の歌 (ライブ)", length = "1:27"), row("偽の歌", length = "1:32"))),
         Case("no length", null, lengthMs = null, deezerSeconds = 90, songs = listOf(row("偽の歌 (ライブ)", length = ""), row("偽の歌", length = ""))),
         // In Latin letters, main opens the plain one itself.
         Case("no lengths", "song1", lengthMs = null, songs = listOf(row("Fake Song (Live)"), row("Fake Song"))),
