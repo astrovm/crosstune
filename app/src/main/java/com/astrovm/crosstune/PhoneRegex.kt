@@ -341,11 +341,13 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
     }
 
     private companion object {
-        val LOOKS = listOf("?:", "?=", "?!", "?>", "?<=", "?<!")
         const val SETS = "sSwWdD"
         const val UNICODE_DIGITS = 4
     }
 }
+
+/** How a group that isn't only flags starts, after its (: no group, ahead, behind, or kept. */
+private val LOOKS = listOf("?:", "?=", "?!", "?>", "?<=", "?<!")
 
 /** [codes] written as letters ICU reads one after another: ignoring case, each as each case of it, and runs as one word. */
 private fun letters(codes: IntArray, ignoreCase: Boolean): String = when {
