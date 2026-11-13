@@ -141,8 +141,16 @@ baselineProfile {
     automaticGenerationDuringBuild = false
 }
 
+val composeStability = layout.projectDirectory.file("compose-stability.conf")
 composeCompiler {
-    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
+    stabilityConfigurationFiles.add(composeStability)
+}
+
+// The Kotlin compile isn't told that the Compose compiler reads that file, so a change to it alone left the classes
+// as they were, unstable as before (StableStateTest failed on a build made before the change). As an input of its
+// own, a change to it makes Gradle compile everything again, not only the files that changed.
+tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Kotlin") }.configureEach {
+    inputs.file(composeStability).withPathSensitivity(PathSensitivity.NONE).withPropertyName("composeStability")
 }
 
 // The Compose compiler's reports, with -PcomposeReports: which classes it can't call stable, and which
