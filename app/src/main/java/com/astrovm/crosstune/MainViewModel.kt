@@ -2018,6 +2018,8 @@ internal class MainViewModel(
         } else {
             lyricsJob = viewModelScope.launch {
                 var first: LyricsFinder.FirstLook? = null
+                // No words found, and whether it's taken for an instrumental: worked out once that shows, as it may wait on the app.
+                var noWords: Boolean? = null
                 uiState = uiState.copy(
                     lyricsFor = song, lyrics = "", lyricLines = emptyList(), lyricsSynced = false, lyricsTimedByEar = false, lyricsOffTake = false, lyricsFailed = false, lyricsInstrumental = false, isLoadingLyrics = true, learning = uiState.learning.fresh(), chords = uiState.chords.fresh(),
                     canFollowApps = playback?.hasAccess() == true
@@ -2030,19 +2032,20 @@ internal class MainViewModel(
                     when (val answer = look.lyrics) {
                         is LyricsFinder.Lyrics.Found -> if (answer.markedInstrumental) held(song, answer, look.final) else showWords(song, answer)
                         // No words were shown while looking, so there's none to clear.
-                        LyricsFinder.Lyrics.None -> noWordsFound(song, likelyInstrumental = false)
+                        LyricsFinder.Lyrics.None -> noWords = false
                         // Having no words is what an instrumental is, not a problem.
                         LyricsFinder.Lyrics.Instrumental -> uiState = uiState.copy(lyricsInstrumental = true)
                         // Taken for an instrumental by its genre, which can be wrong: heard for a voice first.
                         LyricsFinder.Lyrics.LikelyInstrumental -> {
                             uiState = uiState.copy(lyricsInstrumental = true)
-                            noWordsFound(song, likelyInstrumental = true)
+                            noWords = true
                         }
                         LyricsFinder.Lyrics.Unavailable -> uiState = uiState.copy(lyrics = "", lyricsFailed = true)
                     }
                 } finally {
                     if (isActive) uiState = uiState.copy(isLoadingLyrics = false)
                 }
+                noWords?.let { noWordsFound(song, likelyInstrumental = it) }
                 follow(song)
                 first.takeIf { !it.final }?.let { retime(song, it.lyrics) }
                 reportUntimed()

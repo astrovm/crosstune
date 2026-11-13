@@ -644,6 +644,27 @@ class UnsungTest {
     }
 
     @Test
+    fun aSongWithNoWordsFoundSaysSoWhileItsAppIsStillAskedWhetherItPlaysIt() {
+        // The app is asked only once no words are found, and may take a second to answer: what was found shows meanwhile.
+        val said = CompletableDeferred<Unit>()
+        playback.said = said
+        singing.answers = listOf(voice)
+        plays()
+        val opened = SystemClock.uptimeMillis()
+        tapLyrics()
+        waitUntil { shows(R.string.lyrics_none) && !shows(R.string.lyrics_loading) }
+        // Before the app answered, and before the wait for it ran out, which ends with this note.
+        assertTrue(SystemClock.uptimeMillis() - opened < MainViewModel.APP_ASKED_MS)
+        assertFalse(TimingLog.lastMinute(), "no words, likely" in TimingLog.lastMinute())
+        assertFalse(said.isCompleted)
+        assertEquals(0, singing.hears)
+        // Once it says it plays the song, the song is still heard for a voice.
+        said.complete(Unit)
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertEquals(TimingLog.lastMinute(), 1, singing.hears)
+    }
+
+    @Test
     fun aSongTakenForAnInstrumentalByItsGenreIsSungAfterAllWhenSomeoneIsHeard() {
         genre = "Jazz"
         singing.answers = listOf(music, voice)
