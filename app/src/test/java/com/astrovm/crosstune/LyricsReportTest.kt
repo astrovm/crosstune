@@ -55,12 +55,19 @@ class LyricsReportTest {
     private val app: Application = ApplicationProvider.getApplicationContext()
     private val fake = FakeSpotify()
     private var controller: ActivityController<MainActivity>? = null
+
+    /** The app the test opened: a test that reaches for it before opening it is wrong. */
+    private val opened get() = checkNotNull(controller) { "The test hasn't opened the app yet" }
     private val playback = FakePlayback().apply { access = true }
     private val link = "https://music.youtube.com/watch?v=sPmul8b17AU"
 
     /** Whether the box for reports turns them away, as when it can't be reached. */
     @Volatile
     private var reportsDown = false
+
+    /** The box's answer to a report, by what it says, when it's another than [reportsDown]'s. */
+    @Volatile
+    private var answerTo: (String) -> Int? = { null }
 
     /** Holds a report on its way until it's let through. */
     @Volatile
@@ -88,7 +95,7 @@ class LyricsReportTest {
             when (request.url.host) {
                 "report.crosstune.cc" -> {
                     reportsHeld?.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                    FakeSpotify.html(request, "", code = if (reportsDown) 503 else 204)
+                    FakeSpotify.html(request, "", code = answerTo(FakeSpotify.bodyOf(request)) ?: if (reportsDown) 503 else 204)
                 }
                 "lrclib.net" -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] Demo one\n[00:10.00] Demo two"}]""")
                 else -> FakeSpotify.html(request, """{"title":"Demo","author_name":"Band"}""")
@@ -116,7 +123,7 @@ class LyricsReportTest {
 
     private fun string(id: Int): String = app.getString(id)
 
-    private fun model() = ViewModelProvider(controller!!.get())[MainViewModel::class.java]
+    private fun model() = ViewModelProvider(opened.get())[MainViewModel::class.java]
 
     private fun waitUntil(condition: () -> Boolean) =
         composeRule.waitUntil(TIMEOUT_MS) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
@@ -167,6 +174,9 @@ class LyricsReportTest {
     /** How many timing reports are owed, kept to be sent once the words are left, or at the next start. */
     private fun owed() = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]")).length()
 
+    /** How many of today's places reports the box has took, as kept: see [AutoReports.take]. */
+    private fun foundToday() = prefs().getString("auto_reports_found_today", null)?.substringAfter(':')?.toInt() ?: 0
+
     /** The offer's Yes, once it takes taps, as it takes none as it comes in. */
     private fun yes() {
         composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
@@ -181,7 +191,7 @@ class LyricsReportTest {
 
     /** What the box for reports was sent, as the app that is started anew finds it. */
     private fun startedAnew() {
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         // Another process, which isn't the one that asked.
         prefs().edit().putLong("auto_reports_asked_in", -7L).commit()
     }
@@ -268,7 +278,7 @@ class LyricsReportTest {
         val send = composeRule.onNode(hasText(string(R.string.report_send)) and hasClickAction())
         send.assertIsNotEnabled()
         composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
-        reportsHeld!!.countDown()
+        checkNotNull(reportsHeld) { "No report is held" }.countDown()
         waitUntil { !shown(string(R.string.report_what_goes)) }
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
     }
@@ -499,7 +509,7 @@ class LyricsReportTest {
         settled()
         assertEquals(emptyList<String>(), problems())
         // Nor is it offered, while the user hasn't said.
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         prefs().edit().remove("auto_reports").commit()
         openLyrics { composeRule.onAllNodes(hasContentDescription(string(R.string.lyrics_instrumental))).fetchSemanticsNodes().isNotEmpty() }
         settled()
@@ -515,7 +525,7 @@ class LyricsReportTest {
         assertFalse(shown(offer))
         assertEquals(false, model().uiState.autoReports)
         // Another song with a problem, words with no timing this time.
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
@@ -534,7 +544,7 @@ class LyricsReportTest {
         assertFalse(shown(offer))
         assertFalse(sentReports().single().getJSONObject("song").getBoolean("timed"))
         // Once a song: shown again, it doesn't go again.
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
         File(app.cacheDir, "kept_words.json").delete()
         openLyrics { shown("Plain one") }
@@ -575,22 +585,208 @@ class LyricsReportTest {
         assertEquals(1_000L, timing.getLong("heardMs") - timing.getLong("timedMs"))
     }
 
+    /** Words with no timing, which Crosstune finds is a problem. */
+    private val plain = """[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]"""
+
+    /** The song's words opened again in an app started anew, found again rather than read from what was kept. */
+    private fun openedAgain() {
+        opened.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics { shown("Plain one") }
+        settled()
+    }
+
     @Test
-    fun anAutomaticReportThatDidntGetThereGoesTheNextTimeOnly() {
+    fun aProblemFoundThatDidntGetThereIsKeptAndGoesAtTheNextStartOnce() {
         prefs().edit().putBoolean("auto_reports", true).commit()
         reportsDown = true
-        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        waitUntil { problems() == listOf("no_timing") }
+        assertEquals(1, owed())
+        // It didn't go, so it gave its place for the day back.
+        assertEquals(0, foundToday())
+        reportsDown = false
+        // A song played once still goes: at the next start, with nothing opened.
+        opened.destroyAndSettle()
+        started()
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+        assertEquals(1, foundToday())
+        assertEquals(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)], fake.requestBodies[fake.requestedUrls.lastIndexOf(ReportSender.URL)])
+        // Gone, it isn't sent again when it's found again.
+        openedAgain()
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+    }
+
+    @Test
+    fun aProblemFoundKeptOnThePhoneThatTheBoxTurnsAwayAtTheNextStartIsntSentAgainWhenFoundAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        reportsDown = true
+        lyricsAre(plain)
         openLyrics { shown("Plain one") }
         waitUntil { problems() == listOf("no_timing") }
         reportsDown = false
-        repeat(2) {
-            controller!!.destroyAndSettle()
-            File(app.cacheDir, "lyrics.json").delete()
-            File(app.cacheDir, "kept_words.json").delete()
-            openLyrics { shown("Plain one") }
-            settled()
-        }
+        answerTo = { 400 }
+        opened.destroyAndSettle()
+        started()
+        waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing", "no_timing"), problems())
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.NO_TIMING))
+        // Turned away, it went nowhere, so it gave its place for the day back.
+        assertEquals(0, foundToday())
+        // The box turns it away as it always will, so finding it again sends nothing.
+        answerTo = { null }
+        openedAgain()
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+    }
+
+    @Test
+    fun aProblemFoundThatTheBoxHasNoRoomForTodayOrThatAnotherAnswersIsKeptToo() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        lyricsAre(plain)
+        // Full for the day, or a network's own answer, as a 403 from a proxy or a 404 while the box moves. Each start
+        // after the first sends the one kept, then the one found again.
+        for ((tries, code) in listOf(429, 403, 404).withIndex()) {
+            answerTo = { code }
+            if (controller == null) openLyrics { shown("Plain one") } else openedAgain()
+            waitUntil { problems().size == 2 * tries + 1 }
+            assertEquals(code.toString(), 1, owed())
+            assertFalse(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.NO_TIMING))
+        }
+    }
+
+    @Test
+    fun aProblemFoundPastTheDaysShareWaitsOnThePhoneForALaterDay() {
+        val today = System.currentTimeMillis() / ReportBox.DAY_MS
+        prefs().edit().putBoolean("auto_reports", true).putString("auto_reports_found_today", "$today:${AutoReports.FOUND_A_DAY}").commit()
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        settled()
+        waitUntil { owed() == 1 }
+        assertEquals(emptyList<String>(), problems())
+        // Started again the same day, it still waits; the next day, it goes.
+        opened.destroyAndSettle()
+        started()
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        prefs().edit().putString("auto_reports_found_today", "${today - 1}:${AutoReports.FOUND_A_DAY}").commit()
+        opened.destroyAndSettle()
+        started()
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("no_timing"), problems())
+    }
+
+    @Test
+    fun twoProblemsFoundWhileTheFirstIsOnItsWayCantBothTakeTheDaysLastPlace() {
+        val today = System.currentTimeMillis() / ReportBox.DAY_MS
+        prefs().edit().putBoolean("auto_reports", true).putString("auto_reports_found_today", "$today:${AutoReports.FOUND_A_DAY - 1}").commit()
+        // One found before, kept on the phone, goes at the start, and is held on its way while the song's own is found.
+        AutoReports(prefs()).owe(MusicMetadata("Old one", "Band"), SongProblem.NO_LYRICS, """{"problem":"no_lyrics"}""")
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        reportsHeld = CountDownLatch(1)
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        // The last place is the first's, so the one found now waits on the phone for a later day.
+        waitUntil { owed() == 2 }
+        checkNotNull(reportsHeld) { "No report is held" }.countDown()
+        waitUntil { owed() == 1 }
+        assertEquals(listOf("no_lyrics"), problems())
+        assertEquals(AutoReports.FOUND_A_DAY, foundToday())
+    }
+
+    @Test
+    fun aProblemFoundIsOnThePhoneWhileOnItsWaySoAnAppEndedThenSendsItAtTheNextStartWithNoPlaceTaken() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        val held = CountDownLatch(1).also { reportsHeld = it }
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        waitUntil { ReportSender.URL in fake.requestedUrls }
+        // On its way: what's on the phone now is what an app ended now starts with. The report is there, and the day's
+        // places are all left, as one on its way holds its place only in the app sending it.
+        val kept = AutoReports(prefs()).owed()
+        assertEquals(listOf("no_timing"), kept.map { JSONObject(it.json).optString("problem") })
+        assertEquals(0, foundToday())
+        assertTrue(AutoReports(prefs()).take(kept.single()) != null)
+        // The one held ends as if the app was ended: it never gets there.
+        reportsDown = true
+        held.countDown()
+        waitUntil { problems().size == 1 && owed() == 1 }
+        reportsDown = false
+        opened.destroyAndSettle()
+        started()
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("no_timing", "no_timing"), problems())
+        assertEquals(1, foundToday())
+    }
+
+    @Test
+    fun aReportOnItsWayAsTheAppIsClosedIsSeenThroughAndNeverSentAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        val held = CountDownLatch(1).also { reportsHeld = it }
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        waitUntil { ReportSender.URL in fake.requestedUrls }
+        // Closed, which ends all the app was doing, while the box is still taking it.
+        opened.destroyAndSettle()
+        held.countDown()
+        waitUntil { owed() == 0 && foundToday() == 1 }
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.NO_TIMING))
+        // The box has it, so the next start doesn't send it again.
+        started()
+        composeRule.waitForIdle()
+        assertEquals(listOf("no_timing"), problems())
+    }
+
+    @Test
+    fun wordsPutInTimeByHandAreOnThePhoneInTheSameStepAsTheMove() {
+        // Making the report on another thread would leave the move unkept, for a moment, if the app was ended.
+        MainActivity.systemDispatcher = Dispatchers.IO
+        openLyrics()
+        composeRule.runOnIdle {
+            model().nudgeSync(500)
+            assertEquals(1, owed())
+        }
+    }
+
+    @Test
+    fun wordsPutInTimeByHandThatTheBoxTurnsAwayAsTheyreLeftArentTakenAsSent() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        answerTo = { 400 }
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand") }
+        waitUntil { owed() == 0 }
+        assertFalse(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.TIMED_BY_HAND))
+        // Put in time again, that report goes.
+        answerTo = { null }
+        opened.destroyAndSettle()
+        openLyrics()
+        composeRule.runOnIdle { model().nudgeSync(500) }
+        composeRule.runOnIdle { model().dismissLyrics() }
+        waitUntil { problems() == listOf("timed_by_hand", "timed_by_hand") }
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.TIMED_BY_HAND))
+    }
+
+    @Test
+    fun anAutomaticReportTheBoxTurnedAwayIsNotSentAgain() {
+        prefs().edit().putBoolean("auto_reports", true).commit()
+        answerTo = { 400 }
+        lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
+        openLyrics { shown("Plain one") }
+        waitUntil { problems() == listOf("no_timing") }
+        assertEquals(0, foundToday())
+        answerTo = { null }
+        opened.destroyAndSettle()
+        File(app.cacheDir, "lyrics.json").delete()
+        File(app.cacheDir, "kept_words.json").delete()
+        openLyrics { shown("Plain one") }
+        settled()
+        assertEquals(listOf("no_timing"), problems())
     }
 
     @Test
@@ -701,7 +897,7 @@ class LyricsReportTest {
         assertEquals(emptyList<String>(), problems())
         assertEquals(1, owed())
         // Killed before they were left.
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         assertEquals(emptyList<String>(), problems())
         openLyrics()
         waitUntil { problems() == listOf("timed_by_hand") }
@@ -726,7 +922,7 @@ class LyricsReportTest {
         assertEquals(1, owed())
         yes()
         assertEquals(1, owed())
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         openLyrics()
         waitUntil { problems() == listOf("timed_by_hand") }
     }
@@ -736,12 +932,12 @@ class LyricsReportTest {
         prefs().edit().putBoolean("auto_reports", true).commit()
         openLyrics()
         composeRule.runOnIdle { model().nudgeSync(500) }
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         reportsDown = true
         openLyrics()
         waitUntil { problems() == listOf("timed_by_hand") }
         assertEquals(1, owed())
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         reportsDown = false
         openLyrics()
         waitUntil { problems() == listOf("timed_by_hand", "timed_by_hand") }
@@ -749,7 +945,7 @@ class LyricsReportTest {
     }
 
     /** [songs] put in time before, whose reports wait on the phone: made up, as what they say doesn't matter. */
-    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), """{"fake":"$it"}""") }
+    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), SongProblem.TIMED_BY_HAND, """{"fake":"$it"}""") }
 
     private fun sentFakes() = fake.requestedUrls.indices.filter { fake.requestedUrls[it] == ReportSender.URL }.map { fake.requestBodies[it] }
 
@@ -765,7 +961,7 @@ class LyricsReportTest {
         // Said no in Settings, it still waits, on the phone, for a yes.
         composeRule.runOnIdle { model().allowAutoReports(false) }
         assertEquals(1, owed())
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         openLyrics()
         composeRule.runOnIdle { model().dismissLyrics() }
         composeRule.waitForIdle()
@@ -819,7 +1015,59 @@ class LyricsReportTest {
         assertEquals(2, owed())
         reportsDown = false
         // The app started anew: they go at the start.
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
+        openLyrics()
+        waitUntil { owed() == 0 }
+        assertEquals(3, sentFakes().size)
+    }
+
+    @Test
+    fun aTimingReportOwedThatTheBoxTurnsAwayIsDroppedAndTheNextGoes() {
+        owedFor("Old one", "Old two")
+        // Made by a version that put more lines in it than the box takes, which it never will.
+        answerTo = { body -> 400.takeIf { "Old one" in body } }
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 2 }
+        waitUntil { owed() == 0 }
+        assertEquals(listOf("""{"fake":"Old one"}""", """{"fake":"Old two"}"""), sentFakes())
+        // Turned away, it isn't taken as sent, so the song's words put in time again still go.
+        assertFalse(AutoReports(prefs()).reported(MusicMetadata("Old one", "Band"), SongProblem.TIMED_BY_HAND))
+        assertTrue(AutoReports(prefs()).reported(MusicMetadata("Old two", "Band"), SongProblem.TIMED_BY_HAND))
+        // Started again, nothing is left to go.
+        opened.destroyAndSettle()
+        openLyrics()
+        composeRule.waitForIdle()
+        assertEquals(2, sentFakes().size)
+    }
+
+    @Test
+    fun timingReportsOwedThatAnAnswerNotTheBoxsOnThemStopsWaitForTheNextStart() {
+        owedFor("Old one", "Old two")
+        answerTo = { 403 }
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(2, owed())
+        assertEquals(0, foundToday())
+    }
+
+    @Test
+    fun timingReportsOwedThatTheBoxHasNoRoomForNowWaitForTheNextStart() {
+        owedFor("Old one", "Old two")
+        answerTo = { 429 }
+        openLyrics()
+        composeRule.runOnIdle { model().dismissLyrics() }
+        composeRule.runOnIdle { model().allowAutoReports(true) }
+        waitUntil { sentFakes().size == 1 }
+        composeRule.waitForIdle()
+        assertEquals(1, sentFakes().size)
+        assertEquals(2, owed())
+        answerTo = { null }
+        opened.destroyAndSettle()
         openLyrics()
         waitUntil { owed() == 0 }
         assertEquals(3, sentFakes().size)
@@ -845,7 +1093,7 @@ class LyricsReportTest {
         composeRule.waitForIdle()
         assertEquals(emptyList<String>(), sentFakes())
         assertEquals(1, owed())
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         prefs().edit().putBoolean("auto_reports", true).commit()
         openLyrics()
         waitUntil { sentFakes().size == 1 }
@@ -905,8 +1153,10 @@ class LyricsReportTest {
         val named = keptSent()[1].getJSONObject("song")
         assertEquals(setOf("title", "artist", "sung", "timing"), named.keys().asSequence().toSet())
         assertFalse(named.getBoolean("sung"))
+        // Timing kept from an earlier version is a share of its own, so it takes no place of the day's.
+        assertEquals(0, foundToday())
         // Started again, nothing goes twice, and what this version times isn't taken for it.
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         LyricsSyncStore(prefs()).save(oldSong(9), oldLines, listOf(SyncPoint(0, 300)))
         started()
         assertEquals(2, keptSent().size)
@@ -920,7 +1170,7 @@ class LyricsReportTest {
         // Not said yet: nothing goes, and it's kept.
         assertEquals(emptyList<JSONObject>(), keptSent())
         assertEquals(2, owed())
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         started()
         assertEquals(2, owed())
         composeRule.runOnIdle { model().allowAutoReports(true) }
@@ -972,7 +1222,7 @@ class LyricsReportTest {
         prefs().edit().putBoolean("auto_reports", true).putString("lyrics_sync", "{not json").putString("sung_heard", "\u0000").commit()
         started()
         assertEquals(0, owed())
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         // Songs with no points, or no name, or points that aren't two numbers each, are no timing to send.
         val odd = JSONObject()
             .put("\u0000band", JSONObject().put("points", org.json.JSONArray().put(org.json.JSONArray().put(1).put(2))))
@@ -1002,7 +1252,7 @@ class LyricsReportTest {
         composeRule.waitForIdle()
         // One turned away stops the rest.
         assertEquals(6, keptSent().size)
-        controller!!.destroyAndSettle()
+        opened.destroyAndSettle()
         fake.handler = others
         started()
         waitUntil { owed() == 0 }
@@ -1099,7 +1349,7 @@ class LyricsReportTest {
         // On its way, it can't be sent twice.
         waitUntil { model().uiState.report == ReportStatus.SENDING }
         send.assertIsNotEnabled()
-        reportsHeld!!.countDown()
+        checkNotNull(reportsHeld) { "No report is held" }.countDown()
         waitUntil { model().uiState.report == null && !shown(string(R.string.reading_what_goes)) }
         assertEquals(1, fake.requestedUrls.count { it == ReportSender.URL })
         val sent = sentReport()
@@ -1121,7 +1371,8 @@ class LyricsReportTest {
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
         openLyrics { model().uiState.learning.lines.isNotEmpty() }
         composeRule.runOnIdle { model().reportReading(Word("花", "か", "ka"), 0, "") }
-        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        waitUntil { model().uiState.report != ReportStatus.SENDING }
+        assertEquals(ReportStatus.FAILED, model().uiState.report)
         assertFalse(sentReport().getJSONObject("reading").has("right"))
     }
 
