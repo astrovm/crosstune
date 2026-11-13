@@ -87,7 +87,7 @@ class MatcherCasesTest {
         Case("1 link alone", "video0", lengthMs = null, linkMs = 240_000, videos = listOf(video("Fake Song (演唱会)", "4:00"), video("Fake Song", "3:30"))),
         Case("1 link alone kanji", null, lengthMs = null, linkMs = 240_000, songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))),
         Case("1 link alone latin", "song1", lengthMs = null, linkMs = 240_000, songs = listOf(row("Fake Song", length = "3:30"), row("Fake Song", length = "4:00"))),
-        Case("1 link and apple", "video0", lengthMs = 240_000, linkMs = 240_000, videos = listOf(video("Fake Song (演唱会)", "4:00"), video("Fake Song", "3:30"))),
+        Case("1 link and apple", "video0", lengthMs = 240_000, linkMs = 240_000, videos = listOf(video("Fake Song (演唱会)", "4:00"), video("Fake Song", "3:30")), knownWrong = 992),
         // 2. Apple has two editions named alike, a live album's and the studio's, at other lengths. Main opens the studio's
         // row for the live one's link in Latin letters, and the live row for the studio's link: Issue #997.
         Case(
@@ -104,7 +104,7 @@ class MatcherCasesTest {
         ),
         Case(
             "2 two editions, no link length", "song0", lengthMs = 240_000, editions = listOf("Fake Album" to 210_000),
-            songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))
+            songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30")), knownWrong = 992
         ),
         // 4. The artist named in Japan's store, and on the rows, in another script.
         Case("4 artist in kanji", "song0", japan = "偽の歌" to "偽バンド", songs = listOf(row("偽の歌", artist = "偽バンド"))),
@@ -390,9 +390,9 @@ class MatcherCasesTest {
         // 2. A band live.
         Case("2 $live", null, videos = listOf(video("Fake Song ($live)")))
     } + listOf("ばら" to "原", "きんか" to "銀河", "かっこう" to "学校", "雨" to "飴").map { (kana, kanji) ->
-        // 4. Kana against kanji can't be told apart, and kanji that read alike may be one name: main's row opens, as
-        // only what says it's another takes it away (the seventh review).
-        Case("4 $kana $kanji", "song0", title = "Fake Song", japan = japanese(kana), songs = listOf(row(kanji)), picked = SAYS_NONE)
+        // 4. Kana against kanji can't be told apart: main's row opens, as only what says it's another takes it away (the
+        // seventh review). 雨 and 飴 are two words, rain and candy, that only read alike: main is wrong there, Issue #983.
+        Case("4 $kana $kanji", "song0", title = "Fake Song", japan = japanese(kana), songs = listOf(row(kanji)), picked = SAYS_NONE, knownWrong = 983.takeIf { kana == "雨" })
     } + listOf(
         // 4. Homophones, kana against kanji, as main: Issue #983.
         Case("4 あめ 飴", "song0", japan = japanese("あめ"), songs = listOf(row("飴")), picked = SAYS_NONE),
