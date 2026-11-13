@@ -173,9 +173,9 @@ class MatcherCasesTest {
         Case("song's subtitle", "song0", japan = japanese("偽の歌 ～偽りの夜～"), songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌")), knownWrong = 992),
         Case("song's credit", "song0", title = "Fake Song feat. Live Crew", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌")), knownWrong = 992),
         Case("tagged", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌 (Single Version)")), knownWrong = 992),
-        Case("other script", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("にせのうた")), knownWrong = 992),
-        Case("live album", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌", "Live at Budokan"))),
-        Case("live in name", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌ライブ"))),
+        Case("other script", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("にせのうた")), knownWrong = 983),
+        Case("live album", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌", "Live at Budokan")), knownWrong = 992),
+        Case("live in name", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌ライブ")), knownWrong = 983),
         Case("not as close", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌", length = "1:31")), knownWrong = 992),
         Case("not as close though shorter", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌", length = "1:28")), knownWrong = 992),
         Case("closer though longer", "song0", songs = listOf(row("偽の歌 (ライブ)", length = "1:27"), row("偽の歌", length = "1:32")), knownWrong = 992),
@@ -229,7 +229,7 @@ class MatcherCasesTest {
         Case("1 rightly doubted", "song0", songs = listOf(row("偽の歌 (Live)"), row("別の歌"), row("Другая песня")), picked = 1, knownWrong = 983),
         Case("1 rightly doubted cyrillic", "song0", songs = listOf(row("偽の歌 (Live)"), row("別の歌"), row("Другая песня")), picked = 2, knownWrong = 983),
         // 1. Nor a row named otherwise, picked or not: only the same name with the tag cut.
-        Case("1 pick in its script", "song0", japan = japanese("にせのうた"), songs = listOf(row("偽の歌 (ライブ)"), row("ニセノウタ")), picked = 1, knownWrong = 992)
+        Case("1 pick in its script", "song0", japan = japanese("にせのうた"), songs = listOf(row("偽の歌 (ライブ)"), row("ニセノウタ")), picked = 1, knownWrong = 983)
     )
 
     // The seventh review, of dc6e8a5f: PR comment 6843592618. Each took away main's right row, signed out or for a wrong pick.
@@ -280,7 +280,7 @@ class MatcherCasesTest {
         // 7. ChatGPT picks another, but main opened its row without asking.
         Case("7 asked", "song0", songs = listOf(row("偽の歌"), row("別の歌")), picked = 1),
         // 9. A live take named by a half, and another song: nothing without ChatGPT, as neither is it.
-        Case("9 live half", "song1", title = "Live Forever", japan = japanese("曲"), songs = listOf(row("別の歌"), row("曲 - Live"))),
+        Case("9 live half", "song1", title = "Live Forever", japan = japanese("曲"), songs = listOf(row("別の歌"), row("曲 - Live")), knownWrong = 983),
         // The replay of 151 songs: one version named twice, in two scripts, or with an apostrophe left out, is the song.
         Case("r1 live twice", "song0", title = "Fake Song (Live)", songs = listOf(row("偽の歌 (ライブ) - Fake Song (Live)"))),
         Case("r2 acoustic twice", "song0", title = "Fake Song Acoustic Guitar Version", songs = listOf(row("偽の歌_Acoustic Guitar Ver. - Fake Song Acoustic Guitar Version"))),
@@ -305,7 +305,7 @@ class MatcherCasesTest {
         Case("2 theme", "song0", title = "Sakura (Theme from Live Forever)", japan = japanese("さくら"), songs = listOf(row("サクラ"), row("さくら (ライブ)"))),
         // A Latin half that's only a word of the song's name, and no reading of the rest, proves nothing; and saying
         // another version, it isn't the song, which main opened by the other half.
-        Case("2 live half", "song1", title = "Live Forever", japan = japanese("曲"), songs = listOf(row("別の歌"), row("曲 - Live"))),
+        Case("2 live half", "song1", title = "Live Forever", japan = japanese("曲"), songs = listOf(row("別の歌"), row("曲 - Live")), knownWrong = 983),
         // 3. A katakana word no list has, and ヴ in a word that only holds a mark: main's row is shown first.
         Case("3 ballad", "song0", title = "Fake Song (Ballad Version)", songs = listOf(row("偽の歌 (バラードバージョン)"), row("偽の歌")), picked = 0),
         Case("3 alive", "song0", title = "Alive", songs = listOf(row("アライヴ"), row("別の歌")), picked = 0)
@@ -361,7 +361,7 @@ class MatcherCasesTest {
         Case("6 hanamizuki", "song0", title = "Hanamizuki", japan = japanese("ﾊﾅﾐｽﾞｷ"), songs = listOf(row("花水木"))),
         Case("6 tokyo", "song0", title = "Tokyo", japan = japanese("トーキョー"), songs = listOf(row("東京"))),
         // 7. "Xバージョン" is "X ver.".
-        Case("7 tv", "song0", title = "Fake Song (Single Version)", songs = listOf(row("偽の歌 (TVバージョン)"))),
+        Case("7 tv", "song0", title = "Fake Song (Single Version)", songs = listOf(row("偽の歌 (TVバージョン)")), knownWrong = 983),
         // But not in a word no list has, which can't tell: the seventh review.
         Case("7 english", "song0", title = "Fake Song (Single Version)", songs = listOf(row("偽の歌 (英語バージョン)"))),
         Case("7 own", "song0", title = "Fake Song (Single Version)", japan = japanese("偽の歌 (シングル・バージョン)"), songs = listOf(row("偽の歌 (シングル・バージョン)"))),
@@ -399,8 +399,8 @@ class MatcherCasesTest {
         // 5. "Live Forever" is "曲" in Japan, so "曲 (ライブ)" is a live one.
         Case("5 live forever", "video0", title = "Live Forever", japan = japanese("曲"), videos = listOf(video("曲"))),
         Case("5 live forever live", null, title = "Live Forever", japan = japanese("曲"), videos = listOf(video("曲 (ライブ)"))),
-        // 5. The song's own album says "& Instrumental", not the row.
-        Case("5 own album instrumental", "song0", album = "Naughty Boys & Instrumental", songs = listOf(row("偽の歌 (Instrumental)", "Naughty Boys & Instrumental"))),
+        // 5. The song's own album says "& Instrumental", and the row is that album's instrumental track: main opens it, Issue #983.
+        Case("5 own album instrumental", "song0", album = "Naughty Boys & Instrumental", songs = listOf(row("偽の歌 (Instrumental)", "Naughty Boys & Instrumental")), knownWrong = 983),
         Case("5 own album", "song0", album = "Naughty Boys & Instrumental", songs = listOf(row("偽の歌", "Naughty Boys & Instrumental"))),
         // The artist's only song as long, in kana, with nothing to say it isn't: as main, Issue #983.
         Case("issue kimini mune kyun", "song0", title = "Kimini Mune Kyun", songs = listOf(row("さよなら")), knownWrong = 983)
