@@ -28,7 +28,7 @@
   ],
   "packageRules": [
     {
-      "description": "The JDK moves in one pull request, by hand: the box, every setup-java step and syncreplay together. scripts/gradle-box/test_jdk_pins.py holds them equal.",
+      "description": "A new JDK major waits on the Dependency Dashboard: the box, every setup-java step, syncreplay and CONTRIBUTING.md move together in one PR. scripts/gradle-box/test_jdk_pins.py holds them equal.",
       "matchPackageNames": [
         "docker.io/library/eclipse-temurin",
         "eclipse-temurin"
@@ -36,7 +36,7 @@
       "matchUpdateTypes": [
         "major"
       ],
-      "enabled": false
+      "dependencyDashboardApproval": true
     },
     {
       "description": "The J-Total widths are measured in this exact browser and its fonts. A new image measures other widths, so it moves only with new tables.",
