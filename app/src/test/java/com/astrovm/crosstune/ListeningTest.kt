@@ -1248,27 +1248,46 @@ class ListeningTest {
     @Test
     fun aNetworkBackWhileTheLastOneStillFailsIsTriedAgainToo() {
         MainActivity.connectionFactory = { FakeConnection() }
-        val keeping = java.util.concurrent.atomic.AtomicBoolean(false)
-        val first = java.util.concurrent.atomic.AtomicReference<String>()
-        val back = java.util.concurrent.atomic.AtomicBoolean(false)
+        val model = java.util.concurrent.atomic.AtomicReference<MainViewModel>()
+        // The time round that keeps it. Told by the round, not by what's asked: the song's card asks the same
+        // services, and its requests can arrive late, after the tap that keeps it (Issue #938).
+        val keeping = java.util.concurrent.atomic.AtomicInteger(Int.MAX_VALUE)
+        val telling = java.util.concurrent.atomic.AtomicBoolean(false)
+        val told = CountDownLatch(1)
         MainActivity.hearingFactory = { FakeHearing().apply { song("Demo", 2.0) } }
         fake.handler = { request ->
-            val url = request.url.toString()
-            // Kept, the next network comes while it's still giving up on the one that went away; what
-            // it asks first, asked again, is it trying on the new one.
-            if (keeping.get() && !first.compareAndSet(null, url) && url == first.get()) back.set(true)
-            if (keeping.get() && first.get() == url && !back.get()) networkBackNow()
-            if (!back.get()) throw IOException("offline")
-            FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
+            val round = model.get()?.keptOfflineRounds ?: 0
+            when {
+                round < keeping.get() -> throw IOException("offline")
+                round == keeping.get() -> {
+                    // The next network comes while each request of the first time round still fails on the one that
+                    // went away: none fails before it's told, so the fetch is still running when it hears.
+                    if (telling.compareAndSet(false, true)) {
+                        // Told even when the telling fails, so the test ends on that failure and not on a wait.
+                        try {
+                            networkBackNow()
+                        } finally {
+                            told.countDown()
+                        }
+                    }
+                    told.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    throw IOException("offline")
+                }
+                else -> FakeSpotify.html(request, """[{"trackName":"Demo","artistName":"Band","plainLyrics":"Night sky"}]""")
+            }
         }
         allowMicrophone()
         launch()
+        model.set(controllerModel())
         recognize()
         waitForText("Demo")
         composeRule.waitForIdle()
-        keeping.set(true)
+        keeping.set(model.get().keptOfflineRounds + 1)
         click(string(R.string.keep_offline))
         waitForDescription(string(R.string.kept_offline))
+        // Told while the first time round failed, and kept the next time round, which that started.
+        assertTrue(telling.get())
+        assertEquals(keeping.get() + 1, model.get().keptOfflineRounds)
     }
 
     /**

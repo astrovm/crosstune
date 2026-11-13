@@ -5002,6 +5002,15 @@ internal class MainViewModel(
     private var fetchAgain = false
 
     /**
+     * How many times what's kept for offline was gone round, so a test can tell a request of one time
+     * round from one of the next: their requests are the same, and the song's card asks its own too.
+     */
+    @VisibleForTesting
+    @Volatile
+    internal var keptOfflineRounds = 0
+        private set
+
+    /**
      * Fetches what each song kept for offline needs and isn't saved yet, one at a time, on a network
      * that costs no data, while there's room.
      */
@@ -5015,6 +5024,7 @@ internal class MainViewModel(
         keepingOffline = viewModelScope.launch {
             do {
                 fetchAgain = false
+                keptOfflineRounds++
                 fetchEachKept(offline)
             } while (fetchAgain)
         }
