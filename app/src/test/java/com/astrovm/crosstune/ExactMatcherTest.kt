@@ -649,6 +649,30 @@ class ExactMatcherTest {
         assertEquals("https://music.youtube.com/watch?v=row00000000", find("Fake Song", "偽の歌", "Naughty Boys & Instrumental"))
     }
 
+
+    @Test
+    fun aHalfThatSaysTheSongsOwnVersionIsTheSongAsOnMain() {
+        // Sixth review, rule F: "Live" after the dash is no other version when the song is the live one.
+        fun find(title: String, japan: String?, row: String, album: String = "Fake Album") = runBlocking {
+            namesAndTabs(
+                songs = listOf(youTubeMusicRow(row, "Fake Band • $album • 4:06", videoId = "row00000000")),
+                apple = mapOf("AR" to appleSong(title, "Fake Band", 245_093)),
+                elsewhere = japan?.let { mapOf("JP" to appleSong(it, "Fake Band", 245_093)) }.orEmpty()
+            )
+            matcher().find(MusicService.YOUTUBE_MUSIC, MusicMetadata(title, "Fake Band"))
+        }
+        val row = "https://music.youtube.com/watch?v=row00000000"
+        assertEquals(row, find("Fake Song (Live)", "偽の歌 (Live)", "偽の歌 - Live"))
+        assertEquals(row, find("Fake Song (Remix)", "偽の歌 (Remix)", "偽の歌 - Remix"))
+        assertEquals(row, find("Fake Song (Live)", "偽の歌 (Live)", "偽の歌 (Live) - Fake Song"))
+        assertEquals(row, find("Fake Song (Live)", "偽の歌 (Live)", "Fake Song - ライブ"))
+        // Saying a version the song isn't, it's still another.
+        assertNull(find("Fake Song", "偽の歌", "偽の歌 - Live"))
+        assertNull(find("Fake Song (Live)", "偽の歌 (Live)", "偽の歌 - Acoustic", album = "Live at Fake Hall"))
+        assertNull(find("Fake Song", null, "Fake Song - ライブ"))
+        assertNull(find("Live Forever", "曲", "曲 - Live"))
+    }
+
     /** A video on Fake Band's channel, 1:30, for [title], also called [japan] in Japan's store, with no song row. */
     private fun findVideo(title: String, video: String, japan: String? = null) = runBlocking {
         namesAndTabs(
@@ -750,6 +774,10 @@ class ExactMatcherTest {
         // As long as the song, by its artist, alone and named both ways: only its letters, Latin ones, keep it out.
         assertNull(findAngel(listOf("Canción Cruel" to "Yoko Takahashi • Otro Álbum • 4:05"), videos = listOf(bothWays("Canción Cruel"))))
         assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(listOf("残酷な天使のテーゼ" to "Yoko Takahashi • Otro Álbum • 4:05"), videos = listOf(bothWays())))
+        // "〇", a circle drawn as a kanji numeral, is no letter: the name is still in Latin letters, as the song's own is,
+        // so it isn't held up against its Japanese one.
+        val circled = listOf("A Cruel Angel's Thesıs 〇" to "Yoko Takahashi • Otro Álbum • 4:05")
+        assertEquals("https://music.youtube.com/watch?v=row00000000", findAngel(circled, japan = "残酷な天使のテーゼ"))
     }
 
     @Test
@@ -938,6 +966,7 @@ class ExactMatcherTest {
             }
         }
     }
+
 
     private fun appleSong(title: String, artist: String, lengthMs: Long = 312_000, id: Long = 7) =
         """{"trackId":$id,"trackName":"$title","artistName":"$artist","trackTimeMillis":$lengthMs}"""

@@ -684,9 +684,11 @@ internal class ExactMatcher(
         val credited = names.artists.joinToString(" ")
         fun another(row: Row) = SongNames.saysAnotherVersionOf(row.name, names.titles, credited)
         rows.firstOrNull { isTheSong(it, names) }?.let { row ->
-            val album = row.details.getOrNull(1).orEmpty()
             val halves = row.name.split(" - ").map(String::trim).takeIf { it.size == 2 }.orEmpty()
-            val half = halves.zip(halves.reversed()).any { (half, other) -> names.titles.none { SongNames.sameVersion(it, half, album) } && SongNames.onlyAnotherVersion(half, other) }
+            // A half that's one of the song's names, or with the other half one of them, as "偽の歌 - Live" is "偽の歌 (Live)", says no other.
+            val half = halves.zip(halves.reversed()).any { (half, other) ->
+                names.titles.none { SongNames.sameVersion(it, half) || SongNames.sameVersion(it, "$other ($half)") } && SongNames.onlyAnotherVersion(half, other)
+            }
             return Opened(row, another(row) || half)
         }
         rows.firstOrNull { isTheSongInAnotherScript(it, names) }?.let { return Opened(it, another(it) || namesAnother(it, names)) }
@@ -890,18 +892,19 @@ internal class ExactMatcher(
      * letters' marks and strokes off, are no name's the song has in Latin letters: "Canción Falsa" for "Fake Song",
      * where "Fake Søng" is it. In a script a name of the song is in, no part of it is that name, written alike or not
      * (see [writtenAlike]): "飴" for "あめ", where "アメ" is it. A script no name of it is in has nothing to compare
-     * with, so main's row stays: "残酷な天使のテーゼ" for "A Cruel Angel's Thesis".
+     * with, so main's row stays: "残酷な天使のテーゼ" for "A Cruel Angel's Thesis". Nor is one with a part in Latin
+     * letters that is the song's name: "Fake Song - ライブ" is "Fake Song (Live)".
      */
     private fun namesAnother(row: Row, names: Names): Boolean {
         val own = names.titles.map { SongNames.bareTitle(SongNames.withoutEditionTag(it)) }
         val scripts = scriptsOf(row.name)
-        if (scripts.isEmpty()) {
-            val latin = own.filter { scriptsOf(it).isEmpty() }.map(SongNames::unmarkedWords)
-            return latin.isNotEmpty() && SongNames.unmarkedWords(SongNames.bareTitle(row.name)) !in latin
-        }
+        val latin = own.filter { scriptsOf(it).isEmpty() }.map(SongNames::unmarkedWords)
+        if (scripts.isEmpty()) return latin.isNotEmpty() && SongNames.unmarkedWords(SongNames.bareTitle(row.name)) !in latin
+        val parts = SongNames.titleNames(row.name).map(SongNames::bareTitle)
+        // A part in Latin letters that's the song's own name, as "Fake Song" in "Fake Song - ライブ", says it's this one.
+        if (parts.any { scriptsOf(it).isEmpty() && SongNames.unmarkedWords(it) in latin }) return false
         val known = own.filter { scriptsOf(it).any(scripts::contains) }
-        val parts = SongNames.titleNames(row.name).map(SongNames::bareTitle).filter { scriptsOf(it).isNotEmpty() }
-        return known.isNotEmpty() && parts.none { part -> known.any { writtenAlike(it, part) } }
+        return known.isNotEmpty() && parts.filter { scriptsOf(it).isNotEmpty() }.none { part -> known.any { writtenAlike(it, part) } }
     }
 
     /** The scripts other than Latin [text] has letters in, with kanji and kana as one, as Japanese writes them together. */
