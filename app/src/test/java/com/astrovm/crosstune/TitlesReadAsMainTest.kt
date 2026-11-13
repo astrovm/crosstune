@@ -159,6 +159,12 @@ class TitlesReadAsMainTest {
         // A blank pair left after the noise is cut goes too.
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.youtubeVideo("Band - Song 『[HD] 』", "Channel"))
         assertEquals(MusicMetadata("Song", "Band"), MetadataParsers.musicVideo("Band - Song 『[HD] 』", "Channel"))
+        // One with none is read as main read the title: a song with a letter on a later line, or none.
+        assertEquals("A「|」" to "B", MetadataParsers.bracketedSong("A「|」\n「B」"))
+        assertNull(MetadataParsers.bracketedSong("A「|」 「B」"))
+        assertEquals("A" to "B", MetadataParsers.bracketedSong("A「B」\nC"))
+        // A Spotify page whose song in brackets has none is read on all its lines, as main did.
+        assertEquals(MusicMetadata("Song『|』", "Artist"), MetadataParsers.musicVideo("Song『|』 - song and lyrics by Artist | Spotify", ""))
     }
 
     private companion object {

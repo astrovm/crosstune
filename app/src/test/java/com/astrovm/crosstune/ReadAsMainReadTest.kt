@@ -63,6 +63,15 @@ class ReadAsMainReadTest {
     }
 
     @Test
+    fun aSongInBracketsIsReadAsMainReadIt() {
+        // As main read a title whose first song in brackets has no letter: a later one, on its line or past only spaces.
+        val main = phoneRegex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
+        texts("「", "」", "『", "』", "A", "|", " ", "\u3000", "\n", "\r\n", "\u0085", "x").forEach { text ->
+            assertEquals(text, main.matchEntire(text)?.destructured?.let { (artist, song) -> artist to song }, MetadataParsers.songAsMainRead(text))
+        }
+    }
+
+    @Test
     fun aChordWikiCreditIsCutAsMainCutIt() {
         val credit = phoneRegex("""\s*[（(]\s*(?:歌|唄|作詞|作曲|編曲|原曲)[^）)]*[）)]\s*$""")
         texts("（", "）", "(", ")", "歌：", "作詞", "x", " ", "\u3000", "\n", "\r\n", "\u0085", "A").forEach { title ->

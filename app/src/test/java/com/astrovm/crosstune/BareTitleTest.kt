@@ -29,6 +29,8 @@ class BareTitleTest {
             "a\n-\u0085", "Song (x) -\u0085", "Song - (x)\u0085", "-\u0085", "Song -\u2028",
             // A dash right before a tag in brackets has the tag's space after it, not one of its own.
             "Song - (a-b)\u0085", "Song - [a-b] (x)\u0085", "-a - b",
+            // U+001F is no "\s" but trimming takes it: it goes with the spaces before a tag.
+            "Song\u001F (Live)", "Song \u001F- Live", "Song\u001F\u001F [x] (y)", "\u001F (x)",
         )) {
             assertEquals(title, Main.bareTitle(title), SongNames.bareTitle(title))
         }
@@ -73,7 +75,7 @@ class BareTitleTest {
         /** Dashes, spaces of each kind, line breaks, brackets, and a cover's words. */
         val PIECES = listOf(
             " - ", " – ", "-", "–", " ", "  ", "\t", "\n", "\r\n", "\r", "\u0085", "\u2028", "\u3000", "(", ")", "[", "]", "(Live)",
-            " (x)", "Cover", "cover of a", "Acoustic", "in the style of b", "a", "x", ".",
+            " (x)", "\u001F", "Cover", "cover of a", "Acoustic", "in the style of b", "a", "x", ".",
         )
     }
 }

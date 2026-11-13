@@ -53,16 +53,13 @@ internal object MetadataParsers {
 
     /**
      * The artist and the song of a title that names the song in 「」 or 『』, as [bracketedSongRegex] reads it. A song
-     * has a letter or a digit: "「|」 Q" names none. Where lines follow one that has none, it's the song main read, a
-     * later one or none, as "「|」\nQ" names none.
+     * has a letter or a digit: "「|」 Q" names none. Where the first has none, it's the song main read, a later one on a
+     * later line or none, as "A「|」\n「B」" names "B" and "「|」\nQ" none. With no line after, main read that first one.
      */
     fun bracketedSong(title: String): Pair<String, String>? {
         val text = withoutBlankSong(title)
-        val found = bracketedSongRegex.matchEntire(text) ?: return null
-        val (artist, song) = found.destructured
-        val after = found.groups[2]?.range?.last?.plus(2) ?: return null
-        val linesAfter = (after until text.length).any { isLineBreak(text[it]) }
-        val read = if (!linesAfter || song.any(Char::isLetterOrDigit)) artist to song else songAsMainRead(text)
+        val (artist, song) = bracketedSongRegex.matchEntire(text)?.destructured ?: return null
+        val read = if (song.any(Char::isLetterOrDigit)) artist to song else songAsMainRead(text)
         return read?.takeIf { (_, named) -> named.any(Char::isLetterOrDigit) }
     }
 
@@ -71,7 +68,7 @@ internal object MetadataParsers {
      * with [text]: the first 「 or 『 on the first line, or after only spaces past it, whose song isn't empty and closes
      * with no line after it. The artist is what's before the spaces before it.
      */
-    private fun songAsMainRead(text: String): Pair<String, String>? {
+    internal fun songAsMainRead(text: String): Pair<String, String>? {
         val lastBreak = text.indexOfLast(::isLineBreak)
         var close = -1
         var pastLine = false

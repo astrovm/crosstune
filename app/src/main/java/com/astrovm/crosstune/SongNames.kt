@@ -41,7 +41,6 @@ internal object SongNames {
     private fun guestInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val start = title.spacesEnd(open + 1)
-        if (!title.readsAt(start, GUEST_WORDS_START)) return null
         val word = featuringWord.matchAt(title.letters(start, LONGEST_WORD), 0) ?: return null
         val close = title.nextBracket(title.after(start, word.value.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
@@ -49,7 +48,7 @@ internal object SongNames {
 
     /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or null. */
     private fun guestWrittenOut(title: CutTitle, at: Int, word: Int): Int? {
-        if (title.afterDigit(at) || !title.readsAt(word, GUEST_WORDS_START)) return null
+        if (title.afterDigit(at)) return null
         val said = featuringSaid.matchAt(title.letters(word, LONGEST_WORD), 0) ?: return null
         val guest = title.spacesEnd(title.after(word, said.value.length - 1))
         val bracket = title.nextBracket(guest)
@@ -65,7 +64,6 @@ internal object SongNames {
 
     /** The most letters [featuringWord] and [featuringSaid] read: "featuring" and the one after it. */
     private const val LONGEST_WORD = 10
-    private const val GUEST_WORDS_START = 'f'
     private const val TAG_OPENS = "(["
     private const val TAG_CLOSES = ")]"
 
@@ -75,7 +73,7 @@ internal object SongNames {
      * \s+M/V\b` read it.
      */
     private fun markEnd(title: CutTitle, at: Int, mark: Int): Int? = markInBrackets(title, mark)
-        ?: if (mark > at && title.readsAt(mark, VIDEO_MARK_START) && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
+        ?: if (mark > at && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
 
     private fun markInBrackets(title: CutTitle, open: Int): Int? {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
@@ -87,7 +85,6 @@ internal object SongNames {
     }
 
     private const val VIDEO_MARK = "m/v"
-    private const val VIDEO_MARK_START = 'm'
     private val videoMarkAt = phoneRegex("""M/V\b""", RegexOption.IGNORE_CASE)
 
     private val guestCredit = phoneRegex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)

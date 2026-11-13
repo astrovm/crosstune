@@ -110,7 +110,8 @@ internal class SongSearcher(
             .addQueryParameter("limit", "$LIMIT")
             .build()
         val results = fetchJson(url.toString()).optJSONArray("data") ?: return emptyList()
-        val typed = query.split(phoneRegex("\\s+")).map(SongNames::normalize).filter { it.isNotEmpty() }
+        // A blank word is in every name alike, so it changes no order.
+        val typed = query.split(phoneRegex("\\s+")).map(SongNames::normalize)
         return (0 until results.length()).mapNotNull { index ->
             val song = results.optJSONObject(index) ?: return@mapNotNull null
             val title = MetadataParsers.deezerTitle(song).trim()

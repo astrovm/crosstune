@@ -82,9 +82,6 @@ internal class CutTitle(private val title: String) {
         return at
     }
 
-    /** Whether a pattern that ignores case reads the letter at [place] as [letter], as [readsAs] says: false past the end. */
-    fun readsAt(place: Int, letter: Char) = title.getOrNull(place)?.let { readsAs(it, letter) } == true
-
     /** Up to [count] letters from [place] on. */
     fun letters(place: Int, count: Int): String {
         val letters = StringBuilder()
