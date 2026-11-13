@@ -481,7 +481,9 @@ pitest {
     // Each mutant's classes are loaded again, and their adapters and stubs fill the JIT's small code
     // heap for them long before the Java heap fills, which PIT reports as a MEMORY_ERROR. One code
     // cache, unsplit, gives them the room.
-    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
+    // MatcherCasesTest's matrix and made-up searches take over a minute for each change that lives, so here only its
+    // fixed cases run: the matcher job in CI runs all of them whenever the matcher or what it calls changes.
+    jvmArgs.set(robolectricJvmArgs + listOf("-Dcrosstune.mutationRun=true", "-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
 }
 
 // After the plugin's own setup, which gives the tests only what they compile against.

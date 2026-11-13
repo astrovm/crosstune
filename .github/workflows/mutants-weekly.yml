@@ -6,12 +6,13 @@ name: Mutants weekly
 # everything. What lived goes in the open "Missed mutants" issue, for follow-up PRs. It never
 # blocks anything.
 #
-# A pull request that changes this workflow or its script runs the script's tests and one real
-# part, so a broken setup shows before Saturday.
+# A pull request that changes this workflow or its script runs the script's tests, one real part
+# and the full matcher run below, so a broken setup shows before Saturday.
 #
 # Each week, MatcherCasesTest runs in full too: its whole matrix and all its made-up searches, of
 # which CI runs one in 20 unless a pull request changes the matcher, the test or what main opened.
 # What the matcher calls lives in other files too, and a change there shows here within the week.
+# A failed matcher run goes in the "Missed mutants" issue too.
 on:
   schedule:
     - cron: "0 6 * * 6"
@@ -135,7 +136,7 @@ jobs:
           if-no-files-found: warn
 
   report:
-    needs: [plan, part]
+    needs: [plan, part, matcher]
     if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.plan.result == 'success' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -158,6 +159,7 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           PARTS: ${{ needs.plan.outputs.parts }}
           JOBS: ${{ needs.part.result }}
+          MATCHER: ${{ needs.matcher.result }}
         run: |
           : > all-lived.txt
           missing_parts=""
@@ -182,6 +184,10 @@ jobs:
             if [ "$JOBS" != success ]; then
               echo 'At least one part failed. Its results may be missing; see the run.'
             fi
+            if [ "$MATCHER" != success ]; then
+              echo "**The full MatcherCasesTest run ended $MATCHER**: a link may open another song than main's. See its job in the run."
+              echo
+            fi
             if [ -z "$lived" ] && [ "$JOBS" = success ] && [ -z "$missing_parts" ]; then
               echo 'Every change in these parts was caught by a test.'
             elif [ -z "$lived" ]; then
@@ -200,6 +206,6 @@ jobs:
           fi
           # A lost part is a finding too: it must reach the issue even when nothing lived.
           has_findings=false
-          if [ -n "$lived" ] || [ -n "$missing_parts" ]; then has_findings=true; fi
+          if [ -n "$lived" ] || [ -n "$missing_parts" ] || [ "$MATCHER" != success ]; then has_findings=true; fi
           scripts/mutants-post.sh report.md "$has_findings"
-          [ -z "$missing_parts" ]
+          [ -z "$missing_parts" ] && [ "$MATCHER" = success ]
