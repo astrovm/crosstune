@@ -1263,8 +1263,12 @@ class ListeningTest {
                     // The next network comes while each request of the first time round still fails on the one that
                     // went away: none fails before it's told, so the fetch is still running when it hears.
                     if (telling.compareAndSet(false, true)) {
-                        networkBackNow()
-                        told.countDown()
+                        // Told even when the telling fails, so the test ends on that failure and not on a wait.
+                        try {
+                            networkBackNow()
+                        } finally {
+                            told.countDown()
+                        }
                     }
                     told.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     throw IOException("offline")
