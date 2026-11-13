@@ -306,9 +306,8 @@ internal fun chordWikiLook(seen: ChordWikiSeen, timedOut: Boolean): ChordWikiLoo
 internal fun chordWikiHits(page: String): List<ChordWikiHit> {
     val lined = page.lineSequence().mapNotNull(::chordWikiHitLine).toList()
     if (lined.isNotEmpty()) return lined
-    return ANCHOR.findAll(page).mapNotNull { match ->
-        val text = ChordFinder.unescape(match.groupValues[2].replace(ANCHOR_TAGS, "")).trim()
-        chordWikiHit(text, ChordFinder.unescape(match.groupValues[1]))
+    return chordWikiLinks(page).mapNotNull { (address, shown) ->
+        chordWikiHit(ChordFinder.unescape(withoutTags(shown)).trim(), ChordFinder.unescape(address))
     }.toList()
 }
 
@@ -380,8 +379,62 @@ private fun chordWikiHit(text: String, href: String): ChordWikiHit? {
     return ChordWikiHit(title, text.substringAfter(" - ", "").trim(), link)
 }
 
-private val ANCHOR = phoneRegex("""<a\b[^<>]*\bhref="([^"<>]*+)"[^<>]*+>((?:[^<]++|<(?!/a>|a\b))*+)</a>""", RegexOption.IGNORE_CASE)
-private val ANCHOR_TAGS = phoneRegex("<[^<>]++>")
+private val ANCHOR = phoneRegex("""<a\b""", RegexOption.IGNORE_CASE)
+private val ADDRESS = phoneRegex("""\bhref="""", RegexOption.IGNORE_CASE)
+private val ANCHOR_CLOSE = phoneRegex("</a>", RegexOption.IGNORE_CASE)
+
+/**
+ * Each link in [page], its address and what it shows, as main's `<a\b[^>]*\bhref="([^"]*)"[^>]*>(.*?)</a>` read them: of
+ * the `href="` in a link's tag, before its first `>`, the last one after which come a `"`, then a `>`, then a `</a>`, and
+ * what's between that `>` and the first `</a>` after it. Each mark is looked for once, so a page of links that never
+ * close takes time in step with it, where main's pattern looked to its end from each.
+ */
+internal fun chordWikiLinks(page: String): Sequence<Pair<String, String>> = sequence {
+    val addresses = linkAddresses(page)
+    val opens = ANCHOR.toPattern().matcher(page)
+    val closes = ANCHOR_CLOSE.toPattern().matcher(page)
+    var firstClose = -1
+    var closeStart = -1
+    var closeEnd = -1
+    var last = -1
+    var from = 0
+    while (opens.find()) {
+        if (opens.start() < from) continue
+        if (firstClose < opens.end()) firstClose = page.indexOf('>', opens.end()).orEnd(page)
+        if (firstClose == page.length) return@sequence
+        while (last + 1 < addresses.size && addresses[last + 1][0] < firstClose) last++
+        val address = addresses.getOrNull(last)?.takeIf { it[0] >= opens.end() } ?: continue
+        // A `</a>` comes after it, as it's one of [addresses].
+        while (closeStart <= address[3]) {
+            closes.find()
+            closeStart = closes.start()
+            closeEnd = closes.end()
+        }
+        yield(page.substring(address[1], address[2]) to page.substring(address[3] + 1, closeStart))
+        from = closeEnd
+    }
+}
+
+/**
+ * Each `href="` in [page] that a quote, a `>` and a `</a>` follow, in order: where it starts, where its value starts,
+ * its quote and its `>`.
+ */
+private fun linkAddresses(page: String): List<IntArray> {
+    var lastClose = -1
+    val anyClose = ANCHOR_CLOSE.toPattern().matcher(page)
+    while (anyClose.find()) lastClose = anyClose.start()
+    val addresses = mutableListOf<IntArray>()
+    val found = ADDRESS.toPattern().matcher(page)
+    var quote = -1
+    var tagClose = -1
+    while (found.find()) {
+        if (quote < found.end()) quote = page.indexOf('"', found.end()).orEnd(page)
+        if (quote == page.length) break
+        if (tagClose <= quote) tagClose = page.indexOf('>', quote + 1).orEnd(page)
+        if (tagClose < lastClose) addresses += intArrayOf(found.start(), found.end(), quote, tagClose)
+    }
+    return addresses
+}
 
 /** What ChordWiki's search says when no song matches. */
 private const val NO_MATCH = "一致するものは見つかりませんでした"

@@ -82,7 +82,10 @@ internal class CutTitle(private val title: String) {
         return at
     }
 
-    /** Up to [count] letters from [place] on. */
+    /**
+     * Up to [count] letters from [place] on, and the other half of a letter past U+FFFF that the last is the first half
+     * of: a pattern would read a half alone as a letter of its own, which "\b" doesn't read as a word's.
+     */
     fun letters(place: Int, count: Int): String {
         val letters = StringBuilder()
         var at = next(place)
@@ -90,6 +93,7 @@ internal class CutTitle(private val title: String) {
             title.getOrNull(at)?.let(letters::append)
             at = next(at + 1)
         }
+        if (letters.lastOrNull()?.isHighSurrogate() == true && title.getOrNull(at)?.isLowSurrogate() == true) letters.append(title[at])
         return letters.toString()
     }
 
@@ -207,9 +211,8 @@ internal class CutTitle(private val title: String) {
      */
     fun afterDigit(at: Int): Boolean {
         val before = letterBefore(at)
-        val last = title.getOrNull(before) ?: return false
-        val first = title.getOrNull(before - 1)
-        return isPatternDigit(if (last.isLowSurrogate() && first != null && first.isHighSurrogate()) Character.toCodePoint(first, last) else last.code)
+        if (before !in title.indices) return false
+        return isPatternDigit(Character.codePointBefore(title, before + 1))
     }
 
     /** Where to look again, from a place to the last place that the cuts since [since] could change what's found from. */

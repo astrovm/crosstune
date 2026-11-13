@@ -1017,7 +1017,7 @@ private fun cutLicenseLine(line: String): List<String> {
     var rest = line
     while (rest.length > most) {
         val window = rest.substring(0, most + 1)
-        val sentence = phoneRegex("[.;:!?] ").findAll(window).lastOrNull()?.let { it.range.first + 1 }?.takeIf { it >= most / 3 }
+        val sentence = phoneRegex("[.;:!?] ").matchesIn(window).lastOrNull()?.let { it.range.first + 1 }?.takeIf { it >= most / 3 }
         val cut = sentence ?: window.lastIndexOf(' ').takeIf { it > 0 } ?: most
         pieces += rest.substring(0, cut).trimEnd()
         rest = rest.substring(cut).trimStart()

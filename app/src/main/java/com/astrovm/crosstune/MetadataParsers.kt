@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.util.Base64
+import java.util.BitSet
 
 /** What Crosstune knows about an item; [artist] is blank for artists and playlists. */
 internal data class MusicMetadata(
@@ -32,7 +33,7 @@ internal data class MusicMetadata(
 /** Turns each service's page, oEmbed or API response into [MusicMetadata]. Returns null when unusable. */
 internal object MetadataParsers {
     private val metaTagRegex = phoneRegex("""<meta\s[^>]*>""", RegexOption.IGNORE_CASE)
-    private val titleTagRegex = phoneRegex("""<title[^<>]*+>([^<]*+)</title>""", RegexOption.IGNORE_CASE)
+    internal val titleTag = PageParts(phoneRegex("<title", RegexOption.IGNORE_CASE), phoneRegex("</title>", RegexOption.IGNORE_CASE), without = '<')
     private val attributeRegex = phoneRegex("""(?<![A-Za-z:_-])([A-Za-z:_-]++)\s*+=\s*+(?:"([^"]*+)"|'([^']*+)')""")
     private val tidalSuffixRegex = phoneRegex("""(^|\s)on TIDAL$""")
     private val entityRegex = phoneRegex("""&(#[0-9]+|#[xX][0-9A-Fa-f]+|[A-Za-z]+);""")
@@ -52,16 +53,24 @@ internal object MetadataParsers {
     private val bracketedSongRegex = phoneRegex("""^(?>(.*?)$SPACES_START\s*+[「『](?![」』]))([^」』]++)[」』](?s:.*)""")
 
     /**
-     * The artist and the song of a title that names the song in 「」 or 『』, as [bracketedSongRegex] reads it. A song
-     * has a letter or a digit: "「|」 Q" names none. Where the first has none, it's the song main read, a later one on a
-     * later line or none, as "A「|」\n「B」" names "B" and "「|」\nQ" none. With no line after, main read that first one.
+     * The artist and the song of a title that names the song in 「」 or 『』, as [bracketedSongRegex] reads it, as main
+     * read it on a phone: "Artist「？」" names "？", and "Artist「♡」" names "♡". A "|" alone names none, see [namesASong].
+     * Where the first names none, it's the song main read, a later one on a later line or none, as "A「|」\n「B」" names
+     * "B" and "「|」\nQ" none. With no line after, main read that first one.
      */
     fun bracketedSong(title: String): Pair<String, String>? {
         val text = withoutBlankSong(title)
         val (artist, song) = bracketedSongRegex.matchEntire(text)?.destructured ?: return null
-        val read = if (song.any(Char::isLetterOrDigit)) artist to song else songAsMainRead(text)
-        return read?.takeIf { (_, named) -> named.any(Char::isLetterOrDigit) }
+        val read = if (namesASong(song)) artist to song else songAsMainRead(text)
+        return read?.takeIf { (_, named) -> namesASong(named) }
     }
+
+    /**
+     * Whether [song], in 「」 or 『』, names one: anything but spaces and the bar that parts a title, "「|」\nQ", whose
+     * "|" main named only once a line cut it off from what followed. A letter past U+FFFF is two chars, and neither is a
+     * space or a bar, so it names one too: "「𠮷」".
+     */
+    internal fun namesASong(song: String) = song.any { it != '|' && !it.isWhitespace() }
 
     /**
      * The artist and the song as main's pattern `(.*?)\s*[「『]([^」』]+)[」』].*` read them on a phone, in time in step
@@ -91,8 +100,8 @@ internal object MetadataParsers {
      */
     private fun songLine(title: String): String {
         val song = bracketedSongRegex.matchEntire(title)?.groups?.get(2) ?: return title
-        // A song with no letter or digit isn't read across lines, see [bracketedSong], so the title is read whole.
-        if (song.value.none(Char::isLetterOrDigit)) return title
+        // A song that names none isn't read across lines, see [bracketedSong], so the title is read whole.
+        if (!namesASong(song.value)) return title
         val end = (song.range.last + 2 until title.length).firstOrNull { isLineBreak(title[it]) } ?: return title
         return title.substring(0, end)
     }
@@ -164,11 +173,11 @@ internal object MetadataParsers {
      * "|Lyrics|HD|" and "|OfficialMusicVisualizer", and a line break after.
      */
     private fun trailingQuality(text: CharSequence) =
-        if (endsOnAWord(text)) trailingQualityRegex.find(text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS))?.range else null
+        if (endsOnAWord(text)) findNear(trailingQualityRegex, text, beforeLetters(text, lineEnd(text), QUALITY_LETTERS)) else null
 
     /** A video's noise a title may end on, "Official Video", as [trailingVideoNoiseRegex] finds it. */
     private fun trailingVideoNoise(text: CharSequence) =
-        if (endsOnAWord(text)) trailingVideoNoiseRegex.find(text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS))?.range else null
+        if (endsOnAWord(text)) findNear(trailingVideoNoiseRegex, text, beforeLetters(text, lineEnd(text), VIDEO_NOISE_LETTERS)) else null
 
     /**
      * Whether [text] ends on a letter or a bar, but for spaces and a line break, as [trailingQualityRegex] and
@@ -345,7 +354,8 @@ internal object MetadataParsers {
      * each place for the song's end, and took time squared on a long title.
      */
     internal class SpotifyWording(val wording: String) {
-        private val before = phoneRegex(Regex.escape(wording.substringBefore("%s")), RegexOption.IGNORE_CASE)
+        /** Where the wording starts: a look ahead, so one look along a line finds each place, also where two overlap. */
+        private val before = phoneRegex("(?=${Regex.escape(wording.substringBefore("%s"))})", RegexOption.IGNORE_CASE)
         private val beforeLength = wording.substringBefore("%s").length
         private val after = phoneRegex(Regex.escape(wording.substringAfter("%s") + " | Spotify") + """\z""", RegexOption.IGNORE_CASE)
         private val afterLength = wording.substringAfter("%s").length + " | Spotify".length
@@ -354,6 +364,11 @@ internal object MetadataParsers {
         fun songAndArtist(title: String): Pair<String, String>? {
             val line = line(title) ?: return null
             val artistEnd = line.length - afterLength
+            // One look finds where the wording starts: on a phone each new look copies the line first, and a look at each
+            // dash took time squared on a long one.
+            val starts = BitSet()
+            val look = before.toPattern().matcher(line)
+            while (look.find()) starts.set(look.start())
             for (songEnd in artistEnd downTo 1) {
                 val separator = when {
                     line[songEnd] == ':' && line[songEnd + 1] == ' ' -> 2
@@ -361,7 +376,7 @@ internal object MetadataParsers {
                     else -> continue
                 }
                 val artistStart = songEnd + separator + beforeLength
-                if (artistStart < artistEnd && before.matchesAt(line, songEnd + separator)) {
+                if (artistStart < artistEnd && starts[songEnd + separator]) {
                     return line.substring(0, songEnd) to line.substring(artistStart, artistEnd)
                 }
             }
@@ -474,7 +489,10 @@ internal object MetadataParsers {
         return title.removeRange(found.range)
     }
 
-    /** Where [text] is [letters] letters before [end], not counting spaces: a pattern that reads no more of them from where it starts starts after there. */
+    /**
+     * Where [text] is [letters] letters before [end], not counting spaces: a pattern that reads no more of them from where
+     * it starts starts after there. Never inside a letter past U+FFFF, whose second half a pattern would read alone.
+     */
     internal fun beforeLetters(text: CharSequence, end: Int, letters: Int): Int {
         var at = end
         var counted = 0
@@ -482,7 +500,7 @@ internal object MetadataParsers {
             if (!isPatternSpace(text[at - 1])) counted++
             at--
         }
-        return at
+        return if (at in 1 until text.length && Character.isSurrogatePair(text[at - 1], text[at])) at - 1 else at
     }
 
     /**
@@ -571,7 +589,7 @@ internal object MetadataParsers {
     private fun artistSeparatorRange(title: String): IntRange? {
         val spaced = artistSeparator(title)
         if (spaced > 0) return spaced until spaced + SEPARATOR_WIDTH
-        return gluedDash.findAll(title).singleOrNull()?.range
+        return gluedDash.matchesIn(title).singleOrNull()?.range
     }
 
     /** A dash after a name's last letter and before a space, "Artist- Song"; one in a name has none after it. */
@@ -595,7 +613,8 @@ internal object MetadataParsers {
     /** A hyphen, or the en or em dash some apps write, as NewPipe does "Queen – Bohemian Rhapsody", each as wide. */
     private val dashes = listOf(" - ", " – ", " — ")
 
-    private val youtubeDataRegex = phoneRegex("""var ytInitialData = (\{(?:[^}v]++|\}(?!;</script>)|v(?!ar ytInitialData = ))*+\});</script>""")
+    /** YouTube's page data: from its `{` to the first `};</script>` after it, what's between read as main read it. */
+    internal val youtubeData = PageParts(phoneRegex("""var ytInitialData = \{"""), phoneRegex("""\};</script>"""), tagEnd = null)
 
     /**
      * A YouTube playlist page: its name, picture and, in the page's own data, its first videos, each
@@ -604,7 +623,7 @@ internal object MetadataParsers {
     fun youtubePlaylist(html: String): MusicMetadata? {
         val tags = openGraphTags(html)
         val title = tags["og:title"]?.takeIf { it.isNotBlank() } ?: return null
-        val data = youtubeDataRegex.find(html)?.groupValues?.get(1)
+        val data = youtubeData.firstIn(html)?.let { html.substring(it.between.first - 1, it.between.last + 2) }
         val videos = data?.let { runCatching { youtubeVideos(JSONTokener(it).nextValue()) }.getOrNull() }.orEmpty()
         return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image(), videos)
     }
@@ -657,12 +676,12 @@ internal object MetadataParsers {
     fun applePlaylist(html: String): MusicMetadata? {
         val tags = openGraphTags(html)
         val title = tags["og:title"]?.removeSuffix(" on Apple Music")?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        val data = appleDataRegex.find(html)?.groupValues?.get(1)
+        val data = appleData.firstBetween(html)
         val songs = data?.let { runCatching { appleSongs(JSONTokener(it).nextValue()) }.getOrNull() }.orEmpty()
         return MusicMetadata(title, "", ItemType.PLAYLIST, tags.image(), songs)
     }
 
-    private val appleDataRegex = phoneRegex("""<script type="application/json" id="serialized-server-data">((?:[^<]++|<(?!/script>|script))*+)</script>""")
+    internal val appleData = PageParts(phoneRegex("""<script type="application/json" id="serialized-server-data">"""), phoneRegex("</script>"), tagEnd = null)
 
     /** Every song found anywhere in Apple Music's page data, in page order. */
     private fun appleSongs(value: Any?): List<MusicMetadata> = when (value) {
@@ -684,7 +703,7 @@ internal object MetadataParsers {
 
     /** Spotify's embed page lists an album's, playlist's or artist's first songs, each with its title, artists and length. */
     fun spotifyEmbedTracks(html: String): List<MusicMetadata> {
-        val data = spotifyDataRegex.find(html)?.groupValues?.get(1) ?: return emptyList()
+        val data = spotifyData.firstBetween(html) ?: return emptyList()
         val list = JSONObject(data).optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")
             ?.optJSONObject("data")?.optJSONObject("entity")?.optJSONArray("trackList") ?: return emptyList()
         return (0 until list.length()).mapNotNull { index ->
@@ -696,7 +715,7 @@ internal object MetadataParsers {
         }
     }
 
-    private val spotifyDataRegex = phoneRegex("""<script id="__NEXT_DATA__" type="application/json">((?:[^<]++|<(?!/script>|script))*+)</script>""")
+    internal val spotifyData = PageParts(phoneRegex("""<script id="__NEXT_DATA__" type="application/json">"""), phoneRegex("</script>"), tagEnd = null)
 
     /** Deezer API object; errors come back as {"error": {...}} with HTTP 200, see [deezerError]. */
     fun deezer(json: JSONObject, type: ItemType): MusicMetadata? {
@@ -792,11 +811,11 @@ internal object MetadataParsers {
         return splitBy(title, ", by ", type).copy(artworkUrl = tags.image(), tracks = tracks)
     }
 
-    private val bandcampDataRegex = phoneRegex("""<script type="application/ld\+json"[^<>]*+>((?:[^<]++|<(?!/script>|script))*+)</script>""")
+    internal val bandcampData = PageParts(phoneRegex("""<script type="application/ld\+json""""), phoneRegex("</script>"))
 
     /** A Bandcamp album page's structured data lists its songs, all by the album's artist. */
     private fun bandcampAlbumSongs(html: String): List<MusicMetadata> {
-        val data = bandcampDataRegex.find(html)?.groupValues?.get(1) ?: return emptyList()
+        val data = bandcampData.firstBetween(html) ?: return emptyList()
         val album = runCatching { JSONObject(data) }.getOrNull() ?: return emptyList()
         val artist = album.optJSONObject("byArtist")?.optString("name").orEmpty()
         val list = album.optJSONObject("track")?.optJSONArray("itemListElement") ?: return emptyList()
@@ -818,12 +837,12 @@ internal object MetadataParsers {
     private fun Map<String, String>.image(): String? = this["og:image"]?.takeIf { it.isNotBlank() }
 
     private fun titleTag(html: String): String? =
-        titleTagRegex.find(html)?.groupValues?.get(1)?.let(::decodeEntities)?.trim()
+        titleTag.firstBetween(html)?.let(::decodeEntities)?.trim()
 
     /** Collects og:* meta tags regardless of attribute order or quote style. */
     private fun openGraphTags(html: String): Map<String, String> = buildMap {
-        for (tag in metaTagRegex.findAll(html)) {
-            val attributes = attributeRegex.findAll(tag.value).associate { match ->
+        for (tag in metaTagRegex.matchesIn(html)) {
+            val attributes = attributeRegex.matchesIn(tag.value).associate { match ->
                 match.groupValues[1].lowercase() to match.groupValues[2].ifEmpty { match.groupValues[3] }
             }
             val property = attributes["property"] ?: continue
@@ -832,12 +851,12 @@ internal object MetadataParsers {
         }
     }
 
-    fun decodeEntities(text: String): String = entityRegex.replace(text) { match ->
+    fun decodeEntities(text: String): String = entityRegex.replaceEach(text) { match ->
         val entity = match.groupValues[1]
         val codePoint = when {
             entity.startsWith("#x", ignoreCase = true) -> entity.drop(2).toIntOrNull(16)
             entity.startsWith("#") -> entity.drop(1).toIntOrNull()
-            else -> return@replace namedEntities[entity.lowercase()] ?: match.value
+            else -> return@replaceEach namedEntities[entity.lowercase()] ?: match.value
         }
         codePoint?.takeIf { Character.isValidCodePoint(it) }
             ?.let { String(Character.toChars(it)) }

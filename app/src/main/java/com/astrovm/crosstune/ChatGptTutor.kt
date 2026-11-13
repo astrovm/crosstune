@@ -628,14 +628,65 @@ internal fun sheet(text: String): Sheet {
  * [text] as plain words: ChatGPT, told not to, still writes *album names* in Markdown and adds
  * sources as "([site](https://…))", which would show as they are.
  */
-internal fun plainText(text: String): String = text
-    .replace(markdownSource, "")
-    .replace(phoneRegex("""\[([^\[\]]++)]\(https?://[^)\[\]]*+\)"""), "$1")
+internal fun plainText(text: String): String = withoutLinks(withoutSources(text))
     .replace(phoneRegex("""\*\*(.+?)\*\*"""), "$1")
     .replace(phoneRegex("""(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])"""), "$1")
 
-/** A source ChatGPT adds after what it says, "([site](https://…))", with the spaces before it. */
-private val markdownSource = phoneRegex("""$SPACES_START\s*+\(\[[^\[\]]*+]\([^)\[\]]*+\)\)""")
+/**
+ * [text] without each source ChatGPT adds after what it says, "([site](https://…))", and the spaces before it, as main's
+ * `\s*\(\[[^\]]*]\([^)]*\)\)` cut them: from `([` to the first `]`, a `(`, then to the first `)`, and another.
+ */
+internal fun withoutSources(text: String): String {
+    val kept = StringBuilder()
+    var from = 0
+    // Each the first after where it was last needed, or the text's length for none.
+    var name = -1
+    var end = -1
+    var at = text.indexOf("([")
+    while (at >= 0) {
+        if (name < at + 2) name = text.indexOf(']', at + 2).orEnd(text)
+        if (name == text.length) break
+        if (text.getOrNull(name + 1) == '(') {
+            if (end < name + 2) end = text.indexOf(')', name + 2).orEnd(text)
+            if (end == text.length) break
+            if (text.getOrNull(end + 1) == ')') {
+                kept.append(text, from, spacesStart(text, at, from))
+                from = end + 2
+                at = text.indexOf("([", from)
+                continue
+            }
+        }
+        at = text.indexOf("([", at + 1)
+    }
+    return kept.append(text, from, text.length).toString()
+}
+
+/**
+ * [text] with each link in Markdown, "[words](https://…)", as its words, as main's `\[([^\]]+)]\(https?://[^)]*\)` read
+ * them: from a `[` to the first `]`, words between, then the address, to the first `)`.
+ */
+internal fun withoutLinks(text: String): String {
+    val kept = StringBuilder()
+    var from = 0
+    var close = -1
+    var end = -1
+    var at = text.indexOf('[')
+    while (at >= 0) {
+        if (close < at) close = text.indexOf(']', at + 1).orEnd(text)
+        if (close == text.length) break
+        val address = close + 1 + listOf("(https://", "(http://").firstOrNull { text.startsWith(it, close + 1) }.orEmpty().length
+        if (close > at + 1 && address > close + 1) {
+            if (end < address) end = text.indexOf(')', address).orEnd(text)
+            if (end == text.length) break
+            kept.append(text, from, at).append(text, at + 1, close)
+            from = end + 1
+            at = text.indexOf('[', from)
+            continue
+        }
+        at = text.indexOf('[', at + 1)
+    }
+    return kept.append(text, from, text.length).toString()
+}
 
 /**
  * The strings of a JSON array finished so far in [text], an answer still being written: those

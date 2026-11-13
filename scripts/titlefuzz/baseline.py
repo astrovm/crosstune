@@ -4,10 +4,12 @@
     python3 scripts/titlefuzz/baseline.py [REF] [--serial SERIAL] [--count N] [--out FILE]
     python3 scripts/titlefuzz/baseline.py [REF] --jvm [--out FILE]
     python3 scripts/titlefuzz/baseline.py [REF] --long [--serial SERIAL]
+    python3 scripts/titlefuzz/baseline.py [REF] --long-all [--serial SERIAL]
 
 REF is the commit to read with, origin/main by default. It's checked out in a temporary worktree, under
-$TITLEFUZZ_TMP if set; TitleFuzz.kt, PhoneRegex.kt and PhoneRegexTable.kt are copied in from this checkout,
-MainTitleProbes.kt as its TitleProbes.kt, and WriteTitlesBaseline.kt.
+$TITLEFUZZ_TMP if set; TitleFuzz.kt, PhoneRegex.kt, PhoneRegexTable.kt and the tests' pattern writer, IcuPattern.kt
+and PhoneRegexSets.kt, are copied in from this checkout,
+MainTitleProbes.kt as its TitleProbes.kt if it has none of its own, and WriteTitlesBaseline.kt.
 
 On a phone, kotlin.text.Regex runs on ICU, which reads spaces, digits, line ends and case otherwise than the JVM.
 So by default the readings are made on the crosstune-phone emulator, as on a phone: the checkout is compiled in the
@@ -20,7 +22,8 @@ line. Make them again when TitleFuzz.kt changes what it makes, or when main's ow
 --count reads only the first N titles, to time a run.
 
 --long writes no readings: it times each reader on long titles on the emulator instead, with LongTitlesProbe.kt, at
-three lengths. On a phone each look with a pattern copies the whole title first, so a reader that looks once a pass or
+three lengths. --long-all times them once at 10,000 letters on each of LongTitlesTest's titles, and names those
+over 50 ms. On a phone each look with a pattern copies the whole title first, so a reader that looks once a pass or
 once a bracket takes time squared there, where the JVM, and so LongTitlesTest, sees none.
 
 It can't read a commit whose readers MainTitleProbes.kt doesn't reach: then change that file to match.
@@ -66,7 +69,7 @@ def on_jvm(checkout):
     return checkout / "app/build/titles-baseline.tsv.gz"
 
 
-def on_emulator(checkout, serial, count, long=False):
+def on_emulator(checkout, serial, count, long=None):
     serial = regextable.emulator(serial)
     box(checkout, ":app:compileDebugUnitTestKotlin")
     built = checkout / "app/build/intermediates/built_in_kotlinc"
@@ -86,8 +89,8 @@ def on_emulator(checkout, serial, count, long=False):
     regextable.run(str(tools / "d8"), "--release", "--min-api", "26", "--lib", str(platform), "--output", str(work / "dex.jar"), str(work / "classes.zip"), str(ids), str(stdlib))
     regextable.run("adb", "-s", serial, "push", str(work / "dex.jar"), DEVICE_JAR)
     try:
-        if long:
-            subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {TIMER}"], check=True)
+        if long is not None:
+            subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {TIMER} {long}"], check=True)
             return None
         started = time.monotonic()
         subprocess.run(["adb", "-s", serial, "shell", f"app_process -cp {DEVICE_JAR} /system/bin {WRITER} {DEVICE_OUT} {count}"], check=True)
@@ -103,6 +106,7 @@ def main():
     parser.add_argument("ref", nargs="?", default="origin/main")
     parser.add_argument("--jvm", action="store_true", help="read on the JVM, not on the emulator")
     parser.add_argument("--long", action="store_true", help="time the readers on long titles on the emulator")
+    parser.add_argument("--long-all", action="store_true", help="time the readers on each of LongTitlesTest's titles, naming the slow ones")
     parser.add_argument("--serial")
     parser.add_argument("--count", type=int, default=200_000)
     parser.add_argument("--out", type=Path, default=OUT)
@@ -113,14 +117,18 @@ def main():
     git("worktree", "add", "--detach", str(checkout), commit)
     try:
         shutil.copy(ROOT / TESTS / "TitleFuzz.kt", checkout / TESTS / "TitleFuzz.kt")
-        shutil.copy(HERE / "MainTitleProbes.kt", checkout / TESTS / "TitleProbes.kt")
+        # A commit with its own TitleProbes.kt, such as a PR's, is read through it; main's through MainTitleProbes.kt.
+        if not (checkout / TESTS / "TitleProbes.kt").exists():
+            shutil.copy(HERE / "MainTitleProbes.kt", checkout / TESTS / "TitleProbes.kt")
         shutil.copy(HERE / "WriteTitlesBaseline.kt", checkout / TESTS / "WriteTitlesBaseline.kt")
         shutil.copy(HERE / "LongTitlesProbe.kt", checkout / TESTS / "LongTitlesProbe.kt")
-        # TitleFuzz reads main's song as a phone does, so main's checkout gets phoneRegex too.
+        # TitleFuzz reads main's song as a phone does, so main's checkout gets phoneRegex too, and the tests' writer.
         for name in ("PhoneRegex.kt", "PhoneRegexTable.kt"):
             shutil.copy(ROOT / MAIN / name, checkout / MAIN / name)
-        if args.long:
-            on_emulator(checkout, args.serial, args.count, long=True)
+        for name in ("IcuPattern.kt", "PhoneRegexSets.kt"):
+            shutil.copy(ROOT / TESTS / name, checkout / TESTS / name)
+        if args.long or args.long_all:
+            on_emulator(checkout, args.serial, args.count, long="all" if args.long_all else "")
             return
         made = on_jvm(checkout) if args.jvm else on_emulator(checkout, args.serial, args.count)
         with gzip.open(made, "rt", encoding="utf-8") as read:

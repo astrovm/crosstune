@@ -19,6 +19,20 @@ object LongTitlesProbe {
             "withoutFeaturing" to { t -> TitleProbes.withoutFeaturing(t) },
             "chordWikiTitles" to { t -> TitleProbes.chordWikiTitles(t) },
         )
+        if (args.firstOrNull() == "all") {
+            // Each of LongTitlesTest's shapes once, at 10,000 letters: only the readers slower than 50 ms are named.
+            for (title in SHAPES + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(LONG / piece.length) + ending } }) {
+                readers.forEach { (_, read) -> read(title.take(500)) }
+                val slow = readers.mapNotNull { (name, read) ->
+                    val began = System.nanoTime()
+                    read(title)
+                    ((System.nanoTime() - began) / 1_000_000).takeIf { it > SLOW_MS }?.let { "$name=$it" }
+                }
+                if (slow.isNotEmpty()) println("'${title.take(16).replace("\n", "\\n")}'…'${title.takeLast(10).replace("\n", "\\n")}' ${slow.joinToString(" ")}")
+            }
+            println("done")
+            return
+        }
         for ((piece, end) in listOf(" - " to " | Spotify", " - Live" to " | Spotify", " HD" to "", " Lyrics" to "", "(" to ")")) {
             for (length in listOf(2_500, 5_000, 10_000)) {
                 val title = piece.repeat(length / piece.length) + end
@@ -29,4 +43,28 @@ object LongTitlesProbe {
             }
         }
     }
+
+    private const val LONG = 10_000
+    private const val SLOW_MS = 50
+
+    /** LongTitlesTest's titles, at [LONG] letters. */
+    private val SHAPES = listOf(
+        "Artist - Song " + "\n".repeat(LONG) + ")", " - ".repeat(LONG / 3), " - Cover".repeat(LONG / 16) + "\n" + " - Cover".repeat(LONG / 16),
+        "Song " + "cover ".repeat(LONG / 6), "Song - " + "cover ".repeat(LONG / 6), "Song " + "(".repeat(LONG), "Song " + "((Lyrics)".repeat(LONG / 9),
+        "Song " + " (Live)".repeat(LONG / 7), "Song " + " (feat. A".repeat(LONG / 9), "Song " + " ft. A".repeat(LONG / 6) + ")",
+        "Song " + "(((Live)))".repeat(LONG / 10), " ft. a  ".repeat(LONG / 8) + ")", "(feat. a".repeat(LONG / 9) + ")".repeat(LONG / 9),
+        "(M/V".repeat(LONG / 5) + ")".repeat(LONG / 5), "Song ft. a" + " - Remaster)".repeat(LONG / 12),
+        "Song" + "|lyrics".repeat(LONG / 7), "Song" + " - ".repeat(LONG / 3) + "song and lyrics by Artist | Spotify",
+    )
+
+    /** LongTitlesTest's pieces and endings. */
+    private val PIECES = listOf(
+        " ", "\n", "\r\n", "\t", "-", " - ", " – ", "|", " | ", "//", ":", "(", ")", "[", "]", "（", "）", "【", "】", "「", "」",
+        "『", "』", "( ", "[ ", "( )", "x ", "a by ", " ft. a ", " ft. a  ", " feat. ", "(feat. a", "2  ft. a", " M/V",
+        " (M/V", " Cover", " - Cover", "\nCover", " cover of a", " in the style of a (", " Lyrics", " HD", " Official Video",
+        " Video", " (Live)", "(Live) ", " - Live", " Remastered", " - Remastered 2012", " (Remastered", "Remix ", "「a」",
+        "a「", "（歌：", "（歌：a）", "(歌", " sub esp", "|| sub español ", " - Song, Lyrics, and Music Video by ", "song by ",
+        " | Spotify", " by ", "\u3000", "\u0085", " ft. a - Remaster)", " ft. a - Remaster", "x[[4K]2 ", " cover", "cover ",
+    )
+    private val ENDINGS = listOf("", ")", "]", "」", "\n", "\r\n", "\u0085", " x", " - Topic", " | Spotify")
 }

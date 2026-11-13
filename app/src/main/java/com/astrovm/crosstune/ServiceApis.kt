@@ -92,7 +92,7 @@ internal class ServiceApis(
         val page = client.newCall(Request.Builder().url(SOUNDCLOUD_URL).header("User-Agent", BROWSER).get().build())
             .answer(ioDispatcher) { it.body.stringAtMost() }
         // The key sits in one of the last scripts the page loads.
-        for (script in soundCloudScriptRegex.findAll(page).map { it.groupValues[1] }.toList().asReversed()) {
+        for (script in soundCloudScriptRegex.matchesIn(page).map { it.groupValues[1] }.toList().asReversed()) {
             val code = client.newCall(Request.Builder().url(script).get().build())
                 .answer(ioDispatcher) { it.body.stringAtMost(MAX_SCRIPT_BYTES) }
             soundCloudIdRegex.find(code)?.let { found -> return found.groupValues[1].also { clientId = it } }

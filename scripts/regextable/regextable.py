@@ -2,7 +2,7 @@
 """What Android's Regex reads each character as, measured on an emulator, and the Kotlin sets the readers take from it.
 
     python3 scripts/regextable/regextable.py probe [--serial SERIAL]   # run RegexTableProbe on the emulator, keep its table
-    python3 scripts/regextable/regextable.py generate [TABLE]         # write PhoneRegexTable.kt from a kept table
+    python3 scripts/regextable/regextable.py generate [TABLE]         # write PhoneRegexTable.kt and PhoneRegexSets.kt from a kept table
     python3 scripts/regextable/regextable.py diff A B                 # list where two tables differ
     python3 scripts/regextable/regextable.py patterns [--serial SERIAL] [--base REF]   # each app pattern on both engines
 
@@ -10,7 +10,8 @@ On Android, kotlin.text.Regex runs on ICU, which reads `\\s`, `\\w`, `\\d`, `\\b
 JVM the tests run on. `probe` compiles RegexTableProbe.kt in the Gradle box, dexes it with d8, runs it on the
 emulator with app_process, and keeps what it prints as app/src/test/regextable/android-API.tsv, its first line naming
 the ICU and Android versions. It runs the probe on this machine's JVM too, and lists where that differs. Then it
-writes PhoneRegexTable.kt from the table. Make it again on a new Android version, and keep the newest as the rule.
+writes PhoneRegexTable.kt from the table, with the sets the app reads, and PhoneRegexSets.kt in the tests, with those
+only the tests' pattern writer reads. Make it again on a new Android version, and keep the newest as the rule.
 
 Take the emulator first: python3 scripts/devicelock.py take crosstune-phone --who "regex table" --minutes 15.
 It finds the running crosstune-phone emulator by its AVD name, or uses --serial. It never runs on a phone: it
@@ -38,6 +39,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 TABLES = ROOT / "app/src/test/regextable"
 KOTLIN = ROOT / "app/src/main/java/com/astrovm/crosstune/PhoneRegexTable.kt"
+# The sets only the tests' pattern writer reads, kept out of the app.
+TEST_KOTLIN = ROOT / "app/src/test/java/com/astrovm/crosstune/PhoneRegexSets.kt"
+# The sets the app reads itself: the rest are TEST_KOTLIN's.
+APP_SETS = {"PHONE_SPACE", "PHONE_DIGIT", "PHONE_LINE_BREAK", "PHONE_LATIN_IGNORING_CASE", "PHONE_WORD_EDGE", "PHONE_NOT_WORD_EDGE"}
 CLASSES = ROOT / "app/build/intermediates/built_in_kotlinc/debugUnitTest/compileDebugUnitTestKotlin/classes"
 MAIN_CLASS = "com.astrovm.crosstune.RegexTableProbe"
 PATTERNS_CLASS = "com.astrovm.crosstune.PatternsProbe"
@@ -140,20 +145,24 @@ def diff(first, second):
 def generate(table):
     rows, engine = load(table)
     every = codes("0-10ffff")
+    made = "// Made by scripts/regextable/regextable.py from app/src/test/regextable/" + Path(table).name + ": make it again, don't edit it."
     lines = [
-        "// Made by scripts/regextable/regextable.py from app/src/test/regextable/" + Path(table).name + ": make it again, don't edit it.",
+        made,
         "package com.astrovm.crosstune",
         "",
         "/** The engine the table was measured on. */",
         f'internal const val PHONE_ENGINE = "{engine}"',
     ]
+    test_lines = [made, "package com.astrovm.crosstune"]
     for name, (what, row) in SETS.items():
         # A row the table doesn't have yet is none, so the app builds for the probe that measures it.
         held = rows.get(("class", row.lstrip("!")))
         if held is None:
             print(f"{name}: no {row} in {table}, so none until it's probed")
         found = set() if held is None else every - codes(held[0]) if row.startswith("!") else codes(held[0])
-        lines += ["", f"/** {what} on a phone, as code point runs in hex. */", f'internal const val {name} = "{ranges(found)}"']
+        (lines if name in APP_SETS else test_lines).extend(
+            ["", f"/** {what} on a phone, as code point runs in hex. */", f'internal const val {name} = "{ranges(found)}"']
+        )
     simple = rows[("sfold", "-")][0].replace(">", ":")
     full = ",".join(f"{code}:{values[0]}" for (kind, code), values in rows.items() if kind == "multi")
     lines += [
@@ -166,7 +175,8 @@ def generate(table):
         "",
     ]
     KOTLIN.write_text("\n".join(lines), encoding="utf-8")
-    print(f"{KOTLIN.relative_to(ROOT)}: from {engine}")
+    TEST_KOTLIN.write_text("\n".join(test_lines + [""]), encoding="utf-8")
+    print(f"{KOTLIN.relative_to(ROOT)} and {TEST_KOTLIN.relative_to(ROOT)}: from {engine}")
 
 
 def emulator(serial):

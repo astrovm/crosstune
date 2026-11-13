@@ -25,8 +25,8 @@ class TitlesReadAsMainTest {
         assertEquals("Artist Band" to "Song", MetadataParsers.bracketedSong("Artist「 」 Band「Song」"))
         // A blank one main didn't read the song in stays: it read the song before it, or none past its first line.
         assertEquals("" to "x『 ", MetadataParsers.bracketedSong("「x『 」"))
-        // One with no letter or digit is no song.
-        assertNull(MetadataParsers.bracketedSong("「『」」"))
+        // A bracket is a song, as main named it.
+        assertEquals("" to "『", MetadataParsers.bracketedSong("「『」」"))
         assertEquals("A「」" to "x", MetadataParsers.bracketedSong("A「」「 」『x』"))
         assertNull(MetadataParsers.bracketedSong("A「x"))
         // Past the first line, one after only spaces is read, as main's pattern reached it; one after a word isn't.
@@ -150,7 +150,12 @@ class TitlesReadAsMainTest {
     }
 
     @Test
-    fun aSongInBracketsHasALetterOrADigit() {
+    fun aSongInBracketsIsAnythingButSpacesAndABar() {
+        // The ninth review's titles: a song of symbols is one, as main named it on a phone, and so is a letter past U+FFFF.
+        for (song in listOf("？", "♡", "…", "!!!", "\uD83D\uDE00", "\uD835\uDC12\uD835\uDC28\uD835\uDC27\uD835\uDC20", "\uD842\uDFB7", "\uD835\uDFD7", "\u00AD", "?|")) {
+            assertEquals(song, "Artist" to song, MetadataParsers.bracketedSong("Artist「$song」"))
+            assertEquals(song, MusicMetadata(song, "Artist"), MetadataParsers.musicVideo("Artist「$song」", "Channel"))
+        }
         // Main read "|" and blanks as the song; none is one.
         assertEquals(MusicMetadata("「|」 Q", "Artist"), MetadataParsers.youtubeVideo("「|」 Q", "Artist - Topic"))
         assertEquals(MusicMetadata("「|」 Q", "Artist"), MetadataParsers.musicVideo("「|」 Q", "Artist - Topic"))

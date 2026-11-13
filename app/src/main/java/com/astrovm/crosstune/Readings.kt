@@ -203,7 +203,7 @@ internal object Readings {
      */
     private fun okurigana(line: String, text: String, pieces: List<Piece>): List<Piece> {
         if (!katakanaAfterKanji.containsMatchIn(text)) return pieces
-        val hiraganaText = katakanaAfterKanji.replace(text) { it.value.take(1) + hiragana(it.value.drop(1)) }
+        val hiraganaText = katakanaAfterKanji.replaceEach(text) { it.value.take(1) + hiragana(it.value.drop(1)) }
         val theirs = ipadicPieces(line, hiraganaText)
         val out = mutableListOf<Piece>()
         var i = 0
@@ -486,14 +486,14 @@ internal object Readings {
 
     private fun givenReadings(line: String): List<Given> {
         var cut = 0
-        return givenReading.findAll(line).map { match ->
+        return givenReading.matchesIn(line).map { match ->
             val start = match.range.first - cut
             cut += match.given(2).length
             Given(start, start + match.given(1).length, hiragana(match.given(3)), match.given(2))
         }.toList()
     }
 
-    private fun withoutGiven(line: String) = line.replace(givenReading) { it.given(1) }
+    private fun withoutGiven(line: String) = givenReading.replaceEach(line) { it.given(1) }
 
     /**
      * [pieces] of the line without its given readings, with those kanji read as [given]: with the
@@ -1445,11 +1445,11 @@ internal object Readings {
             word = FINAL_A.replace(word, "")
             // Nor is one between a vowel's consonant and the next's, taken from the end, as each one
             // taken changes the next: samajhanā is samajhnā, not samjhnā.
-            while (true) word = MEDIAL_A.findAll(word).lastOrNull()?.let { word.removeRange(it.range) } ?: break
+            while (true) word = MEDIAL_A.matchesIn(word).lastOrNull()?.let { word.removeRange(it.range) } ?: break
             // ड़ is typed d, as in "Ud Chala"; ऋ is ri, as in "kripa".
             word = word.replace("ṛ", "d").replace("r\u0325", "ri")
         }
-        return word.replace(phoneRegex("ch?")) { if (it.value == "ch") "chh" else "ch" }
+        return phoneRegex("ch?").replaceEach(word) { if (it.value == "ch") "chh" else "ch" }
             .replace("ś", "sh").replace("ṣ", "sh")
             .replace(phoneRegex("ṁ(?=[pbm])"), "m").replace("ṁ", "n").replace("m\u0310", "n")
     }
@@ -1555,8 +1555,8 @@ internal object Readings {
      * A number in digits is said too, as the word it's part of: 1년 "illyeon".
      */
     fun romaja(hangul: String): String {
-        val spelled = NUMBER_IN_A_WORD.replace(hangul) { number -> inHangul(number.value, hangul.substring(number.range.last + 1)) }
-        return HANGUL_WORD.replace(spelled) { said(it.value) }
+        val spelled = NUMBER_IN_A_WORD.replaceEach(hangul) { number -> inHangul(number.value, hangul.substring(number.range.last + 1)) }
+        return HANGUL_WORD.replaceEach(spelled) { said(it.value) }
     }
 
     /**
@@ -1565,7 +1565,7 @@ internal object Readings {
      */
     private fun inHangul(digits: String, counted: String): String =
         // After another syllable, six's y sound takes an n: 십육 "simnyuk", 열여섯 "yeollyeoseot".
-        number(digits.toLong(), counted).replace(SIX_AFTER) { if (it.value == "육") "뉵" else "녀" }
+        SIX_AFTER.replaceEach(number(digits.toLong(), counted)) { if (it.value == "육") "뉵" else "녀" }
 
     private fun number(number: Long, counted: String): String {
         if (number in 1..99 && COUNTED_IN_KOREAN.any(counted::startsWith) && !counted.startsWith("개월")) {

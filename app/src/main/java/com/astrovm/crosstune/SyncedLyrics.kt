@@ -83,7 +83,7 @@ internal object SyncedLyrics {
      * unless every word has one. Spaces stay with the word before them, so the words together are the line.
      */
     private fun timedWords(text: String, stamps: Regex, timeOf: (MatchResult) -> Long): List<TimedWord> {
-        val found = stamps.findAll(text).toList()
+        val found = stamps.matchesIn(text).toList()
         if (found.isEmpty() || text.substring(0, found.first().range.first).isNotBlank()) return emptyList()
         val words = mutableListOf<TimedWord>()
         found.forEachIndexed { index, match ->
@@ -127,7 +127,7 @@ internal object SyncedLyrics {
      * About how many sounds a line has, to sing it: a word for each in Latin letters, and a syllable
      * for each Japanese kana, Chinese character or Korean block.
      */
-    private fun soundsIn(text: String): Int = syllable.findAll(text).count() + latinWord.findAll(text).count()
+    private fun soundsIn(text: String): Int = syllable.matchesIn(text).count() + latinWord.matchesIn(text).count()
 
     /**
      * The line being sung at [positionMs], or -1 before the first. Of words timed [byEar], a line with

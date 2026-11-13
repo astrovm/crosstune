@@ -81,7 +81,7 @@ private fun isPerformanceNote(inside: String): Boolean {
 
 /** Which characters of [text] are performance notes, with the space before each; null when it has none. A note that starts the line leaves a space to trim. */
 private fun noteMask(text: String): BooleanArray? {
-    val notes = bracketed.findAll(text).filter { isPerformanceNote(it.value.substring(1, it.value.length - 1)) }.toList()
+    val notes = bracketed.matchesIn(text).filter { isPerformanceNote(it.value.substring(1, it.value.length - 1)) }.toList()
     if (notes.isEmpty()) return null
     val cut = BooleanArray(text.length)
     for (note in notes) {
@@ -350,38 +350,56 @@ internal fun mended(line: String): String {
     return mended
 }
 
-/** Whether [words] are in capitals, nearly every letter that has them, as some sites keep a whole song. */
+/**
+ * Whether [words] are in capitals, nearly every letter that has them, as some sites keep a whole song. Read letter by
+ * letter, a letter past U+FFFF whole.
+ */
 private fun inCapitals(words: String): Boolean {
-    val cased = words.filter { it.isLetter() && it.lowercaseChar() != it.uppercaseChar() }
-    return cased.length >= MIN_CASED_LETTERS && cased.count(Char::isUpperCase) >= cased.length * CAPITALS_SHARE
+    val cased = words.codePoints().filter { Character.isLetter(it) && Character.toLowerCase(it) != Character.toUpperCase(it) }.toArray()
+    return cased.size >= MIN_CASED_LETTERS && cased.count(Character::isUpperCase) >= cased.size * CAPITALS_SHARE
 }
 
 /**
  * [line], written in capitals, as a sentence is written: a capital to start it and each sentence in
- * it, and I. Letter for letter, so words timed one by one can be cut from it again.
+ * it, and I. Letter for letter, a letter past U+FFFF whole, so words timed one by one can be cut from it again.
  */
 internal fun inSentenceCase(line: String): String {
-    val letters = line.map(Char::lowercaseChar).toCharArray()
+    val letters = line.codePoints().map(Character::toLowerCase).toArray()
     var capital = true
     for (i in letters.indices) {
         val letter = letters[i]
-        val alone = letters.getOrNull(i - 1)?.isLetter() != true && letters.getOrNull(i + 1)?.isLetter() != true
+        val alone = letters.getOrNull(i - 1)?.let(Character::isLetter) != true && letters.getOrNull(i + 1)?.let(Character::isLetter) != true
         when {
-            letter in ".!?" -> capital = true
-            !letter.isLetter() -> Unit
-            capital -> letters[i] = letter.uppercaseChar().also { capital = false }
-            letter == 'i' && alone -> letters[i] = 'I'
+            letter in SENTENCE_ENDS -> capital = true
+            !Character.isLetter(letter) -> Unit
+            capital -> letters[i] = Character.toUpperCase(letter).also { capital = false }
+            letter == 'i'.code && alone -> letters[i] = 'I'.code
         }
     }
-    return String(letters)
+    return String(letters, 0, letters.size)
 }
 
-/** Consecutive capital words are a phrase; spelled-out letters such as Y M C A aren't words. */
-private fun capitalWord(word: String) = word.any(Char::isUpperCase) && word.none(Char::isLowerCase)
+/** What ends a sentence in a line: ".", "!" or "?". */
+private val SENTENCE_ENDS = ".!?".map(Char::code)
 
-private fun capitalLetters(line: String): Set<Int> =
-    phoneRegex("\\S+").findAll(line).toList().windowed(2).filter { pair -> pair.all { capitalWord(it.value) } && pair.any { it.value.count(Char::isLetter) > 1 } }
-        .flatten().flatMap { it.range }.toSet()
+/**
+ * Consecutive capital words are a phrase; spelled-out letters such as Y M C A aren't words. Read letter by letter, a
+ * letter past U+FFFF whole, "𐐀" (Deseret) too.
+ */
+private fun capitalWord(word: String) = word.codePoints().anyMatch(Character::isUpperCase) && word.codePoints().noneMatch(Character::isLowerCase)
+
+/** Where each letter of [line]'s capital phrases is, as `\S+` reads its words: between spaces a pattern reads. */
+private fun capitalLetters(line: String): Set<Int> {
+    val words = mutableListOf<IntRange>()
+    var start = -1
+    for (at in 0..line.length) {
+        val space = at == line.length || isPatternSpace(line[at])
+        if (space && start >= 0) words += start until at
+        if (space) start = -1 else if (start < 0) start = at
+    }
+    return words.windowed(2).filter { pair -> pair.all { capitalWord(line.substring(it)) } && pair.any { line.substring(it).codePoints().filter(Character::isLetter).count() > 1 } }
+        .flatten().flatMap { it }.toSet()
+}
 
 private fun capitalLine(line: String) = capitalLetters(line).isNotEmpty()
 
@@ -390,7 +408,14 @@ private fun needsSentenceCase(words: String) = inCapitals(words) || words.lines(
 /** Nearly all-capital sheets cannot supply names, even when a contributor missed a letter. */
 private fun caseEvidence(copy: String) = if (inCapitals(copy)) "" else copy.lines().joinToString("\n") { line ->
     val capitals = capitalLetters(line)
-    if (line.none(Char::isLowerCase)) "" else line.mapIndexed { at, letter -> if (at in capitals) letter.lowercaseChar() else letter }.joinToString("")
+    if (line.codePoints().noneMatch(Character::isLowerCase)) "" else buildString {
+        var at = 0
+        while (at < line.length) {
+            val letter = line.codePointAt(at)
+            appendCodePoint(if (at in capitals) Character.toLowerCase(letter) else letter)
+            at += Character.charCount(letter)
+        }
+    }
 }
 
 /** Words timed one by one, [texts], in sentence case as the line they make up. */
@@ -858,7 +883,7 @@ internal class LyricsFinder(
 
     /** Who Apple Music's page for the store's song [id] says wrote it; none when it says none, or won't answer. */
     private suspend fun writersOf(id: Long): Set<String> = try {
-        credit.findAll(browserPage("$APPLE_MUSIC_SONG_URL$id")).filter { writerRole.containsMatchIn(it.groupValues[2]) }.map { it.groupValues[1].lowercase() }.toSet()
+        credit.matchesIn(browserPage("$APPLE_MUSIC_SONG_URL$id")).filter { writerRole.containsMatchIn(it.groupValues[2]) }.map { it.groupValues[1].lowercase() }.toSet()
     } catch (_: IOException) {
         emptySet()
     }
@@ -1412,11 +1437,11 @@ internal class LyricsFinder(
             val page = LETRAS_URL.toHttpUrl().newBuilder().addPathSegment(song.optString("dns")).addPathSegment(song.optString("url")).build()
             val shown = withoutAds(browserPage(page.toString()))
             // A song in another language has Letras's own translation beside it: its words are the ones on the left.
-            val content = (letrasOriginal.find(shown) ?: letrasWords.find(shown))?.groupValues?.get(1)
+            val content = letrasOriginal(shown) ?: letrasWords.firstBetween(shown)
             // An instrumental's page says so where the words would be, in the page's language.
             if (content?.contains(LETRAS_INSTRUMENTAL) == true) return@withTimeoutOrNull Lyrics.Instrumental
             val words = content
-                ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.replace(letrasTag, "")
+                ?.replace(letrasStanza, "\n\n")?.replace(letrasBreak, "\n")?.let(::withoutTags)
                 ?.let { ChordFinder.unescape(it).trim() }?.takeIf { it.isNotEmpty() }
             words?.let { Lyrics.Found(it, source = LETRAS) } ?: Lyrics.None
         } catch (_: IOException) {
@@ -1478,16 +1503,16 @@ internal class LyricsFinder(
     private fun geniusWords(page: String, title: String): String? {
         // A box of lyrics starts with the page's language menu ("Translations", "Romanization") and the name it opens with,
         // all marked as not part of the words.
-        val body = withoutBoxes(page, geniusNotWords)
-        val boxes = geniusBox.findAll(body).map { start ->
+        val body = withoutBoxes(page) { geniusNotWords.firstIn(it)?.whole?.first }
+        val boxes = geniusBox.allIn(body).map { start ->
             var depth = 0
-            val end = letrasBox.findAll(body, start.range.first).firstOrNull { tag ->
+            val end = letrasBox.matchesIn(body, start.whole.first).firstOrNull { tag ->
                 depth += if (tag.value == "</div>") -1 else 1
                 depth == 0
             }
-            body.substring(start.range.last + 1, end?.range?.first ?: body.length)
+            body.substring(start.whole.last + 1, end?.range?.first ?: body.length)
         }.filter { it.isNotBlank() }.joinToString("\n")
-        val text = ChordFinder.unescape(boxes.replace(letrasBreak, "\n").replace(letrasTag, ""))
+        val text = ChordFinder.unescape(withoutTags(boxes.replace(letrasBreak, "\n")))
         val lines = text.lines().map { it.trim() }
         // The first box opens with the song's name and "Lyrics", and maybe how the page calls it.
         val opening = lines.firstOrNull()?.takeIf { it.startsWith(title) && " Lyrics" in it }
@@ -1497,15 +1522,15 @@ internal class LyricsFinder(
     }
 
     /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
-    private fun withoutAds(page: String): String = withoutBoxes(page, letrasAd)
+    private fun withoutAds(page: String): String = withoutBoxes(page) { letrasAd.find(it)?.range?.first }
 
-    /** [page] without each box that [opening] starts, and all that's inside it. */
-    private fun withoutBoxes(page: String, opening: Regex): String {
+    /** [page] without each box that starts where [opening] says, and all that's inside it. */
+    private fun withoutBoxes(page: String, opening: (String) -> Int?): String {
         var text = page
         while (true) {
-            val start = opening.find(text)?.range?.first ?: return text
+            val start = opening(text) ?: return text
             var depth = 0
-            val end = letrasBox.findAll(text, start).firstOrNull { tag ->
+            val end = letrasBox.matchesIn(text, start).firstOrNull { tag ->
                 depth += if (tag.value == "</div>") -1 else 1
                 depth == 0
             } ?: return text
@@ -1801,16 +1826,33 @@ internal class LyricsFinder(
         const val LETRAS = "letras"
         const val GENIUS = "genius"
         const val LETRAS_BROWSER = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-        val letrasWords = phoneRegex("""<div class="lyric-content[^"<>]*+">((?:[^<]++|<(?!/div>|div class="lyric-content))*+)</div>""")
+        val letrasWords = PageParts(phoneRegex("""<div class="lyric-content"""), phoneRegex("</div>"), tagEnd = "\">")
 
-        /** On a page with Letras's own translation beside the song, the song's words, after its name. */
-        val letrasOriginal = phoneRegex(
-            """<div class="lyric-translation-left">\s*+(?:<strong>(?:[^<]++|<(?!/strong>|div class="lyric-translation-left">))*+</strong>)?((?:[^<]++|<(?!/div>|div class="lyric-translation-left">))*+)</div>"""
-        )
+        /**
+         * On a page with Letras's own translation beside the song, the song's words, after its name, as main's
+         * `<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>` read them: after the name only when
+         * a `</div>` follows it, and up to the first `</div>`.
+         */
+        fun letrasOriginal(page: String): String? {
+            val open = page.indexOf(LETRAS_LEFT).takeIf { it >= 0 } ?: return null
+            val words = spacesEnd(page, open + LETRAS_LEFT.length)
+            if (page.startsWith(STRONG, words)) {
+                val name = page.indexOf(STRONG_END, words + STRONG.length)
+                val end = if (name < 0) -1 else page.indexOf(BOX_END, name + STRONG_END.length)
+                if (end >= 0) return page.substring(name + STRONG_END.length, end)
+            }
+            val end = page.indexOf(BOX_END, words).takeIf { it >= 0 } ?: return null
+            return page.substring(words, end)
+        }
+
+        private const val LETRAS_LEFT = """<div class="lyric-translation-left">"""
+        private const val STRONG = "<strong>"
+        private const val STRONG_END = "</strong>"
+        private const val BOX_END = "</div>"
         private val letrasBox = phoneRegex("""<div\b|</div>""")
         private val letrasAd = phoneRegex("""<div id="pub_""")
-        private val geniusNotWords = phoneRegex("""<div\b[^<>]*data-exclude-from-selection="true"[^<>]*+>""")
-        private val geniusBox = phoneRegex("""<div\b[^<>]*data-lyrics-container="true"[^<>]*+>""")
+        internal val geniusNotWords = PageParts(phoneRegex("""<div\b"""), null, holds = "data-exclude-from-selection=\"true\"")
+        internal val geniusBox = PageParts(phoneRegex("""<div\b"""), null, holds = "data-lyrics-container=\"true\"")
         private val geniusTag = phoneRegex("""^\[[^\]]*]""")
 
         /** Someone credited on an Apple Music song page, and their roles. */
@@ -1818,7 +1860,6 @@ internal class LyricsFinder(
         private val writerRole = phoneRegex("Songwriter|Composer|Lyricist")
         val letrasStanza = phoneRegex("""(?:<br\s*/?>\s*)?</p>\s*<p>""")
         val letrasBreak = phoneRegex("""<br\s*/?>""")
-        val letrasTag = phoneRegex("""<[^<>]++>""")
         const val NETEASE_SEARCH_URL = "https://music.163.com/api/search/get"
         const val NETEASE_LYRIC_URL = "https://music.163.com/api/song/lyric"
         const val NETEASE_REFERER = "https://music.163.com/"

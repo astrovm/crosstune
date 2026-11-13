@@ -22,13 +22,13 @@ import java.io.IOException
 import java.nio.charset.Charset
 import java.net.URLEncoder
 
-/** A song in U-FRET's results: whether it's the easier version, its number, title and artist. */
-private val uFretResult = phoneRegex(
-    """c-list__item (normal|beginner)-chord">\s*+<a href="/song\.php\?data=(\d++)"(?:[^c]++|c(?!-list__item |-list__title">))*+c-list__title">""" +
-        """((?:[^<c]++|<(?!/p>)|c(?!-list__item ))*+)</p>\s*+<p class="c-list__artist">((?:[^<c]++|<(?!/p>)|c(?!-list__item ))*+)</p>"""
-)
-private val tags = phoneRegex("<[^<>]*+>[^<]*+</[^<>]*+>|<[^<>]*+>")
-private val uFretSheet = phoneRegex("""var ufret_chord_datas = (\[(?:[^\]v\n]++|](?!;)|v(?!ar ufret_chord_datas = ))*+]);""")
+/** Where a song starts in U-FRET's results: whether it's the easier version, and its number. */
+private val uFretItem = phoneRegex("""c-list__item (normal|beginner)-chord">\s*+<a href="/song\.php\?data=(\d++)"""")
+private val uFretArtist = phoneRegex("""</p>\s*+<p class="c-list__artist">""")
+private const val U_FRET_TITLE = """c-list__title">"""
+
+/** U-FRET's sheet: its lines, a list in its page's data, which ends on the line it starts on. */
+internal val uFretSheet = PageParts(phoneRegex("""var ufret_chord_datas = \["""), phoneRegex("""];"""), tagEnd = null, oneLine = true)
 private val titleBreak = phoneRegex(""" [-–—/] |／""")
 private val creditBracket = phoneRegex("""$SPACES_START\s*[(（].*$""")
 private val ugData = phoneRegex("""class="js-store" data-content="([^"]*)"""")
@@ -38,23 +38,83 @@ private val laCuerdaResult = phoneRegex(
     """<a href="/([^/"]+)/">([^<]*)</a>|<li id='r(\d+)' lcd='([A-Z]*)-([^']*)'>\s*<a href="javascript:">([^<]*)</a>""",
     RegexOption.IGNORE_CASE
 )
-private val laCuerdaFiles = phoneRegex("""var fns=\[([^\[\]]*+)];""")
+internal val laCuerdaFiles = PageParts(phoneRegex("""var fns=\["""), phoneRegex("""];"""), tagEnd = null, without = ']')
 private val laCuerdaLast = phoneRegex("""var NMAX=(\d+);""")
-private val laCuerdaSheet = phoneRegex("""<div id=t_body><pre>((?:[^<]++|<(?!/pre>|div id=t_body><pre>))*+)</pre>""", RegexOption.IGNORE_CASE)
+internal val laCuerdaSheet = PageParts(phoneRegex("<div id=t_body><pre>", RegexOption.IGNORE_CASE), phoneRegex("</pre>", RegexOption.IGNORE_CASE), tagEnd = null)
 private val laCuerdaChord = phoneRegex("""<a>([^<]*)</a>""", RegexOption.IGNORE_CASE)
-private val markup = phoneRegex("<[^<>]*+>")
 
 /** Cifra Club's sheet of words and chords, its tabs written apart, its chords in bold, and the fret its capo is on. */
-private val cifraClubSheet = phoneRegex("""<pre[^<>]*?data-chord-content="true"[^<>]*+>((?:[^<]++|<(?!/pre>|pre))*+)</pre>""")
-private val cifraClubTabs = phoneRegex("""<div class="tabs">(?:[^<]++|<(?!/div>|div class="tabs">))*+</div>""")
-private val cifraClubChord = phoneRegex("""<b[^<>]*+>([^<]*+)</b>""")
+internal val cifraClubSheet = PageParts(phoneRegex("<pre"), phoneRegex("</pre>"), holds = "data-chord-content=\"true\"")
+internal val cifraClubTabs = PageParts(phoneRegex("""<div class="tabs">"""), phoneRegex("</div>"), tagEnd = null)
+internal val cifraClubChord = PageParts(phoneRegex("<b"), phoneRegex("</b>"), without = '<')
 private val cifraClubCapo = phoneRegex("""\\"capo\\":(\d+)""")
 
-/** A song in J-Total's results: its page, its name, and who sings it. */
-private val jTotalResult = phoneRegex(
-    """<a href="(?:https:)?//music\.j-total\.net/data/([^"]+\.html)" target=""><font size="3"><b>([^<]*+)</b></font></a>""" +
-        """(?:[^<歌]++|<(?!a href="(?:https:)?//music\.j-total\.net/data/)|歌(?!：))*+歌：([^/<]*+)"""
-)
+/** A song's link in J-Total's results: its page and its name. Who sings it is after, by "歌：". */
+private val jTotalLink = phoneRegex("""<a href="(?:https:)?//music\.j-total\.net/data/([^"]+\.html)" target=""><font size="3"><b>([^<]*+)</b></font></a>""")
+
+/**
+ * The songs in U-FRET's results, each whether it's the easier version, its number, its title and its artist, as main's
+ * `c-list__item (normal|beginner)-chord">\s*<a href="/song\.php\?data=(\d+)".*?c-list__title">(.*?)</p>\s*<p class="c-list__artist">(.*?)</p>`
+ * read them: a song with no title of its own takes the next one's, and that one is passed over.
+ */
+internal fun uFretResults(page: String): List<List<String>> = buildList {
+    val items = uFretItem.toPattern().matcher(page)
+    val artists = uFretArtist.toPattern().matcher(page)
+    var artistStart = -1
+    var artistEnd = -1
+    var from = 0
+    while (items.find()) {
+        if (items.start() < from) continue
+        val title = page.indexOf(U_FRET_TITLE, items.end()).takeIf { it >= 0 }?.plus(U_FRET_TITLE.length) ?: break
+        while (artistStart < title) {
+            if (!artists.find()) return@buildList
+            artistStart = artists.start()
+            artistEnd = artists.end()
+        }
+        val end = page.indexOf("</p>", artistEnd).takeIf { it >= 0 } ?: break
+        add(listOf(items.group(1), items.group(2), page.substring(title, artistStart), page.substring(artistEnd, end)))
+        from = end + "</p>".length
+    }
+}
+
+/**
+ * The songs in J-Total's results, each its page, its name, and who sings it, as main's pattern, [jTotalLink] then
+ * `.*?歌：([^/<]*)`, read them: the first "歌：" after the link, the next song's too.
+ */
+internal fun jTotalResults(page: String): List<List<String>> = buildList {
+    val links = jTotalLink.toPattern().matcher(page)
+    var from = 0
+    while (links.find()) {
+        if (links.start() < from) continue
+        val singer = page.indexOf(SINGER, links.end()).takeIf { it >= 0 }?.plus(SINGER.length) ?: break
+        val end = (singer until page.length).firstOrNull { page[it] == '/' || page[it] == '<' } ?: page.length
+        add(listOf(links.group(1), links.group(2), page.substring(singer, end)))
+        from = end
+    }
+}
+
+private const val SINGER = "歌："
+
+/**
+ * [text] without its tags, as main's `<[^>]*>[^<]*</[^>]*>|<[^>]*>` cut them: a tag, and when the next tag closes one,
+ * the words up to it and it too.
+ */
+internal fun withoutTagged(text: String): String {
+    val ends = TagEnds(text, least = 0)
+    val kept = StringBuilder()
+    var from = 0
+    var at = text.indexOf('<')
+    while (at >= 0) {
+        val end = ends.at(at)
+        if (end < 0) break
+        val next = text.indexOf('<', end + 1)
+        val closed = if (next >= 0 && text.startsWith("</", next)) ends.at(next) else -1
+        kept.append(text, from, at)
+        from = (if (closed >= 0) closed else end) + 1
+        at = text.indexOf('<', from)
+    }
+    return kept.append(text, from, text.length).toString()
+}
 
 /** What J-Total adds to the name of its easier versions: "〜初心者向け簡単コードVer.〜". */
 private val jTotalVersion = phoneRegex("""〜[^〜]*Ver\.〜""")
@@ -390,9 +450,9 @@ internal class ChordFinder(
     private suspend fun soundAlikeOnUFret(song: MusicMetadata, artist: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
         for (page in 1..MAX_ARTIST_PAGES) {
             val search = U_FRET_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("key", artist).addQueryParameter("p", "$page").build()
-            val listed = uFretResult.findAll(fetch(search.toString())).map { it.destructured }.toList()
+            val listed = uFretResults(fetch(search.toString()))
             val ids = listed.filter { (_, _, named, by) ->
-                SongNames.sameArtist(unescape(by.trim()), artist) && SongNames.soundsAlike(song.title, unescape(named.replace(tags, "").trim()))
+                SongNames.sameArtist(unescape(by.trim()), artist) && SongNames.soundsAlike(song.title, unescape(withoutTagged(named).trim()))
             }.sortedBy { (kind) -> kind == "beginner" }.map { (_, id) -> id }.take(MAX_SHEETS)
             for (id in ids) sheetOnUFret(id, fits)?.let { return it }
             if (listed.size < U_FRET_PAGE) return null
@@ -403,7 +463,7 @@ internal class ChordFinder(
     /** U-FRET's sheet [id], if it [fits]. */
     private suspend fun sheetOnUFret(id: String, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val url = "$U_FRET_SONG_URL$id"
-        val lines = uFretSheet.firstGroup(sheetPage(url)) ?: return null
+        val lines = sheetPage(url).let { page -> uFretSheet.firstIn(page)?.let { page.substring(it.between.first - 1, it.between.last + 2) } } ?: return null
         return ChordSheet(ChordSheets.fromUFret(JSONArray(lines)), site = ChordSite.U_FRET, url = url).takeIf(fits)
     }
 
@@ -414,8 +474,8 @@ internal class ChordFinder(
      */
     private suspend fun searchUFret(song: MusicMetadata, key: String, title: String, otherNames: suspend () -> OtherNames, fits: (ChordSheet) -> Boolean): ChordSheet? {
         val search = U_FRET_SEARCH_URL.toHttpUrl().newBuilder().addQueryParameter("key", key).build()
-        val found = uFretResult.findAll(fetch(search.toString())).map { it.destructured }
-            .filter { (_, _, named) -> SongNames.same(named.replace(tags, "").trim(), title) }.toList()
+        val found = uFretResults(fetch(search.toString())).asSequence()
+            .filter { (_, _, named) -> SongNames.same(withoutTagged(named).trim(), title) }.toList()
         val artists = if (found.any { (_, _, _, artist) -> SongNames.sameArtist(artist.trim(), song.artist) } || japanese(song.artist)) {
             listOf(song.artist)
         } else {
@@ -515,9 +575,9 @@ internal class ChordFinder(
      */
     private suspend fun searchLaCuerda(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> laCuerdaSheets(song, title, key) }, fits) { url ->
-            val sheet = laCuerdaSheet.firstGroup(sheetPage(url)) ?: return@firstSheet null
+            val sheet = laCuerdaSheet.firstBetween(sheetPage(url)) ?: return@firstSheet null
             // Its chords as Ultimate Guitar marks them, over the words they're played on.
-            val content = unescape(sheet.replace(laCuerdaChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, ""))
+            val content = unescape(laCuerdaChord.replaceEach(sheet) { "[ch]${it.groupValues[1]}[/ch]" }.let { withoutTags(it, least = 0) })
             ChordSheet(ChordSheets.fromUltimateGuitar(content), site = ChordSite.LA_CUERDA, url = url)
         }
 
@@ -527,11 +587,11 @@ internal class ChordFinder(
         // A search that finds nothing is answered with a 500 and no page at all.
         val page = fetch(search.toString()) { code, body -> code == 500 && body.isBlank() }
         // Each song's page, by its row counted from the last.
-        val files = laCuerdaFiles.firstGroup(page)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
+        val files = laCuerdaFiles.firstBetween(page)?.split(',')?.map { it.trim().trim('\'') }.orEmpty()
         val last = laCuerdaLast.firstGroup(page)?.toInt() ?: return emptyList()
         var artist: Pair<String, String>? = null
         val found = mutableListOf<Pair<Boolean, String>>()
-        laCuerdaResult.findAll(page).forEach { match ->
+        laCuerdaResult.matchesIn(page).forEach { match ->
             val (folder, artistName, row, kinds, takes, listed) = match.destructured
             if (folder.isNotEmpty()) {
                 artist = folder to artistName
@@ -568,7 +628,7 @@ internal class ChordFinder(
             .addEncodedQueryParameter("word", URLEncoder.encode(name, J_TOTAL_CHARSET.name()))
             .addQueryParameter("method", "and")
             .build()
-        return jTotalResult.findAll(fetch(search.toString(), charset = J_TOTAL_CHARSET)).map { it.destructured }
+        return jTotalResults(fetch(search.toString(), charset = J_TOTAL_CHARSET)).asSequence()
             .filter { (_, title, artist) -> named(title.replace(jTotalVersion, ""), name, byArtist(artist, song)) }
             .sortedWith(compareBy({ (_, _, artist) -> !byArtist(artist, song) }, { (_, title) -> jTotalVersion.containsMatchIn(title) }))
             .map { (path) -> "$J_TOTAL_URL$path" }
@@ -585,9 +645,9 @@ internal class ChordFinder(
     private suspend fun searchCifraClub(song: MusicMetadata, title: String, fits: (ChordSheet) -> Boolean): ChordSheet? =
         firstSheet(listOf("$title ${song.artist}".trim(), title), { key -> cifraClubSheets(song, title, key) }, fits) { url ->
             val page = sheetPage(url, asPhone = true)
-            val sheet = cifraClubSheet.firstGroup(page) ?: return@firstSheet null
+            val sheet = cifraClubSheet.firstBetween(page) ?: return@firstSheet null
             // Its chords as Ultimate Guitar marks them, over the words they're played on, without its tabs.
-            val content = unescape(sheet.replace(cifraClubTabs, "").replace(cifraClubChord) { "[ch]${it.groupValues[1]}[/ch]" }.replace(markup, "").replace("\u200B", ""))
+            val content = unescape(cifraClubChord.replaceParts(cifraClubTabs.cutFrom(sheet)) { "[ch]$it[/ch]" }.let { withoutTags(it, least = 0) }.replace("\u200B", ""))
             ChordSheet(ChordSheets.fromUltimateGuitar(content), capo = cifraClubCapo.firstGroup(page)?.toInt() ?: 0, site = ChordSite.CIFRA_CLUB, url = url)
         }
 
@@ -618,8 +678,8 @@ internal class ChordFinder(
      */
     private fun insideTitle(title: String, ours: String): Boolean {
         if (SongNames.words(ours).isNotEmpty()) return false
-        val wanted = titleWords.findAll(Readings.simplified(SongNames.bareTitle(ours))).map { SongNames.normalize(it.value) }.toList()
-        val words = titleWords.findAll(Readings.simplified(title)).map { SongNames.normalize(it.value) }.toList()
+        val wanted = titleWords.matchesIn(Readings.simplified(SongNames.bareTitle(ours))).map { SongNames.normalize(it.value) }.toList()
+        val words = titleWords.matchesIn(Readings.simplified(title)).map { SongNames.normalize(it.value) }.toList()
         return wanted.sumOf { it.length } >= 2 && words.windowed(wanted.size).any { it == wanted }
     }
 
@@ -792,7 +852,7 @@ internal class ChordFinder(
         val named = mapOf("quot" to "\"", "amp" to "&", "lt" to "<", "gt" to ">", "apos" to "'", "nbsp" to " ", "shy" to "")
 
         /** An HTML attribute's text as written, spaces and all, which [android.text.Html] would run together. */
-        fun unescape(text: String): String = entity.replace(text) { match ->
+        fun unescape(text: String): String = entity.replaceEach(text) { match ->
             val name = match.groupValues[1]
             when {
                 name.startsWith("#x") -> codePoint(name.substring(2).toIntOrNull(16), match.value)

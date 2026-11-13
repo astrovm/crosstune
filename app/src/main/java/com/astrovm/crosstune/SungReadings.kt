@@ -98,7 +98,7 @@ internal class SungReadings(
             if (!asked.add(page)) continue
             val html = get(page, stillWanted) ?: return null
             // A page without the words isn't one of its songs': it couldn't be asked, rather than it has none.
-            if (!words.containsMatchIn(html)) throw IOException("UtaTen's page for a song has no words")
+            if (words.firstIn(html) == null) throw IOException("UtaTen's page for a song has no words")
             val fixes = matched(lines, read, linesOf(html))
             if (linesFixed(fixes) > linesFixed(current)) current = fixes
             // Enough lines alike: it's this song.
@@ -127,7 +127,7 @@ internal class SungReadings(
             .addQueryParameter("title", title)
             .build()
         val found = get(search.toString(), stillWanted) ?: return null
-        val rows = searchRow.findAll(found).map { it.groupValues[1] to ChordFinder.unescape(it.groupValues[2]).trim() }.toList()
+        val rows = searchRows(found).map { (path, artist) -> path to ChordFinder.unescape(artist).trim() }.toList()
         // Neither songs nor its "no words found": another page, one asking whether it's a person, say, which says nothing of the song.
         if (rows.isEmpty() && NONE_FOUND !in found) throw IOException("UtaTen answered its search with a page it doesn't write")
         return rows.sortedByDescending { (_, by) -> SongNames.sameArtist(by, singer) || SongNames.artistInside(singer, by) }.map { (page, _) -> SITE_URL + page }
@@ -178,37 +178,77 @@ internal class SungReadings(
         /** How alike two lines have to be, from 0 to 1, for one's readings to be the other's. */
         const val ALIKE = 0.4
 
-        private val searchRow = phoneRegex(
-            """<p class="searchResult__title">\s*+<a href="(/lyric/[A-Za-z0-9]++/)">(?:[^<]++|<(?!td class="searchResult__artist">|p class="searchResult__title">))*+""" +
-                """<td class="searchResult__artist">\s*+<p>\s*+<a [^<>]*+>((?:[^<]++|<(?!/a>|p class="searchResult__title">))*+)</a>"""
-        )
-        private val words = phoneRegex("""<div class="hiragana"\s*+>((?:[^<]++|<(?!/div>|div class="hiragana"))*+)</div>""")
-        private val ruby = phoneRegex(
-            """<span class="ruby"><span class="rb">((?:[^<]++|<(?!/span><span class="rt">|span class="ruby">))*+)</span><span class="rt">""" +
-                """((?:[^<]++|<(?!/span></span>|span class="ruby">))*+)</span></span>"""
-        )
+        private val searchRow = phoneRegex("""<p class="searchResult__title">\s*+<a href="(/lyric/[A-Za-z0-9]++/)">""")
+        private val searchArtist = phoneRegex("""<td class="searchResult__artist">\s*+<p>\s*+<a """)
+        internal val words = PageParts(phoneRegex("""<div class="hiragana"\s*+>"""), phoneRegex("</div>"), tagEnd = null)
+
+        /**
+         * Each song in a search's results, its page and its artist, as main's pattern, [searchRow], then
+         * `.*?<td class="searchResult__artist">\s*<p>\s*<a [^>]*>(.*?)</a>`, read them: the first artist after the
+         * song's link, the next song's too, up to the first `</a>` after its tag.
+         */
+        fun searchRows(page: String): Sequence<Pair<String, String>> = sequence {
+            val rows = searchRow.toPattern().matcher(page)
+            val artists = searchArtist.toPattern().matcher(page)
+            var artistStart = -1
+            var artistEnd = -1
+            var from = 0
+            while (rows.find()) {
+                if (rows.start() < from) continue
+                while (artistStart < rows.end()) {
+                    if (!artists.find()) return@sequence
+                    artistStart = artists.start()
+                    artistEnd = artists.end()
+                }
+                val tagClose = page.indexOf('>', artistEnd).takeIf { it >= 0 } ?: return@sequence
+                val end = page.indexOf(LINK_END, tagClose + 1).takeIf { it >= 0 } ?: return@sequence
+                yield(page.substring(rows.start(1), rows.end(1)) to page.substring(tagClose + 1, end))
+                from = end + LINK_END.length
+            }
+        }
+
+        private const val LINK_END = "</a>"
+
+        /**
+         * Each kanji in [line] with how it's sung, its range and both, as main's
+         * `<span class="ruby"><span class="rb">(.*?)</span><span class="rt">(.*?)</span></span>` read them.
+         */
+        internal fun rubies(line: String): Sequence<Triple<IntRange, String, String>> = sequence {
+            var at = line.indexOf(RUBY)
+            while (at >= 0) {
+                val written = at + RUBY.length
+                val middle = line.indexOf(RUBY_MIDDLE, written).takeIf { it >= 0 } ?: return@sequence
+                val sung = middle + RUBY_MIDDLE.length
+                val end = line.indexOf(RUBY_END, sung).takeIf { it >= 0 } ?: return@sequence
+                yield(Triple(at until end + RUBY_END.length, line.substring(written, middle), line.substring(sung, end)))
+                at = line.indexOf(RUBY, end + RUBY_END.length)
+            }
+        }
+
+        private const val RUBY = """<span class="ruby"><span class="rb">"""
+        private const val RUBY_MIDDLE = """</span><span class="rt">"""
+        private const val RUBY_END = "</span></span>"
         private val exclaimed = phoneRegex("[!?！？]")
         private val titleMark = phoneRegex("[()（）\\[\\]～~〜「」『』]| - ")
         private val lineBreak = phoneRegex("""<br\s*/?>""")
-        private val tag = phoneRegex("""<[^<>]++>""")
 
         /** The words on a song's page, line by line, each in pieces, kanji with how they're sung. */
         fun linesOf(page: String): List<List<Ruby>> {
-            val body = words.find(page)?.let { it.groupValues[1] } ?: return emptyList()
+            val body = words.firstBetween(page) ?: return emptyList()
             return body.split(lineBreak).map(String::trim).map { line ->
                 val parts = mutableListOf<Ruby>()
                 var at = 0
-                ruby.findAll(line).forEach { match ->
-                    plain(line.substring(at, match.range.first))?.let { parts += Ruby(it) }
-                    parts += Ruby(plain(match.groupValues[1]).orEmpty(), plain(match.groupValues[2]))
-                    at = match.range.last + 1
+                for ((range, written, sung) in rubies(line)) {
+                    plain(line.substring(at, range.first))?.let { parts += Ruby(it) }
+                    parts += Ruby(plain(written).orEmpty(), plain(sung))
+                    at = range.last + 1
                 }
                 plain(line.substring(at))?.let { parts += Ruby(it) }
                 parts
             }.filter { line -> line.any { it.text.isNotBlank() } }
         }
 
-        private fun plain(html: String): String? = ChordFinder.unescape(html.replace(tag, "")).replace('\n', ' ').takeIf { it.isNotEmpty() }
+        private fun plain(html: String): String? = ChordFinder.unescape(withoutTags(html)).replace('\n', ' ').takeIf { it.isNotEmpty() }
 
         /**
          * The readings [theirs] gives [lines], [read] as the dictionary reads them: each line takes

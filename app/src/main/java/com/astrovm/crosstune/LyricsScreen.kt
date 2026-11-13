@@ -2500,7 +2500,7 @@ private fun TappableRubyLine(parts: List<Ruby>, words: List<Word>, picked: Word?
         var at = 0
         parts.forEach { part ->
             // A part with a reading stays whole; one without wraps as the lyrics do.
-            val pieces = if (part.reading == null) WORDS.findAll(part.text).map { it.value }.toList() else listOf(part.text)
+            val pieces = if (part.reading == null) WORDS.matchesIn(part.text).map { it.value }.toList() else listOf(part.text)
             pieces.forEach { piece ->
                 val start = at
                 at += piece.length

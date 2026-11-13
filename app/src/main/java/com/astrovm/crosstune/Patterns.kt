@@ -21,6 +21,77 @@ internal fun isBetweenSpaces(text: String, at: Int) = text.getOrNull(at - 1)?.le
 internal fun isLineBreak(char: Char) = char.code in LINE_BREAKS
 private val LINE_BREAKS = CodeRuns(PHONE_LINE_BREAK)
 
+/**
+ * The first match of [regex] in [text] from [start] on, by its range in [text], looked for in [text] from a little before
+ * [start] only: on a phone each look copies what it looks in first, and a look at the whole of a long title each pass
+ * of a loop takes time squared. A little is what a look behind at [start] reads before it, as `(?<!\s)` and `\b` do:
+ * the marks and format letters a `\b` looks past, then the letter before them.
+ */
+internal fun findNear(regex: Regex, text: CharSequence, start: Int): IntRange? {
+    var from = start
+    while (from > 0 && isLookedPast(Character.codePointBefore(text, from))) from = Character.offsetByCodePoints(text, from, -1)
+    if (from > 0) from = Character.offsetByCodePoints(text, from, -1)
+    return regex.find(text.subSequence(from, text.length), start - from)?.range?.let { it.first + from..it.last + from }
+}
+
+/**
+ * Each match of this in [input], from [start] on, as [Regex.findAll] finds them, by one look along it. [Regex.findAll],
+ * and [Regex.replace] with a function, start a new look for each match, and on a phone each new look copies the whole
+ * input first: time squared on a long page or title with many matches. After a match with no letters the look goes
+ * on from the next letter, a letter past U+FFFF whole on a phone.
+ */
+internal fun Regex.matchesIn(input: CharSequence, start: Int = 0): Sequence<MatchResult> = sequence {
+    val matcher = toPattern().matcher(input)
+    var found = matcher.find(start)
+    while (found) {
+        yield(FoundMatch(this@matchesIn, input, IntArray(2 * matcher.groupCount() + 2) { if (it % 2 == 0) matcher.start(it / 2) else matcher.end(it / 2) }))
+        found = matcher.find()
+    }
+}
+
+/**
+ * [input] with each match of this as [transform] gives it, as [Regex.replace] puts them, by one look along it: see
+ * [matchesIn]. As there, a match with no letters at the end, after one that ends there, is left as it is.
+ */
+internal fun Regex.replaceEach(input: CharSequence, transform: (MatchResult) -> CharSequence): String {
+    val kept = StringBuilder()
+    var from = 0
+    for (match in matchesIn(input)) {
+        kept.append(input, from, match.range.first).append(transform(match))
+        from = match.range.last + 1
+        if (from >= input.length) break
+    }
+    return kept.append(input, from, input.length).toString()
+}
+
+/** A match that [matchesIn] found: where it and each group start and end in [input], -1 for a group with none. */
+private class FoundMatch(private val regex: Regex, private val input: CharSequence, private val bounds: IntArray) : MatchResult {
+    override val range get() = bounds[0] until bounds[1]
+    override val value get() = input.substring(bounds[0], bounds[1])
+    override val groups: MatchGroupCollection = Groups()
+    override val groupValues: List<String> get() = List(groups.size) { groups[it]?.value.orEmpty() }
+
+    /** The next match, by a look of its own, as [Regex.find]'s. */
+    override fun next(): MatchResult? {
+        val next = if (range.isEmpty()) bounds[1] + 1 else bounds[1]
+        return if (next > input.length) null else regex.find(input, next)
+    }
+
+    private inner class Groups : AbstractCollection<MatchGroup?>(), MatchGroupCollection {
+        override val size get() = bounds.size / 2
+        override fun iterator() = List(size, ::get).iterator()
+        override fun get(index: Int): MatchGroup? {
+            val start = bounds[2 * index]
+            return if (start < 0) null else MatchGroup(input.substring(start, bounds[2 * index + 1]), start until bounds[2 * index + 1])
+        }
+    }
+}
+
+/** Whether a `\b` looks past [code] to the letter before it on a phone, by [PHONE_WORD_EDGE] and [PHONE_NOT_WORD_EDGE]: a mark or a format letter. */
+internal fun isLookedPast(code: Int) = code !in WORD_EDGES && code !in NOT_WORD_EDGES
+private val WORD_EDGES by lazy { CodeRuns(PHONE_WORD_EDGE) }
+private val NOT_WORD_EDGES by lazy { CodeRuns(PHONE_NOT_WORD_EDGE) }
+
 /** A digit as a pattern's `\d` reads it on a phone, by [PHONE_DIGIT]: any of Unicode's, "２" and "٢" too. */
 internal fun isPatternDigit(code: Int) = code in DIGITS
 private val DIGITS = CodeRuns(PHONE_DIGIT)

@@ -27,8 +27,11 @@ object RegexTableProbe {
         """\S""", """\W""", """\d""", """\p{L}""", """\p{M}""", """\p{N}""", """\p{Zs}""", """[\p{L}\p{N}]""", """[^\p{L}\p{N}]""", """[^\s]""",
     ).map { "(?i)$it" to Regex(it, RegexOption.IGNORE_CASE) }
 
-    /** Where a word starts for `\b`: at the start of the code point alone, after an "a", and after a space. */
-    private val boundaries = listOf("\\b@0" to "", "\\b@a" to "a", "\\b@ " to " ")
+    /**
+     * Where a word starts for `\b`: at the start of the code point alone, after an "a", and after a space. Then after
+     * what's two chars, a word letter, digit or mark past U+FFFF, and after a format letter, which `\b` looks past.
+     */
+    private val boundaries = listOf("\\b@0" to "", "\\b@a" to "a", "\\b@ " to " ") + BOUNDARIES_BEFORE
 
     /** The letters main's patterns read ignoring case, and those case folds may reach. */
     private val foldedLetters = ('a'..'z') + "ñáéíóúüçãõâêôàèìòùäëïößåæøœşğıİклипофцаьнрзыеσςǅ".toList()
@@ -106,3 +109,10 @@ object RegexTableProbe {
         File(args[0]).bufferedWriter().use { out -> lines().forEach { out.write(it); out.write("\n") } }
     }
 }
+
+/** What's before the place in the `\b` rows past the first three, by row name: "\b@1d400" is after "𝐀". */
+internal val BOUNDARIES_BEFORE = listOf(
+    "\\b@1d400" to "\uD835\uDC00", "\\b@20bb7" to "\uD842\uDFB7", "\\b@1d7d7" to "\uD835\uDFD7", "\\b@ad" to "\u00AD",
+    "\\b@a ad" to "a\u00AD", "\\b@20 ad" to " \u00AD", "\\b@1d400 ad" to "\uD835\uDC00\u00AD", "\\b@a 1d167" to "a\uD834\uDD67",
+    "\\b@20 1d167" to " \uD834\uDD67", "\\b@a e0001" to "a\uDB40\uDC01",
+)

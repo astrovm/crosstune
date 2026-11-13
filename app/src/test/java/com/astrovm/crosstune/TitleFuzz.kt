@@ -48,6 +48,13 @@ internal object TitleFuzz {
         Title("Song (Remaﬆered)", "Channel", "Artist"), Title("Song -\u0085", "Channel", "Artist"),
         Title("「|」 Q", "Artist - Topic", "Artist"), Title(" 『\u3000 』", "Channel", "Artist"),
         Title("Band - Song 『[HD] 』", "Channel", "Artist"),
+        // The ninth review's: songs of symbols only, and letters out of the basic plane, which are two chars.
+        Title("Artist「？」", "Channel", "Artist"), Title("Artist「♡」", "Channel", "Artist"), Title("Artist「…」", "Channel", "Artist"),
+        Title("Artist『!!!』", "Channel", "Artist"), Title("Artist「\uD842\uDFB7」", "Channel", "Artist"),
+        Title("Artist「\uD835\uDC12\uD835\uDC28\uD835\uDC27\uD835\uDC20」", "Channel", "Artist"), Title("Artist「😀」", "Channel", "Artist"),
+        Title("Song M/V\uD835\uDC00", "Channel", "Artist"), Title("Song (featuring\uD835\uDC00 X)", "Channel", "Artist"),
+        Title("Song\uD835\uDC00 ft. X", "Channel", "Artist"), Title("Song\u00AD - Live", "Channel", "Artist"),
+        Title("Song (Live\u2060)", "Channel", "Artist"), Title("\uD835\uDFD7 Song MV", "Channel", "Artist"),
     ) + listOf(
         // TitlesReadAsMainTest's, read by main on a phone.
         "Artist「 」", "Artist『　』", "Artist「 」 Band「Song」", "「x『 」", "「『」」", "A「」「 」『x』", "A「x", "A\n「 」『x』", "A\nB「 」『x』",
@@ -101,11 +108,13 @@ internal object TitleFuzz {
      */
     fun variants(title: Title): List<Pair<String, Title>> =
         NESTING.mapNotNull { kinds -> flat(title.text, kinds)?.let { "$FLAT$kinds" to title.copy(text = it) } } +
-            listOfNotNull(withoutBlank(title.text)?.let { BLANK to title.copy(text = it) })
+            listOfNotNull(withoutBlank(title.text)?.let { BLANK to title.copy(text = it) }) +
+            listOfNotNull(withoutBlankPastTags(title.text)?.takeIf { it != withoutBlank(title.text) }?.let { BLANK_PAST_TAGS to title.copy(text = it) })
 
     const val FLAT = "flat "
     const val MARK = '¦'
     const val BLANK = "blank"
+    const val BLANK_PAST_TAGS = "blank past tags"
 
     /** The brackets each reader nests tags in, by their openers: a video's, a cover's, ChordWiki's, and a song's words. */
     val NESTING = listOf("([", "([【", "（(", "([（【「『［")
@@ -167,6 +176,19 @@ internal object TitleFuzz {
         return kept.takeIf { it != text }
     }
     private val mainSong = phoneRegex("""^.*?\s*([「『][^」』]+[」』])""")
+
+    /**
+     * [text] without the first 「」 or 『』 with something in it, as for [cuts], while that has only spaces, and then as
+     * [withoutBlank]: main cut a video's tags before it looked for its song, "\u0085[Letra]" too, so the first line
+     * needn't lead to it. Null where it isn't one.
+     */
+    private fun withoutBlankPastTags(text: String): String? {
+        val open = text.indices.firstOrNull { text[it] in "「『" && it + 1 < text.length && text[it + 1] !in "」』" } ?: return null
+        val close = text.indexOfAny(charArrayOf('」', '』'), open + 1)
+        if (close < 0 || text.substring(open + 1, close).isNotBlank()) return null
+        val kept = text.removeRange(open, close + 1)
+        return withoutBlank(kept) ?: kept
+    }
 
     /** Where a baseline's line goes on with the readings of one of the title's [cuts]. No title has it. */
     const val CUT = '\u001E'
@@ -313,7 +335,7 @@ internal object TitleFuzz {
     )
     private val ENDINGS = listOf(
         "", "", "", ")", "]", "|", " |", "\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029", " ", "\t", " \u0085",
-        "\u000B", "\u000C", "\u3000", "\u00A0", " \u000B", "\u000C\n",
+        "\u000B", "\u000C", "\u3000", "\u00A0", " \u000B", "\u000C\n", "\uD835\uDC00", "\uD835\uDFD7", "\u00AD", "\u2060",
     )
     private val PAIRS = listOf("()", "[]", "{}", "（）", "【】", "「」", "『』", "〈〉", "［］").map { it[0] to it[1] }
     private val WORDS = listOf("Song", "Artist", "Love", "2", "1987", "Song 2", "x", "Q", "YOASOBI", "アイドル", "夜に駆ける", "Band", "Remix")
@@ -329,12 +351,14 @@ internal object TitleFuzz {
     )
     private val MARKS = listOf(
         "(", ")", "[", "]", "{", "}", "（", "）", "【", "】", "「", "」", "『", "』", "〈", "〉", "［", "］",
-        ":(", ":)", ";)", ":-(", "(:", "):", "XD", "<3", "!", "?", "\"", "'", "...", "#1", "@",
+        ":(", ":)", ";)", ":-(", "(:", "):", "XD", "<3", "!", "?", "\"", "'", "...", "#1", "@", "？", "♡", "…", "!!!",
     )
     private val SCRIPTS = listOf(
         "أغنية", "حب", "שיר", "אהבה", "\u200F", "\u200E", "🎵", "😀", "👍🏽", "Ünïcödé", "Ђорђе", "노래", "\u3000", "\u00A0",
         // Marks and joiners a phone's "\b" looks past, digits that ICU's "\d" reads, and spaces that its "\s" does.
         "Cafe\u0301", "\u0301", "a\u200Db", "\u200D", "١٩٨٧", "２０１１", "\u1680", "\u205F", "\u2007", "\u202F",
+        // Word letters out of the basic plane, which are two chars each, and format letters a phone's "\b" looks past.
+        "\uD835\uDC00", "\uD842\uDFB7", "\uD835\uDFD7", "Song\uD835\uDC00", "\u00AD", "\u2060", "\uFEFF", "x\u00ADy",
     )
     private val SEPARATORS = listOf(" - ", " – ", " ‑ ", "-", " | ", "|", " / ", "/", "//", " // ", ": ", ".", ",", " & ", " x ", " y ", " + ")
     private val SPOTIFY = listOf(

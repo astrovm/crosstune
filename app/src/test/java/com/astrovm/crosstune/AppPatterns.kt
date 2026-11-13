@@ -30,11 +30,14 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
     private fun patternsIn(name: String, source: String, known: Map<String, String>): List<Found> {
         fun where(at: Int) = "$name:${source.take(at).count { it == '\n' } + 1}"
         fun line(at: Int) = source.substring(source.lastIndexOf('\n', at - 1) + 1).lineSequence().first().trim()
+        // A pattern named in a comment, as main's was, is no pattern of the app's.
+        fun inComment(at: Int) = line(at).let { it.startsWith("*") || it.startsWith("/*") || it.startsWith("//") }
+        val calls = call.findAll(source).filterNot { inComment(it.range.first) }.toList()
         val read = call.findAll(source).map { it.range.first }.toSet()
         built.findAll(source).filter { it.range.first !in read }.map { it.range.first }
-            .filterNot { line(it).startsWith("*") || line(it).startsWith("//") }
+            .filterNot(::inComment)
             .forEach { unread += "${where(it)} ${line(it)}" }
-        return call.findAll(source).map { found ->
+        return calls.map { found ->
             val where = where(found.range.first)
             val text = literals.findAll(found.groupValues[1]).joinToString("") { literalText(it.value) }
             val built = template.replace(text) { part ->

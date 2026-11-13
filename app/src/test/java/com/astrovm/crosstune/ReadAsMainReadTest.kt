@@ -118,6 +118,32 @@ class ReadAsMainReadTest {
         }
     }
 
+    @Test
+    fun noiseIsLookedForFromNoPlaceInsideALetterPastUFFFF() {
+        assertEquals(1, MetadataParsers.beforeLetters("a\uD835\uDC00 b", 5, 2))
+        assertEquals(4, MetadataParsers.beforeLetters("a\uD835\uDC00 b", 5, 1))
+        assertEquals(2, MetadataParsers.beforeLetters("\uD835\uDC00\uD835\uDC00", 4, 1))
+        assertEquals(0, MetadataParsers.beforeLetters("\uD835\uDC00\uD835\uDC00", 4, 3))
+        // A half alone is a letter of its own.
+        assertEquals(1, MetadataParsers.beforeLetters("a\uDC00", 2, 1))
+        assertEquals(1, MetadataParsers.beforeLetters("\uD835\uD835", 2, 1))
+    }
+
+    @Test
+    fun aLookNearAPlaceFindsWhatALookAlongTheWholeTitleFinds() {
+        // Patterns that look behind a letter at most, past the marks and format letters that `\b` looks past on a phone.
+        for (pattern in listOf("""\bx""", """(?<!\s)x""", """(?<=a)x""", """\s*x\s*$""")) {
+            val regex = phoneRegex(pattern, RegexOption.IGNORE_CASE)
+            texts("a", "x", " ", "\u0301", "\u200D", "\u00AD", "\uD835\uDC00", "\uD834\uDD67", "\n", "-", count = SHORT).forEach { text ->
+                for (start in 0..text.length) {
+                    // Never inside a letter past U+FFFF, see [MetadataParsers.beforeLetters].
+                    if (start in 1 until text.length && text[start].isLowSurrogate() && text[start - 1].isHighSurrogate()) continue
+                    assertEquals("$pattern in $text from $start", regex.find(text, start)?.range, findNear(regex, text, start))
+                }
+            }
+        }
+    }
+
     /** Whether a bracket opens in [title] before the one open before it closes. */
     private fun nested(title: String): Boolean {
         var depth = 0

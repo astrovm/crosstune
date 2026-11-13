@@ -80,7 +80,6 @@ internal object ChordSheets {
     /** How long a line with nothing after it takes per letter, to time its chords. */
     private const val LETTER_MS = 150L
 
-    private val inline = phoneRegex("""\[([^\[\]]*+)]""")
 
     /** A reading in brackets right after a kanji: kana, and the dashes that hold a sound. */
     private val reading = phoneRegex("""(?<=\p{sc=Han})[(（][ぁ-ゟァ-ヿｦ-ﾟ\-－]+[)）]""")
@@ -91,42 +90,59 @@ internal object ChordSheets {
     private val jTotalLineEnd = phoneRegex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
 
     /*
-     * The patterns that read a J-Total page take time in step with its length, whatever is on it. A part
-     * marked `*+` or `++` takes all it can and gives none back, and a tag ends at the next `<` or `>`, so a
-     * pattern that can't match gives up at once: a chord name with no `</a>`, or a `<` with no `>` after it,
-     * took seconds on 30,000 letters, and a long run of tags filled the stack.
+     * A J-Total page is read as main's patterns read it, a tag from its `<` to the first `>` after it, but in time
+     * in step with its length: main's patterns tried again from each `<`, and a chord name with no `</a>`, or a `<`
+     * with no `>` after it, took seconds on 30,000 letters. So its tags and links are read by [TagEnds] and
+     * [linkedNames], each looking on from where it last looked.
      */
 
     /** A chord's name: spaces, then a letter, then anything up to the next tag. */
     private const val CHORD_NAME = """\s*+[^<\s][^<]*+"""
 
-    /** The link a chord's name is in: `<a`, a `cd/` address, then its `>`. */
-    private const val CHORD_TAG = """<a (?=[^<>]*cd/)[^<>]*+>"""
-
     /** A chord, linked to the picture of how it's played, and any bass written after the link: "E" then "onG#". */
-    private val jTotalChord = phoneRegex("""$CHORD_TAG($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
+    internal data class ChordLink(val range: IntRange, val name: String, val bass: String)
 
     /** A chord link a <br> cut in half, so the line starts with the name and the closing tag. */
     private val splitChord = phoneRegex("""^($CHORD_NAME)</a>(?:on([A-G][#b]?))?""")
-    private val markup = phoneRegex("""<[^<>]++>""")
-    private val nonAnchorMarkup = phoneRegex("""<(?!/?a(?:\s|>))/?[^<>]++>""", RegexOption.IGNORE_CASE)
     private val sourceSpace = phoneRegex("""[ \t\r\n]+""")
-    private val nameThenBreak = phoneRegex("""($CHORD_TAG$CHORD_NAME)(<br\s*/?>)(\s*</a>)""", RegexOption.IGNORE_CASE)
-    private val spacesAndTags = phoneRegex("""(?: |<[^<>]++>)++""")
-    private val oneSpaceOrTag = phoneRegex(""" |<[^<>]++>""")
-
-    // A style block ends at its own </style>, and never runs on into the next <style>.
-    private val commentedStyle = phoneRegex("""<!--\s*+<style\b[^<>]*+>(?:[^<]++|<(?!/?style\b))*+</style>\s*+-->""", RegexOption.IGNORE_CASE)
-    private val styleBlock = phoneRegex("""<style\b[^<>]*+>((?:[^<]++|<(?!/?style\b))*+)</style>""", RegexOption.IGNORE_CASE)
-    private val ttRule = phoneRegex("""(?:^|[}\s>])tt\s*+\{([^{}]*+)\}""", RegexOption.IGNORE_CASE)
+    internal val commentedStyle = PageParts(phoneRegex("""<!--\s*+<style\b""", RegexOption.IGNORE_CASE), phoneRegex("""</style>\s*+-->""", RegexOption.IGNORE_CASE))
+    internal val styleBlock = PageParts(phoneRegex("""<style\b""", RegexOption.IGNORE_CASE), phoneRegex("</style>", RegexOption.IGNORE_CASE))
     private val fontFamily = phoneRegex("""font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
 
     /** J-Total's last tt rule selects one of its two font stacks. */
     fun jTotalMonospace(page: String): Boolean {
-        val css = withoutCssComments(styleBlock.findAll(page.replace(commentedStyle, "")).joinToString("\n") { it.groupValues[1] })
-        val family = ttRule.findAll(css).mapNotNull { fontFamily.find(it.groupValues[1])?.groupValues?.get(1) }.lastOrNull()
+        val styled = commentedStyle.cutFrom(page)
+        val css = withoutCssComments(styleBlock.allIn(styled).joinToString("\n") { styled.substring(it.between) })
+        val family = ttRules(css).mapNotNull { fontFamily.find(it)?.groupValues?.get(1) }.lastOrNull()
         return family?.replace("'", "\"")?.replace(" ", "")?.equals("\"Inconsolata\",monospace", ignoreCase = true) == true
     }
+
+    /**
+     * What's in each `tt` rule of [css], as main's `(?:^|[}\s>])tt\s*\{([^}]*)\}` read them: a `tt` at the start, or
+     * after a `}`, a space or a `>` that the rule before didn't end on, then from its `{` to the first `}` after it.
+     */
+    internal fun ttRules(css: String): Sequence<String> = sequence {
+        var from = 0
+        var at = css.indexOf(TT, ignoreCase = true)
+        while (at >= 0) {
+            val brace = spacesEnd(css, at + TT.length)
+            if (startsASelector(css, at, from) && css.getOrNull(brace) == '{') {
+                val end = css.indexOf('}', brace + 1)
+                // A rule that never closes, nor any after it.
+                if (end < 0) return@sequence
+                yield(css.substring(brace + 1, end))
+                from = end + 1
+                at = css.indexOf(TT, from, ignoreCase = true)
+            } else {
+                at = css.indexOf(TT, at + 1, ignoreCase = true)
+            }
+        }
+    }
+
+    private const val TT = "tt"
+
+    /** Whether a `tt` at [at] in [css] starts a selector, as [ttRules] reads one: [from] is where the rule before it ended. */
+    private fun startsASelector(css: String, at: Int, from: Int) = at == 0 || at > from && css[at - 1].let { it == '}' || it == '>' || isPatternSpace(it) }
 
     /** [css] with each comment taken out, from where it opens to the first close after it. One that never closes stays, and so does the rest. */
     internal fun withoutCssComments(css: String): String {
@@ -153,16 +169,27 @@ internal object ChordSheets {
 
     private val solfegeChord = phoneRegex("""^(SOL|DO|RE|MI|FA|LA|SI)([#b]?)((?:maj|min|sus|add|dim|aug|alt|m|M|b|[^A-Za-z/])*)(?:/(SOL|DO|RE|MI|FA|LA|SI)([#b]?))?$""")
 
+    /** Each chord in brackets in [line], as main's `\[([^\]]*)]` read them: from a `[` to the first `]` after it, a `[` between too. */
+    internal fun brackets(line: String): Sequence<IntRange> = sequence {
+        var at = line.indexOf('[')
+        while (at >= 0) {
+            val end = line.indexOf(']', at + 1)
+            if (end < 0) return@sequence
+            yield(at..end)
+            at = line.indexOf('[', end + 1)
+        }
+    }
+
     /** U-FRET's sheet: each line its words with each chord in brackets where it's played, "[Am]五月[Em]雨". */
     fun fromUFret(lines: JSONArray): List<SheetLine> = (0 until lines.length()).map { index ->
         val line = lines.getString(index).trimEnd('\r', '\n')
         val chords = mutableListOf<Chord>()
         val text = StringBuilder()
         var from = 0
-        inline.findAll(line).forEach { match ->
-            text.append(line, from, match.range.first)
-            match.groupValues[1].trim().takeIf { it.isNotEmpty() }?.let { chords += Chord(text.length, it) }
-            from = match.range.last + 1
+        for (bracket in brackets(line)) {
+            text.append(line, from, bracket.first)
+            line.substring(bracket.first + 1, bracket.last).trim().takeIf { it.isNotEmpty() }?.let { chords += Chord(text.length, it) }
+            from = bracket.last + 1
         }
         text.append(line.substring(from))
         SheetLine(text.toString(), chords)
@@ -185,12 +212,114 @@ internal object ChordSheets {
      * none at the start of the line. The tags stay where they were, as a link can start or end in
      * the space.
      */
-    private fun collapseSpaces(line: String): String = line.replace(spacesAndTags) { run ->
-        var spaced = run.range.first == 0
-        run.value.replace(oneSpaceOrTag) {
-            if (it.value != " ") it.value else if (spaced) "" else " ".also { spaced = true }
+    internal fun collapseSpaces(line: String): String {
+        val tags = TagEnds(line)
+        val kept = StringBuilder()
+        // In a run of spaces and tags, whether it has its one space: a run at the line's start has none. Null out of one.
+        var spaced: Boolean? = null
+        var at = 0
+        while (at < line.length) {
+            val tagEnd = tags.at(at)
+            if (tagEnd < 0 && line[at] != ' ') {
+                kept.append(line[at])
+                spaced = null
+                at++
+                continue
+            }
+            val hasSpace = spaced ?: (at == 0)
+            if (tagEnd >= 0) {
+                kept.append(line, at, tagEnd + 1)
+                spaced = hasSpace
+                at = tagEnd + 1
+            } else {
+                if (!hasSpace) kept.append(' ')
+                spaced = true
+                at++
+            }
         }
-    }.trim(' ')
+        return kept.toString().trim(' ')
+    }
+
+    /**
+     * Each chord link in [line], as main's `<a [^>]*cd/[^>]*>([^<]*[^<\s][^<]*)</a>(?:on([A-G][#b]?))?` read them: by
+     * [linkedNames], its tag closed right after its name, then any bass.
+     */
+    internal fun chordLinks(line: String): Sequence<ChordLink> =
+        linkedNames(line, ignoreCase = false) { at -> if (line.startsWith(LINK_CLOSE, at)) at + LINK_CLOSE.length else -1 }.map { (start, nameStart, nameEnd, end) ->
+            val bassEnd = if (line.getOrNull(end + 3)?.let { it in "#b" } == true) end + 4 else end + 3
+            val bass = if (line.startsWith("on", end) && line.getOrNull(end + 2)?.let { it in 'A'..'G' } == true) line.substring(end + 2, bassEnd) else ""
+            ChordLink(start until if (bass.isEmpty()) end else bassEnd, line.substring(nameStart, nameEnd), bass)
+        }
+
+    /** [sheet] with each chord link a <br> cut after its name closed before the break, as main's `nameThenBreak` put it with "$1$3$2". */
+    internal fun withNamesBeforeBreaks(sheet: String): String {
+        val kept = StringBuilder()
+        var from = 0
+        for ((_, _, nameEnd, end) in linkedNames(sheet, ignoreCase = true) { closedAfterBreak(sheet, it) }) {
+            val breakEnd = breakEnd(sheet, nameEnd)
+            kept.append(sheet, from, nameEnd).append(sheet, breakEnd, end).append(sheet, nameEnd, breakEnd)
+            from = end
+        }
+        return kept.append(sheet, from, sheet.length).toString()
+    }
+
+    /** Where a <br> that starts at [at] ends, as `<br`, spaces, an optional `/`, then `>` read it ignoring case, or -1. */
+    private fun breakEnd(text: String, at: Int): Int {
+        if (!text.regionMatches(at, "<br", 0, "<br".length, ignoreCase = true)) return -1
+        var end = spacesEnd(text, at + "<br".length)
+        if (text.getOrNull(end) == '/') end++
+        return if (text.getOrNull(end) == '>') end + 1 else -1
+    }
+
+    /** Where a <br> at [at], then spaces and `</a>`, end, as such a <br>, `\s*` and `</a>` read them ignoring case, or -1. */
+    private fun closedAfterBreak(text: String, at: Int): Int {
+        val breakEnd = breakEnd(text, at).takeIf { it >= 0 } ?: return -1
+        val close = spacesEnd(text, breakEnd)
+        return if (text.regionMatches(close, LINK_CLOSE, 0, LINK_CLOSE.length, ignoreCase = true)) close + LINK_CLOSE.length else -1
+    }
+
+    /**
+     * Where each chord link in [text] starts, where its name starts and ends, and where [after] says it ends, as main's
+     * `<a [^>]*cd/[^>]*>[^<]*[^<\s][^<]*` read them: `<a `, a `cd/` address before the tag's first `>`, then a name, up to
+     * the next tag, with a letter that isn't a space. [after] reads from that tag, and says -1 for no link.
+     */
+    private fun linkedNames(text: String, ignoreCase: Boolean, after: (Int) -> Int): Sequence<IntArray> = sequence {
+        // Each the first of its kind from where it was last needed, or the text's length for none.
+        var tagClose = -1
+        var address = -1
+        var nextTag = -1
+        var letter = -1
+        var at = text.indexOf(LINK, ignoreCase = ignoreCase)
+        while (at >= 0) {
+            val inside = at + LINK.length
+            if (tagClose < inside) tagClose = text.indexOf('>', inside).orEnd(text)
+            if (address < inside) address = text.indexOf(ADDRESS, inside, ignoreCase).orEnd(text)
+            // A link no `>` closes, or with no address, nor any after it.
+            if (tagClose == text.length || address == text.length) return@sequence
+            var end = -1
+            if (address < tagClose) {
+                if (nextTag <= tagClose) nextTag = text.indexOf('<', tagClose + 1).orEnd(text)
+                if (letter <= tagClose) letter = (tagClose + 1 until text.length).firstOrNull { !isPatternSpace(text[it]) } ?: text.length
+                if (letter < nextTag && nextTag < text.length) end = after(nextTag)
+            }
+            if (end < 0) {
+                at = text.indexOf(LINK, at + 1, ignoreCase)
+                continue
+            }
+            yield(intArrayOf(at, tagClose + 1, nextTag, end))
+            at = text.indexOf(LINK, end, ignoreCase)
+        }
+    }
+
+    private const val LINK = "<a "
+    private const val LINK_CLOSE = "</a>"
+    private const val ADDRESS = "cd/"
+
+    /** Whether a link's tag, `<a` or `</a`, then a space or `>`, starts at [at], as `<(?!/?a(?:\s|>))` reads it ignoring case. */
+    internal fun isLinkTag(text: String, at: Int): Boolean {
+        val name = if (text.getOrNull(at + 1) == '/') at + 2 else at + 1
+        return text.getOrNull(name)?.lowercaseChar() == 'a' && text.getOrNull(name + 1)?.let { it == '>' || isPatternSpace(it) } == true
+    }
 
     /**
      * J-Total's sheet, as written into its page: a line of chords over the line of words they're
@@ -204,14 +333,15 @@ internal object ChordSheets {
      */
     fun fromJTotal(sheet: String, monospace: Boolean = false): List<SheetLine> {
         // A chord link can end after the break that follows its name: the name is still on its line.
-        val lines = sheet.replace(nameThenBreak, "$1$3$2").split(jTotalLineEnd).map { collapseSpaces(it.replace(nonAnchorMarkup, "").replace(sourceSpace, " ")) }
-            .filter { it.replace(markup, "").trim(' ').isNotEmpty() }
+        val lines = withNamesBeforeBreaks(sheet).split(jTotalLineEnd)
+            .map { line -> collapseSpaces(withoutTags(line) { isLinkTag(line, it) }.replace(sourceSpace, " ")) }
+            .filter { withoutTags(it).trim(' ').isNotEmpty() }
         val result = mutableListOf<SheetLine>()
         var index = 0
         while (index < lines.size) {
             val line = lines[index++]
-            if (!jTotalChord.containsMatchIn(line) && !splitChord.containsMatchIn(line)) {
-                result += SheetLine(line.replace(markup, ""), emptyList())
+            if (chordLinks(line).none() && !splitChord.containsMatchIn(line)) {
+                result += SheetLine(withoutTags(line), emptyList())
                 continue
             }
             val chords = mutableListOf<Pair<Int, String>>()
@@ -221,19 +351,18 @@ internal object ChordSheets {
             splitChord.find(line)?.let { split ->
                 val (name, bass) = split.destructured
                 chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
-                column += columns(split.value.replace(markup, ""), monospace)
+                column += columns(withoutTags(split.value), monospace)
                 from = split.range.last + 1
             }
-            jTotalChord.findAll(line).forEach { match ->
-                val (name, bass) = match.destructured
-                column += columns(line.substring(from, match.range.first).replace(markup, ""), monospace)
+            for ((range, name, bass) in chordLinks(line)) {
+                column += columns(withoutTags(line.substring(from, range.first)), monospace)
                 chords += column to if (bass.isEmpty()) name.trim() else "${name.trim()}/$bass"
-                column += columns(match.value.replace(markup, ""), monospace)
-                from = match.range.last + 1
+                column += columns(withoutTags(line.substring(range)), monospace)
+                from = range.last + 1
             }
             val words = lines.getOrNull(index)?.takeUnless {
-                jTotalChord.containsMatchIn(it) || splitChord.containsMatchIn(it)
-            }?.replace(markup, "")
+                chordLinks(it).any() || splitChord.containsMatchIn(it)
+            }?.let(::withoutTags)
             if (words != null) index++
             result += SheetLine(words.orEmpty(), chords.map { (at, name) -> Chord(letterAt(words.orEmpty(), at, monospace), name) })
         }
@@ -288,7 +417,7 @@ internal object ChordSheets {
     private val directiveName = phoneRegex("""[a-z_][a-z0-9_]*""")
 
     /** The longest editor on an edit page; a page with none is the ChordPro text itself. */
-    private val textarea = phoneRegex("""<textarea\b[^<>]*+>((?:[^<]++|<(?!/textarea>|textarea\b))*+)</textarea>""", RegexOption.IGNORE_CASE)
+    internal val textarea = PageParts(phoneRegex("""<textarea\b""", RegexOption.IGNORE_CASE), phoneRegex("</textarea>", RegexOption.IGNORE_CASE))
 
     /** A chord token: a letter root, then only what a chord name uses, and not a whole word. */
     private val chordToken = phoneRegex("""[A-G][0-9A-Za-z#/()+\-]*""")
@@ -369,7 +498,7 @@ internal object ChordSheets {
 
     /** The ChordPro text: the longest textarea on an edit page, or [page] when it has none. An empty editor stays empty. */
     private fun chordWikiText(page: String): String {
-        val editors = textarea.findAll(page).map { it.groupValues[1] }.toList()
+        val editors = textarea.allIn(page).map { page.substring(it.between) }.toList()
         if (editors.isEmpty()) return page
         return ChordFinder.unescape(editors.maxBy { it.length })
     }
@@ -421,11 +550,11 @@ internal object ChordSheets {
         val chords = mutableListOf<Chord>()
         val text = StringBuilder()
         var from = 0
-        inline.findAll(body).forEach { match ->
-            text.append(body, from, match.range.first)
-            val name = match.groupValues[1].trim()
+        for (bracket in brackets(body)) {
+            text.append(body, from, bracket.first)
+            val name = body.substring(bracket.first + 1, bracket.last).trim()
             if (chordWikiChord(name)) chords += Chord(text.length, name)
-            from = match.range.last + 1
+            from = bracket.last + 1
         }
         text.append(body.substring(from))
         val (words, placed) = withoutReadings(text.toString(), chords)
@@ -439,7 +568,7 @@ internal object ChordSheets {
      * Left in, they are letters the song never has, and a line that is mostly readings looks like another verse.
      */
     private fun withoutReadings(words: String, chords: List<Chord>): Pair<String, List<Chord>> {
-        val ranges = reading.findAll(words).map { it.range }.toList()
+        val ranges = reading.matchesIn(words).map { it.range }.toList()
         if (ranges.isEmpty()) return words to chords
         return reading.replace(words, "") to chords.map { chord ->
             val gone = ranges.sumOf { range -> (minOf(chord.at, range.last + 1) - range.first).coerceAtLeast(0) }
@@ -451,7 +580,7 @@ internal object ChordSheets {
     private fun chordWikiChord(name: String): Boolean {
         if (name.equals("N.C.", ignoreCase = true) || name.equals("NC", ignoreCase = true)) return true
         if (name.length > 15 || !chordToken.matches(name)) return false
-        return letterRun.findAll(name).all { chordWord.containsMatchIn(it.value) }
+        return letterRun.matchesIn(name).all { chordWord.containsMatchIn(it.value) }
     }
 
     /**
@@ -474,7 +603,7 @@ internal object ChordSheets {
             val chords = mutableListOf<Chord>()
             val plain = StringBuilder()
             var from = 0
-            ugChord.findAll(line).forEach { match ->
+            ugChord.matchesIn(line).forEach { match ->
                 plain.append(line, from, match.range.first)
                 chords += Chord(plain.length, letterName(match.groupValues[1].trim()))
                 plain.append(match.groupValues[1])

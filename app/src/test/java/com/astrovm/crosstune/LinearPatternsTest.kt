@@ -43,16 +43,17 @@ class LinearPatternsTest {
     private val builtAtRunTime = listOf(
         // One word of a short list, between lookarounds of one letter each.
         "Translator.kt" to "\$spoken",
-        // A Spotify page's wording, before and after the artist, as plain letters: matched at one place each.
-        "MetadataParsers.kt" to "phoneRegex(Regex.escape(wording.substringBefore",
+        // A Spotify page's wording, before and after the artist, as plain letters: looked for ahead from each place, and
+        // matched at one place.
+        "MetadataParsers.kt" to "phoneRegex(\"(?=\${Regex.escape(wording.substringBefore",
         "MetadataParsers.kt" to "phoneRegex(Regex.escape(wording.substringAfter",
         // Where each pattern is built, from what the line above it gives it, once in its name and once where it's called.
         "PhoneRegex.kt" to "phoneRegex(pattern, options.toSet(), ICU)",
         "PhoneRegex.kt" to "phoneRegex(pattern, options.toSet(), ICU)",
         "PhoneRegex.kt" to "fun phoneRegex(pattern: String, options: Set<RegexOption>, onIcu: Boolean)",
         // The pattern as it is on a phone, and written out for the JVM: each a pattern above, so timed there.
-        "PhoneRegex.kt" to "Regex(IcuPattern(pattern, options).written)",
-        "PhoneRegex.kt" to "Regex(IcuPattern(pattern, options).written)",
+        "PhoneRegex.kt" to "Regex(JVM_WRITER.written(pattern, options))",
+        "PhoneRegex.kt" to "Regex(JVM_WRITER.written(pattern, options))",
     )
 
     @Test
@@ -77,7 +78,9 @@ class LinearPatternsTest {
             "val a = Regex(\"\"\"${'$'}TAG(x)\"\"\" + \"\"\"${'$'}{END}\\s\"\"\", RegexOption.IGNORE_CASE)\n" +
             "val b = Regex(\"a\\\\d\\${'$'}\")\nval c = Regex(\"\"\"${'$'}{'${'$'}'}\"\"\")\n" +
             "val d = Regex(\"\"\"\"q\":\"(\\w)\"\"\"\").find(x)\nval e = Regex(\"\"\"^(.+)\"\"\" + words + \"\"\"${'$'}\"\"\")\n" +
-            "val f = words.joinToString(\"|\").toRegex()\nval g = Regex(words.first(), RegexOption.IGNORE_CASE)\n"
+            "val f = words.joinToString(\"|\").toRegex()\nval g = Regex(words.first(), RegexOption.IGNORE_CASE)\n" +
+            // Patterns named in comments, as what main read: none is the app's, read or not.
+            "/**\n * as main's `text.replace(Regex(\"<[^>]+>\"), with)` did, or Regex(words)\n */\n// Regex(\"a*b\") and Regex(x)\n/* Regex(\"c\") */\n"
         val read = AppPatterns(listOf("Test.kt" to source))
         assertEquals(listOf("<b>(x)</b>\\s", "a\\d$", "$", "\"q\":\"(\\w)\""), read.found.map { it.pattern.pattern() })
         assertEquals(listOf(true, false, false, false), read.found.map { it.pattern.flags() and Pattern.CASE_INSENSITIVE != 0 })

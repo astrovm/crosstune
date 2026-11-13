@@ -193,7 +193,7 @@ internal class Translator(
                     sense.optJSONArray("definitions")?.let { list -> (0 until list.length()).map { Definition(type, list.getJSONObject(it).optString("definition")) } }.orEmpty()
                 }
                 // Wiktionary sends its page styling along with some definitions, which isn't text to show.
-                .map { it.copy(meaning = HtmlCompat.fromHtml(it.meaning.replace(styleSheet, ""), HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim()) }
+                .map { it.copy(meaning = HtmlCompat.fromHtml(styleSheets.cutFrom(it.meaning), HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim()) }
                 .firstOrNull { it.meaning.isNotEmpty() }
         } catch (_: IOException) {
             null
@@ -254,4 +254,4 @@ internal class Translator(
 internal data class Definition(val type: String?, val meaning: String)
 
 /** A page's styling, as Wiktionary leaves in some definitions. */
-private val styleSheet = phoneRegex("""<style[^<>]*+>(?:[^<]++|<(?!/style>|style))*+</style>""", RegexOption.IGNORE_CASE)
+internal val styleSheets = PageParts(phoneRegex("<style", RegexOption.IGNORE_CASE), phoneRegex("</style>", RegexOption.IGNORE_CASE))

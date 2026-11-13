@@ -79,7 +79,7 @@ internal object SongNames {
         if (open >= title.end || title[open] !in TAG_OPENS) return null
         val mark = title.spacesEnd(open + 1)
         val letters = title.letters(mark, VIDEO_MARK.length)
-        if (letters.length < VIDEO_MARK.length || !letters.indices.all { readsAs(letters[it], VIDEO_MARK[it]) }) return null
+        if (letters.length < VIDEO_MARK.length || !VIDEO_MARK.indices.all { readsAs(letters[it], VIDEO_MARK[it]) }) return null
         val close = title.spacesEnd(title.after(mark, VIDEO_MARK.length))
         return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
     }
@@ -370,7 +370,8 @@ internal object SongNames {
     /**
      * "Song - Acoustic Cover": a dash between spaces, then a cover's words on the last line with no dash between, to the
      * end. Read in code as the pattern `\s[-–]\s[^-–]*(?:words).*$` read it, which tried each dash, and took time squared
-     * on a long title: here each of the words on the last line is read once, with the last dash before it.
+     * on a long title: here each of the words on the last line is read once, with the last dash before it, by one look
+     * along it, as on a phone each new look copies the title first.
      */
     private fun coverAfterDash(title: String): IntRange? {
         val end = lineEnd(title)
@@ -378,12 +379,13 @@ internal object SongNames {
         while (lineStart > 0 && !isLineBreak(title[lineStart - 1])) lineStart--
         // Words on the last line end before its line break, if any: what's after [end] is that line break alone.
         val marks = TrailingMarks(title)
-        var words = coverWords.find(title, lineStart)
-        while (words != null) {
+        val words = coverWords.toPattern().matcher(title)
+        var found = words.find(lineStart)
+        while (found) {
             // The space after the dash comes before the words, which start with a letter.
-            val dash = marks.dashBefore(words.range.first)
+            val dash = marks.dashBefore(words.start())
             if (isBetweenSpaces(title, dash)) return dash - 1 until end
-            words = words.next()
+            found = words.find()
         }
         return null
     }
@@ -403,9 +405,9 @@ internal object SongNames {
         if (sungAlong(name, artist) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
         // What follows "Artist - " is the song's name, not a tag; a video's channel is named for the artist.
         val by = artist.replace(channel, "")
-        val dashed = dashTag.findAll(name).filterNot { by.isNotBlank() && sameArtist(name.substring(0, it.range.first), by) }
+        val dashed = dashTag.matchesIn(name).filterNot { by.isNotBlank() && sameArtist(name.substring(0, it.range.first), by) }
         // A guest named before the tag is the song's, "Song (feat. Guest) [Instrumental]"; after it, they sing in this mix.
-        return (bracketTag.findAll(name) + dashed).any { onlyInstrumental(it.groupValues[1]) && !singerAfter.containsMatchIn(name.substring(it.range.first)) } ||
+        return (bracketTag.matchesIn(name) + dashed).any { onlyInstrumental(it.groupValues[1]) && !singerAfter.containsMatchIn(name.substring(it.range.first)) } ||
             offVocalAtEnd.containsMatchIn(name)
     }
 
@@ -419,8 +421,8 @@ internal object SongNames {
      */
     fun albumOfInstrumentals(album: String): Boolean {
         val name = Normalizer.normalize(album, Normalizer.Form.NFKC).replace(instrumentals, "")
-        return instrumentalWord.findAll(name).any { !shortForm.matches(it.value) } || accompaniment.containsMatchIn(name) ||
-            (bracketTag.findAll(name) + dashTag.findAll(name)).any { onlyInstrumental(it.groupValues[1]) }
+        return instrumentalWord.matchesIn(name).any { !shortForm.matches(it.value) } || accompaniment.containsMatchIn(name) ||
+            (bracketTag.matchesIn(name) + dashTag.matchesIn(name)).any { onlyInstrumental(it.groupValues[1]) }
     }
 
     /** Whether a [tag], what's in brackets or after a dash, says the whole recording is an instrumental. */
@@ -709,7 +711,7 @@ internal object SongNames {
      * "Paraquedas (feat. Gusttavo Lima)": some sites have a song under a guest's name only.
      */
     fun withGuests(artist: String, title: String): String =
-        (listOf(artist) + guestCredit.findAll(title).map { it.groupValues[1].trim() }).joinToString(" feat. ")
+        (listOf(artist) + guestCredit.matchesIn(title).map { it.groupValues[1].trim() }).joinToString(" feat. ")
 
     /**
      * The iTunes Store of the country that writes names as [names] are, which names its songs as

@@ -49,6 +49,11 @@ class LongTitlesTest {
             "Song ft. a" + " - Remaster)".repeat(length / 12),
             // The same with no tag: where the last look for one started holds, as no cut takes a letter after it.
             "(feat. a".repeat(length / 18) + ")".repeat(length / 18) + " x".repeat(length / 4),
+            // The ninth review's: on a phone a look along the title each cover, tag or dash took time squared.
+            "Song " + "cover ".repeat(length / 6),
+            "Song - " + "cover ".repeat(length / 6),
+            "|lyrics".repeat(length / 7),
+            "Song" + " - a".repeat(length / 4) + " - song and lyrics by Artist | Spotify",
         ) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(length / piece.length) + ending } }
     }
 

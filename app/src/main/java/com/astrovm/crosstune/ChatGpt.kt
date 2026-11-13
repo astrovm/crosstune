@@ -571,4 +571,4 @@ private val newestFirst = Comparator<ChatGptModel> { a, b ->
         ?: (b.slug.length compareTo a.slug.length)
 }
 
-private fun version(slug: String) = phoneRegex("""\d+""").findAll(slug).map { it.value.toLong() }.toList()
+private fun version(slug: String) = phoneRegex("""\d+""").matchesIn(slug).map { it.value.toLong() }.toList()

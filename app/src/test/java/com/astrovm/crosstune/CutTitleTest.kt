@@ -13,6 +13,17 @@ import kotlin.random.Random
  */
 class CutTitleTest {
     @Test
+    fun aWindowOfLettersHoldsALetterPastUFFFFWhole() {
+        // Its last letter the first half of one, a window takes the other half too: a pattern reads a half alone as a letter.
+        assertEquals("ab\uD835\uDC00", CutTitle("ab\uD835\uDC00c").letters(0, 3))
+        assertEquals("ab", CutTitle("ab\uD835\uDC00c").letters(0, 2))
+        assertEquals("\uD835\uDC00", CutTitle("\uD835\uDC00").letters(0, 1))
+        // A half with no other half after it stays alone.
+        assertEquals("a\uD835", CutTitle("a\uD835b").letters(0, 2))
+        assertEquals("a\uD835", CutTitle("a\uD835").letters(0, 2))
+    }
+
+    @Test
     fun aTitleIsCutAsMainCutIt() {
         val random = Random(SEED)
         repeat(Fuzz.count(TITLES, FEW)) {

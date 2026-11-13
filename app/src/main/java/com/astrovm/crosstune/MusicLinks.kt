@@ -72,7 +72,7 @@ internal object MusicLinks {
     fun parse(text: String): LinkInput? {
         nowPlayingSong(text)?.let { return it }
         // Text with more than one link, e.g. a post sharing a song, is about the first that's music.
-        val urls = urlRegex.findAll(text).map { it.value.trimEnd(*URL_END) }.toList()
+        val urls = urlRegex.matchesIn(text).map { it.value.trimEnd(*URL_END) }.toList()
         if (urls.isEmpty()) return parseOne(text.trim())
         return urls.firstNotNullOfOrNull { parseOne(it.trim()) }
     }

@@ -51,7 +51,8 @@ class PatternLettersTest {
         val written = phoneRegex("""\b""", emptySet(), onIcu = false)
         assertTrue("${written.pattern.length}", written.pattern.length < 6 * SHORT_SET)
         val boundary = written.toPattern().matcher("")
-        for ((row, before) in listOf("\\b@0" to "", "\\b@a" to "a", "\\b@ " to " ")) {
+        // After a letter of two chars, a format letter, or a mark of two chars, it steps back over each whole, as a phone does.
+        for ((row, before) in listOf("\\b@0" to "", "\\b@a" to "a", "\\b@ " to " ") + BOUNDARIES_BEFORE) {
             val found = BitSet()
             for (code in 0..Character.MAX_CODE_POINT) {
                 if (boundary.reset(before + String(Character.toChars(code))).find(before.length) && boundary.start() == before.length) found.set(code)
@@ -85,7 +86,7 @@ class PatternLettersTest {
             val text = String(Character.toChars(code))
             assertEquals(text, foldReadsIt, phoneRegex(Regex.escape(fold), setOf(RegexOption.IGNORE_CASE), onIcu = false).matches(text))
             assertEquals(text, itReadsFold, phoneRegex(Regex.escape(text), setOf(RegexOption.IGNORE_CASE), onIcu = false).matches(fold))
-            assertEquals(fold, String(CaseFolds.full(code), 0, CaseFolds.full(code).size))
+            assertEquals(fold, String(WrittenFolds.full(code), 0, WrittenFolds.full(code).size))
         }
         assertEquals(TABLE.simpleFolds, (0..Character.MAX_CODE_POINT).filter { CaseFolds.simple(it) != it }.associateWith(CaseFolds::simple))
     }

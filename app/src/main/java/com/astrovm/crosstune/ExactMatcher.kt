@@ -540,9 +540,9 @@ internal class ExactMatcher(
             if (!response.isSuccessful) throw IOException("Qobuz answered ${response.code}")
             response.body.stringAtMost()
         }
-        val songs = qobuzItemRegex.findAll(page).mapNotNull { item ->
-            val html = item.value
-            val (title, credit) = qobuzTitleRegex.find(html)?.groupValues?.drop(1)?.map(::htmlText) ?: return@mapNotNull null
+        val songs = qobuzItems.allIn(page).mapNotNull { item ->
+            val html = page.substring(item.whole)
+            val (title, credit) = qobuzTitle(html)?.toList()?.map(::htmlText) ?: return@mapNotNull null
             val (artist, album) = credit.split("•").map(String::trim).let { it.first() to it.getOrElse(1) { "" } }
             QobuzSong(title, artist, album, qobuzTrackRegex.find(html)?.groupValues?.get(1), qobuzAlbumRegex.find(html)?.groupValues?.get(1))
         }
@@ -558,10 +558,9 @@ internal class ExactMatcher(
 
     private class QobuzSong(val title: String, val artist: String, val albumTitle: String, val track: String?, val album: String?)
 
-    private fun htmlText(html: String) = android.text.Html.fromHtml(html.replace(tagRegex, " "), android.text.Html.FROM_HTML_MODE_LEGACY)
+    private fun htmlText(html: String) = android.text.Html.fromHtml(withoutTags(html, with = " "), android.text.Html.FROM_HTML_MODE_LEGACY)
         .toString().replace(spacesRegex, " ").trim()
 
-    private val tagRegex = phoneRegex("<[^<>]++>")
     private val spacesRegex = phoneRegex("\\s+")
 
     /** Whether [name] is one of [metadata]'s artists, e.g. the account an upload is on. */
@@ -939,7 +938,7 @@ internal class ExactMatcher(
     private fun looselyMatches(metadata: MusicMetadata, name: String, artist: String): Boolean =
         SongNames.wordsMatch(name, metadata.title) && SongNames.artistInside(artist, metadata.artist)
 
-    private companion object {
+    internal companion object {
         const val TIMEOUT_MS = 5_000L
 
         /** How many of the Spotify songs ListenBrainz knows by a name are read to find the one. */
@@ -951,11 +950,19 @@ internal class ExactMatcher(
         const val SPOTIFY_TRACK_URL = "https://open.spotify.com/track/"
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         /** One song in Qobuz's search: its title and "artist • album", and the numbers of the song and its album. */
-        private val qobuzItemRegex = phoneRegex("""<div class="ListItem">(?:[^<]++|<(?!/li>|div class="ListItem">))*+</li>""")
-        private val qobuzTitleRegex = phoneRegex(
-            """class="ListItem__title"(?:[^<>c]|c(?!lass="ListItem__title"))*+>((?:[^<c]++|<(?!/a>)|c(?!lass="ListItem__title"))*+)</a>\s*+""" +
-                """<p class="ListItem__artists">((?:[^<]++|<(?!/p>|p class="ListItem__artists">))*+)</p>"""
-        )
+        internal val qobuzItems = PageParts(phoneRegex("""<div class="ListItem">"""), phoneRegex("</li>"), tagEnd = null)
+        internal val qobuzTitles = PageParts(phoneRegex("""class="ListItem__title""""), phoneRegex("""</a>\s*+<p class="ListItem__artists">"""))
+
+        /**
+         * A Qobuz song's title and credit, as main's `class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>`
+         * read them: the title up to the first `</a>` that the credit follows, then the credit up to the first `</p>`.
+         */
+        fun qobuzTitle(html: String): Pair<String, String>? {
+            val title = qobuzTitles.firstIn(html) ?: return null
+            val credit = title.whole.last + 1
+            val end = html.indexOf("</p>", credit).takeIf { it >= 0 } ?: return null
+            return html.substring(title.between) to html.substring(credit, end)
+        }
         private val qobuzTrackRegex = phoneRegex("""track&#x2F;(\d+)""")
         private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
 
