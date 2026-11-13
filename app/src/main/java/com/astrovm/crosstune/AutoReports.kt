@@ -193,7 +193,6 @@ internal class AutoReports(
     /** The report [owed] went. */
     fun paid(owed: Owed) = remember(owed.key)
 
-
     /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */
     fun owes(owed: Owed): Boolean = owed in owed()
 

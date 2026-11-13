@@ -157,7 +157,9 @@ class SongNamesVersionTest {
         for (same in listOf(
             "インストール", "Fake Song インストール", "Fake Song (インストラクター)", "Fake Song (アライヴ)", "ドライブ", "Fake Song ドライブ", "Fake Song ライブラリー", "ライフ", "ライフ・イズ",
             "Fake Song ディスカバー", "Fake Song 디스커버", "Fake Song 드라이브", "라이브러리", "커버리지", "반주자",
-            "ATV Sizes", "Fake Song ATV Size", "TV Sizes", "Fake Song TV Size2", "Fake Song (TV Size\u0332)"
+            "ATV Sizes", "Fake Song ATV Size", "TV Sizes", "Fake Song TV Size2", "Fake Song (TV Size\u0332)",
+            // Katakana from its first letter, ァ, to its last, ヿ, with ー, goes on a run.
+            "Fake Song (ァライブ)", "Fake Song (ライブヺ)", "Fake Song (ーライブ)", "Fake Song (ライブヿ)"
         )) {
             assertFalse(same, other(same))
         }
@@ -167,7 +169,9 @@ class SongNamesVersionTest {
             "Fake Song ライブ版", "Fake Song (반주)", "Fake Song 라이브 버전", "Fake Song 翻唱版", "Fake Song 卡拉OK版", "Fake Song (ＴＶサイズ)",
             "Fake Song ｶﾗｵｹ", "Fake Song【カラオケ】", "Fake Song 메들리", "Fake Song 混音版", "Fake Song 串烧",
             "Fake Songのカラオケ", "Fake Song ライブを歌う", "Fake Song 歌ってみたい", "カラオケ Fake Song", "Fake Song TV Size版",
-            "Fake Song (インストゥルメンタル)", "Fake Song (アコースティックカバー)"
+            "Fake Song (インストゥルメンタル)", "Fake Song (アコースティックカバー)",
+            // Just past katakana, ゠ and ・ end a run.
+            "Fake Song (゠ライブ)", "Fake Song (ライブ・)"
         )) {
             assertTrue(said, other(said))
         }
@@ -247,7 +251,10 @@ class SongNamesVersionTest {
     @Test
     fun aHalfThatSaysOnlyAVersionIsAnotherVersion() {
         for (half in listOf("Live", "ライブ", "Acoustic Ver.", "Live 2019")) assertTrue(half, SongNames.onlyAnotherVersion(half, "曲"))
-        for (half in listOf("From \"Live Forever\"", "Fake Song", "Live at Budokan", "Remastered 2012")) assertFalse(half, SongNames.onlyAnotherVersion(half, "曲"))
+        // A Latin word that says no version says more, even one letter, first or last of the alphabet.
+        for (half in listOf("From \"Live Forever\"", "Fake Song", "Live at Budokan", "Remastered 2012", "Live a", "Live z")) {
+            assertFalse(half, SongNames.onlyAnotherVersion(half, "曲"))
+        }
         // The other half saying that version too, it's one version said twice.
         assertFalse(SongNames.onlyAnotherVersion("なごり雪 (ライブ)", "Nagoriyuki (Live)"))
         assertFalse(SongNames.onlyAnotherVersion("子守唄_Acoustic Guitar Ver.", "Fake Lullaby Acoustic Guitar Version"))

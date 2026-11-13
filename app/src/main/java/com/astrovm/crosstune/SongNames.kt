@@ -178,25 +178,26 @@ internal object SongNames {
         val latin = words(tag).all { canon(it) in tagged }
         val marked = VERSION_WRITTEN.filterKeys(tag::contains)
         if (!latin || marked.any { (mark, means) -> means !in tagged && written.none { normalize(mark) in it } }) return false
-        val rest = marked.keys.fold(tag) { left, mark -> left.replace(mark, " ") }.split(notOwnLetters).filter { it.isNotEmpty() }
+        val rest = marked.keys.fold(tag) { left, mark -> left.replace(mark, " ") }.split(notOwnLetters)
+        // An empty run, between two marks, says nothing, so it passes.
         return rest.all { run -> written.any { normalize(run) in it } || inKatakanaSays(run, tagged) }
     }
 
     /** Whether [run] is words in katakana, each one of [tagged]: "シングルリミックス" for "(Single Remix)". */
-    private fun inKatakanaSays(run: String, tagged: Set<String>): Boolean {
-        val cut = BooleanArray(run.length + 1).also { it[0] = true }
-        for (end in 1..run.length) {
-            cut[end] = (0 until end).any { start -> cut[start] && KATAKANA_WORDS[withBu(run.substring(start, end))]?.let { words(it).all { word -> canon(word) in tagged } } == true }
-        }
-        return cut[run.length]
-    }
+    private fun inKatakanaSays(run: String, tagged: Set<String>): Boolean =
+        cutInto(run, KATAKANA_WORDS.filterValues { words(it).all { word -> canon(word) in tagged } }.keys)
+
+    /** Whether [run], with ヴ as ブ, is some of [words] one after another, none for an empty one. */
+    private fun cutInto(run: String, words: Collection<String>): Boolean =
+        Regex(words.joinToString("|", "(?:", ")*") { Regex.escape(withBu(it)) }).matches(withBu(run))
 
     /**
      * The tags of [title] that say what version it is, "(Live)", "(Single Mix)" or "(Live at Budokan)", not what it's
      * from: "(Theme from Live Forever)" says "live", but of a film's name.
      */
     private fun ownVersions(title: String) = title.removePrefix(bareTitle(title)).split(tagEdge).filter { tag ->
-        wordList(tag).let { it.isNotEmpty() && (it.all(VERSION_LIKE::contains) || it.first() in VERSION_WORDS) }
+        // A tag with no words in Latin letters adds none, so it may as well count.
+        wordList(tag).let { it.all(VERSION_LIKE::contains) || it.first() in VERSION_WORDS }
     }
 
     /** The parts of [name] that say it's a version: "(Single ver.)", "TVバージョン", or all of "Fake Lullaby Acoustic Guitar Version". */
@@ -264,20 +265,15 @@ internal object SongNames {
         private val letters = composed(written).filter(Char::isLetterOrDigit)
         private val pattern = Regex(letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*"""))
 
+        /** The mark, with all the katakana on either side of it: the run of words it's in. */
+        private val inItsRun = Regex("(?<!$KATAKANA)$KATAKANA*(?:${pattern.pattern})$KATAKANA*(?!$KATAKANA)")
+
         // Whether it's a word is looked at on each name, not as it's made: marks are made once, as the app starts.
         fun foundIn(name: String): Boolean {
             val text = composed(name).replace(HOLD_A_MARK, " ")
+            if (Regex(KATAKANA).containsMatchIn(letters)) return inItsRun.findAll(text).any { run -> run.value.split(notKatakana).all(::versionRun) }
             val aWord = letters.all { scriptOf(it) == Character.UnicodeScript.LATIN }
-            val inWords = letters.any(::inKatakana)
-            return pattern.findAll(text).any { found ->
-                val before = text.getOrNull(found.range.first - 1)
-                val after = text.getOrNull(found.range.last + 1)
-                when {
-                    aWord -> !goesOn(before) && !goesOn(after)
-                    inWords -> katakanaWords(text, found.range)
-                    else -> true
-                }
-            }
+            return pattern.findAll(text).any { found -> !aWord || !goesOn(text.getOrNull(found.range.first - 1)) && !goesOn(text.getOrNull(found.range.last + 1)) }
         }
 
         companion object {
@@ -287,29 +283,8 @@ internal object SongNames {
              */
             private val HOLD_A_MARK = Regex("(?<![\\u1100-\\u11ff\\u3130-\\u318f\\uac00-\\ud7af])(?:드라이브|라이브러리|디스커버|커버리지|반주자)")
 
-            /**
-             * Whether the katakana at either end of [range] in [text], with the rest of its run, is words a version tag
-             * says: "カラオケバージョン" or "オフ・ヴォーカル".
-             */
-            private fun katakanaWords(text: String, range: IntRange): Boolean {
-                var start = range.first
-                while (inKatakana(text.getOrNull(start)) && inKatakana(text.getOrNull(start - 1))) start--
-                var end = range.last
-                while (inKatakana(text.getOrNull(end)) && inKatakana(text.getOrNull(end + 1))) end++
-                return text.substring(start, end + 1).split(notKatakana).filter { it.isNotEmpty() }.all(::cutIntoWords)
-            }
-
-            /** Whether [run] is words a version tag says in katakana, one after another. */
-            private fun cutIntoWords(run: String): Boolean {
-                val cut = BooleanArray(run.length + 1).also { it[0] = true }
-                for (end in 1..run.length) {
-                    cut[end] = (0 until end).any { start -> cut[start] && katakanaWord(run.substring(start, end)) }
-                }
-                return cut[run.length]
-            }
-
-            /** Whether [next] is a katakana letter or ー, so more of a word in katakana. */
-            private fun inKatakana(next: Char?): Boolean = next != null && (next in '\u30a1'..'\u30fa' || next in '\u30fc'..'\u30ff')
+            /** A katakana letter or ー, what a word in katakana is made of. */
+            private const val KATAKANA = "[\\u30a1-\\u30fa\\u30fc-\\u30ff]"
 
             private val notKatakana = Regex("[^\\u30a1-\\u30fa\\u30fc-\\u30ff]+")
 
@@ -321,8 +296,8 @@ internal object SongNames {
         }
     }
 
-    /** Whether [word] in katakana is one a version tag says: see [KATAKANA_WORDS] and [VERSION_WRITTEN]. */
-    private fun katakanaWord(word: String) = withBu(word) in KATAKANA_WORDS || word in VERSION_WRITTEN
+    /** Whether [run] in katakana is words a version tag says, one after another: see [KATAKANA_WORDS] and [VERSION_WRITTEN]. */
+    private fun versionRun(run: String) = cutInto(run, KATAKANA_WORDS.keys + VERSION_WRITTEN.keys)
 
     /** Words a video's title has when it's another version of the song, or not the song at all. */
     private val VERSION_WORDS = setOf(
@@ -363,9 +338,7 @@ internal object SongNames {
     )
 
     /** The words a tag that says only what version it is has: see [ownVersions]. */
-    private val VERSION_LIKE by lazy {
-        VERSION_WORDS + VERSION_SAID.keys + KATAKANA_WORDS.values.flatMap(::words) + "size"
-    }
+    private val VERSION_LIKE = VERSION_WORDS + VERSION_SAID.keys + KATAKANA_WORDS.values.flatMap(::words) + "size"
 
     /**
      * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,

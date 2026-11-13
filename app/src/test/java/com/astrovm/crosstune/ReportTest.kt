@@ -379,8 +379,12 @@ class ReportTest {
     fun thousandsOfLinesPutInTimeStillMakeAReportTheBoxTakes() {
         val lines = (0 until 5000).map { HandTiming("空".repeat(300), it * 500L, it * 500L + (it * 37 % 11) * 10) }
         val report = Report("2.30.0", MusicMetadata("Song", "Band"), timing = lines)
-        assertTrue(report.json().toByteArray().size <= ReportBox.MAX_BYTES)
-        assertEquals(listOf(0L, 4999 * 500L), sentLines(report).map { it.getLong("timedMs") }.let { listOf(it.first(), it.last()) })
+        val bytes = report.json().toByteArray().size
+        assertTrue(bytes <= ReportBox.MAX_BYTES)
+        val sent = sentLines(report)
+        assertEquals(listOf(0L, 4999 * 500L), sent.map { it.getLong("timedMs") }.let { listOf(it.first(), it.last()) })
+        // Past the count, the lines still go to the size, no fewer: one more, and the comma before it, wouldn't fit.
+        assertTrue(bytes.toString(), bytes + sent.minOf { it.toString().toByteArray().size } + 1 > ReportBox.MAX_BYTES)
     }
 
     @Test
