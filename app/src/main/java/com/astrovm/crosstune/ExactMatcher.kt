@@ -673,25 +673,24 @@ internal class ExactMatcher(
     /**
      * [found], the first of [rows] main's [check] names as the song, or in its place the same song without a version:
      * where none of the song's names has a tag, and one of [found]'s says a version and nothing else (see
-     * [SongNames.versionTagged]), the first other of [rows] with no tag, no word of a version in its name or second
-     * line, that passes the same [check], is [found]'s name with its tags cut, and is as close to the song's length. So what opens
-     * is always a row main's own check names as the song, and where main opens one, one opens.
+     * [SongNames.versionTagged]), the first of [rows] with no tag, so never [found] itself, no word of a version in its
+     * name or second line, that passes the same [check], is [found]'s name with its tags cut, and is as close to the
+     * song's length. So what opens is always a row main's own check names as the song, and where main opens one, one opens.
      */
     private fun plainOne(found: Row, rows: List<Row>, names: Names, check: (Row, Names) -> Boolean): Row {
         if (names.titles.any(SongNames::tagged) || !SongNames.versionTagged(found.name)) return found
         val name = SongNames.outsideTags(found.name)
         val off = offBy(found, names)
         return rows.firstOrNull { row ->
-            row !== found && !SongNames.tagged(row.name) && !SongNames.mentionsAVersion(row.name + " " + row.details.drop(1).joinToString(" ")) &&
+            !SongNames.tagged(row.name) && !SongNames.mentionsAVersion(row.name + " " + row.details.drop(1).joinToString(" ")) &&
                 check(row, names) && SongNames.outsideTags(row.name) == name && offBy(row, names) <= off
         } ?: found
     }
 
     /** How far [row] is from the nearest of the song's lengths: none where the song's aren't known, the most where the row's isn't. */
     private fun offBy(row: Row, names: Names): Long {
-        if (names.lengthsMs.isEmpty()) return 0
         val length = row.lengthMs ?: return Long.MAX_VALUE
-        return names.lengthsMs.minOf { kotlin.math.abs(it - length) }
+        return names.lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } ?: 0
     }
 
     /** The songs or videos among [items] that play. */
