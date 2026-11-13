@@ -17,6 +17,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -40,6 +43,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.withLock
 
 internal sealed interface Effect {
@@ -243,6 +247,9 @@ internal class MainViewModel(
     /** When the song an app names none for is listened to next, on the [now] clock, and how many times in a row nothing was heard. */
     private var nextByEarAtMs = 0L
     private var quietByEar = 0
+
+    /** The work naming a song by ear, which a listen asked for waits on, so the microphone isn't opened twice. */
+    private var byEar: Job? = null
 
     /** The screen's state, which the parts work is handed to change too. */
     private val screen = mutableStateOf(
@@ -948,7 +955,9 @@ internal class MainViewModel(
             destinationUrls = emptyMap(), selectedDestination = null, link = null, showDestinationPicker = false,
             handlingIncomingLink = false, handingOff = false
         )
+        val byEar = byEar
         job = viewModelScope.launch {
+            byEar?.cancelAndJoin()
             val heard = try {
                 listener.listen()
             } finally {
@@ -1052,6 +1061,7 @@ internal class MainViewModel(
                     nextByEarAtMs = 0L
                     quietByEar = 0
                     uiState = uiState.copy(playingUnnamed = unnamed?.let { PlayingUnnamed(it) })
+                    showPlayingNow()
                 }
             }
             .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight } }
@@ -1066,11 +1076,12 @@ internal class MainViewModel(
      * what plays stays named as the app has it.
      */
     private suspend fun nameByEar(source: PlaybackSource) {
+        byEar = currentCoroutineContext()[Job]
         while (true) {
             delay(nextByEarAtMs - now())
             val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud()
-            val heard = listener.listenToPlaying(byMicrophone)
-            nextByEarAtMs = now() + when (heard) {
+            val heard = if (byMicrophone) listenAloud(source) else listener.listenToPlaying(byMicrophone = false)
+            val wait = when (heard) {
                 is Heard.Song -> {
                     quietByEar = 0
                     uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = heard)) }
@@ -1084,7 +1095,22 @@ internal class MainViewModel(
                 }
                 else -> BY_EAR_RETRY_MS
             }
+            // After the song's words were looked for, which takes a while.
+            nextByEarAtMs = now() + wait
         }
+    }
+
+    /**
+     * Listens by microphone while the phone plays aloud, and stops once it doesn't, as when headphones
+     * are plugged in or the sound is muted midway: null then, a failure like any other.
+     */
+    private suspend fun listenAloud(source: PlaybackSource): Heard? = coroutineScope {
+        val listening = async { listener.listenToPlaying(byMicrophone = true) }
+        val quiet = async {
+            while (source.playsAloud()) delay(ALOUD_CHECK_MS)
+            null
+        }
+        select { listening.onAwait { it }; quiet.onAwait { it } }.also { coroutineContext.cancelChildren() }
     }
 
     /** How long until the song [heard] should be over, and the next one playing, or a while when its length isn't known. */
@@ -1102,7 +1128,8 @@ internal class MainViewModel(
     }
 
     private fun showPlayingNow() {
-        val song = heardNow ?: followedNow?.first
+        // A song another app paused isn't offered over what an app plays now, even with no song named.
+        val song = heardNow ?: followedNow?.first?.takeIf { uiState.playingUnnamed == null }
         uiState = uiState.copy(playingNow = song?.let { NowPlaying(it, followedNow?.takeIf { (followed) -> followed == song }?.second) })
     }
 
@@ -5371,6 +5398,9 @@ internal class MainViewModel(
         /** The soonest and the latest naming by ear listens again after a song: the end of a song may be misheard, and a long one may be skipped. */
         const val BY_EAR_SOONEST_MS = 20_000L
         const val BY_EAR_LATEST_MS = 360_000L
+
+        /** How often a listen by microphone checks the phone still plays aloud. */
+        const val ALOUD_CHECK_MS = 1_000L
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L

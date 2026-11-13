@@ -3,6 +3,7 @@ package com.astrovm.crosstune
 import android.app.Application
 import android.content.Context
 import android.os.Looper
+import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -16,6 +17,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,6 +36,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowSystemClock
 
 /**
  * The view model on its own, with only the parts a test hands it: what it does when a part is
@@ -320,10 +326,10 @@ class MainViewModelTest {
     }
 
     /** A model following [playback], which plays a radio station with no song named, as VRadio does (#998). */
-    private fun radioModel(ears: SongHearing, playback: FakePlayback = FakePlayback(), phone: Phone = Phone.OTHER, mayCalibrate: Boolean = true): MainViewModel {
+    private fun radioModel(ears: SongHearing, playback: FakePlayback = FakePlayback(), phone: Phone = Phone.OTHER, mayCalibrate: Boolean = true, lyricsFinder: LyricsFinder? = null): MainViewModel {
         playback.access = true
         playback.unnamed.value = station
-        val model = model(playback = playback, listener = ears, phone = phone, mayCalibrate = mayCalibrate)
+        val model = model(playback = playback, listener = ears, phone = phone, mayCalibrate = mayCalibrate, lyricsFinder = lyricsFinder)
         model.viewModelScope.launch { model.watchPlayingNow() }
         idle()
         return model
@@ -454,6 +460,103 @@ class MainViewModelTest {
         assertNull(model.uiState.playingUnnamed)
         assertEquals(song, model.uiState.playingNow?.song)
         pass(MainViewModel.BY_EAR_LATEST_MS)
+        assertEquals(2, ears.asked.size)
+    }
+
+    /** Listens until it's stopped, and keeps each time it was, and whether it was let use the microphone. */
+    private class LongEars(val closingMs: Long = 0) : SongHearing {
+        val asked = mutableListOf<Boolean>()
+        var stopped = 0
+        /** Whether the last listen by ear had closed the microphone when one was asked for by hand. */
+        var closedFirst: Boolean? = null
+        private var open = false
+        override suspend fun listen(): Heard {
+            closedFirst = !open
+            return Heard.Nothing
+        }
+        override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
+            asked += byMicrophone
+            open = true
+            try {
+                awaitCancellation()
+            } finally {
+                stopped++
+                // Letting the microphone go takes a moment.
+                withContext(NonCancellable) { delay(closingMs) }
+                open = false
+            }
+        }
+    }
+
+    @Test
+    fun theMicrophoneStopsOnceThePhoneNoLongerPlaysAloud() {
+        val playback = FakePlayback()
+        val ears = LongEars()
+        radioModel(ears, playback).playingBarInSight(true)
+        idle()
+        assertEquals(listOf(true), ears.asked)
+        pass(5 * MainViewModel.ALOUD_CHECK_MS)
+        assertEquals(0, ears.stopped)
+        // Headphones plugged in midway: the microphone would hear nothing from then on.
+        playback.aloud = false
+        pass(MainViewModel.ALOUD_CHECK_MS)
+        assertEquals(1, ears.stopped)
+        // Tried again in a while, by the phone's own sound alone.
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        assertEquals(listOf(true, false), ears.asked)
+    }
+
+    @Test
+    fun aListenByHandWaitsForTheMicrophoneToBeLetGo() {
+        val ears = LongEars(closingMs = 500)
+        val model = radioModel(ears)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.asked.size)
+        model.listen()
+        pass(1_000)
+        assertEquals(1, ears.stopped)
+        assertEquals(true, ears.closedFirst)
+    }
+
+    @Test
+    fun aSongAnotherAppPausedIsNotOfferedOverAStationPlaying() {
+        val playback = FakePlayback()
+        val model = playingModel(playback, open = false)
+        assertEquals(song, model.uiState.playingNow?.song)
+        // Spotify pauses, and keeps its song; VRadio starts.
+        playback.playing.value = following(playing = false)
+        playback.onThePhone = null
+        playback.unnamed.value = station
+        idle()
+        assertNull(model.uiState.playingNow)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+        // VRadio stops: the paused song is offered again.
+        playback.unnamed.value = null
+        idle()
+        assertEquals(song, model.uiState.playingNow?.song)
+    }
+
+    @Test
+    fun aSongHeardIsListenedToAgainWhenItShouldBeOverEvenWhenItsWordsTakeAWhile() {
+        var asked = 0
+        fake.handler = { request ->
+            // The lookup takes 10 s, all on its first ask.
+            if (asked++ == 0) ShadowSystemClock.advanceBy(Duration.ofSeconds(10))
+            FakeSpotify.html(request, "")
+        }
+        val finder = LyricsFinder(fake.client(), "test", Dispatchers.Unconfined, busyPauseMs = 0, matching = Dispatchers.Unconfined)
+        val heardAt = SystemClock.elapsedRealtime()
+        val ears = EarsOnThePhone(heardSong())
+        radioModel(ears, lyricsFinder = finder).playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.asked.size)
+        val lookupMs = SystemClock.elapsedRealtime() - heardAt
+        assertEquals(10_000L, lookupMs)
+        // 150 s of the song were left when it was heard, and a little after that.
+        pass(heardAt + 150_000 + MainViewModel.BY_EAR_AFTER_MS - SystemClock.elapsedRealtime() - 500)
+        assertEquals(1, ears.asked.size)
+        pass(1_000)
         assertEquals(2, ears.asked.size)
     }
 

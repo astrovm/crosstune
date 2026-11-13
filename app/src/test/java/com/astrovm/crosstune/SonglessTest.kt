@@ -39,7 +39,6 @@ class SonglessTest {
         assertTrue(noSong("fake_song.flac", ""))
         assertTrue(noSong("Fake Song.m4a", "Unknown"))
         assertTrue(noSong("Fake Song", "Unknown Artist"))
-        assertTrue(noSong("Track 01", "Fake Artist"))
         assertTrue(noSong("Track 7.mp3", "<unknown>"))
         assertTrue(noSong("Pista 03", ""))
         assertTrue(noSong("AUD-20240101-WA0003", ""))
@@ -63,6 +62,9 @@ class SonglessTest {
         assertFalse(noSong("Song 2", "Fake Band"))
         assertFalse(noSong("Summer of 1999", "Fake Artist"))
         assertFalse(noSong("Track 01 Remix Edition", "Fake Artist"))
+        // A song an artist named for its place on the album, as some do.
+        assertFalse(noSong("Track 10", "Fake Artist"))
+        assertFalse(noSong("Pista 03", "Fake Band"))
     }
 
     @Test
