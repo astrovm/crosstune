@@ -54,6 +54,34 @@ class MatcherCasesTest {
 
     private fun japanese(title: String) = title to "Fake Band"
 
+    // The seventh review, of dc6e8a5f: PR comment 6843592618. Each took away main's right row, signed out or for a wrong pick.
+    private val seventh = listOf(
+        // 1. Main's row wrongly doubted, ChatGPT's wrong pick opened. Now main's row isn't doubted, so ChatGPT isn't asked.
+        Case("1 tokyo", "song1", title = "Tokyo", japan = japanese("トーキョー"), songs = listOf(row("別の歌", length = "1:35"), row("とうきょう")), picked = 0),
+        Case("1 muede", "song1", title = "Muede", songs = listOf(row("Other Song"), row("Müde")), picked = 0),
+        Case("1 album version", "song0", songs = listOf(row("偽の歌 (Album Version)"), row("別の歌")), picked = 1),
+        // 1. Main's row rightly doubted: what ChatGPT picks opens only where it passes the same check.
+        Case("1 pick passes", "song0", now = "song1", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌")), picked = 1),
+        Case("1 pick fails", "song0", now = null, songs = listOf(row("偽の歌 (ライブ)"), row("別の歌 (Live)")), picked = 1),
+        Case("1 pick another song", "song0", now = null, japan = japanese("偽の歌"), songs = listOf(row("偽の歌 (ライブ)"), row("別の歌")), picked = 1)
+    ) + listOf(
+        // 2. One name written two ways: a long vowel, ヴ, an old kanji, kana against kanji, German's "ue".
+        Triple("Tokyo", "トーキョー", "とうきょう"), Triple("Sayonara", "さよなら", "さようなら"), Triple("Sakura", "桜", "櫻"),
+        Triple("Asu", "明日", "あす"), Triple("Violin", "ヴァイオリン", "バイオリン"), Triple("Sakura", "さくら", "桜")
+    ).map { (title, store, name) ->
+        Case("2 $store $name", "song0", title = title, japan = japanese(store), songs = listOf(row(name)))
+    } + listOf(
+        Case("2 muede", "song0", title = "Muede", songs = listOf(row("Müde"))),
+        // 5. A word no list has says no version: "Christmas" is "クリスマス".
+        Case("5 christmas", "song0", title = "Fake Song (Christmas Version)", songs = listOf(row("偽の歌 (クリスマス・バージョン)"))),
+        // 6. A subtitle a store leaves out, either way.
+        Case("6 subtitle", "song0", japan = japanese("偽の歌"), songs = listOf(row("偽の歌 ～偽りの夜～"))),
+        Case("6 subtitle in the store", "song0", japan = japanese("偽の歌 ～偽りの夜～"), songs = listOf(row("偽の歌")))
+    ) + listOf("Album Version", "Single Version", "Original Version", "映画「ライブ・フォーエバー」主題歌", "Full Version").map { tag ->
+        // 3 and 4. An edition, or what film it's the song of, says no version.
+        Case("3 $tag", "song0", songs = listOf(row("偽の歌 ($tag)")))
+    }
+
     // The sixth review, of 36adbf4f: PR comment 6839603318. Each opened another row or a video than main's, without ChatGPT.
     private val sixth = listOf("Live" to "ライブ", "Acoustic" to "アコースティック", "Remix" to "リミックス", "Live at Budokan" to "ライブ・アット・武道館").map { (tag, written) ->
         // 1. The store names the song with its tag in Latin letters, the row in katakana: main's row, not the studio take.
@@ -156,7 +184,8 @@ class MatcherCasesTest {
         Case("6 tokyo", "song0", title = "Tokyo", japan = japanese("トーキョー"), songs = listOf(row("東京"))),
         // 7. "Xバージョン" is "X ver.".
         Case("7 tv", "song0", now = null, title = "Fake Song (Single Version)", songs = listOf(row("偽の歌 (TVバージョン)"))),
-        Case("7 english", "song0", now = null, title = "Fake Song (Single Version)", songs = listOf(row("偽の歌 (英語バージョン)"))),
+        // But not in a word no list has, which can't tell: the seventh review.
+        Case("7 english", "song0", title = "Fake Song (Single Version)", songs = listOf(row("偽の歌 (英語バージョン)"))),
         Case("7 own", "song0", title = "Fake Song (Single Version)", japan = japanese("偽の歌 (シングル・バージョン)"), songs = listOf(row("偽の歌 (シングル・バージョン)"))),
         // 2. The first in the song's own script isn't it, as its words are another's, so it's never what's left either.
         Case("2 first in its own script", "song0", now = null, japan = japanese("偽物"), songs = listOf(row("別の歌"), row("Фальшивая песня"), row("Другая песня (Live)"))),
@@ -183,8 +212,9 @@ class MatcherCasesTest {
         // 2. A band live.
         Case("2 $live", null, videos = listOf(video("Fake Song ($live)")))
     } + listOf("ばら" to "原", "きんか" to "銀河", "かっこう" to "学校", "雨" to "飴").map { (kana, kanji) ->
-        // 4. Read alike only with the sound marks, and never kanji against kanji: ChatGPT is asked, and says none.
-        Case("4 $kana $kanji", "song0", now = null, title = "Fake Song", japan = japanese(kana), songs = listOf(row(kanji)), picked = SAYS_NONE)
+        // 4. Kana against kanji can't be told apart, and kanji that read alike may be one name: main's row opens, as
+        // only what says it's another takes it away (the seventh review).
+        Case("4 $kana $kanji", "song0", title = "Fake Song", japan = japanese(kana), songs = listOf(row(kanji)), picked = SAYS_NONE)
     } + listOf(
         // 4. Homophones, kana against kanji, as main: Issue #983.
         Case("4 あめ 飴", "song0", japan = japanese("あめ"), songs = listOf(row("飴")), picked = SAYS_NONE),
@@ -237,7 +267,7 @@ class MatcherCasesTest {
 
     @Test
     fun everyInputTheReviewsTriedOpensWhatMainDidOrBetter() {
-        val cases = sixth + fifth + fourth + third + second + first + before
+        val cases = seventh + sixth + fifth + fourth + third + second + first + before
         val wrong = cases.map { it to find(it) }.filter { (case, found) -> found != checked(case) }
             .map { (case, found) -> "${case.what}: ${checked(case)}, not $found" }
         assertEquals(emptyList<String>(), wrong)
@@ -255,7 +285,7 @@ class MatcherCasesTest {
         // The review of 61c74c9c, 5: longer words that hold a mark, which main took for one, say no other version of
         // what main opened; nor does ヴ in a word that only holds a mark's letters (the fifth review, 4), nor a mark in
         // the name that means a word of the song's (the sixth, 8).
-        fun other(name: String, title: String = "Fake Song") = SongNames.saysAnotherVersionOf(name, listOf(title), "Fake Band")
+        fun other(name: String, title: String = "Fake Song") = SongNames.saysAnother(name, "", listOf(title), listOf("Fake Band"))
         for (name in listOf("Fake Song (インストール)", "Fake Song (ATV Sizes)", "Fake Song (ライフ)", "偽の歌 (ライヴァル)", "インストラクター")) {
             assertEquals(name, false, other(name))
         }
@@ -370,27 +400,34 @@ class MatcherCasesTest {
 
     /**
      * Made-up searches, the same each run (see [fuzzed]), each signed out, picking the first, picking another, saying
-     * none and too slow, break no rule of [broken]. What main opened is [FUZZ], written by this test on main (see [onMain]).
+     * none and too slow, break no rule of [broken], and never open a wrong row where main opened the right one, as the
+     * search knows which it made right (see [verdict]). What main opened is [FUZZ], written by this test on main (see
+     * [onMain]). Where main's right row opens nothing signed out, each is named, as it's a loss.
      */
     @Test
     fun madeUpSearchesOpenWhatMainOpenedOrNothingButForAPick() {
         val main = if (onMain) emptyMap() else stored(FUZZ)
         val opened = mutableListOf<String>()
         val broken = mutableListOf<String>()
+        val lost = mutableListOf<String>()
         val counts = sortedMapOf<String, Int>()
-        fuzzed().forEachIndexed { index, modes ->
-            val found = modes.map(::found)
+        fuzzed().forEachIndexed { index, fuzzed ->
+            val found = fuzzed.modes.map(::found)
             opened += "$index\t${found.joinToString(" ") { it.id ?: "-" }}"
             if (onMain) return@forEachIndexed
             val was = requireNotNull(main["$index"]) { "$index" }
-            val key = "$index ${modes.first().title}: ${modes.first().songs} ${modes.first().videos}"
-            broken += broken(key, modes, found, was.first().takeIf { it != "-" }, FUZZ_MODES)
+            val key = "$index ${fuzzed.song.title}: ${fuzzed.modes.first().songs} ${fuzzed.modes.first().videos}"
+            broken += broken(key, fuzzed.modes, found, was.first().takeIf { it != "-" }, FUZZ_MODES)
             found.zip(was).forEachIndexed { mode, (now, then) ->
-                counts.merge("${FUZZ_MODES[mode]}: ${if (then == "-") "nothing" else "opens"} -> ${if (now.id == then) "the same" else now.id ?: "nothing"}".replace(Regex("(song|video)\\d"), "$1"), 1, Int::plus)
+                val (before, after) = fuzzed.verdict(then) to fuzzed.verdict(now.id ?: "-")
+                counts.merge("${FUZZ_MODES[mode]}: $before -> $after", 1, Int::plus)
+                if (before == RIGHT && after == WRONG) broken += "$key, ${FUZZ_MODES[mode]}: ${now.id} is wrong, main's $then right"
+                if (mode == 0 && before == RIGHT && after == NOTHING) lost += "$key: main's $then"
             }
         }
         written(FUZZ, opened)
         println("Main -> now, made-up searches:\n" + counts.entries.joinToString("\n"))
+        println("${lost.size} right -> nothing signed out:\n" + lost.joinToString("\n"))
         assertEquals("${broken.size} broken: " + broken.take(WORSE_SHOWN).joinToString("\n"), 0, broken.size)
     }
 
@@ -414,28 +451,67 @@ class MatcherCasesTest {
     /** The ids of those of [rows] shown as [shown]. */
     private fun ids(rows: List<String>, kind: String, shown: String) = rows.indices.filter { rows[it] == shown }.map { "$kind$it" }
 
+    /** A song the made-up searches look for: its [title], its name in Japan's store, which song it is, [name], and its [version]. */
+    private class FuzzSong(val title: String, val japan: String?, val name: String, val version: String = "")
+
+    /** A name a row or a video is given, [text], and the song it names, [name], in its [version]. */
+    private class FuzzName(val text: String, val name: String, val version: String = "")
+
+    /**
+     * A row or a video made up, as it's [shown], naming the song [name], in its [version], null where it can't be told,
+     * and whether it's [off]: by another artist, or not as long. One a fan put up may be anything.
+     */
+    private class Drawn(val shown: String, val name: String, val version: String?, val off: Boolean, val fan: Boolean = false)
+
+    /** A made-up search for [song], in each of [modes], with the [rows] and [videos] it finds. */
+    private class Fuzzed(val song: FuzzSong, val modes: List<Case>, val rows: List<Drawn>, val videos: List<Drawn>) {
+        /** Whether what opened, "song0", "video1" or "-", is the song: [RIGHT], [WRONG], [UNKNOWN] or [NOTHING]. */
+        fun verdict(id: String): String {
+            if (id == "-") return NOTHING
+            val drawn = if (id.startsWith("video")) videos[id.removePrefix("video").toInt()] else rows[id.removePrefix("song").toInt()]
+            return when {
+                drawn.off || drawn.name != song.name || drawn.version != null && drawn.version != song.version -> WRONG
+                drawn.version == null || drawn.fan -> UNKNOWN
+                else -> RIGHT
+            }
+        }
+    }
+
     /**
      * [FUZZ_CASES] made-up searches, the same each run, as the seed is: one of [FUZZ_SONGS], 1 to 4 rows and up to 2
      * videos, named from [FUZZ_NAMES], maybe with one of [FUZZ_TAGS], by the artist or another, on any album, as long as
      * the song or not; each in every one of [FUZZ_MODES].
      */
-    private fun fuzzed(): List<List<Case>> {
+    private fun fuzzed(): List<Fuzzed> {
         val random = kotlin.random.Random(FUZZ_SEED)
         fun <T> List<T>.drawn(): T = this[random.nextInt(size)]
-        fun named(base: String) = base + if (random.nextBoolean()) FUZZ_TAGS.drawn() else ""
+        fun tag(): Pair<String, String?>? = if (random.nextBoolean()) FUZZ_TAGS.drawn() else null
         return List(FUZZ_CASES) { index ->
-            val (title, japan) = FUZZ_SONGS.drawn()
-            val songs = List(1 + random.nextInt(FUZZ_ROWS)) {
-                row(named(FUZZ_NAMES.drawn()), FUZZ_ALBUMS.drawn(), if (random.nextInt(5) == 0) "Other Band" else "Fake Band", FUZZ_LENGTHS.drawn())
+            val song = FUZZ_SONGS.drawn()
+            val rows = List(1 + random.nextInt(FUZZ_ROWS)) {
+                val name = FUZZ_NAMES.drawn()
+                val tag = tag()
+                val (album, artist, length) = Triple(FUZZ_ALBUMS.drawn(), if (random.nextInt(5) == 0) "Other Band" else "Fake Band", FUZZ_LENGTHS.drawn())
+                val version = versionOf(listOfNotNull(name.version, tag?.let { it.second }, FUZZ_ALBUMS_SAY[album]), tag != null && tag.second == null)
+                Drawn(row(name.text + tag?.first.orEmpty(), album, artist, length), name.name, version, artist != "Fake Band" || length in FUZZ_OFF)
             }
             val videos = List(random.nextInt(FUZZ_VIDEOS + 1)) {
-                val name = named(if (random.nextBoolean()) title else FUZZ_NAMES.drawn())
-                video((if (random.nextInt(4) == 0) "Fake Band - " else "") + name, FUZZ_LENGTHS.drawn(), FUZZ_CHANNELS.drawn())
+                val name = if (random.nextBoolean()) FuzzName(song.title, song.name, song.version) else FUZZ_NAMES.drawn()
+                val tag = tag()
+                val (byArtist, length, channel) = Triple(random.nextInt(4) == 0, FUZZ_LENGTHS.drawn(), FUZZ_CHANNELS.drawn())
+                val version = versionOf(listOfNotNull(name.version, tag?.let { it.second }), tag != null && tag.second == null)
+                val shown = video((if (byArtist) "Fake Band - " else "") + name.text + tag?.first.orEmpty(), length, channel)
+                Drawn(shown, name.name, version, length in FUZZ_OFF, fan = channel == "Fan")
             }
-            val case = Case("fuzz $index", null, title = title, japan = japan?.let(::japanese), songs = songs, videos = videos)
-            listOf(case, case.copy(picked = 0), case.copy(picked = 1 + random.nextInt(FUZZ_ROWS - 1)), case.copy(picked = SAYS_NONE), case.copy(picked = 0, slow = true))
+            val case = Case("fuzz $index", null, title = song.title, japan = song.japan?.let(::japanese), songs = rows.map(Drawn::shown), videos = videos.map(Drawn::shown))
+            val modes = listOf(case, case.copy(picked = 0), case.copy(picked = 1 + random.nextInt(FUZZ_ROWS - 1)), case.copy(picked = SAYS_NONE), case.copy(picked = 0, slow = true))
+            Fuzzed(song, modes, rows, videos)
         }
     }
+
+    /** The version that what's [said] says: none, the one it says, or null where it says two or what can't be told, [unknown]. */
+    private fun versionOf(said: List<String>, unknown: Boolean): String? =
+        said.filter(String::isNotEmpty).distinct().let { versions -> if (unknown || versions.size > 1) null else versions.firstOrNull().orEmpty() }
 
     /** What main opened, kept as [written] wrote it on main: each line a key, then what opened in each mode. */
     private fun stored(name: String): Map<String, List<String>> = requireNotNull(javaClass.getResourceAsStream("/$name-main.tsv.gz")) { name }.use { stream ->
@@ -522,23 +598,52 @@ class MatcherCasesTest {
         const val FUZZ_VIDEOS = 2
         val FUZZ_MODES = listOf("signed out", "picks the first", "picks another", "says none", "too slow")
         val FUZZ_SONGS = listOf(
-            "Fake Song" to null, "Fake Song" to "偽の歌", "Ame" to "あめ", "Sakura" to "さくら", "Sakura (Theme from Live Forever)" to "さくら",
-            "Live Forever" to "曲", "Fake Song (Live)" to "偽の歌 (Live)", "Brain" to "脳", "Alive" to null, "Fake Song (Ballad Version)" to null,
-            "Love Song (Single Version)" to null
+            FuzzSong("Fake Song", null, "fake"), FuzzSong("Fake Song", "偽の歌", "fake"), FuzzSong("Ame", "あめ", "ame"), FuzzSong("Sakura", "さくら", "sakura"),
+            FuzzSong("Sakura (Theme from Live Forever)", "さくら", "sakura"), FuzzSong("Live Forever", "曲", "forever"),
+            FuzzSong("Fake Song (Live)", "偽の歌 (Live)", "fake", "live"), FuzzSong("Brain", "脳", "brain"), FuzzSong("Alive", null, "alive"),
+            FuzzSong("Fake Song (Ballad Version)", null, "fake", "ballad"), FuzzSong("Love Song (Single Version)", null, "love"),
+            // The seventh review's: one name written two ways, a subtitle, and a version no list has.
+            FuzzSong("Tokyo", "トーキョー", "tokyo"), FuzzSong("Muede", null, "muede"), FuzzSong("Sayonara", "さよなら", "sayonara"),
+            FuzzSong("Asu", "明日", "asu"), FuzzSong("Violin", "ヴァイオリン", "violin"), FuzzSong("Fake Song", "偽の歌 ～偽りの夜～", "fake"),
+            FuzzSong("Fake Song (Christmas Version)", null, "fake", "christmas")
         )
         val FUZZ_NAMES = listOf(
-            "偽の歌", "にせのうた", "ニセノウタ", "別の歌", "歌", "サクラ", "さくら", "桜", "アメ", "あめ", "飴", "Fake Song", "Fake Søng", "Canción Falsa",
-            "ノー", "脳", "のう", "ライヴ・フォーエヴァー", "アライヴ", "曲", "曲 - Live", "Live Forever - 曲", "偽の歌 - Fake Song", "Sakura", "Ame"
+            FuzzName("偽の歌", "fake"), FuzzName("にせのうた", "fake"), FuzzName("ニセノウタ", "fake"), FuzzName("別の歌", "other"), FuzzName("歌", "other"),
+            FuzzName("サクラ", "sakura"), FuzzName("さくら", "sakura"), FuzzName("桜", "sakura"), FuzzName("アメ", "ame"), FuzzName("あめ", "ame"),
+            FuzzName("飴", "candy"), FuzzName("Fake Song", "fake"), FuzzName("Fake Søng", "fake"), FuzzName("Canción Falsa", "other"),
+            FuzzName("ノー", "no"), FuzzName("脳", "brain"), FuzzName("のう", "brain"), FuzzName("ライヴ・フォーエヴァー", "forever"),
+            FuzzName("アライヴ", "alive"), FuzzName("曲", "forever"), FuzzName("曲 - Live", "forever", "live"), FuzzName("Live Forever - 曲", "forever"),
+            FuzzName("偽の歌 - Fake Song", "fake"), FuzzName("Sakura", "sakura"), FuzzName("Ame", "ame"),
+            FuzzName("とうきょう", "tokyo"), FuzzName("東京", "tokyo"), FuzzName("Tokyo", "tokyo"), FuzzName("Müde", "muede"), FuzzName("Muede", "muede"),
+            FuzzName("さようなら", "sayonara"), FuzzName("櫻", "sakura"), FuzzName("あす", "asu"), FuzzName("明日", "asu"), FuzzName("バイオリン", "violin"),
+            FuzzName("偽の歌 ～偽りの夜～", "fake"), FuzzName("Other Song", "other")
         )
+        /** Each tag, and the version it says; null where it can't be told. */
         val FUZZ_TAGS = listOf(
-            " (ライブ)", " (Live)", " (ライヴ)", " (TV Edit)", " (Short)", " (バラードバージョン)", " (シングル・バージョン)", " (Remix)", " (Acoustic)",
-            " (オフ・ヴォーカル)", " (インストラクター)", " - Live", " - From \"Live Forever\"", " (Teaser)", " (English Version)", " - English Version",
-            " (日本語)", " (歌詞付き)", " (THE FIRST TAKE)", " (Official Video)", " [2019]"
+            " (ライブ)" to "live", " (Live)" to "live", " (ライヴ)" to "live", " (TV Edit)" to "tv edit", " (Short)" to "short",
+            " (バラードバージョン)" to "ballad", " (シングル・バージョン)" to "", " (Remix)" to "remix", " (Acoustic)" to "acoustic",
+            " (オフ・ヴォーカル)" to "karaoke", " (インストラクター)" to null, " - Live" to "live", " - From \"Live Forever\"" to "", " (Teaser)" to "teaser",
+            " (English Version)" to "english", " - English Version" to "english", " (日本語)" to null, " (歌詞付き)" to "", " (THE FIRST TAKE)" to "first take",
+            " (Official Video)" to "", " [2019]" to null,
+            // The seventh review's: editions, a film, a subtitle, a version no list has, the whole song, and in Spanish.
+            " (Album Version)" to "", " (Single Version)" to "", " (Original Version)" to "", " (映画「ライブ・フォーエバー」主題歌)" to "",
+            " (Christmas Version)" to "christmas", " (クリスマス・バージョン)" to "christmas", " ～偽りの夜～" to "", " (Full Version)" to "",
+            " - Version Español" to "spanish"
         )
         val FUZZ_ALBUMS = listOf("Fake Album", "Live Best", "Live at Budokan", "Karaoke Picks")
+
+        /** What version an album says its songs are: a compilation, "Live Best", says none. */
+        val FUZZ_ALBUMS_SAY = mapOf("Live at Budokan" to "live", "Karaoke Picks" to "karaoke")
         val FUZZ_LENGTHS = listOf("1:30", "1:32", "1:34", "0:30", "3:00")
+
+        /** Lengths no recording of the song has: a teaser, or another song. */
+        val FUZZ_OFF = setOf("0:30", "3:00")
         val FUZZ_CHANNELS = listOf("Fake Band", "Fan", "Fake Band - Topic")
         const val WORSE_SHOWN = 60
+        const val RIGHT = "right"
+        const val WRONG = "wrong"
+        const val UNKNOWN = "can't tell"
+        const val NOTHING = "nothing"
         const val LATE_MS = 60_000L
     }
 }

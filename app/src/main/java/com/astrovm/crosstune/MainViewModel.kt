@@ -2602,7 +2602,7 @@ internal class MainViewModel(
         // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
         if (!likelyInstrumental && autoReports.allowed == false) return
         // The app is asked, as no words may come back before following it has said it plays the song.
-        val canHear = singing != null && mayCalibrate() && (shownPlayed || playback?.takeIf { it.hasAccess() }?.follow(song)?.first()?.clock?.playing == true)
+        val canHear = singing != null && mayCalibrate() && (shownPlayed || appPlays(song))
         // Noted, as a report of no words then says how it came to be one.
         TimingLog.note("no words, likely instrumental $likelyInstrumental, a voice ${if (canHear) "is listened for" else "can't be heard"}")
         if (canHear) {
@@ -2623,6 +2623,14 @@ internal class MainViewModel(
         if (singing == null || !mayCalibrate()) return false
         // Naming a song has the microphone, and out of sight, nothing's heard.
         if (shazamLeads || nextPaused) return false
+        return appPlays(song)
+    }
+
+    /**
+     * Whether a music app on this phone plays [song] now, as the apps say when asked: one that doesn't say in
+     * [APP_ASKED_MS], or a song heard from another device, isn't.
+     */
+    private suspend fun appPlays(song: MusicMetadata): Boolean {
         val source = playback?.takeIf { it.hasAccess() } ?: return false
         val following = withTimeoutOrNull(APP_ASKED_MS) { source.follow(song).first() }
         return following?.let { it.app != null && it.clock.playing } == true

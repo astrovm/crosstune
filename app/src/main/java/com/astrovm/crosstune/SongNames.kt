@@ -92,12 +92,6 @@ internal object SongNames {
         Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase(Locale.ROOT)
             .replace(lettersAndDigits, "")
 
-    /**
-     * [name]'s words, with what marks or strokes their letters too: "Fake Søng" is "Fake Song", as "Canción" is
-     * "Cancion".
-     */
-    fun unmarkedWords(name: String): Set<String> = words(name.lowercase(Locale.ROOT).map { UNMARKED[it] ?: "$it" }.joinToString(""))
-
     /** Latin letters with a stroke or joined, which no mark taken off makes plain, as they're written plain. */
     private val UNMARKED = mapOf('ø' to "o", 'æ' to "ae", 'œ' to "oe", 'ß' to "ss", 'đ' to "d", 'ð' to "d", 'ł' to "l", 'ħ' to "h", 'ı' to "i", 'þ' to "th")
 
@@ -140,79 +134,102 @@ internal object SongNames {
     }
 
     /**
-     * [name], in another script than the song's [titles], says it's another version of the song by [artist]. What
-     * the version tags of its names say in Latin letters counts in any script, as they're one recording's: "なごり雪
-     * (ライブ)" is "Nagoriyuki (Live)", and "曲 (ライブ)" another version of "Live Forever", whose name says it. A tag
-     * that says it's a version, "(TVバージョン)", "(Single ver.)" or "(Inst.)", is the song's own only when all else it
-     * says is what the song's own tags say: "Single", or "シングル", the same word in katakana, for "Fake Song (Single
-     * Version)"; or as one of its names writes it. A mark that means a word of the song's name counts only in a tag,
-     * so "ライヴ・フォーエヴァー (Live Forever)" is the song, where "曲 (ライブ)" isn't. An apostrophe is spelling,
-     * so "Directors" is "Director's". It only says no to what main opened, never which row opens.
+     * Whether [name], a song or a video YouTube Music shows, on [album], is another recording or another song than the
+     * one by [artists] named [titles]: two versions (see [versionsDiffer]) or two names (see [namedOtherwise]). Only
+     * what it says counts. A word, a tag or a spelling none of these knows can't tell, so it never counts. It only
+     * takes away what main opened, or what ChatGPT picks in its place.
      */
-    fun saysAnotherVersionOf(name: String, titles: Collection<String>, artist: String): Boolean =
-        anotherVersion(name.replace(apostrophe, ""), titles.map { it.replace(apostrophe, "") }, artist)
+    fun saysAnother(name: String, album: String, titles: Collection<String>, artists: Collection<String>): Boolean =
+        versionsDiffer(name, album, titles, artists) || namedOtherwise(name, titles, artists)
+
+    /**
+     * Whether [name] and the song's [titles] say two versions: a word one of them says a version with, "live", "ライブ"
+     * or "(TVバージョン)", that the other doesn't say. What says no version is taken off both first: an edition,
+     * "(Album Version)" or "(シングル・バージョン)", what it's from or the song of, "(Theme from …)" or "(映画「…」主題歌)",
+     * and a subtitle, "～…～" (see [versionParts]). A word no list has says nothing, so "(Christmas Version)" is
+     * "(クリスマス・バージョン)"; nor does "version" alone, so "(Smooth Rap Version)" may be "smooth rap". A tag that
+     * says "version" says which in any word a list has, in Latin letters too, "(TV ver.)", but its artist's name. Before
+     * the tags, a word of the song's name or its artist's is that name, "ライヴ・フォーエヴァー" for "Live Forever", and a
+     * tag that's one of those names says no version. What all the song's names say is missing only where [name] and its
+     * [album] never say it, even in a word in katakana in a longer one, or a word [IN_KATAKANA] has in Latin letters, but
+     * its artist's name.
+     */
+    private fun versionsDiffer(name: String, album: String, titles: Collection<String>, artists: Collection<String>): Boolean {
+        val named = (titles + titles.map(::bareTitle) + artists).map { normalize(inLatin(it)) }.toSet()
+        val known = (titles + artists).map(::inLatin).flatMap { words(it) + marksIn(it) }.toSet()
+        val (first, tags) = versionParts(name)
+        // In Latin letters, "Band" may be its artist's name: "Fake Band" says no band version, but "Band Versions" does.
+        fun uncredited(text: String) = artists.map(::inLatin).filter(String::isNotBlank).fold(text) { rest, artist -> rest.replace(artist, " ") }
+        // A tag that says "version" says which in any word a list has, "(TV ver.)" or "(Speed-Up Version)".
+        fun said(tag: String, loosely: Boolean) = versionWords(tag) + versionWords(uncredited(tag), loosely || "version" in words(tag))
+        val says = tags.filterNot { normalize(it) in named }.flatMap { said(it, loosely = false) }.toSet() + (versionWords(first) - known)
+        // What a name of the song says: its tags, and its own words where they say "version".
+        fun saidBy(title: String, loosely: Boolean) = versionParts(title).let { (bare, own) ->
+            own.flatMap { said(it, loosely) }.toSet() + versionWords(bare, loosely).takeIf { "version" in it }.orEmpty()
+        }
+        val mentioned = versionWords(inLatin("$name $album")) + versionWords(uncredited(inLatin("$name $album")), loosely = true) +
+            KATAKANA.filterKeys(withBu(composed(name))::contains).values.flatMap(::words).filter { it in VOCAB || it in IN_KATAKANA }
+        return differs(says, titles.flatMap { saidBy(it, loosely = true) }.toSet()) || differs(titles.map { saidBy(it, loosely = false) }.reduce(Set<String>::intersect), mentioned)
+    }
+
+    /** Whether [said] has a version word [other] doesn't, but "version", which doesn't say which. */
+    private fun differs(said: Set<String>, other: Set<String>): Boolean = (said - "version" - other).isNotEmpty()
+
+    /**
+     * [name] as [inLatin] writes it, without a subtitle, "～偽りの夜～", nor what it's from or the song of, apart at its
+     * tags (see [tagEdge]): what's before them, then each tag but one that says no version, an edition (see
+     * [withoutEditionTag]), "Full Version", or "From "Live Forever"".
+     */
+    private fun versionParts(name: String): Pair<String, List<String>> {
+        val parts = withoutEditionTag(inLatin(name).replace(subtitle, " ").replace(aside) { if (saysWhatItsFrom(it.value)) " " else it.value })
+            .split(tagEdge).map(String::trim)
+        return parts.first() to parts.drop(1).filter { it.isNotEmpty() && withoutEditionTag("x ($it)") != "x" && !FULL.matches(it) && !saysWhatItsFrom(it) }
+    }
+
+    /** Whether [tag] says what film or show it's from or the song of: "Theme from Live Forever", "映画「偽物」主題歌". */
+    private fun saysWhatItsFrom(tag: String) = "from" in wordList(tag) || tieIn.containsMatchIn(tag)
+
+    /**
+     * The version words in [part]: its own (see [VOCAB]), what katakana in it says (see [IN_KATAKANA]), and what [MARKS]
+     * in it say. [loosely], also a word of [IN_KATAKANA] in Latin letters, as it may be what the other name says in katakana.
+     */
+    private fun versionWords(part: String, loosely: Boolean = false): Set<String> {
+        val inKatakana = if (loosely) words(part) else saidInKatakana.findAll(part).flatMap { words(it.value) }.toSet()
+        return words(part).filter(VOCAB::contains).toSet() + inKatakana.filter(IN_KATAKANA::contains) + marksIn(part)
+    }
+
+    /** What [inLatin] wrote for katakana, in capitals, as all else is lowercase: "(バラードバージョン)" is "(BALLAD VERSION)". */
+    private val saidInKatakana = Regex("\\p{Lu}+")
+
+    private fun marksIn(text: String) = MARKS.filter { it.foundIn(text) }.flatMap(Mark::says)
+
+    /**
+     * [text] composed (see [composed]), with what it says as words in Latin letters: a run in katakana that's words of
+     * [KATAKANA] as those words, in capitals, "ver." as "version" and "inst." as "instrumental", and ・ as the space it
+     * is, so "シングル・バージョン" is "SINGLE VERSION". An apostrophe is spelling, so "Director's" is "Directors".
+     */
+    private fun inLatin(text: String): String = composed(text).replace(apostrophe, "")
+        .replace(KATAKANA_RUN) { run -> inWords(withBu(run.value))?.let { " ${it.uppercase(Locale.ROOT)} " } ?: run.value }
+        .replace(shortened) { if (it.groupValues[1] == "ver") "version" else "instrumental" }.replace('・', ' ')
+
+    /** [run] in katakana as the words of [KATAKANA] it is, one after another, or null where it's more: "アライブ". */
+    private fun inWords(run: String): String? {
+        val found = KNOWN_RUN.findAll(run).toList()
+        return found.takeIf { it.sumOf { word -> word.value.length } == run.length }?.joinToString(" ") { KATAKANA.getValue(it.value) }
+    }
 
     private val apostrophe = Regex("['’‘＇]")
+    private val shortened = Regex("""\b(ver|inst)\b\.?""")
 
-    private fun anotherVersion(name: String, titles: Collection<String>, artist: String): Boolean {
-        val said = titles.flatMap(::words).map(::canon).toSet()
-        val tagged = titles.flatMap { title -> ownVersions(title).flatMap(::words) + versionTags(title).flatMap(::words) }.map(::canon).toSet()
-        // What it's from, "From "Live Forever"" or "(Theme from …)", names a film, not a version. Its brackets stay, as
-        // they tell the tags apart; and the name before them is the song's, "From Me to You" too.
-        val stated = name.split(tagEdge).drop(1).filter { "from" in wordList(it) }.fold(name) { left, film -> left.replace(film, "") }
-        val versions = versionTags(stated)
-        if (versions.any { !allSaid(it, tagged, titles.map(::normalize)) }) return true
-        if ((words(stated) - said - words(artist) - versions.flatMap(::words).toSet()).any { it in VERSION_WORDS && canon(it) !in said }) return true
-        val tags = stated.removePrefix(bareTitle(stated))
-        return MARKS.any { mark ->
-            mark.foundIn(if (mark.means.any(said::contains)) tags else stated) && titles.none(mark::foundIn) && !mark.foundIn(artist) && mark.means.none(tagged::contains)
-        }
-    }
+    /** A subtitle between two tildes, "～偽りの夜～", which a store may leave out. */
+    private val subtitle = Regex("[~～〜][^~～〜]*[~～〜]")
 
-    /**
-     * Whether [tag], which says it's a version, says nothing the song's own tags don't: each word, as they [tagged]
-     * it, "ver" or "version" alike; each run in katakana, as words katakana writes them with that are all so, never
-     * one only near one ("ショート" isn't "Stay"); or anything as one of the song's names has it [written].
-     */
-    private fun allSaid(tag: String, tagged: Set<String>, written: List<String>): Boolean {
-        val latin = words(tag).all { canon(it) in tagged }
-        val marked = VERSION_WRITTEN.filterKeys(tag::contains)
-        if (!latin || marked.any { (mark, means) -> means !in tagged && written.none { normalize(mark) in it } }) return false
-        val rest = marked.keys.fold(tag) { left, mark -> left.replace(mark, " ") }.split(notOwnLetters)
-        // An empty run, between two marks, says nothing, so it passes.
-        return rest.all { run -> written.any { normalize(run) in it } || inKatakanaSays(run, tagged) }
-    }
+    /** A tag in brackets, which may say what it's from: "(映画「ライブ・フォーエバー」主題歌)". */
+    private val aside = Regex("""[(\[【][^()\[\]【】]*[)\]】]""")
+    private val tieIn = Regex(TIE_IN, RegexOption.IGNORE_CASE)
 
-    /** Whether [run] is words in katakana, each one of [tagged]: "シングルリミックス" for "(Single Remix)". */
-    private fun inKatakanaSays(run: String, tagged: Set<String>): Boolean =
-        cutInto(run, KATAKANA_WORDS.filterValues { words(it).all { word -> canon(word) in tagged } }.keys)
-
-    /** Whether [run], with ヴ as ブ, is some of [words] one after another, none for an empty one. */
-    private fun cutInto(run: String, words: Collection<String>): Boolean =
-        Regex(words.joinToString("|", "(?:", ")*") { Regex.escape(withBu(it)) }).matches(withBu(run))
-
-    /**
-     * The tags of [title] that say what version it is, "(Live)", "(Single Mix)" or "(Live at Budokan)", not what it's
-     * from: "(Theme from Live Forever)" says "live", but of a film's name.
-     */
-    private fun ownVersions(title: String) = title.removePrefix(bareTitle(title)).split(tagEdge).filter { tag ->
-        // A tag with no words in Latin letters adds none, so it may as well count.
-        wordList(tag).let { it.all(VERSION_LIKE::contains) || it.first() in VERSION_WORDS }
-    }
-
-    /** The parts of [name] that say it's a version: "(Single ver.)", "TVバージョン", or all of "Fake Lullaby Acoustic Guitar Version". */
-    private fun versionTags(name: String) = composed(name).split(tagEdge).filter { tag -> words(tag).any(VERSION_SAID::containsKey) || VERSION_WRITTEN.keys.any(tag::contains) }
-
-    /**
-     * Whether [half] of a name, apart by " - ", says only that it's another version than the [other] half: "曲 - Live"
-     * is a live one, though "Live Forever" is "曲" in Japan, where "なごり雪 (ライブ) - Nagoriyuki (Live)" says one version
-     * twice. "From "Live Forever"" says more: what it's from. Only Latin words and numbers are [words], so "曲" says nothing more.
-     */
-    fun onlyAnotherVersion(half: String, other: String): Boolean =
-        saysAnotherVersionOf(half, listOf(other), "") && words(half).all { word -> canon(word) in VERSION_LIKE || word.all(Char::isDigit) }
-
-    /** "ver" as "version", "inst" as "instrumental": one word, written short or not. */
-    private fun canon(word: String) = VERSION_SAID[word] ?: word
+    /** The whole song, where a TV cut is shorter: no other version. */
+    private val FULL = Regex("full(?: (?:version|size|length))?", RegexOption.IGNORE_CASE)
 
     /** NFKC and lowercase, so "ＴＶ" is "tv" and "ｳﾞｧｰｼﾞｮﾝ" "ヴァージョン", with its sound marks kept. */
     private fun composed(text: String) = Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase(Locale.ROOT)
@@ -226,20 +243,12 @@ internal object SongNames {
     /** Where one tag of a name ends and another starts: brackets, a tilde, a bar, a slash, an underscore, or a dash with spaces round it. */
     private val tagEdge = Regex("""[()\[\]{}【】「」『』〈〉《》~〜|/_]|\s[-–]\s""")
 
-    /** What isn't a letter of a script but Latin, so what's left is each run of them: "シングル" in "シングル・バージョン". */
-    private val notOwnLetters = Regex("""[^\p{L}]+|\p{IsLatin}+""")
-
-    /** Words that say a name is a version, written short or not, and the word they mean. */
-    private val VERSION_SAID = mapOf("ver" to "version", "version" to "version", "inst" to "instrumental", "instrumental" to "instrumental")
-
-    /** The same as other scripts write them, which have no spaces to make them words of their own: "TVバージョン". */
-    private val VERSION_WRITTEN = mapOf("バージョン" to "version", "ヴァージョン" to "version", "버전" to "version")
-
     /**
-     * Words a version tag says in katakana, with ヴ as ブ (see [withBu]), and the same words in Latin letters: what's
-     * the song's own when its tags say that word, "(ショート・バージョン)" for "(Short Version)".
+     * Words katakana writes a version with, with ヴ as ブ (see [withBu]), and the same words in Latin letters:
+     * "(ショート・バージョン)" is "(Short Version)". Only a run of them all counts, "シングルリミックス": in a run with
+     * another word, "アライヴ" or "インストラクター", it's part of that word.
      */
-    private val KATAKANA_WORDS = mapOf(
+    private val KATAKANA = mapOf(
         "シングル" to "single", "アルバム" to "album", "オリジナル" to "original", "ラジオ" to "radio", "エディット" to "edit",
         "ショート" to "short", "ロング" to "long", "フル" to "full", "スロー" to "slow", "ライブ" to "live", "リミックス" to "remix",
         "ミックス" to "mix", "リマスター" to "remaster", "リマスタード" to "remastered", "モノラル" to "mono", "モノ" to "mono",
@@ -249,31 +258,33 @@ internal object SongNames {
         "ムービー" to "movie", "テレビ" to "tv", "ドラマ" to "drama", "アニメ" to "anime", "アカペラ" to "acapella", "ボーカル" to "vocal",
         "オフ" to "off", "カバー" to "cover", "セルフ" to "self", "スペシャル" to "special", "ニュー" to "new", "スタジオ" to "studio",
         "リレコーディング" to "re recording", "ダンス" to "dance", "アンプラグド" to "unplugged",
-        "バラード" to "ballad", "サイズ" to "size", "メドレー" to "medley", "オルゴール" to "orgel"
+        "バラード" to "ballad", "サイズ" to "size", "メドレー" to "medley", "オルゴール" to "orgel", "バージョン" to "version"
     )
 
-    /**
-     * A mark, as another script writes it, "カラオケ" or "tvサイズ", and the [means] it has in Latin letters. Japanese,
-     * Korean and Chinese put words together with no space, "カラオケバージョン" or "피아노커버", so a mark is found
-     * in a longer run of letters. In katakana, only when that run is all words a version tag says (see
-     * [KATAKANA_WORDS]), so "インストラクター", "アライブ" and "ドライブ" hold none; in Hangul, but for in a longer word
-     * that only holds it: see [HOLD_A_MARK]. One in Latin letters only is a word of its own, so "tv size" isn't in "ATV
-     * Sizes". Compared composed, so ライブ is never ライフ and one Hangul syllable never part of
-     * another, and with widths folded, "ＴＶサイズ". What's between its letters doesn't count, "オフ・ヴォーカル" or "TV-size".
-     */
-    private class Mark(written: String, vararg val means: String) {
-        private val letters = composed(written).filter(Char::isLetterOrDigit)
-        private val pattern = Regex(letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*"""))
+    /** One of [KATAKANA], the longest first, so "モノラル" is never "モノ" and more. */
+    private val KNOWN_RUN = Regex(KATAKANA.keys.sortedByDescending(String::length).joinToString("|"))
 
-        /** The mark, with all the katakana on either side of it: the run of words it's in. */
-        private val inItsRun = Regex("(?<!$KATAKANA)$KATAKANA*(?:${pattern.pattern})$KATAKANA*(?!$KATAKANA)")
+    /** A run of katakana, ー and all: "シングル" and "バージョン" in "シングル・バージョン". */
+    private val KATAKANA_RUN = Regex("[\\u30a1-\\u30fa\\u30fc-\\u30ff]+")
+
+    /**
+     * A mark another script than katakana says a version with, "翻唱" or "커버", and the words it [says] in Latin
+     * letters, or itself where it has none. Korean and Chinese run words together, "피아노커버", so it's found in a
+     * longer run of letters, but in Hangul not inside a longer word that only holds it: see [HOLD_A_MARK]. One in Latin
+     * letters, "off vocal", is a word of its own, so "tv size" isn't in "ATV Sizes". What's between its letters doesn't
+     * count, "TV-size".
+     */
+    private class Mark(written: String, vararg means: String) {
+        val says = means.toList().ifEmpty { listOf(written) }
+        private val letters = composed(written).filter(Char::isLetterOrDigit)
+        private val pattern = Regex(letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*"""), RegexOption.IGNORE_CASE)
 
         // Whether it's a word is looked at on each name, not as it's made: marks are made once, as the app starts.
-        fun foundIn(name: String): Boolean {
-            val text = composed(name).replace(HOLD_A_MARK, " ")
-            if (Regex(KATAKANA).containsMatchIn(letters)) return inItsRun.findAll(text).any { run -> run.value.split(notKatakana).all(::versionRun) }
+        /** Whether it's in [text], as [inLatin] writes it. */
+        fun foundIn(text: String): Boolean {
+            val held = text.replace(HOLD_A_MARK, " ")
             val aWord = letters.all { scriptOf(it) == Character.UnicodeScript.LATIN }
-            return pattern.findAll(text).any { found -> !aWord || !goesOn(text.getOrNull(found.range.first - 1)) && !goesOn(text.getOrNull(found.range.last + 1)) }
+            return pattern.findAll(held).any { found -> !aWord || !goesOn(held.getOrNull(found.range.first - 1)) && !goesOn(held.getOrNull(found.range.last + 1)) }
         }
 
         companion object {
@@ -283,11 +294,6 @@ internal object SongNames {
              */
             private val HOLD_A_MARK = Regex("(?<![\\u1100-\\u11ff\\u3130-\\u318f\\uac00-\\ud7af])(?:드라이브|라이브러리|디스커버|커버리지|반주자)")
 
-            /** A katakana letter or ー, what a word in katakana is made of. */
-            private const val KATAKANA = "[\\u30a1-\\u30fa\\u30fc-\\u30ff]"
-
-            private val notKatakana = Regex("[^\\u30a1-\\u30fa\\u30fc-\\u30ff]+")
-
             /** Whether [next], beside a word in Latin letters, is more of it: a Latin letter, a digit, or a mark over the last letter. */
             private fun goesOn(next: Char?): Boolean =
                 next != null && (scriptOf(next) == Character.UnicodeScript.LATIN || next.isDigit() || next.category == CharCategory.NON_SPACING_MARK)
@@ -295,9 +301,6 @@ internal object SongNames {
             private fun scriptOf(letter: Char): Character.UnicodeScript = Character.UnicodeScript.of(letter.code)
         }
     }
-
-    /** Whether [run] in katakana is words a version tag says, one after another: see [KATAKANA_WORDS] and [VERSION_WRITTEN]. */
-    private fun versionRun(run: String) = cutInto(run, KATAKANA_WORDS.keys + VERSION_WRITTEN.keys)
 
     /** Words a video's title has when it's another version of the song, or not the song at all. */
     private val VERSION_WORDS = setOf(
@@ -317,28 +320,19 @@ internal object SongNames {
         "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉ok", "커버", "라이브", "노래방"
     ).map(::normalize)
 
-    /** [VERSION_MARKS] and more, with what they mean in Latin letters, for [saysAnotherVersionOf]: see [Mark]. */
+    /** [VERSION_MARKS] and more, but those katakana writes (see [KATAKANA]), with what they say in Latin letters: see [Mark]. */
     private val MARKS = listOf(
-        Mark("カラオケ", "karaoke"), Mark("ライブ", "live"), Mark("弾き語り"), Mark("歌ってみた", "cover"), Mark("演奏してみた", "cover"),
-        Mark("弾いてみた", "cover"), Mark("叩いてみた", "cover"), Mark("ピアノ", "piano"), Mark("ギター", "guitar"), Mark("カバー", "cover"),
-        Mark("メドレー", "medley"), Mark("練習", "practice"), Mark("オルゴール", "orgel", "musicbox"), Mark("アカペラ", "acapella", "cappella"),
-        Mark("アコースティック", "acoustic"), Mark("翻唱", "cover"), Mark("伴奏", "instrumental", "karaoke"), Mark("伴唱", "karaoke"),
-        Mark("卡拉ok", "karaoke"), Mark("커버", "cover"), Mark("라이브", "live"), Mark("노래방", "karaoke"),
-        // Many songs in one: "(メドレー)" above, "(串烧)", "(메들리)".
+        Mark("弾き語り"), Mark("歌ってみた", "cover"), Mark("演奏してみた", "cover"), Mark("弾いてみた", "cover"), Mark("叩いてみた", "cover"),
+        Mark("練習", "practice"), Mark("翻唱", "cover"), Mark("伴奏", "instrumental", "karaoke"), Mark("伴唱", "karaoke"), Mark("卡拉ok", "karaoke"),
+        Mark("커버", "cover"), Mark("라이브", "live"), Mark("노래방", "karaoke"), Mark("버전", "version"),
+        // Many songs in one: "(串烧)", "(메들리)".
         Mark("串烧", "medley"), Mark("串燒", "medley"), Mark("메들리", "medley"),
-        // Without the singing, or cut for TV: "(Off Vocal)", "(オフ・ヴォーカル)", "(TV Size)", "(インスト)", "(纯音乐)", "(반주)".
-        Mark("offvocal", "instrumental", "karaoke"), Mark("tvsize"), Mark("オフボーカル", "instrumental", "karaoke"),
-        Mark("オフヴォーカル", "instrumental", "karaoke"), Mark("インスト", "inst", "instrumental"),
-        Mark("tvサイズ"), Mark("テレビサイズ"),
-        Mark("纯音乐", "instrumental"), Mark("純音樂", "instrumental"), Mark("인스트", "inst", "instrumental"), Mark("반주", "instrumental", "karaoke"),
-        // Remixed, or sung live: "(リミックス)", "(混音)", "(리믹스)", "(演唱会)".
-        Mark("リミックス", "remix"), Mark("混音", "remix"), Mark("리믹스", "remix"), Mark("演唱会", "live", "concert"), Mark("演唱會", "live", "concert"),
-        // ライブ and カバー written with ヴ.
-        Mark("ライヴ", "live"), Mark("カヴァー", "cover")
+        // Without the singing, or cut for TV: "(Off Vocal)", "(オフ・ヴォーカル)" once in Latin letters, "(TV Size)", "(纯音乐)", "(반주)".
+        Mark("offvocal", "instrumental", "karaoke"), Mark("tvsize"), Mark("纯音乐", "instrumental"), Mark("純音樂", "instrumental"),
+        Mark("인스트", "instrumental"), Mark("반주", "instrumental", "karaoke"),
+        // Remixed, or sung live: "(混音)", "(리믹스)", "(演唱会)".
+        Mark("混音", "remix"), Mark("리믹스", "remix"), Mark("演唱会", "live", "concert"), Mark("演唱會", "live", "concert")
     )
-
-    /** The words a tag that says only what version it is has: see [ownVersions]. */
-    private val VERSION_LIKE = VERSION_WORDS + VERSION_SAID.keys + KATAKANA_WORDS.values.flatMap(::words) + "size"
 
     /**
      * Whether [song] is many songs in one, which has no one song's words to find: a medley, a mashup,
@@ -381,6 +375,22 @@ internal object SongNames {
     private val OTHER_RECORDING = setOf("live", "remix", "acoustic", "demo", "instrumental", "unplugged", "karaoke", "cover", "session", "sessions")
 
     /**
+     * The words that say a version, as [inLatin] writes them: [VERSION_WORDS], [OTHER_RECORDING], what [MARKS] say, a
+     * language, and "version". Other words [KATAKANA] has say one only in katakana (see [IN_KATAKANA]), as "TV" or
+     * "Slow" in Latin letters may be anything.
+     */
+    private val VOCAB = VERSION_WORDS + OTHER_RECORDING + MARKS.flatMap(Mark::says) + setOf("version", "english", "japanese", "extended") - setOf("ver", "inst")
+
+    /**
+     * The words [KATAKANA] says a version with, "テレビ" or "バラード", but those an edition says, "シングル" or "リマスター"
+     * (see [withoutEditionTag]), and those that say none alone, "ニュー", "スタジオ" or "オフ".
+     */
+    private val IN_KATAKANA = KATAKANA.values.flatMap(::words).toSet() - setOf(
+        "single", "album", "original", "remaster", "remastered", "mono", "stereo", "full", "off", "vocal", "size", "up", "re", "studio", "new",
+        "special", "self", "edit", "radio"
+    )
+
+    /**
      * "A & B feat. C" is credited as just "A" on some services, so each name counts on its own,
      * and "The" doesn't count. The whole credit counts too, for a name that holds a separator:
      * "125, Rue Montmartre" is one artist, not a "125" and a "Rue Montmartre".
@@ -416,29 +426,84 @@ internal object SongNames {
     }
 
     /**
-     * [one] and [other] are one name, written two ways: as Taiwan and China write it, 小幸運 and 小幸运; in katakana and in
-     * hiragana, サクラ and さくら; or in Japanese one in kana and the other with kanji, さくら and 桜, which read alike. Read
-     * with its sound marks, so ばら isn't 原, and never kanji against kanji, as 雨 and 飴 read alike and are two words. A
-     * long vowel is one however it's written: ユーキ is 勇気, ゆうき, and ノー may be 脳. Half-width kana are kana, "ﾊﾅﾐｽﾞｷ".
-     * Reading takes a moment the first time, so it's done off the main thread.
+     * Whether [name] names another song than the one by [artists] named [titles]: each of its names (see [namesIn]),
+     * but one that's a version alone or its artist's, is apart from a name of the song in its own script, and alike
+     * none (see [alike]). Two scripts, as kana and kanji, 明日 and あす, can't be told apart. So a name in brackets in
+     * another script than [name]'s others names it too, "Fake Prayer (가짜 기도)", where "Fake Wish" may be
+     * another way to say it.
      */
-    fun writtenAlike(one: String, other: String): Boolean {
-        val names = listOf(one, other).map { Normalizer.normalize(it, Normalizer.Form.NFKC) }
-        if (spelled(names.first()) == spelled(names.last())) return true
-        val (kana, kanji) = names.partition { name -> name.any(Char::isLetter) && name.filter(Char::isLetter).all(Readings::isKana) }
-        if (kana.size != 1 || kanji.single().none(Readings::isHan)) return false
-        return readOut(kana.single()) == readOut(kanji.single())
+    private fun namedOtherwise(name: String, titles: Collection<String>, artists: Collection<String>): Boolean {
+        val own = titles.flatMap(::namesIn).map(::Name).filter { it.ways.first().isNotEmpty() }
+        val by = artists.flatMap(::artistNames).map { Name(it).ways.first() }.toSet()
+        val named = namesIn(name).filterNot(::onlyAVersion).map(::Name)
+        // But a guest, a version or what it's from: "(feat. 偽の人)", "(ライブ)", "(映画「偽物」主題歌)".
+        val inBrackets = aside.findAll(name.replace(featuring, " ")).map { it.value.drop(1).dropLast(1) }
+            .filterNot { onlyAVersion(it) || saysWhatItsFrom(inLatin(it)) }.map(::Name)
+            .filter { tag -> tag.script != Character.UnicodeScript.COMMON && named.none { it.script == tag.script } }
+        val names = (named + inBrackets).filter { it.ways.first() !in by }
+        return names.isNotEmpty() && names.all { part -> own.map { alike(part, it) }.let { true !in it && false in it } }
     }
 
-    /** [name] as China writes it, its katakana as hiragana, lowercase and with only its letters and digits, sound marks kept. */
-    private fun spelled(name: String) = Readings.hiragana(asChinaWrites(name)).lowercase(Locale.ROOT).filter(Char::isLetterOrDigit)
+    /** The names [title] goes by, as [titleNames] has them, each without its tags or a subtitle: both of "偽の歌 - Fake Song". */
+    private fun namesIn(title: String): List<String> =
+        titleNames(title).drop(1).ifEmpty { listOf(title) }.map { bareTitle(withoutEditionTag(it.replace(subtitle, " "))) }
 
-    /** How [name] reads, in hiragana, with its sound marks and its long vowels as ー: がっこー, never かっこう. */
-    private fun readOut(name: String): String {
-        val read = Normalizer.normalize(Readings.of(listOf(name), Script.JAPANESE).single().reading.inHiragana(true), Normalizer.Form.NFKC)
-            .filter(Char::isLetterOrDigit)
-        return read.mapIndexed { at, kana -> if (at > 0 && lengthens(read[at - 1], kana)) 'ー' else kana }.joinToString("")
+    /** Whether [part] says only what version it is, as "Live", "ライブ" or "Live 2019" do, and no name. */
+    private fun onlyAVersion(part: String): Boolean = inLatin(part).let { latin ->
+        latin.none { it.isLetter() && Character.UnicodeScript.of(it.code) != Character.UnicodeScript.LATIN } &&
+            words(latin).all { it in VOCAB || it in IN_KATAKANA || it.all(Char::isDigit) }
     }
+
+    /**
+     * Whether [one] and [other] are one name: null in two scripts, which can't be told; true where one holds the
+     * other, written one of its [Name.ways]. Kanji against kanji is also one where it reads the same, as 雨 and 飴 or
+     * 桜 and 櫻 do, or where a kanji no reading knows is in it: kanji are written many ways. So 偽の歌 and 別の歌 are two,
+     * as are 脳 and 別の歌, whose reading holds 脳's.
+     */
+    private fun alike(one: Name, other: Name): Boolean? {
+        if (one.script != other.script) return null
+        if (one.ways.any { a -> other.ways.any { b -> a in b || b in a } }) return true
+        if (one.script != Character.UnicodeScript.HAN) return false
+        val (a, b) = readOut(one.text) to readOut(other.text)
+        return a.any(Readings::isHan) || b.any(Readings::isHan) || a == b
+    }
+
+    /**
+     * A name as it's compared: its [ways], NFKC, lowercase and only letters and digits, a Latin letter without its marks
+     * or strokes, "ü" also as German spells it out, "ue", so "Müde" is "Muede"; kana as hiragana, ヴ as ブ and no long
+     * vowel (see [withoutLongVowels]), so "トーキョー" is "とうきょう"; and kanji as China writes them, so 小幸運 is
+     * 小幸运. Its [script], kanji wherever there's one, as Japanese writes kana with them.
+     */
+    private class Name(val text: String) {
+        val ways = listOf(GERMAN, emptyMap()).map { folded(text, it) }.distinct()
+        val script: Character.UnicodeScript = ways.first().let { way ->
+            when {
+                way.any(Readings::isHan) -> Character.UnicodeScript.HAN
+                way.any(Readings::isKana) -> Character.UnicodeScript.HIRAGANA
+                else -> way.firstOrNull()?.let { Character.UnicodeScript.of(it.code) } ?: Character.UnicodeScript.COMMON
+            }
+        }
+    }
+
+    /** [text] folded as [Name] says, with some letters [spelled] out. */
+    private fun folded(text: String, spelled: Map<Char, String>): String {
+        val letters = Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase(Locale.ROOT).map { spelled[it] ?: UNMARKED[it] ?: unmarked(it) }
+        return asChinaWrites(withoutLongVowels(Readings.hiragana(withBu(letters.joinToString(""))).filter(Char::isLetterOrDigit)))
+    }
+
+    /** [letter] without its marks when it's a Latin one, "é" as "e", where "が" keeps its sound mark. */
+    private fun unmarked(letter: Char): String =
+        if (Character.UnicodeScript.of(letter.code) == Character.UnicodeScript.LATIN) Normalizer.normalize("$letter", Normalizer.Form.NFD).replace(marks, "") else "$letter"
+
+    /** How German spells out a letter with an umlaut, as a name in Latin letters may write it. */
+    private val GERMAN = mapOf('ä' to "ae", 'ö' to "oe", 'ü' to "ue")
+
+    /** How [name] reads, in hiragana, with no long vowel; a kanji no reading knows stays as it is. */
+    private fun readOut(name: String): String =
+        withoutLongVowels(Normalizer.normalize(Readings.of(listOf(name), Script.JAPANESE).single().reading.inHiragana(true), Normalizer.Form.NFKC).filter(Char::isLetterOrDigit))
+
+    /** [kana] with no long vowel, written ー or as the vowel again (see [lengthens]): "とうきょう" and "とーきょー" are "ときょ". */
+    private fun withoutLongVowels(kana: String): String = kana.filterIndexed { at, letter -> letter != 'ー' && (at == 0 || !lengthens(kana[at - 1], letter)) }
 
     /**
      * Whether [kana] after [before] only makes its vowel long, as ー does: the same vowel, "かあ", or う after an o, "こう",

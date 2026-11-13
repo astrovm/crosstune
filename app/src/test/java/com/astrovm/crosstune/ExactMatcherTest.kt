@@ -598,13 +598,14 @@ class ExactMatcherTest {
         // In kana or in kanji, read alike.
         assertEquals("https://music.youtube.com/watch?v=row00000000", find(MusicMetadata("さくら", "Fake Band"), "桜", "さくら"))
         assertEquals("https://music.youtube.com/watch?v=row00000000", find(MusicMetadata("桜", "Fake Band"), "さくら", "桜"))
-        // Read otherwise, it's another song in the same script.
-        assertNull(find(MusicMetadata("さくら", "Fake Band"), "桜の雨", "さくら"))
-        // Read with its sound marks, and kanji never against kanji, as main opened none of these.
-        assertNull(find(MusicMetadata("ばら", "Fake Band"), "原", "ばら"))
-        assertNull(find(MusicMetadata("きんか", "Fake Band"), "銀河", "きんか"))
-        assertNull(find(MusicMetadata("かっこう", "Fake Band"), "学校", "かっこう"))
-        assertNull(find(MusicMetadata("雨", "Fake Band"), "飴", "雨"))
+        // Kana against kanji can't be told apart, read otherwise or not, so main's row stays: only what says it's
+        // another takes it away.
+        assertEquals("https://music.youtube.com/watch?v=row00000000", find(MusicMetadata("さくら", "Fake Band"), "桜の雨", "さくら"))
+        // Nor whatever their sound marks, nor two kanji that read alike: no reading tells 雨 from 飴.
+        for ((song, row) in listOf("ばら" to "原", "きんか" to "銀河", "かっこう" to "学校", "雨" to "飴")) {
+            assertEquals(row, "https://music.youtube.com/watch?v=row00000000", find(MusicMetadata(song, "Fake Band"), row, song))
+        }
+        // Kanji against kanji that read otherwise are two songs.
         assertNull(find(MusicMetadata("小幸運", "田馥甄"), "小日子", "小幸運"))
     }
 
@@ -739,14 +740,17 @@ class ExactMatcherTest {
         // add the coroutine to the thread's name.
         val readOn = java.util.Collections.synchronizedList(mutableListOf<String>())
         val reader = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "reading") }
-        val read = { one: String, other: String -> readOn += Thread.currentThread().name.substringBefore(" @coroutine#"); SongNames.writtenAlike(one, other) }
+        val read = { name: String, album: String, titles: Collection<String>, artists: Collection<String> ->
+            readOn += Thread.currentThread().name.substringBefore(" @coroutine#")
+            SongNames.saysAnother(name, album, titles, artists)
+        }
         val found = try {
             runBlocking {
                 namesAndTabs(
                     songs = listOf(youTubeMusicRow("桜", "Fake Band • 桜 • 4:26", videoId = "row00000000")),
                     deezer = """[{"title":"さくら","artist":{"name":"Fake Band"},"duration":266}]"""
                 )
-                ExactMatcher(fake.client(), "AR", readingDispatcher = reader.asCoroutineDispatcher(), writtenAlike = read)
+                ExactMatcher(fake.client(), "AR", readingDispatcher = reader.asCoroutineDispatcher(), saysAnother = read)
                     .find(MusicService.YOUTUBE_MUSIC, MusicMetadata("さくら", "Fake Band"))
             }
         } finally {
@@ -754,6 +758,42 @@ class ExactMatcherTest {
         }
         assertEquals("https://music.youtube.com/watch?v=row00000000", found)
         assertEquals(setOf("reading"), readOn.toSet())
+    }
+
+    @Test
+    fun whatChatGptPicksForADoubtedRowPassesTheSameCheckOnTheThreadForReading() {
+        // Main's row is on an album that says it's another recording. What ChatGPT picks in its place opens only where
+        // nothing says it's another too, checked where names are read.
+        fun find(picked: Int) = run {
+            val readOn = java.util.Collections.synchronizedList(mutableListOf<String>())
+            val reader = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "reading") }
+            val doubts = { _: String, album: String, _: Collection<String>, _: Collection<String> ->
+                readOn += Thread.currentThread().name.substringBefore(" @coroutine#")
+                "Other" in album
+            }
+            val found = try {
+                runBlocking {
+                    namesAndTabs(
+                        // In kanji, where the song is in kana, so main's own steps don't open the first by its name.
+                        songs = listOf(
+                            youTubeMusicRow("桜", "Fake Band • Other Album • 4:26", videoId = "row00000000"),
+                            youTubeMusicRow("桜", "Fake Band • Other Picks • 4:26", videoId = "row00000001"),
+                            youTubeMusicRow("桜", "Fake Band • Fake Album • 4:26", videoId = "row00000002")
+                        ),
+                        deezer = """[{"title":"さくら","artist":{"name":"Fake Band"},"duration":266}]"""
+                    )
+                    ExactMatcher(fake.client(), "AR", pick = { _, _, videos -> picked.takeUnless { videos } }, readingDispatcher = reader.asCoroutineDispatcher(), saysAnother = doubts)
+                        .find(MusicService.YOUTUBE_MUSIC, MusicMetadata("さくら", "Fake Band"))
+                }
+            } finally {
+                reader.shutdown()
+            }
+            assertEquals(setOf("reading"), readOn.toSet())
+            found
+        }
+        assertEquals("https://music.youtube.com/watch?v=row00000002", find(2))
+        assertNull(find(1))
+        assertNull(find(0))
     }
 
     @Test
@@ -852,7 +892,8 @@ class ExactMatcherTest {
 
     @Test
     fun kanjiAndKanaAreOneScriptAndLatinLettersNone() {
-        // Known as 群青 in Japan, たぶん is a song in its script, in kana as its words are, so another.
+        // Known as 群青 in Japan, たぶん is in its script, in kana as its words are. Kana against kanji can't be told
+        // apart, so main's row stays.
         val song = MusicMetadata("Gunjou", "YOASOBI")
         fun find(rows: List<String>, videos: List<String>, title: String = "Gunjou", japan: String? = "群青", shown: MutableList<List<String>> = mutableListOf()) = runBlocking {
             namesAndTabs(
@@ -864,11 +905,12 @@ class ExactMatcherTest {
             ExactMatcher(fake.client(), "AR", pick = { _, songs, videos -> if (!videos) shown += songs; null }).find(MusicService.YOUTUBE_MUSIC, song.copy(title = title))
         }
         val shown = mutableListOf<List<String>>()
-        assertNull(find(listOf("Fake Song", "たぶん"), listOf(youTubeMusicRow("たぶん (Gunjou)", "Fan • 1M views • 4:09", videoId = "video000000")), shown = shown))
-        // In main's order.
-        assertEquals(listOf("Fake Song", "たぶん"), shown.single().map { it.substringBefore(" | ") })
+        assertEquals(
+            "https://music.youtube.com/watch?v=row10000000",
+            find(listOf("Fake Song", "たぶん"), listOf(youTubeMusicRow("たぶん (Gunjou)", "Fan • 1M views • 4:09", videoId = "video000000")), shown = shown)
+        )
+        assertEquals(emptyList<List<String>>(), shown)
         // Known only in Japanese, a song in Latin letters isn't one in another script.
-        shown.clear()
         assertNull(find(listOf("Fake Song", "Blue"), emptyList(), title = "群青", japan = null, shown = shown))
         assertEquals(listOf("Fake Song", "Blue"), shown.single().map { it.substringBefore(" | ") })
         // Nor is one with a digit of another script, as Thai's two: only letters say a script.
