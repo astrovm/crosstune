@@ -87,7 +87,7 @@ class MatcherCasesTest {
         Case("1 link alone", "video0", lengthMs = null, linkMs = 240_000, videos = listOf(video("Fake Song (演唱会)", "4:00"), video("Fake Song", "3:30"))),
         Case("1 link alone kanji", null, lengthMs = null, linkMs = 240_000, songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))),
         Case("1 link alone latin", "song1", lengthMs = null, linkMs = 240_000, songs = listOf(row("Fake Song", length = "3:30"), row("Fake Song", length = "4:00"))),
-        Case("1 link and apple", "video0", lengthMs = 240_000, linkMs = 240_000, videos = listOf(video("Fake Song (演唱会)", "4:00"), video("Fake Song", "3:30")), knownWrong = 992),
+        Case("1 link and apple", "video0", lengthMs = 240_000, linkMs = 240_000, videos = listOf(video("Fake Song (演唱会)", "4:00"), video("Fake Song", "3:30"))),
         // 2. Apple has two editions named alike, a live album's and the studio's, at other lengths. Main opens the studio's
         // row for the live one's link in Latin letters, and the live row for the studio's link: Issue #997.
         Case(
@@ -104,7 +104,7 @@ class MatcherCasesTest {
         ),
         Case(
             "2 two editions, no link length", "song0", lengthMs = 240_000, editions = listOf("Fake Album" to 210_000),
-            songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30")), knownWrong = 992
+            songs = listOf(row("偽の歌 (ライブ)", length = "4:00"), row("偽の歌", length = "3:30"))
         ),
         // 4. The artist named in Japan's store, and on the rows, in another script.
         Case("4 artist in kanji", "song0", japan = "偽の歌" to "偽バンド", songs = listOf(row("偽の歌", artist = "偽バンド"))),
