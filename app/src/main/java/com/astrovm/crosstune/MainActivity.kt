@@ -862,6 +862,8 @@ class MainActivity : ComponentActivity() {
         onPeekPlayingNow = viewModel::peekPlayingNow,
         onPlayingNowPlayPause = viewModel::playingNowPlayPause,
         onPlayingNowSkip = viewModel::playingNowSkip,
+        onOpenPlayingUnnamed = viewModel::openPlayingUnnamed,
+        onPlayingBarInSight = viewModel::playingBarInSight,
         onSettingsLeft = viewModel::settingsLeft,
         loadArtwork = viewModel.artwork::load,
         covers = viewModel.artwork

@@ -94,6 +94,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -259,6 +260,10 @@ internal data class ScreenActions(
     val onPeekPlayingNow: () -> Unit = {},
     val onPlayingNowPlayPause: () -> Unit = {},
     val onPlayingNowSkip: () -> Unit = {},
+    /** Shows the song heard in what an app plays with no song named. */
+    val onOpenPlayingUnnamed: () -> Unit = {},
+    /** Says whether the bar with what an app plays with no song named is on screen, the only time it's named by ear. */
+    val onPlayingBarInSight: (Boolean) -> Unit = {},
     val onSettingsLeft: () -> Unit = {},
     /** Fetches the shown song's words and shows them. */
     val onShowLyrics: () -> Unit = {},
@@ -704,10 +709,17 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
     val songList = state.result?.takeIf { state.isSongList && it.tracks.isNotEmpty() }
 
     // At the bottom, unless it's the song shown or it's turned off; not while a link is typed in.
-    val playing = state.playingNow?.takeIf { now ->
-        state.playingBar && state.error == null && !state.isLoading && !state.listening &&
-            (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
+    val barOpen = state.playingBar && state.error == null && !state.isLoading && !state.listening &&
+        (state.linkText.isBlank() || (state.result != null && state.linkText == state.link?.url))
+    val playing = state.playingNow?.takeIf { barOpen }
+    // What an app plays with no song named is listened to only while its bar is on screen.
+    val unnamed = state.playingUnnamed?.takeIf { barOpen && playing == null }
+    val naming = unnamed != null
+    DisposableEffect(naming) {
+        actions.onPlayingBarInSight(naming)
+        onDispose { actions.onPlayingBarInSight(false) }
     }
+    val bar: Any? = playing ?: unnamed
     Page(
         title = stringResource(R.string.app_name),
         titleLeading = { AppLogo() },
@@ -729,13 +741,16 @@ private fun MainScreen(state: UiState, actions: ScreenActions, onOpenSettings: (
                 // What's broken stays in sight until it's fixed, over what's playing, once it isn't asked below the field.
                 val toFix = state.toFix.takeIf { !state.firstAsks } ?: 0
                 AnimatedVisibility(visible = toFix > 0, enter = Motion.appear, exit = Motion.disappear) {
-                    FixBar(toFix, actions.onOpenFixes, modifier = if (playing == null) Modifier.navigationBarsPadding() else Modifier)
+                    FixBar(toFix, actions.onOpenFixes, modifier = if (bar == null) Modifier.navigationBarsPadding() else Modifier)
                 }
-                AnimatedVisibility(visible = playing != null, enter = Motion.appear, exit = Motion.disappear) {
+                AnimatedVisibility(visible = bar != null, enter = Motion.appear, exit = Motion.disappear) {
                     // Kept while it fades out, as the song goes when it's tapped.
-                    val shown = remember { mutableStateOf(playing) }
-                    if (playing != null) shown.value = playing
-                    shown.value?.let { NowPlayingBar(it, actions) }
+                    val shown = remember { mutableStateOf(bar) }
+                    if (bar != null) shown.value = bar
+                    when (val now = shown.value) {
+                        is NowPlaying -> NowPlayingBar(now, actions)
+                        is PlayingUnnamed -> UnnamedBar(now, actions)
+                    }
                 }
             }
         },
@@ -824,6 +839,39 @@ private fun NowPlayingBar(now: NowPlaying, actions: ScreenActions) {
                 }
             }
             if (following != null && duration != null) PlayedSoFar(following, duration)
+        }
+    }
+}
+
+/**
+ * What an app plays while it names no song, e.g. a radio station: the song heard in it, which a tap
+ * shows like a link, or until one is, what the app calls it, e.g. the station, and never as a song.
+ */
+@Composable
+private fun UnnamedBar(now: PlayingUnnamed, actions: ScreenActions) {
+    val song = now.heard?.metadata
+    val name = song?.title ?: now.playing.name ?: now.playing.label.orEmpty()
+    Surface(
+        onClick = actions.onOpenPlayingUnnamed,
+        enabled = song != null,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth().testTag(NOW_PLAYING_TAG)
+    ) {
+        Row(
+            modifier = Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = ContentMaxWidth),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CoverArt(song?.artworkUrl ?: now.playing.artworkUrl, actions.loadArtwork, size = 48.dp)
+            Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    listOfNotNull(song?.artist, now.playing.label).filter { it.isNotBlank() && it != name }.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

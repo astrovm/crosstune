@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -257,6 +258,26 @@ class ListeningTest {
         assertEquals(0, microphone.opened)
         assertEquals(0, shazamRequests())
         assertEquals(playing, HistoryStore(prefs()).load().first().metadata)
+    }
+
+    @Test
+    fun aRadioStationIsShownAsItIsUntilItsSongIsHeardAndThenATapShowsTheSong() {
+        // VRadio names only the station (#998).
+        MainActivity.playbackFactory = { FakePlayback().apply { access = true; unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") } }
+        val heard = kotlinx.coroutines.CompletableDeferred<Heard>()
+        MainActivity.hearingFactory = { SongHearing { heard.await() } }
+        launch()
+        waitUntil(TIMEOUT_MS) { barShown() }
+        assertTrue(shown("RTP Antena 2"))
+        assertTrue(shown("VRadio"))
+        // The station is no song: there's nothing to open, and it isn't kept as one.
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).assertIsNotEnabled()
+        heard.complete(Heard.Song(MusicMetadata("Iris", "The Goo Goo Dolls"), null))
+        waitForText("Iris")
+        assertTrue(shown("The Goo Goo Dolls \u00b7 VRadio"))
+        composeRule.onNodeWithTag(NOW_PLAYING_TAG).performClick()
+        waitUntil(TIMEOUT_MS) { composeRule.onAllNodesWithTag(RESULT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(HistoryStore(prefs()).load().none { it.metadata.title == "RTP Antena 2" })
     }
 
     @Test

@@ -174,6 +174,8 @@ internal data class UiState(
     val update: Update? = null,
     /** The song a music app on the phone plays, or has paused, while Crosstune is in sight: a bar to open its player from. */
     val playingNow: NowPlaying? = null,
+    /** What an app plays while it names no song, e.g. a radio station, while Crosstune is in sight; see [PlayingUnnamed]. */
+    val playingUnnamed: PlayingUnnamed? = null,
     val history: List<HistoryEntry> = emptyList(),
     /** False until there's an app songs play in: the only music app, or the first one picked on a song. */
     val hasDefault: Boolean = true,
@@ -387,6 +389,12 @@ internal data class ChatGptState(
  */
 /** A song a music app plays on the phone, with where it is and what the app lets be done, when it says. */
 internal data class NowPlaying(val song: MusicMetadata, val following: Following? = null)
+
+/**
+ * An app that plays with no song named, as [playing] has it, and the song [heard] in it once one is,
+ * by its sound or the microphone. The app's own name for a song always comes before it.
+ */
+internal data class PlayingUnnamed(val playing: Unnamed, val heard: Heard.Song? = null)
 
 /**
  * The player's [song], asked of the music app [app], by package, with its [link] there for YouTube

@@ -83,7 +83,8 @@ class MainViewModelTest {
         playQueue: PlayQueue? = null,
         lookAhead: Boolean = true,
         reminders: PracticeReminders? = null,
-        sungReadings: SungReadings? = null
+        sungReadings: SungReadings? = null,
+        mayCalibrate: Boolean = false
     ): MainViewModel {
         val client = fake.client()
         return MainViewModel(
@@ -111,7 +112,8 @@ class MainViewModelTest {
             qobuzNumbers = qobuzNumbers,
             offline = offline,
             reminders = reminders,
-            sungReadings = sungReadings
+            sungReadings = sungReadings,
+            mayCalibrate = { mayCalibrate }
         ).also { made += it }
     }
 
@@ -303,6 +305,179 @@ class MainViewModelTest {
             idle()
         }
         return model
+    }
+
+    private val station = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2", "https://example.com/logo.png")
+
+    /** Hears [answers] in turn, the last one from then on, and keeps whether each time it was let use the microphone. */
+    private class EarsOnThePhone(vararg val answers: Heard) : SongHearing {
+        val asked = mutableListOf<Boolean>()
+        override suspend fun listen(): Heard = Heard.Nothing
+        override suspend fun listenToPlaying(byMicrophone: Boolean): Heard {
+            asked += byMicrophone
+            return answers[minOf(asked.size, answers.size) - 1]
+        }
+    }
+
+    /** A model following [playback], which plays a radio station with no song named, as VRadio does (#998). */
+    private fun radioModel(ears: SongHearing, playback: FakePlayback = FakePlayback(), phone: Phone = Phone.OTHER, mayCalibrate: Boolean = true): MainViewModel {
+        playback.access = true
+        playback.unnamed.value = station
+        val model = model(playback = playback, listener = ears, phone = phone, mayCalibrate = mayCalibrate)
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        return model
+    }
+
+    private fun heardSong(lengthMs: Long? = 200_000, offsetMs: Long? = 50_000) =
+        Heard.Song(MusicMetadata("Fake Song", "Fake Artist", lengthMs = lengthMs), "1234", offsetMs, android.os.SystemClock.elapsedRealtime())
+
+    @Test
+    fun anAppPlayingWithNoSongNamedIsShownAsItIsAndNamedByEarOnlyWhileItsBarIsInSight() {
+        val heard = heardSong()
+        val ears = EarsOnThePhone(heard)
+        val model = radioModel(ears)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+        assertNull(model.uiState.playingNow)
+        // Nothing heard yet, a tap has no song to show.
+        model.openPlayingUnnamed()
+        assertNull(model.uiState.result)
+        assertTrue(ears.asked.isEmpty())
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(listOf(true), ears.asked)
+        assertEquals(PlayingUnnamed(station, heard), model.uiState.playingUnnamed)
+        // Listened to again once the song should be over: 150 s of it left, and a little after.
+        pass(MainViewModel.BY_EAR_AFTER_MS + 149_000)
+        assertEquals(1, ears.asked.size)
+        pass(1_500)
+        assertEquals(2, ears.asked.size)
+        // Out of sight, it stops, and back in, it waits as it would have.
+        model.playingBarInSight(false)
+        pass(MainViewModel.BY_EAR_LATEST_MS)
+        assertEquals(2, ears.asked.size)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(3, ears.asked.size)
+        // A tap shows the song heard, as a Shazam link would.
+        model.openPlayingUnnamed()
+        idle()
+        assertTrue(model.uiState.linkText, model.uiState.linkText.endsWith("/song/1234"))
+    }
+
+    @Test
+    fun theMicrophoneNamesWhatPlaysOnlyWhenAllowedAlreadyOnAPhonePlayingAloud() {
+        val allowed = EarsOnThePhone(Heard.Nothing)
+        radioModel(allowed).playingBarInSight(true)
+        idle()
+        assertEquals(listOf(true), allowed.asked)
+        // Never asked for: only the phone's own sound, when it shares it.
+        val notAllowed = EarsOnThePhone(Heard.Failed(AppError.MICROPHONE))
+        val model = radioModel(notAllowed, mayCalibrate = false)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(listOf(false), notAllowed.asked)
+        // Failing quietly, the station stays shown as it is.
+        assertNull(model.uiState.error)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+        val tv = EarsOnThePhone(Heard.Nothing)
+        radioModel(tv, phone = Phone.TV).playingBarInSight(true)
+        idle()
+        assertEquals(listOf(false), tv.asked)
+        // Through headphones or muted, the microphone would hear nothing.
+        val quiet = EarsOnThePhone(Heard.Nothing)
+        radioModel(quiet, FakePlayback().apply { aloud = false }).playingBarInSight(true)
+        idle()
+        assertEquals(listOf(false), quiet.asked)
+    }
+
+    @Test
+    fun nothingHeardShowsTheStationAgainAndRestsLongerEachTime() {
+        val ears = EarsOnThePhone(heardSong(), Heard.Nothing)
+        val model = radioModel(ears)
+        model.playingBarInSight(true)
+        idle()
+        assertNotNull(model.uiState.playingUnnamed?.heard)
+        pass(MainViewModel.BY_EAR_AFTER_MS + 150_000)
+        // Talk between songs: the song heard is over, and no other plays yet.
+        assertEquals(2, ears.asked.size)
+        assertEquals(PlayingUnnamed(station), model.uiState.playingUnnamed)
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        assertEquals(3, ears.asked.size)
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        assertEquals(3, ears.asked.size)
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        assertEquals(4, ears.asked.size)
+    }
+
+    @Test
+    fun aSongOfNoKnownLengthOrAFailureIsListenedToAgainInAWhile() {
+        val ears = EarsOnThePhone(heardSong(lengthMs = null), Heard.Failed(AppError.NETWORK), Heard.Unsent { Heard.Nothing }, heardSong(offsetMs = null), heardSong(offsetMs = 199_000))
+        val model = radioModel(ears)
+        model.playingBarInSight(true)
+        idle()
+        pass(MainViewModel.BY_EAR_UNKNOWN_MS)
+        assertEquals(2, ears.asked.size)
+        // The failure keeps the song heard shown.
+        assertNotNull(model.uiState.playingUnnamed?.heard)
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        assertEquals(3, ears.asked.size)
+        pass(MainViewModel.BY_EAR_RETRY_MS)
+        assertEquals(4, ears.asked.size)
+        pass(MainViewModel.BY_EAR_UNKNOWN_MS)
+        assertEquals(5, ears.asked.size)
+        // Heard right at its end, it's still given a moment, as the end may be misheard.
+        pass(MainViewModel.BY_EAR_SOONEST_MS - 1_000)
+        assertEquals(5, ears.asked.size)
+        pass(1_000)
+        assertEquals(6, ears.asked.size)
+    }
+
+    @Test
+    fun theAppsOwnNameForASongWinsAndAnotherStationStartsOver() {
+        val playback = FakePlayback()
+        val ears = EarsOnThePhone(heardSong())
+        val model = radioModel(ears, playback)
+        model.playingBarInSight(true)
+        idle()
+        assertEquals(1, ears.asked.size)
+        // Another station is listened to at once.
+        val other = station.copy(name = "Fake FM")
+        playback.unnamed.value = other
+        idle()
+        assertEquals(2, ears.asked.size)
+        assertEquals(PlayingUnnamed(other, ears.answers[0] as Heard.Song), model.uiState.playingUnnamed)
+        // The app names the song: its name is shown, and no more is listened to.
+        playback.unnamed.value = null
+        playback.onThePhone = Heard.Song(song, null, app = "com.ilv.vradio")
+        idle()
+        assertNull(model.uiState.playingUnnamed)
+        assertEquals(song, model.uiState.playingNow?.song)
+        pass(MainViewModel.BY_EAR_LATEST_MS)
+        assertEquals(2, ears.asked.size)
+    }
+
+    @Test
+    fun listeningByHandStopsListeningByEar() {
+        val ears = EarsOnThePhone(heardSong())
+        val model = radioModel(ears)
+        model.playingBarInSight(true)
+        idle()
+        model.listen()
+        idle()
+        pass(MainViewModel.BY_EAR_LATEST_MS)
+        assertEquals(1, ears.asked.size)
+    }
+
+    @Test
+    fun withNoAccessNothingPlayingIsShown() {
+        val playback = FakePlayback()
+        val model = radioModel(EarsOnThePhone(Heard.Nothing), playback)
+        assertNotNull(model.uiState.playingUnnamed)
+        playback.access = false
+        model.viewModelScope.launch { model.watchPlayingNow() }
+        idle()
+        assertNull(model.uiState.playingUnnamed)
     }
 
     @Test

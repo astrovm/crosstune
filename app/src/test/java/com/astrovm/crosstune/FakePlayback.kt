@@ -78,6 +78,18 @@ internal class FakePlayback : PlaybackSource {
     /** How many are listening for what's on the phone. */
     val nowPlayingWatchers get() = songs.subscriptionCount.value
 
+    /** What an app plays with no song named, e.g. a radio station; see [PlaybackSource.playingUnnamed]. */
+    val unnamed = MutableStateFlow<Unnamed?>(null)
+
+    override fun playingUnnamed() = unnamed.value
+
+    override fun unnamedUpdates(): Flow<Unnamed?> = unnamed
+
+    /** Whether the phone's music plays out loud, where the microphone hears it. */
+    var aloud = true
+
+    override fun playsAloud() = aloud
+
     /** The app each seek was sent to, null for any. */
     val seekedApps: MutableList<String?> = CopyOnWriteArrayList()
 

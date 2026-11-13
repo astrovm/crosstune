@@ -22,6 +22,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -236,6 +237,13 @@ internal class MainViewModel(
     /** What [UiState.playingNow] is made of: the song heard playing, and the one an app is followed on. */
     private var heardNow: MusicMetadata? = null
     private var followedNow: Pair<MusicMetadata, Following>? = null
+
+    /** Whether the bar with what's playing is on screen, the only time a song's named by ear on its own. */
+    private val barInSight = MutableStateFlow(false)
+
+    /** When the song an app names none for is listened to next, on the [now] clock, and how many times in a row nothing was heard. */
+    private var nextByEarAtMs = 0L
+    private var quietByEar = 0
 
     /** The screen's state, which the parts work is handed to change too. */
     private val screen = mutableStateOf(
@@ -930,6 +938,8 @@ internal class MainViewModel(
      * With [lyrics], its words open as soon as it's named. The microphone permission is already granted.
      */
     fun listen(lyrics: Boolean = false) {
+        // The bar goes while it listens, and its own listening with it, so the microphone isn't opened twice.
+        barInSight.value = false
         cancelContentWork()
         heardSong = null
         hear(null)
@@ -993,7 +1003,7 @@ internal class MainViewModel(
         followedNow = null
         val source = playback?.takeIf { it.hasAccess() }
         if (source == null) {
-            uiState = uiState.copy(playingNow = null)
+            uiState = uiState.copy(playingNow = null, playingUnnamed = null)
             return
         }
         // Registration, callbacks and cancellation share the main thread, so none can reattach
@@ -1023,7 +1033,73 @@ internal class MainViewModel(
                         }
                     }
             }
+            launch { nameUnnamed(source) }
         }
+    }
+
+    /** Tells whether the bar with what's playing is on screen, as it comes and goes. */
+    fun playingBarInSight(shown: Boolean) {
+        barInSight.value = shown
+    }
+
+    /**
+     * Shows what an app plays while it names no song, e.g. a radio station, and names the song by
+     * ear while its bar is on screen. A new name from the app starts over; the app naming a song ends it.
+     */
+    private suspend fun nameUnnamed(source: PlaybackSource) {
+        source.unnamedUpdates().distinctUntilChanged()
+            .onEach { unnamed ->
+                if (unnamed != uiState.playingUnnamed?.playing) {
+                    nextByEarAtMs = 0L
+                    quietByEar = 0
+                    uiState = uiState.copy(playingUnnamed = unnamed?.let { PlayingUnnamed(it) })
+                }
+            }
+            .combine(barInSight) { unnamed, inSight -> unnamed?.takeIf { inSight } }
+            .distinctUntilChanged()
+            .collectLatest { unnamed -> if (unnamed != null) nameByEar(source) }
+    }
+
+    /**
+     * Listens to what plays, again once the song heard should be over, as the next one has started by
+     * then. Shared sound first; the microphone only when it was allowed before, never on a TV, and only
+     * while the phone plays aloud, as through headphones or muted it hears nothing. Any failure is quiet:
+     * what plays stays named as the app has it.
+     */
+    private suspend fun nameByEar(source: PlaybackSource) {
+        while (true) {
+            delay(nextByEarAtMs - now())
+            val byMicrophone = uiState.phone != Phone.TV && mayCalibrate() && source.playsAloud()
+            val heard = listener.listenToPlaying(byMicrophone)
+            nextByEarAtMs = now() + when (heard) {
+                is Heard.Song -> {
+                    quietByEar = 0
+                    uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = heard)) }
+                    lyricsFinder?.firstLook(heard.metadata)
+                    untilOver(heard)
+                }
+                // Talk, ads or a pause: no song plays, so none is shown, and the next try waits longer each time.
+                Heard.Nothing -> {
+                    uiState.playingUnnamed?.let { uiState = uiState.copy(playingUnnamed = it.copy(heard = null)) }
+                    BY_EAR_RETRY_MS shl minOf(quietByEar++, QUIET_PAUSE_DOUBLINGS)
+                }
+                else -> BY_EAR_RETRY_MS
+            }
+        }
+    }
+
+    /** How long until the song [heard] should be over, and the next one playing, or a while when its length isn't known. */
+    private fun untilOver(heard: Heard.Song): Long {
+        val length = heard.metadata.lengthMs ?: return BY_EAR_UNKNOWN_MS
+        val at = heard.offsetMs ?: return BY_EAR_UNKNOWN_MS
+        val since = heard.startedAtMs?.let { now() - it } ?: 0L
+        return (length - at - since + BY_EAR_AFTER_MS).coerceIn(BY_EAR_SOONEST_MS, BY_EAR_LATEST_MS)
+    }
+
+    /** Shows the song heard in what an app plays, as a pasted link would. */
+    fun openPlayingUnnamed() {
+        val heard = uiState.playingUnnamed?.heard ?: return
+        showHeard(heard, lyrics = false)
     }
 
     private fun showPlayingNow() {
@@ -5247,6 +5323,22 @@ internal class MainViewModel(
 
         /** How many times the rest after hearing nothing doubles: 8 s, then 16, 32 and at most 64. */
         const val QUIET_PAUSE_DOUBLINGS = 3
+
+        /**
+         * How long naming by ear waits after a failure, or after hearing nothing, doubled as for
+         * [QUIET_PAUSE_DOUBLINGS]: talk between songs often runs a minute or two.
+         */
+        const val BY_EAR_RETRY_MS = 30_000L
+
+        /** How long after a song heard should be over it's listened to again: past a fade and a cross-fade into the next. */
+        const val BY_EAR_AFTER_MS = 10_000L
+
+        /** How long naming by ear waits after a song whose length isn't known: about half a song. */
+        const val BY_EAR_UNKNOWN_MS = 90_000L
+
+        /** The soonest and the latest naming by ear listens again after a song: the end of a song may be misheard, and a long one may be skipped. */
+        const val BY_EAR_SOONEST_MS = 20_000L
+        const val BY_EAR_LATEST_MS = 360_000L
 
         /** How long the last line repeats for, with no next line to end at. */
         const val LAST_LINE_MS = 6_000L

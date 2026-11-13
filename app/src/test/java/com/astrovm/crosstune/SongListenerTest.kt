@@ -778,6 +778,17 @@ class SongListenerTest {
     }
 
     @Test
+    fun anAppPlayingWithNoSongNamedIsHeardFromThePhonesOwnSoundFirst() {
+        // A radio station that sends only its name, as VRadio does (#998).
+        val phone = FakePlayback().apply { unnamed.value = Unnamed("com.ilv.vradio", "VRadio", "RTP Antena 2") }
+        val byMicrophone = Heard.Song(MusicMetadata("Fake Song", "Fake Artist"), null, 12_000, 400_000)
+        val bySound = byMicrophone.copy(offsetMs = 13_000)
+        assertEquals(bySound, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { bySound }).listen() })
+        // The phone won't share its sound, so the microphone hears it, whatever it is, as the app names none to check it by.
+        assertEquals(byMicrophone, runBlocking { PlayingFirst(phone, SongHearing { byMicrophone }, SongHearing { Heard.Failed(AppError.MICROPHONE) }).listen() })
+    }
+
+    @Test
     fun anotherSongTheMicrophoneHearsInTheRoomIsntTakenForTheOneThePhonePlays() {
         // A video, so its app can't say where in the song it is, and the phone won't share its sound.
         val video = Heard.Song(MusicMetadata("Every Little Thing She Does Is Magic", "The Police"), null)

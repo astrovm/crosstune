@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.AudioPlaybackConfiguration
 import android.media.MediaMetadata
@@ -300,6 +301,20 @@ internal interface PlaybackSource {
     /** The song playing now, updated when music apps start, pause, stop, or change songs. */
     @MainThread
     fun nowPlayingUpdates(): Flow<Heard.Song?>
+
+    /**
+     * What an app on the phone itself plays while it names no song, e.g. a radio station, a file with no
+     * tags or a video that doesn't say it's music, so it's named by listening; null when none plays, or
+     * an app names a song, which [nowPlaying] has.
+     */
+    fun playingUnnamed(): Unnamed?
+
+    /** [playingUnnamed], updated when apps start, pause, stop, or change what they play. */
+    @MainThread
+    fun unnamedUpdates(): Flow<Unnamed?>
+
+    /** Whether the phone's music plays out loud, where the microphone hears it: not muted, nor in headphones. */
+    fun playsAloud(): Boolean
 
     /** What [app] plays, playing or paused, and where in its queue, as that changes; null while it plays nothing. */
     @MainThread
@@ -631,17 +646,47 @@ internal class MediaSessionPlayback(
     }
 
     // Without the user's say-so Android shows none, and says so by throwing.
-    override fun nowPlaying(): Heard.Song? {
-        if (!hasAccess()) return null
-        // An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
-        // playing on the phone is only believed while the phone is playing something. Cast to a TV, or
-        // played on a computer, the phone itself stays quiet.
+    override fun nowPlaying(): Heard.Song? = playingApps().firstNotNullOfOrNull(::playing)
+
+    // A song any app names comes first; only the phone's own sound can be heard, not a TV's or a computer's.
+    override fun playingUnnamed(): Unnamed? {
+        val apps = playingApps()
+        if (apps.any { playing(it) != null }) return null
+        return apps.firstOrNull { !it.remote() }?.let { controller ->
+            val metadata = controller.metadata
+            Unnamed(
+                controller.packageName,
+                labelOf(controller.packageName),
+                metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() },
+                metadata?.let(::coverOf)
+            )
+        }
+    }
+
+    override fun unnamedUpdates(): Flow<Unnamed?> = changes(::playingUnnamed)
+
+    override fun playsAloud(): Boolean =
+        !audio.isStreamMute(AudioManager.STREAM_MUSIC) && audio.getStreamVolume(AudioManager.STREAM_MUSIC) > 0 &&
+            audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).none { it.type in PRIVATE_OUTPUTS }
+
+    /**
+     * The apps playing now, nearest first. Without the user's say-so Android shows none, and says so by
+     * throwing. An app may still say it plays long after it stopped, e.g. a browser tab left behind, so one
+     * playing on the phone is only believed while the phone is playing something. Cast to a TV, or
+     * played on a computer, the phone itself stays quiet.
+     */
+    private fun playingApps(): List<MediaController> {
+        if (!hasAccess()) return emptyList()
         val sounding = audio.isMusicActive
         return runCatching { sessions.getActiveSessions(listener) }.getOrNull().orEmpty()
             .filter { it.packageName != context.packageName && it.playbackState?.state == PlaybackState.STATE_PLAYING && !it.leftBehind() && (sounding || it.remote()) }
             .sortedWith(nearestFirst)
-            .firstNotNullOfOrNull(::playing)
     }
+
+    /** What the app [packageName] is called, as Android shows it. */
+    private fun labelOf(packageName: String): String? = runCatching {
+        context.packageManager.run { getApplicationLabel(getApplicationInfo(packageName, 0)).toString() }
+    }.getOrNull()
 
     override fun recording(song: MusicMetadata): MusicMetadata? {
         if (!hasAccess()) return null
@@ -749,10 +794,13 @@ internal class MediaSessionPlayback(
         }
     }.distinctUntilChanged()
 
-    /** What [controller] plays, as a song; [asked] is how long the song asked for is, when known. */
+    /** What [controller] plays, as a song, unless it names none; [asked] is how long the song asked for is, when known. */
     private fun playing(controller: MediaController, asked: Long? = null): Heard.Song? {
         val metadata = controller.metadata ?: return null
-        val (title, artist) = MetadataParsers.playerSong(metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty(), metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()) ?: return null
+        val said = metadata.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+        val label = labelOf(controller.packageName)
+        if (Songless.namesNoSong(said, metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), label)) return null
+        val (title, artist) = MetadataParsers.playerSong(said, Songless.ownName(metadata.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty(), label)) ?: return null
         // With no album outside a music app it's most likely a video, "Artist - Song (Official Video)" by "ArtistVEVO",
         // named as a song the way a YouTube link is; a video that doesn't say it's music is no song.
         // YouTube Music plays videos with no album too, all of them music, "Queen - Bohemian Rhapsody (Lyrics)" by "7clouds".
@@ -766,8 +814,7 @@ internal class MediaSessionPlayback(
             controller.mirrored() -> MetadataParsers.musicVideo(title, artist, byDash = false) ?: return null
             else -> MetadataParsers.musicVideo(title, artist) ?: return null
         }
-        val artwork = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata)
+        val artwork = coverOf(metadata)
         // Where a video is isn't where its song is, as it may open with more, so it isn't given.
         // Nor where a song waiting for an ad to end is, as it isn't playing yet.
         val clock = following(controller, asked)?.takeIf { !it.video }?.clock?.takeIf { it.playing }
@@ -780,6 +827,11 @@ internal class MediaSessionPlayback(
             recordingId = RecordingKey.playing(controller.packageName, id, duration)
         ), appleMusicId = null, offsetMs = clock?.positionMs, startedAtMs = clock?.atMs, app = controller.packageName, speed = clock?.speed ?: 1f)
     }
+
+    /** The cover the app shows: its link on the web, or the picture itself; see [ownCover]. */
+    private fun coverOf(metadata: MediaMetadata): String? =
+        listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            .mapNotNull(metadata::getString).firstOrNull { it.startsWith("https://") } ?: ownCover(metadata)
 
     /**
      * The cover the app shows, when it gives no link to one, e.g. YouTube Music for a song no other
@@ -814,9 +866,7 @@ internal class MediaSessionPlayback(
         val state = controller.playbackState?.takeIf { it.state !in NOT_PLAYING } ?: return null
         // An app that doesn't say where it is gives nothing to keep the words in time with.
         if (state.position < 0) return null
-        val app = runCatching {
-            context.packageManager.run { getApplicationLabel(getApplicationInfo(controller.packageName, 0)).toString() }
-        }.getOrNull()
+        val app = labelOf(controller.packageName)
         // Its position is from when it last said so; since then it moved on at its own speed.
         val at = state.lastPositionUpdateTime.takeIf { it > 0 } ?: now()
         val speed = state.playbackSpeed.takeIf { it > 0f } ?: 1f
@@ -976,6 +1026,15 @@ private const val SPOTIFY_LIKED = "CHECK_FILL"
 
 /** A music app's own button to repeat, which goes round its ways as it does there, by what the app's session calls it. */
 private val REPEATS = setOf("loop_mode_action") // YouTube Music
+
+/**
+ * Where the phone's music goes when only its listener hears it: headphones, wired or Bluetooth. A Bluetooth
+ * speaker can't be told from headphones, so the microphone isn't asked to hear one either.
+ */
+private val PRIVATE_OUTPUTS = buildSet {
+    addAll(listOf(AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO))
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(AudioDeviceInfo.TYPE_BLE_HEADSET)
+}
 
 /** States in which an app plays nothing to follow. */
 private val NOT_PLAYING = setOf(PlaybackState.STATE_NONE, PlaybackState.STATE_STOPPED, PlaybackState.STATE_ERROR)
