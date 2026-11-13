@@ -86,7 +86,7 @@ internal data class Report(
     val source: String? = null,
     val player: PlayerTiming? = null,
     /** Its own id, for one Crosstune keeps to send: in what [json] measures, as it goes with it. See [AutoReports.ID]. */
-    val id: String? = null
+    private val id: String? = null
 ) {
     val title: String get() = song?.let { "Lyrics of ${it.title} by ${it.artist}" }.orEmpty()
 
