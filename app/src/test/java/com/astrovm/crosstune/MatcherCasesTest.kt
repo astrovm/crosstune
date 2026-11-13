@@ -35,14 +35,14 @@ class MatcherCasesTest {
      */
     private val every = if (onMain || System.getProperty("crosstune.matcherFull") == "true") 1 else SAMPLED
 
+    /** Set in PIT's runs, where each change that lives runs every test that reaches it: there the matrix and the made-up searches, over a minute, don't. */
+    private val mutationRun = System.getProperty("crosstune.mutationRun") == "true"
+
     /**
      * The keys of the matrix's songs to look for, with -PmatcherSongs=plain,japan: all of them where none are named. So
      * what main opens can be written in parts, each in a Gradle run short enough, and the parts' lines put together in
      * the matrix's order.
      */
-    /** Set in PIT's runs, where each change that lives runs every test that reaches it: there the matrix and the made-up searches, over a minute, don't. */
-    private val mutationRun = System.getProperty("crosstune.mutationRun") == "true"
-
     private val only = System.getProperty("crosstune.matcherSongs").orEmpty().split(",").filter(String::isNotBlank).toSet()
 
     /**
@@ -155,16 +155,16 @@ class MatcherCasesTest {
         Case("8 japanese", "song0", songs = listOf(row("偽の歌 (Japanese Version)"), row("偽の歌"))),
         Case("8 korean", "song0", songs = listOf(row("偽の歌 (Korean Version)"), row("偽の歌"))),
         // 9. More than a version in the tag: as on main, Issue #992.
-        Case("9 budokan", "song0", songs = listOf(row("偽の歌 (Live from Budokan)"), row("偽の歌"))),
-        Case("9 op size", "song0", songs = listOf(row("偽の歌 (OP Size)"), row("偽の歌")))
+        Case("9 budokan", "song0", songs = listOf(row("偽の歌 (Live from Budokan)"), row("偽の歌")), knownWrong = 992),
+        Case("9 op size", "song0", songs = listOf(row("偽の歌 (OP Size)"), row("偽の歌")), knownWrong = 992)
     ).flatMap { case -> listOf(case, case.copy(what = "${case.what} picked", picked = case.songs.size - 1)) }
 
     // A row whose tag says a version, beside the same name with no tag: main's opens, whichever it is. PR #947 tried to
     // open the plain one in its place, and the tenth review found it opened a wrong row where main opened the right one.
     private val plain = listOf(
-        Case("live", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌"))),
-        Case("live asked", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌")), picked = 0),
-        Case("first plain", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌"), row("偽の歌", "Other Album"))),
+        Case("live", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌")), knownWrong = 992),
+        Case("live asked", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌")), picked = 0, knownWrong = 992),
+        Case("first plain", "song0", songs = listOf(row("偽の歌 (ライブ)"), row("偽の歌"), row("偽の歌", "Other Album")), knownWrong = 992),
         Case("plain first", "song0", songs = listOf(row("偽の歌"), row("偽の歌 (Live)"))),
         Case("video", "video0", videos = listOf(video("Fake Song (演唱会)"), video("Fake Song"))),
         Case("video with no lengths", "video0", lengthMs = null, videos = listOf(video("Fake Song (演唱会)"), video("Fake Song"))),
@@ -369,7 +369,7 @@ class MatcherCasesTest {
         Case("2 first in its own script", "song0", japan = japanese("偽物"), songs = listOf(row("別の歌"), row("Фальшивая песня"), row("Другая песня (Live)"))),
         // 2. A version kept out, the first opens as main had it, whichever song it is: Issue #983.
         Case("2 own first", "song0", songs = listOf(row("偽の歌"), row("別の歌 (Live)"))),
-        Case("2 own after", "song0", songs = listOf(row("別の歌"), row("偽の歌 (Live)")))
+        Case("2 own after", "song0", songs = listOf(row("別の歌"), row("偽の歌 (Live)")), knownWrong = 983)
     ) +
         // 2. The first is the song on a compilation its album's name makes look like another version; main opened it.
         listOf("Live Best", "ライブ・ベスト", "Karaoke Hits", "Acoustic Covers Collection").map { album ->
@@ -377,7 +377,7 @@ class MatcherCasesTest {
         } +
         // 5. Alone on one, as main opened it; and on a live album, the same as main, as no album's name tells the two apart.
         listOf("Live Best", "Studio Sessions", "Tribute", "Piano Ballads", "Instrumental Works", "Remix Best", "Live at Budokan").map { album ->
-            Case("5 $album", "song0", songs = listOf(row("偽の歌", album)))
+            Case("5 $album", "song0", songs = listOf(row("偽の歌", album)), knownWrong = 983.takeIf { album == "Live at Budokan" })
         }
 
     // The second review, of 965dcc85.
@@ -403,7 +403,7 @@ class MatcherCasesTest {
         Case("5 own album instrumental", "song0", album = "Naughty Boys & Instrumental", songs = listOf(row("偽の歌 (Instrumental)", "Naughty Boys & Instrumental"))),
         Case("5 own album", "song0", album = "Naughty Boys & Instrumental", songs = listOf(row("偽の歌", "Naughty Boys & Instrumental"))),
         // The artist's only song as long, in kana, with nothing to say it isn't: as main, Issue #983.
-        Case("issue kimini mune kyun", "song0", title = "Kimini Mune Kyun", songs = listOf(row("さよなら")))
+        Case("issue kimini mune kyun", "song0", title = "Kimini Mune Kyun", songs = listOf(row("さよなら")), knownWrong = 983)
     )
 
     private val angel = Case("", null, title = "A Cruel Angel's Thesis", artist = "Yoko Takahashi", lengthMs = 245_093)
@@ -436,10 +436,10 @@ class MatcherCasesTest {
         Case("945 accent", "song0", artist = "Fake Singer", lengthMs = 245_000, songs = listOf(row("Canción Falsa", "Otro Álbum", "Fake Singer", "4:06"))),
         angel.copy(what = "945 karaoke", main = "song0", lengthMs = 245_000, songs = listOf(row("残酷な天使のテーゼ (オフ・ヴォーカル)", "残酷な天使のテーゼ", "Yoko Takahashi", "4:06"))),
         // Another song by the artist as long, with nothing to say it isn't, opens as on main, asked or not (Issue #983).
-        angel.copy(what = "945 other song", main = "song0", lengthMs = 245_000, songs = listOf(row("魂のルフラン", "魂のルフラン", "Yoko Takahashi", "4:04"))),
-        angel.copy(what = "945 other song asked", main = "song0", lengthMs = 245_000, songs = listOf(row("魂のルフラン", "魂のルフラン", "Yoko Takahashi", "4:04")), picked = SAYS_NONE),
+        angel.copy(what = "945 other song", main = "song0", lengthMs = 245_000, songs = listOf(row("魂のルフラン", "魂のルフラン", "Yoko Takahashi", "4:04")), knownWrong = 983),
+        angel.copy(what = "945 other song asked", main = "song0", lengthMs = 245_000, songs = listOf(row("魂のルフラン", "魂のルフラン", "Yoko Takahashi", "4:04")), picked = SAYS_NONE, knownWrong = 983),
         // 1. Two songs as long, with no store name in Japanese to tell them apart: main's opens (Issue #983).
-        angel.copy(what = "f1 two songs", main = "song0", songs = listOf(row("魂のルフラン", "B", "Yoko Takahashi", "4:05"), row("残酷な天使のテーゼ", "A", "Yoko Takahashi", "4:05"))),
+        angel.copy(what = "f1 two songs", main = "song0", songs = listOf(row("魂のルフラン", "B", "Yoko Takahashi", "4:05"), row("残酷な天使のテーゼ", "A", "Yoko Takahashi", "4:05")), knownWrong = 983),
         // 12. Written in full-width letters: nothing opens, as on main.
         Case("f12 full width", null, title = "Ｆａｋｅ Ｓｏｎｇ", songs = listOf(row("Fake Song")))
     )
