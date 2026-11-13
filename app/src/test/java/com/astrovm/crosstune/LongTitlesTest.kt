@@ -41,6 +41,12 @@ class LongTitlesTest {
             // The review's slowest: a player's title of dashes, and guests that each end where the next starts.
             " - ".repeat(length / 3) + "\n",
             " ft. a  ".repeat(length / 8) + ")",
+            // Guests and marks in each other, cut one a pass from the inside, with tags cut off the end on the same passes.
+            "(feat. a".repeat(length / 9) + ")".repeat(length / 9),
+            "(M/V".repeat(length / 5) + ")".repeat(length / 5),
+            "(feat. a (M/V".repeat(length / 15) + "))".repeat(length / 15),
+            "(feat. a".repeat(length / 18) + ")".repeat(length / 18) + " x".repeat(length / 4) + " - Remastered".repeat(length / 52),
+            "Song ft. a" + " - Remaster)".repeat(length / 12),
         ) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(length / piece.length) + ending } }
     }
 

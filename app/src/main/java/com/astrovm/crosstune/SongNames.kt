@@ -32,93 +32,62 @@ internal object SongNames {
      * featuring)\s+[^()\[\]]*?(?=\s*[(\[]|$)` read it, from the left, as that pattern read on to the next bracket from
      * each place, and took time squared on a long title.
      */
-    fun withoutFeaturing(title: String): String = withoutEach(title) { at, word, brackets ->
-        featuringInBrackets(title, word, brackets).takeIf { it >= 0 } ?: if (word > at) featuringWrittenOut(title, at, word, brackets) else -1
+    fun withoutFeaturing(title: String): String = CutTitle(title).apply { cutEach(CutTitle.ALL) { at, word -> guestEnd(this, at, word) } }.toString()
+
+    /** Where a guest from [at] in [title] ends, [word] being where the spaces from there end, or null. */
+    private fun guestEnd(title: CutTitle, at: Int, word: Int): Int? = guestInBrackets(title, word) ?: if (word > at) guestWrittenOut(title, at, word) else null
+
+    /** "(feat. A)", at [open]: where it ends, or null. */
+    private fun guestInBrackets(title: CutTitle, open: Int): Int? {
+        if (open >= title.end || title[open] !in TAG_OPENS) return null
+        val start = title.spacesEnd(open + 1)
+        if (!title.startsWith(start, GUEST_WORDS_START)) return null
+        val word = featuringWord.matchAt(title.letters(start, LONGEST_WORD), 0) ?: return null
+        val close = title.nextBracket(title.after(start, word.value.length))
+        return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
     }
 
-    /** "(feat. A)", at [open]: where it ends, or -1. */
-    private fun featuringInBrackets(title: String, open: Int, brackets: NextOf): Int {
-        if (open >= title.length || title[open] !in TAG_OPENS) return -1
-        val word = featuringWord.matchAt(title, spacesEnd(title, open + 1)) ?: return -1
-        val close = brackets.from(word.range.last + 1)
-        return if (close >= 0 && title[close] in TAG_CLOSES) close + 1 else -1
-    }
-
-    /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or -1. */
-    private fun featuringWrittenOut(title: String, at: Int, word: Int, brackets: NextOf): Int {
-        if (at > 0 && title[at - 1] in '0'..'9') return -1
-        val said = featuringSaid.matchAt(title, word) ?: return -1
-        val guest = spacesEnd(title, said.range.last)
-        val bracket = brackets.from(guest)
+    /** " ft. A", from the spaces at [at] before [word]: up to the spaces before the next tag, or to the end. Where it ends, or null. */
+    private fun guestWrittenOut(title: CutTitle, at: Int, word: Int): Int? {
+        if (title.letterBefore(at).let { it >= 0 && title[it] in '0'..'9' } || !title.startsWith(word, GUEST_WORDS_START)) return null
+        val said = featuringSaid.matchAt(title.letters(word, LONGEST_WORD), 0) ?: return null
+        val guest = title.spacesEnd(title.after(word, said.value.length - 1))
+        val bracket = title.nextBracket(guest)
         return when {
-            bracket < 0 -> lineEnd(title, guest)
-            title[bracket] in TAG_CLOSES -> -1
-            else -> spacesStart(title, bracket, guest)
+            bracket >= title.end -> title.lineEnd(guest)
+            title[bracket] in TAG_CLOSES -> null
+            else -> title.spacesStart(bracket, guest)
         }
     }
 
     private val featuringWord = Regex("""(?:feat|ft|featuring)\b""", RegexOption.IGNORE_CASE)
     private val featuringSaid = Regex("""(?:feat\.?|ft\.?|featuring)\s""", RegexOption.IGNORE_CASE)
+
+    /** The most letters [featuringWord] and [featuringSaid] read: "featuring" and the one after it. */
+    private const val LONGEST_WORD = 10
+    private const val GUEST_WORDS_START = 'f'
     private const val TAG_OPENS = "(["
     private const val TAG_CLOSES = ")]"
 
     /**
-     * [title] without what marks it as a music video's, "M/V" or "(M/V)", as K-pop does, which no store has it under.
-     * Read in code as the pattern `\s*[(\[]\s*M/V\s*[)\]]|\s+M/V\b` read it.
+     * Where what marks [title] as a music video's from [at] ends, [mark] being where the spaces from there end, or null:
+     * "M/V" or "(M/V)", as K-pop has it, which no store has it under. Read in code as the pattern `\s*[(\[]\s*M/V\s*[)\]]|
+     * \s+M/V\b` read it.
      */
-    private fun withoutVideoMark(title: String): String = withoutEach(title) { at, mark, _ ->
-        videoMarkInBrackets(title, mark).takeIf { it >= 0 } ?: if (mark > at && videoMarkAt.matchesAt(title, mark)) mark + VIDEO_MARK.length else -1
-    }
+    private fun markEnd(title: CutTitle, at: Int, mark: Int): Int? = markInBrackets(title, mark)
+        ?: if (mark > at && title.startsWith(mark, VIDEO_MARK[0]) && videoMarkAt.matchesAt(title.letters(mark, VIDEO_MARK.length + 1), 0)) title.after(mark, VIDEO_MARK.length) else null
 
-    private fun videoMarkInBrackets(title: String, open: Int): Int {
-        if (open >= title.length || title[open] !in TAG_OPENS) return -1
-        val mark = spacesEnd(title, open + 1)
-        if (!title.regionMatches(mark, VIDEO_MARK, 0, VIDEO_MARK.length, ignoreCase = true)) return -1
-        val close = spacesEnd(title, mark + VIDEO_MARK.length)
-        return if (close < title.length && title[close] in TAG_CLOSES) close + 1 else -1
+    private fun markInBrackets(title: CutTitle, open: Int): Int? {
+        if (open >= title.end || title[open] !in TAG_OPENS) return null
+        val mark = title.spacesEnd(open + 1)
+        if (!title.startsWith(mark, VIDEO_MARK[0]) || !title.letters(mark, VIDEO_MARK.length).equals(VIDEO_MARK, ignoreCase = true)) return null
+        val close = title.spacesEnd(title.after(mark, VIDEO_MARK.length))
+        return if (close < title.end && title[close] in TAG_CLOSES) close + 1 else null
     }
 
     private const val VIDEO_MARK = "M/V"
     private val videoMarkAt = Regex("""M/V\b""", RegexOption.IGNORE_CASE)
 
-    /**
-     * [text] without each match that [endAt] finds, from the left, as a pattern's replace takes them. [endAt] is given
-     * a place, where the spaces from there end, and where the next bracket is: it gives where a match from that place
-     * ends, or -1. From each place in a run of spaces a match reads the same, but from the first one after a digit.
-     */
-    private inline fun withoutEach(text: String, endAt: (at: Int, word: Int, brackets: NextOf) -> Int): String {
-        val brackets = NextOf(text, "()[]")
-        val kept = StringBuilder()
-        var from = 0
-        var at = 0
-        while (at < text.length) {
-            val word = spacesEnd(text, at)
-            val end = endAt(at, word, brackets)
-            if (end >= 0) {
-                kept.append(text, from, at)
-                from = end
-                at = end
-            } else {
-                at = if (word > at + 1 && at > 0 && text[at - 1] in '0'..'9') at + 1 else word + 1
-            }
-        }
-        return if (from == 0) text else kept.append(text, from, text.length).toString()
-    }
-
-    /** Where the next of [chars] is in [text], from a place on: found once while the places only move on. */
-    private class NextOf(private val text: String, chars: String) {
-        private val chars = chars.toCharArray()
-        private var looked = -1
-        private var found = -1
-
-        fun from(start: Int): Int {
-            if (looked < 0 || start < looked || found in 0 until start) {
-                looked = start
-                found = text.indexOfAny(chars, start)
-            }
-            return found
-        }
-    }
     private val guestCredit = Regex("""[(\[]\s*(?:feat|ft|featuring)\b\.?\s*([^()\[\]]*)[)\]]""", RegexOption.IGNORE_CASE)
 
     /**
@@ -133,53 +102,37 @@ internal object SongNames {
     )
 
     /**
-     * [title] without the tags it ends on, again until one says it's another recording or none is left but the tags:
-     * [withoutEditionTag]'s loop once nothing else changes. The title is cut short, not copied, on each pass. A cut that
-     * takes the last bracket with it lets a guest before that bracket run to the end, "Song ft. X - Remastered 2011)",
-     * so the loop's next pass would cut it off: only what's between the brackets left and the end is read for one, once.
+     * The [editionTag] that ends [title], as main's pattern found it, and where it was looked for from. A tag starts at
+     * the last bracket that opens, or after it at one of the last two dashes, and holds no bracket that closes but one
+     * it ends on, so it's looked for from there, and each pass of a long title's loop reads its end only.
      */
-    private fun withoutEndTags(title: String): String {
-        val firstLetter = title.indexOfFirst { !it.isWhitespace() }.takeIf { it >= 0 } ?: title.length
-        var stripped = Kept(title, title.length, "")
-        var unfeatured = stripped
-        var bracket = title.lastIndexOfAny(BRACKETS)
-        while (true) {
-            val tag = editionTagIn(unfeatured)
-            if (tag != null && words(unfeatured.substring(tag)).any { it in OTHER_RECORDING }) return unfeatured.toString()
-            val shorter = if (tag == null) unfeatured else unfeatured.without(tag)
-            if (shorter.end <= firstLetter && shorter.after.isBlank()) return stripped.toString()
-            if (tag == null) return unfeatured.toString()
-            stripped = shorter
-            unfeatured = shorter
-            if (bracket >= shorter.end) {
-                bracket = title.lastIndexOfAny(BRACKETS, shorter.end - 1)
-                val open = title.substring(bracket + 1, shorter.end) + shorter.after
-                val guestless = withoutFeaturing(open)
-                // The guest runs to the end, or to the line break that ends the title, which stays.
-                val same = guestless.commonPrefixWith(open).length
-                if (guestless != open) unfeatured = Kept(title, bracket + 1 + same, guestless.substring(same))
-            }
+    private fun editionTagIn(title: CutTitle): TagLook {
+        val first = title.next(0)
+        val lastCloser = title.previous(title.lineEnd(first) - 1)
+        var dashes = 0
+        var at = title.previous(title.end - 1)
+        while (at > first) {
+            val char = title[at]
+            val next = title.next(at + 1)
+            val spacedDash = (char == '-' || char == '–') && next < title.end && isPatternSpace(title[title.previous(at - 1)]) && isPatternSpace(title[next])
+            // A tag holds no bracket but the one that opens it and the one that closes it at the end.
+            val bracket = char in TAG_OPENS || char in TAG_CLOSES && at != lastCloser
+            if (bracket || spacedDash && ++dashes == 2) break
+            at = title.previous(at - 1)
         }
+        val start = title.spacesStart(maxOf(at, first))
+        val (end, places) = title.lettersFrom(start)
+        val tag = editionTag.find(end)?.range?.let { places[it.first]..places[it.last] }
+        return TagLook(start, title.cuts, tag)
     }
-
-    private val BRACKETS = "()[]".toCharArray()
 
     /**
-     * The [editionTag] that ends [text], as main's pattern found it. A tag starts at the last bracket that opens, or
-     * after it at one of the last two dashes, so it's looked for from there, and each pass of a long title's loop
-     * reads its end only.
+     * What [editionTagIn] found, looking from [start]: none, if it's still looked at, as a tag found is cut or says it's
+     * another recording. That holds until a cut after the first [cuts] takes a letter from [start] on, as all it read but
+     * where the spaces before [start] begin is from there on, and those say only where a tag would start, not if there's one.
      */
-    private fun editionTagIn(text: CharSequence): IntRange? {
-        var dashes = 0
-        var at = text.length - 1
-        while (at > 0) {
-            val char = text[at]
-            val spacedDash = (char == '-' || char == '–') && at + 1 < text.length && isPatternSpace(text[at - 1]) && isPatternSpace(text[at + 1])
-            if (char in TAG_OPENS || (spacedDash && ++dashes == 2)) break
-            at--
-        }
-        return editionTag.find(text, spacesStart(text, at.coerceAtLeast(0)))?.range
-    }
+    private class TagLook(val start: Int, val cuts: Int, val tag: IntRange?)
+
     private const val EDITION_WORDS = """original|(?:album|single|short|original|radio)\s+(?:version|edit|mix)"""
 
     /** The song a film or show opens, ends or plays it in, in Chinese, Japanese or English, or its soundtrack, as K-pop says. */
@@ -243,17 +196,24 @@ internal object SongNames {
      * (Live; 2013 Remaster)" and "Song - Stereo MC's Remix" are other recordings, so they keep their tags.
      */
     fun withoutEditionTag(title: String): String {
-        var stripped = title
+        val cut = CutTitle(title)
+        var guestsSince = CutTitle.ALL
+        var marksSince = CutTitle.ALL
+        var look: TagLook? = null
         // "Song - 2012 Remaster (Mono)" has two, and a title that's only a tag is left as it is.
         while (true) {
-            val unfeatured = withoutVideoMark(withoutFeaturing(stripped))
-            // With no guest nor mark left, cutting a tag off the end brings none back, so from here tags come off the end alone.
-            if (unfeatured == stripped) return withoutEndTags(stripped)
-            val tag = editionTagIn(unfeatured)
-            if (tag != null && words(unfeatured.substring(tag)).any { it in OTHER_RECORDING }) return unfeatured
-            val shorter = if (tag == null) unfeatured else unfeatured.removeRange(tag)
-            if (shorter == stripped || shorter.isBlank()) return stripped
-            stripped = shorter
+            val pass = cut.cuts
+            cut.cutEach(guestsSince) { at, word -> guestEnd(cut, at, word) }
+            guestsSince = pass
+            val marks = cut.cuts
+            cut.cutEach(marksSince) { at, mark -> markEnd(cut, at, mark) }
+            marksSince = marks
+            val tag = look?.takeUnless { cut.cutSince(it.cuts, it.start) }?.let { TagLook(it.start, cut.cuts, it.tag) } ?: editionTagIn(cut)
+            look = tag
+            val range = tag.tag
+            if (range != null && words(cut.letters(range)).any { it in OTHER_RECORDING }) return cut.toString()
+            if (range != null) cut.cut(range.first, range.last + 1)
+            if (cut.cuts == pass || cut.isBlank()) return cut.before(pass)
         }
     }
 
