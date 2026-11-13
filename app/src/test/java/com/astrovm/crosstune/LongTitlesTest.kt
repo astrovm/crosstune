@@ -22,14 +22,18 @@ class LongTitlesTest {
         assertEquals(emptyList<String>(), slow)
     }
 
-    /** The titles of each [length] from [titles] that [read] takes longer than [LIMIT_MS] to read. */
+    /** The titles of each [length] from [titles] that [read] takes longer than [LIMIT_MS] to read, twice. */
     private fun slowOnes(titles: (Int) -> List<String>, read: (String) -> Any?): List<String> {
         // Each once, shorter, so that what's timed is the reading and not the start-up of the code that reads it.
         titles(LENGTH / 10).forEach { read(it) }
-        return titles(LENGTH).mapNotNull { title ->
+        fun millis(title: String): Long {
             val began = System.nanoTime()
             read(title)
-            val millis = (System.nanoTime() - began) / 1_000_000
+            return (System.nanoTime() - began) / 1_000_000
+        }
+        return titles(LENGTH).mapNotNull { title ->
+            // A slow one is read again: a pause of the machine's slows one reading, a reader that takes time squared both.
+            val millis = millis(title).takeIf { it > LIMIT_MS }?.let { minOf(it, millis(title)) } ?: 0
             "${title.take(20).replace("\n", "\\n")}…${title.takeLast(2).replace("\n", "\\n")} ${millis}ms".takeIf { millis > LIMIT_MS }
         }
     }

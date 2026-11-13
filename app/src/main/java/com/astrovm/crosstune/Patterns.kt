@@ -38,11 +38,13 @@ internal fun findNear(regex: Regex, text: CharSequence, start: Int): IntRange? {
  * Each match of this in [input], from [start] on, as [Regex.findAll] finds them, by one look along it. [Regex.findAll],
  * and [Regex.replace] with a function, start a new look for each match, and on a phone each new look copies the whole
  * input first: time squared on a long page or title with many matches. After a match with no letters the look goes
- * on from the next letter, a letter past U+FFFF whole on a phone.
+ * on from the next letter, a letter past U+FFFF whole on a phone. From the start, it looks as [Regex.split] does, each
+ * time from where the last match ended, so a pattern with `\G` reads here as there: on a phone a look from [start]
+ * reads `\G` otherwise.
  */
 internal fun Regex.matchesIn(input: CharSequence, start: Int = 0): Sequence<MatchResult> = sequence {
     val matcher = toPattern().matcher(input)
-    var found = matcher.find(start)
+    var found = if (start == 0) matcher.find() else matcher.find(start)
     while (found) {
         yield(FoundMatch(this@matchesIn, input, IntArray(2 * matcher.groupCount() + 2) { if (it % 2 == 0) matcher.start(it / 2) else matcher.end(it / 2) }))
         found = matcher.find()
