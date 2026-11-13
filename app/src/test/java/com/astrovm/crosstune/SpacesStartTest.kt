@@ -5,7 +5,8 @@ import org.junit.Test
 
 /**
  * A pattern with `\G` in it, as [SPACES_START] has, is searched from the start of the text only: `matches`,
- * `matchEntire`, `containsMatchIn`, `find(text)`, `split` and `replace(text, "…")`. Kotlin's `findAll`,
+ * `matchEntire`, `containsMatchIn`, `find(text)`, `split`, `replace(text, "…")` and `matchesIn(text)`, which looks on
+ * from where each match ended as `split` does. Kotlin's `findAll`,
  * `find(text, start)`, `replace(text) { … }` and a match's `next()` search again with `find(start)`, and there
  * Android's ICU reads `\G` apart from the JVM: in "a / /b", from 4, the JVM finds " /" and Android nothing. The
  * tests run on the JVM, so such a call passes here and goes wrong on the phone. So each use is read from the code.
@@ -24,7 +25,7 @@ class SpacesStartTest {
             /** Not [gap].findAll, in words. */
             fun fine(text: String) = gap.matches(text) || gap.find(text.trim()) != null || gap.containsMatchIn(text) ||
                 text.replace(gap, " ").isEmpty() || gap.replace(text, "-").isEmpty() || text.split(gap).isEmpty() ||
-                listOf(text).any(gap::containsMatchIn) || other.findAll(text).any()
+                listOf(text).any(gap::containsMatchIn) || other.findAll(text).any() || gap.matchesIn(text).iterator().hasNext()
             fun findAll(text: String) = gap.findAll(text)
             fun fromStart(text: String) = gap.find(text, 2)
             fun inBlock(text: String) = gap.replace(text) { "-" }
@@ -34,9 +35,10 @@ class SpacesStartTest {
             fun handed(text: String) = listOf(gap)
             fun held(text: String, fixer: (MatchResult) -> CharSequence) = gap.replace(text, fixer)
             fun said() = "gap.findAll(text)" + ${"\"\"\""}gap.find(text, 2)${"\"\"\""} + '"'
+            fun fromAfter(text: String) = gap.matchesIn(text, 2)
         """.trimIndent()
         val found = searchedAgain(AppPatterns(listOf("Test.kt" to source)))
-        assertEquals(listOf(7, 8, 9, 10, 11, 12, 13, 14), found.map { it.substringAfter("Test.kt:").substringBefore(' ').toInt() })
+        assertEquals(listOf(7, 8, 9, 10, 11, 12, 13, 14, 16), found.map { it.substringAfter("Test.kt:").substringBefore(' ').toInt() })
     }
 
     /** Each use of a pattern with `\G` that isn't a search from the start, by where it is, or a pattern no value holds. */
@@ -63,6 +65,7 @@ class SpacesStartTest {
             declared.containsMatchIn(before) -> true
             reference.matchesAt(after, 0) -> true
             after.startsWith(".find(") -> args(after, ".find(".length).let { (given, rest) -> given.size == 1 && !next.matchesAt(rest, 0) }
+            after.startsWith(".matchesIn(") -> args(after, ".matchesIn(".length).first.size == 1
             after.startsWith(".replace(") -> args(after, ".replace(".length).let { (given, rest) -> given.size == 2 && plain(given[1], rest) }
             plainCall.matchesAt(after, 0) -> true
             // Handed to a String's replace or split, as the first of what it's given.
