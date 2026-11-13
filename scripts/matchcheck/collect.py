@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Collect real data for the matcher's "song in another script" rule, read-only.
+"""Collect real data to replay the YouTube Music matcher on (replay.py), read-only.
 
 For each artist in ARTISTS, Apple's US store gives songs with Latin names, as a link from
 another service would. Apple's JP, KR and TW stores give the same recordings under their own
 names, found by the same length to the millisecond. For each song, YouTube Music's song and
 video search and Deezer's search are asked as the app asks them. Every answer is kept in
-OUT/raw, so analyze.py can run again without the network.
+OUT/raw, so replay.py can serve it again without the network.
 
     python3 scripts/matchcheck/collect.py OUT [--per-artist N]
 
