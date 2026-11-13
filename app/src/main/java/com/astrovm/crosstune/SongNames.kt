@@ -304,13 +304,16 @@ internal object SongNames {
         private val script = scriptOf(letters.first())
 
         // Whether it's a word is looked at on each name, not as it's made: marks are made once, as the app starts.
-        /** Whether it's in [text], as [inLatin] writes it, as a word of its own where its script has them. */
-        fun foundIn(text: String): Boolean = pattern.findAll(text).any { found ->
-            when (script) {
-                Character.UnicodeScript.LATIN -> !goesOn(text.getOrNull(found.range.first - 1)) && !goesOn(text.getOrNull(found.range.last + 1))
-                Character.UnicodeScript.HANGUL -> HANGUL_RUN.findAll(text).any { run -> found.range.first in run.range && HANGUL_MARKS.matches(run.value) }
-                else -> true
+        /**
+         * Whether it's in [text], as [inLatin] writes it, as a word of its own where its script has them: in Latin letters,
+         * with no more of a word on either side; in Hangul, whole in a run of marks alone.
+         */
+        fun foundIn(text: String): Boolean = when (script) {
+            Character.UnicodeScript.LATIN -> pattern.findAll(text).any { found ->
+                !goesOn(text.getOrNull(found.range.first - 1)) && !goesOn(text.getOrNull(found.range.last + 1))
             }
+            Character.UnicodeScript.HANGUL -> HANGUL_RUN.findAll(text).any { run -> HANGUL_MARKS.matches(run.value) && pattern.containsMatchIn(run.value) }
+            else -> pattern.containsMatchIn(text)
         }
 
         /** Whether it's anywhere in [text], in a longer word too, as a name that holds it may still say it. */
@@ -469,31 +472,21 @@ internal object SongNames {
 
     /**
      * Whether [one] and [other] are one name, written in one script: the same once folded, one of its [Name.ways]; or,
-     * in kanji, read the same, as 桜 and 櫻 are, with every kanji's reading known. Never in two scripts, as 明日 and
-     * あす, which can't be told from 明日 and あした.
+     * both with kanji, read the same, as 桜 and 櫻 are, with every kanji's reading known. Never kanji against kana alone,
+     * as 明日 and あす, which can't be told from 明日 and あした.
      */
-    private fun alike(one: Name, other: Name): Boolean {
-        if (one.script != other.script) return false
-        if (one.ways.any(other.ways::contains)) return true
-        return one.script == Character.UnicodeScript.HAN && readOut(one.text).let { it == readOut(other.text) && it.none(Readings::isHan) }
-    }
+    private fun alike(one: Name, other: Name): Boolean =
+        one.ways.any(other.ways::contains) || one.kanji && other.kanji && readOut(one.text).let { it == readOut(other.text) && it.none(Readings::isHan) }
 
     /**
      * A name as it's compared: its [ways], NFKC, lowercase and only letters and digits, a Latin letter without its marks
      * or strokes, "ü" also as German spells it out, "ue", so "Müde" is "Muede"; kana as hiragana, ヴ as ブ, ぢ as じ, づ as
      * ず, a repeat mark as what it repeats and no long vowel (see [withoutLongVowels]), so "トーキョー" is "とうきょう"; and
-     * kanji as China writes them, so 小幸運 is 小幸运. Its [script], kanji wherever there's one, as Japanese writes kana
-     * with them, else kana, else its first letter's.
+     * kanji as China writes them, so 小幸運 is 小幸运. Whether it has [kanji], as Japanese writes kana with them.
      */
     private class Name(val text: String) {
         val ways = listOf(GERMAN, emptyMap()).map { folded(text, it) }.distinct()
-        val script: Character.UnicodeScript = ways.first().let { way ->
-            when {
-                way.any(Readings::isHan) -> Character.UnicodeScript.HAN
-                way.any(Readings::isKana) -> Character.UnicodeScript.HIRAGANA
-                else -> way.firstOrNull(Char::isLetter)?.let { Character.UnicodeScript.of(it.code) } ?: Character.UnicodeScript.COMMON
-            }
-        }
+        val kanji = ways.first().any(Readings::isHan)
     }
 
     /** [text] folded as [Name] says, with some letters [spelled] out. */

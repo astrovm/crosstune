@@ -404,6 +404,8 @@ class SongNamesVersionTest {
         assertTrue(other("偽の歌", "偽の歌 (Live)"))
         assertFalse(other("偽の歌", "偽の歌 (Live)", album = "Fake Band • Live at Budokan"))
         assertFalse(other("偽の歌 (ライブ・バージョン)", "偽の歌 (Live)"))
+        // Nor inside a longer word in Hangul, which may still say it: it can't tell.
+        assertFalse(other("偽の歌 (얼라이브)", "偽の歌 (Live)"))
         // A version the song's name says in katakana, its album may say in Latin letters, but not in its artist's name.
         assertFalse(other("偽の歌", "偽の歌 (バラードバージョン)", album = "Fake Band • Ballad Best"))
         assertTrue(other("偽の歌", "偽の歌 (バンドバージョン)", album = "Fake Band • Fake Album"))
