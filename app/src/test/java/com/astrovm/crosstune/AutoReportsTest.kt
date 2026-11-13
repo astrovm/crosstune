@@ -226,9 +226,8 @@ class AutoReportsTest {
         assertFalse(reports.reported(song("Demo"), SongProblem.TIMED_BY_HAND))
         reports.turnedAway(song("Demo"), SongProblem.NO_LYRICS)
         assertTrue(reports.reported(song("Demo"), SongProblem.NO_LYRICS))
-        // Neither went, so neither counts for the day.
-        repeat(AutoReports.FOUND_A_DAY - 1) { reports.remember(song("Song $it"), SongProblem.NO_TIMING) }
-        assertTrue(reports.mayFind())
+        // Neither takes a place of the day's.
+        assertTrue(List(AutoReports.FOUND_A_DAY) { reports.takePlace() }.all { it != null })
     }
 
     @Test
@@ -236,28 +235,31 @@ class AutoReportsTest {
         var now = 3 * ReportBox.DAY_MS - 1
         val reports = AutoReports(preferences, session = 1, now = { now })
         assertEquals(23, AutoReports.FOUND_A_DAY)
-        repeat(AutoReports.FOUND_A_DAY - 1) { reports.remember(song("Song $it"), SongProblem.NO_TIMING) }
-        // Timing kept from an earlier version is its own share, so it doesn't count.
-        preferences.edit().putString("lyrics_sync", JSONObject().put("old\u0000band", JSONObject().put("points", JSONArray().put(JSONArray().put(0).put(9)))).toString()).commit()
-        reports.keepEarlier("2.24.0", "16 (36)")
-        reports.paid(reports.owed().single())
-        assertTrue(reports.mayFind())
-        reports.paid(AutoReports.Owed(reports.owedKey(song("Demo")), "{}"))
-        assertFalse(reports.mayFind())
-        assertFalse(AutoReports(preferences, now = { now }).mayFind())
+        val places = List(AutoReports.FOUND_A_DAY) { reports.takePlace() }.filterNotNull()
+        assertEquals(AutoReports.FOUND_A_DAY, places.size)
+        // The check and the count are one step, so none is left for another found meanwhile, here or anew.
+        assertNull(reports.takePlace())
+        assertNull(AutoReports(preferences, now = { now }).takePlace())
+        // Sent, it's remembered, which takes no other place.
+        reports.remember(song("Demo"), SongProblem.NO_LYRICS)
+        assertNull(reports.takePlace())
+        // One that didn't go gives its place back, for one more.
+        reports.giveBack(places.first())
+        assertEquals(listOf(true, false), List(2) { reports.takePlace() != null })
         now++
-        assertTrue(reports.mayFind())
-        reports.remember(song("Next day"), SongProblem.NO_LYRICS)
-        assertTrue(reports.mayFind())
-        // What was kept of the day before, broken, counts as nothing.
+        assertTrue(reports.takePlace() != null)
+        // A place of the day before is gone with it: given back, it frees none of today's.
+        reports.giveBack(places.last())
+        assertEquals(AutoReports.FOUND_A_DAY - 1, List(AutoReports.FOUND_A_DAY) { reports.takePlace() }.count { it != null })
+        // What was kept of the day, broken, counts as nothing.
         preferences.edit().putString("auto_reports_found_today", "${now / ReportBox.DAY_MS}:many").commit()
-        assertTrue(reports.mayFind())
+        assertTrue(reports.takePlace() != null)
     }
 
     @Test
     fun withoutAClockGivenTheDayIsTheWallClocks() {
         val reports = AutoReports(preferences, session = 1)
-        repeat(AutoReports.FOUND_A_DAY) { reports.remember(song("Song $it"), SongProblem.NO_TIMING) }
-        assertFalse(AutoReports(preferences, session = 1, now = System::currentTimeMillis).mayFind())
+        repeat(AutoReports.FOUND_A_DAY) { reports.takePlace() }
+        assertNull(AutoReports(preferences, session = 1, now = System::currentTimeMillis).takePlace())
     }
 }

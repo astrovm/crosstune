@@ -3483,8 +3483,11 @@ internal class MainViewModel(
             val player = report.player?.let { it.copy(appPackage = it.appPackage ?: playing?.appPackage, speed = it.speed ?: playing?.clock?.speed) }
             val json = withContext(systemDispatcher) { report.copy(app = report.app ?: playing?.app, player = player).json() }
             // Past the day's share, it waits on the phone for a start on a later day.
-            if (!autoReports.mayFind()) return@launch autoReports.owe(song, problem, json)
-            when (sender.send(json)) {
+            val place = autoReports.takePlace() ?: return@launch autoReports.owe(song, problem, json)
+            val delivery = sender.send(json)
+            // One that didn't go frees its place for the day.
+            if (delivery != Delivery.SENT) autoReports.giveBack(place)
+            when (delivery) {
                 Delivery.SENT -> autoReports.remember(song, problem)
                 // Never sent again as it is; words put in time by hand again later still go.
                 Delivery.REFUSED -> autoReports.turnedAway(song, problem)
@@ -3541,9 +3544,13 @@ internal class MainViewModel(
             owedGoing.withLock {
                 val inFront = uiState.lyricsFor?.takeIf { timedByHand }?.let(autoReports::owedKey)
                 for (owed in autoReports.owed().filter { it.key != inFront }) {
-                    // Gone another way meanwhile, as the words it's for were left; or past the day's share, for a later day.
-                    if (!autoReports.owes(owed) || !owed.earlier && !autoReports.mayFind()) continue
+                    // Gone another way meanwhile, as the words it's for were left.
+                    if (!autoReports.owes(owed)) continue
+                    // Past the day's share, for a later day; timing kept from an earlier version is a share of its own.
+                    val place = if (owed.earlier) null else autoReports.takePlace() ?: continue
                     val delivery = sender.send(owed.json)
+                    // One that didn't go frees its place.
+                    if (delivery != Delivery.SENT) place?.let(autoReports::giveBack)
                     // One that doesn't get there stops the rest, which wait for the next time, as they would fail too.
                     if (delivery == Delivery.FAILED) break
                     // One the box turned away it always will, so it's dropped, and the rest go on.

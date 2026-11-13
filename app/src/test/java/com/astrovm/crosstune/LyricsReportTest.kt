@@ -176,6 +176,9 @@ class LyricsReportTest {
     /** How many timing reports are owed, kept to be sent once the words are left, or at the next start. */
     private fun owed() = org.json.JSONArray(prefs().getString("auto_reports_owed", "[]")).length()
 
+    /** How many of today's places problems found took, as kept: see [AutoReports.takePlace]. */
+    private fun foundToday() = prefs().getString("auto_reports_found_today", null)?.substringAfter(':')?.toInt() ?: 0
+
     /** The offer's Yes, once it takes taps, as it takes none as it comes in. */
     private fun yes() {
         composeRule.mainClock.advanceTimeBy(OFFER_ARMED_MS)
@@ -604,12 +607,15 @@ class LyricsReportTest {
         openLyrics { shown("Plain one") }
         waitUntil { problems() == listOf("no_timing") }
         assertEquals(1, owed())
+        // It didn't go, so it gave its place for the day back.
+        assertEquals(0, foundToday())
         reportsDown = false
         // A song played once still goes: at the next start, with nothing opened.
         opened.destroyAndSettle()
         started()
         waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing", "no_timing"), problems())
+        assertEquals(1, foundToday())
         assertEquals(fake.requestBodies[fake.requestedUrls.indexOf(ReportSender.URL)], fake.requestBodies[fake.requestedUrls.lastIndexOf(ReportSender.URL)])
         // Gone, it isn't sent again when it's found again.
         openedAgain()
@@ -630,6 +636,8 @@ class LyricsReportTest {
         waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing", "no_timing"), problems())
         assertTrue(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.NO_TIMING))
+        // Turned away, it went nowhere, so it gave its place for the day back.
+        assertEquals(0, foundToday())
         // The box turns it away as it always will, so finding it again sends nothing.
         answerTo = { null }
         openedAgain()
@@ -670,6 +678,24 @@ class LyricsReportTest {
         started()
         waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing"), problems())
+    }
+
+    @Test
+    fun twoProblemsFoundWhileTheFirstIsOnItsWayCantBothTakeTheDaysLastPlace() {
+        val today = System.currentTimeMillis() / ReportBox.DAY_MS
+        prefs().edit().putBoolean("auto_reports", true).putString("auto_reports_found_today", "$today:${AutoReports.FOUND_A_DAY - 1}").commit()
+        // One found before, kept on the phone, goes at the start, and is held on its way while the song's own is found.
+        AutoReports(prefs()).owe(MusicMetadata("Old one", "Band"), SongProblem.NO_LYRICS, """{"problem":"no_lyrics"}""")
+        MainActivity.lookupDispatcher = Dispatchers.IO
+        reportsHeld = CountDownLatch(1)
+        lyricsAre(plain)
+        openLyrics { shown("Plain one") }
+        // The last place is the first's, so the one found now waits on the phone for a later day.
+        waitUntil { owed() == 2 }
+        checkNotNull(reportsHeld) { "No report is held" }.countDown()
+        waitUntil { owed() == 1 }
+        assertEquals(listOf("no_lyrics"), problems())
+        assertEquals(AutoReports.FOUND_A_DAY, foundToday())
     }
 
     /** Runs what it's given at once, but the next block after [holdNext], on a thread of its own, once it's let go. */
@@ -776,6 +802,7 @@ class LyricsReportTest {
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"plainLyrics":"Plain one\nPlain two"}]""")
         openLyrics { shown("Plain one") }
         waitUntil { problems() == listOf("no_timing") }
+        assertEquals(0, foundToday())
         answerTo = { null }
         opened.destroyAndSettle()
         File(app.cacheDir, "lyrics.json").delete()
@@ -1048,6 +1075,7 @@ class LyricsReportTest {
         waitUntil { sentFakes().size == 1 }
         composeRule.waitForIdle()
         assertEquals(2, owed())
+        assertEquals(0, foundToday())
     }
 
     @Test
@@ -1148,6 +1176,8 @@ class LyricsReportTest {
         val named = keptSent()[1].getJSONObject("song")
         assertEquals(setOf("title", "artist", "sung", "timing"), named.keys().asSequence().toSet())
         assertFalse(named.getBoolean("sung"))
+        // Timing kept from an earlier version is a share of its own, so it takes no place of the day's.
+        assertEquals(0, foundToday())
         // Started again, nothing goes twice, and what this version times isn't taken for it.
         opened.destroyAndSettle()
         LyricsSyncStore(prefs()).save(oldSong(9), oldLines, listOf(SyncPoint(0, 300)))

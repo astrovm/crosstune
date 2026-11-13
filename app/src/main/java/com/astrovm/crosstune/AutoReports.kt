@@ -78,28 +78,47 @@ internal class AutoReports(
     /**
      * The report on [song]'s [problem] turned away by the box, as it always will be: it isn't sent again each time
      * it's found, as it would be the same. Words put in time by hand are only no longer owed, not taken as sent,
-     * so when they're put in time again, that report still goes. Neither counts for the day: see [mayFind].
+     * so when they're put in time again, that report still goes. Neither counts for the day: its place is given
+     * back (see [giveBack]).
      */
     fun turnedAway(song: MusicMetadata, problem: SongProblem) = turnedAway(keyOf(song, problem))
 
     /** The report [owed] turned away by the box, as it always will be: see the other [turnedAway]. */
     fun turnedAway(owed: Owed) = turnedAway(owed.key)
 
-    private fun turnedAway(key: String) = if (key.startsWith(BY_HAND_START)) forget(key) else remember(key, went = false)
+    private fun turnedAway(key: String) = if (key.startsWith(BY_HAND_START)) forget(key) else remember(key)
 
-    /** [key] done with, as it [went] to the box, so it counts for the day, or was turned away. */
-    private fun remember(key: String, went: Boolean = true) {
+    /** [key] done with, as it went to the box or was turned away. */
+    private fun remember(key: String) {
         val list = (sent() - key) + key
         // Written at once, so one that went isn't sent again if the app is ended right after.
-        val edit = preferences.edit().putString(KEY_SENT, JSONArray(list.takeLast(MAX_SENT)).toString())
-        if (went && !key.startsWith(EARLIER_START)) edit.putString(KEY_FOUND_TODAY, "${today()}:${foundToday() + 1}")
-        edit.commit()
+        preferences.edit().putString(KEY_SENT, JSONArray(list.takeLast(MAX_SENT)).toString()).commit()
         // Reported, it isn't owed.
         forget(key)
     }
 
-    /** Whether another problem found may go today, or has to wait for a later day: see [FOUND_A_DAY]. */
-    fun mayFind(): Boolean = foundToday() < FOUND_A_DAY
+    /**
+     * One of today's [FOUND_A_DAY] places, taken for a problem found before its report goes, in one step with the
+     * check: two found together, while the first is still going, can't both take the last. Null where none is left,
+     * so it waits for a later day. Where the report then doesn't go, the place is given back: see [giveBack].
+     */
+    @Synchronized
+    fun takePlace(): Place? {
+        val found = foundToday()
+        if (found >= FOUND_A_DAY) return null
+        val place = Place(today())
+        preferences.edit().putString(KEY_FOUND_TODAY, "${place.day}:${found + 1}").commit()
+        return place
+    }
+
+    /** [place] given back, as its report didn't go: it failed, or the box turned it away. A place of another day is gone already. */
+    @Synchronized
+    fun giveBack(place: Place) {
+        if (place.day == today()) preferences.edit().putString(KEY_FOUND_TODAY, "${place.day}:${foundToday() - 1}").commit()
+    }
+
+    /** A place for a problem found to go, on the [day] it was taken: see [takePlace]. */
+    class Place(val day: String)
 
     /** How many problems found went today. */
     private fun foundToday(): Int =
