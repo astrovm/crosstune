@@ -8,6 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowCloseGuard
 
 /**
  * Holds the YouTube Music matcher to what `origin/main` opens, so a change that takes a right row away, or opens
@@ -790,11 +791,15 @@ class MatcherCasesTest {
     private fun alone(case: Case) =
         case.copy(lengthMs = null, deezerSeconds = null, editions = emptyList(), linkMs = case.linkMs ?: case.lengthMs ?: case.deezerSeconds?.times(MS) ?: LINK_MS)
 
-    /** [work] on each, on every core at once, as each search is its own; in order. */
+    /**
+     * [work] on each, on every core at once, as each search is its own; in order. A few thousand at a time: OkHttp
+     * opens a CloseGuard for each call and leaves it to the garbage collector, but Robolectric keeps every open one
+     * until the test ends, and the full matrix's 600,000 searches filled the heap with them.
+     */
     private fun <T, R> List<T>.inParallel(work: (T) -> R): List<R> {
         val pool = java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
         try {
-            return map { pool.submit<R> { work(it) } }.map { it.get() }
+            return chunked(AT_A_TIME).flatMap { chunk -> chunk.map { pool.submit<R> { work(it) } }.map { it.get() }.also { ShadowCloseGuard.reset() } }
         } finally {
             pool.shutdownNow()
         }
@@ -896,6 +901,7 @@ class MatcherCasesTest {
         const val FUZZ_SEED = 947
         const val FUZZ_CASES = 4_000
         const val SAMPLED = 20
+        const val AT_A_TIME = 2_000
         const val FUZZ_ROWS = 4
         const val FUZZ_VIDEOS = 2
         /**
