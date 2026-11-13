@@ -1435,7 +1435,7 @@ internal class LyricsFinder(
                     doc.optString("art").let { SongNames.sameArtist(it, metadata.artist) || SongNames.artistInside(it, SongNames.withGuests(metadata.artist, metadata.title)) }
             } ?: return@withTimeoutOrNull Lyrics.None
             val page = LETRAS_URL.toHttpUrl().newBuilder().addPathSegment(song.optString("dns")).addPathSegment(song.optString("url")).build()
-            val shown = withoutAds(browserPage(page.toString()))
+            val shown = withoutLetrasAds(browserPage(page.toString()))
             // A song in another language has Letras's own translation beside it: its words are the ones on the left.
             val content = letrasOriginal(shown) ?: letrasWords.firstBetween(shown)
             // An instrumental's page says so where the words would be, in the page's language.
@@ -1503,15 +1503,8 @@ internal class LyricsFinder(
     private fun geniusWords(page: String, title: String): String? {
         // A box of lyrics starts with the page's language menu ("Translations", "Romanization") and the name it opens with,
         // all marked as not part of the words.
-        val body = withoutBoxes(page) { geniusNotWords.firstIn(it)?.whole?.first }
-        val boxes = geniusBox.allIn(body).map { start ->
-            var depth = 0
-            val end = letrasBox.matchesIn(body, start.whole.first).firstOrNull { tag ->
-                depth += if (tag.value == "</div>") -1 else 1
-                depth == 0
-            }
-            body.substring(start.whole.last + 1, end?.range?.first ?: body.length)
-        }.filter { it.isNotBlank() }.joinToString("\n")
+        val body = withoutGeniusNotWords(page)
+        val boxes = geniusBoxes(body).filter { it.isNotBlank() }.joinToString("\n")
         val text = ChordFinder.unescape(withoutTags(boxes.replace(letrasBreak, "\n")))
         val lines = text.lines().map { it.trim() }
         // The first box opens with the song's name and "Lyrics", and maybe how the page calls it.
@@ -1519,23 +1512,6 @@ internal class LyricsFinder(
         val words = lines.drop(if (opening != null) 1 else 0).filterNot { geniusTag.matches(it) }
             .joinToString("\n").replace(phoneRegex("""\n{3,}"""), "\n\n").trim()
         return words.ifEmpty { null }
-    }
-
-    /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
-    private fun withoutAds(page: String): String = withoutBoxes(page) { letrasAd.find(it)?.range?.first }
-
-    /** [page] without each box that starts where [opening] says, and all that's inside it. */
-    private fun withoutBoxes(page: String, opening: (String) -> Int?): String {
-        var text = page
-        while (true) {
-            val start = opening(text) ?: return text
-            var depth = 0
-            val end = letrasBox.matchesIn(text, start).firstOrNull { tag ->
-                depth += if (tag.value == "</div>") -1 else 1
-                depth == 0
-            } ?: return text
-            text = text.removeRange(start, end.range.last + 1)
-        }
     }
 
     /** A page that only answers a request that looks like a browser's. */
@@ -1849,11 +1825,69 @@ internal class LyricsFinder(
         private const val STRONG = "<strong>"
         private const val STRONG_END = "</strong>"
         private const val BOX_END = "</div>"
-        private val letrasBox = phoneRegex("""<div\b|</div>""")
         private val letrasAd = phoneRegex("""<div id="pub_""")
         internal val geniusNotWords = PageParts(phoneRegex("""<div\b"""), null, holds = "data-exclude-from-selection=\"true\"")
         internal val geniusBox = PageParts(phoneRegex("""<div\b"""), null, holds = "data-lyrics-container=\"true\"")
         private val geniusTag = phoneRegex("""^\[[^\]]*]""")
+
+        /** [page] without the ads Letras puts between a song's verses, each a box of boxes, taken out whole. */
+        internal fun withoutLetrasAds(page: String): String =
+            withoutBoxes(page, letrasAd.matchesIn(page).map { it.range.first }) { window -> letrasAd.find(window)?.range?.first }
+
+        /** [page] without the boxes Genius marks as not part of a song's words, its language menu and the name it opens with. */
+        internal fun withoutGeniusNotWords(page: String): String =
+            withoutBoxes(page, geniusNotWords.allIn(page).map { it.whole.first }) { window -> geniusNotWords.firstIn(window)?.whole?.first }
+
+        /**
+         * What's in each of [body]'s boxes of lyrics, to where it closes, or to the end where it doesn't. A box whose tag
+         * ends on the `>` of a `</div>`, `<div data-lyrics-container="true"</div>`, closes there, as main counted, so it
+         * has no words, where main threw.
+         */
+        internal fun geniusBoxes(body: String): Sequence<String> {
+            val tags = BoxTags(body)
+            return geniusBox.allIn(body).map { box ->
+                val words = box.whole.last + 1
+                body.substring(words, (tags.closing(tags.at(box.whole.first)) ?: body.length).coerceAtLeast(words))
+            }
+        }
+
+        /**
+         * [page] without each box that starts where [openings] says, the first again and again, and all that's inside it,
+         * as main took them out: from the first opening on the page left, to the `</div>` where as many have closed as
+         * opened since. A box that never closes ends it: it and all after it stay. [openings] are where one opens on
+         * [page], in order; [joined] finds where one opens in a short text, as a cut can join a `<di` to a `v` after it.
+         * Each opening and each tag is looked for once, so a page of boxes is read in time in step with it, where main
+         * looked again from the start of the page for each.
+         */
+        private fun withoutBoxes(page: String, openings: Sequence<Int>, joined: (String) -> Int?): String {
+            val tags = BoxTags(page)
+            val kept = StringBuilder()
+            val opens = openings.iterator()
+            var from = 0
+            var next = -1
+            var nextClose = -1
+            while (true) {
+                // One a cut made is first, as all before the cut opened none. It opens before the cut and ends after.
+                val tail = minOf(kept.length, JOIN_REACH)
+                if (nextClose < from) nextClose = page.indexOf('>', from).orEnd(page)
+                val window = kept.substring(kept.length - tail) + page.substring(from, minOf(page.length, maxOf(nextClose + 1, from + JOIN_REACH)))
+                val across = joined(window)?.takeIf { it < tail }
+                if (across != null) {
+                    val end = tags.endFrom(tags.firstFrom(from)) ?: break
+                    kept.setLength(kept.length - tail + across)
+                    from = end
+                    continue
+                }
+                while (next < from) next = if (opens.hasNext()) opens.next() else return kept.append(page, from, page.length).toString()
+                val end = tags.end(tags.at(next)) ?: break
+                kept.append(page, from, next)
+                from = end
+            }
+            return kept.append(page, from, page.length).toString()
+        }
+
+        /** How far before a cut a box's opening can start and still be one only once the cut joins it, `<div id="pub_` less a letter. */
+        private const val JOIN_REACH = 12
 
         /** Someone credited on an Apple Music song page, and their roles. */
         private val credit = phoneRegex(""""name":"([^"]+)","roleNames":\[([^\]]*)]""")
@@ -2055,3 +2089,50 @@ internal fun Request.Builder.asPhoneBrowser(): Request.Builder = header("User-Ag
     .header("Sec-Fetch-Mode", "navigate")
     .header("Sec-Fetch-Dest", "document")
     .header("Sec-Fetch-Site", "none")
+
+private val BOX_TAG = phoneRegex("""<div\b|</div>""")
+
+/**
+ * The `<div` and `</div>` tags of [page], as main's `<div\b|</div>` found them, and where each box closes as main
+ * counted them: at the first `</div>` after it where as many have closed as opened since. Each is looked for once:
+ * for each place in the tags, the first tag after it where fewer are open than there.
+ */
+private class BoxTags(page: String) {
+    private val starts: IntArray
+    private val ends: IntArray
+
+    /**
+     * For each place between the tags, by how many come before it, the first place after it where fewer boxes are open
+     * than there, or 0 for none: no place after another is the first.
+     */
+    private val fewerOpen: IntArray
+
+    init {
+        val found = BOX_TAG.matchesIn(page).toList()
+        starts = IntArray(found.size) { found[it].range.first }
+        ends = IntArray(found.size) { found[it].range.last + 1 }
+        val open = IntArray(found.size + 1)
+        found.forEachIndexed { at, tag -> open[at + 1] = open[at] + if (tag.value == "</div>") -1 else 1 }
+        fewerOpen = IntArray(open.size)
+        val waiting = ArrayDeque<Int>()
+        for (count in open.indices) {
+            while (waiting.isNotEmpty() && open[waiting.last()] > open[count]) fewerOpen[waiting.removeLast()] = count
+            waiting.addLast(count)
+        }
+    }
+
+    /** Which tag starts at [place], which is one's. */
+    fun at(place: Int): Int = starts.binarySearch(place)
+
+    /** Which tag is the first at [place] or after it, or how many there are for none. */
+    fun firstFrom(place: Int): Int = starts.binarySearch(place).let { if (it < 0) -it - 1 else it }
+
+    /** Where the `</div>` that closes the box tag [tag] opens starts, or null where none does. */
+    fun closing(tag: Int): Int? = fewerOpen[tag + 1].takeIf { it != 0 }?.let { starts[it - 1] }
+
+    /** Where the box tag [tag] opens ends, past its `</div>`, or null where none closes it. */
+    fun end(tag: Int): Int? = endFrom(tag + 1)
+
+    /** Where a box opened before tag [tag], with all after it in it, ends, past its `</div>`, or null where none closes it. */
+    fun endFrom(tag: Int): Int? = fewerOpen[tag].takeIf { it != 0 }?.let { ends[it - 1] }
+}

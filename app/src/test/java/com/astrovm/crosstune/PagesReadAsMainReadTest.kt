@@ -254,6 +254,62 @@ class PagesReadAsMainReadTest {
         }
     }
 
+    @Test
+    fun boxesAreTakenOutAsMainTookThemOut() {
+        val box = main("""<div\b|</div>""")
+        val ad = main("""<div id="pub_""")
+        val notWords = main("""<div\b[^>]*data-exclude-from-selection="true"[^>]*>""")
+        val words = main("""<div\b[^>]*data-lyrics-container="true"[^>]*>""")
+        // Main's: from the first opening on the page left, to where as many have closed as opened, again and again.
+        var joins = 0
+        fun withoutBoxes(page: String, opening: Regex): String {
+            var text = page
+            var last = -1
+            while (true) {
+                val start = opening.find(text)?.range?.first ?: return text
+                // One that opens before where the last was taken out opened only once that joined what was around it.
+                if (start < last) joins++
+                var depth = 0
+                val end = box.findAll(text, start).firstOrNull { tag ->
+                    depth += if (tag.value == "</div>") -1 else 1
+                    depth == 0
+                } ?: return text
+                text = text.removeRange(start, end.range.last + 1)
+                last = start
+            }
+        }
+        // Boxes with half a "<div" before them or after them, which taking them out joins into one.
+        val pieces = arrayOf("<", "<di", "v", "iv", " ", ">", "</div>", "/div>", "x", "\u0301")
+        val adBox = """<div id="pub_">x</div>"""
+        texts(*pieces, """<div id="pub_""", adBox, """v id="pub_">""", "<d$adBox", """${adBox}iv id="pub_""", most = LONG).forEach { page ->
+            assertEquals(page, withoutBoxes(page, ad), LyricsFinder.withoutLetrasAds(page))
+        }
+        val adJoins = joins
+        joins = 0
+        val notWordsTag = """<div data-exclude-from-selection="true">"""
+        texts(
+            *pieces, """ data-exclude-from-selection="true"""", notWordsTag, "${notWordsTag}x</div>", """v data-exclude-from-selection="true">""",
+            "<d$notWordsTag</div>", """$notWordsTag</div>iv data-exclude-from-selection="true">""", """<div data-lyrics-container="true">""",
+            most = LONG,
+        ).forEach { page ->
+            val body = withoutBoxes(page, notWords)
+            assertEquals(page, body, LyricsFinder.withoutGeniusNotWords(page))
+            val boxes = words.findAll(body).map { start ->
+                var depth = 0
+                val end = box.findAll(body, start.range.first).firstOrNull { tag ->
+                    depth += if (tag.value == "</div>") -1 else 1
+                    depth == 0
+                }
+                // Main threw where its tag ended on the ">" of a "</div>", which closed it: it has no words.
+                body.substring(start.range.last + 1, (end?.range?.first ?: body.length).coerceAtLeast(start.range.last + 1))
+            }.toList()
+            assertEquals(body, boxes, LyricsFinder.geniusBoxes(body).toList())
+        }
+        assertEquals(listOf("", "a"), LyricsFinder.geniusBoxes("<div data-lyrics-container=\"true\"</div>x<div data-lyrics-container=\"true\">a</div>").toList())
+        // Enough openings that a cut made, of each kind, that those are read as main read them too.
+        assertEquals("$adJoins and $joins", true, adJoins > MIN_JOINS && joins > MIN_JOINS)
+    }
+
     /** Each part [parts] finds in pages of [pieces], as [main] finds them: whole, and its [group] [widen]ed, if any. */
     private fun assertParts(parts: PageParts, main: Regex, group: Int?, vararg pieces: String, widen: Int = 0, most: Int = MAX_PIECES) {
         texts(*pieces, most = most).forEach { page ->
@@ -282,5 +338,6 @@ class PagesReadAsMainReadTest {
         const val MAX_PIECES = 10
         const val SHORT_PIECES = 8
         const val LONG = 12
+        const val MIN_JOINS = 20
     }
 }

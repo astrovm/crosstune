@@ -60,9 +60,14 @@ class LongPagesTest {
             Reader("Cifra Club's chords", listOf("<b", "<b>", ">", "<", "</b")) { cifraClubChord.replaceParts(it) { chord -> "[ch]$chord[/ch]" } },
             Reader("Letras's words", listOf("""<div class="lyric-content""", "\"", "\">", "</div")) { LyricsFinder.letrasWords.firstIn(it) },
             Reader("Letras's original", listOf("""<div class="lyric-translation-left">""", " ", "<strong>", "</strong>", "</div")) { LyricsFinder.letrasOriginal(it) },
-            Reader("Genius's boxes", listOf("<div", " data-lyrics-container=\"true\"", " data-exclude-from-selection=\"true\"", ">")) {
-                LyricsFinder.geniusBox.allIn(it).count() + LyricsFinder.geniusNotWords.allIn(it).count()
-            },
+            Reader(
+                "Genius's boxes",
+                listOf(
+                    "<div", " data-lyrics-container=\"true\"", " data-exclude-from-selection=\"true\"", ">", "</div>", "<di", "v",
+                    "<div data-exclude-from-selection=\"true\">x</div>", "<div data-lyrics-container=\"true\">x</div>",
+                ),
+            ) { LyricsFinder.geniusBoxes(LyricsFinder.withoutGeniusNotWords(it)).count() },
+            Reader("Letras's ads", listOf("<div id=\"pub_", "\">", "</div>", "<div>", "<di", "v", "<div id=\"pub_\">x</div>", "a")) { LyricsFinder.withoutLetrasAds(it) },
             Reader("UtaTen's words", listOf("""<div class="hiragana"""", " ", ">", "</div")) { SungReadings.words.firstIn(it) },
             Reader("UtaTen's readings", listOf("""<span class="ruby"><span class="rb">""", """</span><span class="rt">""", "</span>")) { SungReadings.rubies(it).count() },
             Reader("UtaTen's search", listOf("""<p class="searchResult__title"><a href="/lyric/a1/">""", """<td class="searchResult__artist"><p><a """, ">", "</a")) {
