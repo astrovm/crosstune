@@ -181,6 +181,16 @@ class UnsungTest {
     }
 
     @Test
+    fun aSongTheAppPlaysIsHeardForAVoiceThoughWhatsOnThePhoneIsYetToBeSaid() {
+        // Words looked up quicker than the phone says what it plays: the app's asked whether it plays the song, as it is for held words.
+        playback.nowPlayingLate.value = true
+        singing.answers = listOf(voice)
+        openLyrics()
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertEquals(1, singing.hears)
+    }
+
+    @Test
     fun aSongNoOneIsHeardSingingHasNoWordsToReport() {
         singing.answers = listOf(music)
         openLyrics()

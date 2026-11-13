@@ -2597,11 +2597,12 @@ internal class MainViewModel(
      * [likelyInstrumental] by its genre alone, a voice heard says it's sung after all. Not heard, as when
      * it plays elsewhere, it's reported as it always was.
      */
-    private fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
+    private suspend fun noWordsFound(song: MusicMetadata, likelyInstrumental: Boolean) {
         if (SongNames.manySongs(song)) return
         // With reports turned off, a voice heard changes nothing, but for a song taken for an instrumental.
         if (!likelyInstrumental && autoReports.allowed == false) return
-        val canHear = singing != null && shownPlayed && mayCalibrate()
+        // Shown as it played, or played now: the words can be found before what's on the phone is said.
+        val canHear = singing != null && mayCalibrate() && (shownPlayed || appPlays(song))
         // Noted, as a report of no words then says how it came to be one.
         TimingLog.note("no words, likely instrumental $likelyInstrumental, a voice ${if (canHear) "is listened for" else "can't be heard"}")
         if (canHear) {
@@ -2614,14 +2615,21 @@ internal class MainViewModel(
 
     /**
      * Whether a listen for a voice in [song] can start: the microphone's allowed, Crosstune is in sight and not naming a
-     * song, and a music app on this phone plays it now. Asked of the apps, as the words come before the song's followed,
-     * while what's followed is still the song before. A song heard from another device, or in an app Crosstune can't
+     * song, and a music app on this phone plays it now. A song heard from another device, or in an app Crosstune can't
      * see, can't be listened to.
      */
     private suspend fun listenCanStart(song: MusicMetadata): Boolean {
         if (singing == null || !mayCalibrate()) return false
         // Naming a song has the microphone, and out of sight, nothing's heard.
         if (shazamLeads || nextPaused) return false
+        return appPlays(song)
+    }
+
+    /**
+     * Whether a music app on this phone plays [song] now. Asked of the apps, as the words come before the song's
+     * followed, while what's followed is still the song before.
+     */
+    private suspend fun appPlays(song: MusicMetadata): Boolean {
         val source = playback?.takeIf { it.hasAccess() } ?: return false
         val following = withTimeoutOrNull(APP_ASKED_MS) { source.follow(song).first() }
         return following?.let { it.app != null && it.clock.playing } == true
