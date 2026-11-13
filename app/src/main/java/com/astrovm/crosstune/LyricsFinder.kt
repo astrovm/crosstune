@@ -392,10 +392,13 @@ private fun capitalWord(word: String) = word.codePoints().anyMatch(Character::is
 private fun capitalLetters(line: String): Set<Int> {
     val words = mutableListOf<IntRange>()
     var start = -1
-    for (at in 0..line.length) {
+    // To the end too, which ends the last word.
+    var at = 0
+    while (at <= line.length) {
         val space = at == line.length || isPatternSpace(line[at])
-        if (space && start >= 0) words += start until at
-        if (space) start = -1 else if (start < 0) start = at
+        if (space && start != -1) words += start until at
+        if (space) start = -1 else if (start == -1) start = at
+        at++
     }
     return words.windowed(2).filter { pair -> pair.all { capitalWord(line.substring(it)) } && pair.any { line.substring(it).codePoints().filter(Character::isLetter).count() > 1 } }
         .flatten().flatMap { it }.toSet()
@@ -1869,8 +1872,8 @@ internal class LyricsFinder(
             while (true) {
                 // One a cut made is first, as all before the cut opened none. It opens before the cut and ends after.
                 val tail = minOf(kept.length, JOIN_REACH)
-                val nextClose = nextCloses.from(from)
-                val window = kept.substring(kept.length - tail) + page.substring(from, minOf(page.length, maxOf(nextClose + 1, from + JOIN_REACH)))
+                // To the next `>`, which it takes: the opening's tag ends on it, or the opening ends before it.
+                val window = kept.substring(kept.length - tail) + page.substring(from, minOf(page.length, nextCloses.from(from) + 1))
                 val across = joined(window)?.takeIf { it < tail }
                 if (across != null) {
                     val end = tags.endFrom(tags.firstFrom(from)) ?: break

@@ -10,6 +10,7 @@ import okhttp3.Response
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -1119,6 +1120,21 @@ class LyricsFinderTest {
         // Each a letter and a stop, as spelled-out letters are: the line isn't in capitals.
         val text = "We meet J. R. tonight"
         assertEquals(text, LyricsFinder.cleaned(Lyrics.Found(text), song).words)
+    }
+
+    @Test
+    fun aSongIsInCapitalsFromTwentyLettersNineInTenOfThemCapitals() {
+        // One word a line, so no line has a capital phrase: only the song as a whole can be in capitals.
+        fun cleaned(text: String) = LyricsFinder.cleaned(Lyrics.Found(text), song).words
+        assertNotEquals("SUNSHINE\nEVERYWHERE\nOK", cleaned("SUNSHINE\nEVERYWHERE\nOK"))
+        assertEquals("SUNSHINE\nEVERYWHERE\nO", cleaned("SUNSHINE\nEVERYWHERE\nO"))
+        assertNotEquals("SUNSHINE\nEVERYWHEre\nOK", cleaned("SUNSHINE\nEVERYWHEre\nOK"))
+        assertEquals("SUNSHINE\nEVERYWHere\nOK", cleaned("SUNSHINE\nEVERYWHere\nOK"))
+    }
+
+    @Test
+    fun aCapitalPhraseCanStartALine() {
+        assertEquals("Oh I love you", LyricsFinder.cleaned(Lyrics.Found("OH I love you"), song).words)
     }
 
     @Test
@@ -2233,6 +2249,8 @@ class LyricsFinderTest {
         assertEquals(true, isRomaji("ni wa ga sora kaze yume hana michi namida $english"))
         assertEquals(false, isRomaji("ni wa ga sora kaze yume hana michi cloud $english"))
         assertEquals(false, isRomaji("ni wa koe sora kaze yume hana michi namida $english"))
+        // What's before the first word isn't one.
+        assertEquals(true, isRomaji(", ni wa ga sora kaze yume hana michi namida $english"))
     }
 
     @Test
@@ -2255,6 +2273,8 @@ class LyricsFinderTest {
         assertEquals(true, isRomanizedKorean("nae neon geu saram haneul baram kkum sarang nunmul $english"))
         assertEquals(false, isRomanizedKorean("nae neon geu saram haneul baram kkum sarang cloud $english"))
         assertEquals(false, isRomanizedKorean("nae neon gippeum saram haneul baram kkum sarang nunmul $english"))
+        // What's before the first word isn't one.
+        assertEquals(true, isRomanizedKorean(", nae neon geu saram haneul baram kkum sarang nunmul $english"))
     }
 
     @Test
