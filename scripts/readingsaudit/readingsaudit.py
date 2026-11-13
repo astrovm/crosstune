@@ -7,6 +7,10 @@
   python3 scripts/readingsaudit/readingsaudit.py compare --words   # every wrong word too, with its song: for a person to read, not to publish
   python3 scripts/readingsaudit/readingsaudit.py compare --before before   # and what changed since a run kept in that folder: cp -r audit before
   python3 scripts/readingsaudit/readingsaudit.py table     # remake the app's jmdict-readings.txt from jmdict.json, through gradle-box
+  python3 scripts/readingsaudit/readingsaudit.py golden    # lock every reading right today into readings-golden.tsv, through gradle-box; a row already there stays
+  python3 scripts/readingsaudit/readingsaudit.py golden --accept WORD KANA   # and drop the lock on WORD read as KANA, when that change is on purpose
+  python3 scripts/readingsaudit/readingsaudit.py lines     # every audit line read whole by origin/main's code and HEAD's, as the app shows it; anything right that changes fails it. Before merging a readings change
+  python3 scripts/readingsaudit/readingsaudit.py hole      # how many right readings the golden file guards on every wider stretch of their line, and how many a break on the whole line slips past; --golden FILE, again for more
   python3 scripts/readingsaudit/readingsaudit.py oldkana   # remake the app's old-kana.txt from jmdict.json
   python3 scripts/readingsaudit/readingsaudit.py fetch     # put the newest jmdict-eng in the folder as jmdict.json; --tag TAG for another
   python3 scripts/readingsaudit/readingsaudit.py age       # fail when either file's JMdict is older than MAX_AGE_DAYS; the release runs it
@@ -204,15 +208,24 @@ def table(folder, gradle=None):
 
 
 # How Gradle runs unless --gradle says otherwise: in the build box, which keeps a machine's builds in turn.
-GRADLE_BOX = f"{ROOT / 'scripts/gradle-box/gradle-box.sh'} --max-workers=2"
+GRADLE_BOX = ("scripts/gradle-box/gradle-box.sh", "--max-workers=2")
+
+
+def songcheck(folder, test, gradle=None, root=ROOT, also=()):
+    """Runs one songcheck test class through Gradle, gradle-box unless [gradle] says otherwise, on the audit folder, in
+    the checkout at [root]: gradle-box builds the checkout its script is in. Then in each checkout of [also] too, in
+    the same gradle-box run, so it waits in line once. Its exit code."""
+    # gradle-box mounts SONGCHECK_DIR, so the words stay out of the checkout.
+    env = {**os.environ, "SONGCHECK_DIR": str(folder)}
+    if gradle and also:
+        raise SystemExit("Only gradle-box reads more than one checkout in one run: leave out --gradle")
+    gradle = shlex.split(gradle) if gradle else [str(Path(root) / GRADLE_BOX[0]), *(f"--also={Path(tree).resolve()}" for tree in also), *GRADLE_BOX[1:]]
+    command = ["nice", "-n", "10", *gradle, ":app:songCheck", f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
+    return subprocess.call(command, env=env, cwd=root)
 
 
 def run(folder, test="com.astrovm.crosstune.songcheck.ReadingsAudit", gradle=None):
-    # gradle-box mounts SONGCHECK_DIR, so the words stay out of the checkout.
-    env = {**os.environ, "SONGCHECK_DIR": str(folder)}
-    command = ["nice", "-n", "10", *shlex.split(gradle or GRADLE_BOX), ":app:songCheck",
-               f"-PsongcheckDir={folder}", f"-PsongcheckTest={test}"]
-    sys.exit(subprocess.call(command, env=env, cwd=ROOT))
+    sys.exit(songcheck(folder, test, gradle))
 
 
 # ---- fetch and age ----
@@ -455,6 +468,26 @@ def reading_over(ours, line, start, end):
     return over[0][0], over[-1][1], "".join(s[2] for s in over)
 
 
+def their_reading(line, stretch, unit, others, option):
+    """UtaTen's reading over [stretch]: [option] for the kanji at [unit], the shortest of theirs for each of [others]
+    inside it, and the line's own letters between."""
+    (a, b), (start, end) = stretch, unit
+    text, i = "", a
+    while i < b:
+        if i == start:
+            text += option
+            i = end
+            continue
+        other = next((u for u in others if u[0] == i), None)
+        if other:
+            text += min(other[2], key=len)
+            i = other[1]
+        else:
+            text += line[i]
+            i += 1
+    return text
+
+
 def compare_line(line, parts, units):
     """Each of UtaTen's kanji in the line: (word as written, ours, theirs, right?), over the stretch both split alike."""
     ours = spans(parts)
@@ -470,22 +503,7 @@ def compare_line(line, parts, units):
         covered = {i for u in others for i in range(u[0], u[1])} | set(range(start, end))
         if any(is_han(line[i]) and i not in covered for i in range(a, b)):
             continue
-        def theirs(option):
-            text, i = "", a
-            while i < b:
-                if i == start:
-                    text += option
-                    i = end
-                    continue
-                other = next((u for u in others if u[0] == i), None)
-                if other:
-                    text += min(other[2], key=len)
-                    i = other[1]
-                else:
-                    text += line[i]
-                    i += 1
-            return text
-        wanted = [theirs(o) for o in options]
+        wanted = [their_reading(line, (a, b), (start, end), others, o) for o in options]
         right = any(norm(w) == norm(kana) for w in wanted)
         out.append((line[a:b], kana, max(wanted, key=len), right, (a, b)))
     return out
@@ -656,11 +674,21 @@ def compare(folder, words, before=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age"])
+    parser.add_argument("step", choices=["songs", "run", "compare", "table", "oldkana", "fetch", "age", "golden", "hole", "lines"])
     parser.add_argument("--words", action="store_true", help="compare: list every wrong word shown, with its song and line")
     parser.add_argument("--before", help="compare: a folder in the data folder with an earlier run's audit/, to count what changed")
     parser.add_argument("--gradle", help="run, table: the Gradle command, instead of gradle-box")
     parser.add_argument("--tag", help="fetch: this jmdict-simplified release instead of the newest")
+    parser.add_argument("--accept", action="append", nargs=2, default=[], metavar=("WORD", "KANA"),
+                        help="golden, lines: drop the lock on WORD read as KANA, when the app now reads it otherwise on purpose")
+    parser.add_argument("--base", default="origin/main", help="lines: the commit to read the lines with first")
+    parser.add_argument("--accept-romaji", action="store_true", help="lines: the romaji of lines read right changes, on purpose")
+    parser.add_argument("--new-audit", action="store_true", help="lines: the audit folder is new, on purpose: name it in the golden file")
+    parser.add_argument("--out", type=Path, help="golden: write the file here instead of the one in the repo")
+    parser.add_argument("--width", type=int, help="golden: the letters of context each row holds on each side of its stable stretch")
+    parser.add_argument("--union-share", type=float, help="golden: the most of a song's lines the rows may spell together, from 0 to 1")
+    parser.add_argument("--golden", action="append", type=Path, default=[], metavar="FILE",
+                        help="hole: a golden file to measure, instead of the one in the repo; again for more")
     args = parser.parse_args(argv)
     folder = data_dir()
     if args.step == "songs":
@@ -675,6 +703,17 @@ def main(argv=None):
         fetch(folder, args.tag)
     elif args.step == "age":
         sys.exit(age([TABLE, OLD_KANA], datetime.date.today()))
+    elif args.step == "lines":
+        # wholelines.py reads this module's audit too.
+        import wholelines
+        sys.exit(wholelines.lines(folder, args.accept, args.base, new_audit=args.new_audit, accept_romaji=args.accept_romaji))
+    elif args.step in ("golden", "hole"):
+        # golden.py reads this module's audit, so it is loaded only here.
+        import golden
+        sys.exit(golden.golden(folder, args.out or golden.GOLDEN_FILE, args.accept,
+                                width=golden.CONTEXT if args.width is None else args.width,
+                                union_share=golden.UNION_SHARE if args.union_share is None else args.union_share) if args.step == "golden"
+                 else golden.hole(folder, args.golden or [golden.GOLDEN_FILE]))
     else:
         compare(folder, args.words, args.before)
 

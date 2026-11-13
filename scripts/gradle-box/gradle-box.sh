@@ -2,6 +2,10 @@
 # Runs ./gradlew for this checkout in a container, in turn with every other checkout on this machine.
 #
 #   scripts/gradle-box/gradle-box.sh :app:testDebugUnitTest --tests '*LyricsFinderTest*'
+#   scripts/gradle-box/gradle-box.sh --also=/path/to/other/checkout :app:songCheck ...
+#
+# --also=DIR, before the rest, runs the same Gradle command in another checkout of this repository too, after this
+# one, in the same box and slot: it waits in line once. The box sees DIR as well. The exit code is the first that failed.
 #
 # The container sees this checkout, the Android SDK read-only and the debug key, and not the rest
 # of $HOME. Git comes from the image (eclipse-temurin:25-jdk plus Git), so whisper.cpp can read its
@@ -42,6 +46,17 @@
 # A new seed is made only when the cache and its copy fit; its contents are then read-only.
 # An older seed or a lowered limit can still leave the cache over target.
 set -euo pipefail
+
+also=()
+while [[ ${1:-} == --also=* ]]; do
+    dir=${1#--also=}
+    if [[ ! -d $dir ]]; then
+        echo "gradle-box: --also: no folder at $dir" >&2
+        exit 1
+    fi
+    also+=("$(cd "$dir" && pwd -P)")
+    shift
+done
 
 here=$(dirname "${BASH_SOURCE[0]}")
 containerfile=$here/Containerfile
@@ -242,6 +257,9 @@ if [[ -n ${SONGCHECK_DIR:-} ]]; then
 fi
 # A worktree keeps its Git data in the main checkout, which may be somewhere else.
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
+for dir in ${also[@]+"${also[@]}"}; do
+    box+=(-v "$dir:$dir")
+done
 # The same key as builds outside the box, so its APKs install over theirs.
 [[ -f $key ]] && box+=(-v "$key:/root/.android/debug.keystore:ro")
 
@@ -270,7 +288,13 @@ keep_downloads() {
 
 stalled_before=$(stalled total)
 # A child rather than exec, so the ticket goes when it ends, and stopping this stops the build.
-nice -n 10 podman run "${box[@]}" "$image" ./gradlew --no-daemon "$@" &
+if ((${#also[@]})); then
+    # Each checkout in turn, all of them whatever fails: the first failure is the exit code.
+    run=(bash "$root/scripts/gradle-box/each-checkout.sh" "${#also[@]}" "${also[@]}" "$@")
+else
+    run=(./gradlew --no-daemon "$@")
+fi
+nice -n 10 podman run "${box[@]}" "$image" "${run[@]}" &
 child=$!
 trap 'kill -TERM "$child" 2>/dev/null || true' INT TERM
 status=0
