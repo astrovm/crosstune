@@ -135,9 +135,10 @@ internal object SongNames {
 
     /**
      * Whether [name], a song or a video YouTube Music shows, on [album], credited to [credit], is another recording than
-     * the one by [artists] named [titles]: two versions (see [versionsDiffer]). Only what its tags say counts. A name in
-     * another script or spelled otherwise, a word, a tag or a spelling none of these knows can't tell, so it never
-     * counts. It only takes away what main opened, or what ChatGPT picks in its place.
+     * the one by [artists] named [titles]: two versions (see [versionsDiffer]). A tag says the version: the row's, that
+     * the song's names don't say, or the song's, that the row's name and album never say. Its name never does, nor does a
+     * name in another script or spelled otherwise, a word, a tag or a spelling none of these knows: they can't tell, so
+     * they never count. It only takes away what main opened, or what ChatGPT picks in its place.
      */
     fun saysAnother(name: String, album: String, titles: Collection<String>, artists: Collection<String>, credit: String = ""): Boolean =
         versionsDiffer(name, album, titles, artists + artistNames(credit).flatMap { it.split(conjunction) })

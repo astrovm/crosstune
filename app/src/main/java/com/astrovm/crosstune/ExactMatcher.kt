@@ -36,7 +36,7 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
  * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
  * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length;
- * 6, as what main opened on YouTube Music doesn't open when something says it's another version or another song.
+ * 6, as what main opened on YouTube Music doesn't open when its tags say it's another version.
  */
 internal const val MATCH_VERSION = 6
 
@@ -678,7 +678,7 @@ internal class ExactMatcher(
         return settled(opened, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), names)
     }
 
-    /** What main opened, [row], and whether something says it's another version or another song, [doubted]. */
+    /** What main opened, [row], and whether its tags say it's another version, [doubted] (see [doubts]). */
     private class Opened(val row: Row, val doubted: Boolean)
 
     /**
