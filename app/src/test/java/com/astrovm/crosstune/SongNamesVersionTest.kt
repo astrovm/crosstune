@@ -177,6 +177,8 @@ class SongNamesVersionTest {
         )) {
             assertTrue(said, other(said))
         }
+        // A run of marks in Hangul says only the marks in it: "(라이브)" is the song's own live, no other version.
+        assertFalse(other("Fake Song (라이브)", "Fake Song (Live)"))
         // In the name, before any tag, nothing says a version: "Live Wire" may be "Livewire", "Live Forever" a name.
         for (name in listOf(
             "Fake Song ライブ版", "Fake Song 라이브 버전", "Fake Song 翻唱版", "Fake Songのカラオケ", "Fake Song ライブを歌う", "カラオケ Fake Song",
