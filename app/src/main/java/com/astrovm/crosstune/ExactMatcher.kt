@@ -71,10 +71,10 @@ internal class ExactMatcher(
     private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,
     /** A Spotify artist's id by their name, see [MusicBrainz.spotifyArtist]; none by default. */
     private val spotifyArtist: suspend (String) -> String? = { null },
-    /** Where names are read, 桜 as さくら (see [SongNames.saysAnother]): off the main thread, as the first read loads a dictionary. */
+    /** Where names are read, 桜 as さくら (see [SongNames.namesTheSong]): off the main thread, as the first read loads a dictionary. */
     private val readingDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Whether a row, on its album, is another recording or another song than the one named so: [SongNames.saysAnother], which reads names. */
-    private val saysAnother: (String, String, Collection<String>, Collection<String>) -> Boolean = SongNames::saysAnother
+    /** Whether a row, on its album, by its credit, is another recording than the one named so: [SongNames.saysAnother]. */
+    private val saysAnother: (String, String, Collection<String>, Collection<String>, String) -> Boolean = SongNames::saysAnother
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
@@ -693,21 +693,36 @@ internal class ExactMatcher(
     }
 
     /**
-     * Whether [row] says it's another recording or another song than [names], by its name and its second line, which
-     * has its album: see [SongNames.saysAnother]. Only what says so counts, never what it can't tell.
+     * Whether [row] says it's another recording than [names], by its tags and its second line, which has its artist
+     * and its album: see [SongNames.saysAnother]. Only what says so counts, never what it can't tell.
      */
-    private fun doubts(row: Row, names: Names): Boolean = saysAnother(row.name, row.details.joinToString(" "), names.titles, names.artists)
+    private fun doubts(row: Row, names: Names): Boolean =
+        saysAnother(row.name, row.details.joinToString(" "), names.titles, names.artists, row.details.first())
 
     /**
      * Where what opens is settled, in one place: what main [opened], unless it's doubted; otherwise ChatGPT picks from
      * [toPick], in main's order, as when main opened nothing. So without ChatGPT, nothing opens that main didn't. Once
-     * main's row is doubted, what ChatGPT picks has to pass the same check (see [doubts]), else nothing opens.
+     * main's row is doubted, what ChatGPT picks opens only where main's own steps say it's the song, and nothing says
+     * it's another (see [isTheSongToo]); else nothing opens.
      */
     private fun settled(opened: Opened?, toPick: ToPick, names: Names): Answer = when {
         opened == null -> Answer(null, toPick)
         !opened.doubted -> Answer(toPick.watchUrl + opened.row.id)
-        else -> Answer(null, toPick.copy(takes = { !doubts(it, names) }))
+        else -> Answer(null, toPick.copy(takes = { isTheSongToo(it, names) }))
     }
+
+    /**
+     * Whether [row], picked in place of a doubted one, is the song: main's own check of a song or a video says so, or
+     * one of its names is one of the song's in one script, by its artist (see [SongNames.namesTheSong]); and nothing
+     * says it's another recording (see [doubts]). Not said another isn't enough: "別の歌" by the artist says nothing.
+     */
+    private fun isTheSongToo(row: Row, names: Names): Boolean {
+        val named = isTheSong(row, names) || isTheSongsVideo(row, names) || SongNames.namesTheSong(row.name, names.titles) && byTheArtist(row, names)
+        return named && !doubts(row, names)
+    }
+
+    /** Whether [row]'s first line of details, its artist or channel, credits one of the song's artists. */
+    private fun byTheArtist(row: Row, names: Names): Boolean = SongNames.artists(row.details.first()).any(names.artists.flatMap(SongNames::artists).toSet()::contains)
 
     /** The songs or videos among [items] that play. */
     private fun playable(items: List<JSONObject>): List<Row> = items.map(::row).filter { it.id != null }
@@ -877,9 +892,7 @@ internal class ExactMatcher(
         if (row.id == null) return false
         val album = row.details.getOrNull(1).orEmpty()
         val named = SongNames.titleNames(row.name).any { name -> names.titles.any { SongNames.sameVersion(it, name, album) } }
-        val wanted = names.artists.flatMap(SongNames::artists).toSet()
-        val by = SongNames.artists(row.details.first()).any(wanted::contains)
-        return named && by && sameLength(row, names)
+        return named && byTheArtist(row, names) && sameLength(row, names)
     }
 
     /**
@@ -891,8 +904,7 @@ internal class ExactMatcher(
         val length = row.lengthMs ?: return false
         if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
         if (row.name.none { it.isLetter() && Character.UnicodeBlock.of(it) != Character.UnicodeBlock.BASIC_LATIN }) return false
-        val wanted = names.artists.flatMap(SongNames::artists).toSet()
-        return SongNames.artists(row.details.first()).any(wanted::contains)
+        return byTheArtist(row, names)
     }
 
     /**
