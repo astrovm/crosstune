@@ -1,11 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", "group:all"],
-  "schedule": ["* 0-3 */3 * *"],
+  "extends": [
+    "config:recommended",
+    "group:all"
+  ],
+  "schedule": [
+    "* 0-3 */3 * *"
+  ],
   "timezone": "America/Argentina/Buenos_Aires",
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
-  "lockFileMaintenance": { "enabled": true, "schedule": ["* 0-3 */3 * *"] },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "* 0-3 */3 * *"
+    ]
+  },
   "hostRules": [
     {
       "matchHost": "repo.maven.apache.org",
@@ -14,6 +24,26 @@
     {
       "matchHost": "repo1.maven.org",
       "concurrentRequestLimit": 1
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "A new JDK major waits on the Dependency Dashboard: the box, every setup-java step, syncreplay and CONTRIBUTING.md move together in one PR. scripts/gradle-box/test_jdk_pins.py holds them equal.",
+      "matchPackageNames": [
+        "docker.io/library/eclipse-temurin",
+        "eclipse-temurin"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "The J-Total widths are measured in this exact browser and its fonts. A new image measures other widths, so it moves only with new tables.",
+      "matchFileNames": [
+        "scripts/jtotal-widths/**"
+      ],
+      "enabled": false
     }
   ]
 }

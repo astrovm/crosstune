@@ -8,7 +8,7 @@ package com.astrovm.crosstune
  */
 object Fuzz {
     /** Set by the pitest task in `app/build.gradle.kts`. */
-    private val underMutationTesting = System.getProperty("crosstune.mutationTesting") == "true"
+    private val underMutationTesting = System.getProperty("crosstune.mutationRun") == "true"
 
     /** [all] in the test task, [few] under mutation testing. */
     fun count(all: Int, few: Int) = if (underMutationTesting) few else all

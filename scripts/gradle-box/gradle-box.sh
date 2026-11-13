@@ -240,6 +240,10 @@ fi
 if [[ -n ${SONGCHECK_DIR:-} ]]; then
     box+=(-v "$SONGCHECK_DIR:$SONGCHECK_DIR")
 fi
+# So are the matcher's, as they're what the services answered (scripts/matchcheck/replay.py).
+if [[ -n ${MATCHCHECK_DIR:-} ]]; then
+    box+=(-v "$MATCHCHECK_DIR:$MATCHCHECK_DIR" -e "MATCHCHECK_DIR=$MATCHCHECK_DIR" -e "MATCHCHECK_LABEL=${MATCHCHECK_LABEL:-head}")
+fi
 # A worktree keeps its Git data in the main checkout, which may be somewhere else.
 [[ $common == "$root"/* ]] || box+=(-v "$common:$common:ro")
 # The same key as builds outside the box, so its APKs install over theirs.
