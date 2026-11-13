@@ -435,6 +435,35 @@ class AutoReportsTest {
     }
 
     @Test
+    fun aNoDeletesTheProblemsFoundThatWaitAndKeepsWhatWasPutInTimeByHand() {
+        fun found() {
+            reports.owe(song("No words"), SongProblem.NO_LYRICS, json("no words"))
+            reports.owe(song("Off"), SongProblem.SUNG_OFF, json("off"))
+        }
+        found()
+        reports.owe(song("By hand"), SongProblem.TIMED_BY_HAND, json("by hand"))
+        preferences.edit().putString("lyrics_sync", JSONObject().put("earlier\u0000band", JSONObject().put("points", JSONArray().put(JSONArray().put(0).put(100)))).toString()).commit()
+        reports.keepEarlier("2.24.0", "16 (36)")
+        val earlier = reports.owed().single { it.earlier }
+        // A yes keeps them all to go.
+        reports.allowed = true
+        assertEquals(listOf("no words", "off", "by hand"), reports.owed().filterNot { it.earlier }.names())
+        // Turned off, the problems found are gone, and turned on again, they don't go.
+        reports.allowed = false
+        assertEquals(listOf("by hand"), reports.owed().filterNot { it.earlier }.names())
+        assertEquals(listOf(earlier), reports.owed().filter { it.earlier })
+        reports.allowed = true
+        assertEquals(listOf("by hand"), reports.owed().filterNot { it.earlier }.names())
+        // Not answered, they stay; a third close is a no, as one in Settings is.
+        found()
+        reports.allowed = null
+        assertEquals(3, reports.owed().count { !it.earlier })
+        repeat(AutoReports.MAX_CLOSES) { reports.closed() }
+        assertEquals(false, reports.allowed)
+        assertEquals(listOf("by hand"), reports.owed().filterNot { it.earlier }.names())
+    }
+
+    @Test
     fun wordsTimedAgainAfterTheirReportWentTakeNoRoomFromOnesStillToGo() {
         reports.owe(song("Still to go"), SongProblem.TIMED_BY_HAND, json("left"))
         repeat(AutoReports.MAX_OWED) {

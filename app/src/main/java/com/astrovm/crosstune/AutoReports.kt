@@ -52,11 +52,18 @@ internal class AutoReports(
     /** Held while the reports owed go, by whichever screen sends them, so a start and a yes close together don't send one twice. */
     val sending: Mutex get() = shared.sending
 
-    /** Yes or no, or null while the user hasn't said. */
+    /**
+     * Yes or no, or null while the user hasn't said. A no deletes the problems found that wait on the phone, as they
+     * were kept only to go: turned on again later, they never do. Words put in time by hand, and the timing an earlier
+     * version kept, stay, as they're kept whatever the user answered.
+     */
     var allowed: Boolean?
         get() = if (preferences.contains(KEY_ALLOWED)) preferences.getBoolean(KEY_ALLOWED, false) else null
         set(value) {
-            preferences.edit().apply { if (value == null) remove(KEY_ALLOWED) else putBoolean(KEY_ALLOWED, value) }.apply()
+            synchronized(shared) {
+                preferences.edit().apply { if (value == null) remove(KEY_ALLOWED) else putBoolean(KEY_ALLOWED, value) }.apply()
+                if (value == false) keep(kept().filter { it.key.startsWith(BY_HAND_START) || it.earlier })
+            }
         }
 
     private fun keyOf(song: MusicMetadata, problem: SongProblem) =
