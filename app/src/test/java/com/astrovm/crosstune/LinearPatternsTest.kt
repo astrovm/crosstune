@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.regex.Pattern
 
@@ -8,18 +10,13 @@ import java.util.regex.Pattern
  * Every pattern in the app takes time in step with the text it reads. A page can be long and made of
  * anything, and a pattern that looks to the end of the text from each place it tries takes time squared:
  * 20,000 `<` with no `>` take seconds where they should take a millisecond. So each pattern in the app's
- * code is timed on long text of the kinds that do that.
+ * code is timed on long text of the kinds that do that, and on the same text twice as long: [Growth].
  */
 class LinearPatternsTest {
     @Test
     fun noPatternInTheAppTakesTimeSquaredOnLongText() {
         val slow = AppPatterns.ofApp().found.mapNotNull { (where, _, pattern) ->
-            val worst = hostileTexts(pattern.pattern()).maxOf { text -> millisToReadAll(pattern, text) }
-            when {
-                worst == OVERFLOWED -> "$where overflows the stack ${pattern.pattern().take(80)}"
-                worst > LIMIT_MS -> "$where ${worst}ms ${pattern.pattern().take(80)}"
-                else -> null
-            }
+            outOfStep(pattern)?.let { "$where $it ${pattern.pattern().take(80)}" }
         }
         assertEquals(emptyList<String>(), slow)
     }
@@ -57,19 +54,19 @@ class LinearPatternsTest {
     )
 
     @Test
-    fun aPatternThatLooksToTheEndFromEachPlaceIsSlowAndOneThatDoesNotIsFast() {
-        val slow = Pattern.compile("<[^>]*>")
-        val fast = Pattern.compile("<[^<>]*+>")
-        assertEquals(true, hostileTexts(slow.pattern()).maxOf { millisToReadAll(slow, it) } > LIMIT_MS)
-        assertEquals(true, hostileTexts(fast.pattern()).maxOf { millisToReadAll(fast, it) } <= LIMIT_MS)
+    fun aPatternThatLooksToTheEndFromEachPlaceIsOutOfStepAndOneThatDoesNotIsInStep() {
+        // Shorter than the app's patterns are read at, as one that's out of step takes seconds there, read again and again.
+        val opens = { length: Int -> listOf("<".repeat(length)) }
+        assertNotNull(outOfStep(Pattern.compile("<[^>]*>"), SHORT, opens))
+        assertNull(outOfStep(Pattern.compile("<[^<>]*+>"), SHORT, opens))
     }
 
     @Test
     fun aPatternThatRunsOutOfStackIsNamedAndNotTheEndOfTheTest() {
-        val deep = Pattern.compile("(?:a|b)*c")
-        assertEquals(OVERFLOWED, millisToReadAll(deep, "a".repeat(LENGTH)))
+        val run = { length: Int -> listOf("a".repeat(length)) }
+        assertEquals("overflows the stack", outOfStep(Pattern.compile("(?:a|b)*c"), texts = run))
         // The same, with no group to repeat and tried only where a run starts.
-        assertEquals(true, millisToReadAll(Pattern.compile("(?<![ab])[ab]*+c"), "a".repeat(LENGTH)) <= LIMIT_MS)
+        assertNull(outOfStep(Pattern.compile("(?<![ab])[ab]*+c"), texts = run))
     }
 
     @Test
@@ -92,11 +89,11 @@ class LinearPatternsTest {
     }
 
     /** Text that makes a pattern try each place and look on to the end: runs of one thing, and of how the pattern starts. */
-    private fun hostileTexts(pattern: String): List<String> {
+    private fun hostileTexts(pattern: String, length: Int): List<String> {
         val start = plainStart(pattern)
-        val starts = if (start.isEmpty()) emptyList() else listOf(start.repeat(LENGTH / start.length + 1), start + "x".repeat(LENGTH), start + " ".repeat(LENGTH))
+        val starts = if (start.isEmpty()) emptyList() else listOf(start.repeat(length / start.length + 1), start + "x".repeat(length), start + " ".repeat(length))
         // Each run on its own, and then something that isn't a space nor ends the text, so a pattern reads on past it.
-        return RUNS.flatMap { listOf(it.repeat(LENGTH / it.length), it.repeat(LENGTH / it.length) + ")") } + starts
+        return RUNS.flatMap { listOf(it.repeat(length / it.length), it.repeat(length / it.length) + ")") } + starts
     }
 
     /**
@@ -146,21 +143,22 @@ class LinearPatternsTest {
     }
 
     /**
-     * How long the pattern takes to find all it finds in the text, stopped at [GIVE_UP_MS], or [OVERFLOWED] when it
-     * runs out of stack, as a repeated group does with one call for each repeat: then that one pattern is named, and
-     * the others are still timed.
+     * Null when [pattern] reads [texts] in step with their length, else how it doesn't: its times, that it reads on past
+     * [GIVE_UP_MS], or that it runs out of stack, as a repeated group does with one call for each repeat. Then that one
+     * pattern is named, and the others are still timed.
      */
-    private fun millisToReadAll(pattern: Pattern, text: String): Long {
-        val began = System.nanoTime()
-        val matcher = pattern.matcher(Deadline(text, began + GIVE_UP_MS * 1_000_000))
-        try {
-            generateSequence { matcher.takeIf { it.find() } }.count()
-        } catch (_: Deadline.Passed) {
-            return GIVE_UP_MS
-        } catch (_: StackOverflowError) {
-            return OVERFLOWED
-        }
-        return (System.nanoTime() - began) / 1_000_000
+    private fun outOfStep(pattern: Pattern, length: Int = LENGTH, texts: (Int) -> List<String> = { hostileTexts(pattern.pattern(), it) }): String? = try {
+        Growth.outOfStep(texts, length, { it.take(6).replace("\n", "\\n") + "…" }) { readAll(pattern, it) }.firstOrNull()
+    } catch (_: Deadline.Passed) {
+        "reads on past $GIVE_UP_MS ms"
+    } catch (_: StackOverflowError) {
+        "overflows the stack"
+    }
+
+    /** All the pattern finds in the text, stopped once [GIVE_UP_MS] have passed, as a pattern that's out of step can take minutes. */
+    private fun readAll(pattern: Pattern, text: String): Int {
+        val matcher = pattern.matcher(Deadline(text, System.nanoTime() + GIVE_UP_MS * 1_000_000))
+        return generateSequence { matcher.takeIf { it.find() } }.count()
     }
 
     /** Text that stops a pattern once its time is up, as [Pattern] has no time limit of its own. */
@@ -177,10 +175,11 @@ class LinearPatternsTest {
     }
 
     private companion object {
+        /** How long a text is read, and then twice it. */
         const val LENGTH = 20_000
-        const val LIMIT_MS = 300L
-        const val GIVE_UP_MS = 1_000L
-        const val OVERFLOWED = Long.MAX_VALUE
+        const val SHORT = 5_000
+        /** Far past the slowest pattern's time on a busy machine, which is in milliseconds: a pattern this slow is out of step. */
+        const val GIVE_UP_MS = 10_000L
         val RUNS = listOf("x", " ", "\n", "<", "<a ", "<p>", "[", "(", "（", "a ", "&#", "-", "歌", "x\"")
         const val OPERATORS = "\\[](){}?*+|^$."
         const val ESCAPED_PLAIN = "<>\"'/=.-:()[]{}?+*|&#;"

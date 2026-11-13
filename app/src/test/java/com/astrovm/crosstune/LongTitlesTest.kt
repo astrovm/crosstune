@@ -11,32 +11,21 @@ import org.junit.Test
 class LongTitlesTest {
     @Test
     fun noTitleTakesLongToRead() {
-        assertEquals(emptyList<String>(), slowOnes(::titles, ::read))
+        assertEquals(emptyList<String>(), Growth.outOfStep(::titles, LENGTH, ::named, ::read))
     }
 
     @Test
     fun noTitleTakesLongToSayIfItsAnInstrumental() {
         // Its looks are the readers', so each shape and piece once as it is, by an artist named first and by one named in each tag.
         val titles = { length: Int -> shapes(length) + PIECES.map { it.repeat(length / it.length) } }
-        val slow = listOf("Channel", "a").flatMap { artist -> slowOnes(titles) { title -> SongNames.saysInstrumental(title, artist) }.map { "$artist: $it" } }
+        val slow = listOf("Channel", "a").flatMap { artist ->
+            Growth.outOfStep(titles, LENGTH, ::named) { title -> SongNames.saysInstrumental(title, artist) }.map { "$artist: $it" }
+        }
         assertEquals(emptyList<String>(), slow)
     }
 
-    /** The titles of each [length] from [titles] that [read] takes longer than [LIMIT_MS] to read, twice. */
-    private fun slowOnes(titles: (Int) -> List<String>, read: (String) -> Any?): List<String> {
-        // Each once, shorter, so that what's timed is the reading and not the start-up of the code that reads it.
-        titles(LENGTH / 10).forEach { read(it) }
-        fun millis(title: String): Long {
-            val began = System.nanoTime()
-            read(title)
-            return (System.nanoTime() - began) / 1_000_000
-        }
-        return titles(LENGTH).mapNotNull { title ->
-            // A slow one is read again: a pause of the machine's slows one reading, a reader that takes time squared both.
-            val millis = millis(title).takeIf { it > LIMIT_MS }?.let { minOf(it, millis(title)) } ?: 0
-            "${title.take(20).replace("\n", "\\n")}…${title.takeLast(2).replace("\n", "\\n")} ${millis}ms".takeIf { millis > LIMIT_MS }
-        }
-    }
+    /** How a title is named when it's out of step: how it starts and ends. */
+    private fun named(title: String) = "${title.take(20).replace("\n", "\\n")}…${title.takeLast(2).replace("\n", "\\n")}"
 
     /** The worst titles found for the readers, each about [length] long. */
     private fun titles(length: Int) = shapes(length) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(length / piece.length) + ending } }
@@ -85,11 +74,8 @@ class LongTitlesTest {
     @Test
     fun noShareTakesLongToRead() {
         // A line that Now Playing's wordings split at many places, and that doesn't end as one does.
-        val share = "a by ".repeat(LENGTH / 5) + "\nx\nhttps://www.google.com/search?q=x"
-        MusicLinks.parse("Song by Artist\nhttps://www.google.com/search?q=Song+Artist")
-        val began = System.nanoTime()
-        MusicLinks.parse(share)
-        assertEquals(true, (System.nanoTime() - began) / 1_000_000 <= LIMIT_MS)
+        val shares = { length: Int -> listOf("a by ".repeat(length / 5) + "\nx\nhttps://www.google.com/search?q=x") }
+        assertEquals(emptyList<String>(), Growth.outOfStep(shares, LENGTH, ::named, MusicLinks::parse))
     }
 
     @Test
@@ -118,14 +104,15 @@ class LongTitlesTest {
     }
 
     private companion object {
-        const val LENGTH = 20_000
         /**
-         * Here the patterns are written out in what a phone's ICU reads, which the JVM reads two to three times slower
-         * than they were: 374 ms for the slowest title, " HD" again and again. On an emulator, as on a phone, the same
-         * title takes 148 ms at half the length, where main took 3,597 ms. `scripts/titlefuzz/baseline.py --long` times
-         * them there, where a look with a pattern costs the title's length.
+         * How long a title is read, and then twice it. Here the patterns are written out in what a phone's ICU reads,
+         * which the JVM reads two to three times slower than they were: the slowest title, " HD" again and again,
+         * takes about 300 ms at this length on a quiet machine, and on a busy one twice that, which is why the test
+         * holds each reader to its growth and not to a time. On an emulator, as on a phone, the same title takes
+         * 148 ms, where main took 3,597 ms. `scripts/titlefuzz/baseline.py --long` times them there, where a look with
+         * a pattern costs the title's length.
          */
-        const val LIMIT_MS = 600L
+        const val LENGTH = 10_000
 
         /** What a title is made of where the readers look for a tag, each repeated to [LENGTH]. */
         val PIECES = listOf(

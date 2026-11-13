@@ -11,15 +11,8 @@ import org.junit.Test
 class LongPagesTest {
     @Test
     fun noPageTakesLongToRead() {
-        // Each once, shorter, so that what's timed is the reading and not the start-up of the code that reads it.
-        READERS.forEach { reader -> pages(reader.marks, LENGTH / 10).forEach { reader.read(it) } }
         val slow = READERS.flatMap { reader ->
-            pages(reader.marks, LENGTH).mapNotNull { page ->
-                val began = System.nanoTime()
-                reader.read(page)
-                val millis = (System.nanoTime() - began) / 1_000_000
-                "${reader.name}: ${page.take(30).replace("\n", "\\n")}… ${millis}ms".takeIf { millis > LIMIT_MS }
-            }
+            Growth.outOfStep({ pages(reader.marks, it) }, LENGTH, { page -> "${reader.name}: ${page.take(30).replace("\n", "\\n")}…" }, reader.read)
         }
         assertEquals(emptyList<String>(), slow)
     }
@@ -32,8 +25,8 @@ class LongPagesTest {
     private class Reader(val name: String, val marks: List<String>, val read: (String) -> Any?)
 
     private companion object {
+        /** How long a page is read, and then twice it: pages are long, and each reading quick. */
         const val LENGTH = 20_000
-        const val LIMIT_MS = 300L
 
         val SCRIPT = listOf("</script>", "<", ">", "}", "};", "a")
         val READERS = listOf(

@@ -4,7 +4,6 @@ import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -481,12 +480,12 @@ class ChordSheetsTest {
         // Each pattern that reads a chord's name tried every way to split a long name before giving up, and
         // each tag pattern looked from every < to the line's end: 30,000 letters took seconds. Each sheet
         // below fails one of them.
-        val long = "x".repeat(30_000)
         val link = """<a href="JavaScript:jump_1('../../../cd/C.html');">"""
-        for (sheet in listOf("$link$long", "$link$long<br>abcd", "$long<br>abcd", "$link $long", "<a cd/".repeat(5_000), "<".repeat(30_000), "<b".repeat(15_000))) {
-            val took = timed { ChordSheets.fromJTotal(sheet) }
-            assertTrue("${sheet.take(60)}... took $took ms", took < 500)
+        val sheets = { length: Int ->
+            val long = "x".repeat(length)
+            listOf("$link$long", "$link$long<br>abcd", "$long<br>abcd", "$link $long", "<a cd/".repeat(length / 6), "<".repeat(length), "<b".repeat(length / 2))
         }
+        assertEquals(emptyList<String>(), Growth.outOfStep(sheets, 30_000, { it.take(60) }, ChordSheets::fromJTotal))
     }
 
     @Test
@@ -540,23 +539,17 @@ class ChordSheetsTest {
     fun aJTotalPageThatNeverClosesWhatItOpensTakesNoLongerThanItsLength() {
         // Each of these opens a style, a comment or a rule and never closes it. Looked for from each opening
         // to the page's end, they took up to two seconds.
-        val pages = listOf(
-            "<style>".repeat(5_000),
-            "<!--<style>".repeat(3_000),
-            "<style>${" tt{".repeat(7_500)}</style>",
-            "<style>${"/*x".repeat(6_666)}</style>",
-            "<!--HPSTART-->".repeat(3_000),
-        )
-        for (page in pages) {
-            val took = timed { ChordSheets.jTotalMonospace(page); ChordSheets.jTotalSheet(page) }
-            assertTrue("${page.take(40)}... took $took ms", took < 500)
+        val pages = { length: Int ->
+            listOf(
+                "<style>".repeat(length / 7),
+                "<!--<style>".repeat(length / 11),
+                "<style>${" tt{".repeat(length / 4)}</style>",
+                "<style>${"/*x".repeat(length / 3)}</style>",
+                "<!--HPSTART-->".repeat(length / 14),
+            )
         }
-    }
-
-    private fun timed(work: () -> Unit): Long {
-        val began = System.nanoTime()
-        work()
-        return (System.nanoTime() - began) / 1_000_000
+        val read = { page: String -> ChordSheets.jTotalMonospace(page) to ChordSheets.jTotalSheet(page) }
+        assertEquals(emptyList<String>(), Growth.outOfStep(pages, 30_000, { it.take(40) }, read))
     }
 
     @Test
