@@ -23,7 +23,8 @@ concurrency:
 
 jobs:
   # A pull request that only changes the site, docs, store listing, the reports' Worker, the browser extension or their scripts skips the app's jobs.
-  # One that changes the YouTube Music matcher, its MatcherCasesTest or what main opened in it runs that test in full.
+  # One that changes the YouTube Music matcher, what it reads names and links with, its MatcherCasesTest or what main
+  # opened in it runs that test in full.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -64,7 +65,7 @@ jobs:
           else
             echo "extension=false" >> "$GITHUB_OUTPUT"
           fi
-          if grep -qE '^app/src/(main/java/com/astrovm/crosstune/(ExactMatcher|SongNames)\.kt|test/java/com/astrovm/crosstune/MatcherCasesTest\.kt|test/resources/matcher-(matrix|fuzz)-main\.tsv\.gz)$' <<< "$files"; then
+          if grep -qE '^app/src/(main/java/com/astrovm/crosstune/(ExactMatcher|SongNames|CutTitle|MetadataParsers|Patterns|PhoneRegex|PhoneRegexTable|MusicLinks)\.kt|test/java/com/astrovm/crosstune/MatcherCasesTest\.kt|test/resources/matcher-(matrix|fuzz)-main\.tsv\.gz)$' <<< "$files"; then
             echo "matcher=true" >> "$GITHUB_OUTPUT"
           else
             echo "matcher=false" >> "$GITHUB_OUTPUT"
