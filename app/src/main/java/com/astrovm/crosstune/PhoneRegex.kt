@@ -92,10 +92,76 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
     /** What's read from here to the ) that closes the group it's in, or to the end. */
     private fun sequence(start: Flags): String {
         var flags = start
-        val out = StringBuilder()
-        // The letters read one after another, which ICU reads as one word ignoring case: "ss" is "ß".
-        val word = mutableListOf<Pair<Int, Boolean>>()
-        fun flush() {
+        val written = Written()
+        while (at < pattern.length && pattern[at] != ')') flags = next(flags, written)
+        return written.done()
+    }
+
+    /** The piece at [at] read into [written], and the flags for the rest of the group. */
+    private fun next(flags: Flags, written: Written): Flags {
+        when (pattern[at]) {
+            '(' -> {
+                val (text, set) = group(flags)
+                written.atom(text)
+                return set ?: flags
+            }
+            '[' -> written.atom(charClass(flags.ignoreCase))
+            '\\' -> escape(flags.ignoreCase, written)
+            '*', '+', '?', '{' -> written.quantified(quantifier())
+            else -> {
+                val plain = plain(flags)
+                if (plain != null) {
+                    written.atom(plain)
+                    at++
+                } else {
+                    val code = pattern.codePointAt(at)
+                    written.letter(code, flags.ignoreCase)
+                    at += Character.charCount(code)
+                }
+            }
+        }
+        return flags
+    }
+
+    /** What `|`, `.`, `^` and `$` are written as, or null for a letter. */
+    private fun plain(flags: Flags): String? = when (pattern[at]) {
+        '|' -> "|"
+        '.' -> if (flags.dotAll) "(?s:.)" else "[^${runs(LINE_BREAKS.bits())}]"
+        '^' -> if (flags.lines) lineStart else "^"
+        '$' -> if (flags.lines) anyLineEnd else lineEnd
+        else -> null
+    }
+
+    /** A sequence as it's written out, with the letters read one after another kept as one word till a piece ends it. */
+    private class Written {
+        private val out = StringBuilder()
+
+        /** The letters read one after another, which ICU reads as one word ignoring case: "ss" is "ß". */
+        private val word = mutableListOf<Pair<Int, Boolean>>()
+
+        fun letter(code: Int, ignoreCase: Boolean) {
+            word += code to ignoreCase
+        }
+
+        fun atom(text: String) {
+            flush()
+            out.append(text)
+        }
+
+        /** A quantifier takes the last letter alone. */
+        fun quantified(quantifier: String) {
+            val last = word.removeLastOrNull()
+            flush()
+            if (last != null) out.append(letters(intArrayOf(last.first), last.second))
+            out.append(quantifier)
+        }
+
+        fun done(): String {
+            flush()
+            return out.toString()
+        }
+
+        private fun flush() {
             var from = 0
             while (from < word.size) {
                 val ignoreCase = word[from].second
@@ -106,40 +172,6 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
             }
             word.clear()
         }
-        fun atom(text: String) {
-            flush()
-            out.append(text)
-        }
-        while (at < pattern.length) {
-            when (pattern[at]) {
-                ')' -> break
-                '|' -> atom("|").also { at++ }
-                '(' -> {
-                    flush()
-                    val (text, set) = group(flags)
-                    out.append(text)
-                    flags = set ?: flags
-                }
-                '[' -> atom(charClass(flags.ignoreCase))
-                '\\' -> escape(flags.ignoreCase, word, ::atom)
-                '.' -> atom(if (flags.dotAll) "(?s:.)" else "[^${runs(LINE_BREAKS.bits())}]").also { at++ }
-                '^' -> atom(if (flags.lines) lineStart else "^").also { at++ }
-                '$' -> atom(if (flags.lines) anyLineEnd else lineEnd).also { at++ }
-                '*', '+', '?', '{' -> {
-                    // A quantifier takes the last letter alone.
-                    val last = word.removeLastOrNull()
-                    flush()
-                    if (last != null) out.append(letters(intArrayOf(last.first), last.second))
-                    out.append(quantifier())
-                }
-                else -> pattern.codePointAt(at).let { code ->
-                    word += code to flags.ignoreCase
-                    at += Character.charCount(code)
-                }
-            }
-        }
-        flush()
-        return out.toString()
     }
 
     /** A group from its (, and the flags it sets for the rest of the one it's in, if it's only them: "(?i)". */
@@ -185,27 +217,38 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
         return pattern.substring(start, at)
     }
 
-    /** What a \ starts, as a letter of [word] or an [atom]. */
-    private fun escape(ignoreCase: Boolean, word: MutableList<Pair<Int, Boolean>>, atom: (String) -> Unit) {
+    /** What a \ starts, as a letter of [written]'s word or a piece of its own. */
+    private fun escape(ignoreCase: Boolean, written: Written) {
         at++
         require(at < pattern.length) { "A \\ that ends $pattern" }
-        when (val letter = pattern[at]) {
-            in SETS, 'p', 'P' -> atom(set(ignoreCase).let { (set, negated) -> if (negated) "[^$set]" else set })
-            'b' -> atom(boundary).also { at++ }
-            'z', 'A', 'G' -> atom("\\$letter").also { at++ }
-            'Z' -> atom(lineEnd).also { at++ }
-            in '1'..'9' -> {
-                // ICU reads a group again ignoring case as a word, which isn't written out.
-                require(!ignoreCase) { "A group read again ignoring case in $pattern isn't written out" }
-                atom("\\$letter").also { at++ }
+        val letter = pattern[at]
+        val anchor = escapedAnchor(letter, ignoreCase)
+        when {
+            letter in SETS || letter in "pP" -> written.atom(set(ignoreCase).let { (set, negated) -> if (negated) "[^$set]" else set })
+            anchor != null -> {
+                written.atom(anchor)
+                at++
             }
-            'Q' -> {
+            letter == 'Q' -> {
                 val end = pattern.indexOf("\\E", at).takeIf { it >= 0 } ?: pattern.length
-                pattern.substring(at + 1, end).codePoints().forEach { word += it to ignoreCase }
+                pattern.substring(at + 1, end).codePoints().forEach { written.letter(it, ignoreCase) }
                 at = minOf(end + 2, pattern.length)
             }
-            else -> word += escaped() to ignoreCase
+            else -> written.letter(escaped(), ignoreCase)
         }
+    }
+
+    /** What `\b`, `\z`, `\A`, `\G`, `\Z` and a group read again are written as, or null for any other escape. */
+    private fun escapedAnchor(letter: Char, ignoreCase: Boolean): String? = when (letter) {
+        'b' -> boundary
+        'z', 'A', 'G' -> "\\$letter"
+        'Z' -> lineEnd
+        in '1'..'9' -> {
+            // ICU reads a group again ignoring case as a word, which isn't written out.
+            require(!ignoreCase) { "A group read again ignoring case in $pattern isn't written out" }
+            "\\$letter"
+        }
+        else -> null
     }
 
     /** The letter an escape from [at], past its \, stands for: "\t", "\x{3000}", "\u3000", "\-". */
@@ -247,33 +290,46 @@ internal class IcuPattern(private val pattern: String, options: Set<RegexOption>
         val negated = pattern.startsWith("^", at).also { if (it) at++ }
         val letters = BitSet()
         val sets = StringBuilder()
-        while (true) {
-            require(at < pattern.length) { "A [ that doesn't close in $pattern" }
-            val char = pattern[at]
-            if (pattern.startsWith("&&[", at)) {
-                // ICU folds case and turns ^ after taking the part both hold, which the JVM doesn't.
-                require(!ignoreCase && !negated) { "A part both hold, ignoring case or turned, in $pattern isn't written out" }
-                at += 2
-                sets.append("&&").append(charClass(false))
-                require(pattern.startsWith("]", at)) { "More after a part both hold in $pattern isn't written out" }
-                continue
-            }
-            require(char != '[' && !pattern.startsWith("&&", at)) { "A class in a class in $pattern isn't written out" }
-            if (char == ']') break
-            if (char == '\\' && pattern.getOrNull(at + 1)?.let { it in SETS || it in "pP" } == true) {
-                at++
-                set(ignoreCase).let { (set, negated) -> sets.append(if (negated) "[^$set]" else set) }
-                continue
-            }
-            val first = classLetter()
-            val ranged = pattern.startsWith("-", at) && pattern.getOrNull(at + 1) != ']'
-            if (ranged) at++
-            val last = if (ranged) classLetter() else first
-            letters.set(first, last + 1)
-        }
+        var open = true
+        while (open) open = classPart(ignoreCase, negated, letters, sets)
         at++
         val held = if (ignoreCase) closed(letters) else letters
         return "[${if (negated) "^" else ""}${if (held.isEmpty) "" else runs(held)}$sets]"
+    }
+
+    /** One part of a class read into [letters] or [sets]: a letter, a run, a set or a part both hold. False at its ]. */
+    private fun classPart(ignoreCase: Boolean, negated: Boolean, letters: BitSet, sets: StringBuilder): Boolean {
+        require(at < pattern.length) { "A [ that doesn't close in $pattern" }
+        if (pattern.startsWith("&&[", at)) {
+            sets.append("&&").append(bothHold(ignoreCase || negated))
+            return true
+        }
+        require(pattern[at] != '[' && !pattern.startsWith("&&", at)) { "A class in a class in $pattern isn't written out" }
+        when {
+            pattern[at] == ']' -> return false
+            pattern[at] == '\\' && pattern.getOrNull(at + 1)?.let { it in SETS || it in "pP" } == true -> {
+                at++
+                set(ignoreCase).let { (set, turned) -> sets.append(if (turned) "[^$set]" else set) }
+            }
+            else -> classRange(letters)
+        }
+        return true
+    }
+
+    /** A letter in a class, or a run of them, "a-z", read into [letters]. */
+    private fun classRange(letters: BitSet) {
+        val first = classLetter()
+        val ranged = pattern.startsWith("-", at) && pattern.getOrNull(at + 1) != ']'
+        if (ranged) at++
+        letters.set(first, (if (ranged) classLetter() else first) + 1)
+    }
+
+    /** The class after a "&&", which both parts hold. */
+    private fun bothHold(foldedOrTurned: Boolean): String {
+        // ICU folds case and turns ^ after taking the part both hold, which the JVM doesn't.
+        require(!foldedOrTurned) { "A part both hold, ignoring case or turned, in $pattern isn't written out" }
+        at += 2
+        return charClass(false).also { require(pattern.startsWith("]", at)) { "More after a part both hold in $pattern isn't written out" } }
     }
 
     /** A letter in a class, or an escaped one. */
