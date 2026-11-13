@@ -25,6 +25,12 @@ class RegexBracesTest {
     }
 
     @Test
+    fun aLetterInATemplateIsReadAsThatLetter() {
+        val source = "val a = Regex(\"\"\"href=${'$'}{'\"'}\"\"\")\nval b = Regex(\"\"\"a${'$'}{'${'$'}'}\"\"\")\n"
+        assertEquals(listOf("href=\"", "a$"), AppPatterns(listOf("Test.kt" to source)).found.map { it.pattern.pattern() })
+    }
+
+    @Test
     fun aLoneBraceIsToldFromOneWithAMeaning() {
         val fine = listOf("""a{2,3}b{4}c{5,}""", """\p{L}+\P{Mn}\{x\}""", """[^}]*[{}][]}]""", """(?<=${'$'}{VOWEL}x)""", """tt\s*\{([^}]*)\}""")
         val lone = listOf("""tt\s*\{([^}]*)}""", """a{b""", """a{2,3}}""", """[a]}""")

@@ -222,8 +222,8 @@ internal object MetadataParsers {
 
     private const val SPOTIFY_LISTEN_TO = "Listen to "
 
-    private val songCountRegex = phoneRegex("""<meta name="music:song_count" content="(\d+)"""")
-    private val songLengthRegex = phoneRegex("""<meta name="music:duration" content="(\d+)"""")
+    private val songCountRegex = phoneRegex("""<meta name="music:song_count" content="(\d+)${'"'}""")
+    private val songLengthRegex = phoneRegex("""<meta name="music:duration" content="(\d+)${'"'}""")
 
     private val spotifyStateRegex = phoneRegex("""<script id="initialState" type="text/plain">([^<]*)</script>""")
 
@@ -819,7 +819,7 @@ internal object MetadataParsers {
         return splitBy(title, ", by ", type).copy(artworkUrl = tags.image(), tracks = tracks)
     }
 
-    internal val bandcampData = PageParts(phoneRegex("""<script type="application/ld\+json""""), phoneRegex("</script>"))
+    internal val bandcampData = PageParts(phoneRegex("""<script type="application/ld\+json${'"'}"""), phoneRegex("</script>"))
 
     /** A Bandcamp album page's structured data lists its songs, all by the album's artist. */
     private fun bandcampAlbumSongs(html: String): List<MusicMetadata> {

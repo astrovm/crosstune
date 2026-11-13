@@ -40,9 +40,9 @@ class LongPagesTest {
             Reader("YouTube's data", listOf("var ytInitialData = {") + SCRIPT) { MetadataParsers.youtubeData.firstIn(it) },
             Reader("Apple Music's data", listOf("""<script type="application/json" id="serialized-server-data">""") + SCRIPT) { MetadataParsers.appleData.firstIn(it) },
             Reader("Spotify's data", listOf("""<script id="__NEXT_DATA__" type="application/json">""") + SCRIPT) { MetadataParsers.spotifyData.firstIn(it) },
-            Reader("Bandcamp's data", listOf("""<script type="application/ld+json"""") + SCRIPT) { MetadataParsers.bandcampData.firstIn(it) },
+            Reader("Bandcamp's data", listOf("""<script type="application/ld+json${'"'}""") + SCRIPT) { MetadataParsers.bandcampData.firstIn(it) },
             Reader("U-FRET's sheet", listOf("var ufret_chord_datas = [", "]", "];", "\n", "a")) { uFretSheet.firstIn(it) },
-            Reader("U-FRET's search", listOf("""c-list__item normal-chord"><a href="/song.php?data=1"""", """c-list__title">""", "</p>", """<p class="c-list__artist">""")) {
+            Reader("U-FRET's search", listOf("""c-list__item normal-chord"><a href="/song.php?data=1${'"'}""", """c-list__title">""", "</p>", """<p class="c-list__artist">""")) {
                 uFretResults(it)
             },
             Reader("J-Total's search", listOf("""<a href="//music.j-total.net/data/a.html" target=""><font size="3"><b>""", "</b></font></a>", "歌：", "/")) { jTotalResults(it) },
@@ -61,12 +61,12 @@ class LongPagesTest {
                 ),
             ) { LyricsFinder.geniusBoxes(LyricsFinder.withoutGeniusNotWords(it)).count() },
             Reader("Letras's ads", listOf("<div id=\"pub_", "\">", "</div>", "<div>", "<di", "v", "<div id=\"pub_\">x</div>", "a")) { LyricsFinder.withoutLetrasAds(it) },
-            Reader("UtaTen's words", listOf("""<div class="hiragana"""", " ", ">", "</div")) { SungReadings.words.firstIn(it) },
+            Reader("UtaTen's words", listOf("""<div class="hiragana${'"'}""", " ", ">", "</div")) { SungReadings.words.firstIn(it) },
             Reader("UtaTen's readings", listOf("""<span class="ruby"><span class="rb">""", """</span><span class="rt">""", "</span>")) { SungReadings.rubies(it).count() },
             Reader("UtaTen's search", listOf("""<p class="searchResult__title"><a href="/lyric/a1/">""", """<td class="searchResult__artist"><p><a """, ">", "</a")) {
                 SungReadings.searchRows(it).count()
             },
-            Reader("Qobuz's search", listOf("""<div class="ListItem">""", "</li", """class="ListItem__title"""", ">", "</a>", """<p class="ListItem__artists">""")) {
+            Reader("Qobuz's search", listOf("""<div class="ListItem">""", "</li", """class="ListItem__title${'"'}""", ">", "</a>", """<p class="ListItem__artists">""")) {
                 ExactMatcher.qobuzItems.allIn(it).count() + (ExactMatcher.qobuzTitle(it)?.first?.length ?: 0)
             },
             Reader("tags", listOf("<", ">", "</", "<a", " ")) { withoutTags(it) + withoutTags(it, least = 0) + withoutTagged(it) },

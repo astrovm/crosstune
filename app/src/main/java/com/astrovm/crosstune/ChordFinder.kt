@@ -23,7 +23,7 @@ import java.nio.charset.Charset
 import java.net.URLEncoder
 
 /** Where a song starts in U-FRET's results: whether it's the easier version, and its number. */
-private val uFretItem = phoneRegex("""c-list__item (normal|beginner)-chord">\s*+<a href="/song\.php\?data=(\d++)"""")
+private val uFretItem = phoneRegex("""c-list__item (normal|beginner)-chord">\s*+<a href="/song\.php\?data=(\d++)${'"'}""")
 private val uFretArtist = phoneRegex("""</p>\s*+<p class="c-list__artist">""")
 private const val U_FRET_TITLE = """c-list__title">"""
 
@@ -31,7 +31,7 @@ private const val U_FRET_TITLE = """c-list__title">"""
 internal val uFretSheet = PageParts(phoneRegex("""var ufret_chord_datas = \["""), phoneRegex("""];"""), tagEnd = null, oneLine = true)
 private val titleBreak = phoneRegex(""" [-–—/] |／""")
 private val creditBracket = phoneRegex("""$SPACES_START\s*[(（].*$""")
-private val ugData = phoneRegex("""class="js-store" data-content="([^"]*)"""")
+private val ugData = phoneRegex("""class="js-store" data-content="([^"]*)${'"'}""")
 
 /** In LaCuerda's results, an artist, or a song of theirs: its row, the kind of sheet each take is, and the takes best liked first. */
 private val laCuerdaResult = phoneRegex(

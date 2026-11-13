@@ -67,7 +67,7 @@ class PagesReadAsMainReadTest {
             MetadataParsers.bandcampData,
             main("""<script type="application/ld\+json"[^>]*>(.*?)</script>""", DOT_MATCHES_ALL),
             1,
-            """<script type="application/ld+json"""", """<script type="application/ld+json">""", *script,
+            """<script type="application/ld+json${'"'}""", """<script type="application/ld+json">""", *script,
         )
         val title = main("""<title[^>]*>([^<]*)</title>""", IGNORE_CASE)
         texts("<title", "</title>", ">", "<", "a").forEach { page ->
@@ -132,7 +132,7 @@ class PagesReadAsMainReadTest {
             SungReadings.words,
             main("""<div class="hiragana"\s*>(.*?)</div>""", DOT_MATCHES_ALL),
             1,
-            """<div class="hiragana"""", " ", "\u3000", ">", "</div>", "<", "a", "\n", """<div class="hiragana">""", """<div class="hiragana" >""",
+            """<div class="hiragana${'"'}""", " ", "\u3000", ">", "</div>", "<", "a", "\n", """<div class="hiragana">""", """<div class="hiragana" >""",
         )
         assertParts(ExactMatcher.qobuzItems, main("""<div class="ListItem">.*?</li>""", DOT_MATCHES_ALL), null, """<div class="ListItem">""", "</li>", "<", ">", "a")
         val original = main("""<div class="lyric-translation-left">\s*(?:<strong>.*?</strong>)?(.*?)</div>""", DOT_MATCHES_ALL)
@@ -144,7 +144,7 @@ class PagesReadAsMainReadTest {
         }
         val qobuz = main("""class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>""", DOT_MATCHES_ALL)
         texts(
-            """class="ListItem__title"""", """class="ListItem__title">""", ">", "</a>", " ", """<p class="ListItem__artists">""", "</p>", "<", "a",
+            """class="ListItem__title${'"'}""", """class="ListItem__title">""", ">", "</a>", " ", """<p class="ListItem__artists">""", "</p>", "<", "a",
             """</a> <p class="ListItem__artists">""", """</a> <p class="ListItem__artists">c</p>""",
             most = SHORT_PIECES,
         ).forEach { page ->
@@ -159,7 +159,7 @@ class PagesReadAsMainReadTest {
             DOT_MATCHES_ALL,
         )
         texts(
-            """c-list__item normal-chord"><a href="/song.php?data=1"""", """c-list__item beginner-chord"> <a href="/song.php?data=22"""",
+            """c-list__item normal-chord"><a href="/song.php?data=1${'"'}""", """c-list__item beginner-chord"> <a href="/song.php?data=22${'"'}""",
             """c-list__title">""", "</p>", """ <p class="c-list__artist">""", "a",
             """c-list__item normal-chord"><a href="/song.php?data=1"c-list__title">t</p> <p class="c-list__artist">s</p>""",
         ).forEach { page -> assertEquals(page, uFret.findAll(page).map { it.groupValues.drop(1) }.toList(), uFretResults(page)) }
@@ -305,7 +305,7 @@ class PagesReadAsMainReadTest {
         joins = 0
         val notWordsTag = """<div data-exclude-from-selection="true">"""
         texts(
-            *pieces, """ data-exclude-from-selection="true"""", notWordsTag, "${notWordsTag}x</div>", """v data-exclude-from-selection="true">""",
+            *pieces, """ data-exclude-from-selection="true${'"'}""", notWordsTag, "${notWordsTag}x</div>", """v data-exclude-from-selection="true">""",
             "<d$notWordsTag</div>", """$notWordsTag</div>iv data-exclude-from-selection="true">""", """<div data-lyrics-container="true">""",
             most = LONG,
             // A box a cut joins whose tag ends far past the cut.

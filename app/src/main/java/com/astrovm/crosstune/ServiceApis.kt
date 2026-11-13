@@ -233,8 +233,8 @@ internal class ServiceApis(
         private const val MAX_SCRIPT_BYTES = 8L * 1024 * 1024
         private const val BROWSER = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
-        private val soundCloudScriptRegex = phoneRegex("""<script crossorigin src="(https://a-v2\.sndcdn\.com/assets/[^"]+\.js)"""")
-        private val soundCloudIdRegex = phoneRegex("""client_id:"([A-Za-z0-9]{32})"""")
+        private val soundCloudScriptRegex = phoneRegex("""<script crossorigin src="(https://a-v2\.sndcdn\.com/assets/[^"]+\.js)${'"'}""")
+        private val soundCloudIdRegex = phoneRegex("""client_id:"([A-Za-z0-9]{32})${'"'}""")
 
         /** A TIDAL song, with its version, e.g. "Remix", as TIDAL shows it, and its album's cover. */
         fun tidalTrack(json: JSONObject): MusicMetadata? {
@@ -287,4 +287,4 @@ internal fun JSONObject?.runsText(): String = this?.optJSONArray("runs").objects
 /** What kind of video YouTube Music says [answer] is about: ATV, a song; OMV, an official video; UGC, someone's upload. */
 internal fun musicVideoTypeIn(answer: Any): String? = musicVideoType.find(answer.toString())?.groupValues?.get(1)
 
-private val musicVideoType = phoneRegex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)"""")
+private val musicVideoType = phoneRegex(""""musicVideoType":"MUSIC_VIDEO_TYPE_([A-Z_]+)${'"'}""")

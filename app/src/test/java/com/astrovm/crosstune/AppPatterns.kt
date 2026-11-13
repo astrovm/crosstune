@@ -41,8 +41,9 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
             val where = where(found.range.first)
             val text = literals.findAll(found.groupValues[1]).joinToString("") { literalText(it.value) }
             val built = template.replace(text) { part ->
-                val key = part.groupValues[1].ifEmpty { part.groupValues[2] }
-                if (part.value == "\${'$'}") "$" else known[key] ?: run { unread += "$where \$$key"; part.value }
+                val key = part.groupValues[2].ifEmpty { part.groupValues[3] }
+                // A letter in a template, as ${'"'} ends a raw string in a quote, is that letter.
+                part.groupValues[1].ifEmpty { known[key] ?: run { unread += "$where \$$key"; part.value } }
             }
             val options = found.groupValues[2]
             // Kotlin's Regex reads every pattern with UNICODE_CASE.
@@ -85,7 +86,7 @@ internal class AppPatterns(val files: List<Pair<String, String>>) {
         /** Any `phoneRegex(` or `Regex(`, read or not, and a `.toRegex(`. */
         private val built = Regex("""\b(?:phoneRegex|Regex)\(|\.toRegex\(""")
         private val constant = Regex("""\bconst val (\w+)\s*=\s*($RAW|$QUOTED)""")
-        private val template = Regex("""\$\{'\$'\}|\$\{(\w+)\}|\$(\w+)""")
+        private val template = Regex("""\$\{'([^'\\])'\}|\$\{(\w+)\}|\$(\w+)""")
         private val escape = Regex("""\\(u[0-9a-fA-F]{4}|.)""")
         /** The value a `Regex(` is given to, right before it: "private val tags = ". */
         private val holder = Regex("""\b(?:val|var)\s+(\w+)(?:\s*:\s*Regex)?\s*=\s*$""")

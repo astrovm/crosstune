@@ -124,7 +124,7 @@ class SpacesStartTest {
         val block = Regex("""\s*\{""")
         val argumentTo = Regex("""\.(replace|split)\(\s*$""")
         /** A letter in quotes, which may be a quote, or a raw string, or a quoted one. */
-        val literal = Regex("""'(?:\\.|[^'\\])'|""" + "\"\"\"(?:[^\"]|\"(?!\"\"))*+\"*\"\"\"" + """|"(?:[^"\\\n]|\\.)*+"""")
+        val literal = Regex("""'(?:\\.|[^'\\])'|""" + "\"\"\"(?:[^\"]|\"(?!\"\"))*+\"*\"\"\"" + """|"(?:[^"\\\n]|\\.)*+${'"'}""")
         val notALineBreak = Regex("""[^\n]""")
     }
 }

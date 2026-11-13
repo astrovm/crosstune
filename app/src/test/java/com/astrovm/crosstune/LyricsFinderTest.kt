@@ -2400,9 +2400,9 @@ class LyricsFinderTest {
         )
         // The song's page is asked for by its video, and the words as YouTube Music's app, which gets them timed.
         val next = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/next") }]
-        assertEquals(true, next.contains(""""videoId":"vid1"""") && next.contains("WEB_REMIX"))
+        assertEquals(true, next.contains(""""videoId":"vid1${'"'}""") && next.contains("WEB_REMIX"))
         val browse = fake.requestBodies[fake.requestedUrls.indexOfFirst { it.startsWith("https://music.youtube.com/youtubei/v1/browse") }]
-        assertEquals(true, browse.contains(""""browseId":"MPLYt_words"""") && browse.contains("ANDROID_MUSIC"))
+        assertEquals(true, browse.contains(""""browseId":"MPLYt_words${'"'}""") && browse.contains("ANDROID_MUSIC"))
     }
 
     /** YouTube Music's page for video vid1, a song [length] long, or a video, with a page for its words. */

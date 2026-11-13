@@ -380,7 +380,7 @@ private fun chordWikiHit(text: String, href: String): ChordWikiHit? {
 }
 
 private val ANCHOR = phoneRegex("""<a\b""", RegexOption.IGNORE_CASE)
-private val ADDRESS = phoneRegex("""\bhref="""", RegexOption.IGNORE_CASE)
+private val ADDRESS = phoneRegex("""\bhref=${'"'}""", RegexOption.IGNORE_CASE)
 private val ANCHOR_CLOSE = phoneRegex("</a>", RegexOption.IGNORE_CASE)
 
 /**

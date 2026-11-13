@@ -21,6 +21,18 @@ class NoUnsafeCallsTest {
         assertEquals(emptyList<String>(), found)
     }
 
+    /**
+     * Lint's HTML report reads `"""a` and four quotes as a string closed and a quote that opens another. With a quote in
+     * backticks in a comment after it, it reads on to before the file's start and crashes, and the report says nothing
+     * of what it found. Such a string ends in ${'"'} instead.
+     */
+    @Test
+    fun noRawStringEndsInAQuote() {
+        val found = listOf("src/main/java", "src/test/java").flatMap { File(it).walk().filter { file -> file.extension == "kt" }.toList() }
+            .flatMap { file -> Code(file.readText()).also { it.read() }.endsInAQuote.map { "${file.name}:$it" } }
+        assertEquals(emptyList<String>(), found)
+    }
+
     @Test
     fun onlyTheCodeIsRead() {
         val source = """
@@ -28,7 +40,9 @@ class NoUnsafeCallsTest {
             /* d!!
             */ val e = "f!!" + '!' + '\'' + ""${'"'}g!!""${'"'}${'"'} + "${'$'}{h!!.let { "i!!" }}" + "\"j!!"
         """.trimIndent()
-        assertEquals("val a = b!! \n\n val e =  +  +  +  + h!!.let {  } + ", Code(source).read())
+        val code = Code(source)
+        assertEquals("val a = b!! \n\n val e =  +  +  +  + h!!.let {  } + ", code.read())
+        assertEquals(listOf(3), code.endsInAQuote)
     }
 
     /**
@@ -38,6 +52,9 @@ class NoUnsafeCallsTest {
     private class Code(private val source: String) {
         private val kept = StringBuilder()
         private var at = 0
+
+        /** The line of each raw string that ends in a quote of its own. */
+        val endsInAQuote = mutableListOf<Int>()
 
         fun read(): String {
             code(inTemplate = false)
@@ -79,6 +96,7 @@ class NoUnsafeCallsTest {
                 }
             }
             at += quote.length
+            if (raw && source.getOrNull(at) == '"') endsInAQuote += source.substring(0, at).count { it == '\n' } + 1
             // A raw string can end in quotes of its own: """a"""" is a" closed.
             while (raw && source.getOrNull(at) == '"') at++
         }

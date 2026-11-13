@@ -951,7 +951,7 @@ internal class ExactMatcher(
         const val YOUTUBE_WATCH_VIDEOS_URL = "https://www.youtube.com/watch_videos"
         /** One song in Qobuz's search: its title and "artist • album", and the numbers of the song and its album. */
         internal val qobuzItems = PageParts(phoneRegex("""<div class="ListItem">"""), phoneRegex("</li>"), tagEnd = null)
-        internal val qobuzTitles = PageParts(phoneRegex("""class="ListItem__title""""), phoneRegex("""</a>\s*+<p class="ListItem__artists">"""))
+        internal val qobuzTitles = PageParts(phoneRegex("""class="ListItem__title${'"'}"""), phoneRegex("""</a>\s*+<p class="ListItem__artists">"""))
 
         /**
          * A Qobuz song's title and credit, as main's `class="ListItem__title"[^>]*>(.*?)</a>\s*<p class="ListItem__artists">(.*?)</p>`
@@ -964,7 +964,7 @@ internal class ExactMatcher(
             return html.substring(title.between) to html.substring(credit, end)
         }
         private val qobuzTrackRegex = phoneRegex("""track&#x2F;(\d+)""")
-        private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)"""")
+        private val qobuzAlbumRegex = phoneRegex("""href="/[a-z]{2}-[a-z]{2}/album/[^"/]+/([A-Za-z0-9]+)${'"'}""")
 
         const val BANDCAMP_SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
         const val YOUTUBE_MUSIC_SEARCH_URL = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"

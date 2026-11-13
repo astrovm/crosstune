@@ -2003,7 +2003,7 @@ internal class LyricsFinder(
 
 
 /** The page YouTube Music shows a song's words on, by its id. */
-private val lyricsPage = phoneRegex(""""browseId":"(MPLY[^"]+)"""")
+private val lyricsPage = phoneRegex(""""browseId":"(MPLY[^"]+)${'"'}""")
 
 /** How well words are timed: well, so they follow the song; badly; or not at all. */
 private const val WELL_TIMED = 2
