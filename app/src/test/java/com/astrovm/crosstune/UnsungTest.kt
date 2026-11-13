@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.yield
@@ -622,13 +623,55 @@ class UnsungTest {
 
     /** The song's words opened, wherever it plays, till [done]. */
     private fun openAnywhere(done: () -> Boolean) {
+        tapLyrics()
+        waitUntil { done() && !model().findingWords }
+    }
+
+    /** The song's card opened from its link, and its words asked for. */
+    private fun tapLyrics() {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_SHOW_SONG, true)
         controller = Robolectric.buildActivity(MainActivity::class.java, intent).setup()
         composeRule.waitForIdle()
         val lyrics = hasText(app.getString(R.string.lyrics_button)) or hasContentDescription(app.getString(R.string.lyrics_button))
         waitUntil { composeRule.onAllNodes(lyrics).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onAllNodes(lyrics)[0].performScrollTo().performClick()
-        waitUntil { done() && !model().findingWords }
+    }
+
+    @Test
+    fun aSongWithNoWordsFoundBeforeItsAppSaysItPlaysItIsStillHeardFirst() {
+        // Failed now and then on GitHub (Issue #886): the lookup came back before following the app had said a thing.
+        val said = CompletableDeferred<Unit>()
+        playback.said = said
+        singing.answers = listOf(voice)
+        plays()
+        tapLyrics()
+        waitUntil { fake.requestedUrls.any { "lrclib.net" in it } }
+        composeRule.waitForIdle()
+        assertEquals(emptyList<String>(), problems())
+        said.complete(Unit)
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertEquals(TimingLog.lastMinute(), 1, singing.hears)
+    }
+
+    @Test
+    fun aSongWithNoWordsFoundSaysSoWhileItsAppIsStillAskedWhetherItPlaysIt() {
+        // The app is asked only once no words are found, and may take a second to answer: what was found shows meanwhile.
+        val said = CompletableDeferred<Unit>()
+        playback.said = said
+        singing.answers = listOf(voice)
+        plays()
+        val opened = SystemClock.uptimeMillis()
+        tapLyrics()
+        waitUntil { shows(R.string.lyrics_none) && !shows(R.string.lyrics_loading) }
+        // Before the app answered, and before the wait for it ran out, which ends with this note.
+        assertTrue(SystemClock.uptimeMillis() - opened < MainViewModel.APP_ASKED_MS)
+        assertFalse(TimingLog.lastMinute(), "no words, likely" in TimingLog.lastMinute())
+        assertFalse(said.isCompleted)
+        assertEquals(0, singing.hears)
+        // Once it says it plays the song, the song is still heard for a voice.
+        said.complete(Unit)
+        waitUntil { problems() == listOf("no_lyrics") }
+        assertEquals(TimingLog.lastMinute(), 1, singing.hears)
     }
 
     @Test
