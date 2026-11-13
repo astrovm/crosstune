@@ -42,14 +42,12 @@ internal class AutoReports(
     private val now: () -> Long = System::currentTimeMillis
 ) {
 
-    /** What every [AutoReports] on these preferences in this process shares: see [Shared]. */
-    private val shared = sharedFor(preferences)
-
     /**
-     * [block] run while no other [AutoReports] on these preferences, in any thread, reads and writes the reports kept:
-     * two screens of the app open at once, as one opened from a share is, never take one report or one place twice.
+     * What every [AutoReports] on these preferences in this process shares: see [Shared]. Each read and write of the
+     * reports kept is synchronized on it, so two screens of the app open at once, as one opened from a share is, in
+     * any thread, never take one report or one place twice.
      */
-    private inline fun <T> locked(block: () -> T): T = synchronized(shared, block)
+    private val shared = sharedFor(preferences)
 
     /** Held while the reports owed go, by whichever screen sends them, so a start and a yes close together don't send one twice. */
     val sending: Mutex get() = shared.sending
@@ -76,7 +74,7 @@ internal class AutoReports(
      * The offer closed, as not now: counted, and the [MAX_CLOSES]th one is a no, for good. The user can
      * still turn them on in Settings, which this never overrides once it's there.
      */
-    fun closed() = locked {
+    fun closed() = synchronized(shared) {
         val closes = preferences.getInt(KEY_CLOSES, 0) + 1
         preferences.edit().putInt(KEY_CLOSES, closes).apply()
         if (closes >= MAX_CLOSES) allowed = false
@@ -89,7 +87,7 @@ internal class AutoReports(
     fun reported(song: MusicMetadata, problem: SongProblem): Boolean = keyOf(song, problem) in sent()
 
     /** [song]'s [problem] reported, so it isn't again; only the latest are remembered. */
-    fun remember(song: MusicMetadata, problem: SongProblem) = locked { remember(keyOf(song, problem)) }
+    fun remember(song: MusicMetadata, problem: SongProblem) = synchronized(shared) { remember(keyOf(song, problem)) }
 
     /**
      * [owed] turned away by the box, as it always will be: a problem found isn't sent again each time it's found, as
@@ -112,7 +110,7 @@ internal class AutoReports(
      * a place left of today's [FOUND_A_DAY], counting those on their way. Null where it can't go now: one past the
      * day's share waits for a later day. How it went is told with [went], always.
      */
-    fun take(owed: Owed): Going? = locked {
+    fun take(owed: Owed): Going? = synchronized(shared) {
         val going = shared.going
         if (!owes(owed) || owed.key in going) return null
         val counts = !owed.earlier
@@ -127,7 +125,7 @@ internal class AutoReports(
      * owed, and takes no place.
      */
     fun went(going: Going, delivery: Delivery?) {
-        locked {
+        synchronized(shared) {
             val counts = shared.going.remove(going.owed.key) ?: return
             when (delivery) {
                 Delivery.SENT -> {
@@ -158,7 +156,7 @@ internal class AutoReports(
      * box keeps one report for it, whichever got there, so one it got and couldn't say so isn't kept twice. The
      * latest [MAX_OWED] of each, by hand and found, are kept, so the oldest go first. Each waits for the next start.
      */
-    fun owe(song: MusicMetadata, problem: SongProblem, json: String): Owed = locked {
+    fun owe(song: MusicMetadata, problem: SongProblem, json: String): Owed = synchronized(shared) {
         val key = keyOf(song, problem)
         val kept = kept()
         val id = kept.firstOrNull { it.key == key }?.id ?: UUID.randomUUID().toString()
@@ -199,7 +197,7 @@ internal class AutoReports(
      * ([SungStore]). Read from what this version found, never after, so nothing timed from now on is taken for it.
      */
     fun keepEarlier(version: String, android: String) {
-        locked {
+        synchronized(shared) {
             if (preferences.getBoolean(KEY_EARLIER_READ, false)) return
             val sung = preferences.getString(KEY_SUNG, null)?.split('\n')?.toSet().orEmpty()
             val songs = runCatching { JSONObject(preferences.getString(KEY_SYNC, null) ?: "{}") }.getOrDefault(JSONObject())
@@ -238,7 +236,7 @@ internal class AutoReports(
     }
 
     /** Nothing owed for [song]: the words were put back as they were. */
-    fun owedNothing(song: MusicMetadata) = locked { keep(kept().filter { it.key != owedKey(song) }) }
+    fun owedNothing(song: MusicMetadata) = synchronized(shared) { keep(kept().filter { it.key != owedKey(song) }) }
 
 
     /** Whether [owed] is still to go as it is: not sent yet, by this or by another way, nor put back, nor replaced. */
