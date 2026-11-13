@@ -4,5 +4,7 @@
 --   npx wrangler d1 execute crosstune-reports --remote --file migrations/0001_report_id.sql
 --   npx wrangler d1 execute crosstune-reports --remote --file limits.sql
 -- Reports from before, and those sent without an id, stay NULL there, and out of the index.
+-- Run it once. Run again, it stops at once with "duplicate column name: report_id": that says it ran already, and
+-- changes nothing.
 ALTER TABLE reports ADD COLUMN report_id TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS reports_report_id ON reports (report_id) WHERE report_id IS NOT NULL;

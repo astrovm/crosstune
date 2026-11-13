@@ -1019,25 +1019,52 @@ test("the ids take no more room than they're counted for, so the shares still fi
   assert.deepEqual(counts(e), recounted(e));
 });
 
-test("migrations/0001_report_id.sql, then limits.sql, takes a table from before ids to one that keeps each once", async () => {
-  // The table and its triggers as they were before the column.
-  const before = (text) => text.replace(/,\n(\s*--[^\n]*\n)*\s*report_id TEXT\n\);/, "\n);").replace(/\n(--[^\n]*\n)*CREATE UNIQUE INDEX[^\n]*\n/, "\n");
-  const schema = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
-  const limits = readFileSync(new URL("./limits.sql", import.meta.url), "utf8");
-  const oldLimits = limits.replace(/ \+ 2 \* coalesce\(length\(CAST\((NEW\.|OLD\.)?report_id AS BLOB\)\), 0\)/g, "");
-  assert.ok(!before(schema).includes("report_id") && !oldLimits.includes("report_id"));
+/** A database as it was before report ids: the table without the column, and the triggers that don't count it. */
+function beforeIds() {
+  const schema = readFileSync(new URL("./schema.sql", import.meta.url), "utf8")
+    .replace(/,\n(\s*--[^\n]*\n)*\s*report_id TEXT\n\);/, "\n);").replace(/\n(--[^\n]*\n)*CREATE UNIQUE INDEX[^\n]*\n/, "\n");
+  const limits = readFileSync(new URL("./limits.sql", import.meta.url), "utf8")
+    .replace(/\n(--[^\n]*\n)*SELECT report_id FROM reports LIMIT 0;\n/, "\n")
+    .replace(/ \+ 2 \* coalesce\(length\(CAST\((NEW\.|OLD\.)?report_id AS BLOB\)\), 0\)/g, "");
+  assert.ok(!schema.includes("report_id") && !limits.includes("report_id"));
   const e = realEnv();
   e.db.exec("DROP TABLE reports; DROP TABLE report_counts;");
-  e.db.exec(before(schema));
-  e.db.exec(oldLimits);
+  e.db.exec(schema);
+  e.db.exec(limits);
+  return e;
+}
+
+/** The triggers on the reports, each as SQLite keeps it. */
+const triggers = (e) => e.db.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all().map((row) => ({ ...row }));
+
+test("limits.sql run before migrations/0001_report_id.sql stops before it drops anything, and the triggers there keep counting", () => {
+  const e = beforeIds();
+  fill(e, 2, "+0 seconds", "no_lyrics", 100);
+  const old = triggers(e);
+  assert.deepEqual(old.map((it) => it.name), ["report_counted", "report_recounted", "report_uncounted"]);
+  assert.throws(() => e.db.exec(readFileSync(new URL("./limits.sql", import.meta.url), "utf8")), /no such column: report_id/);
+  assert.deepEqual(triggers(e), old);
+  fill(e, 1, "+0 seconds", "no_lyrics", 100);
+  e.db.exec("DELETE FROM reports WHERE rowid = (SELECT min(rowid) FROM reports)");
+  assert.equal(rows(e), 2);
+  assert.deepEqual(counts(e), recounted(e));
+});
+
+test("migrations/0001_report_id.sql, then limits.sql, takes a table from before ids to one that keeps each once", async () => {
+  const e = beforeIds();
   fill(e, 3, "+0 seconds", "no_lyrics", 100);
-  e.db.exec(readFileSync(new URL("./migrations/0001_report_id.sql", import.meta.url), "utf8"));
+  const migration = readFileSync(new URL("./migrations/0001_report_id.sql", import.meta.url), "utf8");
+  const limits = readFileSync(new URL("./limits.sql", import.meta.url), "utf8");
+  e.db.exec(migration);
   e.db.exec(limits);
   assert.equal(rows(e), 3);
   for (let i = 0; i < 2; i++) assert.equal((await worker.fetch(from("203.0.113.1", withId(found)), e)).status, 204);
   assert.equal(rows(e), 4);
   assert.deepEqual(counts(e), recounted(e));
-  // Run again, limits.sql changes nothing.
+  // Run again, limits.sql changes nothing, and the migration says it ran already, as its comment says.
   e.db.exec(limits);
+  assert.deepEqual(counts(e), recounted(e));
+  assert.throws(() => e.db.exec(migration), /duplicate column name: report_id/);
+  assert.match(migration, /duplicate column name: report_id/);
   assert.deepEqual(counts(e), recounted(e));
 });

@@ -10,6 +10,10 @@
 -- REPLACE (or INSERT OR REPLACE): it deletes a row without its trigger, and the counts drift. After any other
 -- edit the triggers don't see, run this file again.
 
+-- The triggers below count report_id, which migrations/0001_report_id.sql adds. Without it, this stops here, before
+-- any trigger is dropped, so the ones there keep counting: run that migration first.
+SELECT report_id FROM reports LIMIT 0;
+
 -- When each report came in, in order: the daily clear-out finds the old ones here, and the counts start from it.
 CREATE INDEX IF NOT EXISTS reports_at ON reports (at);
 
