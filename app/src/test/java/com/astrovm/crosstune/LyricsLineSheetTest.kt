@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -118,6 +119,8 @@ class LyricsLineSheetTest {
         val reading = LineReading(listOf(Ruby("夜", "よる"), Ruby("の"), Ruby("空", "そら")), "よるのそら", "yoru no sora", "yoru no sora")
         open(base(Learning(readings = true, romanized = true, lines = listOf(reading), script = Script.JAPANESE), lyrics = "夜の空\nStars"), line = "夜の空")
         compose.onNode(study).assertExists()
+        // A piece with no reading, as the lyrics wrap it.
+        compose.onNode(hasText("の") and hasAnyAncestor(study)).assertExists()
         // Once in the words behind the sheet, and once in it.
         compose.onAllNodesWithText("yoru no sora").assertCountEquals(2)
     }

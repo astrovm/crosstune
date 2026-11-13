@@ -1810,14 +1810,14 @@ internal class LyricsFinder(
          * a `</div>` follows it, and up to the first `</div>`.
          */
         fun letrasOriginal(page: String): String? {
-            val open = page.indexOf(LETRAS_LEFT).takeIf { it >= 0 } ?: return null
+            val open = page.indexOf(LETRAS_LEFT).orNone() ?: return null
             val words = spacesEnd(page, open + LETRAS_LEFT.length)
             if (page.startsWith(STRONG, words)) {
-                val name = page.indexOf(STRONG_END, words + STRONG.length)
-                val end = if (name < 0) -1 else page.indexOf(BOX_END, name + STRONG_END.length)
-                if (end >= 0) return page.substring(name + STRONG_END.length, end)
+                // From the `<strong>`, which isn't a `</strong>`.
+                val nameEnd = page.indexOf(STRONG_END, words).orNone()?.plus(STRONG_END.length)
+                nameEnd?.let { page.indexOf(BOX_END, it).orNone() }?.let { return page.substring(nameEnd, it) }
             }
-            val end = page.indexOf(BOX_END, words).takeIf { it >= 0 } ?: return null
+            val end = page.indexOf(BOX_END, words).orNone() ?: return null
             return page.substring(words, end)
         }
 
@@ -1865,11 +1865,11 @@ internal class LyricsFinder(
             val opens = openings.iterator()
             var from = 0
             var next = -1
-            var nextClose = -1
+            val nextCloses = NextFound(page, ">")
             while (true) {
                 // One a cut made is first, as all before the cut opened none. It opens before the cut and ends after.
                 val tail = minOf(kept.length, JOIN_REACH)
-                if (nextClose < from) nextClose = page.indexOf('>', from).orEnd(page)
+                val nextClose = nextCloses.from(from)
                 val window = kept.substring(kept.length - tail) + page.substring(from, minOf(page.length, maxOf(nextClose + 1, from + JOIN_REACH)))
                 val across = joined(window)?.takeIf { it < tail }
                 if (across != null) {
@@ -2097,7 +2097,7 @@ private val BOX_TAG = phoneRegex("""<div\b|</div>""")
  * counted them: at the first `</div>` after it where as many have closed as opened since. Each is looked for once:
  * for each place in the tags, the first tag after it where fewer are open than there.
  */
-private class BoxTags(page: String) {
+internal class BoxTags(page: String) {
     private val starts: IntArray
     private val ends: IntArray
 

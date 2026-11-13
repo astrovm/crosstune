@@ -98,7 +98,11 @@ class PagesReadAsMainReadTest {
             1,
             "<pre", " data-chord-content=\"true\"", "data-chord-content=", ">", "</pre>", "<", "a", "\n", "<pre data-chord-content=\"true\">",
             "<pre x data-chord-content=\"true\" y>",
+            // What the tag has in it ends right at its `>`, or starts right after it.
+            also = listOf("<pre data-chord-content=\"true\">a</pre>", "<pre>data-chord-content=\"true\">a</pre>", "<pre >data-chord-content=\"true\"a</pre>"),
         )
+        // A part on one line whose close starts with a line break: the break is the close's, not the part's.
+        assertParts(PageParts(main("a"), main("\nb"), tagEnd = null, oneLine = true), main("a(.*?)\nb"), 1, "a", "\nb", "x", "\n", also = listOf("ax\nb", "a\nb"))
         assertParts(cifraClubTabs, main("""<div class="tabs">.*?</div>""", DOT_MATCHES_ALL), null, """<div class="tabs">""", "</div>", "<", ">", "a", "\n")
         val bold = main("""<b[^>]*>([^<]*)</b>""")
         val chord = arrayOf("<b", "<b>", "</b>", ">", "<", "a", "\n")
@@ -177,7 +181,11 @@ class PagesReadAsMainReadTest {
             """<p class="searchResult__title"><a href="/lyric/a1/"><td class="searchResult__artist"><p> <a h>s</a>""",
         ).forEach { page -> assertEquals(page, utaTen.findAll(page).map { it.groupValues[1] to it.groupValues[2] }.toList(), SungReadings.searchRows(page).toList()) }
         val anchor = main("""<a\b[^>]*\bhref="([^"]*)"[^>]*>(.*?)</a>""", IGNORE_CASE, DOT_MATCHES_ALL)
-        texts("<a", "<A", "<ab", " ", "href=\"", "xhref=\"", " HREF=\"", "\"", ">", "</a>", "</A>", "<", "x", "\n", "<a href=\"u\">s</a>").forEach { page ->
+        texts(
+            "<a", "<A", "<ab", " ", "href=\"", "xhref=\"", " HREF=\"", "\"", ">", "</a>", "</A>", "<", "x", "\n", "<a href=\"u\">s</a>",
+            // An address with a `>` in it, right at its start or before its quote, and a link that shows nothing.
+            also = listOf("<a href=\">u\">s</a>", "<a href=\"u>\">s</a>", "<a href=\"u\"></a>", "<a href=\"u\"></a>x</a>", "<a x>href=\"u\">s</a>"),
+        ).forEach { page ->
             assertEquals(page, anchor.findAll(page).map { it.groupValues[1] to it.groupValues[2] }.toList(), chordWikiLinks(page).toList())
         }
     }
@@ -196,6 +204,10 @@ class PagesReadAsMainReadTest {
             "<a ", "<a", "cd/", ">", "</a>", "<", "x", " ", "\u3000", "\n", "on", "A", "H", "#", "b", "<a cd/>", "<a href=\"cd/x\">", "<a cd/>E", "</a>onG",
             "</a>onA#", "</a>onBb",
             most = SHORT_PIECES,
+            also = listOf(
+                // Basses at each end of A to G, an address that ends at the tag's `>` or is after it, and a name of spaces.
+                "<a cd/>E</a>onA", "<a cd/>E</a>onG", "<a cd/>E</a>onH", "<a cd/>Am</a>", "<a x>cd/</a>", "<a x>cd/E</a>", "<a href=cd/x> </a>", "<a cd/>E",
+            ),
         ).forEach { line ->
             assertEquals(
                 line,
@@ -207,6 +219,7 @@ class PagesReadAsMainReadTest {
         texts(
             "<a ", "cd/", ">", "x", " ", "\n", "</a>", "</A>", "<", "<a cd/>E", "<A x CD/>E", "<br/>", "<BR >", "<br>", " </a>", "<a cd/>E<br></a>", "<br",
             most = SHORT_PIECES,
+            also = listOf("<a cd/>E<br>", "<a cd/> <br></a>", "<a x>cd/E<br></a>"),
         ).forEach { sheet ->
             assertEquals(sheet, sheet.replace(nameThenBreak, "$1$3$2"), ChordSheets.withNamesBeforeBreaks(sheet))
         }
@@ -248,6 +261,10 @@ class PagesReadAsMainReadTest {
         val link = main("""\[([^\]]+)]\(https?://[^)]*\)""")
         texts(
             "([", "[", "]", "(", ")", "))", "](", "(https://", "(http://", "](https://", "](http://", "(htt", " ", "\n", "a", "([s](u))", " ([s](u)", "[w](https://u)", "[]",
+            // A `)` or `]` in a source's name, one before it, and a link whose words or address hold another's marks.
+            also = listOf(
+                "([a)](b))", "]([a)) ", "x]([s](u))", "([s]](u))", "[w)](https://u)", "[[w](https://u)", "[w](https://)", "[w](https://u", "[](https://u)",
+            ),
         ).forEach { text ->
             assertEquals(text, text.replace(source, ""), withoutSources(text))
             assertEquals(text, text.replace(link, "$1"), withoutLinks(text))
@@ -291,6 +308,8 @@ class PagesReadAsMainReadTest {
             *pieces, """ data-exclude-from-selection="true"""", notWordsTag, "${notWordsTag}x</div>", """v data-exclude-from-selection="true">""",
             "<d$notWordsTag</div>", """$notWordsTag</div>iv data-exclude-from-selection="true">""", """<div data-lyrics-container="true">""",
             most = LONG,
+            // A box a cut joins whose tag ends far past the cut.
+            also = listOf("""<di$notWordsTag</div>v data-exclude-from-selection="true">x</div>"""),
         ).forEach { page ->
             val body = withoutBoxes(page, notWords)
             assertEquals(page, body, LyricsFinder.withoutGeniusNotWords(page))
@@ -311,8 +330,8 @@ class PagesReadAsMainReadTest {
     }
 
     /** Each part [parts] finds in pages of [pieces], as [main] finds them: whole, and its [group] [widen]ed, if any. */
-    private fun assertParts(parts: PageParts, main: Regex, group: Int?, vararg pieces: String, widen: Int = 0, most: Int = MAX_PIECES) {
-        texts(*pieces, most = most).forEach { page ->
+    private fun assertParts(parts: PageParts, main: Regex, group: Int?, vararg pieces: String, widen: Int = 0, most: Int = MAX_PIECES, also: List<String> = emptyList()) {
+        texts(*pieces, most = most, also = also).forEach { page ->
             val expected = main.findAll(page).map { match ->
                 listOfNotNull(match.range.first, match.range.last, group?.let { checkNotNull(match.groups[it]).range.first }, group?.let { checkNotNull(match.groups[it]).range.last })
             }.toList()
@@ -326,10 +345,10 @@ class PagesReadAsMainReadTest {
     /** Main's [pattern], read as a phone reads it. */
     private fun main(pattern: String, vararg options: RegexOption) = phoneRegex(pattern, *options)
 
-    /** [COUNT] texts of up to [most] of [pieces], the same each run. */
-    private fun texts(vararg pieces: String, most: Int = MAX_PIECES): Sequence<String> {
+    /** [COUNT] texts of up to [most] of [pieces], the same each run, then each of [also], where a reader's checks differ. */
+    private fun texts(vararg pieces: String, most: Int = MAX_PIECES, also: List<String> = emptyList()): Sequence<String> {
         val random = Random(SEED)
-        return generateSequence { buildString { repeat(random.nextInt(0, most)) { append(pieces[random.nextInt(pieces.size)]) } } }.take(COUNT)
+        return generateSequence { buildString { repeat(random.nextInt(0, most)) { append(pieces[random.nextInt(pieces.size)]) } } }.take(COUNT) + also
     }
 
     private companion object {

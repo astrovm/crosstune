@@ -23,7 +23,8 @@ internal fun interface PatternWriter {
  */
 private val JVM_WRITER by lazy { Class.forName("com.astrovm.crosstune.IcuPatternWriter").getDeclaredConstructor().newInstance() as PatternWriter }
 
-/** Whether [Regex] runs on ICU here: only ICU reads U+3000 as a space. */
+/** Whether [Regex] runs on ICU here: only ICU reads U+3000 as a space. A field, read as it was set: on the JVM it's always false. */
+@JvmField
 internal val ICU = Regex("""\s""").matches("\u3000")
 
 /** Code points, from runs in hex as [PHONE_SPACE] has them: "9-d,20" is U+0009 to U+000D, and U+0020. */

@@ -127,9 +127,10 @@ internal object ChordSheets {
         while (at >= 0) {
             val brace = spacesEnd(css, at + TT.length)
             if (startsASelector(css, at, from) && css.getOrNull(brace) == '{') {
-                val end = css.indexOf('}', brace + 1)
+                // From the `{`, which isn't one.
+                val end = css.indexOf('}', brace)
                 // A rule that never closes, nor any after it.
-                if (end < 0) return@sequence
+                if (end == -1) return@sequence
                 yield(css.substring(brace + 1, end))
                 from = end + 1
                 at = css.indexOf(TT, from, ignoreCase = true)
@@ -174,9 +175,10 @@ internal object ChordSheets {
         var at = line.indexOf('[')
         while (at >= 0) {
             val end = line.indexOf(']', at + 1)
-            if (end < 0) return@sequence
+            if (end == -1) return@sequence
             yield(at..end)
-            at = line.indexOf('[', end + 1)
+            // From the `]`, which isn't one.
+            at = line.indexOf('[', end)
         }
     }
 
@@ -220,14 +222,14 @@ internal object ChordSheets {
         var at = 0
         while (at < line.length) {
             val tagEnd = tags.at(at)
-            if (tagEnd < 0 && line[at] != ' ') {
+            if (tagEnd == -1 && line[at] != ' ') {
                 kept.append(line[at])
                 spaced = null
                 at++
                 continue
             }
             val hasSpace = spaced ?: (at == 0)
-            if (tagEnd >= 0) {
+            if (tagEnd != -1) {
                 kept.append(line, at, tagEnd + 1)
                 spaced = hasSpace
                 at = tagEnd + 1
@@ -273,7 +275,7 @@ internal object ChordSheets {
 
     /** Where a <br> at [at], then spaces and `</a>`, end, as such a <br>, `\s*` and `</a>` read them ignoring case, or -1. */
     private fun closedAfterBreak(text: String, at: Int): Int {
-        val breakEnd = breakEnd(text, at).takeIf { it >= 0 } ?: return -1
+        val breakEnd = breakEnd(text, at).orNone() ?: return -1
         val close = spacesEnd(text, breakEnd)
         return if (text.regionMatches(close, LINK_CLOSE, 0, LINK_CLOSE.length, ignoreCase = true)) close + LINK_CLOSE.length else -1
     }
@@ -284,29 +286,28 @@ internal object ChordSheets {
      * the next tag, with a letter that isn't a space. [after] reads from that tag, and says -1 for no link.
      */
     private fun linkedNames(text: String, ignoreCase: Boolean, after: (Int) -> Int): Sequence<IntArray> = sequence {
-        // Each the first of its kind from where it was last needed, or the text's length for none.
-        var tagClose = -1
-        var address = -1
-        var nextTag = -1
-        var letter = -1
+        val tagCloses = NextFound(text, ">")
+        val addresses = NextFound(text, ADDRESS, ignoreCase)
+        val nextTags = NextFound(text, "<")
+        val letters = NextFound(text) { from -> (from until text.length).firstOrNull { !isPatternSpace(text[it]) } ?: -1 }
         var at = text.indexOf(LINK, ignoreCase = ignoreCase)
         while (at >= 0) {
             val inside = at + LINK.length
-            if (tagClose < inside) tagClose = text.indexOf('>', inside).orEnd(text)
-            if (address < inside) address = text.indexOf(ADDRESS, inside, ignoreCase).orEnd(text)
+            val tagClose = tagCloses.from(inside)
+            val address = addresses.from(inside)
             // A link no `>` closes, or with no address, nor any after it.
             if (tagClose == text.length || address == text.length) return@sequence
             var end = -1
-            if (address < tagClose) {
-                if (nextTag <= tagClose) nextTag = text.indexOf('<', tagClose + 1).orEnd(text)
-                if (letter <= tagClose) letter = (tagClose + 1 until text.length).firstOrNull { !isPatternSpace(text[it]) } ?: text.length
-                if (letter < nextTag && nextTag < text.length) end = after(nextTag)
+            // The address all before the `>`, and a name after it: the next tag is past a letter that isn't a space.
+            // [after] says -1 at the text's end, where there's no tag.
+            if (address + ADDRESS.length <= tagClose && letters.from(tagClose + 1) < nextTags.from(tagClose)) {
+                end = after(nextTags.from(tagClose))
             }
-            if (end < 0) {
+            if (end == -1) {
                 at = text.indexOf(LINK, at + 1, ignoreCase)
                 continue
             }
-            yield(intArrayOf(at, tagClose + 1, nextTag, end))
+            yield(intArrayOf(at, tagClose + 1, nextTags.from(tagClose), end))
             at = text.indexOf(LINK, end, ignoreCase)
         }
     }

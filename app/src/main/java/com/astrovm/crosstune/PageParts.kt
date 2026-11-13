@@ -75,11 +75,13 @@ internal class PageParts(
      * length for none: each is looked for again only past where it was found.
      */
     private inner class Marks(private val page: String) {
+        // Each asked only where what it looks for is given.
+        private val tagCloses = NextFound(page, tagEnd.orEmpty().take(1))
+        private val helds = NextFound(page, holds.orEmpty())
+        private val stops = NextFound(page, without?.toString().orEmpty())
         private var tagClose = -1
-        private var held = -1
         private var closeStart = -1
-        private var stop = -1
-        private var lineBreak = -1
+        private val lineBreaks = NextFound(page) { from -> (from until page.length).firstOrNull { isLineBreak(page[it]) } ?: -1 }
 
         /** Where the [close] last found ends. */
         var closeEnd = -1
@@ -92,7 +94,7 @@ internal class PageParts(
         fun between(end: Int): Int {
             var between = end
             if (tagEnd != null) {
-                if (tagClose < between) tagClose = page.indexOf(tagEnd[0], between).orEnd(page)
+                tagClose = tagCloses.from(between)
                 // A tag no `>` closes, nor any after it.
                 if (tagClose == page.length) return NONE_AFTER
                 if (!page.startsWith(tagEnd, tagClose)) return NOT_ONE
@@ -103,10 +105,11 @@ internal class PageParts(
 
         /** [between], where the opening tag that ends at [end] has [holds] in it, as [between] says. */
         private fun heldIn(holds: String, end: Int, between: Int): Int {
-            if (held < end) held = page.indexOf(holds, end).orEnd(page)
+            val held = helds.from(end)
             return when {
                 held == page.length -> NONE_AFTER
-                held > tagClose -> NOT_ONE
+                // All of it in the tag, before the `>` that ends it.
+                held + holds.length > tagClose -> NOT_ONE
                 else -> between
             }
         }
@@ -121,14 +124,8 @@ internal class PageParts(
                 closeStart = closes.start()
                 closeEnd = closes.end()
             }
-            if (without != null) {
-                if (stop < between) stop = page.indexOf(without, between).orEnd(page)
-                if (stop < closeStart) return NOT_ONE
-            }
-            if (oneLine) {
-                if (lineBreak < between) lineBreak = (between until page.length).firstOrNull { isLineBreak(page[it]) } ?: page.length
-                if (lineBreak < closeStart) return NOT_ONE
-            }
+            if (without != null && stops.from(between) < closeStart) return NOT_ONE
+            if (oneLine && lineBreaks.from(between) < closeStart) return NOT_ONE
             return closeStart
         }
     }
@@ -138,21 +135,46 @@ internal class PageParts(
 private const val NOT_ONE = -1
 private const val NONE_AFTER = -2
 
-/** This place, or [text]'s length for none (-1). */
-internal fun Int.orEnd(text: String) = if (this < 0) text.length else this
+/** This place, or null for none: -1, as `indexOf` says. */
+internal fun Int.orNone(): Int? = if (this == -1) null else this
+
+/**
+ * Where [find] finds what it looks for in [text] from a place on, or [text]'s length for none, remembered: asked of
+ * places in order, what it found stays the answer till a place past it is asked, so [text] is looked through once,
+ * however many times it's asked. [find] says -1 for none, as `indexOf` does.
+ */
+internal class NextFound(private val text: String, private val find: (from: Int) -> Int) {
+    /** Where [what] is next, with case or without it. */
+    constructor(text: String, what: String, ignoreCase: Boolean = false) : this(text, { text.indexOf(what, it, ignoreCase) })
+
+    private var found = -1
+
+    /** How many times [text] was looked through from a place, which reading it in step with its length keeps few. */
+    var looks = 0
+        private set
+
+    /** Where it's next from [place] on, or [text]'s length for none. */
+    fun from(place: Int): Int {
+        if (found < place) {
+            found = find(place).let { if (it == -1) text.length else it }
+            looks++
+        }
+        return found
+    }
+}
 
 /**
  * Where each tag in [text] ends, asked of places in order, as main's `<[^>]+>` read a tag: from a `<` to the first `>`
  * after it, `<` and line breaks between too, with more than [least] letters between. `<[^>]*>` is a [least] of 0.
  */
 internal class TagEnds(private val text: String, private val least: Int = 1) {
-    private var close = -1
+    private val closes = NextFound(text, ">")
 
     /** Where the tag that starts at [at] ends, at its `>`, or -1 for none. */
     fun at(at: Int): Int {
         if (text[at] != '<') return -1
-        if (close < at) close = text.indexOf('>', at + 1).orEnd(text)
-        return if (close < text.length && close - at > least) close else -1
+        val close = closes.from(at)
+        return if (close != text.length && close - at > least) close else -1
     }
 }
 
@@ -167,7 +189,7 @@ internal fun withoutTags(text: String, with: String = "", least: Int = 1, skip: 
     var at = text.indexOf('<')
     while (at >= 0) {
         val end = if (skip(at)) -1 else ends.at(at)
-        if (end < 0) {
+        if (end == -1) {
             at = text.indexOf('<', at + 1)
             continue
         }

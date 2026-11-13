@@ -65,15 +65,16 @@ internal fun uFretResults(page: String): List<List<String>> = buildList {
     var from = 0
     while (items.find()) {
         if (items.start() < from) continue
-        val title = page.indexOf(U_FRET_TITLE, items.end()).takeIf { it >= 0 }?.plus(U_FRET_TITLE.length) ?: break
+        val title = page.indexOf(U_FRET_TITLE, items.end()).orNone()?.plus(U_FRET_TITLE.length) ?: break
         while (artistStart < title) {
             if (!artists.find()) return@buildList
             artistStart = artists.start()
             artistEnd = artists.end()
         }
-        val end = page.indexOf("</p>", artistEnd).takeIf { it >= 0 } ?: break
+        val end = page.indexOf("</p>", artistEnd).orNone() ?: break
         add(listOf(items.group(1), items.group(2), page.substring(title, artistStart), page.substring(artistEnd, end)))
-        from = end + "</p>".length
+        // Past its `</p>`, which no song starts in.
+        from = end
     }
 }
 
@@ -86,7 +87,7 @@ internal fun jTotalResults(page: String): List<List<String>> = buildList {
     var from = 0
     while (links.find()) {
         if (links.start() < from) continue
-        val singer = page.indexOf(SINGER, links.end()).takeIf { it >= 0 }?.plus(SINGER.length) ?: break
+        val singer = page.indexOf(SINGER, links.end()).orNone()?.plus(SINGER.length) ?: break
         val end = (singer until page.length).firstOrNull { page[it] == '/' || page[it] == '<' } ?: page.length
         add(listOf(links.group(1), links.group(2), page.substring(singer, end)))
         from = end
@@ -106,11 +107,11 @@ internal fun withoutTagged(text: String): String {
     var at = text.indexOf('<')
     while (at >= 0) {
         val end = ends.at(at)
-        if (end < 0) break
+        if (end == -1) break
         val next = text.indexOf('<', end + 1)
-        val closed = if (next >= 0 && text.startsWith("</", next)) ends.at(next) else -1
+        val closed = if (next != -1 && text.startsWith("</", next)) ends.at(next) else -1
         kept.append(text, from, at)
-        from = (if (closed >= 0) closed else end) + 1
+        from = (if (closed != -1) closed else end) + 1
         at = text.indexOf('<', from)
     }
     return kept.append(text, from, text.length).toString()

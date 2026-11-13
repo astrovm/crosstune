@@ -78,15 +78,17 @@ internal object MetadataParsers {
      * with no line after it. The artist is what's before the spaces before it.
      */
     internal fun songAsMainRead(text: String): Pair<String, String>? {
-        val lastBreak = text.indexOfLast(::isLineBreak)
-        var close = -1
+        // Where the last line starts: the song closes on it, as nothing that follows it is on another line.
+        val lastLine = text.indexOfLast(::isLineBreak) + 1
+        val closes = NextFound(text) { text.indexOfAny(SONG_CLOSES, it) }
         var pastLine = false
         for (at in text.indices) {
             val char = text[at]
             if (char in SONG_OPENS) {
-                if (close <= at) close = text.indexOfAny(SONG_CLOSES, at + 1)
-                if (close < 0) return null
-                if (close > at + 1 && close > lastBreak) return text.substring(0, spacesStart(text, at)) to text.substring(at + 1, close)
+                // From the open, which isn't a close.
+                val close = closes.from(at)
+                if (close == text.length) return null
+                if (close > at + 1 && close >= lastLine) return text.substring(0, spacesStart(text, at)) to text.substring(at + 1, close)
             }
             pastLine = pastLine || isLineBreak(char)
             if (pastLine && !isPatternSpace(char)) return null
@@ -119,7 +121,8 @@ internal object MetadataParsers {
         var pastLine = false
         while (at < title.length) {
             val char = title[at]
-            val close = if (char in SONG_OPENS) title.indexOfAny(SONG_CLOSES, at + 1) else at
+            // From the open, which isn't a close.
+            val close = if (char in SONG_OPENS) title.indexOfAny(SONG_CLOSES, at) else at
             if (close > at + 1) {
                 if (!title.substring(at + 1, close).isBlank()) break
                 kept = (kept ?: StringBuilder()).append(title, from, at)
@@ -128,7 +131,7 @@ internal object MetadataParsers {
                 continue
             }
             pastLine = pastLine || isLineBreak(char)
-            if (close < 0 || pastLine && !isPatternSpace(char)) break
+            if (close == -1 || pastLine && !isPatternSpace(char)) break
             at = close + 1
         }
         return kept?.append(title, from, title.length)?.toString() ?: title
@@ -500,7 +503,8 @@ internal object MetadataParsers {
             if (!isPatternSpace(text[at - 1])) counted++
             at--
         }
-        return if (at in 1 until text.length && Character.isSurrogatePair(text[at - 1], text[at])) at - 1 else at
+        // Before [end], with a letter at least, so a letter is there.
+        return if (at > 0 && Character.isSurrogatePair(text[at - 1], text[at])) at - 1 else at
     }
 
     /**
@@ -703,9 +707,13 @@ internal object MetadataParsers {
 
     /** Spotify's embed page lists an album's, playlist's or artist's first songs, each with its title, artists and length. */
     fun spotifyEmbedTracks(html: String): List<MusicMetadata> {
-        val data = spotifyData.firstBetween(html) ?: return emptyList()
-        val list = JSONObject(data).optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")
-            ?.optJSONObject("data")?.optJSONObject("entity")?.optJSONArray("trackList") ?: return emptyList()
+        val list = spotifyData.firstBetween(html)?.let { JSONObject(it) }?.optJSONObject("props")?.optJSONObject("pageProps")?.optJSONObject("state")
+            ?.optJSONObject("data")?.optJSONObject("entity")?.optJSONArray("trackList")
+        // One return: an empty list where none are found is the same as any empty list.
+        return list?.let { songs -> spotifyEmbedTracks(songs) }.orEmpty()
+    }
+
+    private fun spotifyEmbedTracks(list: JSONArray): List<MusicMetadata> {
         return (0 until list.length()).mapNotNull { index ->
             val track = list.optJSONObject(index) ?: return@mapNotNull null
             MusicMetadata(
@@ -815,14 +823,16 @@ internal object MetadataParsers {
 
     /** A Bandcamp album page's structured data lists its songs, all by the album's artist. */
     private fun bandcampAlbumSongs(html: String): List<MusicMetadata> {
-        val data = bandcampData.firstBetween(html) ?: return emptyList()
-        val album = runCatching { JSONObject(data) }.getOrNull() ?: return emptyList()
-        val artist = album.optJSONObject("byArtist")?.optString("name").orEmpty()
-        val list = album.optJSONObject("track")?.optJSONArray("itemListElement") ?: return emptyList()
-        return (0 until list.length()).mapNotNull { index ->
-            val name = list.optJSONObject(index)?.optJSONObject("item")?.let { it.optString("name").ifBlank { null } }
-            name?.let { MusicMetadata(it, artist) }
-        }
+        val album = bandcampData.firstBetween(html)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val artist = album?.optJSONObject("byArtist")?.optString("name").orEmpty()
+        val list = album?.optJSONObject("track")?.optJSONArray("itemListElement")
+        // One return: an empty list where none are found is the same as any empty list.
+        return list?.let { songs ->
+            (0 until songs.length()).mapNotNull { index ->
+                val name = songs.optJSONObject(index)?.optJSONObject("item")?.let { it.optString("name").ifBlank { null } }
+                name?.let { MusicMetadata(it, artist) }
+            }
+        }.orEmpty()
     }
 
     private fun splitBy(text: String, separator: String, type: ItemType): MusicMetadata {

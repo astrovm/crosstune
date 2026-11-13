@@ -393,24 +393,26 @@ internal fun chordWikiLinks(page: String): Sequence<Pair<String, String>> = sequ
     val addresses = linkAddresses(page)
     val opens = ANCHOR.toPattern().matcher(page)
     val closes = ANCHOR_CLOSE.toPattern().matcher(page)
-    var firstClose = -1
+    val firstCloses = NextFound(page, ">")
     var closeStart = -1
     var closeEnd = -1
     var last = -1
     var from = 0
     while (opens.find()) {
         if (opens.start() < from) continue
-        if (firstClose < opens.end()) firstClose = page.indexOf('>', opens.end()).orEnd(page)
+        val firstClose = firstCloses.from(opens.end())
         if (firstClose == page.length) return@sequence
-        while (last + 1 < addresses.size && addresses[last + 1][0] < firstClose) last++
-        val address = addresses.getOrNull(last)?.takeIf { it[0] >= opens.end() } ?: continue
+        // The last address whose `href="` is all before the tag's first `>`, where it's in this tag.
+        while (last + 1 < addresses.size && addresses[last + 1][1] <= firstClose) last++
+        val address = addresses.getOrNull(last)?.takeIf { (opens.end()..firstClose).contains(it[0]) } ?: continue
+        val shown = address[3] + 1
         // A `</a>` comes after it, as it's one of [addresses].
-        while (closeStart <= address[3]) {
+        while (closeStart < shown) {
             closes.find()
             closeStart = closes.start()
             closeEnd = closes.end()
         }
-        yield(page.substring(address[1], address[2]) to page.substring(address[3] + 1, closeStart))
+        yield(page.substring(address[1], address[2]) to page.substring(shown, closeStart))
         from = closeEnd
     }
 }
@@ -420,18 +422,18 @@ internal fun chordWikiLinks(page: String): Sequence<Pair<String, String>> = sequ
  * its quote and its `>`.
  */
 private fun linkAddresses(page: String): List<IntArray> {
-    var lastClose = -1
-    val anyClose = ANCHOR_CLOSE.toPattern().matcher(page)
-    while (anyClose.find()) lastClose = anyClose.start()
     val addresses = mutableListOf<IntArray>()
     val found = ADDRESS.toPattern().matcher(page)
-    var quote = -1
-    var tagClose = -1
+    val quotes = NextFound(page, "\"")
+    val tagCloses = NextFound(page, ">")
+    val anchorCloses = NextFound(page, "</a>", ignoreCase = true)
     while (found.find()) {
-        if (quote < found.end()) quote = page.indexOf('"', found.end()).orEnd(page)
+        val quote = quotes.from(found.end())
         if (quote == page.length) break
-        if (tagClose <= quote) tagClose = page.indexOf('>', quote + 1).orEnd(page)
-        if (tagClose < lastClose) addresses += intArrayOf(found.start(), found.end(), quote, tagClose)
+        // From the quote, which isn't one.
+        val tagClose = tagCloses.from(quote)
+        // What it shows starts before a `</a>`, empty or not. From the `>`, which no `</a>` starts on.
+        if (anchorCloses.from(tagClose) < page.length) addresses += intArrayOf(found.start(), found.end(), quote, tagClose)
     }
     return addresses
 }

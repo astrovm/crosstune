@@ -200,10 +200,12 @@ internal class SungReadings(
                     artistStart = artists.start()
                     artistEnd = artists.end()
                 }
-                val tagClose = page.indexOf('>', artistEnd).takeIf { it >= 0 } ?: return@sequence
-                val end = page.indexOf(LINK_END, tagClose + 1).takeIf { it >= 0 } ?: return@sequence
+                val tagClose = page.indexOf('>', artistEnd).orNone() ?: return@sequence
+                // From the `>`, which no `</a>` starts at.
+                val end = page.indexOf(LINK_END, tagClose).orNone() ?: return@sequence
                 yield(page.substring(rows.start(1), rows.end(1)) to page.substring(tagClose + 1, end))
-                from = end + LINK_END.length
+                // Past the `</a>`: a row has none in it, so none starts in it either.
+                from = end
             }
         }
 
@@ -217,11 +219,12 @@ internal class SungReadings(
             var at = line.indexOf(RUBY)
             while (at >= 0) {
                 val written = at + RUBY.length
-                val middle = line.indexOf(RUBY_MIDDLE, written).takeIf { it >= 0 } ?: return@sequence
+                val middle = line.indexOf(RUBY_MIDDLE, written).orNone() ?: return@sequence
                 val sung = middle + RUBY_MIDDLE.length
-                val end = line.indexOf(RUBY_END, sung).takeIf { it >= 0 } ?: return@sequence
+                val end = line.indexOf(RUBY_END, sung).orNone() ?: return@sequence
                 yield(Triple(at until end + RUBY_END.length, line.substring(written, middle), line.substring(sung, end)))
-                at = line.indexOf(RUBY, end + RUBY_END.length)
+                // From its end: a ruby has no `</span>` in it, so none starts in it either.
+                at = line.indexOf(RUBY, end)
             }
         }
 
@@ -234,8 +237,8 @@ internal class SungReadings(
 
         /** The words on a song's page, line by line, each in pieces, kanji with how they're sung. */
         fun linesOf(page: String): List<List<Ruby>> {
-            val body = words.firstBetween(page) ?: return emptyList()
-            return body.split(lineBreak).map(String::trim).map { line ->
+            // One return: no words is no lines, as any empty list.
+            return words.firstBetween(page)?.split(lineBreak).orEmpty().map(String::trim).map { line ->
                 val parts = mutableListOf<Ruby>()
                 var at = 0
                 for ((range, written, sung) in rubies(line)) {

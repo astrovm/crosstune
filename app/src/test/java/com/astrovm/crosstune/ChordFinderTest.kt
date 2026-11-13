@@ -374,8 +374,9 @@ Singing to the morning light</div>"""
             answer(
                 request,
                 mapOf(
-                    "https://www.ufret.jp/search.php" to uFretResult(3, "川の道", "歩く人", beginner = true) + uFretResult(1, "川の道", "他の人") +
-                        uFretResult(2, "川の道", "歩く人") + uFretResult(4, "別の歌", "歩く人"),
+                    // Another song by the artist first, which isn't looked at.
+                    "https://www.ufret.jp/search.php" to uFretResult(4, "別の歌", "歩く人") + uFretResult(3, "川の道", "歩く人", beginner = true) +
+                        uFretResult(1, "川の道", "他の人") + uFretResult(2, "川の道", "歩く人"),
                     "https://www.ufret.jp/song.php?data=2" to uFretSong("[Am]川の[Em]道を歩いていく\r", "[F]朝の光に[G]歌っている\r"),
                     "https://www.ufret.jp/song.php?data=3" to uFretSong("[C]川の道を歩いていく\r", "朝の光に歌っている")
                 )

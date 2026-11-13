@@ -19,6 +19,13 @@ class PhoneRegexTest {
     }
 
     @Test
+    fun aPhonesCaseFoldsAreReadFromItsTable() {
+        // Read now, not only as patterns written out when the tests start read them.
+        assertEquals('k'.code, CaseFolds.simpleFolds[0x212A])
+        assertEquals(listOf('s'.code, 's'.code), CaseFolds.fullFolds[0xDF]?.toList())
+    }
+
+    @Test
     fun aPartOfAClassBothHoldIsReadAsBothHoldIt() {
         assertEquals("acd", phoneRegex("[a-d&&[^b]]", emptySet(), onIcu = false).findAll("abcd").joinToString("") { it.value })
         // What follows the class is read too.

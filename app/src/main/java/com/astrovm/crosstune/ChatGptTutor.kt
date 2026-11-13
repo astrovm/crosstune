@@ -639,15 +639,14 @@ internal fun plainText(text: String): String = withoutLinks(withoutSources(text)
 internal fun withoutSources(text: String): String {
     val kept = StringBuilder()
     var from = 0
-    // Each the first after where it was last needed, or the text's length for none.
-    var name = -1
-    var end = -1
+    val names = NextFound(text, "]")
+    val ends = NextFound(text, ")")
     var at = text.indexOf("([")
     while (at >= 0) {
-        if (name < at + 2) name = text.indexOf(']', at + 2).orEnd(text)
+        val name = names.from(at + 2)
         if (name == text.length) break
         if (text.getOrNull(name + 1) == '(') {
-            if (end < name + 2) end = text.indexOf(')', name + 2).orEnd(text)
+            val end = ends.from(name + 2)
             if (end == text.length) break
             if (text.getOrNull(end + 1) == ')') {
                 kept.append(text, from, spacesStart(text, at, from))
@@ -668,15 +667,17 @@ internal fun withoutSources(text: String): String {
 internal fun withoutLinks(text: String): String {
     val kept = StringBuilder()
     var from = 0
-    var close = -1
-    var end = -1
+    val closes = NextFound(text, "]")
+    val ends = NextFound(text, ")")
     var at = text.indexOf('[')
     while (at >= 0) {
-        if (close < at) close = text.indexOf(']', at + 1).orEnd(text)
+        // From the `[`, which isn't one.
+        val close = closes.from(at)
         if (close == text.length) break
-        val address = close + 1 + listOf("(https://", "(http://").firstOrNull { text.startsWith(it, close + 1) }.orEmpty().length
-        if (close > at + 1 && address > close + 1) {
-            if (end < address) end = text.indexOf(')', address).orEnd(text)
+        val linked = listOf("(https://", "(http://").any { text.startsWith(it, close + 1) }
+        if (close > at + 1 && linked) {
+            // From the `]`: what's between is the address's start, with no `)`.
+            val end = ends.from(close)
             if (end == text.length) break
             kept.append(text, from, at).append(text, at + 1, close)
             from = end + 1

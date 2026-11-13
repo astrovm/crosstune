@@ -960,7 +960,7 @@ internal class ExactMatcher(
         fun qobuzTitle(html: String): Pair<String, String>? {
             val title = qobuzTitles.firstIn(html) ?: return null
             val credit = title.whole.last + 1
-            val end = html.indexOf("</p>", credit).takeIf { it >= 0 } ?: return null
+            val end = html.indexOf("</p>", credit).orNone() ?: return null
             return html.substring(title.between) to html.substring(credit, end)
         }
         private val qobuzTrackRegex = phoneRegex("""track&#x2F;(\d+)""")

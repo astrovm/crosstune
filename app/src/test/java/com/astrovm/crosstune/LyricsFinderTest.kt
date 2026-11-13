@@ -1115,6 +1115,13 @@ class LyricsFinderTest {
     }
 
     @Test
+    fun initialsAreNoCapitalPhrase() {
+        // Each a letter and a stop, as spelled-out letters are: the line isn't in capitals.
+        val text = "We meet J. R. tonight"
+        assertEquals(text, LyricsFinder.cleaned(Lyrics.Found(text), song).words)
+    }
+
+    @Test
     fun nearlyCapitalCopiesCannotSupplyBrokenCapitals() {
         val text = "MESSAGE IN A BOTTLE\nMESSAGE IN A BOTTLe\nMESSAGE IN A BOTTLE"
         assertEquals("Message in a bottle\nMessage in a bottle\nMessage in a bottle",

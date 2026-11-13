@@ -67,7 +67,8 @@ class ReadAsMainReadTest {
         // As main read a title whose first song in brackets has no letter: a later one, on its line or past only spaces.
         val main = phoneRegex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
         // An empty song, then one: main's song has a letter at least.
-        (sequenceOf("A「」B「C」", "『』 「x」") + texts("「", "」", "『", "』", "A", "|", " ", "\u3000", "\n", "\r\n", "\u0085", "x")).forEach { text ->
+        // A song that closes as the last line starts, and one with nothing in it.
+        (sequenceOf("A「」B「C」", "『』 「x」", "A「x\n」", "A「」", "A「x」\n", "A「x」\nB") + texts("「", "」", "『", "』", "A", "|", " ", "\u3000", "\n", "\r\n", "\u0085", "x")).forEach { text ->
             assertEquals(text, main.matchEntire(text)?.destructured?.let { (artist, song) -> artist to song }, MetadataParsers.songAsMainRead(text))
         }
     }
@@ -127,6 +128,18 @@ class ReadAsMainReadTest {
         // A half alone is a letter of its own.
         assertEquals(1, MetadataParsers.beforeLetters("a\uDC00", 2, 1))
         assertEquals(1, MetadataParsers.beforeLetters("\uD835\uD835", 2, 1))
+        // From the start: nothing before it to be half of a letter with.
+        assertEquals(0, MetadataParsers.beforeLetters("ab", 2, 2))
+        assertEquals(0, MetadataParsers.beforeLetters("ab", 2, 3))
+    }
+
+    @Test
+    fun aLookNearAPlaceLooksPastOnlyMarksAndFormatLetters() {
+        assertEquals(false, isLookedPast('a'.code))
+        assertEquals(false, isLookedPast(' '.code))
+        // A combining accent and a zero-width joiner.
+        assertEquals(true, isLookedPast(0x0301))
+        assertEquals(true, isLookedPast(0x200D))
     }
 
     @Test

@@ -326,6 +326,15 @@ class ChordSheetsTest {
     }
 
     @Test
+    fun jTotalsChordInATagOfItsOwnInItsLinkIsStillItsChord() {
+        // A tag that isn't a link is cut before the link is read.
+        assertEquals(
+            listOf(SheetLine("abcd", listOf(Chord(0, "Am")))),
+            ChordSheets.fromJTotal("""<a href="JavaScript:jump_1('../../../cd/Am.html');"><b>Am</b></a><br>abcd""")
+        )
+    }
+
+    @Test
     fun jTotalsBassIsWrittenAfterItsLinkAsOn() {
         assertEquals(
             listOf(SheetLine("川の道", listOf(Chord(0, "E/G#"), Chord(3, "Am")))),
