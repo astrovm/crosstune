@@ -152,17 +152,27 @@ internal class AutoReports(
      * A report on [song]'s [problem], [json] as it'd be sent, kept on the phone until it's sent. Words put in time by
      * hand are owed whatever the user's answer is: they're only left, and reported, a while after, the app may be
      * killed before, and the answer may come later. A problem found is owed when its report didn't get there, or
-     * had to wait for a later day. An older one for the same song and problem gives way, and leaves it its [ID]: the
-     * box keeps one report for it, whichever got there, so one it got and couldn't say so isn't kept twice. The
-     * latest [MAX_OWED] of each, by hand and found, are kept, so the oldest go first. Each waits for the next start.
+     * had to wait for a later day. An older one for the same song and problem gives way. [json] is sent as it is, so
+     * it has its [ID] from [idFor] already, inside the box's size. The latest [MAX_OWED] of each, by hand and found,
+     * are kept, so the oldest go first. Each waits for the next start.
      */
     fun owe(song: MusicMetadata, problem: SongProblem, json: String): Owed = synchronized(shared) {
         val key = keyOf(song, problem)
-        val kept = kept()
-        val id = kept.firstOrNull { it.key == key }?.id ?: UUID.randomUUID().toString()
-        val owed = Owed(key, JSONObject(json).put(ID, id).toString())
-        keep(kept.filter { it.key != key } + owed)
+        val owed = Owed(key, json)
+        keep(kept().filter { it.key != key } + owed)
+        // Kept, it carries its id from now on.
+        shared.ids.remove(key)
         owed
+    }
+
+    /**
+     * The [ID] for a report on [song]'s [problem], to make it with, so the report is measured with it: the one kept
+     * for it, as an older version of the same report gives its id to the newer, and the box keeps one of them,
+     * whichever got there; else one made now, which every screen gets until the report is kept.
+     */
+    fun idFor(song: MusicMetadata, problem: SongProblem): String = synchronized(shared) {
+        val key = keyOf(song, problem)
+        kept().firstOrNull { it.key == key }?.id ?: shared.ids.getOrPut(key) { UUID.randomUUID().toString() }
     }
 
     /** The key [song]'s timing report is owed under. */
@@ -231,7 +241,9 @@ internal class AutoReports(
             .put("timing", JSONArray(points.map { JSONObject().put("timedMs", it.optLong(0)).put("heardMs", it.optLong(1)) }))
         recording?.let { song.put("recording", ReportBox.cut(it, "recording")) }
         length?.let { song.put("lengthMs", it.toLong()) }
-        val json = JSONObject().put("version", version).put("android", android).put("problem", EARLIER).put("song", song).put(ID, UUID.randomUUID().toString())
+        // Each text cut to what the box keeps, and no more lines than it takes, so with its id it always fits.
+        val json = JSONObject().put("version", ReportBox.cut(version, "version")).put("android", ReportBox.cut(android, "android")).put("problem", EARLIER)
+            .put("song", song).put(ID, UUID.randomUUID().toString())
         return Owed("$EARLIER\u0000$key", json.toString())
     }
 
@@ -259,6 +271,9 @@ internal class AutoReports(
     private class Shared {
         val going = mutableMapOf<String, Boolean>()
         val sending = Mutex()
+
+        /** The ids given by [idFor] to reports not kept yet, by key. */
+        val ids = mutableMapOf<String, String>()
     }
 
     companion object {

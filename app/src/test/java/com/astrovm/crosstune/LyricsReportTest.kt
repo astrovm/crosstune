@@ -752,8 +752,7 @@ class LyricsReportTest {
     @Test
     fun twoScreensOfTheAppStartedTogetherSendEachReportOwedOnce() {
         prefs().edit().putBoolean("auto_reports", true).commit()
-        val reports = AutoReports(prefs())
-        listOf("One", "Two", "Three").forEach { reports.owe(MusicMetadata(it, "Band"), SongProblem.NO_LYRICS, """{"version":"1","problem":"no_lyrics"}""") }
+        listOf("One", "Two", "Three").forEach { owe(MusicMetadata(it, "Band"), SongProblem.NO_LYRICS, JSONObject().put("version", "1").put("problem", "no_lyrics")) }
         val held = CountDownLatch(1).also { reportsHeld = it }
         started()
         val first = opened
@@ -1001,7 +1000,12 @@ class LyricsReportTest {
     }
 
     /** [songs] put in time before, whose reports wait on the phone: made up, as what they say doesn't matter. */
-    private fun owedFor(vararg songs: String) = songs.forEach { AutoReports(prefs()).owe(MusicMetadata(it, "Band"), SongProblem.TIMED_BY_HAND, """{"fake":"$it"}""") }
+    private fun owedFor(vararg songs: String) = songs.forEach { owe(MusicMetadata(it, "Band"), SongProblem.TIMED_BY_HAND, JSONObject().put("fake", it)) }
+
+    /** [json] kept to go on [song]'s [problem], made with its id, as the app makes it. */
+    private fun owe(song: MusicMetadata, problem: SongProblem, json: JSONObject) = AutoReports(prefs()).run {
+        owe(song, problem, json.put(AutoReports.ID, idFor(song, problem)).toString())
+    }
 
     private fun sentFakes() = fake.requestedUrls.indices.filter { fake.requestedUrls[it] == ReportSender.URL }.map { at ->
         // Each goes with the id it was kept with, which says nothing else.

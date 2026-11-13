@@ -3475,7 +3475,7 @@ internal class MainViewModel(
     private fun reportProblem(song: MusicMetadata, problem: SongProblem) {
         val sender = reports ?: return
         if (autoReports.reported(song, problem)) return
-        val report = reportOn(sender, song, problem = problem)
+        val report = reportOn(sender, song, problem = problem).copy(id = autoReports.idFor(song, problem))
         // On the phone at once, as it is so far, so nothing that ends the work below loses it: it goes at the next start.
         autoReports.owe(song, problem, report.json())
         viewModelScope.launch {
@@ -3527,7 +3527,8 @@ internal class MainViewModel(
         val song = uiState.lyricsFor ?: return
         val sender = reports ?: return
         if (!timedByHand) return
-        autoReports.owe(song, SongProblem.TIMED_BY_HAND, reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).json())
+        val report = reportOn(sender, song, problem = SongProblem.TIMED_BY_HAND).copy(id = autoReports.idFor(song, SongProblem.TIMED_BY_HAND))
+        autoReports.owe(song, SongProblem.TIMED_BY_HAND, report.json())
     }
 
     /**

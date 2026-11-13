@@ -1,6 +1,8 @@
 package com.astrovm.crosstune
 
+import android.content.Context
 import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -355,6 +357,31 @@ class ReportTest {
         val over = report(count, "x".repeat(fill + 1))
         assertEquals(count - 1, sentLines(over).size)
         assertTrue(over.json().toByteArray().size <= ReportBox.MAX_BYTES)
+    }
+
+    @Test
+    fun aReportAsBigAsTheBoxTakesIsKeptToGoWithItsIdAndStillFits() {
+        val preferences = ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("report-test", Context.MODE_PRIVATE).also { it.edit().clear().commit() }
+        val reports = AutoReports(preferences)
+        val song = MusicMetadata("Song", "Band")
+        val all = (0 until ReportBox.MAX_POINTS).map { HandTiming("空".repeat(300), it * 1000L, it * 1000L + (it % 7) * 100) }
+        val player = PlayerTiming("com.example.player", 1f, 0, 0, "lead 0")
+        // One Crosstune found, and one put in time by hand: each kept to go, as the app keeps it.
+        for (problem in listOf(SongProblem.SUNG_OFF, SongProblem.TIMED_BY_HAND)) {
+            fun report(count: Int, comment: String) = Report("2.30.0", song, comment = comment, timing = all.take(count), problem = problem, player = player)
+            // Filled to the byte without its id, as it was before the id was measured with it.
+            val count = (1..all.size).last { sentLines(report(it, "x")).size == it }
+            val full = report(count, "x".repeat(ReportBox.MAX_BYTES - report(count, "x").json().toByteArray().size + 1))
+            assertEquals(ReportBox.MAX_BYTES, full.json().toByteArray().size)
+            val id = reports.idFor(song, problem)
+            val owed = reports.owe(song, problem, full.copy(id = id).json())
+            // What goes is what's kept, as it is: the box, which counts its bytes as this does, takes it.
+            val bytes = owed.json.toByteArray().size
+            assertTrue(bytes.toString(), bytes <= ReportBox.MAX_BYTES)
+            assertEquals(id, owed.id)
+            // A line gives way for the id.
+            assertEquals(count - 1, JSONObject(owed.json).getJSONObject("song").getJSONArray("timing").length())
+        }
     }
 
     @Test

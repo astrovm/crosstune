@@ -84,7 +84,9 @@ internal data class Report(
     val problem: SongProblem? = null,
     /** Where the words came from, and their timing when it was borrowed. */
     val source: String? = null,
-    val player: PlayerTiming? = null
+    val player: PlayerTiming? = null,
+    /** Its own id, for one Crosstune keeps to send: in what [json] measures, as it goes with it. See [AutoReports.ID]. */
+    val id: String? = null
 ) {
     val title: String get() = song?.let { "Lyrics of ${it.title} by ${it.artist}" }.orEmpty()
 
@@ -133,6 +135,7 @@ internal data class Report(
     private fun jsonWith(points: List<HandTiming>, log: String?): String = JSONObject().apply {
         put("version", ReportBox.cut(version, "version"))
         put("android", ReportBox.cut(android, "android"))
+        id?.let { put(AutoReports.ID, it) }
         ReportBox.cut(comment, "comment").takeIf { it.isNotEmpty() }?.let { put("comment", it) }
         problem?.let { put("problem", it.key) }
         song?.takeIf { songTaken }?.let {

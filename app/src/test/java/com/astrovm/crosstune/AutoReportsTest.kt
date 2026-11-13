@@ -377,21 +377,27 @@ class AutoReportsTest {
         assertEquals(20, reports.owed().size)
     }
 
+    /** A made-up report, named [name], made with [id]. */
+    private fun json(name: Any, id: String) = JSONObject().put("name", "$name").put(AutoReports.ID, id).toString()
+
     @Test
-    fun eachReportCarriesAnIdOfItsOwnKeptWhenTheSameReportIsMadeAgain() {
-        val first = reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, json(1))
-        val id = checkNotNull(first.id)
+    fun eachReportIsMadeWithAnIdOfItsOwnKeptWhenTheSameReportIsMadeAgain() {
+        val id = reports.idFor(song("Demo"), SongProblem.TIMED_BY_HAND)
         assertTrue(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matches(id))
-        assertEquals("1", JSONObject(first.json).getString("name"))
+        // Before it's kept, another screen of the app making it gets the same.
+        assertEquals(id, AutoReports(preferences).idFor(song("demo", "BAND"), SongProblem.TIMED_BY_HAND))
+        // Kept as it was made: its id was measured with it, so nothing is added.
+        val first = reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, json(1, id))
+        assertEquals(json(1, id), first.json)
+        assertEquals(id, first.id)
         // Put in time some more: the newer is the same report, so the box keeps one of them.
-        assertEquals(id, reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, json(2)).id)
+        assertEquals(id, reports.idFor(song("Demo"), SongProblem.TIMED_BY_HAND))
         // Another song, or another problem of it, is another report.
-        val others = listOf(reports.owe(song("Other"), SongProblem.TIMED_BY_HAND, json(3)), reports.owe(song("Demo"), SongProblem.NO_LYRICS, json(4)))
-        assertEquals(3, (others.map { it.id } + id).toSet().size)
+        val others = listOf(reports.idFor(song("Other"), SongProblem.TIMED_BY_HAND), reports.idFor(song("Demo"), SongProblem.NO_LYRICS))
+        assertEquals(3, (others + id).toSet().size)
         // Turned away, then put in time again: a new report.
-        reports.went(checkNotNull(reports.take(reports.owed().first())), Delivery.REFUSED)
-        val again = reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, json(5))
-        assertFalse(again.id in (others.map { it.id } + id))
+        reports.went(checkNotNull(reports.take(first)), Delivery.REFUSED)
+        assertFalse(reports.idFor(song("Demo"), SongProblem.TIMED_BY_HAND) in (others + id))
     }
 
     @Test
@@ -401,7 +407,7 @@ class AutoReportsTest {
         val old = reports.owed().single()
         assertNull(old.id)
         assertEquals(json(1), old.json)
-        assertTrue(reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, json(2)).id != null)
+        assertTrue(Regex("[0-9a-f-]{36}").matches(reports.idFor(song("Demo"), SongProblem.TIMED_BY_HAND)))
     }
 
     @Test
@@ -411,6 +417,21 @@ class AutoReportsTest {
         preferences.edit().putString("lyrics_sync", songs.toString()).commit()
         reports.keepEarlier("2.24.0", "16 (36)")
         assertEquals(2, reports.owed().mapNotNull { it.id }.toSet().size)
+    }
+
+    @Test
+    fun timingKeptFromAnEarlierVersionAtItsBiggestStillFitsTheBox() {
+        // Every text past what the box keeps, of the most bytes a character takes, and more lines than it takes, far apart.
+        val long = "\uD83C\uDFB5".repeat(1000)
+        val key = "$long\u0000$long\u0000$long\u0000${Long.MAX_VALUE}"
+        val points = JSONArray((0..ReportBox.MAX_POINTS).map { JSONArray().put(ReportBox.DAY_MS - it * 7919L).put(-ReportBox.DAY_MS + it * 104_729L) })
+        preferences.edit().putString("lyrics_sync", JSONObject().put(key, JSONObject().put("points", points).put("words", long)).toString()).commit()
+        reports.keepEarlier("9".repeat(100), "9".repeat(100))
+        val owed = reports.owed().single()
+        val bytes = owed.json.toByteArray().size
+        assertTrue(bytes.toString(), bytes <= ReportBox.MAX_BYTES)
+        assertEquals(ReportBox.MAX_POINTS, JSONObject(owed.json).getJSONObject("song").getJSONArray("timing").length())
+        assertEquals(ReportBox.LIMITS.getValue("version"), JSONObject(owed.json).getString("version").length)
     }
 
     @Test
