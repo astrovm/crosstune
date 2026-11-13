@@ -21,8 +21,10 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -41,6 +43,8 @@ import org.robolectric.shadows.ShadowToast
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 /**
  * Reporting a problem with a song's words, in one tap, to Crosstune's own box for reports. At
@@ -710,12 +714,12 @@ class LyricsReportTest {
         assertEquals(listOf("no_timing"), kept.map { JSONObject(it.json).optString("problem") })
         assertEquals(0, foundToday())
         assertTrue(AutoReports(prefs()).take(kept.single()) != null)
-        // The one held ends as if the app was ended: it never gets there.
-        reportsDown = true
+        // The one held ends as if the app was ended: it never gets there. Closing waits for it to end.
+        val sends = AtomicInteger()
+        answerTo = { if (sends.getAndIncrement() == 0) 503 else null }
         held.countDown()
-        waitUntil { problems().size == 1 && owed() == 1 }
-        reportsDown = false
         opened.destroyAndSettle()
+        assertEquals(1, owed())
         started()
         waitUntil { owed() == 0 }
         assertEquals(listOf("no_timing", "no_timing"), problems())
@@ -730,9 +734,14 @@ class LyricsReportTest {
         lyricsAre(plain)
         openLyrics { shown("Plain one") }
         waitUntil { ReportSender.URL in fake.requestedUrls }
-        // Closed, which ends all the app was doing, while the box is still taking it.
+        // Closed, which ends all the app was doing, while the box is still taking it. The box takes it only once
+        // closing has called the screen's work off, so the send has to see itself through to be let go.
+        val work = checkNotNull(model().viewModelScope.coroutineContext[Job])
+        thread {
+            while (!work.isCancelled) Thread.sleep(POLL_MS)
+            held.countDown()
+        }
         opened.destroyAndSettle()
-        held.countDown()
         waitUntil { owed() == 0 && foundToday() == 1 }
         assertTrue(AutoReports(prefs()).reported(MusicMetadata("Demo", "Band"), SongProblem.NO_TIMING))
         // The box has it, so the next start doesn't send it again.
@@ -1324,6 +1333,7 @@ class LyricsReportTest {
 
     private companion object {
         const val TIMEOUT_MS = 10_000L
+        const val POLL_MS = 5L
         /** The offer takes no tap for 500 ms from the frame it first shows, so a frame more. */
         const val OFFER_ARMED_MS = 600L
     }
