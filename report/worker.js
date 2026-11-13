@@ -226,9 +226,9 @@ async function turnAway(env, day, kind, why) {
 
 /**
  * A report turned away, saying [why]: "minute", "network", "full" or "no_key". The app reads only the status, so keep
- * 429 (and 503) for "not now" and 400, 413 and 415 for a report that is never taken. For "not now", a timing it owes
- * and a problem it found wait on the phone for a later start, and a person's own report says it wasn't sent. A report
- * that is never taken is deleted on the phone. The reason is for whoever looks at the answer.
+ * 429 (and 503) for "not now" and 400, 413 and 415 for a report that is never taken. A timing it owes waits for a later
+ * start, and a person's own report says it wasn't sent. A problem found live that is turned away is lost: Issue #964,
+ * fixed in the app by PR #947, keeps it for "not now". The reason is for whoever looks at the answer.
  */
 function refused(code, why) {
   return new Response(null, { status: code, headers: { "X-Crosstune-Refused": why } });

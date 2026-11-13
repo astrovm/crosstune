@@ -151,333 +151,60 @@ class SongNamesVersionTest {
     }
 
     @Test
-    fun aMarkInAnotherScriptIsFoundButNotInAWordThatOnlyHoldsIt() {
-        fun other(name: String, title: String = "Fake Song", artist: String = "Fake Band") = SongNames.saysAnother(name, "", listOf(title), listOf(artist))
-        // A longer word that only holds a mark, a sound mark off, or a Latin mark inside a longer Latin word, is another word.
-        for (same in listOf(
-            "インストール", "Fake Song インストール", "Fake Song (インストラクター)", "Fake Song (アライヴ)", "ドライブ", "Fake Song ドライブ", "Fake Song ライブラリー", "ライフ", "ライフ・イズ",
-            "Fake Song ディスカバー", "Fake Song 디스커버", "Fake Song 드라이브", "라이브러리", "커버리지", "반주자",
-            // In Hangul, inside a longer word, a mark can't tell: the eighth review, 6.
-            "Fake Song (얼라이브)", "Fake Song (러브드라이브)", "Fake Song (피아노커버)", "Fake Song (밴드라이브)", "Fake Song (드라이브)",
-            "Fake Song (ATV Sizes)", "Fake Song ATV Size", "Fake Song (TV Sizes)", "Fake Song TV Size2", "Fake Song (TV Size̲)",
-            // Katakana from its first letter, ァ, to its last, ヿ, with ー, goes on a run.
-            "Fake Song (ァライブ)", "Fake Song (ライブヺ)", "Fake Song (ーライブ)", "Fake Song (ライブヿ)"
-        )) {
-            assertFalse(same, other(same))
+    fun aNameWithAnythingButTheSongsNameIsTagged() {
+        for (name in listOf("Fake Song", "偽の歌", "にせのうた", "Fake Søng", "가짜 노래", "Fake-Song", "Fake Song 2", "Fake Song Pt.2")) {
+            assertFalse(name, SongNames.tagged(name))
         }
-        // As a word of its own in a tag, with what's between its letters, or in full or half width, it says so; in Hangul,
-        // also in a run of marks alone.
-        for (said in listOf(
-            "Fake Song (インスト)", "Fake Song (TV Size)", "Fake Song - TV-size", "Fake Song (オフ・ヴォーカル)", "Fake Song (Off Vocal)",
-            "Fake Song (ライブ版)", "Fake Song (반주)", "Fake Song (라이브 버전)", "Fake Song (라이브버전)", "Fake Song (翻唱版)", "Fake Song (卡拉OK版)",
-            "Fake Song (ＴＶサイズ)", "Fake Song (ｶﾗｵｹ)", "Fake Song【カラオケ】", "Fake Song (메들리)", "Fake Song (混音版)", "Fake Song (串烧)",
-            "Fake Song - カラオケを歌う", "Fake Song (歌ってみたい)", "Fake Song (TV Size版)", "Fake Song (インストゥルメンタル)", "Fake Song (アコースティックカバー)",
-            // Just past katakana, ゠ and ・ end a run.
-            "Fake Song (゠ライブ)", "Fake Song (ライブ・)"
-        )) {
-            assertTrue(said, other(said))
-        }
-        // A run of marks in Hangul says only the marks in it: "(라이브)" is the song's own live, no other version.
-        assertFalse(other("Fake Song (라이브)", "Fake Song (Live)"))
-        // In the name, before any tag, nothing says a version: "Live Wire" may be "Livewire", "Live Forever" a name.
         for (name in listOf(
-            "Fake Song ライブ版", "Fake Song 라이브 버전", "Fake Song 翻唱版", "Fake Songのカラオケ", "Fake Song ライブを歌う", "カラオケ Fake Song",
-            "Fake Song TV Size版", "Fake Song Live", "Live - Fake Song", "Fake Song / Live"
+            "Fake Song (Live)", "Fake Song [2019]", "Fake Song {Mix}", "Fake Song <Edit>", "偽の歌「偽物」", "偽の歌『偽物』", "偽の歌【MV】",
+            "偽の歌〈Live〉", "偽の歌《Live》", "偽の歌 ～偽りの夜～", "偽の歌〜偽りの夜〜", "Fake Song - Live", "Fake Song -Live", "Fake Song– Live",
+            "Fake Song | Fake Band", "偽の歌 / Fake Song", "偽の歌_Acoustic", "Fake Song feat. Live Crew", "Fake Song ft. Live Crew",
+            "Fake Song featuring Live Crew", "Fake Song with Live Crew", "Fake Song prod. Live Crew", "Fake Band x Live Crew", "Fake Song vs Live Crew",
+            "偽の歌（Live）", "偽の歌｜Fake Band", "偽の歌／Fake Song"
         )) {
-            assertFalse(name, other(name))
-        }
-        // The song's own name says it, so it's no other version.
-        assertFalse(other("ライブ (Fake Band)", "ライブ"))
-        assertFalse(other("Fake Song (Fake カバー)", artist = "Fake カバー"))
-        assertTrue(other("ライフ (ライブ)", "ライフ"))
-        // Many songs in one is found the same way.
-        for (many in listOf("夏メドレー", "夏のメドレー", "ディズニーメドレー", "ヒットメドレー2020", "메들리곡", "Fake Song (串燒)")) {
-            assertTrue(many, SongNames.manySongs(MusicMetadata(many, "Fake Band")))
+            assertTrue(name, SongNames.tagged(name))
         }
     }
 
     @Test
-    fun aMarkSaysAVersionOnlyInATagAndInHangulOnlyBesideMarks() {
-        // Every mark, alone, after a word and before one, as Japanese, Korean, Chinese and Thai write them with no space;
-        // in katakana, only words a version tag says.
-        val before = listOf("", "ピアノ", "アコースティック", "バンド", "피아노", "밴드", "钢琴", "เปียโน")
-        val after = listOf("", "バージョン", "ver", "版", "カバー", "映像", "よ", "を歌う", "버전", "곡", "영상", "클립", "现场版", "เวอร์ชัน")
-        val songs = listOf("Fake Song " to "Fake Song", "假的歌" to "假的歌", "เพลงปลอม" to "เพลงปลอม")
-        // Words in Hangul that are no mark: beside one, a mark in Hangul is part of a longer word.
-        val hangulWords = setOf("피아노", "밴드", "곡", "영상", "클립")
-        fun other(name: String, title: String) = SongNames.saysAnother(name, "", listOf(title), listOf("Fake Band"))
-        for (mark in MARKS) for (first in before) for (last in after) for ((song, title) in songs) {
-            val said = "$first$mark$last"
-            assertFalse("$song$said", other("$song$said", title))
-            // A word beside it in katakana may say a version of its own: "ピアノ" is piano.
-            val expected = first in setOf("ピアノ", "アコースティック", "バンド") || last == "カバー" || when {
-                mark.first() in '가'..'힣' -> first !in hangulWords && last !in hangulWords
-                // A mark in Latin letters is a word of its own: "Off Vocalver" isn't one.
-                mark.last() in 'a'..'z' -> last != "ver"
-                else -> true
-            }
-            assertEquals("$song($said)", expected, other("$song($said)", title))
-            assertEquals("$song - $said", expected, other("$song - $said", title))
-        }
-        // A mark in a longer word that only holds it, or beside a word in katakana no version tag says, as in the name
-        // "Alive", says nothing, where main found one; after a word a version tag says, it is one: a band live.
-        for (held in listOf("ドライブ", "ライブラリー", "ディスカバー", "디스커버", "드라이브", "라이브러리", "커버리지", "ライフ", "アライブ", "ワールドライブ", "カラオケビデオ", "밴드라이브")) {
-            assertTrue(held, mainSays("Fake Song $held", "Fake Song"))
-            assertFalse(held, other("Fake Song ($held)", "Fake Song"))
-        }
-        assertTrue(other("Fake Song (バンドライブ)", "Fake Song"))
-    }
-
-    @Test
-    fun aMarkTheSongsOwnNameSaysInOtherWordsIsNoOtherVersion() {
-        // "Nagoriyuki (Live)" is live, so "なごり雪 (ライブ)" is no other version of it, for a song in another script.
-        fun other(name: String, title: String, artist: String = "Fake Band") = SongNames.saysAnother(name, "", listOf(title), listOf(artist))
-        assertFalse(other("なごり雪 (ライブ)", "Nagoriyuki (Live)"))
-        assertFalse(other("白銀の子守唄 (アコースティックギター)", "Shirogane No Komoriuta Acoustic Guitar Version"))
-        // What it says in other words is another version still, and only the title says what the song is.
-        assertTrue(other("なごり雪 (カラオケ)", "Nagoriyuki (Live)"))
-        assertTrue(other("絶体絶命 (MOMOE YAMAGUCHI TRIBUTE SELECTION)", "Zettai Zetsumei"))
-        assertFalse(other("絶体絶命 MOMOE YAMAGUCHI TRIBUTE SELECTION", "Zettai Zetsumei"))
-        assertTrue(other("なごり雪 (Instrumental)", "Nagoriyuki"))
-        assertTrue(other("なごり雪 (ライブ)", "Nagoriyuki"))
-        assertTrue(other("なごり雪 (ライブ)", "Nagoriyuki", "Fake Band Live"))
-        // Elsewhere a name says what it says, as main had it: "曲 (ライブ)" is another version of "Live Forever".
-        assertTrue(SongNames.saysAnotherVersion("曲 (ライブ)", "Live Forever", "Fake Band"))
-        assertTrue(mainSays("曲 (ライブ)", "Live Forever"))
-        assertTrue(SongNames.saysAnotherVersion("なごり雪 (ライブ)", "Nagoriyuki (Live)", "Fake Band"))
-        // A mark that means a word of the song's name, in the name itself, is the name read out: the sixth review, 8.
-        assertFalse(other("ライヴ・フォーエヴァー (Live Forever)", "Live Forever"))
-        assertFalse(other("ライヴ・フォーエヴァー", "Live Forever"))
-        assertFalse(SongNames.saysAnotherVersion("ライヴ・フォーエヴァー (Live Forever)", "Live Forever", "Fake Band"))
-        assertTrue(other("曲 (ライヴ)", "Live Forever"))
-        assertFalse(other("インストラクター", "Fake Song"))
-        assertFalse(SongNames.saysAnotherVersion("インストラクター", "Fake Song", "Fake Band"))
-        // A tag that starts with a version word is the song's own version, where one that names a film isn't.
-        assertFalse(other("偽の歌 (ライブ・アット・武道館)", "Fake Song (Live at Budokan)"))
-        assertTrue(other("さくら (ライブ)", "Sakura (Theme from Live Forever)"))
-        // What a tag says it's from is a film's name; the name before the tags is the song's, "from" or not.
-        assertFalse(other("Fake Song - From \"Live Forever\"", "Fake Song"))
-        assertFalse(other("Fake Song (Theme from Live Forever)", "Fake Song"))
-        assertTrue(other("From Me to You (Live)", "From Me to You"))
-        assertFalse(other("From Me to You", "From Me to You"))
-    }
-
-    @Test
-    fun aHalfThatSaysOnlyAVersionIsAnotherVersion() {
-        fun other(name: String, title: String = "曲") = SongNames.saysAnother(name, "", listOf(title), listOf("Fake Band"))
-        for (half in listOf("Live", "ライブ", "Acoustic Ver.", "Live 2019", "Live at Budokan")) {
-            assertTrue(half, other("曲 - $half"))
-            // Before the first dash, it's the name.
-            assertFalse(half, other("$half - 曲"))
-        }
-        // A half that says no version, an edition, a film, the artist or the song in other words, is no other version.
-        for (half in listOf("From \"Live Forever\"", "Remastered 2012", "Fake Band", "Single Version")) assertFalse(half, other("曲 - $half"))
-        // The other half saying that version too, it's one version said twice.
-        assertFalse(other("なごり雪 (ライブ) - Nagoriyuki (Live)", "Nagoriyuki (Live)"))
-        assertFalse(other("子守唄_Acoustic Guitar Ver.", "Fake Lullaby Acoustic Guitar Version"))
-        assertTrue(other("子守唄_Acoustic Guitar Ver.", "Fake Lullaby"))
-    }
-
-    @Test
-    fun aShortWordForWhatTheSongsOwnNameSaysIsNoOtherVersion() {
-        // "ver." for the song's "Version", and "Inst." for its "Instrumental", as main opened a song in another script.
-        fun other(name: String, title: String) = SongNames.saysAnother(name, "", listOf(title), listOf("Fake Band"))
-        assertFalse(other("真夜中のドア (シングルver.)", "Fake Door (Single Version)"))
-        assertFalse(other("子守唄_Acoustic Guitar Ver.", "Fake Lullaby Acoustic Guitar Version"))
-        assertFalse(other("子守唄 (Inst.)", "Fake Lullaby (Instrumental)"))
-        // A single is an edition, so it says no version, either way: the seventh review, 3.
-        assertFalse(other("真夜中のドア (シングルver.)", "Fake Door"))
-        // A version the song's own name doesn't say still is one.
-        assertTrue(other("真夜中のドア (Live ver.)", "Fake Door (Single Version)"))
-        assertTrue(other("子守唄 (Inst.)", "Fake Lullaby"))
-        // Only in a tag that says nothing else: "(TV ver.)" is another version of "(Single Version)".
-        assertFalse(other("真夜中のドア - Mayonaka no Door (Single ver.)", "Fake Door (Single Version)"))
-        assertFalse(other("シンデレラ・ハネムーン (Speed Up Ver.)", "Cinderella Honeymoon (Speed-Up Version)"))
-        assertTrue(other("真夜中のドア (TV ver.)", "Fake Door (Single Version)"))
-        assertTrue(other("真夜中のドア (Single ver.) - Fake Door (TV ver.)", "Fake Door (Single Version)"))
-        // A version the song says in a word a list has, "Speed-Up", the name doesn't say, though it says another in words
-        // no list has, "Disco funk".
-        assertTrue(other("シンデレラ・ハネムーン – Disco funk ver.", "Cinderella Honeymoon (Speed-Up Version)"))
-        assertFalse(other("シンデレラ・ハネムーン – Disco funk ver.", "Cinderella Honeymoon (Disco Version)"))
-        // Elsewhere "ver." is another version, as main had it: a video "(TV ver.)" of "(Single Version)" isn't the song.
-        for (tag in listOf("TV", "English", "Short", "Dance", "Live", "Single")) {
-            assertTrue(tag, mainSays("Fake Song ($tag ver.)", "Fake Song (Single Version)"))
-            assertTrue(tag, SongNames.saysAnotherVersion("Fake Song ($tag ver.)", "Fake Song (Single Version)", "Fake Band"))
-        }
-        assertTrue(SongNames.saysAnotherVersion("子守唄 (Inst.)", "Fake Lullaby (Instrumental)", "Fake Band"))
-        // An apostrophe is spelling: "Directors" is "Director's".
-        assertFalse(other("偽の歌 (Directors Edit Version)", "Fake Song (Director's Edit Version)"))
-        assertFalse(other("偽の歌 (Director’s Edit Version)", "Fake Song (Directors Edit Version)"))
-        assertFalse(other("偽の歌 (Directors Cut Version)", "Fake Song (Director's Edit Version)"))
-        assertTrue(other("偽の歌 (Directors Live Version)", "Fake Song (Director's Edit Version)"))
-    }
-
-    @Test
-    fun whatAllTheSongsNamesSayTogetherIsItsOwn() {
-        fun other(name: String, vararg titles: String) = SongNames.saysAnother(name, "", titles.toList(), listOf("Fake Band"))
-        // "Single" in English and "シングル" in Japanese: "(Single ver.)" is the song's own version.
-        val single = arrayOf("Fake Song (Single Version)", "偽の歌 (シングル・バージョン)")
-        assertFalse(other("偽の歌 (Single ver.)", *single))
-        assertFalse(other("偽の歌 (シングル・バージョン)", single.first()))
-        assertFalse(other("偽の歌 (ｼﾝｸﾞﾙ･ﾊﾞｰｼﾞｮﾝ)", single.first()))
-        assertFalse(other("偽の歌 (シングル・バージョン)", "Fake Song", "偽の歌 (シングル・バージョン)"))
-        // Katakana runs words into one: "スピードアップ" is "Speed-Up", and "ダンスリミックス" "Dance Remix".
-        assertFalse(other("偽の歌 (スピードアップバージョン)", "Fake Song (Speed-Up Version)"))
-        assertTrue(other("偽の歌 (スピードアップバージョン)", "Fake Song"))
-        assertFalse(other("偽の歌 (ダンスリミックス・バージョン)", "Fake Song (Dance Remix Version)"))
-        assertFalse(other("偽の歌 (ダンスフロアリミックス・バージョン)", "Fake Song (Dance Floor Remix Version)"))
-        // In a run with a word no list has, "フロア", it can't be told, and "version" alone doesn't say which.
-        assertFalse(other("偽の歌 (ダンスフロアリミックス・バージョン)", "Fake Song"))
-        assertTrue(other("偽の歌 (ダンスリミックス・バージョン)", "Fake Song"))
-        // In a tag that says "version", a word in Latin letters says which, but its artist's name: "Fake Band" is no band version.
-        assertTrue(other("偽の歌 (TV Version)", "Fake Song"))
-        assertFalse(other("偽の歌 (Fake Band Version)", "Fake Song"))
-        assertTrue(other("偽の歌 (Band Version)", "Fake Song"))
-        // A version word near a word of its name, or of another tag, is another version.
-        for ((title, word) in listOf(
-            "Love Song" to "ライヴ", "Sorry" to "スロー", "Wrong Way" to "ロング", "Remix Me" to "リミックス", "Adam" to "デモ", "Speed Up" to "スピードアップ"
+    fun onlyATagThatSaysAVersionAndNothingElseCounts() {
+        for (name in listOf(
+            "Fake Song (Live)", "Fake Song (Live Version)", "Fake Song - Acoustic Version", "Fake Song [Remix]", "Fake Song (Inst.)",
+            "Fake Song (Slowed + Reverb)", "Fake Song (Sped Up)", "Fake Song (Live & Acoustic)", "Fake Song (Versión Live)",
+            "偽の歌 (ライブ)", "偽の歌 (ライヴ・バージョン)", "偽の歌（ﾗｲﾌﾞ）", "偽の歌【カラオケ】", "偽の歌 (オフ・ヴォーカル)", "偽の歌 (弾き語り)", "假歌 (现场版)",
+            "假歌 (伴奏)", "가짜 노래 (라이브)", "가짜 노래 (라이브 버전)", "가짜 노래 (피아노 버전)", "Fake Song (Live) (2019)"
         )) {
-            assertTrue(word, other("偽の歌 (${word}バージョン)", "$title (Single Version)"))
+            assertTrue(name, SongNames.versionTagged(name))
         }
-        // But a short or a full version is an edition, or the whole song.
-        for ((title, word) in listOf("Stay" to "ショート", "Free" to "フル")) assertFalse(word, other("偽の歌 (${word}バージョン)", "$title (Single Version)"))
-        assertTrue(other("曲 (ライブ)", "Live Forever"))
-        assertFalse(other("曲 (ライヴ)", "Fake Song (Live)"))
-        // "Xバージョン" is "X ver.": a version the names don't say is another, in any script.
-        for (name in listOf("偽の歌 (TVバージョン)", "偽の歌 (TV Version)", "偽の歌 (Orchestra Version)", "봄날 (라이브 버전)", "偽の歌 (ライブ・ヴァージョン)")) {
-            assertTrue(name, other(name, *single))
+        for (name in listOf(
+            "Fake Song", "Live Forever", "Fake Song Live", "Fake Song (Live at Budokan)", "Fake Song (Live 2019)", "Fake Song (prod. Live Crew)",
+            "Fake Song (Fake Band x Live Crew)", "Fake Song [English Subtitles]", "Fake Song (Lyrics in English)", "偽の歌 (アニメMV)", "偽の歌 (Live Crew)",
+            "Fake Song (English Version)", "Fake Song (Remastered 2011)", "Fake Song (Album Version)", "Fake Song (Version)", "偽の歌 (バージョン)",
+            "偽の歌 (TVアニメ「ライブ」オープニングテーマ)", "偽の歌「ライブ」", "偽の歌 (얼라이브)", "偽の歌 (밴드라이브)", "偽の歌 (バンドライブ)", "偽の歌 (ライブ2019)",
+            "偽の歌 (Живой)", "Fake Song ()", "Fake Song - Live from Budokan", "偽の歌 (En Vivo)"
+        )) {
+            assertFalse(name, SongNames.versionTagged(name))
         }
-        // But not in a word no list has, "英語", nor with no word: "version" alone doesn't say which.
-        assertFalse(other("偽の歌 (英語バージョン)", *single))
-        assertFalse(other("偽の歌 (バージョン)", "Fake Song"))
-        // A version none of them says by name, against an edition, can't be told apart.
-        assertFalse(other("偽の歌 (Single ver.)", "Fake Song (Single)"))
-        // "ver" and "version" are one word, whichever the song's names and the name say.
-        assertFalse(other("スパークル (movie ver.)", "Sparkle - Movie Ver."))
-        assertFalse(other("スパークル (Movie Version)", "Sparkle - Movie Ver."))
-        assertFalse(other("スパークル ver", "Sparkle Ver"))
-        // "Movie" in a tag that says "version" is the film's version, which "original" isn't.
-        assertTrue(other("スパークル (original ver.)", "Sparkle - Movie Ver."))
-        // A word katakana says a version with says it in katakana, "バラード" against "Speed-Up", where in Latin letters
-        // it may be anything, "TV Sizes"; and either way it's what the other says.
-        assertTrue(other("偽の歌 (バラードバージョン)", "Fake Song (Speed-Up Version)"))
-        assertTrue(other("偽の歌 (スピードアップバージョン)", "Fake Song (Ballad Version)"))
-        assertFalse(other("偽の歌 (バラードバージョン)", "Fake Song (Ballad Version)"))
-        assertFalse(other("偽の歌 (Ballad Version)", "偽の歌 (バラードバージョン)"))
-        assertTrue(other("偽の歌 (テレビバージョン)", "Fake Song (Single Version)"))
-        assertFalse(other("偽の歌 (テレビバージョン)", "Fake Song (TV Version)"))
-        assertFalse(other("偽の歌 - Ballad", "Fake Song"))
-        // Two versions both said by a word a list has are two: English and Japanese.
-        assertTrue(other("スパークル (English ver.)", "Sparkle - Japanese Ver."))
-        assertTrue(other("スパークル (イングリッシュ・バージョン)", "Sparkle (Japanese Version)"))
-        // Its album is a tag of its own.
-        assertTrue(other("偽の歌 | Instrumental Works", *single))
-        assertFalse(other("偽の歌 | Fake Works", *single))
     }
 
     @Test
-    fun whatSaysNoVersionIsTakenOffBothFirst() {
-        fun other(name: String, title: String = "偽の歌", album: String = "") = SongNames.saysAnother(name, album, listOf(title), listOf("Fake Band"))
-        // An edition, what it's from, and a subtitle: the seventh review, 3, 4 and 6.
-        for (said in listOf(
-            "偽の歌 (Album Version)", "偽の歌 (Single Version)", "偽の歌 (Original Version)", "偽の歌 (映画「ライブ・フォーエバー」主題歌)",
-            "偽の歌 ～偽りの夜～", "偽の歌 〜偽りの夜〜", "偽の歌 (Full Version)", "偽の歌 - Full", "偽の歌 (Theme from \"Live Forever\")"
-        )) {
-            assertFalse(said, other(said))
-            assertFalse(said, other("偽の歌", said))
+    fun aWordOrAMarkOfAVersionAnywhereIsMentioned() {
+        for (text in listOf("Fake Song Live", "Live Best", "偽の歌 ライブ", "얼라이브", "Fake Song Acoustic", "假歌现场", "Karaoke Picks", "MTV")) {
+            assertTrue(text, SongNames.mentionsAVersion(text))
         }
-        // A word no list has says no version, in any script: the seventh review, 5.
-        assertFalse(other("偽の歌 (クリスマス・バージョン)", "Fake Song (Christmas Version)"))
-        assertFalse(other("Fake Song (Christmas Version)", "偽の歌 (クリスマス・バージョン)"))
-        // Without "version", a word of the katakana list says one only in katakana: "Ballad" in Latin letters may be a name.
-        assertTrue(other("偽の歌 (バラード)"))
-        assertFalse(other("偽の歌 (Ballad)"))
-        // A mark says what it means, or itself where it has no word in Latin letters.
-        assertTrue(other("偽の歌 (弾き語り)"))
-        assertFalse(other("偽の歌 (翻唱)", "偽の歌 (Cover)"))
-        // Nor does "Version" alone: it doesn't say which, as "Smooth Rap" may be said without it.
-        assertFalse(other("偽の歌 (クリスマス・バージョン)"))
-        assertFalse(other("Fake Song - Version Español", "Fake Song"))
-        assertFalse(other("Fake Song - Version Español", "Fake Song (Version Español)"))
-        assertFalse(other("偽の歌 smooth rap - Fake Song smooth rap", "Fake Song (Smooth Rap Version)"))
-        assertFalse(other("偽の歌", "Fake Song (Director's Edit Version)"))
-        assertTrue(other("偽の歌", "Fake Song (Live Version)"))
-        // What the song says, its album may say: "Fake Song (Live)" on "Live at Budokan".
-        assertTrue(other("偽の歌", "偽の歌 (Live)"))
-        assertFalse(other("偽の歌", "偽の歌 (Live)", album = "Fake Band • Live at Budokan"))
-        assertFalse(other("偽の歌 (ライブ・バージョン)", "偽の歌 (Live)"))
-        // Nor inside a longer word in Hangul, which may still say it: it can't tell.
-        assertFalse(other("偽の歌 (얼라이브)", "偽の歌 (Live)"))
-        // A version the song's name says in katakana, its album may say in Latin letters, but not in its artist's name.
-        assertFalse(other("偽の歌", "偽の歌 (バラードバージョン)", album = "Fake Band • Ballad Best"))
-        assertTrue(other("偽の歌", "偽の歌 (バンドバージョン)", album = "Fake Band • Fake Album"))
-        assertFalse(other("偽の歌", "偽の歌 (バンドバージョン)", album = "Fake Band • Band Versions"))
+        for (text in listOf("Fake Song", "Fake Album", "偽の歌", "にせのうた", "Fake Søng", "1M views")) {
+            assertFalse(text, SongNames.mentionsAVersion(text))
+        }
     }
 
     @Test
-    fun aNameSaysNoOtherAndIsTheSongOnlyInItsOwnScript() {
-        fun other(name: String, vararg titles: String) = SongNames.saysAnother(name, "", titles.toList(), listOf("Fake Band"))
-        // Another name, script or spelling says no other: it can't tell, so it never doubts. The eighth review, 2, 3, 4,
-        // 6, 7 and 9.
-        for ((name, title) in listOf(
-            "別の歌" to "偽の歌", "Other Song" to "Fake Song", "Ryuusei" to "Ryūsei", "Toukyou" to "Tōkyō", "Soeren" to "Søren", "Shooting Star" to "Ryūsei",
-            "明日の歌" to "あすの歌", "三ヶ月" to "3ヶ月", "君と僕" to "君&僕", "Fake Song Pt.2" to "Fake Song Part 2", "ちぢむ" to "ちじむ", "こころ" to "こゝろ",
-            "얼라이브" to "Alive", "러브드라이브" to "Love Drive", "バラード" to "Ballade", "テレビ" to "Television", "Live Wire" to "Livewire",
-            "Other Song (偽の歌)" to "Fake Song", "Fake Band - 別の歌" to "偽の歌", "2 Other Song" to "Fake Song"
-        )) {
-            assertFalse("$name $title", other(name, title))
-            assertFalse("$title $name", other(title, name))
+    fun aNameOutsideItsTagsIsItsLettersAndDigitsBeforeThem() {
+        for (name in listOf("偽の歌 (Live)", "偽の歌 - Live", "偽の歌", "偽の歌【ライブ】", "偽の歌（ﾗｲﾌﾞ）", " 偽の歌 ")) {
+            assertEquals(name, "偽の歌", SongNames.outsideTags(name))
         }
-        // One of its names is one of the song's, in one script, once folded: a long vowel, ヴ, kana, German's "ue", a mark or
-        // a stroke, China's kanji, ぢ, づ and a repeat mark, or kanji read the same.
-        fun names(name: String, vararg titles: String) = SongNames.namesTheSong(name, titles.toList())
-        for ((name, title) in listOf(
-            "とうきょう" to "トーキョー", "とーきょー" to "とうきょう", "さようなら" to "さよなら", "櫻" to "桜", "バイオリン" to "ヴァイオリン",
-            "Müde" to "Muede", "Muede" to "Müde", "はなみずき" to "ﾊﾅﾐｽﾞｷ", "さくら" to "サクラ", "Fake Søng" to "Fake Song", "Straße Æon" to "Strasse Aeon",
-            "Canción Falsa" to "Cancion Falsa", "雨" to "飴", "えいが" to "えーが", "ちぢむ" to "ちじむ", "こころ" to "こゝろ",
-            "いすず" to "いすゞ", "ススム" to "スヽム", "いすず" to "イスヾ", "時時" to "時々", "偽の歌 - Fake Song" to "Fake Song", "Fake Song (Live)" to "Fake Song"
-        )) {
-            assertTrue("$name $title", names(name, title))
-            assertTrue("$title $name", names(title, name))
-        }
-        assertTrue(names("とうきょう", "Tokyo", "トーキョー"))
-        // Not in two scripts, not a part of it, not another name, nor kanji read otherwise or by no reading known.
-        for ((name, title) in listOf(
-            "明日" to "あす", "さくら" to "桜", "Fake Song" to "偽の歌", "歌" to "偽の歌", "別の歌" to "偽の歌", "Other Song" to "Fake Song",
-            "別の歌" to "脳", "はら" to "ばら", "大幸运" to "小幸运", "Другая песня" to "Fake Song", "Ryuusei" to "Ryūsei"
-        )) {
-            assertFalse("$name $title", names(name, title))
-        }
-    }
-
-    private companion object {
-        /** Main's marks, then those this branch adds. */
-        val MAIN_MARKS = listOf(
-            "カラオケ", "ライブ", "弾き語り", "歌ってみた", "演奏してみた", "弾いてみた", "叩いてみた", "ピアノ", "ギター",
-            "カバー", "メドレー", "練習", "オルゴール", "アカペラ", "翻唱", "伴奏", "伴唱", "卡拉OK", "커버", "라이브", "노래방"
-        )
-        val NEW_MARKS = listOf(
-            "串烧", "串燒", "메들리", "Off Vocal", "TV Size", "オフボーカル", "オフヴォーカル", "インスト", "TVサイズ", "テレビサイズ",
-            "纯音乐", "純音樂", "인스트", "반주", "リミックス", "混音", "리믹스", "演唱会", "演唱會", "アコースティック"
-        )
-        val MARKS = MAIN_MARKS + NEW_MARKS
-
-        /** Main's [SongNames.saysAnotherVersion], as it was before marks were words: a word of its own, or a mark anywhere. */
-        fun mainSays(name: String, title: String): Boolean {
-            fun words(text: String) = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "")
-                .lowercase(java.util.Locale.ROOT).split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.toSet()
-            fun letters(text: String) = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD).replace(Regex("""\p{M}+"""), "")
-                .lowercase(java.util.Locale.ROOT).replace(Regex("""[^\p{L}\p{N}]+"""), "")
-            if ((words(name) - words(title) - words("Fake Band")).any { it in MAIN_VERSION_WORDS }) return true
-            return MAIN_MARKS.map(::letters).any { it in letters(name) && it !in letters(title) }
-        }
-
-        val MAIN_VERSION_WORDS = setOf(
-            "cover", "covers", "covered", "karaoke", "live", "unplugged", "mtv", "vivo", "directo", "session", "sessions",
-            "concert", "tour", "remix", "mix", "instrumental", "inst", "acoustic", "acustico", "piano", "guitar",
-            "bass", "drum", "drums", "chords", "tab", "tabs", "tutorial", "lesson", "practice", "reaction", "slowed",
-            "reverb", "sped", "nightcore", "8d", "demo", "medley", "mashup", "amv", "mmd", "ver", "tribute", "ktv",
-            "acapella", "acappella", "cappella", "capella", "8bit", "orgel", "musicbox"
-        )
+        assertEquals("fakesong2", SongNames.outsideTags("Fake Song 2 (Live)"))
+        assertEquals("fakesøng", SongNames.outsideTags("Fake Søng"))
+        assertEquals("にせのうた", SongNames.outsideTags("にせのうた"))
+        assertEquals("偽の歌ライブ", SongNames.outsideTags("偽の歌ライブ"))
     }
 }

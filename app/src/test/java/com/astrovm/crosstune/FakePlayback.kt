@@ -1,11 +1,8 @@
 package com.astrovm.crosstune
 
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
 
 /**
  * A music app the test plays from: whether Crosstune may see it, or Android holds that back for now,
@@ -67,16 +64,7 @@ internal class FakePlayback : PlaybackSource {
     /** The app each follow was asked for, null for any. */
     val followedApps: MutableList<String?> = CopyOnWriteArrayList()
 
-    /** Till done, following says nothing, as an app may take a moment to say what it plays. */
-    @Volatile
-    var said: CompletableDeferred<Unit>? = null
-
-    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> {
-        followed += song
-        followedApps += app
-        val flow = app?.let(appPlaying::get) ?: playing
-        return said?.let { later -> flow { later.await(); emitAll(flow) } } ?: flow
-    }
+    override fun follow(song: MusicMetadata, app: String?): Flow<Following?> = (app?.let(appPlaying::get) ?: playing).also { followed += song; followedApps += app }
 
     /** Whether what started isn't believed yet, as the phone's sound takes a moment to follow what an app says it plays. */
     var quietYet = false

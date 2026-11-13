@@ -82,8 +82,8 @@ class AutoReportsTest {
     @Test
     fun aReportOwedIsKeptUntilItGoesAndThenForgotten() {
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, """{"fake":1}""")
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, """{"fake":2}""")
+        reports.owe(song("Demo"), """{"fake":1}""")
+        reports.owe(song("Demo"), """{"fake":2}""")
         assertEquals(listOf("""{"fake":2}"""), AutoReports(preferences).owed().map { it.json })
         reports.paid(reports.owed().single())
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
@@ -92,7 +92,7 @@ class AutoReportsTest {
 
     @Test
     fun aReportThatWentAnotherWayIsNotOwedAnyMore() {
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "{}")
+        reports.owe(song("Demo"), "{}")
         reports.remember(song("Demo"), SongProblem.TIMED_BY_HAND)
         assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
         // Gone from what's kept too, not only hidden.
@@ -101,8 +101,8 @@ class AutoReportsTest {
 
     @Test
     fun reportsOwedForSeveralSongsAreKeptAndOneIsPutBackAlone() {
-        reports.owe(song("One"), SongProblem.TIMED_BY_HAND, "1")
-        reports.owe(song("Two"), SongProblem.TIMED_BY_HAND, "2")
+        reports.owe(song("One"), "1")
+        reports.owe(song("Two"), "2")
         assertEquals(listOf("1", "2"), reports.owed().map { it.json })
         reports.owedNothing(song("one"))
         assertEquals(listOf("2"), reports.owed().map { it.json })
@@ -113,7 +113,7 @@ class AutoReportsTest {
     @Test
     fun onlyTheLatestReportsOwedAreKept() {
         assertEquals(20, AutoReports.MAX_OWED)
-        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.TIMED_BY_HAND, "$it") }
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
         assertEquals((1..AutoReports.MAX_OWED).map { "$it" }, reports.owed().map { it.json })
     }
 
@@ -127,11 +127,11 @@ class AutoReportsTest {
 
     @Test
     fun aReportOwedIsStillOwedOnlyAsItWasKept() {
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "1")
+        reports.owe(song("Demo"), "1")
         val first = reports.owed().single()
         assertTrue(reports.owes(first))
         // Put in time again: the newer goes, not the one read before.
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "2")
+        reports.owe(song("Demo"), "2")
         assertFalse(reports.owes(first))
         reports.paid(reports.owed().single())
         assertFalse(reports.owes(first))
@@ -143,7 +143,7 @@ class AutoReportsTest {
         repeat(30) { songs.put("song$it\u0000band", JSONObject().put("words", "1").put("points", JSONArray().put(JSONArray().put(0).put(100)))) }
         preferences.edit().putString("lyrics_sync", songs.toString()).commit()
         reports.keepEarlier("2.24.0", "16 (36)")
-        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.TIMED_BY_HAND, "$it") }
+        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), "$it") }
         val owed = reports.owed()
         assertEquals(30, owed.count { it.earlier })
         assertEquals(AutoReports.MAX_OWED, owed.count { !it.earlier })
@@ -154,17 +154,12 @@ class AutoReportsTest {
     }
 
     @Test
-    fun aSongKeptBeforeWithMoreLinesThanTheBoxTakesSendsThoseThatTellMost() {
-        val points = JSONArray().apply { repeat(301) { put(JSONArray().put(it * 1000L).put(it * 1000L + if (it == 150) 3000 else 5)) } }
+    fun aSongKeptBeforeWithMoreLinesThanTheBoxTakesSendsTheFirstOnes() {
+        val points = JSONArray().apply { repeat(301) { put(JSONArray().put(it * 1000L).put(it * 1000L + 5)) } }
         preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band\u0000123", JSONObject().put("points", points)).toString()).commit()
         reports.keepEarlier("2.24.0", "16 (36)")
         val song = JSONObject(reports.owed().single().json).getJSONObject("song")
-        val timing = song.getJSONArray("timing")
-        assertEquals(300, timing.length())
-        val times = (0 until timing.length()).map { timing.getJSONObject(it).getLong("timedMs") }
-        // The ends and the line off from the rest stay; one in a straight run goes.
-        assertTrue(times.containsAll(listOf(0L, 150_000L, 300_000L)))
-        assertFalse(times.contains(1000L))
+        assertEquals(300, song.getJSONArray("timing").length())
         // A key with a length and no recording.
         assertEquals(123L, song.getLong("lengthMs"))
         assertFalse(song.has("recording"))
@@ -178,88 +173,5 @@ class AutoReportsTest {
         val song = JSONObject(reports.owed().single().json).getJSONObject("song")
         assertFalse(song.has("lengthMs"))
         assertFalse(song.has("recording"))
-    }
-
-    @Test
-    fun aSongKeptBeforeSendsOnlyTheLinesAndTheTextsTheBoxTakes() {
-        val points = JSONArray().put(JSONArray().put(-1).put(100)).put(JSONArray().put(0).put(ReportBox.DAY_MS + 1)).put(JSONArray().put(500).put(600))
-        val key = "${"t".repeat(301)}\u0000band\u0000${"r".repeat(201)}\u0000"
-        preferences.edit().putString("lyrics_sync", JSONObject().put(key, JSONObject().put("points", points)).toString()).commit()
-        reports.keepEarlier("2.24.0", "16 (36)")
-        val song = JSONObject(reports.owed().single().json).getJSONObject("song")
-        assertEquals("""[{"timedMs":500,"heardMs":600}]""", song.getJSONArray("timing").toString())
-        assertEquals("t".repeat(300), song.getString("title"))
-        assertEquals("r".repeat(200), song.getString("recording"))
-    }
-
-    @Test
-    fun aSongKeptBeforeWithNoLineTheBoxTakesIsNotOwed() {
-        val points = JSONArray().put(JSONArray().put(-1).put(100))
-        preferences.edit().putString("lyrics_sync", JSONObject().put("song\u0000band", JSONObject().put("points", points)).toString()).commit()
-        reports.keepEarlier("2.24.0", "16 (36)")
-        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
-    }
-
-    @Test
-    fun aReportTheBoxTurnedAwayIsNoLongerOwedNorTakenAsSent() {
-        reports.owe(song("Song"), SongProblem.TIMED_BY_HAND, "{}")
-        reports.turnedAway(reports.owed().single())
-        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
-        assertFalse(reports.reported(song("Song"), SongProblem.TIMED_BY_HAND))
-    }
-
-    @Test
-    fun aProblemFoundIsOwedBesideTheWordsPutInTimeAndOnlyItsLatestAreKept() {
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "by hand")
-        repeat(AutoReports.MAX_OWED + 1) { reports.owe(song("Song $it"), SongProblem.NO_LYRICS, "$it") }
-        // The same song's other problem is owed apart, and the same problem again gives way to the newer.
-        reports.owe(song("Song 20"), SongProblem.NO_CHORDS, "chords")
-        reports.owe(song("Song 20"), SongProblem.NO_LYRICS, "newer")
-        assertEquals(listOf("by hand") + (2 until AutoReports.MAX_OWED).map { "$it" } + listOf("chords", "newer"), reports.owed().map { it.json })
-    }
-
-    @Test
-    fun aProblemTheBoxTurnedAwayIsntSentAgainButWordsPutInTimeByHandStillGo() {
-        reports.owe(song("Demo"), SongProblem.TIMED_BY_HAND, "{}")
-        reports.turnedAway(song("Demo"), SongProblem.TIMED_BY_HAND)
-        assertEquals(emptyList<AutoReports.Owed>(), reports.owed())
-        assertFalse(reports.reported(song("Demo"), SongProblem.TIMED_BY_HAND))
-        reports.turnedAway(song("Demo"), SongProblem.NO_LYRICS)
-        assertTrue(reports.reported(song("Demo"), SongProblem.NO_LYRICS))
-        // Neither takes a place of the day's.
-        assertTrue(List(AutoReports.FOUND_A_DAY) { reports.takePlace() }.all { it != null })
-    }
-
-    @Test
-    fun onlySoManyProblemsFoundGoInADayByUtcAndTheNextDayMoreDo() {
-        var now = 3 * ReportBox.DAY_MS - 1
-        val reports = AutoReports(preferences, session = 1, now = { now })
-        assertEquals(23, AutoReports.FOUND_A_DAY)
-        val places = List(AutoReports.FOUND_A_DAY) { reports.takePlace() }.filterNotNull()
-        assertEquals(AutoReports.FOUND_A_DAY, places.size)
-        // The check and the count are one step, so none is left for another found meanwhile, here or anew.
-        assertNull(reports.takePlace())
-        assertNull(AutoReports(preferences, now = { now }).takePlace())
-        // Sent, it's remembered, which takes no other place.
-        reports.remember(song("Demo"), SongProblem.NO_LYRICS)
-        assertNull(reports.takePlace())
-        // One that didn't go gives its place back, for one more.
-        reports.giveBack(places.first())
-        assertEquals(listOf(true, false), List(2) { reports.takePlace() != null })
-        now++
-        assertTrue(reports.takePlace() != null)
-        // A place of the day before is gone with it: given back, it frees none of today's.
-        reports.giveBack(places.last())
-        assertEquals(AutoReports.FOUND_A_DAY - 1, List(AutoReports.FOUND_A_DAY) { reports.takePlace() }.count { it != null })
-        // What was kept of the day, broken, counts as nothing.
-        preferences.edit().putString("auto_reports_found_today", "${now / ReportBox.DAY_MS}:many").commit()
-        assertTrue(reports.takePlace() != null)
-    }
-
-    @Test
-    fun withoutAClockGivenTheDayIsTheWallClocks() {
-        val reports = AutoReports(preferences, session = 1)
-        repeat(AutoReports.FOUND_A_DAY) { reports.takePlace() }
-        assertNull(AutoReports(preferences, session = 1, now = System::currentTimeMillis).takePlace())
     }
 }

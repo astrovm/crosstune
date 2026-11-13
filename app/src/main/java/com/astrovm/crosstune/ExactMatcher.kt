@@ -13,7 +13,6 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -36,7 +35,7 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
  * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
  * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length;
- * 6, as what main opened on YouTube Music doesn't open when its tags say it's another version.
+ * 6, as a YouTube Music row whose tag says a version gives way to the same song without one, for a song with no tag.
  */
 internal const val MATCH_VERSION = 6
 
@@ -70,11 +69,7 @@ internal class ExactMatcher(
     private val timeoutMs: Long = TIMEOUT_MS,
     private val pickTimeoutMs: Long = PICK_TIMEOUT_MS,
     /** A Spotify artist's id by their name, see [MusicBrainz.spotifyArtist]; none by default. */
-    private val spotifyArtist: suspend (String) -> String? = { null },
-    /** Where names are read, 桜 as さくら (see [SongNames.namesTheSong]): off the main thread, as the first read loads a dictionary. */
-    private val readingDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    /** Whether a row, on its album, by its credit, is another recording than the one named so: [SongNames.saysAnother]. */
-    private val saysAnother: (String, String, Collection<String>, Collection<String>, String) -> Boolean = SongNames::saysAnother
+    private val spotifyArtist: suspend (String) -> String? = { null }
 ) {
 
     /** What looking for something came to: found, not there, or no answer, e.g. offline, which says neither. */
@@ -150,15 +145,7 @@ internal class ExactMatcher(
      */
     private class Answer(val url: String?, val toPick: ToPick? = null)
 
-    /** What ChatGPT may pick from, and of it what it [takes]: all of it, unless what main opened was doubted. */
-    private data class ToPick(
-        val metadata: MusicMetadata,
-        val songs: List<Row>,
-        val videos: List<Row>,
-        val watchUrl: String,
-        val lengthsMs: List<Long>,
-        val takes: (Row) -> Boolean = { true }
-    )
+    private class ToPick(val metadata: MusicMetadata, val songs: List<Row>, val videos: List<Row>, val watchUrl: String, val lengthsMs: List<Long>)
 
     /**
      * What [target] has for [metadata]. A search that failed or timed out is asked once more when
@@ -197,7 +184,8 @@ internal class ExactMatcher(
     private suspend fun picked(toPick: ToPick): Match {
         val url = withTimeoutOrNull(pickTimeoutMs) {
             Answer(
-                pickedFrom(toPick, toPick.songs, videos = false) ?: pickedFrom(toPick, toPick.videos, videos = true)
+                pickedFrom(toPick.metadata, toPick.songs, toPick.watchUrl, videos = false, toPick.lengthsMs)
+                    ?: pickedFrom(toPick.metadata, toPick.videos, toPick.watchUrl, videos = true, toPick.lengthsMs)
             )
         } ?: return Match.Failed
         return url.url?.let(Match::Found) ?: Match.Missing
@@ -673,72 +661,53 @@ internal class ExactMatcher(
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
-        val opened = withContext(readingDispatcher) { opened(items.map(::row), videos.map(::row), names) }
+        val (rows, shown) = items.map(::row) to videos.map(::row)
+        for ((among, check) in listOf(rows to ::isTheSong, rows to ::isTheSongInAnotherScript, shown to ::isTheSongsVideo)) {
+            val found = among.firstOrNull { check(it, names) } ?: continue
+            return Answer(watchUrl + plainOne(found, among, names, check).id)
+        }
         // Last, the songs, then the videos, are picked from, each asked about apart.
-        return settled(opened, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs), names)
-    }
-
-    /** What main opened, [row], and whether its tags say it's another version, [doubted] (see [doubts]). */
-    private class Opened(val row: Row, val doubted: Boolean)
-
-    /**
-     * What main opened, found as main found it: the first song under one of the song's names, else the first in
-     * another script (see [isTheSongInAnotherScript]), else the first video that plays it; null for none. What main
-     * missed only makes it [Opened.doubted] (see [doubts]).
-     */
-    private fun opened(rows: List<Row>, videos: List<Row>, names: Names): Opened? {
-        val row = rows.firstOrNull { isTheSong(it, names) } ?: rows.firstOrNull { isTheSongInAnotherScript(it, names) }
-            ?: videos.firstOrNull { isTheSongsVideo(it, names) }
-        return row?.let { Opened(it, doubts(it, names)) }
+        return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
     }
 
     /**
-     * Whether [row] says it's another recording than [names], by its tags and its second line, which has its artist
-     * and its album: see [SongNames.saysAnother]. Only what says so counts, never what it can't tell.
+     * [found], the first of [rows] main's [check] names as the song, or in its place the same song without a version:
+     * where none of the song's names has a tag, and one of [found]'s says a version and nothing else (see
+     * [SongNames.versionTagged]), the first other of [rows] with no tag, no word of a version in its name or second
+     * line, that passes the same [check], is [found]'s name with its tags cut, and is as close to the song's length. So what opens
+     * is always a row main's own check names as the song, and where main opens one, one opens.
      */
-    private fun doubts(row: Row, names: Names): Boolean =
-        saysAnother(row.name, row.details.joinToString(" "), names.titles, names.artists, row.details.first())
-
-    /**
-     * Where what opens is settled, in one place: what main [opened], unless it's doubted; otherwise ChatGPT picks from
-     * [toPick], in main's order, as when main opened nothing. So without ChatGPT, nothing opens that main didn't. Once
-     * main's row is doubted, what ChatGPT picks opens only where main's own steps say it's the song, and nothing says
-     * it's another (see [isTheSongToo]); else nothing opens.
-     */
-    private fun settled(opened: Opened?, toPick: ToPick, names: Names): Answer = when {
-        opened == null -> Answer(null, toPick)
-        !opened.doubted -> Answer(toPick.watchUrl + opened.row.id)
-        else -> Answer(null, toPick.copy(takes = { isTheSongToo(it, names) }))
+    private fun plainOne(found: Row, rows: List<Row>, names: Names, check: (Row, Names) -> Boolean): Row {
+        if (names.titles.any(SongNames::tagged) || !SongNames.versionTagged(found.name)) return found
+        val name = SongNames.outsideTags(found.name)
+        val off = offBy(found, names)
+        return rows.firstOrNull { row ->
+            row !== found && !SongNames.tagged(row.name) && !SongNames.mentionsAVersion(row.name + " " + row.details.drop(1).joinToString(" ")) &&
+                check(row, names) && SongNames.outsideTags(row.name) == name && offBy(row, names) <= off
+        } ?: found
     }
 
-    /**
-     * Whether [row], picked in place of a doubted one, is the song: main's own check of a song or a video says so, or
-     * one of its names is one of the song's in one script, by its artist (see [SongNames.namesTheSong]); and nothing
-     * says it's another recording (see [doubts]). Not said another isn't enough: "別の歌" by the artist says nothing.
-     */
-    private fun isTheSongToo(row: Row, names: Names): Boolean {
-        val named = isTheSong(row, names) || isTheSongsVideo(row, names) || SongNames.namesTheSong(row.name, names.titles) && byTheArtist(row, names)
-        return named && !doubts(row, names)
+    /** How far [row] is from the nearest of the song's lengths: none where the song's aren't known, the most where the row's isn't. */
+    private fun offBy(row: Row, names: Names): Long {
+        if (names.lengthsMs.isEmpty()) return 0
+        val length = row.lengthMs ?: return Long.MAX_VALUE
+        return names.lengthsMs.minOf { kotlin.math.abs(it - length) }
     }
-
-    /** Whether [row]'s first line of details, its artist or channel, credits one of the song's artists. */
-    private fun byTheArtist(row: Row, names: Names): Boolean = SongNames.artists(row.details.first()).any(names.artists.flatMap(SongNames::artists).toSet()::contains)
 
     /** The songs or videos among [items] that play. */
     private fun playable(items: List<JSONObject>): List<Row> = items.map(::row).filter { it.id != null }
 
     /**
      * The one among [rows] that [pick] says the song is, each shown as "title | details". Their titles
-     * are anyone's, and may say anything, so one far from all of the song's lengths isn't taken: a few
-     * seconds for a song, more for a video, which may open with more. Nor one [toPick] doesn't take.
+     * are anyone's, and may say anything, so one far from all of the song's [lengthsMs] isn't taken: a few
+     * seconds for a song, more for a video, which may open with more.
      */
-    private suspend fun pickedFrom(toPick: ToPick, rows: List<Row>, videos: Boolean): String? {
+    private suspend fun pickedFrom(metadata: MusicMetadata, rows: List<Row>, watchUrl: String, videos: Boolean, lengthsMs: List<Long>): String? {
         if (rows.isEmpty()) return null
-        val index = pick(toPick.metadata, rows.map { "${it.name} | ${it.details.joinToString(" • ")}" }, videos) ?: return null
+        val index = pick(metadata, rows.map { "${it.name} | ${it.details.joinToString(" • ")}" }, videos) ?: return null
         val row = rows.getOrNull(index) ?: return null
-        val off = row.lengthMs?.let { length -> toPick.lengthsMs.map { kotlin.math.abs(it - length) }.minOrNull() } ?: 0L
-        if (off > if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS) return null
-        return (toPick.watchUrl + row.id).takeIf { withContext(readingDispatcher) { toPick.takes(row) } }
+        val off = row.lengthMs?.let { length -> lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
+        return (watchUrl + row.id).takeIf { off <= if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS }
     }
 
     /**
@@ -892,7 +861,9 @@ internal class ExactMatcher(
         if (row.id == null) return false
         val album = row.details.getOrNull(1).orEmpty()
         val named = SongNames.titleNames(row.name).any { name -> names.titles.any { SongNames.sameVersion(it, name, album) } }
-        return named && byTheArtist(row, names) && sameLength(row, names)
+        val wanted = names.artists.flatMap(SongNames::artists).toSet()
+        val by = SongNames.artists(row.details.first()).any(wanted::contains)
+        return named && by && sameLength(row, names)
     }
 
     /**
@@ -904,7 +875,8 @@ internal class ExactMatcher(
         val length = row.lengthMs ?: return false
         if (row.id == null || names.lengthsMs.none { kotlin.math.abs(length - it) <= SAME_SONG_LENGTH_MS }) return false
         if (row.name.none { it.isLetter() && Character.UnicodeBlock.of(it) != Character.UnicodeBlock.BASIC_LATIN }) return false
-        return byTheArtist(row, names)
+        val wanted = names.artists.flatMap(SongNames::artists).toSet()
+        return SongNames.artists(row.details.first()).any(wanted::contains)
     }
 
     /**
