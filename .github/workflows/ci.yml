@@ -23,6 +23,7 @@ concurrency:
 
 jobs:
   # A pull request that only changes the site, docs, store listing, the reports' Worker, the browser extension or their scripts skips the app's jobs.
+  # One that changes the YouTube Music matcher, its MatcherCasesTest or what main opened in it runs that test in full.
   changes:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -31,15 +32,23 @@ jobs:
     outputs:
       app: ${{ steps.filter.outputs.app }}
       extension: ${{ steps.filter.outputs.extension }}
+      matcher: ${{ steps.filter.outputs.matcher }}
     steps:
       - id: filter
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
         run: |
           if [ -z "$PR" ]; then
             echo "app=true" >> "$GITHUB_OUTPUT"
             echo "extension=true" >> "$GITHUB_OUTPUT"
+            # A push to main ran it in its pull request already, and the weekly mutants workflow runs it too.
+            if [ "$EVENT" = workflow_dispatch ]; then
+              echo "matcher=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "matcher=false" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" -q '.[].filename')
@@ -54,6 +63,11 @@ jobs:
             echo "extension=true" >> "$GITHUB_OUTPUT"
           else
             echo "extension=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^app/src/(main/java/com/astrovm/crosstune/(ExactMatcher|SongNames)\.kt|test/java/com/astrovm/crosstune/MatcherCasesTest\.kt|test/resources/matcher-(matrix|fuzz)-main\.tsv\.gz)$' <<< "$files"; then
+            echo "matcher=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "matcher=false" >> "$GITHUB_OUTPUT"
           fi
 
   site:
@@ -179,6 +193,40 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+  # MatcherCasesTest's whole matrix and all its made-up searches, where the test job runs one in 20 of them: about
+  # 600,000 searches, against what main opened. What opened is uploaded, to make main's again from (see the test).
+  matcher:
+    needs: changes
+    if: needs.changes.outputs.matcher == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          # Main's runs of CI save the caches; this one only reads them.
+          cache-read-only: true
+
+      - name: Matcher cases in full
+        run: ./gradlew :app:testDebugUnitTest --tests com.astrovm.crosstune.MatcherCasesTest -PmatcherFull --build-cache --configuration-cache
+
+      - name: Upload what opened
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: matcher-cases
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/matcher-*-now.tsv
+          retention-days: 14
+          if-no-files-found: warn
+
   lint:
     needs: changes
     if: needs.changes.outputs.app == 'true'
@@ -300,6 +348,7 @@ jobs:
       - site
       - extension
       - test
+      - matcher
       - lint
       - build
     runs-on: ubuntu-26.04
