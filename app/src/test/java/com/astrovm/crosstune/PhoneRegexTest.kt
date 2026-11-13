@@ -54,4 +54,12 @@ class PhoneRegexTest {
         val found = phoneRegex("""(?<=(\d)(?:-))x(y)""", emptySet(), onIcu = false).find("1-xy")
         assertEquals(listOf("xy", "1", "y"), found?.groupValues)
     }
+
+    @Test
+    fun aTableIsReadRunByRunAndAnEmptyOneHoldsNothing() {
+        val runs = CodeRuns("9-d,20")
+        assertEquals(listOf(false, true, true, false, true, false), listOf(8, 9, 0xd, 0xe, 0x20, 0x21).map { it in runs })
+        // regextable.py writes a set no letter is in as "".
+        assertEquals(BitSet(), CodeRuns("").bits())
+    }
 }

@@ -66,7 +66,8 @@ class ReadAsMainReadTest {
     fun aSongInBracketsIsReadAsMainReadIt() {
         // As main read a title whose first song in brackets has no letter: a later one, on its line or past only spaces.
         val main = phoneRegex("""(.*?)\s*[「『]([^」』]+)[」』].*""")
-        texts("「", "」", "『", "』", "A", "|", " ", "\u3000", "\n", "\r\n", "\u0085", "x").forEach { text ->
+        // An empty song, then one: main's song has a letter at least.
+        (sequenceOf("A「」B「C」", "『』 「x」") + texts("「", "」", "『", "』", "A", "|", " ", "\u3000", "\n", "\r\n", "\u0085", "x")).forEach { text ->
             assertEquals(text, main.matchEntire(text)?.destructured?.let { (artist, song) -> artist to song }, MetadataParsers.songAsMainRead(text))
         }
     }
