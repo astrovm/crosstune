@@ -34,10 +34,9 @@ internal data class YouTubeQueue(val url: String, val songs: List<MusicMetadata>
  * Raised when songs are matched otherwise, so what was found the old way is looked for again, in the lookups kept and in
  * Recent: 2, as every edition's length counts, which finds a single's official song where an upload was found before;
  * 3, as a name written both ways apart by a wide space goes by each, which finds Anri's song where a fan's upload was;
- * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length;
- * 6, as a YouTube Music row whose tag says a version gives way to the same song without one, for a song with no tag.
+ * 4, as Qobuz's songs are found in the phone's own store; 5, as another channel's video needs a known matching length.
  */
-internal const val MATCH_VERSION = 6
+internal const val MATCH_VERSION = 5
 
 /**
  * Finds a direct link to the same item using services' key-less search APIs: Apple's iTunes
@@ -661,36 +660,11 @@ internal class ExactMatcher(
             val names = async { namesOf(metadata) }
             videos.await() to names.await()
         }
-        val (rows, shown) = items.map(::row) to videos.map(::row)
-        for ((among, check) in listOf(rows to ::isTheSong, rows to ::isTheSongInAnotherScript, shown to ::isTheSongsVideo)) {
-            val found = among.firstOrNull { check(it, names) } ?: continue
-            return Answer(watchUrl + plainOne(found, among, names, check).id)
-        }
+        items.map(::row).firstOrNull { isTheSong(it, names) }?.let { return Answer(watchUrl + it.id) }
+        items.map(::row).firstOrNull { isTheSongInAnotherScript(it, names) }?.let { return Answer(watchUrl + it.id) }
+        videos.map(::row).firstOrNull { isTheSongsVideo(it, names) }?.let { return Answer(watchUrl + it.id) }
         // Last, the songs, then the videos, are picked from, each asked about apart.
         return Answer(null, ToPick(metadata, playable(items).take(PICK_FROM), playable(videos).take(PICK_FROM), watchUrl, names.lengthsMs))
-    }
-
-    /**
-     * [found], the first of [rows] main's [check] names as the song, or in its place the same song without a version:
-     * where none of the song's names has a tag, and one of [found]'s says a version and nothing else (see
-     * [SongNames.versionTagged]), the first of [rows] with no tag, so never [found] itself, no word of a version in its
-     * name or second line, that passes the same [check], is [found]'s name with its tags cut, and is as close to the
-     * song's length. So what opens is always a row main's own check names as the song, and where main opens one, one opens.
-     */
-    private fun plainOne(found: Row, rows: List<Row>, names: Names, check: (Row, Names) -> Boolean): Row {
-        if (names.titles.any(SongNames::tagged) || !SongNames.versionTagged(found.name)) return found
-        val name = SongNames.outsideTags(found.name)
-        val off = offBy(found, names)
-        return rows.firstOrNull { row ->
-            !SongNames.tagged(row.name) && !SongNames.mentionsAVersion(row.name + " " + row.details.drop(1).joinToString(" ")) &&
-                check(row, names) && SongNames.outsideTags(row.name) == name && offBy(row, names) <= off
-        } ?: found
-    }
-
-    /** How far [row] is from the nearest of the song's lengths: none where the song's aren't known, the most where the row's isn't. */
-    private fun offBy(row: Row, names: Names): Long {
-        val length = row.lengthMs ?: return Long.MAX_VALUE
-        return names.lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } ?: 0
     }
 
     /** The songs or videos among [items] that play. */
