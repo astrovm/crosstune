@@ -1,6 +1,6 @@
 # Git in the image, so whisper.cpp can read its commit on every machine.
 # A host Git is a macOS program on a Mac. On Linux it runs here only while the host libc matches this image.
-FROM docker.io/library/eclipse-temurin:25-jdk
+FROM docker.io/library/eclipse-temurin:26-jdk
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
