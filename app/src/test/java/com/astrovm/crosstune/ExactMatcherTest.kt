@@ -778,7 +778,10 @@ class ExactMatcherTest {
                         songs = listOf(
                             youTubeMusicRow("桜", "Fake Band • Other Album • 4:26", videoId = "row00000000"),
                             youTubeMusicRow("桜", "Fake Band • Other Picks • 4:26", videoId = "row00000001"),
-                            youTubeMusicRow("桜", "Fake Band • Fake Album • 4:26", videoId = "row00000002")
+                            youTubeMusicRow("桜", "Fake Band • Fake Album • 4:26", videoId = "row00000002"),
+                            // As long as it may be, 8 s off, and longer.
+                            youTubeMusicRow("桜", "Fake Band • Fake Best • 4:34", videoId = "row00000003"),
+                            youTubeMusicRow("桜", "Fake Band • Fake Hits • 4:35", videoId = "row00000004")
                         ),
                         deezer = """[{"title":"さくら","artist":{"name":"Fake Band"},"duration":266}]"""
                     )
@@ -792,6 +795,8 @@ class ExactMatcherTest {
             found
         }
         assertEquals("https://music.youtube.com/watch?v=row00000002", find(2))
+        assertEquals("https://music.youtube.com/watch?v=row00000003", find(3))
+        assertNull(find(4))
         assertNull(find(1))
         assertNull(find(0))
     }

@@ -375,6 +375,12 @@ class SongNamesVersionTest {
         // A word no list has says no version, in any script: the seventh review, 5.
         assertFalse(other("偽の歌 (クリスマス・バージョン)", "Fake Song (Christmas Version)"))
         assertFalse(other("Fake Song (Christmas Version)", "偽の歌 (クリスマス・バージョン)"))
+        // Without "version", a word of the katakana list says one only in katakana: "Ballad" in Latin letters may be a name.
+        assertTrue(other("偽の歌 (バラード)"))
+        assertFalse(other("偽の歌 (Ballad)"))
+        // A mark says what it means, or itself where it has no word in Latin letters.
+        assertTrue(other("偽の歌 (弾き語り)"))
+        assertFalse(other("偽の歌 (翻唱)", "偽の歌 (Cover)"))
         // Nor does "Version" alone: it doesn't say which, as "Smooth Rap" may be said without it.
         assertFalse(other("偽の歌 (クリスマス・バージョン)"))
         assertFalse(other("Fake Song - Version Español", "Fake Song"))
@@ -399,7 +405,7 @@ class SongNamesVersionTest {
         for ((name, title) in listOf(
             "とうきょう" to "トーキョー", "とーきょー" to "とうきょう", "さようなら" to "さよなら", "櫻" to "桜", "バイオリン" to "ヴァイオリン",
             "Müde" to "Muede", "Muede" to "Müde", "はなみずき" to "ﾊﾅﾐｽﾞｷ", "さくら" to "サクラ", "Fake Søng" to "Fake Song", "Straße Æon" to "Strasse Aeon",
-            "Canción Falsa" to "Cancion Falsa", "小幸運" to "小幸运", "雨" to "飴", "Fake Song Pt. 2" to "Fake Song"
+            "Canción Falsa" to "Cancion Falsa", "小幸運" to "小幸运", "雨" to "飴", "Fake Song Pt. 2" to "Fake Song", "えいが" to "えーが"
         )) {
             assertFalse("$name $title", other(name, title))
             assertFalse("$title $name", other(title, name))
@@ -436,9 +442,15 @@ class SongNamesVersionTest {
         assertFalse(other("別の歌 (Fake Song)", "偽の歌"))
         assertTrue(other("Other Song", "Fake Song"))
         // But not a guest, a version, what it's from, or a year, which name no song.
-        for (tag in listOf("(feat. 偽の人)", "(ライブ)", "(映画「偽物」主題歌)", "(2019)", "[偽物 Remix]")) assertTrue(tag, other("Other Song $tag", "Fake Song"))
-        // Nor a name in brackets in the script of the name before it.
+        for (tag in listOf("(feat. 偽の人)", "(ライブ)", "(映画「偽物」主題歌)", "(2019)", "[偽物 Remix]", "(♪)")) assertTrue(tag, other("Other Song $tag", "Fake Song"))
+        // In its own script, the name in brackets is the song's, or another.
+        assertFalse(other("別の歌 (偽の歌)", "偽の歌"))
         assertTrue(other("別の歌 (偽の夜)", "偽の歌"))
+        // A half that's only a version names nothing, though it's in the song's name: "Live" for "Live Forever".
+        assertTrue(other("Other Song - Live", "Live Forever (Live)"))
+        // A name's script is its first letter's, not a digit's: "2 Other Song" is in Latin letters.
+        assertTrue(other("2 Other Song", "Fake Song"))
+        assertTrue(other("Other Song (2 Other)", "Fake Song"))
     }
 
     private companion object {

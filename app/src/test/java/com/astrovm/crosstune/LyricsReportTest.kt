@@ -1364,7 +1364,8 @@ class LyricsReportTest {
         lyricsAre("""[{"trackName":"Demo","artistName":"Band","duration":60,"syncedLyrics":"[00:00.00] 花の空"}]""")
         openLyrics { model().uiState.learning.lines.isNotEmpty() }
         composeRule.runOnIdle { model().reportReading(Word("花", "か", "ka"), 0, "") }
-        waitUntil { model().uiState.report == ReportStatus.FAILED }
+        waitUntil { model().uiState.report != ReportStatus.SENDING }
+        assertEquals(ReportStatus.FAILED, model().uiState.report)
         assertFalse(sentReport().getJSONObject("reading").has("right"))
     }
 

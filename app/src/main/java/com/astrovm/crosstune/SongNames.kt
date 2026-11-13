@@ -168,7 +168,7 @@ internal object SongNames {
             own.flatMap { said(it, loosely) }.toSet() + versionWords(bare, loosely).takeIf { "version" in it }.orEmpty()
         }
         val mentioned = versionWords(inLatin("$name $album")) + versionWords(uncredited(inLatin("$name $album")), loosely = true) +
-            KATAKANA.filterKeys(withBu(composed(name))::contains).values.flatMap(::words).filter { it in VOCAB || it in IN_KATAKANA }
+            KATAKANA.filterKeys(withBu(composed(name))::contains).values.flatMap(::words)
         return differs(says, titles.flatMap { saidBy(it, loosely = true) }.toSet()) || differs(titles.map { saidBy(it, loosely = false) }.reduce(Set<String>::intersect), mentioned)
     }
 
@@ -183,7 +183,7 @@ internal object SongNames {
     private fun versionParts(name: String): Pair<String, List<String>> {
         val parts = withoutEditionTag(inLatin(name).replace(subtitle, " ").replace(aside) { if (saysWhatItsFrom(it.value)) " " else it.value })
             .split(tagEdge).map(String::trim)
-        return parts.first() to parts.drop(1).filter { it.isNotEmpty() && withoutEditionTag("x ($it)") != "x" && !FULL.matches(it) && !saysWhatItsFrom(it) }
+        return parts.first() to parts.drop(1).filter { withoutEditionTag("x ($it)") != "x" && !FULL.matches(it) && !saysWhatItsFrom(it) }
     }
 
     /** Whether [tag] says what film or show it's from or the song of: "Theme from Live Forever", "映画「偽物」主題歌". */
@@ -428,18 +428,16 @@ internal object SongNames {
     /**
      * Whether [name] names another song than the one by [artists] named [titles]: each of its names (see [namesIn]),
      * but one that's a version alone or its artist's, is apart from a name of the song in its own script, and alike
-     * none (see [alike]). Two scripts, as kana and kanji, 明日 and あす, can't be told apart. So a name in brackets in
-     * another script than [name]'s others names it too, "Fake Prayer (가짜 기도)", where "Fake Wish" may be
-     * another way to say it.
+     * none (see [alike]). Two scripts, as kana and kanji, 明日 and あす, can't be told apart. A name in brackets names
+     * it too: in another script, "Fake Prayer (가짜 기도)" may be "Fake Wish" said another way.
      */
     private fun namedOtherwise(name: String, titles: Collection<String>, artists: Collection<String>): Boolean {
-        val own = titles.flatMap(::namesIn).map(::Name).filter { it.ways.first().isNotEmpty() }
+        val own = titles.flatMap(::namesIn).map(::Name)
         val by = artists.flatMap(::artistNames).map { Name(it).ways.first() }.toSet()
         val named = namesIn(name).filterNot(::onlyAVersion).map(::Name)
         // But a guest, a version or what it's from: "(feat. 偽の人)", "(ライブ)", "(映画「偽物」主題歌)".
         val inBrackets = aside.findAll(name.replace(featuring, " ")).map { it.value.drop(1).dropLast(1) }
             .filterNot { onlyAVersion(it) || saysWhatItsFrom(inLatin(it)) }.map(::Name)
-            .filter { tag -> tag.script != Character.UnicodeScript.COMMON && named.none { it.script == tag.script } }
         val names = (named + inBrackets).filter { it.ways.first() !in by }
         return names.isNotEmpty() && names.all { part -> own.map { alike(part, it) }.let { true !in it && false in it } }
     }
@@ -472,7 +470,7 @@ internal object SongNames {
      * A name as it's compared: its [ways], NFKC, lowercase and only letters and digits, a Latin letter without its marks
      * or strokes, "ü" also as German spells it out, "ue", so "Müde" is "Muede"; kana as hiragana, ヴ as ブ and no long
      * vowel (see [withoutLongVowels]), so "トーキョー" is "とうきょう"; and kanji as China writes them, so 小幸運 is
-     * 小幸运. Its [script], kanji wherever there's one, as Japanese writes kana with them.
+     * 小幸运. Its [script], kanji wherever there's one, as Japanese writes kana with them, else kana, else its first letter's.
      */
     private class Name(val text: String) {
         val ways = listOf(GERMAN, emptyMap()).map { folded(text, it) }.distinct()
@@ -480,7 +478,7 @@ internal object SongNames {
             when {
                 way.any(Readings::isHan) -> Character.UnicodeScript.HAN
                 way.any(Readings::isKana) -> Character.UnicodeScript.HIRAGANA
-                else -> way.firstOrNull()?.let { Character.UnicodeScript.of(it.code) } ?: Character.UnicodeScript.COMMON
+                else -> way.firstOrNull(Char::isLetter)?.let { Character.UnicodeScript.of(it.code) } ?: Character.UnicodeScript.COMMON
             }
         }
     }
