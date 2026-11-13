@@ -275,7 +275,7 @@ internal object SongNames {
      * count, "TV-size".
      */
     private class Mark(written: String, vararg means: String) {
-        val says = means.toList().ifEmpty { listOf(written) }
+        val says = means.toList()
         private val letters = composed(written).filter(Char::isLetterOrDigit)
         private val pattern = Regex(letters.map { Regex.escape("$it") }.joinToString("""[^\p{L}\p{N}]*"""), RegexOption.IGNORE_CASE)
 
@@ -322,13 +322,13 @@ internal object SongNames {
 
     /** [VERSION_MARKS] and more, but those katakana writes (see [KATAKANA]), with what they say in Latin letters: see [Mark]. */
     private val MARKS = listOf(
-        Mark("弾き語り"), Mark("歌ってみた", "cover"), Mark("演奏してみた", "cover"), Mark("弾いてみた", "cover"), Mark("叩いてみた", "cover"),
+        Mark("弾き語り", "弾き語り"), Mark("歌ってみた", "cover"), Mark("演奏してみた", "cover"), Mark("弾いてみた", "cover"), Mark("叩いてみた", "cover"),
         Mark("練習", "practice"), Mark("翻唱", "cover"), Mark("伴奏", "instrumental", "karaoke"), Mark("伴唱", "karaoke"), Mark("卡拉ok", "karaoke"),
         Mark("커버", "cover"), Mark("라이브", "live"), Mark("노래방", "karaoke"), Mark("버전", "version"),
         // Many songs in one: "(串烧)", "(메들리)".
         Mark("串烧", "medley"), Mark("串燒", "medley"), Mark("메들리", "medley"),
         // Without the singing, or cut for TV: "(Off Vocal)", "(オフ・ヴォーカル)" once in Latin letters, "(TV Size)", "(纯音乐)", "(반주)".
-        Mark("offvocal", "instrumental", "karaoke"), Mark("tvsize"), Mark("纯音乐", "instrumental"), Mark("純音樂", "instrumental"),
+        Mark("offvocal", "instrumental", "karaoke"), Mark("tvsize", "tvsize"), Mark("纯音乐", "instrumental"), Mark("純音樂", "instrumental"),
         Mark("인스트", "instrumental"), Mark("반주", "instrumental", "karaoke"),
         // Remixed, or sung live: "(混音)", "(리믹스)", "(演唱会)".
         Mark("混音", "remix"), Mark("리믹스", "remix"), Mark("演唱会", "live", "concert"), Mark("演唱會", "live", "concert")

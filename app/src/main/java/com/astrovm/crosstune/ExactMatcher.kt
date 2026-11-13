@@ -721,7 +721,7 @@ internal class ExactMatcher(
         if (rows.isEmpty()) return null
         val index = pick(toPick.metadata, rows.map { "${it.name} | ${it.details.joinToString(" • ")}" }, videos) ?: return null
         val row = rows.getOrNull(index) ?: return null
-        val off = row.lengthMs?.let { length -> toPick.lengthsMs.minOfOrNull { kotlin.math.abs(it - length) } } ?: 0L
+        val off = row.lengthMs?.let { length -> toPick.lengthsMs.map { kotlin.math.abs(it - length) }.minOrNull() } ?: 0L
         if (off > if (videos) PICKED_VIDEO_LENGTH_MS else SAME_LENGTH_MS) return null
         return (toPick.watchUrl + row.id).takeIf { withContext(readingDispatcher) { toPick.takes(row) } }
     }
