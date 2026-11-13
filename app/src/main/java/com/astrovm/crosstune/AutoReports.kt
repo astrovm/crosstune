@@ -46,7 +46,7 @@ internal class AutoReports(
         }
 
     private fun keyOf(song: MusicMetadata, problem: SongProblem) =
-        "${problem.key}\u0000${SongNames.keyOf(song.title)}\u0000${SongNames.keyOf(song.artist)}"
+        "${problem.key}\u0000${SongNames.normalize(song.title)}\u0000${SongNames.normalize(song.artist)}"
 
     /** Whether the offer to allow them wasn't made yet in this app session: the process, so it's asked again once the app is started anew. */
     fun mayAsk(): Boolean = preferences.getLong(KEY_ASKED_IN, NEVER) != session

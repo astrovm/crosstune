@@ -600,7 +600,7 @@ internal class LyricsFinder(
      * song kept offline, played from an app that names its recording otherwise, still has its words.
      */
     private suspend fun keptUnderName(metadata: MusicMetadata): Lyrics.Found? {
-        val names = listOf(CACHE_VERSION, 16, 15).map { version -> "$version\u0000${SongNames.keyOf(metadata.title)}\u0000${SongNames.keyOf(metadata.artist)}" }
+        val names = listOf(CACHE_VERSION, 16, 15).map { version -> "$version\u0000${SongNames.normalize(metadata.title)}\u0000${SongNames.normalize(metadata.artist)}" }
         return cache?.entries()?.lastOrNull { (key) -> names.any { name -> key == name || key.startsWith("$name\u0000") } }?.let { (_, kept) -> fromCache(kept)?.first }
     }
 

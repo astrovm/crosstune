@@ -217,8 +217,8 @@ internal class ChatGptTutor(
 
     /**
      * Which of [rows], a music service's search results as "title | artist • album • length", is
-     * [song], by its index; [NONE_PICKED] when none is, and null when it couldn't say. [videos] says the rows
-     * are videos as "title | channel • views • length" instead, put up by anyone.
+     * [song], by its index; null when none is, or it couldn't say. [videos] says the rows are videos
+     * as "title | channel • views • length" instead, put up by anyone.
      */
     suspend fun pickSong(song: MusicMetadata, rows: List<String>, videos: Boolean = false): Int? {
         if (rows.isEmpty()) return null
@@ -242,7 +242,6 @@ internal class ChatGptTutor(
         }
         val answer = reply.written() ?: return null
         val number = answer.trim().takeWhile(Char::isDigit).toIntOrNull() ?: return null
-        if (number == 0) return NONE_PICKED
         return (number - 1).takeIf { it in rows.indices }
     }
 

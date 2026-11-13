@@ -64,7 +64,7 @@ internal class SungReadings(
     }
 
     private fun cacheKey(song: MusicMetadata, lines: List<String>, version: Int) =
-        "utaten|$version|${SongNames.keyOf(song.title)}|${SongNames.keyOf(song.artist)}|${lines.hashCode()}"
+        "utaten|$version|${SongNames.normalize(song.title)}|${SongNames.normalize(song.artist)}|${lines.hashCode()}"
 
     private suspend fun found(song: MusicMetadata, lines: List<String>, read: List<LineReading>, stillWanted: () -> Boolean): List<ReadingFix>? {
         val ours = lines.count { line -> line.any(Readings::isHan) }

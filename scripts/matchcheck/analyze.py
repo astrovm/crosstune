@@ -5,10 +5,13 @@
 
 Each song is looked for as the app does when no store names it in its own script: its names are
 only the US store's, in Latin letters, and its lengths are Apple's editions, or else Deezer's whole
-seconds. The song results YouTube Music gave are then checked as ExactMatcher.theSongInAnotherScript
+seconds. The song results YouTube Music gave are then checked as ExactMatcher.isTheSongInAnotherScript
 checks them, mirrored here: a result fits when it's by the artist, says no other version, is in
 another script and is as long as a known length. A fit is right when its bare name is one of the
 names Apple's JP, KR or TW store gives the recording of the same length to the millisecond.
+
+The SongNames functions mirrored here judge what's right, in replay.py too, so they stay as they were
+written, even where the app's rules change.
 
 It prints two tables:
 1. The other-script signals: for each, on how many songs it holds, and how often it holds for a
@@ -47,9 +50,9 @@ VERSION_MARKS = {
     "リミックス": {"remix"}, "混音": {"remix"}, "리믹스": {"remix"}, "演唱会": {"live", "concert"}, "演唱會": {"live", "concert"},
     "オフヴォーカル": {"instrumental", "karaoke"}, "ライヴ": {"live"}, "カヴァー": {"cover"},
 }
-# SongNames.Mark.wordOfItsOwn: marks that count only with no katakana beside them, as "アライヴ" is "Alive".
+# Marks that count only with no katakana beside them, as "アライヴ" is "Alive".
 WORD_OF_ITS_OWN = {"ライヴ", "カヴァー"}
-# SongNames.Mark.HOLD_A_MARK: words that only hold a mark's letters, as "ドライブ" holds "ライブ", where a word starts.
+# Words that only hold a mark's letters, as "ドライブ" holds "ライブ", where a word starts.
 HOLD_A_MARK = re.compile("(?<![\u30a1-\u30fa\u30fc-\u30ff\u1100-\u11ff\u3130-\u318f\uac00-\ud7af])"
                          "(?:インストール|ドライブ|ライブラリ|ディスカバー|リカバー|드라이브|라이브러리|디스커버|커버리지|반주자)")
 ARTIST_SPLIT = re.compile(r"\s*(?:,|&|、|×|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b|\band\b)\s*", re.IGNORECASE)
@@ -67,10 +70,6 @@ def latin(text):
 
 def artists(text):
     return {normalize(part) for part in ARTIST_SPLIT.split(text) if normalize(part)}
-
-
-def words(text):
-    return set(re.split(r"[^\w]+", unicodedata.normalize("NFKD", text).lower())) - {""}
 
 
 def composed(text):
@@ -109,13 +108,6 @@ def mark_found(mark, name):
         elif mark not in WORD_OF_ITS_OWN or not in_katakana(before) and not in_katakana(after):
             return True
     return False
-
-
-def says_another_version(name, title, artist):
-    """SongNames.saysAnotherVersion: a version word or mark the title and the artist don't have."""
-    if (words(name) - words(title) - words(artist)) & VERSION_WORDS:
-        return True
-    return any(mark_found(mark, name) and not mark_found(mark, title) and not mark_found(mark, artist) for mark in VERSION_MARKS)
 
 
 # SongNames.tagEdge, VERSION_SAID and VERSION_WRITTEN: where a tag ends, and the words that say a name is a version.
@@ -221,17 +213,8 @@ def says_another_version_of(name, titles, artist):
                for mark, means in VERSION_MARKS.items())
 
 
-# ExactMatcher.BRACKETED: what's in brackets, of any kind a title uses.
-BRACKETED = re.compile(r"[(\[（【「『［][^)\]）】」』］]*[)\]）】」』］]")
-
-
-def tags_of(name):
-    """ExactMatcher.tagsOf: what a name has in brackets, each as compared."""
-    return [normalize(m.group(0)) for m in BRACKETED.finditer(name)]
-
-
 def album_said(row, song):
-    """ExactMatcher.inAnotherScript: the row's album, but for the song's own, which says nothing of the row."""
+    """The row's album, but for the song's own, which says nothing of the row."""
     album = row["details"][1] if len(row["details"]) > 2 else ""
     return "" if normalize(album) == normalize(song["album"]) else album
 
@@ -304,7 +287,7 @@ def window_ms(name):
 
 
 def candidates_of(song, results, lengths, inside):
-    """ExactMatcher.inAnotherScript's candidates: by the artist, as long, with a letter in another script."""
+    """ExactMatcher.isTheSongInAnotherScript's rows: by the artist, as long, with a letter in another script."""
     return [r for r in results if r["id"] and r["lengthMs"] is not None and not latin(r["name"]) and
             any(inside(r["lengthMs"] - ms, whole) for ms, whole in lengths) and artists(r["details"][0]) & artists(song["artist"])]
 
@@ -353,14 +336,6 @@ def app_title_names(title):
     """SongNames.titleNames, but for the old Recent titles and the wide space: the name, and its two halves by a dash."""
     halves = [half.strip() for half in title.split(" - ") if half.strip()]
     return [title] + (halves if len(halves) == 2 else [])
-
-
-def names_another(song, row):
-    """ExactMatcher.namesAnother: the row names itself in Latin letters too, with no word of the song's name."""
-    said = {w for w in re.split(r"[^a-z0-9]+", unicodedata.normalize("NFKD", song["title"]).lower()) if w}
-    latin_words = [ws for ws in ({w for w in re.split(r"[^a-z0-9]+", unicodedata.normalize("NFKD", n).lower()) if w}
-                                 for n in app_title_names(row["name"]) if latin(n)) if ws]
-    return bool(latin_words) and not any(ws & said for ws in latin_words)
 
 
 def named_both_ways(song, row, videos):
