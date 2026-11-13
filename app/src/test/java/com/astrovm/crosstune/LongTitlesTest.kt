@@ -105,14 +105,14 @@ class LongTitlesTest {
 
     private companion object {
         /**
-         * How long a title is read, and then twice it. Here the patterns are written out in what a phone's ICU reads,
-         * which the JVM reads two to three times slower than they were: the slowest title, " HD" again and again,
-         * takes about 300 ms at this length on a quiet machine, and on a busy one twice that, which is why the test
-         * holds each reader to its growth and not to a time. On an emulator, as on a phone, the same title takes
-         * 148 ms, where main took 3,597 ms. `scripts/titlefuzz/baseline.py --long` times them there, where a look with
-         * a pattern costs the title's length.
+         * How long a title is read, and then [Growth.TIMES] it. Here the patterns are written out in what a phone's ICU
+         * reads, which the JVM reads two to three times slower than they were: the slowest title, " HD" again and again,
+         * takes about 300 ms at 10,000 letters on a quiet machine, and on a busy one twice that, which is why the test
+         * holds each reader to its growth and not to a time. On an emulator, as on a phone, the same title takes 148 ms
+         * at 10,000 letters, where main took 3,597 ms. `scripts/titlefuzz/baseline.py --long` times them there, where a
+         * look with a pattern costs the title's length.
          */
-        const val LENGTH = 10_000
+        const val LENGTH = 2_500
 
         /** What a title is made of where the readers look for a tag, each repeated to [LENGTH]. */
         val PIECES = listOf(

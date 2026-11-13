@@ -25,8 +25,8 @@ class LongPagesTest {
     private class Reader(val name: String, val marks: List<String>, val read: (String) -> Any?)
 
     private companion object {
-        /** How long a page is read, and then twice it: pages are long, and each reading quick. */
-        const val LENGTH = 20_000
+        /** How long a page is read, and then [Growth.TIMES] it: pages are long, and each reading quick. */
+        const val LENGTH = 10_000
 
         val SCRIPT = listOf("</script>", "<", ">", "}", "};", "a")
         val READERS = listOf(

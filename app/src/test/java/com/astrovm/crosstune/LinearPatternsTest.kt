@@ -10,7 +10,8 @@ import java.util.regex.Pattern
  * Every pattern in the app takes time in step with the text it reads. A page can be long and made of
  * anything, and a pattern that looks to the end of the text from each place it tries takes time squared:
  * 20,000 `<` with no `>` take seconds where they should take a millisecond. So each pattern in the app's
- * code is timed on long text of the kinds that do that, and on the same text twice as long: [Growth].
+ * code reads long text of the kinds that do that, and the same text four times as long, and the letters it looks at
+ * are counted: [Growth].
  */
 class LinearPatternsTest {
     @Test
@@ -143,31 +144,39 @@ class LinearPatternsTest {
     }
 
     /**
-     * Null when [pattern] reads [texts] in step with their length, else how it doesn't: its times, that it reads on past
-     * [GIVE_UP_MS], or that it runs out of stack, as a repeated group does with one call for each repeat. Then that one
-     * pattern is named, and the others are still timed.
+     * Null when [pattern] reads [texts] in step with their length, else how it doesn't: its growth, that it reads each
+     * letter more than [LOOKS_A_LETTER] times, or that it runs out of stack, as a repeated group does with one call for
+     * each repeat. Then that one pattern is named, and the others are still timed.
      */
     private fun outOfStep(pattern: Pattern, length: Int = LENGTH, texts: (Int) -> List<String> = { hostileTexts(pattern.pattern(), it) }): String? = try {
-        Growth.outOfStep(texts, length, { it.take(6).replace("\n", "\\n") + "…" }) { readAll(pattern, it) }.firstOrNull()
-    } catch (_: Deadline.Passed) {
-        "reads on past $GIVE_UP_MS ms"
+        Growth.outOfStepCounting(texts, length, { "${pattern.pattern().take(40)} on ${it.take(6).replace("\n", "\\n")}…" }) { looksToReadAll(pattern, it) }
+            .firstOrNull()
+    } catch (_: Looks.TooMany) {
+        "reads each letter more than $LOOKS_A_LETTER times"
     } catch (_: StackOverflowError) {
         "overflows the stack"
     }
 
-    /** All the pattern finds in the text, stopped once [GIVE_UP_MS] have passed, as a pattern that's out of step can take minutes. */
-    private fun readAll(pattern: Pattern, text: String): Int {
-        val matcher = pattern.matcher(Deadline(text, System.nanoTime() + GIVE_UP_MS * 1_000_000))
-        return generateSequence { matcher.takeIf { it.find() } }.count()
+    /**
+     * How many letters the pattern looks at to find all it finds in the text: the same on any machine, unlike its time.
+     * It's stopped once it has looked at each letter [LOOKS_A_LETTER] times, as one out of step can take minutes.
+     */
+    private fun looksToReadAll(pattern: Pattern, text: String): Long {
+        val looks = Looks(text, text.length.toLong() * LOOKS_A_LETTER)
+        val matcher = pattern.matcher(looks)
+        while (matcher.find()) continue
+        return looks.looks
     }
 
-    /** Text that stops a pattern once its time is up, as [Pattern] has no time limit of its own. */
-    private class Deadline(private val text: String, private val until: Long) : CharSequence {
-        class Passed : RuntimeException()
+    /** Text that stops a pattern once it has looked at [most] letters, as [Pattern] has no limit of its own. */
+    private class Looks(private val text: String, private val most: Long) : CharSequence {
+        class TooMany : RuntimeException()
 
+        var looks = 0L
+            private set
         override val length get() = text.length
         override fun get(index: Int): Char {
-            if (index % 64 == 0 && System.nanoTime() > until) throw Passed()
+            if (++looks > most) throw TooMany()
             return text[index]
         }
         override fun subSequence(startIndex: Int, endIndex: Int) = text.subSequence(startIndex, endIndex)
@@ -175,11 +184,14 @@ class LinearPatternsTest {
     }
 
     private companion object {
-        /** How long a text is read, and then twice it. */
-        const val LENGTH = 20_000
-        const val SHORT = 5_000
-        /** Far past the slowest pattern's time on a busy machine, which is in milliseconds: a pattern this slow is out of step. */
-        const val GIVE_UP_MS = 10_000L
+        /** How long a text is read, and then [Growth.TIMES] it. */
+        const val LENGTH = 5_000
+        const val SHORT = 1_250
+        /**
+         * Far past what a pattern in step reads, a few looks a letter, and short of what one that looks on to the end from
+         * each place reads at 20,000 letters, 10,000: a pattern that reads this many is out of step, and is stopped.
+         */
+        const val LOOKS_A_LETTER = 5_000L
         val RUNS = listOf("x", " ", "\n", "<", "<a ", "<p>", "[", "(", "（", "a ", "&#", "-", "歌", "x\"")
         const val OPERATORS = "\\[](){}?*+|^$."
         const val ESCAPED_PLAIN = "<>\"'/=.-:()[]{}?+*|&#;"

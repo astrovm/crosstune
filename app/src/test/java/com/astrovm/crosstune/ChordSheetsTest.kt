@@ -485,7 +485,7 @@ class ChordSheetsTest {
             val long = "x".repeat(length)
             listOf("$link$long", "$link$long<br>abcd", "$long<br>abcd", "$link $long", "<a cd/".repeat(length / 6), "<".repeat(length), "<b".repeat(length / 2))
         }
-        assertEquals(emptyList<String>(), Growth.outOfStep(sheets, 30_000, { it.take(60) }, ChordSheets::fromJTotal))
+        assertEquals(emptyList<String>(), Growth.outOfStep(sheets, 7_500, { it.take(60) }, ChordSheets::fromJTotal))
     }
 
     @Test
@@ -549,7 +549,7 @@ class ChordSheetsTest {
             )
         }
         val read = { page: String -> ChordSheets.jTotalMonospace(page) to ChordSheets.jTotalSheet(page) }
-        assertEquals(emptyList<String>(), Growth.outOfStep(pages, 30_000, { it.take(40) }, read))
+        assertEquals(emptyList<String>(), Growth.outOfStep(pages, 7_500, { it.take(40) }, read))
     }
 
     @Test
