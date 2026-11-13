@@ -11,6 +11,7 @@ internal object TitleProbes {
     fun coverOf(title: String) = SongNames.coverOf(title)
     fun bareTitle(title: String) = SongNames.bareTitle(title)
     fun withoutEditionTag(title: String) = SongNames.withoutEditionTag(title)
+    fun saysInstrumental(title: String, artist: String) = SongNames.saysInstrumental(title, artist)
     fun withoutFeaturing(title: String) = title.replace(held(SongNames::class.java, SongNames, "featuring"), "")
     fun bracketedSong(title: String) = held(MetadataParsers::class.java, MetadataParsers, "bracketedSongRegex").matchEntire(title)?.groupValues?.drop(1)
 

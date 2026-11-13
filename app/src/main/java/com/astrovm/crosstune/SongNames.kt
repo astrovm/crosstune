@@ -13,7 +13,8 @@ import java.util.Locale
  * anyway, and when they are close enough to be worth taking.
  */
 internal object SongNames {
-    private val leadingArticle = phoneRegex("""^the\s+""", RegexOption.IGNORE_CASE)
+    private const val ARTICLE = "the"
+    private val leadingArticle = phoneRegex("""^$ARTICLE\s+""", RegexOption.IGNORE_CASE)
     private val artistSeparator = phoneRegex(
         """$SPACES_START\s*+(?:,|&|\+|/|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*+""",
         RegexOption.IGNORE_CASE
@@ -403,12 +404,130 @@ internal object SongNames {
         // Written in full-width or half-width letters, "（Ｉｎｓｔ）" or "ｵﾌﾎﾞｰｶﾙ", it says the same.
         val name = Normalizer.normalize(title, Normalizer.Form.NFKC)
         if (sungAlong(name, artist) || coverOf(name) != null || voiceIn.containsMatchIn(name)) return false
+        // A guest named before the tag is the song's, "Song (feat. Guest) [Instrumental]"; after it, they sing in this mix.
+        val lastSinger = singerAfter.matchesIn(name).lastOrNull()?.range?.first ?: -1
+        fun says(tag: MatchResult) = onlyInstrumental(tag.groupValues[1]) && tag.range.first > lastSinger
         // What follows "Artist - " is the song's name, not a tag; a video's channel is named for the artist.
         val by = artist.replace(channel, "")
-        val dashed = dashTag.matchesIn(name).filterNot { by.isNotBlank() && sameArtist(name.substring(0, it.range.first), by) }
-        // A guest named before the tag is the song's, "Song (feat. Guest) [Instrumental]"; after it, they sing in this mix.
-        return (bracketTag.matchesIn(name) + dashed).any { onlyInstrumental(it.groupValues[1]) && !singerAfter.containsMatchIn(name.substring(it.range.first)) } ||
+        val before = if (by.isBlank()) null else ArtistBefore(name, by)
+        return bracketTag.matchesIn(name).any(::says) || dashTag.matchesIn(name).any { says(it) && before?.isTheirs(it.range.first) != true } ||
             offVocalAtEnd.containsMatchIn(name)
+    }
+
+    /**
+     * Whether what's before each dash of [name] is by the artist [by], as [sameArtist] says of [name] up to it, asked of its
+     * dashes in order, those after a space and the tildes that [dashTag] finds. On a phone each look copies what it reads,
+     * and reading the title up to each of many dashes again took time squared: this reads each part of it once. A dash or
+     * a tilde starts no letter, mark or word of what's before it, so what's before one reads as the start of what's before
+     * the next: the names that end before it stay, and the last name and the whole only go on.
+     */
+    internal class ArtistBefore(private val name: String, by: String) {
+        private val theirs = artists(by).toList()
+        private val longest = theirs.maxOfOrNull { it.length } ?: 0
+
+        /** Once a name ended by a separator or a conjunction is theirs, it's before each later dash too. */
+        private var settled = theirs.isEmpty()
+        private val whole = Letters(leadingArticle.find(name)?.range?.last?.plus(1) ?: 0)
+        private val separators = artistSeparator.matchesIn(name).iterator()
+        private var separator = separators.nextOrNull()
+        private var piece = Piece(0)
+
+        /** Whether what's before [dash], the next dash asked of, is by them. */
+        fun isTheirs(dash: Int): Boolean {
+            var ended = separator
+            while (!settled && ended != null && ended.range.last < dash) {
+                settled = partsAreTheirs(name.substring(piece.start, ended.range.first).trim())
+                separator = separators.nextOrNull()
+                piece = Piece(ended.range.last + 1)
+                ended = separator
+            }
+            if (settled) return true
+            whole.readTo(dash)
+            return whole.areTheirs(0) || piece.isTheirs(dash)
+        }
+
+        /** Whether a name between separators, or one of the names a conjunction joins in it, is theirs, as [artists] splits it. */
+        private fun partsAreTheirs(piece: String) = piece.isNotEmpty() && piece.split(conjunction).any(::nameIsTheirs)
+
+        private fun nameIsTheirs(part: String) = normalize(part.replace(leadingArticle, "")).let { it.isNotEmpty() && isOneOf(it, theirs) }
+
+        /** The name from the last separator on, as [artistNames] trims it, and the names a conjunction joins in it. */
+        private inner class Piece(val start: Int) {
+            private val end = separator?.range?.first ?: name.length
+            private val trimmed = (start until end).firstOrNull { !name[it].isWhitespace() } ?: end
+            private val joins = conjunction.matchesIn(name.substring(trimmed, end)).iterator()
+            private var join = joins.nextOrNull()
+            private var partStart = trimmed
+            private var part = Letters(trimmed)
+
+            fun isTheirs(dash: Int): Boolean {
+                var until = dash
+                while (until > trimmed && name[until - 1].isWhitespace()) until--
+                if (until <= trimmed) return false
+                var next = join
+                while (!settled && next != null && trimmed + next.range.last < until) {
+                    settled = nameIsTheirs(name.substring(partStart, trimmed + next.range.first))
+                    partStart = trimmed + next.range.last + 1
+                    part = Letters(partStart)
+                    next = joins.nextOrNull()
+                    join = next
+                }
+                if (settled) return true
+                // A conjunction that ends past the trimmed name joins there too if its word and a space are in it: then the last name is empty.
+                if (next != null && trimmed + next.range.first < until && wordEnd(trimmed + next.range.last + 1) < until) {
+                    return nameIsTheirs(name.substring(partStart, trimmed + next.range.first))
+                }
+                part.readTo(dash)
+                val article = leadingArticle.containsMatchIn(name.substring(partStart, minOf(until, partStart + ARTICLE.length + 1)))
+                return part.areTheirs(if (article) normalize(name.substring(partStart, partStart + ARTICLE.length)).length else 0)
+            }
+
+            /** Where the word of a conjunction ending at [end] ends, before the spaces after it. */
+            private fun wordEnd(end: Int): Int {
+                var at = end
+                while (isPatternSpace(name[at - 1])) at--
+                return at
+            }
+        }
+
+        /** The letters of [name] from [from] on, as [normalize] reads them, read on to each dash, and which of theirs are in them. */
+        private inner class Letters(from: Int) {
+            private val letters = StringBuilder()
+            private var read = from
+            private var drop = 0
+            private val lookFrom = IntArray(theirs.size)
+            private val found = BooleanArray(theirs.size)
+
+            fun readTo(dash: Int) {
+                if (dash <= read) return
+                letters.append(normalize(name.substring(read, dash)))
+                read = dash
+            }
+
+            /** Whether these letters but the first [drop], which an article took, are a name of theirs, as [isOneOf] says. */
+            fun areTheirs(drop: Int): Boolean {
+                if (drop != this.drop) {
+                    this.drop = drop
+                    lookFrom.fill(drop)
+                    found.fill(false)
+                }
+                val length = letters.length - drop
+                if (length <= longest) return length > 0 && isOneOf(letters.substring(drop), theirs)
+                // Longer than each of theirs, they are theirs only with one of theirs in them, which stays as they go on.
+                return theirs.indices.any(::holds)
+            }
+
+            private fun holds(index: Int): Boolean {
+                val wanted = theirs[index]
+                if (!found[index] && wanted.length >= MIN_PARTIAL_ARTIST) {
+                    found[index] = letters.indexOf(wanted, lookFrom[index]) >= 0
+                    lookFrom[index] = maxOf(drop, letters.length - wanted.length + 1)
+                }
+                return found[index]
+            }
+        }
+
+        private fun <T> Iterator<T>.nextOrNull() = if (hasNext()) next() else null
     }
 
     /** Whether [title] or [artist] says it's a track to sing along to, which shows the song's words: see [singAlong]. */
@@ -475,8 +594,12 @@ internal object SongNames {
     /** What says a tag isn't the recording's: "(Not Instrumental)", or names who made it, "(Prod. Instrumental)". */
     private val NOT_SAID = setOf("not", "non", "prod", "produced")
 
-    /** A singer named after a tag, in brackets or not: "[feat. Singer]", "ft. Singer", "with Singer", "x Singer". */
-    private val singerAfter = phoneRegex("""(?:^|[\s(\[])(?:feat\.?|ft\.?|featuring|with|x|×)\s+\S""", RegexOption.IGNORE_CASE)
+    /**
+     * Where a singer may be named, in brackets or not: "[feat. Singer]", "ft. Singer", "with Singer", "x Singer". Each
+     * place, as it reads no letter: one after a tag names a singer after it. A tag starts with a bracket, a dash or a
+     * tilde, which no singer's word is, so one isn't named at the start of what follows it.
+     */
+    private val singerAfter = phoneRegex("""(?=[\s(\[](?:feat\.?|ft\.?|featuring|with|x|×)\s+\S)""", RegexOption.IGNORE_CASE)
 
     /** An album of tracks to sing over, "(Karaoke Version)", "(Backing Tracks)", "(Minus One)". */
     private val accompaniment = phoneRegex("""karaoke|カラオケ|\bbacking tracks?\b|\bminus ones?\b""", RegexOption.IGNORE_CASE)
@@ -666,12 +789,12 @@ internal object SongNames {
     fun sameArtist(one: String, other: String): Boolean {
         val theirs = artists(other)
         if (theirs.isEmpty()) return true
-        return artists(one).any { candidate ->
-            theirs.any { wanted ->
-                wanted == candidate || (minOf(candidate.length, wanted.length) >= MIN_PARTIAL_ARTIST &&
-                    (candidate in wanted || wanted in candidate))
-            }
-        }
+        return artists(one).any { isOneOf(it, theirs) }
+    }
+
+    /** Whether [candidate] is one of [theirs], or one of them is in it, or it's in one of them, when both are long enough to say so. */
+    private fun isOneOf(candidate: String, theirs: Collection<String>) = theirs.any { wanted ->
+        wanted == candidate || (minOf(candidate.length, wanted.length) >= MIN_PARTIAL_ARTIST && (candidate in wanted || wanted in candidate))
     }
 
     /**

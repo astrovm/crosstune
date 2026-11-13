@@ -19,6 +19,20 @@ object LongTitlesProbe {
             "withoutFeaturing" to { t -> TitleProbes.withoutFeaturing(t) },
             "chordWikiTitles" to { t -> TitleProbes.chordWikiTitles(t) },
         )
+        if (args.firstOrNull() == "instrumental") {
+            // Whether a title of tags says it's an instrumental, by an artist named first and by one named in each tag.
+            val says = listOf("Channel", "a").map { artist -> artist to { t: String -> TitleProbes.saysInstrumental(t, artist) } }
+            for (piece in INSTRUMENTAL) {
+                for (length in listOf(2_500, 5_000, 10_000)) {
+                    val title = piece.first + piece.second.repeat(length / piece.second.length) + piece.third
+                    says.forEach { (_, read) -> read(title.take(500)) }
+                    println("'${piece.first}'+'${piece.second}'+'${piece.third}' $length " + says.joinToString(" ") { (artist, read) ->
+                        val began = System.nanoTime(); read(title); "$artist=${(System.nanoTime() - began) / 1_000_000}"
+                    })
+                }
+            }
+            return
+        }
         if (args.firstOrNull() == "all") {
             // Each of LongTitlesTest's shapes once, at 10,000 letters: only the readers slower than 50 ms are named.
             for (title in SHAPES + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(LONG / piece.length) + ending } }) {
@@ -55,6 +69,12 @@ object LongTitlesProbe {
         "Song " + "(((Live)))".repeat(LONG / 10), " ft. a  ".repeat(LONG / 8) + ")", "(feat. a".repeat(LONG / 9) + ")".repeat(LONG / 9),
         "(M/V".repeat(LONG / 5) + ")".repeat(LONG / 5), "Song ft. a" + " - Remaster)".repeat(LONG / 12),
         "Song" + "|lyrics".repeat(LONG / 7), "Song" + " - ".repeat(LONG / 3) + "song and lyrics by Artist | Spotify",
+    )
+
+    /** LongTitlesTest's titles of an instrumental's tags: what starts them, what's repeated, and what ends them. */
+    private val INSTRUMENTAL = listOf(
+        Triple("Channel", " - Instrumental", ""), Triple("a", " - Instrumental & a", ""), Triple("a", " - Instrumental and a", ""),
+        Triple("Song", " (Instrumental)", " ft. a"), Triple("Song", " ~Instrumental", " ft. a"), Triple("", " - ", ""),
     )
 
     /** LongTitlesTest's pieces and endings. */

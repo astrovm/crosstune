@@ -5,6 +5,7 @@
     python3 scripts/titlefuzz/baseline.py [REF] --jvm [--out FILE]
     python3 scripts/titlefuzz/baseline.py [REF] --long [--serial SERIAL]
     python3 scripts/titlefuzz/baseline.py [REF] --long-all [--serial SERIAL]
+    python3 scripts/titlefuzz/baseline.py [REF] --long-instrumental [--serial SERIAL]
 
 REF is the commit to read with, origin/main by default. It's checked out in a temporary worktree, under
 $TITLEFUZZ_TMP if set; TitleFuzz.kt, PhoneRegex.kt, PhoneRegexTable.kt and the tests' pattern writer, IcuPattern.kt
@@ -23,7 +24,8 @@ line. Make them again when TitleFuzz.kt changes what it makes, or when main's ow
 
 --long writes no readings: it times each reader on long titles on the emulator instead, with LongTitlesProbe.kt, at
 three lengths. --long-all times them once at 10,000 letters on each of LongTitlesTest's titles, and names those
-over 50 ms. On a phone each look with a pattern copies the whole title first, so a reader that looks once a pass or
+over 50 ms. --long-instrumental times whether a title says it's an instrumental, at three lengths, on the titles
+whose tags it reads, by an artist named first and by one named in each tag. On a phone each look with a pattern copies the whole title first, so a reader that looks once a pass or
 once a bracket takes time squared there, where the JVM, and so LongTitlesTest, sees none.
 
 It can't read a commit whose readers MainTitleProbes.kt doesn't reach: then change that file to match.
@@ -107,6 +109,7 @@ def main():
     parser.add_argument("--jvm", action="store_true", help="read on the JVM, not on the emulator")
     parser.add_argument("--long", action="store_true", help="time the readers on long titles on the emulator")
     parser.add_argument("--long-all", action="store_true", help="time the readers on each of LongTitlesTest's titles, naming the slow ones")
+    parser.add_argument("--long-instrumental", action="store_true", help="time saysInstrumental on long titles of its tags")
     parser.add_argument("--serial")
     parser.add_argument("--count", type=int, default=200_000)
     parser.add_argument("--out", type=Path, default=OUT)
@@ -127,8 +130,8 @@ def main():
             shutil.copy(ROOT / MAIN / name, checkout / MAIN / name)
         for name in ("IcuPattern.kt", "PhoneRegexSets.kt"):
             shutil.copy(ROOT / TESTS / name, checkout / TESTS / name)
-        if args.long or args.long_all:
-            on_emulator(checkout, args.serial, args.count, long="all" if args.long_all else "")
+        if args.long or args.long_all or args.long_instrumental:
+            on_emulator(checkout, args.serial, args.count, long="all" if args.long_all else "instrumental" if args.long_instrumental else "")
             return
         made = on_jvm(checkout) if args.jvm else on_emulator(checkout, args.serial, args.count)
         with gzip.open(made, "rt", encoding="utf-8") as read:

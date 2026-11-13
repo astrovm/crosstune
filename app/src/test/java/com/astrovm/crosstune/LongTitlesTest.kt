@@ -11,19 +11,34 @@ import org.junit.Test
 class LongTitlesTest {
     @Test
     fun noTitleTakesLongToRead() {
+        assertEquals(emptyList<String>(), slowOnes(::titles, ::read))
+    }
+
+    @Test
+    fun noTitleTakesLongToSayIfItsAnInstrumental() {
+        // Its looks are the readers', so each shape and piece once as it is, by an artist named first and by one named in each tag.
+        val titles = { length: Int -> shapes(length) + PIECES.map { it.repeat(length / it.length) } }
+        val slow = listOf("Channel", "a").flatMap { artist -> slowOnes(titles) { title -> SongNames.saysInstrumental(title, artist) }.map { "$artist: $it" } }
+        assertEquals(emptyList<String>(), slow)
+    }
+
+    /** The titles of each [length] from [titles] that [read] takes longer than [LIMIT_MS] to read. */
+    private fun slowOnes(titles: (Int) -> List<String>, read: (String) -> Any?): List<String> {
         // Each once, shorter, so that what's timed is the reading and not the start-up of the code that reads it.
-        titles(LENGTH / 10).forEach(::read)
-        val slow = titles(LENGTH).mapNotNull { title ->
+        titles(LENGTH / 10).forEach { read(it) }
+        return titles(LENGTH).mapNotNull { title ->
             val began = System.nanoTime()
             read(title)
             val millis = (System.nanoTime() - began) / 1_000_000
             "${title.take(20).replace("\n", "\\n")}…${title.takeLast(2).replace("\n", "\\n")} ${millis}ms".takeIf { millis > LIMIT_MS }
         }
-        assertEquals(emptyList<String>(), slow)
     }
 
     /** The worst titles found for the readers, each about [length] long. */
-    private fun titles(length: Int): List<String> {
+    private fun titles(length: Int) = shapes(length) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(length / piece.length) + ending } }
+
+    /** The titles found worst for a reader, each about [length] long, that aren't a piece again and again. */
+    private fun shapes(length: Int): List<String> {
         return listOf(
             // A run of line breaks, then something that isn't a space.
             "Artist - Song " + "\n".repeat(length) + ")",
@@ -54,7 +69,13 @@ class LongTitlesTest {
             "Song - " + "cover ".repeat(length / 6),
             "|lyrics".repeat(length / 7),
             "Song" + " - a".repeat(length / 4) + " - song and lyrics by Artist | Spotify",
-        ) + PIECES.flatMap { piece -> ENDINGS.map { ending -> piece.repeat(length / piece.length) + ending } }
+            // An instrumental's tags after the artist's name, ended by a separator or a conjunction and the name again, or a singer.
+            "Channel" + " - Instrumental".repeat(length / 15),
+            "a" + " - Instrumental & a".repeat(length / 19),
+            "a" + " - Instrumental and a".repeat(length / 21),
+            "Song" + " (Instrumental)".repeat(length / 15) + " ft. a",
+            "Song" + " ~Instrumental".repeat(length / 14) + " ft. a",
+        )
     }
 
     @Test
