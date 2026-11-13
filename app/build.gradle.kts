@@ -440,6 +440,10 @@ tasks.withType<Test>().configureEach {
     val memory = (ManagementFactory.getOperatingSystemMXBean() as com.sun.management.OperatingSystemMXBean).totalMemorySize
     maxParallelForks = if (Runtime.getRuntime().availableProcessors() >= 4 && memory >= (12L shl 30)) 2 else 1
     jvmArgs(robolectricJvmArgs)
+    // MatcherCasesTest runs a sample of its matrix and made-up searches, as all of them take minutes: all of them with
+    // -PmatcherFull, and only the matrix's songs -PmatcherSongs names, so what main opens can be written in parts.
+    if (providers.gradleProperty("matcherFull").isPresent) systemProperty("crosstune.matcherFull", "true")
+    providers.gradleProperty("matcherSongs").orNull?.let { systemProperty("crosstune.matcherSongs", it) }
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
@@ -477,8 +481,7 @@ pitest {
     // Each mutant's classes are loaded again, and their adapters and stubs fill the JIT's small code
     // heap for them long before the Java heap fills, which PIT reports as a MEMORY_ERROR. One code
     // cache, unsplit, gives them the room.
-    // The matrix and made-up searches of MatcherCasesTest run only a sample of themselves under it, as they'd run past its time.
-    jvmArgs.set(robolectricJvmArgs + listOf("-Dcrosstune.mutants=true", "-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
+    jvmArgs.set(robolectricJvmArgs + listOf("-Xmx3g", "-XX:-SegmentedCodeCache", "-XX:ReservedCodeCacheSize=512m", "-Drobolectric-deps.properties=" + layout.buildDirectory.file("robolectric-deps.properties").get().asFile.path))
 }
 
 // After the plugin's own setup, which gives the tests only what they compile against.
