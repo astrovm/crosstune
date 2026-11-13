@@ -1,6 +1,6 @@
 # What the widths are measured in: Chromium, with Noto standing where J-Total's page asks for MS Gothic
 # and Hiragino Kaku Gothic. This is the machine that shows the same widths Issue #775 measured.
-FROM mcr.microsoft.com/playwright/python:v1.65.1-noble
+FROM mcr.microsoft.com/playwright/python:v1.64.1-noble
 RUN pip install --no-cache-dir playwright==1.64.1
 RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-core fonts-noto-mono fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN printf '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>\n<alias binding="same"><family>MS Gothic</family><prefer><family>Noto Sans Mono CJK JP</family></prefer></alias>\n<alias binding="same"><family>Hiragino Kaku Gothic</family><prefer><family>Noto Sans Mono CJK JP</family></prefer></alias>\n<alias binding="same"><family>sans-serif</family><prefer><family>Noto Sans</family></prefer></alias>\n</fontconfig>\n' > /etc/fonts/local.conf && fc-cache -f
